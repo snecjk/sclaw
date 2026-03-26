@@ -8,6 +8,7 @@
 import { app } from 'electron';
 import path from 'node:path';
 import { existsSync, cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, readdirSync, realpathSync } from 'node:fs';
+import { cp as cpAsync, mkdir as mkdirAsync, rm as rmAsync } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { logger } from './logger';
@@ -458,6 +459,84 @@ const ALL_BUNDLED_PLUGINS = [
   { fn: ensureWeChatPluginInstalled, label: 'WeChat' },
 ] as const;
 
+async function ensurePluginInstalledAsync(
+  pluginDirName: string,
+  candidateSources: string[],
+  pluginLabel: string,
+): Promise<{ installed: boolean; warning?: string }> {
+  const targetDir = join(homedir(), '.openclaw', 'extensions', pluginDirName);
+  const targetManifest = join(targetDir, 'openclaw.plugin.json');
+  const targetPkgJson = join(targetDir, 'package.json');
+  const sourceDir = candidateSources.find((dir) => existsSync(fsPath(join(dir, 'openclaw.plugin.json'))));
+
+  // Keep dev behavior unchanged (including node_modules fallback) by
+  // delegating to the existing sync implementation outside packaged mode.
+  if (!app.isPackaged) {
+    return ensurePluginInstalled(pluginDirName, candidateSources, pluginLabel);
+  }
+
+  if (existsSync(fsPath(targetManifest))) {
+    if (!sourceDir) return { installed: true };
+    const installedVersion = readPluginVersion(targetPkgJson);
+    const sourceVersion = readPluginVersion(join(sourceDir, 'package.json'));
+    if (!sourceVersion || !installedVersion || sourceVersion === installedVersion) {
+      return { installed: true };
+    }
+    logger.info(
+      `[plugin] Upgrading ${pluginLabel} plugin: ${installedVersion} → ${sourceVersion}`,
+    );
+  }
+
+  if (!sourceDir) {
+    return {
+      installed: false,
+      warning: `Bundled ${pluginLabel} plugin mirror not found. Checked: ${candidateSources.join(' | ')}`,
+    };
+  }
+
+  const extensionsRoot = join(homedir(), '.openclaw', 'extensions');
+  const attempts: Array<{ attempt: number; code?: string; name?: string; message: string }> = [];
+  const maxAttempts = process.platform === 'win32' ? 2 : 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await mkdirAsync(fsPath(extensionsRoot), { recursive: true });
+      await rmAsync(fsPath(targetDir), { recursive: true, force: true });
+      await cpAsync(fsPath(sourceDir), fsPath(targetDir), { recursive: true, force: true });
+      if (!existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) {
+        return { installed: false, warning: `Failed to install ${pluginLabel} plugin mirror (manifest missing).` };
+      }
+      fixupPluginManifest(targetDir);
+      logger.info(`Installed ${pluginLabel} plugin from bundled mirror (async): ${sourceDir}`);
+      return { installed: true };
+    } catch (error) {
+      const diagnostic = toErrorDiagnostic(error);
+      attempts.push({ attempt, ...diagnostic });
+      if (attempt < maxAttempts) {
+        try {
+          await rmAsync(fsPath(targetDir), { recursive: true, force: true });
+        } catch {
+          // Ignore cleanup failures before retry.
+        }
+      }
+    }
+  }
+
+  logger.warn(
+    `[plugin] Async bundled mirror install failed for ${pluginLabel}`,
+    {
+      pluginDirName,
+      pluginLabel,
+      sourceDir,
+      targetDir,
+      platform: process.platform,
+      attempts,
+    },
+  );
+
+  return { installed: false, warning: `Failed to install bundled ${pluginLabel} plugin mirror` };
+}
+
 /**
  * Ensure all bundled OpenClaw plugins are installed/upgraded in
  * `~/.openclaw/extensions/`.  Designed to be called once at app startup
@@ -472,6 +551,30 @@ export async function ensureAllBundledPluginsInstalled(): Promise<void> {
       }
     } catch (error) {
       logger.warn(`[plugin] Failed to install/upgrade ${label} plugin:`, error);
+    }
+  }
+}
+
+/**
+ * Async variant for startup paths where we want heavy file copies to run on
+ * fs worker threads instead of blocking the Electron main thread.
+ */
+export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
+  const pluginSpecs = [
+    { dirName: 'dingtalk', label: 'DingTalk' },
+    { dirName: 'wecom', label: 'WeCom' },
+    { dirName: 'qqbot', label: 'QQ Bot' },
+    { dirName: 'openclaw-weixin', label: 'WeChat' },
+  ] as const;
+
+  for (const { dirName, label } of pluginSpecs) {
+    try {
+      const result = await ensurePluginInstalledAsync(dirName, buildCandidateSources(dirName), label);
+      if (result.warning) {
+        logger.warn(`[plugin] ${label}: ${result.warning}`);
+      }
+    } catch (error) {
+      logger.warn(`[plugin] Failed to install/upgrade ${label} plugin (async):`, error);
     }
   }
 }

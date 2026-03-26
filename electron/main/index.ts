@@ -57,6 +57,35 @@ function sendStartupProgress(message: string): void {
   }
 }
 
+function schedulePostFirstPaintWork(
+  win: BrowserWindow,
+  task: () => Promise<void> | void,
+): void {
+  let scheduled = false;
+  const runOnce = () => {
+    if (scheduled) return;
+    scheduled = true;
+    const timer = setTimeout(() => {
+      if (win.isDestroyed()) return;
+      void Promise.resolve(task()).catch((error) => {
+        logger.warn('Deferred startup maintenance failed:', error);
+      });
+    }, 1500);
+    if (typeof timer.unref === 'function') {
+      timer.unref();
+    }
+  };
+
+  // Primary trigger: after first paint.
+  win.once('ready-to-show', runOnce);
+  // Fallback trigger: avoid missing the work when ready-to-show was emitted
+  // before we registered the listener.
+  const fallbackTimer = setTimeout(runOnce, 8000);
+  if (typeof fallbackTimer.unref === 'function') {
+    fallbackTimer.unref();
+  }
+}
+
 // Disable GPU hardware acceleration globally for maximum stability across
 // all GPU configurations (no GPU, integrated, discrete).
 //
@@ -327,7 +356,7 @@ async function initialize(): Promise<void> {
     { ensureClawXContext, repairClawXOnlyBootstrapFiles },
     { autoInstallCliIfNeeded, generateCompletionCache, installCompletionToProfile },
     { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled },
-    { ensureAllBundledPluginsInstalled },
+    { ensureAllBundledPluginsInstalledAsync },
     { startHostApiServer },
     spriteWindowMod,
     floatIconMod,
@@ -435,26 +464,31 @@ async function initialize(): Promise<void> {
     logger.warn('Failed to repair bootstrap files:', error);
   });
 
-  // Pre-deploy built-in skills
-  // to ~/.openclaw/skills/ so they are immediately available without manual install.
-  sendStartupProgress('Installing built-in skills...');
-  void ensureBuiltinSkillsInstalled().catch((error) => {
-    logger.warn('Failed to install built-in skills:', error);
-  });
+  // Defer heavy file-copy maintenance until after first paint so first-launch
+  // startup is responsive on Windows and avoids blank/unresponsive cold starts.
+  schedulePostFirstPaintWork(window, async () => {
+    logger.info('Running deferred startup maintenance tasks');
 
-  // Pre-deploy bundled third-party skills from resources/preinstalled-skills.
-  // This installs full skill directories (not only SKILL.md) in an idempotent,
-  // non-destructive way and never blocks startup.
-  sendStartupProgress('Installing skills...');
-  void ensurePreinstalledSkillsInstalled().catch((error) => {
-    logger.warn('Failed to install preinstalled skills:', error);
-  });
+    await ensureBuiltinSkillsInstalled().catch((error) => {
+      logger.warn('Failed to install built-in skills:', error);
+    });
 
-  // Pre-deploy/upgrade bundled OpenClaw plugins (dingtalk, wecom, qqbot, wechat)
-  // to ~/.openclaw/extensions/ so they are always up-to-date after an app update.
-  sendStartupProgress('Installing plugins...');
-  void ensureAllBundledPluginsInstalled().catch((error) => {
-    logger.warn('Failed to install/upgrade bundled plugins:', error);
+    await ensurePreinstalledSkillsInstalled().catch((error) => {
+      logger.warn('Failed to install preinstalled skills:', error);
+    });
+
+    await ensureAllBundledPluginsInstalledAsync().catch((error) => {
+      logger.warn('Failed to install/upgrade bundled plugins:', error);
+    });
+
+    await autoInstallCliIfNeeded((installedPath) => {
+      mainWindow?.webContents.send('openclaw:cli-installed', installedPath);
+    }).then(() => {
+      generateCompletionCache();
+      installCompletionToProfile();
+    }).catch((error) => {
+      logger.warn('CLI auto-install failed:', error);
+    });
   });
 
   // Bridge gateway and host-side events before any auto-start logic runs, so
@@ -555,16 +589,6 @@ async function initialize(): Promise<void> {
   sendStartupProgress('Finalizing...');
   void ensureClawXContext().catch((error) => {
     logger.warn('Failed to merge StoClaw context into workspace:', error);
-  });
-
-  // Auto-install openclaw CLI and shell completions (non-blocking).
-  void autoInstallCliIfNeeded((installedPath) => {
-    mainWindow?.webContents.send('openclaw:cli-installed', installedPath);
-  }).then(() => {
-    generateCompletionCache();
-    installCompletionToProfile();
-  }).catch((error) => {
-    logger.warn('CLI auto-install failed:', error);
   });
 }
 
