@@ -5,10 +5,6 @@ import { getClawXProviderStore } from './store-instance';
 const PROVIDER_STORE_SCHEMA_VERSION = 1;
 
 function inferAuthMode(type: ProviderType): ProviderAccount['authMode'] {
-  if (type === 'ollama') {
-    return 'local';
-  }
-
   const definition = getProviderDefinition(type);
   if (definition?.defaultAuthMode) {
     return definition.defaultAuthMode;
@@ -27,7 +23,7 @@ export function providerConfigToAccount(
     label: config.name,
     authMode: inferAuthMode(config.type),
     baseUrl: config.baseUrl,
-    apiProtocol: config.apiProtocol || (config.type === 'custom' || config.type === 'ollama'
+    apiProtocol: config.apiProtocol || (config.type === 'custom'
       ? 'openai-completions'
       : getProviderDefinition(config.type)?.providerConfig?.api),
     headers: config.headers,

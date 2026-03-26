@@ -9,7 +9,6 @@ export const PROVIDER_TYPES = [
   'minimax-portal',
   'minimax-portal-cn',
   'qwen-portal',
-  'ollama',
   'custom',
 ] as const;
 
@@ -29,8 +28,6 @@ export const BUILTIN_PROVIDER_TYPES = [
 
 export type ProviderType = (typeof PROVIDER_TYPES)[number];
 export type BuiltinProviderType = (typeof BUILTIN_PROVIDER_TYPES)[number];
-
-export const OLLAMA_PLACEHOLDER_API_KEY = 'ollama-local';
 
 export type ProviderProtocol =
   | 'openai-completions'

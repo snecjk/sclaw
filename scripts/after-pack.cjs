@@ -531,4 +531,11 @@ exports.default = async function afterPack(context) {
   if (nativeRemoved > 0) {
     console.log(`[after-pack] ✅ Removed ${nativeRemoved} non-target native platform packages.`);
   }
+
+  // 5. Remove @node-llama-cpp entirely (not needed, using Ollama/vLLM HTTP API instead)
+  const llamaCppDir = join(dest, '@node-llama-cpp');
+  if (existsSync(llamaCppDir)) {
+    rmSync(llamaCppDir, { recursive: true, force: true });
+    console.log('[after-pack] ✅ Removed @node-llama-cpp (not needed, using Ollama/vLLM HTTP API instead).');
+  }
 };

@@ -50,7 +50,7 @@ export interface GatewayNotification {
 export interface ProviderConfig {
   id: string;
   name: string;
-  type: 'openai' | 'anthropic' | 'ollama' | 'custom';
+  type: 'openai' | 'anthropic' | 'custom';
   apiKey?: string;
   baseUrl?: string;
   model?: string;

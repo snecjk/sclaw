@@ -198,7 +198,7 @@ export function ProvidersSettings() {
         id,
         vendorId: type,
         label: name,
-        authMode: options?.authMode || vendor?.defaultAuthMode || (type === 'ollama' ? 'local' : 'api_key'),
+        authMode: options?.authMode || vendor?.defaultAuthMode || 'api_key',
         baseUrl: options?.baseUrl,
         apiProtocol: options?.apiProtocol,
         headers: options?.headers,
@@ -429,7 +429,7 @@ function ProviderCard({
         setValidating(true);
         const result = await onValidateKey(newKey, {
           baseUrl: baseUrl.trim() || undefined,
-          apiProtocol: (account.vendorId === 'custom' || account.vendorId === 'ollama') ? apiProtocol : undefined,
+          apiProtocol: (account.vendorId === 'custom') ? apiProtocol : undefined,
         });
         setValidating(false);
         if (!result.valid) {
@@ -451,7 +451,7 @@ function ProviderCard({
         if (typeInfo?.showBaseUrl && (baseUrl.trim() || undefined) !== (account.baseUrl || undefined)) {
           updates.baseUrl = baseUrl.trim() || undefined;
         }
-        if ((account.vendorId === 'custom' || account.vendorId === 'ollama') && apiProtocol !== account.apiProtocol) {
+        if ((account.vendorId === 'custom') && apiProtocol !== account.apiProtocol) {
           updates.apiProtocol = apiProtocol;
         }
         if (showModelIdField && (modelId.trim() || undefined) !== (account.model || undefined)) {
@@ -471,12 +471,6 @@ function ProviderCard({
         if (Object.keys(updates).length > 0) {
           payload.updates = updates;
         }
-      }
-
-      // Keep Ollama key optional in UI, but persist a placeholder when
-      // editing legacy configs that have no stored key.
-      if (account.vendorId === 'ollama' && !status?.hasKey && !payload.newApiKey) {
-        payload.newApiKey = resolveProviderApiKeyForSave(account.vendorId, '') as string;
       }
 
       if (!payload.newApiKey && !payload.updates) {
@@ -817,7 +811,7 @@ function ProviderCard({
                 <div className="relative flex-1">
                   <Input
                     type={showKey ? 'text' : 'password'}
-                    placeholder={typeInfo?.requiresApiKey ? typeInfo?.placeholder : (typeInfo?.id === 'ollama' ? t('aiProviders.notRequired') : t('aiProviders.card.editKey'))}
+                    placeholder={typeInfo?.requiresApiKey ? typeInfo?.placeholder : t('aiProviders.card.editKey')}
                     value={newKey}
                     onChange={(e) => setNewKey(e.target.value)}
                     className={cn(currentInputClasses, 'pr-10')}
@@ -1166,7 +1160,7 @@ function AddProviderDialog({
       if (requiresKey && apiKey) {
         const result = await onValidateKey(selectedType, apiKey, {
           baseUrl: baseUrl.trim() || undefined,
-          apiProtocol: (selectedType === 'custom' || selectedType === 'ollama') ? apiProtocol : undefined,
+          apiProtocol: (selectedType === 'custom') ? apiProtocol : undefined,
         });
         if (!result.valid) {
           setValidationError(result.error || t('aiProviders.toast.invalidKey'));
@@ -1188,14 +1182,12 @@ function AddProviderDialog({
         apiKey.trim(),
         {
           baseUrl: baseUrl.trim() || undefined,
-          apiProtocol: (selectedType === 'custom' || selectedType === 'ollama') ? apiProtocol : undefined,
+          apiProtocol: (selectedType === 'custom') ? apiProtocol : undefined,
           headers: userAgent.trim() ? { 'User-Agent': userAgent.trim() } : undefined,
           model: resolveProviderModelForSave(typeInfo, modelId, devModeUnlocked),
-          authMode: useOAuthFlow ? (preferredOAuthMode || 'oauth_device') : selectedType === 'ollama'
-            ? 'local'
-            : (isOAuth && supportsApiKey && authMode === 'apikey')
-              ? 'api_key'
-              : vendorMap.get(selectedType)?.defaultAuthMode || 'api_key',
+          authMode: useOAuthFlow ? (preferredOAuthMode || 'oauth_device') : (isOAuth && supportsApiKey && authMode === 'apikey')
+            ? 'api_key'
+            : vendorMap.get(selectedType)?.defaultAuthMode || 'api_key',
         }
       );
     } catch {
@@ -1350,7 +1342,7 @@ function AddProviderDialog({
                       <Input
                         id="apiKey"
                         type={showKey ? 'text' : 'password'}
-                        placeholder={typeInfo?.id === 'ollama' ? t('aiProviders.notRequired') : typeInfo?.placeholder}
+                        placeholder={typeInfo?.placeholder}
                         value={apiKey}
                         onChange={(e) => {
                           setApiKey(e.target.value);

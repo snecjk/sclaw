@@ -77,13 +77,5 @@ describe('provider-model-sync', () => {
         'custom-123/model',
       ),
     ).toBeNull();
-
-    expect(
-      buildNonOAuthAgentProviderUpdate(
-        providerConfig({ type: 'ollama', id: 'ollama' }),
-        'ollama',
-        'ollama/qwen3:latest',
-      ),
-    ).toBeNull();
   });
 });

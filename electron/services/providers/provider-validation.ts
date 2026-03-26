@@ -107,8 +107,6 @@ function getValidationProfile(
       return 'google-query-key';
     case 'openrouter':
       return 'openrouter';
-    case 'ollama':
-      return 'none';
     default:
       return 'openai-completions';
   }

@@ -41,7 +41,7 @@ function normalizeProviderBaseUrl(
     return normalized.replace(/\/v1$/, '').replace(/\/anthropic$/, '').replace(/\/$/, '') + '/anthropic';
   }
 
-  if (config.type === 'custom' || config.type === 'ollama') {
+  if (config.type === 'custom') {
     const protocol = apiProtocol || config.apiProtocol || 'openai-completions';
     if (protocol === 'openai-responses') {
       return normalized.replace(/\/responses?$/i, '');
@@ -62,7 +62,7 @@ function shouldUseExplicitDefaultOverride(config: ProviderConfig, runtimeProvide
 }
 
 export function getOpenClawProviderKey(type: string, providerId: string): string {
-  if (type === 'custom' || type === 'ollama') {
+  if (type === 'custom') {
     const suffix = providerId.replace(/-/g, '').slice(0, 8);
     return `${type}-${suffix}`;
   }

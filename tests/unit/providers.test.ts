@@ -58,21 +58,7 @@ describe('provider metadata', () => {
 
   it('keeps builtin provider sources in sync', () => {
     expect(BUILTIN_PROVIDER_TYPES).toEqual(
-      expect.arrayContaining(['anthropic', 'openai', 'google', 'openrouter', 'ark', 'moonshot', 'siliconflow', 'minimax-portal', 'minimax-portal-cn', 'qwen-portal', 'ollama'])
-    );
-  });
-
-  it('uses OpenAI-compatible Ollama default base URL', () => {
-    expect(PROVIDER_TYPE_INFO).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: 'ollama',
-          defaultBaseUrl: 'http://localhost:11434/v1',
-          requiresApiKey: false,
-          showBaseUrl: true,
-          showModelId: true,
-        }),
-      ])
+      expect.arrayContaining(['anthropic', 'openai', 'google', 'openrouter', 'ark', 'moonshot', 'siliconflow', 'minimax-portal', 'minimax-portal-cn', 'qwen-portal'])
     );
   });
 
@@ -133,9 +119,6 @@ describe('provider metadata', () => {
   });
 
   it('normalizes provider API keys for save flow', () => {
-    expect(resolveProviderApiKeyForSave('ollama', '')).toBe('ollama-local');
-    expect(resolveProviderApiKeyForSave('ollama', '   ')).toBe('ollama-local');
-    expect(resolveProviderApiKeyForSave('ollama', 'real-key')).toBe('real-key');
     expect(resolveProviderApiKeyForSave('openai', '')).toBeUndefined();
     expect(resolveProviderApiKeyForSave('openai', ' sk-test ')).toBe('sk-test');
   });

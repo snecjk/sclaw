@@ -442,7 +442,7 @@ function cleanupBundle(outputDir) {
   const LARGE_REMOVALS = [
     'node_modules/pdfjs-dist/legacy',
     'node_modules/pdfjs-dist/types',
-    'node_modules/node-llama-cpp/llama',
+    // node-llama-cpp is removed entirely in after-pack.cjs
     'node_modules/koffi/src',
     'node_modules/koffi/vendor',
     'node_modules/koffi/doc',

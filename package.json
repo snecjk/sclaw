@@ -8,7 +8,6 @@
             "electron",
             "esbuild",
             "koffi",
-            "node-llama-cpp",
             "protobufjs",
             "sharp"
         ],

@@ -79,7 +79,7 @@ export function legacyProviderToAccount(provider: ProviderWithKeyInfo): Provider
     id: provider.id,
     vendorId: provider.type,
     label: provider.name,
-    authMode: provider.type === 'ollama' ? 'local' : 'api_key',
+    authMode: 'api_key',
     baseUrl: provider.baseUrl,
     headers: provider.headers,
     model: provider.model,
