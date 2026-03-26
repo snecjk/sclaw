@@ -612,7 +612,7 @@ export function Skills() {
 
   return (
     <div className="flex flex-col -m-6 h-[calc(100vh-2.5rem)] overflow-hidden">
-      <div className="w-full max-w-5xl mx-auto flex flex-col h-full p-10 pt-16">
+      <div className="w-full flex flex-col h-full p-10 pt-16">
 
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-start justify-between mb-6 shrink-0 gap-4">
@@ -746,7 +746,7 @@ export function Skills() {
             </div>
           )}
 
-          <div className="flex flex-col gap-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredSkills.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
                 <Puzzle className="h-10 w-10 mb-4 opacity-50" />
@@ -756,46 +756,44 @@ export function Skills() {
               filteredSkills.map((skill) => (
                 <div
                   key={skill.id}
-                  className="group flex flex-row items-center justify-between py-3.5 px-3 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer border-b border-black/5 dark:border-white/5 last:border-0"
+                  className="group flex flex-col p-4 rounded-xl glass cursor-pointer transition-all duration-200 hover:shadow-lg"
                   onClick={() => setSelectedSkill(skill)}
                 >
-                  <div className="flex items-start gap-4 flex-1 overflow-hidden pr-4">
-                    <div className="h-10 w-10 shrink-0 flex items-center justify-center text-2xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl overflow-hidden">
+                  {/* 顶部: 圆形图标 + 名称 + 标签 */}
+                  <div className="flex items-start gap-3 mb-3">
+                    {/* 圆形彩色背景图标 */}
+                    <div className="h-12 w-12 shrink-0 flex items-center justify-center text-2xl rounded-full bg-gradient-to-br from-violet-400 to-purple-500 dark:from-violet-500 dark:to-purple-600 shadow-sm">
                       {skill.icon || '🧩'}
                     </div>
-                    <div className="flex flex-col overflow-hidden">
-                      <div className="flex items-center gap-2 mb-1">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
                         <h3 className="text-[15px] font-semibold text-foreground truncate">{skill.name}</h3>
-                        {skill.isCore ? (
-                          <Lock className="h-3 w-3 text-muted-foreground" />
-                        ) : skill.isBundled ? (
-                          <Puzzle className="h-3 w-3 text-blue-500/70" />
-                        ) : null}
-                        {skill.slug && skill.slug !== skill.name ? (
-                          <span className="text-[11px] font-mono px-1.5 py-0.5 rounded border border-black/10 dark:border-white/10 text-muted-foreground">
-                            {skill.slug}
-                          </span>
-                        ) : null}
+                        {skill.isCore && <Lock className="h-3 w-3 text-muted-foreground shrink-0" />}
+                        {skill.isBundled && <Puzzle className="h-3 w-3 text-blue-500/70 shrink-0" />}
                       </div>
-                      <p className="text-[13.5px] text-muted-foreground line-clamp-1 pr-6 leading-relaxed">
-                        {skill.description}
-                      </p>
-                      <div className="mt-1 flex items-center gap-2 text-[11px] text-foreground/55">
-                        <Badge variant="secondary" className="px-1.5 py-0 h-5 text-[10px] font-medium bg-black/5 dark:bg-white/10 border-0 shadow-none">
-                          {resolveSkillSourceLabel(skill, t)}
-                        </Badge>
-                        <span className="truncate font-mono">
-                          {skill.baseDir || t('detail.pathUnavailable')}
+                      {skill.slug && skill.slug !== skill.name && (
+                        <span className="text-[11px] font-mono px-1.5 py-0.5 rounded border border-black/10 dark:border-white/10 text-muted-foreground mt-1 inline-block">
+                          {skill.slug}
                         </span>
-                      </div>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-6 shrink-0" onClick={e => e.stopPropagation()}>
-                    {skill.version && (
-                      <span className="text-[13px] font-mono text-muted-foreground">
-                        v{skill.version}
-                      </span>
-                    )}
+
+                  {/* 描述 */}
+                  <p className="text-[13px] text-muted-foreground line-clamp-2 mb-3 flex-1 leading-relaxed">
+                    {skill.description}
+                  </p>
+
+                  {/* 底部: 来源 + 版本 + 开关 */}
+                  <div className="flex items-center justify-between pt-3 border-t border-black/5 dark:border-white/5" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="px-1.5 py-0 h-5 text-[10px] font-medium bg-black/5 dark:bg-white/10 border-0 shadow-none">
+                        {resolveSkillSourceLabel(skill, t)}
+                      </Badge>
+                      {skill.version && (
+                        <span className="text-[11px] font-mono text-muted-foreground">v{skill.version}</span>
+                      )}
+                    </div>
                     <Switch
                       checked={skill.enabled}
                       onCheckedChange={(checked) => handleToggle(skill.id, checked)}
