@@ -178,7 +178,7 @@ function createWindow(): BrowserWindow {
 
   const win = new BrowserWindow({
     width: 1280,
-    height: 800,
+    height: 860,
     minWidth: 960,
     minHeight: 600,
     icon: getAppIcon(),

@@ -336,7 +336,7 @@ function WelcomeContent() {
       </p>
 
       {/* Language Selector */}
-      <div className="flex justify-center gap-2 py-2">
+      {/*<div className="flex justify-center gap-2 py-2">
         {SUPPORTED_LANGUAGES.map((lang) => (
           <Button
             key={lang.code}
@@ -348,7 +348,7 @@ function WelcomeContent() {
             {lang.label}
           </Button>
         ))}
-      </div>
+      </div>*/}
 
       <ul className="text-left space-y-3 pt-2">
         <li className="flex items-center gap-3 p-2.5 rounded-lg glass-subtle border border-glass-border">
