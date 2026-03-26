@@ -29,12 +29,13 @@
 </p>
 
 <p align="center">
-  <img src="resources/screenshot/sprite.png" style="width: 100%; height: auto;">
+  <img src="resources/screenshot/job.png" style="width: 100%; height: auto;">
 </p>
 
 <p align="center">
-  <img src="resources/screenshot/job.png" style="width: 100%; height: auto;">
+  <img src="resources/screenshot/sprite.png" style="width: 100%; height: auto;">
 </p>
+
 
 ---
 
