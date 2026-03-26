@@ -1188,7 +1188,7 @@ function ProviderContent({
             aria-expanded={providerMenuOpen}
             onClick={() => setProviderMenuOpen((open) => !open)}
             className={cn(
-              'w-full rounded-md border border-input bg-background px-3 py-2 text-sm',
+              'w-full rounded-md border border-glass-border bg-[hsl(var(--glass-bg)/0.7)] backdrop-blur-glass px-3 py-2 text-sm',
               'flex items-center justify-between gap-2',
               'focus:outline-none focus:ring-2 focus:ring-ring'
             )}
@@ -1219,7 +1219,7 @@ function ProviderContent({
           {providerMenuOpen && (
             <div
               role="listbox"
-              className="absolute z-20 mt-1 w-full rounded-md border border-border bg-popover shadow-md max-h-64 overflow-auto"
+              className="absolute z-20 mt-1 w-full rounded-md border border-glass-border glass-panel max-h-64 overflow-auto"
             >
               {providers.map((p) => {
                 const iconUrl = getProviderIconUrl(p.id);
@@ -1234,8 +1234,8 @@ function ProviderContent({
                     onClick={() => handleSelectProvider(p.id)}
                     className={cn(
                       'w-full px-3 py-2 text-left text-sm flex items-center justify-between gap-2',
-                      'hover:bg-accent transition-colors',
-                      isSelected && 'bg-accent/60'
+                      'hover:bg-white/20 dark:hover:bg-white/10 transition-colors',
+                      isSelected && 'bg-white/15 dark:bg-white/10'
                     )}
                   >
                     <div className="flex items-center gap-2 min-w-0">
@@ -1298,7 +1298,7 @@ function ProviderContent({
                     'flex-1 py-2 px-3 rounded-lg border transition-colors',
                     arkMode === 'apikey'
                       ? 'bg-primary/10 border-primary/30 font-medium'
-                      : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                      : 'border-glass-border glass-subtle text-muted-foreground hover:bg-white/20 dark:hover:bg-white/10'
                   )}
                 >
                   {t('settings:aiProviders.authModes.apiKey')}
@@ -1315,7 +1315,7 @@ function ProviderContent({
                     'flex-1 py-2 px-3 rounded-lg border transition-colors',
                     arkMode === 'codeplan'
                       ? 'bg-primary/10 border-primary/30 font-medium'
-                      : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                      : 'border-glass-border glass-subtle text-muted-foreground hover:bg-white/20 dark:hover:bg-white/10'
                   )}
                 >
                   {t('provider.codePlanMode')}
@@ -1343,7 +1343,6 @@ function ProviderContent({
                   onConfiguredChange(false);
                 }}
                 autoComplete="off"
-                className="bg-background border-input"
               />
             </div>
           )}
@@ -1362,7 +1361,6 @@ function ProviderContent({
                   onConfiguredChange(false);
                 }}
                 autoComplete="off"
-                className="bg-background border-input"
               />
               <p className="text-xs text-muted-foreground">
                 {t('provider.modelIdDesc')}
@@ -1384,7 +1382,7 @@ function ProviderContent({
                     'flex-1 py-2 px-3 rounded-lg border transition-colors',
                     apiProtocol === 'openai-completions'
                       ? 'bg-primary/10 border-primary/30 font-medium'
-                      : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                      : 'border-glass-border glass-subtle text-muted-foreground hover:bg-white/20 dark:hover:bg-white/10'
                   )}
                 >
                   {t('provider.protocols.openaiCompletions')}
@@ -1399,7 +1397,7 @@ function ProviderContent({
                     'flex-1 py-2 px-3 rounded-lg border transition-colors',
                     apiProtocol === 'openai-responses'
                       ? 'bg-primary/10 border-primary/30 font-medium'
-                      : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                      : 'border-glass-border glass-subtle text-muted-foreground hover:bg-white/20 dark:hover:bg-white/10'
                   )}
                 >
                   {t('provider.protocols.openaiResponses')}
@@ -1414,7 +1412,7 @@ function ProviderContent({
                     'flex-1 py-2 px-3 rounded-lg border transition-colors',
                     apiProtocol === 'anthropic-messages'
                       ? 'bg-primary/10 border-primary/30 font-medium'
-                      : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                      : 'border-glass-border glass-subtle text-muted-foreground hover:bg-white/20 dark:hover:bg-white/10'
                   )}
                 >
                   {t('provider.protocols.anthropic')}
@@ -1425,12 +1423,12 @@ function ProviderContent({
 
           {/* Auth mode toggle for providers supporting both */}
           {isOAuth && supportsApiKey && (
-            <div className="flex rounded-lg border overflow-hidden text-sm">
+            <div className="flex rounded-lg border border-glass-border overflow-hidden text-sm glass-subtle">
               <button
                 onClick={() => setAuthMode('oauth')}
                 className={cn(
                   'flex-1 py-2 px-3 transition-colors',
-                  authMode === 'oauth' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'
+                  authMode === 'oauth' ? 'bg-primary text-primary-foreground' : 'hover:bg-white/20 dark:hover:bg-white/10 text-muted-foreground'
                 )}
               >
                 {t('settings:aiProviders.oauth.loginMode')}
@@ -1439,7 +1437,7 @@ function ProviderContent({
                 onClick={() => setAuthMode('apikey')}
                 className={cn(
                   'flex-1 py-2 px-3 transition-colors',
-                  authMode === 'apikey' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'
+                  authMode === 'apikey' ? 'bg-primary text-primary-foreground' : 'hover:bg-white/20 dark:hover:bg-white/10 text-muted-foreground'
                 )}
               >
                 {t('settings:aiProviders.oauth.apikeyMode')}
@@ -1463,7 +1461,7 @@ function ProviderContent({
                     setKeyValid(null);
                   }}
                   autoComplete="off"
-                  className="pr-10 bg-background border-input"
+                  className="pr-10"
                 />
                 <button
                   type="button"
@@ -1564,7 +1562,7 @@ function ProviderContent({
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-center gap-2 p-3 bg-background border rounded-lg">
+                        <div className="flex items-center justify-center gap-2 p-3 glass-subtle border border-glass-border rounded-lg">
                           <code className="text-2xl font-mono tracking-widest font-bold text-primary">
                             {oauthData.userCode}
                           </code>
