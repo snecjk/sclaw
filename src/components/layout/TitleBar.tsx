@@ -13,7 +13,7 @@ export function TitleBar() {
 
   if (platform === 'darwin') {
     // macOS: just a drag region, traffic lights are native
-    return <div className="drag-region h-10 shrink-0 border-b bg-background" />;
+    return <div className="drag-region h-10 shrink-0 border-b glass" />;
   }
 
   // Linux keeps the native frame/title bar for better IME compatibility.
@@ -51,20 +51,20 @@ function WindowsTitleBar() {
   };
 
   return (
-    <div className="drag-region flex h-10 shrink-0 items-center justify-end border-b bg-background">
+    <div className="drag-region flex h-10 shrink-0 items-center justify-end border-b glass">
 
       {/* Right: Window Controls */}
       <div className="no-drag flex h-full">
         <button
           onClick={handleMinimize}
-          className="flex h-full w-11 items-center justify-center text-muted-foreground hover:bg-accent transition-colors"
+          className="flex h-full w-11 items-center justify-center text-muted-foreground hover:bg-white/10 transition-colors"
           title="Minimize"
         >
           <Minus className="h-4 w-4" />
         </button>
         <button
           onClick={handleMaximize}
-          className="flex h-full w-11 items-center justify-center text-muted-foreground hover:bg-accent transition-colors"
+          className="flex h-full w-11 items-center justify-center text-muted-foreground hover:bg-white/10 transition-colors"
           title={maximized ? 'Restore' : 'Maximize'}
         >
           {maximized ? <Copy className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}

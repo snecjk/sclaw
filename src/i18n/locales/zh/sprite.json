@@ -1,0 +1,10 @@
+{
+  "greeting": "Hi, 有什么需要我帮忙的吗~",
+  "quickAction1": "帮我写一封邮件",
+  "quickAction2": "帮我总结一下文档",
+  "quickAction3": "帮我翻译以下内容",
+  "quickAction4": "帮我头脑风暴一些想法",
+  "inputPlaceholder": "任何问题，尽管问吧~",
+  "sending": "思考中...",
+  "openMainWindow": "打开主窗口"
+}

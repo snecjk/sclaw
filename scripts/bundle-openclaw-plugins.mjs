@@ -6,8 +6,6 @@
  * Build a self-contained mirror of OpenClaw third-party plugins for packaging.
  * Current plugins:
  *   - @soimy/dingtalk -> build/openclaw-plugins/dingtalk
- *   - @wecom/wecom-openclaw-plugin -> build/openclaw-plugins/wecom
- *   - @tencent-weixin/openclaw-weixin -> build/openclaw-plugins/openclaw-weixin
  *
  * The output plugin directory contains:
  *   - plugin source files (index.ts, openclaw.plugin.json, package.json, ...)
@@ -18,11 +16,67 @@ import 'zx/globals';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const OUTPUT_ROOT = path.join(ROOT, 'build', 'openclaw-plugins');
 const NODE_MODULES = path.join(ROOT, 'node_modules');
+const CACHE_DIR = path.join(ROOT, '.download-cache', 'openclaw-plugins');
+const CACHE_MANIFEST = path.join(CACHE_DIR, 'manifest.json');
+
+// Ensure cache directory exists
+if (!fs.existsSync(CACHE_DIR)) {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+}
+
+// Load or initialize cache manifest
+function loadCacheManifest() {
+  if (fs.existsSync(CACHE_MANIFEST)) {
+    try {
+      return JSON.parse(fs.readFileSync(CACHE_MANIFEST, 'utf8'));
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function saveCacheManifest(manifest) {
+  fs.writeFileSync(CACHE_MANIFEST, JSON.stringify(manifest, null, 2), 'utf8');
+}
+
+// Check if cache is valid
+function isCacheValid(cacheKey) {
+  if (!cacheKey) return false;
+  const manifest = loadCacheManifest();
+  if (manifest.cacheKey !== cacheKey) return false;
+  if (!fs.existsSync(manifest.cachePath)) return false;
+  return true;
+}
+
+// Copy from cache to output
+function copyFromCache(cachePath, outputPath) {
+  if (fs.existsSync(outputPath)) {
+    fs.rmSync(outputPath, { recursive: true });
+  }
+  fs.cpSync(cachePath, outputPath, { recursive: true, dereference: true });
+}
+
+// Save output to cache
+function saveToCache(outputPath, cacheKey) {
+  const cachePath = path.join(CACHE_DIR, `plugins-${cacheKey}`);
+  if (fs.existsSync(cachePath)) {
+    fs.rmSync(cachePath, { recursive: true });
+  }
+  fs.cpSync(outputPath, cachePath, { recursive: true, dereference: true });
+  
+  const manifest = loadCacheManifest();
+  manifest.cacheKey = cacheKey;
+  manifest.cachePath = cachePath;
+  manifest.createdAt = new Date().toISOString();
+  saveCacheManifest(manifest);
+}
 
 // On Windows, pnpm virtual store paths can exceed MAX_PATH (260 chars).
 // Adding \\?\ prefix bypasses the limit for Win32 fs calls.
@@ -37,11 +91,28 @@ function normWin(p) {
 
 const PLUGINS = [
   { npmName: '@soimy/dingtalk', pluginId: 'dingtalk' },
-  { npmName: '@wecom/wecom-openclaw-plugin', pluginId: 'wecom' },
-  { npmName: '@sliverp/qqbot', pluginId: 'qqbot' },
-  { npmName: '@larksuite/openclaw-lark', pluginId: 'feishu-openclaw-plugin' },
-  { npmName: '@tencent-weixin/openclaw-weixin', pluginId: 'openclaw-weixin' },
 ];
+
+// Now define the hash function after PLUGINS is defined
+function calculatePluginsHash() {
+  try {
+    const hash = createHash('sha256');
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    
+    // Include plugin versions in hash
+    for (const plugin of PLUGINS) {
+      const pluginPkgPath = path.join(NODE_MODULES, ...plugin.npmName.split('/'), 'package.json');
+      if (fs.existsSync(pluginPkgPath)) {
+        const pluginPkg = JSON.parse(fs.readFileSync(pluginPkgPath, 'utf8'));
+        hash.update(`${plugin.npmName}@${pluginPkg.version || 'unknown'}`);
+      }
+    }
+    
+    return hash.digest('hex').substring(0, 16);
+  } catch {
+    return null;
+  }
+}
 
 function getVirtualStoreNodeModules(realPkgPath) {
   let dir = realPkgPath;
@@ -236,10 +307,28 @@ function patchPluginId(pluginDir, expectedId) {
 }
 
 echo`📦 Bundling OpenClaw plugin mirrors...`;
+
+// Check cache first
+const cacheKey = calculatePluginsHash();
+if (isCacheValid(cacheKey)) {
+  const manifest = loadCacheManifest();
+  echo`   📦 Using cached plugins bundle (key: ${cacheKey})`;
+  copyFromCache(manifest.cachePath, OUTPUT_ROOT);
+  echo`✅ Plugin mirrors ready (from cache): ${OUTPUT_ROOT}`;
+  process.exit(0);
+}
+
 fs.mkdirSync(OUTPUT_ROOT, { recursive: true });
 
 for (const plugin of PLUGINS) {
   bundleOnePlugin(plugin);
+}
+
+// Save to cache for future builds
+if (cacheKey) {
+  echo`💾 Saving plugins bundle to cache...`;
+  saveToCache(OUTPUT_ROOT, cacheKey);
+  echo`   ✅ Cache saved (key: ${cacheKey})`;
 }
 
 echo`✅ Plugin mirrors ready: ${OUTPUT_ROOT}`;

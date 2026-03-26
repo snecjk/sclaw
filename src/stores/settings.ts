@@ -70,7 +70,9 @@ const defaultSettings = {
   language: resolveSupportedLanguage(typeof navigator !== 'undefined' ? navigator.language : undefined),
   startMinimized: false,
   launchAtStartup: false,
-  telemetryEnabled: true,
+  // Telemetry disabled by default for faster cold starts
+  // Users can enable it in Settings > Advanced
+  telemetryEnabled: false,
   gatewayAutoStart: true,
   gatewayPort: 18789,
   proxyEnabled: false,
@@ -178,7 +180,7 @@ export const useSettingsStore = create<SettingsState>()(
       resetSettings: () => set(defaultSettings),
     }),
     {
-      name: 'clawx-settings',
+      name: 'stoclaw-settings',
     }
   )
 );

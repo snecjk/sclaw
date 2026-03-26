@@ -1,0 +1,10 @@
+{
+  "greeting": "Hi, what can I help you with?",
+  "quickAction1": "Help me write an email",
+  "quickAction2": "Summarize this document",
+  "quickAction3": "Translate the following",
+  "quickAction4": "Help me brainstorm ideas",
+  "inputPlaceholder": "Ask anything...",
+  "sending": "Thinking...",
+  "openMainWindow": "Open main window"
+}

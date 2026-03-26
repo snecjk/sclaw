@@ -233,8 +233,8 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <Card className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-3xl border-0 shadow-2xl bg-[#f3f1e9] dark:bg-card overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 bg-black/40 dark:bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <Card className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-3xl border border-glass-border shadow-2xl glass-panel overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <CardHeader className="flex flex-row items-start justify-between pb-2 shrink-0">
           <div>
             <CardTitle className="text-2xl font-serif font-normal">{job ? t('dialog.editTitle') : t('dialog.createTitle')}</CardTitle>
@@ -253,7 +253,7 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
               placeholder={t('dialog.taskNamePlaceholder')}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="h-[44px] rounded-xl font-mono text-[13px] bg-[#eeece3] dark:bg-muted border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:border-primary shadow-sm transition-all text-foreground placeholder:text-foreground/40"
+              className="h-[44px] rounded-xl font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:border-primary shadow-sm transition-all text-foreground placeholder:text-foreground/40"
             />
           </div>
 
@@ -266,7 +266,7 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               rows={3}
-              className="rounded-xl font-mono text-[13px] bg-[#eeece3] dark:bg-muted border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:border-primary shadow-sm transition-all text-foreground placeholder:text-foreground/40 resize-none"
+              className="rounded-xl font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:border-primary shadow-sm transition-all text-foreground placeholder:text-foreground/40 resize-none"
             />
           </div>
 
@@ -286,7 +286,7 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
                       "justify-start h-10 rounded-xl font-medium text-[13px] transition-all",
                       schedule === preset.value
                         ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm border-transparent"
-                        : "bg-[#eeece3] dark:bg-muted border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80 hover:text-foreground"
+                        : "bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80 hover:text-foreground"
                     )}
                   >
                     <Timer className="h-4 w-4 mr-2 opacity-70" />
@@ -299,7 +299,7 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
                 placeholder={t('dialog.cronPlaceholder')}
                 value={customSchedule}
                 onChange={(e) => setCustomSchedule(e.target.value)}
-                className="h-[44px] rounded-xl font-mono text-[13px] bg-[#eeece3] dark:bg-muted border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:border-primary shadow-sm transition-all text-foreground placeholder:text-foreground/40"
+                className="h-[44px] rounded-xl font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:border-primary shadow-sm transition-all text-foreground placeholder:text-foreground/40"
               />
             )}
             <div className="flex items-center justify-between mt-2">
@@ -319,7 +319,7 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
           </div>
 
           {/* Enabled */}
-          <div className="flex items-center justify-between bg-[#eeece3] dark:bg-muted p-4 rounded-2xl shadow-sm border border-black/5 dark:border-white/5">
+          <div className="flex items-center justify-between bg-[hsl(var(--glass-bg)/0.5)] p-4 rounded-2xl shadow-sm border border-glass-border">
             <div>
               <Label className="text-[14px] text-foreground/80 font-bold">{t('dialog.enableImmediately')}</Label>
               <p className="text-[13px] text-muted-foreground mt-0.5">
@@ -542,14 +542,14 @@ export function Cron() {
 
   if (loading) {
     return (
-      <div className="flex flex-col -m-6 dark:bg-background min-h-[calc(100vh-2.5rem)] items-center justify-center">
+      <div className="flex flex-col -m-6 min-h-[calc(100vh-2.5rem)] items-center justify-center">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
+    <div className="flex flex-col -m-6 h-[calc(100vh-2.5rem)] overflow-hidden">
       <div className="w-full max-w-5xl mx-auto flex flex-col h-full p-10 pt-16">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-start justify-between mb-12 shrink-0 gap-4">

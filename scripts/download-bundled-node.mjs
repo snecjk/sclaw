@@ -6,6 +6,27 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const NODE_VERSION = '22.16.0';
 const BASE_URL = `https://nodejs.org/dist/v${NODE_VERSION}`;
 const OUTPUT_BASE = path.join(ROOT_DIR, 'resources', 'bin');
+const CACHE_DIR = path.join(ROOT_DIR, '.download-cache');
+const CACHE_MANIFEST = path.join(CACHE_DIR, 'node-manifest.json');
+
+// Ensure cache directory exists
+await fs.ensureDir(CACHE_DIR);
+
+// Load or initialize cache manifest
+async function loadCacheManifest() {
+  if (await fs.pathExists(CACHE_MANIFEST)) {
+    try {
+      return await fs.readJson(CACHE_MANIFEST);
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+async function saveCacheManifest(manifest) {
+  await fs.writeJson(CACHE_MANIFEST, manifest, { spaces: 2 });
+}
 
 const TARGETS = {
   'win32-x64': {
@@ -31,14 +52,25 @@ async function setupTarget(id) {
 
   const targetDir = path.join(OUTPUT_BASE, id);
   const tempDir = path.join(ROOT_DIR, 'temp_node_extract');
-  const archivePath = path.join(ROOT_DIR, target.filename);
+  const cacheKey = `${NODE_VERSION}_${target.filename}`;
+  const cachedArchive = path.join(CACHE_DIR, cacheKey);
   const downloadUrl = `${BASE_URL}/${target.filename}`;
+  const outputNode = path.join(targetDir, 'node.exe');
 
   echo(chalk.blue`\n📦 Setting up Node.js for ${id}...`);
 
-  // Only remove the target binary, not the entire directory,
-  // to avoid deleting uv.exe or other binaries placed by other download scripts.
-  const outputNode = path.join(targetDir, 'node.exe');
+  // Check if binary already exists and is valid
+  const cacheManifest = await loadCacheManifest();
+  
+  if (await fs.pathExists(outputNode)) {
+    // Verify cached archive exists and binary is from this version
+    if (cacheManifest[cacheKey] && await fs.pathExists(cachedArchive)) {
+      echo(chalk.green`   ✅ Using existing binary (cached)`);
+      return;
+    }
+  }
+
+  // Cleanup & Prep
   if (await fs.pathExists(outputNode)) {
     await fs.remove(outputNode);
   }
@@ -46,12 +78,33 @@ async function setupTarget(id) {
   await fs.ensureDir(targetDir);
   await fs.ensureDir(tempDir);
 
+  let archivePath;
+  let needsCleanup = false;
+
   try {
-    echo`⬇️ Downloading: ${downloadUrl}`;
-    const response = await fetch(downloadUrl);
-    if (!response.ok) throw new Error(`Failed to download: ${response.statusText}`);
-    const buffer = await response.arrayBuffer();
-    await fs.writeFile(archivePath, Buffer.from(buffer));
+    // Check if we have a valid cached archive
+    if (cacheManifest[cacheKey] && await fs.pathExists(cachedArchive)) {
+      echo`   📦 Using cached archive`;
+      archivePath = cachedArchive;
+    } else {
+      // Download
+      archivePath = path.join(ROOT_DIR, target.filename);
+      needsCleanup = true;
+      echo`⬇️ Downloading: ${downloadUrl}`;
+      const response = await fetch(downloadUrl);
+      if (!response.ok) throw new Error(`Failed to download: ${response.statusText}`);
+      const buffer = await response.arrayBuffer();
+      await fs.writeFile(archivePath, Buffer.from(buffer));
+      
+      // Save to cache
+      await fs.copyFile(archivePath, cachedArchive);
+      cacheManifest[cacheKey] = {
+        version: NODE_VERSION,
+        filename: target.filename,
+        downloadedAt: new Date().toISOString(),
+      };
+      await saveCacheManifest(cacheManifest);
+    }
 
     echo`📂 Extracting...`;
     if (os.platform() === 'win32') {
@@ -77,8 +130,10 @@ async function setupTarget(id) {
 
     echo(chalk.green`✅ Success: ${outputNode}`);
   } finally {
-    await fs.remove(archivePath);
     await fs.remove(tempDir);
+    if (needsCleanup) {
+      await fs.remove(path.join(ROOT_DIR, target.filename));
+    }
   }
 }
 

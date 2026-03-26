@@ -17,10 +17,15 @@ import { Skills } from './pages/Skills';
 import { Cron } from './pages/Cron';
 import { Settings } from './pages/Settings';
 import { Setup } from './pages/Setup';
+import { Login } from './pages/Login';
+import { Sprite } from './pages/Sprite';
+import { FloatIcon } from './pages/FloatIcon';
 import { useSettingsStore } from './stores/settings';
+import { useAuthStore } from './stores/auth';
 import { useGatewayStore } from './stores/gateway';
 import { useProviderStore } from './stores/providers';
-import { applyGatewayTransportPreference } from './lib/api-client';
+import { useChatStore } from './stores/chat';
+import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
 
 
 /**
@@ -96,10 +101,13 @@ function App() {
   const setupComplete = useSettingsStore((state) => state.setupComplete);
   const initGateway = useGatewayStore((state) => state.init);
   const initProviders = useProviderStore((state) => state.init);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const initAuth = useAuthStore((state) => state.init);
 
   useEffect(() => {
     initSettings();
-  }, [initSettings]);
+    initAuth();
+  }, [initSettings, initAuth]);
 
   // Sync i18n language with persisted settings on mount
   useEffect(() => {
@@ -118,12 +126,19 @@ function App() {
     initProviders();
   }, [initProviders]);
 
-  // Redirect to setup wizard if not complete
+  // Auth guard: redirect to login if not authenticated, then to setup if not complete
+  // Skip auth guard for sprite and float-icon routes (they manage their own initialization)
   useEffect(() => {
-    if (!setupComplete && !location.pathname.startsWith('/setup')) {
+    if (location.pathname === '/sprite' || location.pathname === '/float-icon') return;
+    if (!isAuthenticated && !location.pathname.startsWith('/login')) {
+      navigate('/login');
+    } else if (isAuthenticated && location.pathname.startsWith('/login')) {
+      // Logged in — leave the login page
+      navigate(setupComplete ? '/' : '/setup');
+    } else if (isAuthenticated && !setupComplete && !location.pathname.startsWith('/setup')) {
       navigate('/setup');
     }
-  }, [setupComplete, location.pathname, navigate]);
+  }, [isAuthenticated, setupComplete, location.pathname, navigate]);
 
   // Listen for navigation events from main process
   useEffect(() => {
@@ -162,12 +177,33 @@ function App() {
     applyGatewayTransportPreference();
   }, []);
 
+  // Push current session context to main process for the sprite window.
+  // Only runs in the main window (not in the sprite route).
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const currentAgentId = useChatStore((s) => s.currentAgentId);
+  useEffect(() => {
+    if (location.pathname === '/sprite' || location.pathname === '/float-icon') return;
+    invokeIpc('sprite:pushSessionContext', {
+      sessionKey: currentSessionKey,
+      agentId: currentAgentId,
+    });
+  }, [currentSessionKey, currentAgentId, location.pathname]);
+
   return (
     <ErrorBoundary>
       <TooltipProvider delayDuration={300}>
         <Routes>
+          {/* SSO Login page */}
+          <Route path="/login" element={<Login />} />
+
           {/* Setup wizard (shown on first launch) */}
           <Route path="/setup/*" element={<Setup />} />
+
+          {/* Desktop sprite (floating assistant window) */}
+          <Route path="/sprite" element={<Sprite />} />
+
+          {/* Desktop float icon (floating launcher) */}
+          <Route path="/float-icon" element={<FloatIcon />} />
 
           {/* Main application routes */}
           <Route element={<MainLayout />}>

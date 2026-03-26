@@ -17,10 +17,89 @@
  */
 
 import 'zx/globals';
+import { createHash } from 'node:crypto';
 
 const ROOT = path.resolve(__dirname, '..');
 const OUTPUT = path.join(ROOT, 'build', 'openclaw');
 const NODE_MODULES = path.join(ROOT, 'node_modules');
+const CACHE_DIR = path.join(ROOT, '.download-cache', 'openclaw-bundle');
+const CACHE_MANIFEST = path.join(CACHE_DIR, 'manifest.json');
+
+// Ensure cache directory exists
+if (!fs.existsSync(CACHE_DIR)) {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+}
+
+// Calculate hash of package.json files to detect changes
+function calculateHash(filePath) {
+  const hash = createHash('sha256');
+  const content = fs.readFileSync(filePath);
+  hash.update(content);
+  return hash.digest('hex');
+}
+
+// Get cache key based on openclaw package version and dependencies
+function getCacheKey() {
+  try {
+    const openclawPkg = JSON.parse(fs.readFileSync(path.join(NODE_MODULES, 'openclaw', 'package.json'), 'utf8'));
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    const hash = createHash('sha256');
+    hash.update(openclawPkg.version || 'unknown');
+    hash.update(JSON.stringify(pkg.dependencies || {}));
+    hash.update(JSON.stringify(pkg.devDependencies || {}));
+    return hash.digest('hex').substring(0, 16);
+  } catch {
+    return null;
+  }
+}
+
+// Load or initialize cache manifest
+function loadCacheManifest() {
+  if (fs.existsSync(CACHE_MANIFEST)) {
+    try {
+      return JSON.parse(fs.readFileSync(CACHE_MANIFEST, 'utf8'));
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function saveCacheManifest(manifest) {
+  fs.writeFileSync(CACHE_MANIFEST, JSON.stringify(manifest, null, 2), 'utf8');
+}
+
+// Check if cache is valid
+function isCacheValid(cacheKey) {
+  if (!cacheKey) return false;
+  const manifest = loadCacheManifest();
+  if (manifest.cacheKey !== cacheKey) return false;
+  if (!fs.existsSync(manifest.cachePath)) return false;
+  return true;
+}
+
+// Copy from cache to output
+function copyFromCache(cachePath, outputPath) {
+  if (fs.existsSync(outputPath)) {
+    fs.rmSync(outputPath, { recursive: true });
+  }
+  fs.cpSync(cachePath, outputPath, { recursive: true, dereference: true });
+}
+
+// Save output to cache
+function saveToCache(outputPath, cacheKey) {
+  const cachePath = path.join(CACHE_DIR, `bundle-${cacheKey}`);
+  if (fs.existsSync(cachePath)) {
+    fs.rmSync(cachePath, { recursive: true });
+  }
+  fs.cpSync(outputPath, cachePath, { recursive: true, dereference: true });
+  
+  const manifest = loadCacheManifest();
+  manifest.cacheKey = cacheKey;
+  manifest.cachePath = cachePath;
+  manifest.createdAt = new Date().toISOString();
+  saveCacheManifest(manifest);
+}
 
 // On Windows, pnpm virtual store paths can exceed MAX_PATH (260 chars).
 function normWin(p) {
@@ -30,6 +109,17 @@ function normWin(p) {
 }
 
 echo`📦 Bundling openclaw for electron-builder...`;
+
+// 0. Check cache first
+const cacheKey = getCacheKey();
+if (isCacheValid(cacheKey)) {
+  const manifest = loadCacheManifest();
+  echo`   📦 Using cached bundle (key: ${cacheKey})`;
+  copyFromCache(manifest.cachePath, OUTPUT);
+  echo``;
+  echo`✅ Bundle complete (from cache): ${OUTPUT}`;
+  process.exit(0);
+}
 
 // 1. Resolve the real path of node_modules/openclaw (follows pnpm symlink)
 const openclawLink = path.join(NODE_MODULES, 'openclaw');
@@ -712,4 +802,12 @@ echo`   dist/entry.js: ${distExists ? '✓' : '✗'}`;
 if (!entryExists || !distExists) {
   echo`❌ Bundle verification failed!`;
   process.exit(1);
+}
+
+// 9. Save to cache for future builds
+if (cacheKey) {
+  echo``;
+  echo`💾 Saving bundle to cache...`;
+  saveToCache(OUTPUT, cacheKey);
+  echo`   ✅ Cache saved (key: ${cacheKey})`;
 }

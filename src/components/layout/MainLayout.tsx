@@ -8,7 +8,7 @@ import { TitleBar } from './TitleBar';
 
 export function MainLayout() {
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background">
+    <div className="flex h-screen flex-col overflow-hidden bg-canvas-gradient">
       {/* Title bar: drag region on macOS, icon + controls on Windows */}
       <TitleBar />
 

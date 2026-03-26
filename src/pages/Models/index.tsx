@@ -192,7 +192,7 @@ export function Models() {
   const usageLoading = isGatewayRunning && fetchState.status === 'loading';
 
   return (
-    <div className="flex flex-col -m-6 dark:bg-background h-[calc(100vh-2.5rem)] overflow-hidden">
+    <div className="flex flex-col -m-6 h-[calc(100vh-2.5rem)] overflow-hidden">
       <div className="w-full max-w-5xl mx-auto flex flex-col h-full p-10 pt-16">
         
         {/* Header */}
@@ -526,9 +526,9 @@ function UsageContentPopup({
   unknownModelLabel: string;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-3xl rounded-2xl border border-black/10 dark:border-white/10 bg-background shadow-xl">
-        <div className="flex items-start justify-between gap-3 border-b border-black/10 dark:border-white/10 px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 backdrop-blur-sm px-4" role="dialog" aria-modal="true">
+      <div className="w-full max-w-3xl rounded-2xl border border-glass-border glass-panel shadow-xl">
+        <div className="flex items-start justify-between gap-3 border-b border-glass-border px-5 py-4">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">{title}</p>
             <p className="text-xs text-muted-foreground truncate mt-0.5">
@@ -550,7 +550,7 @@ function UsageContentPopup({
             {entry.content}
           </pre>
         </div>
-        <div className="flex justify-end border-t border-black/10 dark:border-white/10 px-5 py-3">
+        <div className="flex justify-end border-t border-glass-border px-5 py-3">
           <Button variant="outline" onClick={onClose}>
             {closeLabel}
           </Button>

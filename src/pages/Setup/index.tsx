@@ -200,7 +200,7 @@ export function Setup() {
 
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+    <div className="flex h-screen flex-col overflow-hidden" style={{ background: 'linear-gradient(135deg, var(--canvas-from), var(--canvas-via), var(--canvas-to))' }}>
       <TitleBar />
       <div className="flex-1 overflow-auto">
         {/* Progress Indicator */}
@@ -215,7 +215,7 @@ export function Setup() {
                       ? 'border-primary bg-primary text-primary-foreground'
                       : i === safeStepIndex
                         ? 'border-primary text-primary'
-                        : 'border-slate-600 text-slate-600'
+                        : 'border-muted-foreground/40 text-muted-foreground/60'
                   )}
                 >
                   {i < safeStepIndex ? (
@@ -228,7 +228,7 @@ export function Setup() {
                   <div
                     className={cn(
                       'h-0.5 w-8 transition-colors',
-                      i < safeStepIndex ? 'bg-primary' : 'bg-slate-600'
+                      i < safeStepIndex ? 'bg-primary' : 'bg-muted-foreground/30'
                     )}
                   />
                 )}
@@ -248,11 +248,11 @@ export function Setup() {
           >
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold mb-2">{t(`steps.${step.id}.title`)}</h1>
-              <p className="text-slate-400">{t(`steps.${step.id}.description`)}</p>
+              <p className="text-muted-foreground">{t(`steps.${step.id}.description`)}</p>
             </div>
 
             {/* Step-specific content */}
-            <div className="rounded-xl bg-card text-card-foreground border shadow-sm p-8 mb-8">
+            <div className="glass-panel border border-glass-border rounded-2xl p-8 mb-8">
               {safeStepIndex === STEP.WELCOME && <WelcomeContent />}
               {safeStepIndex === STEP.RUNTIME && <RuntimeContent onStatusChange={setRuntimeChecksPassed} />}
               {safeStepIndex === STEP.PROVIDER && (
@@ -326,7 +326,9 @@ function WelcomeContent() {
   return (
     <div className="text-center space-y-4">
       <div className="mb-4 flex justify-center">
-        <img src={clawxIcon} alt="ClawX" className="h-16 w-16" />
+        <div className="glass-subtle border border-glass-border rounded-2xl p-4">
+          <img src={clawxIcon} alt="StoClaw" className="h-16 w-16" />
+        </div>
       </div>
       <h2 className="text-xl font-semibold">{t('welcome.title')}</h2>
       <p className="text-muted-foreground">
@@ -348,22 +350,22 @@ function WelcomeContent() {
         ))}
       </div>
 
-      <ul className="text-left space-y-2 text-muted-foreground pt-2">
-        <li className="flex items-center gap-2">
-          <CheckCircle2 className="h-5 w-5 text-green-400" />
-          {t('welcome.features.noCommand')}
+      <ul className="text-left space-y-3 pt-2">
+        <li className="flex items-center gap-3 p-2.5 rounded-lg glass-subtle border border-glass-border">
+          <CheckCircle2 className="h-5 w-5 text-green-500 dark:text-green-400 shrink-0" />
+          <span className="text-foreground/80">{t('welcome.features.noCommand')}</span>
         </li>
-        <li className="flex items-center gap-2">
-          <CheckCircle2 className="h-5 w-5 text-green-400" />
-          {t('welcome.features.modernUI')}
+        <li className="flex items-center gap-3 p-2.5 rounded-lg glass-subtle border border-glass-border">
+          <CheckCircle2 className="h-5 w-5 text-green-500 dark:text-green-400 shrink-0" />
+          <span className="text-foreground/80">{t('welcome.features.modernUI')}</span>
         </li>
-        <li className="flex items-center gap-2">
-          <CheckCircle2 className="h-5 w-5 text-green-400" />
-          {t('welcome.features.bundles')}
+        <li className="flex items-center gap-3 p-2.5 rounded-lg glass-subtle border border-glass-border">
+          <CheckCircle2 className="h-5 w-5 text-green-500 dark:text-green-400 shrink-0" />
+          <span className="text-foreground/80">{t('welcome.features.bundles')}</span>
         </li>
-        <li className="flex items-center gap-2">
-          <CheckCircle2 className="h-5 w-5 text-green-400" />
-          {t('welcome.features.crossPlatform')}
+        <li className="flex items-center gap-3 p-2.5 rounded-lg glass-subtle border border-glass-border">
+          <CheckCircle2 className="h-5 w-5 text-green-500 dark:text-green-400 shrink-0" />
+          <span className="text-foreground/80">{t('welcome.features.crossPlatform')}</span>
         </li>
       </ul>
     </div>
@@ -574,7 +576,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
   const renderStatus = (status: 'checking' | 'success' | 'error', message: string) => {
     if (status === 'checking') {
       return (
-        <span className="flex items-center gap-2 text-yellow-400 whitespace-nowrap">
+        <span className="flex items-center gap-2 text-yellow-500 dark:text-yellow-400 whitespace-nowrap">
           <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin" />
           {message || 'Checking...'}
         </span>
@@ -582,7 +584,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
     }
     if (status === 'success') {
       return (
-        <span className="flex items-center gap-2 text-green-400 whitespace-nowrap">
+        <span className="flex items-center gap-2 text-green-500 dark:text-green-400 whitespace-nowrap">
           <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
           {message}
         </span>
@@ -593,13 +595,13 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
     const displayMsg = isLong ? message.slice(0, ERROR_TRUNCATE_LEN) : message;
 
     return (
-      <span className="flex items-center gap-2 text-red-400 whitespace-nowrap">
+      <span className="flex items-center gap-2 text-red-500 dark:text-red-400 whitespace-nowrap">
         <XCircle className="h-5 w-5 flex-shrink-0" />
         <span>{displayMsg}</span>
         {isLong && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="cursor-pointer text-red-300 hover:text-red-200 font-medium">...</span>
+              <span className="cursor-pointer text-red-400 dark:text-red-300 hover:text-red-300 dark:hover:text-red-200 font-medium">...</span>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-sm whitespace-normal break-words text-xs">
               {message}
@@ -625,13 +627,13 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
         </div>
       </div>
       <div className="space-y-3">
-        <div className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 rounded-lg bg-muted/50">
+        <div className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 rounded-lg glass-subtle border border-glass-border">
           <span className="text-left">{t('runtime.nodejs')}</span>
           <div className="flex justify-end">
             {renderStatus(checks.nodejs.status, checks.nodejs.message)}
           </div>
         </div>
-        <div className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 rounded-lg bg-muted/50">
+        <div className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 rounded-lg glass-subtle border border-glass-border">
           <div className="text-left min-w-0">
             <span>{t('runtime.openclaw')}</span>
             {openclawDir && (
@@ -644,7 +646,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
             {renderStatus(checks.openclaw.status, checks.openclaw.message)}
           </div>
         </div>
-        <div className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 rounded-lg bg-muted/50">
+        <div className="grid grid-cols-[1fr_auto] items-center gap-4 p-3 rounded-lg glass-subtle border border-glass-border">
           <div className="flex items-center gap-2 text-left">
             <span>{t('runtime.gateway')}</span>
             {checks.gateway.status === 'error' && (
@@ -660,11 +662,11 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
       </div>
 
       {(checks.nodejs.status === 'error' || checks.openclaw.status === 'error') && (
-        <div className="mt-4 p-4 rounded-lg bg-red-900/20 border border-red-500/20">
+        <div className="mt-4 p-4 rounded-lg glass-subtle border border-destructive/30">
           <div className="flex items-start gap-2">
-            <AlertCircle className="h-5 w-5 text-red-400 mt-0.5" />
+            <AlertCircle className="h-5 w-5 text-red-500 dark:text-red-400 mt-0.5" />
             <div>
-              <p className="font-medium text-red-400">{t('runtime.issue.title')}</p>
+              <p className="font-medium text-red-500 dark:text-red-400">{t('runtime.issue.title')}</p>
               <p className="text-sm text-muted-foreground mt-1">
                 {t('runtime.issue.desc')}
               </p>
@@ -675,7 +677,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
 
       {/* Log viewer panel */}
       {showLogs && (
-        <div className="mt-4 p-4 rounded-lg bg-black/40 border border-border">
+        <div className="mt-4 p-4 rounded-lg glass-subtle border border-glass-border">
           <div className="flex items-center justify-between mb-2">
             <p className="font-medium text-foreground text-sm">{t('runtime.logs.title')}</p>
             <div className="flex gap-2">
@@ -688,7 +690,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
               </Button>
             </div>
           </div>
-          <pre className="text-xs text-slate-300 bg-black/50 p-3 rounded max-h-60 overflow-auto whitespace-pre-wrap font-mono">
+          <pre className="text-xs text-muted-foreground bg-[hsl(var(--glass-bg)/0.5)] p-3 rounded-lg max-h-60 overflow-auto whitespace-pre-wrap font-mono">
             {logContent || t('runtime.logs.noLogs')}
           </pre>
         </div>
@@ -1477,8 +1479,8 @@ function ProviderContent({
           {/* Device OAuth Trigger */}
           {useOAuthFlow && (
             <div className="space-y-4 pt-2">
-              <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 p-4 text-center">
-                <p className="text-sm text-blue-200 mb-3 block">
+              <div className="rounded-lg glass-subtle border border-primary/20 p-4 text-center">
+                <p className="text-sm text-muted-foreground mb-3 block">
                   This provider requires signing in via your browser.
                 </p>
                 <Button
@@ -1496,9 +1498,9 @@ function ProviderContent({
 
               {/* OAuth Active State Modal / Inline View */}
               {oauthFlowing && (
-                <div className="mt-4 p-4 border rounded-xl bg-card relative overflow-hidden">
+                <div className="mt-4 p-4 rounded-xl glass-subtle border border-glass-border relative overflow-hidden">
                   {/* Background pulse effect */}
-                  <div className="absolute inset-0 bg-primary/5 animate-pulse" />
+                  <div className="absolute inset-0 bg-primary/5 animate-pulse rounded-xl" />
 
                   <div className="relative z-10 flex flex-col items-center justify-center text-center space-y-4">
                     {oauthError ? (
@@ -1698,13 +1700,13 @@ function InstallingContent({ skills, onComplete, onSkip }: InstallingContentProp
   const getStatusIcon = (status: InstallStatus) => {
     switch (status) {
       case 'pending':
-        return <div className="h-5 w-5 rounded-full border-2 border-slate-500" />;
+        return <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/40" />;
       case 'installing':
         return <Loader2 className="h-5 w-5 text-primary animate-spin" />;
       case 'completed':
-        return <CheckCircle2 className="h-5 w-5 text-green-400" />;
+        return <CheckCircle2 className="h-5 w-5 text-green-500 dark:text-green-400" />;
       case 'failed':
-        return <XCircle className="h-5 w-5 text-red-400" />;
+        return <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" />;
     }
   };
 
@@ -1715,9 +1717,9 @@ function InstallingContent({ skills, onComplete, onSkip }: InstallingContentProp
       case 'installing':
         return <span className="text-primary">{t('installing.status.installing')}</span>;
       case 'completed':
-        return <span className="text-green-400">{t('installing.status.installed')}</span>;
+        return <span className="text-green-500 dark:text-green-400">{t('installing.status.installed')}</span>;
       case 'failed':
-        return <span className="text-red-400">{t('installing.status.failed')}</span>;
+        return <span className="text-red-500 dark:text-red-400">{t('installing.status.failed')}</span>;
     }
   };
 
@@ -1737,7 +1739,7 @@ function InstallingContent({ skills, onComplete, onSkip }: InstallingContentProp
           <span className="text-muted-foreground">{t('installing.progress')}</span>
           <span className="text-primary">{overallProgress}%</span>
         </div>
-        <div className="h-2 bg-secondary rounded-full overflow-hidden">
+        <div className="h-2 rounded-full overflow-hidden glass-subtle border border-glass-border">
           <motion.div
             className="h-full bg-primary"
             initial={{ width: 0 }}
@@ -1755,8 +1757,8 @@ function InstallingContent({ skills, onComplete, onSkip }: InstallingContentProp
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className={cn(
-              'flex items-center justify-between p-3 rounded-lg',
-              skill.status === 'installing' ? 'bg-muted' : 'bg-muted/50'
+              'flex items-center justify-between p-3 rounded-lg glass-subtle border border-glass-border',
+              skill.status === 'installing' && 'ring-1 ring-primary/20'
             )}
           >
             <div className="flex items-center gap-3">
@@ -1776,18 +1778,18 @@ function InstallingContent({ skills, onComplete, onSkip }: InstallingContentProp
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="p-4 rounded-lg bg-red-900/30 border border-red-500/50 text-red-200 text-sm"
+          className="p-4 rounded-lg glass-subtle border border-destructive/30 text-sm"
         >
           <div className="flex items-start gap-2">
-            <AlertCircle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
+            <AlertCircle className="h-5 w-5 text-red-500 dark:text-red-400 shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <p className="font-semibold">{t('installing.error')}</p>
-              <pre className="text-xs bg-black/30 p-2 rounded overflow-x-auto whitespace-pre-wrap font-monospace">
+              <p className="font-semibold text-red-500 dark:text-red-400">{t('installing.error')}</p>
+              <pre className="text-xs bg-[hsl(var(--glass-bg)/0.5)] p-2 rounded-lg overflow-x-auto whitespace-pre-wrap font-monospace text-muted-foreground">
                 {errorMessage}
               </pre>
               <Button
                 variant="link"
-                className="text-red-400 p-0 h-auto text-xs underline"
+                className="text-red-500 dark:text-red-400 p-0 h-auto text-xs underline"
                 onClick={() => window.location.reload()}
               >
                 {t('installing.restart')}
@@ -1798,7 +1800,7 @@ function InstallingContent({ skills, onComplete, onSkip }: InstallingContentProp
       )}
 
       {!errorMessage && (
-        <p className="text-sm text-slate-400 text-center">
+        <p className="text-sm text-muted-foreground text-center">
           {t('installing.wait')}
         </p>
       )}
@@ -1838,21 +1840,21 @@ function CompleteContent({ selectedProvider, installedSkills }: CompleteContentP
       </p>
 
       <div className="space-y-3 text-left max-w-md mx-auto">
-        <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+        <div className="flex items-center justify-between p-3 rounded-lg glass-subtle border border-glass-border">
           <span>{t('complete.provider')}</span>
-          <span className="text-green-400">
+          <span className="text-green-500 dark:text-green-400">
             {providerData ? <span className="flex items-center gap-1.5">{getProviderIconUrl(providerData.id) ? <img src={getProviderIconUrl(providerData.id)} alt={providerData.name} className={`h-4 w-4 inline-block ${shouldInvertInDark(providerData.id) ? 'dark:invert' : ''}`} /> : providerData.icon} {providerData.id === 'custom' ? t('settings:aiProviders.custom') : providerData.name}</span> : '—'}
           </span>
         </div>
-        <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+        <div className="flex items-center justify-between p-3 rounded-lg glass-subtle border border-glass-border">
           <span>{t('complete.components')}</span>
-          <span className="text-green-400">
+          <span className="text-green-500 dark:text-green-400">
             {installedSkillNames || `${installedSkills.length} ${t('installing.status.installed')}`}
           </span>
         </div>
-        <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+        <div className="flex items-center justify-between p-3 rounded-lg glass-subtle border border-glass-border">
           <span>{t('complete.gateway')}</span>
-          <span className={gatewayStatus.state === 'running' ? 'text-green-400' : 'text-yellow-400'}>
+          <span className={gatewayStatus.state === 'running' ? 'text-green-500 dark:text-green-400' : 'text-yellow-500 dark:text-yellow-400'}>
             {gatewayStatus.state === 'running' ? `✓ ${t('complete.running')}` : gatewayStatus.state}
           </span>
         </div>

@@ -20,7 +20,7 @@ function getIconsDir(): string {
 /**
  * Create system tray icon and menu
  */
-export function createTray(mainWindow: BrowserWindow): Tray {
+export function createTray(mainWindow: BrowserWindow, onToggleSprite?: () => void, onToggleFloatIcon?: () => void): Tray {
   // Use platform-appropriate icon for system tray
   const iconsDir = getIconsDir();
   let iconPath: string;
@@ -57,7 +57,7 @@ export function createTray(mainWindow: BrowserWindow): Tray {
   tray = new Tray(icon);
   
   // Set tooltip
-  tray.setToolTip('ClawX - AI Assistant');
+  tray.setToolTip('StoClaw - AI Assistant');
   
   const showWindow = () => {
     if (mainWindow.isDestroyed()) return;
@@ -68,8 +68,20 @@ export function createTray(mainWindow: BrowserWindow): Tray {
   // Create context menu
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Show ClawX',
+      label: 'Show StoClaw',
       click: showWindow,
+    },
+    {
+      label: 'Toggle Sprite',
+      click: () => {
+        onToggleSprite?.();
+      },
+    },
+    {
+      label: 'Toggle Float Icon',
+      click: () => {
+        onToggleFloatIcon?.();
+      },
     },
     {
       type: 'separator',
@@ -122,7 +134,7 @@ export function createTray(mainWindow: BrowserWindow): Tray {
       type: 'separator',
     },
     {
-      label: 'Quit ClawX',
+      label: 'Quit StoClaw',
       click: () => {
         app.quit();
       },
@@ -157,7 +169,7 @@ export function createTray(mainWindow: BrowserWindow): Tray {
  */
 export function updateTrayStatus(status: string): void {
   if (tray) {
-    tray.setToolTip(`ClawX - ${status}`);
+    tray.setToolTip(`StoClaw - ${status}`);
   }
 }
 

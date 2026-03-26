@@ -137,6 +137,17 @@ const electronAPI = {
         'openclaw:getConfigDir',
         'openclaw:getSkillsDir',
         'openclaw:getCliCommand',
+        // Sprite
+        'sprite:toggle',
+        'sprite:getSessionContext',
+        'sprite:pushSessionContext',
+        'sprite:showMainWindow',
+        // Float Icon
+        'floaticon:toggleSprite',
+        'floaticon:setPosition',
+        'floaticon:getPosition',
+        'floaticon:toggle',
+        'floaticon:setVisible',
       ];
 
       if (validChannels.includes(channel)) {
@@ -178,6 +189,7 @@ const electronAPI = {
         'oauth:success',
         'oauth:error',
         'openclaw:cli-installed',
+        'startup-progress',
       ];
 
       if (validChannels.includes(channel)) {

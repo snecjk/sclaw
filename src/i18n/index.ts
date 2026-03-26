@@ -16,6 +16,8 @@ import enAgents from './locales/en/agents.json';
 import enSkills from './locales/en/skills.json';
 import enCron from './locales/en/cron.json';
 import enSetup from './locales/en/setup.json';
+import enAuth from './locales/en/auth.json';
+import enSprite from './locales/en/sprite.json';
 
 // ZH
 import zhCommon from './locales/zh/common.json';
@@ -27,6 +29,8 @@ import zhAgents from './locales/zh/agents.json';
 import zhSkills from './locales/zh/skills.json';
 import zhCron from './locales/zh/cron.json';
 import zhSetup from './locales/zh/setup.json';
+import zhAuth from './locales/zh/auth.json';
+import zhSprite from './locales/zh/sprite.json';
 
 // JA
 import jaCommon from './locales/ja/common.json';
@@ -38,6 +42,8 @@ import jaAgents from './locales/ja/agents.json';
 import jaSkills from './locales/ja/skills.json';
 import jaCron from './locales/ja/cron.json';
 import jaSetup from './locales/ja/setup.json';
+import jaAuth from './locales/ja/auth.json';
+import jaSprite from './locales/ja/sprite.json';
 
 export const SUPPORTED_LANGUAGES = [
     { code: 'en', label: 'English' },
@@ -56,6 +62,8 @@ const resources = {
         skills: enSkills,
         cron: enCron,
         setup: enSetup,
+        auth: enAuth,
+        sprite: enSprite,
     },
     zh: {
         common: zhCommon,
@@ -67,6 +75,8 @@ const resources = {
         skills: zhSkills,
         cron: zhCron,
         setup: zhSetup,
+        auth: zhAuth,
+        sprite: zhSprite,
     },
     ja: {
         common: jaCommon,
@@ -78,6 +88,8 @@ const resources = {
         skills: jaSkills,
         cron: jaCron,
         setup: jaSetup,
+        auth: jaAuth,
+        sprite: jaSprite,
     },
 };
 
@@ -89,7 +101,7 @@ i18n
         fallbackLng: 'en',
         supportedLngs: [...SUPPORTED_LANGUAGE_CODES],
         defaultNS: 'common',
-        ns: ['common', 'settings', 'dashboard', 'chat', 'channels', 'agents', 'skills', 'cron', 'setup'],
+        ns: ['common', 'settings', 'dashboard', 'chat', 'channels', 'agents', 'skills', 'cron', 'setup', 'auth', 'sprite'],
         interpolation: {
             escapeValue: false, // React already escapes
         },

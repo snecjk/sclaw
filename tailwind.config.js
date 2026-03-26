@@ -48,6 +48,20 @@ module.exports = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        glass: {
+          border: 'hsl(var(--glass-border))',
+          highlight: 'hsl(var(--glass-highlight))',
+        },
+      },
+      backdropBlur: {
+        glass: 'var(--glass-blur)',
+      },
+      boxShadow: {
+        glass: 'var(--glass-shadow)',
+        'glass-lg': 'var(--glass-shadow), inset 0 1px 0 0 hsl(var(--glass-highlight))',
+      },
+      backgroundImage: {
+        'canvas-gradient': 'linear-gradient(135deg, var(--canvas-from), var(--canvas-via), var(--canvas-to))',
       },
       borderRadius: {
         lg: 'var(--radius)',

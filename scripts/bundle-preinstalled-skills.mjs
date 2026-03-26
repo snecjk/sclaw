@@ -4,12 +4,80 @@ import 'zx/globals';
 import { readFileSync, existsSync, mkdirSync, rmSync, cpSync, writeFileSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const MANIFEST_PATH = join(ROOT, 'resources', 'skills', 'preinstalled-manifest.json');
 const OUTPUT_ROOT = join(ROOT, 'build', 'preinstalled-skills');
 const TMP_ROOT = join(ROOT, 'build', '.tmp-preinstalled-skills');
+const CACHE_DIR = join(ROOT, '.download-cache', 'preinstalled-skills');
+const CACHE_MANIFEST = join(CACHE_DIR, 'manifest.json');
+
+// Ensure cache directory exists
+if (!existsSync(CACHE_DIR)) {
+  mkdirSync(CACHE_DIR, { recursive: true });
+}
+
+// Calculate hash of manifest to detect changes
+function calculateManifestHash() {
+  try {
+    const hash = createHash('sha256');
+    const content = readFileSync(MANIFEST_PATH, 'utf8');
+    hash.update(content);
+    return hash.digest('hex').substring(0, 16);
+  } catch {
+    return null;
+  }
+}
+
+// Load or initialize cache manifest
+function loadCacheManifest() {
+  if (existsSync(CACHE_MANIFEST)) {
+    try {
+      return JSON.parse(readFileSync(CACHE_MANIFEST, 'utf8'));
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function saveCacheManifest(manifest) {
+  writeFileSync(CACHE_MANIFEST, JSON.stringify(manifest, null, 2), 'utf8');
+}
+
+// Check if cache is valid
+function isCacheValid(cacheKey) {
+  if (!cacheKey) return false;
+  const manifest = loadCacheManifest();
+  if (manifest.cacheKey !== cacheKey) return false;
+  if (!existsSync(manifest.cachePath)) return false;
+  return true;
+}
+
+// Copy from cache to output
+function copyFromCache(cachePath, outputPath) {
+  if (existsSync(outputPath)) {
+    rmSync(outputPath, { recursive: true });
+  }
+  cpSync(cachePath, outputPath, { recursive: true, dereference: true });
+}
+
+// Save output to cache
+function saveToCache(outputPath, cacheKey) {
+  const cachePath = join(CACHE_DIR, `skills-${cacheKey}`);
+  if (existsSync(cachePath)) {
+    rmSync(cachePath, { recursive: true });
+  }
+  cpSync(outputPath, cachePath, { recursive: true, dereference: true });
+  
+  const manifest = loadCacheManifest();
+  manifest.cacheKey = cacheKey;
+  manifest.cachePath = cachePath;
+  manifest.createdAt = new Date().toISOString();
+  saveCacheManifest(manifest);
+}
 
 function loadManifest() {
   if (!existsSync(MANIFEST_PATH)) {
@@ -108,6 +176,16 @@ if (process.env.SKIP_PREINSTALLED_SKILLS === '1') {
   process.exit(0);
 }
 
+// Check cache first
+const cacheKey = calculateManifestHash();
+if (isCacheValid(cacheKey)) {
+  const manifest = loadCacheManifest();
+  echo`   📦 Using cached skills bundle (key: ${cacheKey})`;
+  copyFromCache(manifest.cachePath, OUTPUT_ROOT);
+  echo`Preinstalled skills ready (from cache): ${OUTPUT_ROOT}`;
+  process.exit(0);
+}
+
 const manifestSkills = loadManifest();
 
 rmSync(OUTPUT_ROOT, { recursive: true, force: true });
@@ -164,4 +242,12 @@ for (const group of groups) {
 
 writeFileSync(join(OUTPUT_ROOT, '.preinstalled-lock.json'), `${JSON.stringify(lock, null, 2)}\n`, 'utf8');
 rmSync(TMP_ROOT, { recursive: true, force: true });
+
+// Save to cache for future builds
+if (cacheKey) {
+  echo`💾 Saving skills bundle to cache...`;
+  saveToCache(OUTPUT_ROOT, cacheKey);
+  echo`   ✅ Cache saved (key: ${cacheKey})`;
+}
+
 echo`Preinstalled skills ready: ${OUTPUT_ROOT}`;

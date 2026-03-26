@@ -15,7 +15,7 @@ let settingsStoreInstance: any = null;
  * Generate a random token for gateway authentication
  */
 function generateToken(): string {
-  return `clawx-${randomBytes(16).toString('hex')}`;
+  return `stoclaw-${randomBytes(16).toString('hex')}`;
 }
 
 /**
@@ -78,7 +78,9 @@ function createDefaultSettings(): AppSettings {
     language: resolveSupportedLanguage(getSystemLocale()),
     startMinimized: false,
     launchAtStartup: false,
-    telemetryEnabled: true,
+    // Telemetry is disabled by default for faster cold starts
+    // Users can enable it in Settings > Advanced if they want to help improve the product
+    telemetryEnabled: false,
     machineId: '',
     hasReportedInstall: false,
 

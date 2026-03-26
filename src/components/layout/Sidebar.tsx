@@ -14,20 +14,19 @@ import {
   PanelLeftClose,
   PanelLeft,
   Plus,
-  Terminal,
-  ExternalLink,
   Trash2,
   Cpu,
+  LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAgentsStore } from '@/stores/agents';
+import { useAuthStore } from '@/stores/auth';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { hostApiFetch } from '@/lib/host-api';
 import { useTranslation } from 'react-i18next';
 import logoSvg from '@/assets/logo.svg';
 
@@ -127,6 +126,9 @@ export function Sidebar() {
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
 
+  const authUser = useAuthStore((s) => s.user);
+  const authLogout = useAuthStore((s) => s.logout);
+
   useEffect(() => {
     if (!isGatewayRunning) return;
     let cancelled = false;
@@ -149,24 +151,7 @@ export function Sidebar() {
   const getSessionLabel = (key: string, displayName?: string, label?: string) =>
     sessionLabels[key] ?? label ?? displayName ?? key;
 
-  const openDevConsole = async () => {
-    try {
-      const result = await hostApiFetch<{
-        success: boolean;
-        url?: string;
-        error?: string;
-      }>('/api/gateway/control-ui');
-      if (result.success && result.url) {
-        window.electron.openExternal(result.url);
-      } else {
-        console.error('Failed to get Dev Console URL:', result.error);
-      }
-    } catch (err) {
-      console.error('Error opening Dev Console:', err);
-    }
-  };
-
-  const { t } = useTranslation(['common', 'chat']);
+  const { t } = useTranslation(['common', 'chat', 'auth']);
   const [sessionToDelete, setSessionToDelete] = useState<{ key: string; label: string } | null>(null);
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
 
@@ -216,17 +201,17 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'flex shrink-0 flex-col border-r bg-[#eae8e1]/60 dark:bg-background transition-all duration-300',
-        sidebarCollapsed ? 'w-16' : 'w-64'
+        'flex shrink-0 flex-col border-r glass transition-all duration-300',
+        sidebarCollapsed ? 'w-16' : 'w-52'
       )}
     >
       {/* Top Header Toggle */}
       <div className={cn("flex items-center p-2 h-12", sidebarCollapsed ? "justify-center" : "justify-between")}>
         {!sidebarCollapsed && (
           <div className="flex items-center gap-2 px-2 overflow-hidden">
-            <img src={logoSvg} alt="ClawX" className="h-5 w-auto shrink-0" />
+            <img src={logoSvg} alt="StoClaw" className="h-5 w-auto shrink-0" />
             <span className="text-sm font-semibold truncate whitespace-nowrap text-foreground/90">
-              ClawX
+              StoClaw
             </span>
           </div>
         )}
@@ -332,6 +317,35 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="p-2 mt-auto">
+        {/* User Info */}
+        {authUser && (
+          <div className={cn(
+            'flex items-center gap-2 rounded-lg px-2.5 py-2 mb-1',
+            sidebarCollapsed ? 'justify-center px-0' : ''
+          )}>
+            <div
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-semibold"
+              title={sidebarCollapsed ? authUser.realName : undefined}
+            >
+              {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
+            </div>
+            {!sidebarCollapsed && (
+              <>
+                <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm text-foreground/80">
+                  {authUser.realName || authUser.userName}
+                </span>
+                <button
+                  onClick={() => { void authLogout().then(() => navigate('/login')); }}
+                  className="flex shrink-0 items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:text-destructive hover:bg-destructive/10"
+                  title={t('auth:logout.button')}
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         <NavLink
             to="/settings"
             className={({ isActive }) =>
@@ -353,7 +367,7 @@ export function Sidebar() {
           )}
         </NavLink>
 
-        <Button
+        {/*<Button
           variant="ghost"
           className={cn(
             'flex items-center gap-2.5 rounded-lg px-2.5 py-2 h-auto text-[14px] font-medium transition-colors w-full mt-1',
@@ -371,7 +385,7 @@ export function Sidebar() {
               <ExternalLink className="h-3 w-3 shrink-0 ml-auto opacity-50 text-muted-foreground" />
             </>
           )}
-        </Button>
+        </Button>*/}
       </div>
 
       <ConfirmDialog

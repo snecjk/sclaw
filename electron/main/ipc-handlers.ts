@@ -75,7 +75,9 @@ import {
 export function registerIpcHandlers(
   gatewayManager: GatewayManager,
   clawHubService: ClawHubService,
-  mainWindow: BrowserWindow
+  mainWindow: BrowserWindow,
+  getSpriteWindow?: () => BrowserWindow | null,
+  getFloatIconWindow?: () => BrowserWindow | null,
 ): void {
   // Unified request protocol (non-breaking: legacy channels remain available)
   registerUnifiedRequestHandlers(gatewayManager);
@@ -84,7 +86,7 @@ export function registerIpcHandlers(
   registerHostApiProxyHandlers();
 
   // Gateway handlers
-  registerGatewayHandlers(gatewayManager, mainWindow);
+  registerGatewayHandlers(gatewayManager, mainWindow, getSpriteWindow, getFloatIconWindow);
 
   // ClawHub handlers
   registerClawHubHandlers(clawHubService);
@@ -126,7 +128,7 @@ export function registerIpcHandlers(
   registerCronHandlers(gatewayManager);
 
   // Window control handlers (for custom title bar on Windows/Linux)
-  registerWindowHandlers(mainWindow);
+  registerWindowHandlers();
 
   // WhatsApp handlers
   registerWhatsAppHandlers(mainWindow);
@@ -136,6 +138,12 @@ export function registerIpcHandlers(
 
   // File staging handlers (upload/send separation)
   registerFileHandlers();
+
+  // Sprite handlers (desktop sprite session context bridge)
+  registerSpriteHandlers(mainWindow);
+
+  // Float icon handlers (desktop floating launcher)
+  registerFloatIconHandlers(getFloatIconWindow);
 }
 
 function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
@@ -824,7 +832,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
   });
 
   // Create a new cron job
-  // UI-created tasks have no delivery target — results go to the ClawX chat page.
+  // UI-created tasks have no delivery target — results go to the StoClaw chat page.
   // Tasks created via external channels (Feishu, Discord, etc.) are handled
   // directly by the OpenClaw Gateway and do not pass through this IPC handler.
   ipcMain.handle('cron:create', async (_, input: {
@@ -841,7 +849,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
         enabled: input.enabled ?? true,
         wakeMode: 'next-heartbeat',
         sessionTarget: 'isolated',
-        // UI-created jobs deliver results via ClawX WebSocket chat events,
+        // UI-created jobs deliver results via StoClaw WebSocket chat events,
         // not external messaging channels.  Setting mode='none' prevents
         // the Gateway from attempting channel delivery (which would fail
         // with "Channel is required" when no channels are configured).
@@ -976,8 +984,24 @@ function registerLogHandlers(): void {
  */
 function registerGatewayHandlers(
   gatewayManager: GatewayManager,
-  mainWindow: BrowserWindow
+  mainWindow: BrowserWindow,
+  getSpriteWindow?: () => BrowserWindow | null,
+  getFloatIconWindow?: () => BrowserWindow | null,
 ): void {
+  // Helper: broadcast an event to all renderer windows (main + sprite + float-icon)
+  const broadcast = (channel: string, ...args: unknown[]) => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(channel, ...args);
+    }
+    const sprite = getSpriteWindow?.();
+    if (sprite && !sprite.isDestroyed()) {
+      sprite.webContents.send(channel, ...args);
+    }
+    const floatIcon = getFloatIconWindow?.();
+    if (floatIcon && !floatIcon.isDestroyed()) {
+      floatIcon.webContents.send(channel, ...args);
+    }
+  };
   type GatewayHttpProxyRequest = {
     path?: string;
     method?: string;
@@ -1215,47 +1239,33 @@ function registerGatewayHandlers(
     }
   });
 
-  // Forward Gateway events to renderer
+  // Forward Gateway events to all renderer windows
   gatewayManager.on('status', (status) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('gateway:status-changed', status);
-    }
+    broadcast('gateway:status-changed', status);
   });
 
   gatewayManager.on('message', (message) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('gateway:message', message);
-    }
+    broadcast('gateway:message', message);
   });
 
   gatewayManager.on('notification', (notification) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('gateway:notification', notification);
-    }
+    broadcast('gateway:notification', notification);
   });
 
   gatewayManager.on('channel:status', (data) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('gateway:channel-status', data);
-    }
+    broadcast('gateway:channel-status', data);
   });
 
   gatewayManager.on('chat:message', (data) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('gateway:chat-message', data);
-    }
+    broadcast('gateway:chat-message', data);
   });
 
   gatewayManager.on('exit', (code) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('gateway:exit', code);
-    }
+    broadcast('gateway:exit', code);
   });
 
   gatewayManager.on('error', (error) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('gateway:error', error.message);
-    }
+    broadcast('gateway:error', error.message);
   });
 }
 
@@ -1874,7 +1884,7 @@ function registerProviderHandlers(gatewayManager: GatewayManager): void {
         const resolvedBaseUrl = options?.baseUrl || provider?.baseUrl || registryBaseUrl;
         const resolvedProtocol = options?.apiProtocol || provider?.apiProtocol;
 
-        console.log(`[clawx-validate] validating provider type: ${providerType}`);
+        console.log(`[stoclaw-validate] validating provider type: ${providerType}`);
         return await validateApiKeyWithProvider(providerType, apiKey, {
           baseUrl: resolvedBaseUrl,
           apiProtocol: resolvedProtocol,
@@ -2100,26 +2110,114 @@ function registerUsageHandlers(): void {
 }
 /**
  * Window control handlers (for custom title bar on Windows)
+ * Uses event.sender to resolve the correct BrowserWindow, so sprite
+ * window:close hides the sprite instead of closing the main window.
  */
-function registerWindowHandlers(mainWindow: BrowserWindow): void {
-  ipcMain.handle('window:minimize', () => {
-    mainWindow.minimize();
+function registerWindowHandlers(): void {
+  ipcMain.handle('window:minimize', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
   });
 
-  ipcMain.handle('window:maximize', () => {
-    if (mainWindow.isMaximized()) {
-      mainWindow.unmaximize();
+  ipcMain.handle('window:maximize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win?.isMaximized()) {
+      win.unmaximize();
     } else {
-      mainWindow.maximize();
+      win?.maximize();
     }
   });
 
-  ipcMain.handle('window:close', () => {
-    mainWindow.close();
+  ipcMain.handle('window:close', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
   });
 
-  ipcMain.handle('window:isMaximized', () => {
-    return mainWindow.isMaximized();
+  ipcMain.handle('window:isMaximized', (event) => {
+    return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false;
+  });
+}
+
+/**
+ * Sprite handlers (desktop sprite session context bridge)
+ */
+function registerSpriteHandlers(mainWindow: BrowserWindow): void {
+  // Session context cache (transient runtime state in main process memory)
+  let cachedSessionContext: { sessionKey: string; agentId: string } = {
+    sessionKey: '',
+    agentId: '',
+  };
+
+  // Main window pushes its current session context whenever it changes
+  ipcMain.handle('sprite:pushSessionContext', (_, ctx: { sessionKey: string; agentId: string }) => {
+    cachedSessionContext = ctx;
+  });
+
+  // Sprite fetches current session context before sending a message
+  ipcMain.handle('sprite:getSessionContext', () => {
+    return cachedSessionContext;
+  });
+
+  // Toggle sprite visibility from renderer
+  ipcMain.handle('sprite:toggle', async () => {
+    const { toggleSprite } = await import('./sprite-window');
+    toggleSprite();
+  });
+
+  // Show and focus the main window (called from sprite to navigate back)
+  ipcMain.handle('sprite:showMainWindow', () => {
+    if (!mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
+/**
+ * Float icon handlers (desktop floating launcher)
+ */
+function registerFloatIconHandlers(
+  getFloatIconWindow?: () => BrowserWindow | null,
+): void {
+  // Toggle sprite via float icon (with positioning near the icon)
+  ipcMain.handle('floaticon:toggleSprite', async () => {
+    const { toggleSpriteNearIcon } = await import('./float-icon-window');
+    await toggleSpriteNearIcon();
+  });
+
+  // Set float icon window position (used during drag)
+  ipcMain.handle('floaticon:setPosition', (_, x: number, y: number) => {
+    const win = getFloatIconWindow?.();
+    if (win && !win.isDestroyed()) {
+      win.setPosition(Math.round(x), Math.round(y));
+    }
+  });
+
+  // Get float icon window position (used at drag start)
+  ipcMain.handle('floaticon:getPosition', () => {
+    const win = getFloatIconWindow?.();
+    if (win && !win.isDestroyed()) {
+      const bounds = win.getBounds();
+      return { x: bounds.x, y: bounds.y };
+    }
+    return { x: 0, y: 0 };
+  });
+
+  // Toggle float icon visibility
+  ipcMain.handle('floaticon:toggle', async () => {
+    const { toggleFloatIcon } = await import('./float-icon-window');
+    toggleFloatIcon();
+  });
+
+  // Set float icon visibility
+  ipcMain.handle('floaticon:setVisible', async (_, visible: boolean) => {
+    const { showFloatIcon, hideFloatIcon } = await import('./float-icon-window');
+    if (visible) {
+      showFloatIcon();
+    } else {
+      hideFloatIcon();
+    }
   });
 }
 

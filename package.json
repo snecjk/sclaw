@@ -1,5 +1,5 @@
 {
-    "name": "clawx",
+    "name": "stoclaw",
     "version": "0.3.0-alpha.0",
     "pnpm": {
         "onlyBuiltDependencies": [
@@ -26,9 +26,9 @@
             ]
         }
     },
-    "description": "ClawX - Graphical AI Assistant based on OpenClaw",
+    "description": "StoClaw - Graphical AI Assistant based on OpenClaw",
     "main": "dist-electron/main/index.js",
-    "author": "ClawX Team",
+    "author": "StoClaw Team",
     "license": "MIT",
     "private": true,
     "scripts": {

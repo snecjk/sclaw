@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { PORTS } from '../utils/config';
 import { logger } from '../utils/logger';
 import type { HostApiContext } from './context';
+import { handleAuthRoutes } from './routes/auth';
 import { handleAppRoutes } from './routes/app';
 import { handleGatewayRoutes } from './routes/gateway';
 import { handleSettingsRoutes } from './routes/settings';
@@ -24,6 +25,7 @@ type RouteHandler = (
 ) => Promise<boolean>;
 
 const routeHandlers: RouteHandler[] = [
+  handleAuthRoutes,
   handleAppRoutes,
   handleGatewayRoutes,
   handleSettingsRoutes,

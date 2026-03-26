@@ -2,22 +2,28 @@
  * Electron Main Process Entry
  * Manages window creation, system tray, and IPC handlers
  */
+
+// ── Startup timing (first executable line) ──────────────────────
+const _startupT0 = Date.now();
+function _ts(label: string): void {
+  console.log(`[STARTUP] ${label}: +${Date.now() - _startupT0}ms`);
+}
+
 import { app, BrowserWindow, nativeImage, session, shell } from 'electron';
 import type { Server } from 'node:http';
 import { join } from 'path';
-import { GatewayManager } from '../gateway/manager';
-import { registerIpcHandlers } from './ipc-handlers';
-import { createTray } from './tray';
-import { createMenu } from './menu';
 
-import { appUpdater, registerUpdateHandlers } from './updater';
+// Type-only imports for lazy-loaded modules (zero runtime cost).
+// The actual classes are loaded dynamically in initialize() to avoid
+// blocking process startup with heavy dependency chains.
+import type { GatewayManager } from '../gateway/manager';
+import type { ClawHubService } from '../gateway/clawhub';
+import type { HostEventBus } from '../api/event-bus';
+
+// Lightweight modules needed before window creation
+import { createMenu } from './menu';
 import { logger } from '../utils/logger';
 import { warmupNetworkOptimization } from '../utils/uv-env';
-import { initTelemetry } from '../utils/telemetry';
-
-import { ClawHubService } from '../gateway/clawhub';
-import { ensureClawXContext, repairClawXOnlyBootstrapFiles } from '../utils/openclaw-workspace';
-import { autoInstallCliIfNeeded, generateCompletionCache, installCompletionToProfile } from '../utils/openclaw-cli';
 import { isQuitting, setQuitting } from './app-state';
 import { applyProxySettings } from './proxy';
 import { syncLaunchAtStartupSettingFromStore } from './launch-at-startup';
@@ -35,22 +41,27 @@ import {
 import { createSignalQuitHandler } from './signal-quit';
 import { acquireProcessInstanceFileLock } from './process-instance-lock';
 import { getSetting } from '../utils/store';
-import { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled } from '../utils/skill-config';
-import { ensureAllBundledPluginsInstalled } from '../utils/plugin-install';
-import { startHostApiServer } from '../api/server';
-import { HostEventBus } from '../api/event-bus';
-import { deviceOAuthManager } from '../utils/device-oauth';
-import { browserOAuthManager } from '../utils/browser-oauth';
-import { whatsAppLoginManager } from '../utils/whatsapp-login';
-import { syncAllProviderAuthToRuntime } from '../services/providers/provider-runtime-sync';
 
-const WINDOWS_APP_USER_MODEL_ID = 'app.clawx.desktop';
+_ts('static imports loaded');
+
+const WINDOWS_APP_USER_MODEL_ID = 'app.stoclaw.desktop';
+
+/**
+ * Send startup progress message to the splash screen
+ * This provides visual feedback during the critical first-launch period
+ */
+function sendStartupProgress(message: string): void {
+  // Send to main window (will be received by splash screen before React loads)
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('startup-progress', message);
+  }
+}
 
 // Disable GPU hardware acceleration globally for maximum stability across
 // all GPU configurations (no GPU, integrated, discrete).
 //
 // Rationale (following VS Code's philosophy):
-// - Page/file loading is async data fetching — zero GPU dependency.
+// - Page/file loading is async data fetching - zero GPU dependency.
 // - The original per-platform GPU branching was added to avoid CPU rendering
 //   competing with sync I/O on Windows, but all file I/O is now async
 //   (fs/promises), so that concern no longer applies.
@@ -58,26 +69,40 @@ const WINDOWS_APP_USER_MODEL_ID = 'app.clawx.desktop';
 //   behaviour varies between vendors (Intel, AMD, NVIDIA, Apple Silicon) and
 //   driver versions, making it the #1 source of rendering bugs in Electron.
 //
-// Users who want GPU acceleration can pass `--enable-gpu` on the CLI or
-// set `"disable-hardware-acceleration": false` in the app config (future).
-app.disableHardwareAcceleration();
+// GPU acceleration is now enabled by default to support glassmorphism
+// backdrop-filter effects. Users who hit GPU driver issues can pass
+// `--disable-gpu` on the CLI to fall back to software rendering.
+// app.disableHardwareAcceleration();
+
+// ── Chromium startup optimisation flags ─────────────────────────
+// These must be set before app.whenReady() to take effect.
+if (process.platform === 'win32') {
+  // Skip the expensive native window occlusion calculation that delays
+  // BrowserWindow creation on Windows.
+  app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+}
+// Disable the spare renderer process that Chromium pre-spawns for
+// site-per-process isolation — we only ever have one renderer.
+app.commandLine.appendSwitch('renderer-process-limit', '1');
+
+_ts('app flags set');
 
 // On Linux, set CHROME_DESKTOP so Chromium can find the correct .desktop file.
-// On Wayland this maps the running window to clawx.desktop (→ icon + app grouping);
+// On Wayland this maps the running window to stoclaw.desktop (icon + app grouping);
 // on X11 it supplements the StartupWMClass matching.
 // Must be called before app.whenReady() / before any window is created.
 if (process.platform === 'linux') {
-  app.setDesktopName('clawx.desktop');
+  app.setDesktopName('stoclaw.desktop');
 }
 
 // Prevent multiple instances of the app from running simultaneously.
 // Without this, two instances each spawn their own gateway process on the
 // same port, then each treats the other's gateway as "orphaned" and kills
-// it — creating an infinite kill/restart loop on Windows.
+// it - creating an infinite kill/restart loop on Windows.
 // The losing process must exit immediately so it never reaches Gateway startup.
 const gotElectronLock = app.requestSingleInstanceLock();
 if (!gotElectronLock) {
-  console.info('[ClawX] Another instance already holds the single-instance lock; exiting duplicate process');
+  console.info('[StoClaw] Another instance already holds the single-instance lock; exiting duplicate process');
   app.exit(0);
 }
 let releaseProcessInstanceFileLock: () => void = () => {};
@@ -86,7 +111,7 @@ if (gotElectronLock) {
   try {
     const fileLock = acquireProcessInstanceFileLock({
       userDataDir: app.getPath('userData'),
-      lockName: 'clawx',
+      lockName: 'stoclaw',
     });
     gotFileLock = fileLock.acquired;
     releaseProcessInstanceFileLock = fileLock.release;
@@ -97,21 +122,21 @@ if (gotElectronLock) {
           ? 'unknown lock format/content'
           : 'unknown owner';
       console.info(
-        `[ClawX] Another instance already holds process lock (${fileLock.lockPath}, ${ownerDescriptor}); exiting duplicate process`,
+        `[StoClaw] Another instance already holds process lock (${fileLock.lockPath}, ${ownerDescriptor}); exiting duplicate process`,
       );
       app.exit(0);
     }
   } catch (error) {
-    console.warn('[ClawX] Failed to acquire process instance file lock; continuing with Electron single-instance lock only', error);
+    console.warn('[StoClaw] Failed to acquire process instance file lock; continuing with Electron single-instance lock only', error);
   }
 }
 const gotTheLock = gotElectronLock && gotFileLock;
 
 // Global references
 let mainWindow: BrowserWindow | null = null;
-let gatewayManager!: GatewayManager;
-let clawHubService!: ClawHubService;
-let hostEventBus!: HostEventBus;
+let gatewayManager: GatewayManager | null = null;
+let clawHubService: ClawHubService | null = null;
+let hostEventBus: HostEventBus | null = null;
 let hostApiServer: Server | null = null;
 const mainWindowFocusState = createMainWindowFocusState();
 const quitLifecycleState = createQuitLifecycleState();
@@ -121,7 +146,7 @@ const quitLifecycleState = createQuitLifecycleState();
  */
 function getIconsDir(): string {
   if (app.isPackaged) {
-    // Packaged: icons are in extraResources → process.resourcesPath/resources/icons
+    // Packaged: icons are in extraResources -> process.resourcesPath/resources/icons
     return join(process.resourcesPath, 'resources', 'icons');
   }
   // Development: relative to dist-electron/main/
@@ -167,7 +192,22 @@ function createWindow(): BrowserWindow {
     titleBarStyle: isMac ? 'hiddenInset' : useCustomTitleBar ? 'hidden' : 'default',
     trafficLightPosition: isMac ? { x: 16, y: 16 } : undefined,
     frame: isMac || !useCustomTitleBar,
-    show: false,
+    show: false,  // We call show() manually below — before loading content
+    backgroundColor: '#0f1525',  // Match splash screen background
+  });
+
+  // Show the window IMMEDIATELY — before loading content.
+  // On first run, ready-to-show can take 5-10s because the renderer process
+  // must cold-start (V8 init, preload script, HTML parse, first paint).
+  // By showing now, the user sees a dark window instantly (matching the splash
+  // background), and the splash screen content appears as soon as the renderer
+  // finishes its first paint. This is much better UX than a blank desktop.
+  win.show();
+  _ts('window shown (dark bg)');
+
+  // Log when the renderer actually finishes first paint (diagnostic).
+  win.once('ready-to-show', () => {
+    _ts('ready-to-show (splash rendered)');
   });
 
   // Handle external links
@@ -212,6 +252,7 @@ function focusMainWindow(): void {
 function createMainWindow(): BrowserWindow {
   const win = createWindow();
 
+  // Handle focus requests from second-instance launches
   win.once('ready-to-show', () => {
     if (mainWindow !== win) {
       return;
@@ -220,10 +261,7 @@ function createMainWindow(): BrowserWindow {
     const action = consumeMainWindowReady(mainWindowFocusState);
     if (action === 'focus') {
       focusWindow(win);
-      return;
     }
-
-    win.show();
   });
 
   win.on('close', (event) => {
@@ -247,9 +285,21 @@ function createMainWindow(): BrowserWindow {
  * Initialize the application
  */
 async function initialize(): Promise<void> {
-  // Initialize logger first
+  _ts('initialize() start');
+
+  // Create the main window as early as possible.
+  // Window shows immediately with dark background (see createWindow).
+  const window = createMainWindow();
+  _ts('mainWindow created');
+
+  // Set application menu (fast, no I/O — can happen after window show)
+  createMenu();
+
+  // Initialize logger AFTER window creation so its sync I/O runs in parallel
+  // with the renderer loading HTML. Calls before init() safely go to console
+  // + in-memory ring buffer; file writing begins after init().
   logger.init();
-  logger.info('=== ClawX Application Starting ===');
+  logger.info('=== StoClaw Application Starting ===');
   logger.debug(
     `Runtime: platform=${process.platform}/${process.arch}, electron=${process.versions.electron}, node=${process.versions.node}, packaged=${app.isPackaged}, pid=${process.pid}, ppid=${process.ppid}`
   );
@@ -257,21 +307,87 @@ async function initialize(): Promise<void> {
   // Warm up network optimization (non-blocking)
   void warmupNetworkOptimization();
 
-  // Initialize Telemetry early
-  await initTelemetry();
+  // ── Lazy-load heavy modules in parallel while splash screen is displayed ──
+  // These were previously static imports that blocked process startup with
+  // heavy dependency chains (Baileys, posthog-node, electron-updater, etc.).
+  // React has MIN_SPLASH_DISPLAY_MS = 800ms, giving ample time for these
+  // imports to resolve + IPC handlers to register before the first IPC call.
+  const [
+    gatewayMod,
+    clawhubMod,
+    eventBusMod,
+    { registerIpcHandlers },
+    { appUpdater, registerUpdateHandlers },
+    { initTelemetry },
+    { createTray },
+    { deviceOAuthManager },
+    { browserOAuthManager },
+    { whatsAppLoginManager },
+    { syncAllProviderAuthToRuntime },
+    { ensureClawXContext, repairClawXOnlyBootstrapFiles },
+    { autoInstallCliIfNeeded, generateCompletionCache, installCompletionToProfile },
+    { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled },
+    { ensureAllBundledPluginsInstalled },
+    { startHostApiServer },
+    spriteWindowMod,
+    floatIconMod,
+  ] = await Promise.all([
+    import('../gateway/manager'),
+    import('../gateway/clawhub'),
+    import('../api/event-bus'),
+    import('./ipc-handlers'),
+    import('./updater'),
+    import('../utils/telemetry'),
+    import('./tray'),
+    import('../utils/device-oauth'),
+    import('../utils/browser-oauth'),
+    import('../utils/whatsapp-login'),
+    import('../services/providers/provider-runtime-sync'),
+    import('../utils/openclaw-workspace'),
+    import('../utils/openclaw-cli'),
+    import('../utils/skill-config'),
+    import('../utils/plugin-install'),
+    import('../api/server'),
+    import('./sprite-window'),
+    import('./float-icon-window'),
+  ]);
+  _ts('dynamic imports resolved');
 
-  // Apply persisted proxy settings before creating windows or network requests.
-  await applyProxySettings();
-  await syncLaunchAtStartupSettingFromStore();
+  // Construct core service instances (now that modules are loaded).
+  // Use local references (guaranteed non-null) for subsequent setup calls.
+  const gm = new gatewayMod.GatewayManager();
+  const chs = new clawhubMod.ClawHubService();
+  const heb = new eventBusMod.HostEventBus();
+  gatewayManager = gm;
+  clawHubService = chs;
+  hostEventBus = heb;
 
-  // Set application menu
-  createMenu();
+  // Initialize Telemetry (non-blocking)
+  // Note: Telemetry is disabled by default for faster cold starts
+  void initTelemetry().catch((error) => {
+    logger.warn('Telemetry initialization failed:', error);
+  });
 
-  // Create the main window
-  const window = createMainWindow();
+  // Apply persisted proxy settings before network requests.
+  sendStartupProgress('Loading settings...');
+  const proxyPromise = applyProxySettings().catch((error) => {
+    logger.warn('Failed to apply proxy settings:', error);
+  });
 
-  // Create system tray
-  createTray(window);
+  // Sync launch-at-startup setting (fast, uses electron-store)
+  void syncLaunchAtStartupSettingFromStore();
+
+  // Wait for critical initialization (proxy affects network calls)
+  await proxyPromise;
+
+  // Create sprite window (hidden by default, toggled via tray)
+  spriteWindowMod.createSpriteWindow();
+
+  // Create float icon window (visible by default, acts as sprite launcher)
+  floatIconMod.createFloatIconWindow();
+
+  // Create system tray (with sprite and float icon toggle support)
+  createTray(window, spriteWindowMod.toggleSprite, floatIconMod.toggleFloatIcon);
 
   // Override security headers ONLY for the OpenClaw Gateway Control UI.
   // The URL filter ensures this callback only fires for gateway requests,
@@ -297,12 +413,12 @@ async function initialize(): Promise<void> {
   );
 
   // Register IPC handlers
-  registerIpcHandlers(gatewayManager, clawHubService, window);
+  registerIpcHandlers(gm, chs, window, spriteWindowMod.getSpriteWindow, floatIconMod.getFloatIconWindow);
 
   hostApiServer = startHostApiServer({
-    gatewayManager,
-    clawHubService,
-    eventBus: hostEventBus,
+    gatewayManager: gm,
+    clawHubService: chs,
+    eventBus: heb,
     mainWindow: window,
   });
 
@@ -312,7 +428,7 @@ async function initialize(): Promise<void> {
   // Note: Auto-check for updates is driven by the renderer (update store init)
   // so it respects the user's "Auto-check for updates" setting.
 
-  // Repair any bootstrap files that only contain ClawX markers (no OpenClaw
+  // Repair any bootstrap files that only contain StoClaw markers (no OpenClaw
   // template content). This fixes a race condition where ensureClawXContext()
   // previously created the file before the gateway could seed the full template.
   void repairClawXOnlyBootstrapFiles().catch((error) => {
@@ -321,6 +437,7 @@ async function initialize(): Promise<void> {
 
   // Pre-deploy built-in skills (feishu-doc, feishu-drive, feishu-perm, feishu-wiki)
   // to ~/.openclaw/skills/ so they are immediately available without manual install.
+  sendStartupProgress('Installing built-in skills...');
   void ensureBuiltinSkillsInstalled().catch((error) => {
     logger.warn('Failed to install built-in skills:', error);
   });
@@ -328,98 +445,101 @@ async function initialize(): Promise<void> {
   // Pre-deploy bundled third-party skills from resources/preinstalled-skills.
   // This installs full skill directories (not only SKILL.md) in an idempotent,
   // non-destructive way and never blocks startup.
+  sendStartupProgress('Installing skills...');
   void ensurePreinstalledSkillsInstalled().catch((error) => {
     logger.warn('Failed to install preinstalled skills:', error);
   });
 
   // Pre-deploy/upgrade bundled OpenClaw plugins (dingtalk, wecom, qqbot, feishu, wechat)
   // to ~/.openclaw/extensions/ so they are always up-to-date after an app update.
+  sendStartupProgress('Installing plugins...');
   void ensureAllBundledPluginsInstalled().catch((error) => {
     logger.warn('Failed to install/upgrade bundled plugins:', error);
   });
 
   // Bridge gateway and host-side events before any auto-start logic runs, so
   // renderer subscribers observe the full startup lifecycle.
-  gatewayManager.on('status', (status: { state: string }) => {
-    hostEventBus.emit('gateway:status', status);
+  gm.on('status', (status: { state: string }) => {
+    heb.emit('gateway:status', status);
     if (status.state === 'running') {
       void ensureClawXContext().catch((error) => {
-        logger.warn('Failed to re-merge ClawX context after gateway reconnect:', error);
+        logger.warn('Failed to re-merge StoClaw context after gateway reconnect:', error);
       });
     }
   });
 
-  gatewayManager.on('error', (error) => {
-    hostEventBus.emit('gateway:error', { message: error.message });
+  gm.on('error', (error) => {
+    heb.emit('gateway:error', { message: error.message });
   });
 
-  gatewayManager.on('notification', (notification) => {
-    hostEventBus.emit('gateway:notification', notification);
+  gm.on('notification', (notification) => {
+    heb.emit('gateway:notification', notification);
   });
 
-  gatewayManager.on('chat:message', (data) => {
-    hostEventBus.emit('gateway:chat-message', data);
+  gm.on('chat:message', (data) => {
+    heb.emit('gateway:chat-message', data);
   });
 
-  gatewayManager.on('channel:status', (data) => {
-    hostEventBus.emit('gateway:channel-status', data);
+  gm.on('channel:status', (data) => {
+    heb.emit('gateway:channel-status', data);
   });
 
-  gatewayManager.on('exit', (code) => {
-    hostEventBus.emit('gateway:exit', { code });
+  gm.on('exit', (code) => {
+    heb.emit('gateway:exit', { code });
   });
 
   deviceOAuthManager.on('oauth:code', (payload) => {
-    hostEventBus.emit('oauth:code', payload);
+    heb.emit('oauth:code', payload);
   });
 
   deviceOAuthManager.on('oauth:start', (payload) => {
-    hostEventBus.emit('oauth:start', payload);
+    heb.emit('oauth:start', payload);
   });
 
   deviceOAuthManager.on('oauth:success', (payload) => {
-    hostEventBus.emit('oauth:success', { ...payload, success: true });
+    heb.emit('oauth:success', { ...payload, success: true });
   });
 
   deviceOAuthManager.on('oauth:error', (error) => {
-    hostEventBus.emit('oauth:error', error);
+    heb.emit('oauth:error', error);
   });
 
   browserOAuthManager.on('oauth:start', (payload) => {
-    hostEventBus.emit('oauth:start', payload);
+    heb.emit('oauth:start', payload);
   });
 
   browserOAuthManager.on('oauth:code', (payload) => {
-    hostEventBus.emit('oauth:code', payload);
+    heb.emit('oauth:code', payload);
   });
 
   browserOAuthManager.on('oauth:success', (payload) => {
-    hostEventBus.emit('oauth:success', { ...payload, success: true });
+    heb.emit('oauth:success', { ...payload, success: true });
   });
 
   browserOAuthManager.on('oauth:error', (error) => {
-    hostEventBus.emit('oauth:error', error);
+    heb.emit('oauth:error', error);
   });
 
   whatsAppLoginManager.on('qr', (data) => {
-    hostEventBus.emit('channel:whatsapp-qr', data);
+    heb.emit('channel:whatsapp-qr', data);
   });
 
   whatsAppLoginManager.on('success', (data) => {
-    hostEventBus.emit('channel:whatsapp-success', data);
+    heb.emit('channel:whatsapp-success', data);
   });
 
   whatsAppLoginManager.on('error', (error) => {
-    hostEventBus.emit('channel:whatsapp-error', error);
+    heb.emit('channel:whatsapp-error', error);
   });
 
   // Start Gateway automatically (this seeds missing bootstrap files with full templates)
   const gatewayAutoStart = await getSetting('gatewayAutoStart');
   if (gatewayAutoStart) {
     try {
+      sendStartupProgress('Starting Gateway...');
       await syncAllProviderAuthToRuntime();
       logger.debug('Auto-starting Gateway...');
-      await gatewayManager.start();
+      await gm.start();
       logger.info('Gateway auto-start succeeded');
     } catch (error) {
       logger.error('Gateway auto-start failed:', error);
@@ -429,11 +549,12 @@ async function initialize(): Promise<void> {
     logger.info('Gateway auto-start disabled in settings');
   }
 
-  // Merge ClawX context snippets into the workspace bootstrap files.
+  // Merge StoClaw context snippets into the workspace bootstrap files.
   // The gateway seeds workspace files asynchronously after its HTTP server
   // is ready, so ensureClawXContext will retry until the target files appear.
+  sendStartupProgress('Finalizing...');
   void ensureClawXContext().catch((error) => {
-    logger.warn('Failed to merge ClawX context into workspace:', error);
+    logger.warn('Failed to merge StoClaw context into workspace:', error);
   });
 
   // Auto-install openclaw CLI and shell completions (non-blocking).
@@ -468,13 +589,13 @@ if (gotTheLock) {
     app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
   }
 
-  gatewayManager = new GatewayManager();
-  clawHubService = new ClawHubService();
-  hostEventBus = new HostEventBus();
+  // Note: gatewayManager, clawHubService, hostEventBus are constructed lazily
+  // inside initialize() after dynamic imports resolve. Lifecycle handlers below
+  // use null-safe access since they may fire before initialize() completes.
 
   // When a second instance is launched, focus the existing window instead.
   app.on('second-instance', () => {
-    logger.info('Second ClawX instance detected; redirecting to the existing window');
+    logger.info('Second StoClaw instance detected; redirecting to the existing window');
 
     const focusRequest = requestSecondInstanceFocus(
       mainWindowFocusState,
@@ -491,6 +612,7 @@ if (gotTheLock) {
 
   // Application lifecycle
   app.whenReady().then(() => {
+    _ts('app.whenReady() resolved');
     void initialize().catch((error) => {
       logger.error('Application initialization failed:', error);
     });
@@ -527,8 +649,15 @@ if (gotTheLock) {
       return;
     }
 
-    hostEventBus.closeAll();
+    hostEventBus?.closeAll();
     hostApiServer?.close();
+
+    if (!gatewayManager) {
+      // Gateway never initialized (quit during early startup); nothing to clean up.
+      markQuitCleanupCompleted(quitLifecycleState);
+      app.quit();
+      return;
+    }
 
     const stopPromise = gatewayManager.stop().catch((err) => {
       logger.warn('gatewayManager.stop() error during quit:', err);
@@ -540,7 +669,7 @@ if (gotTheLock) {
     void Promise.race([stopPromise.then(() => 'stopped' as const), timeoutPromise]).then((result) => {
       if (result === 'timeout') {
         logger.warn('Gateway shutdown timed out during app quit; proceeding with forced quit');
-        void gatewayManager.forceTerminateOwnedProcessForQuit().then((terminated) => {
+        void gatewayManager?.forceTerminateOwnedProcessForQuit().then((terminated) => {
           if (terminated) {
             logger.warn('Forced gateway process termination completed after quit timeout');
           }
@@ -561,7 +690,7 @@ if (gotTheLock) {
     try {
       void gatewayManager?.stop().catch(() => { /* ignore */ });
     } catch {
-      // ignore — stop() may not be callable if state is corrupted
+      // ignore - stop() may not be callable if state is corrupted
     }
     // Give Gateway stop a brief window, then force-exit.
     setTimeout(() => {

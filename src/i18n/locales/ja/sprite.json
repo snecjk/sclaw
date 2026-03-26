@@ -1,0 +1,10 @@
+{
+  "greeting": "Hi, 何かお手伝いできることはありますか？",
+  "quickAction1": "メールを書くのを手伝って",
+  "quickAction2": "このドキュメントを要約して",
+  "quickAction3": "以下を翻訳して",
+  "quickAction4": "アイデアのブレストを手伝って",
+  "inputPlaceholder": "何でも聞いてください...",
+  "sending": "考え中...",
+  "openMainWindow": "メインウィンドウを開く"
+}
