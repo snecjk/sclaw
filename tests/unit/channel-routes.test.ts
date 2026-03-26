@@ -31,7 +31,6 @@ vi.mock('@electron/utils/agent-config', () => ({
 
 vi.mock('@electron/utils/plugin-install', () => ({
   ensureDingTalkPluginInstalled: vi.fn(),
-  ensureFeishuPluginInstalled: vi.fn(),
   ensureQQBotPluginInstalled: vi.fn(),
   ensureWeChatPluginInstalled: vi.fn(),
   ensureWeComPluginInstalled: vi.fn(),
@@ -69,16 +68,16 @@ describe('handleChannelRoutes', () => {
   });
 
   it('reports healthy running multi-account channels as connected', async () => {
-    listConfiguredChannelsMock.mockResolvedValue(['feishu']);
+    listConfiguredChannelsMock.mockResolvedValue(['dingtalk']);
     listConfiguredChannelAccountsMock.mockResolvedValue({
-      feishu: {
+      dingtalk: {
         defaultAccountId: 'default',
-        accountIds: ['default', 'feishu-2412524e'],
+        accountIds: ['default', 'dingtalk-2412524e'],
       },
     });
     readOpenClawConfigMock.mockResolvedValue({
       channels: {
-        feishu: {
+        dingtalk: {
           defaultAccount: 'default',
         },
       },
@@ -86,19 +85,19 @@ describe('handleChannelRoutes', () => {
     listAgentsSnapshotMock.mockResolvedValue({
       agents: [],
       channelAccountOwners: {
-        'feishu:default': 'main',
-        'feishu:feishu-2412524e': 'code',
+        'dingtalk:default': 'main',
+        'dingtalk:dingtalk-2412524e': 'code',
       },
     });
 
     const rpc = vi.fn().mockResolvedValue({
       channels: {
-        feishu: {
+        dingtalk: {
           configured: true,
         },
       },
       channelAccounts: {
-        feishu: [
+        dingtalk: [
           {
             accountId: 'default',
             configured: true,
@@ -107,7 +106,7 @@ describe('handleChannelRoutes', () => {
             linked: false,
           },
           {
-            accountId: 'feishu-2412524e',
+            accountId: 'dingtalk-2412524e',
             configured: true,
             connected: false,
             running: true,
@@ -116,7 +115,7 @@ describe('handleChannelRoutes', () => {
         ],
       },
       channelDefaultAccountId: {
-        feishu: 'default',
+        dingtalk: 'default',
       },
     });
 
@@ -144,11 +143,11 @@ describe('handleChannelRoutes', () => {
         success: true,
         channels: [
           expect.objectContaining({
-            channelType: 'feishu',
+            channelType: 'dingtalk',
             status: 'connected',
             accounts: expect.arrayContaining([
               expect.objectContaining({ accountId: 'default', status: 'connected' }),
-              expect.objectContaining({ accountId: 'feishu-2412524e', status: 'connected' }),
+              expect.objectContaining({ accountId: 'dingtalk-2412524e', status: 'connected' }),
             ]),
           }),
         ],

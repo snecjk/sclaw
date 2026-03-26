@@ -21,7 +21,6 @@ import {
 } from '../../utils/agent-config';
 import {
   ensureDingTalkPluginInstalled,
-  ensureFeishuPluginInstalled,
   ensureQQBotPluginInstalled,
   ensureWeChatPluginInstalled,
   ensureWeComPluginInstalled,
@@ -172,7 +171,7 @@ function scheduleGatewayChannelRestart(ctx: HostApiContext, reason: string): voi
 // Plugin-based channels require a full Gateway process restart to properly
 // initialize / tear-down plugin connections.  SIGUSR1 in-process reload is
 // not sufficient for channel plugins (see restartGatewayForAgentDeletion).
-const FORCE_RESTART_CHANNELS = new Set(['dingtalk', 'wecom', 'whatsapp', 'feishu', 'qqbot', OPENCLAW_WECHAT_CHANNEL_TYPE]);
+const FORCE_RESTART_CHANNELS = new Set(['dingtalk', 'wecom', 'whatsapp', 'qqbot', OPENCLAW_WECHAT_CHANNEL_TYPE]);
 
 function scheduleGatewayChannelSaveRefresh(
   ctx: HostApiContext,
@@ -540,13 +539,6 @@ export async function handleChannelRoutes(
         const installResult = await ensureQQBotPluginInstalled();
         if (!installResult.installed) {
           sendJson(res, 500, { success: false, error: installResult.warning || 'QQ Bot plugin install failed' });
-          return true;
-        }
-      }
-      if (storedChannelType === 'feishu') {
-        const installResult = await ensureFeishuPluginInstalled();
-        if (!installResult.installed) {
-          sendJson(res, 500, { success: false, error: installResult.warning || 'Feishu plugin install failed' });
           return true;
         }
       }

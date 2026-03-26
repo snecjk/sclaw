@@ -13,7 +13,6 @@ export type ChannelType =
   | 'telegram'
   | 'discord'
   | 'signal'
-  | 'feishu'
   | 'wecom'
   | 'imessage'
   | 'matrix'
@@ -87,7 +86,6 @@ export const CHANNEL_ICONS: Record<ChannelType, string> = {
   telegram: '✈️',
   discord: '🎮',
   signal: '🔒',
-  feishu: '🐦',
   wecom: '💼',
   imessage: '💬',
   matrix: '🔗',
@@ -108,7 +106,6 @@ export const CHANNEL_NAMES: Record<ChannelType, string> = {
   telegram: 'Telegram',
   discord: 'Discord',
   signal: 'Signal',
-  feishu: 'Feishu / Lark',
   wecom: 'WeCom',
   imessage: 'iMessage',
   matrix: 'Matrix',
@@ -364,39 +361,6 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
       'channels:meta.signal.instructions.2',
     ],
   },
-  feishu: {
-    id: 'feishu',
-    name: 'Feishu / Lark',
-    icon: '🐦',
-    description: 'channels:meta.feishu.description',
-    connectionType: 'token',
-    docsUrl: 'channels:meta.feishu.docsUrl',
-    configFields: [
-      {
-        key: 'appId',
-        label: 'channels:meta.feishu.fields.appId.label',
-        type: 'text',
-        placeholder: 'channels:meta.feishu.fields.appId.placeholder',
-        required: true,
-        envVar: 'FEISHU_APP_ID',
-      },
-      {
-        key: 'appSecret',
-        label: 'channels:meta.feishu.fields.appSecret.label',
-        type: 'password',
-        placeholder: 'channels:meta.feishu.fields.appSecret.placeholder',
-        required: true,
-        envVar: 'FEISHU_APP_SECRET',
-      },
-    ],
-    instructions: [
-      'channels:meta.feishu.instructions.0',
-      'channels:meta.feishu.instructions.1',
-      'channels:meta.feishu.instructions.2',
-      'channels:meta.feishu.instructions.3',
-    ],
-    isPlugin: true,
-  },
   imessage: {
     id: 'imessage',
     name: 'iMessage',
@@ -580,7 +544,7 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
  * Get primary supported channels (non-plugin, commonly used)
  */
 export function getPrimaryChannels(): ChannelType[] {
-  return ['telegram', 'discord', 'whatsapp', 'wechat', 'dingtalk', 'feishu', 'wecom', 'qqbot'];
+  return ['telegram', 'discord', 'whatsapp', 'wechat', 'dingtalk', 'wecom', 'qqbot'];
 }
 
 /**

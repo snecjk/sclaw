@@ -651,6 +651,8 @@ export class GatewayManager extends EventEmitter {
         params,
       };
 
+      console.log('WS send request:', request);
+
       try {
         this.ws.send(JSON.stringify(request));
       } catch (error) {

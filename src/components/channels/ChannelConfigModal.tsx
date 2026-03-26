@@ -40,7 +40,6 @@ import discordIcon from '@/assets/channels/discord.svg';
 import whatsappIcon from '@/assets/channels/whatsapp.svg';
 import wechatIcon from '@/assets/channels/wechat.svg';
 import dingtalkIcon from '@/assets/channels/dingtalk.svg';
-import feishuIcon from '@/assets/channels/feishu.svg';
 import wecomIcon from '@/assets/channels/wecom.svg';
 import qqIcon from '@/assets/channels/qq.svg';
 
@@ -96,7 +95,7 @@ export function ChannelConfigModal({
   } | null>(null);
 
   const meta: ChannelMeta | null = selectedType ? CHANNEL_META[selectedType] : null;
-  const shouldUseCredentialValidation = selectedType !== 'feishu';
+  const shouldUseCredentialValidation = true;
   const usesManagedQrAccounts = usesPluginManagedQrAccounts(selectedType);
   const showAccountIdEditor = allowEditAccountId && !usesManagedQrAccounts;
   const resolvedAccountId = usesManagedQrAccounts
@@ -784,8 +783,6 @@ function ChannelLogo({ type }: { type: ChannelType }) {
       return <img src={wechatIcon} alt="WeChat" className="w-[22px] h-[22px] dark:invert" />;
     case 'dingtalk':
       return <img src={dingtalkIcon} alt="DingTalk" className="w-[22px] h-[22px] dark:invert" />;
-    case 'feishu':
-      return <img src={feishuIcon} alt="Feishu" className="w-[22px] h-[22px] dark:invert" />;
     case 'wecom':
       return <img src={wecomIcon} alt="WeCom" className="w-[22px] h-[22px] dark:invert" />;
     case 'qqbot':

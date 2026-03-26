@@ -47,7 +47,7 @@ describe('Channels page status refresh', () => {
           success: true,
           channels: [
             {
-              channelType: 'feishu',
+              channelType: 'dingtalk',
               defaultAccountId: 'default',
               status: 'connected',
               accounts: [

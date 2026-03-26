@@ -337,7 +337,6 @@ const openclawPath = process.resourcesPath + '/openclaw';
   - [ ] DingTalk
   - [ ] WeCom
   - [ ] QQ
-  - [ ] Feishu
   - [ ] WeChat
 - [ ] AI Provider 正常调用
   - [ ] OpenAI

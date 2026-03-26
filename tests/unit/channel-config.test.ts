@@ -57,10 +57,10 @@ describe('channel credential normalization and duplicate checks', () => {
   it('assertNoDuplicateCredential detects duplicates with different whitespace', async () => {
     const { saveChannelConfig } = await import('@electron/utils/channel-config');
 
-    await saveChannelConfig('feishu', { appId: 'bot-123', appSecret: 'secret-a' }, 'agent-a');
+    await saveChannelConfig('qqbot', { appId: 'bot-123', appSecret: 'secret-a' }, 'agent-a');
 
     await expect(
-      saveChannelConfig('feishu', { appId: '  bot-123  ', appSecret: 'secret-b' }, 'agent-b'),
+      saveChannelConfig('qqbot', { appId: '  bot-123  ', appSecret: 'secret-b' }, 'agent-b'),
     ).rejects.toThrow('already bound to another agent');
   });
 
@@ -69,37 +69,37 @@ describe('channel credential normalization and duplicate checks', () => {
     // to avoid false positives where different tokens become the same after lowercasing
     const { saveChannelConfig } = await import('@electron/utils/channel-config');
 
-    await saveChannelConfig('feishu', { appId: 'Bot-ABC', appSecret: 'secret-a' }, 'agent-a');
+    await saveChannelConfig('qqbot', { appId: 'Bot-ABC', appSecret: 'secret-a' }, 'agent-a');
 
     // Should NOT throw - different case is considered a different credential
     await expect(
-      saveChannelConfig('feishu', { appId: 'bot-abc', appSecret: 'secret-b' }, 'agent-b'),
+      saveChannelConfig('qqbot', { appId: 'bot-abc', appSecret: 'secret-b' }, 'agent-b'),
     ).resolves.not.toThrow();
   });
 
   it('normalizes credential values when saving (trim only, preserve case)', async () => {
     const { saveChannelConfig } = await import('@electron/utils/channel-config');
 
-    await saveChannelConfig('feishu', { appId: '  BoT-XyZ  ', appSecret: 'secret' }, 'agent-a');
+    await saveChannelConfig('qqbot', { appId: '  BoT-XyZ  ', appSecret: 'secret' }, 'agent-a');
 
     const config = await readOpenClawJson();
     const channels = config.channels as Record<string, { accounts: Record<string, { appId?: string }> }>;
     // Should trim whitespace but preserve original case
-    expect(channels.feishu.accounts['agent-a'].appId).toBe('BoT-XyZ');
+    expect(channels.qqbot.accounts['agent-a'].appId).toBe('BoT-XyZ');
   });
 
   it('emits warning logs when credential normalization (trim) occurs', async () => {
     const { saveChannelConfig } = await import('@electron/utils/channel-config');
 
-    await saveChannelConfig('feishu', { appId: '  BoT-Log  ', appSecret: 'secret' }, 'agent-a');
+    await saveChannelConfig('qqbot', { appId: '  BoT-Log  ', appSecret: 'secret' }, 'agent-a');
 
     expect(mockLoggerWarn).toHaveBeenCalledWith(
       'Normalized channel credential value for duplicate check',
-      expect.objectContaining({ channelType: 'feishu', accountId: 'agent-a', key: 'appId' }),
+      expect.objectContaining({ channelType: 'qqbot', accountId: 'agent-a', key: 'appId' }),
     );
     expect(mockLoggerWarn).toHaveBeenCalledWith(
       'Normalizing channel credential value before save',
-      expect.objectContaining({ channelType: 'feishu', accountId: 'agent-a', key: 'appId' }),
+      expect.objectContaining({ channelType: 'qqbot', accountId: 'agent-a', key: 'appId' }),
     );
   });
 });
@@ -109,19 +109,19 @@ describe('parseDoctorValidationOutput', () => {
     const { parseDoctorValidationOutput } = await import('@electron/utils/channel-config');
 
     const out = parseDoctorValidationOutput(
-      'feishu',
-      'feishu error: token invalid\nfeishu warning: fallback enabled\n',
+      'qqbot',
+      'qqbot error: token invalid\nqqbot warning: fallback enabled\n',
     );
 
     expect(out.undetermined).toBe(false);
-    expect(out.errors).toEqual(['feishu error: token invalid']);
-    expect(out.warnings).toEqual(['feishu warning: fallback enabled']);
+    expect(out.errors).toEqual(['qqbot error: token invalid']);
+    expect(out.warnings).toEqual(['qqbot warning: fallback enabled']);
   });
 
   it('falls back with hint when output has no channel signal', async () => {
     const { parseDoctorValidationOutput } = await import('@electron/utils/channel-config');
 
-    const out = parseDoctorValidationOutput('feishu', 'all good, no channel details');
+    const out = parseDoctorValidationOutput('qqbot', 'all good, no channel details');
 
     expect(out.undetermined).toBe(true);
     expect(out.errors).toEqual([]);
@@ -131,7 +131,7 @@ describe('parseDoctorValidationOutput', () => {
   it('falls back with hint when output is empty', async () => {
     const { parseDoctorValidationOutput } = await import('@electron/utils/channel-config');
 
-    const out = parseDoctorValidationOutput('feishu', '   ');
+    const out = parseDoctorValidationOutput('qqbot', '   ');
 
     expect(out.undetermined).toBe(true);
     expect(out.errors).toEqual([]);

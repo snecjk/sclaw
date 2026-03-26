@@ -23,7 +23,6 @@ const OPENCLAW_DIR = join(homedir(), '.openclaw');
 const CONFIG_FILE = join(OPENCLAW_DIR, 'openclaw.json');
 const WECOM_PLUGIN_ID = 'wecom';
 const WECHAT_PLUGIN_ID = OPENCLAW_WECHAT_CHANNEL_TYPE;
-const FEISHU_PLUGIN_ID_CANDIDATES = ['openclaw-lark', 'feishu-openclaw-plugin'] as const;
 const DEFAULT_ACCOUNT_ID = 'default';
 const CHANNEL_TOP_LEVEL_KEYS_TO_KEEP = new Set(['accounts', 'defaultAccount', 'enabled']);
 const WECHAT_STATE_DIR = join(OPENCLAW_DIR, WECHAT_PLUGIN_ID);
@@ -39,7 +38,6 @@ const PLUGIN_CHANNELS = ['whatsapp'];
 // Maps each channel type to the field that uniquely identifies a bot/account.
 // When two agents try to use the same value for this field, the save is rejected.
 const CHANNEL_UNIQUE_CREDENTIAL_KEY: Record<string, string> = {
-    feishu: 'appId',
     wecom: 'botId',
     dingtalk: 'clientId',
     telegram: 'botToken',
@@ -62,24 +60,6 @@ async function fileExists(p: string): Promise<boolean> {
 
 function normalizeCredentialValue(value: string): string {
     return value.trim();
-}
-
-async function resolveFeishuPluginId(): Promise<string> {
-    const extensionRoot = join(homedir(), '.openclaw', 'extensions');
-    for (const dirName of FEISHU_PLUGIN_ID_CANDIDATES) {
-        const manifestPath = join(extensionRoot, dirName, 'openclaw.plugin.json');
-        try {
-            const raw = await readFile(manifestPath, 'utf-8');
-            const parsed = JSON.parse(raw) as { id?: unknown };
-            if (typeof parsed.id === 'string' && parsed.id.trim()) {
-                return parsed.id.trim();
-            }
-        } catch {
-            // ignore and try next candidate
-        }
-    }
-    // Fallback to the modern id when extension manifests are not available yet.
-    return FEISHU_PLUGIN_ID_CANDIDATES[0];
 }
 
 function resolveStoredChannelType(channelType: string): string {
@@ -262,49 +242,6 @@ export async function writeOpenClawConfig(config: OpenClawConfig): Promise<void>
 // ── Channel operations ───────────────────────────────────────────
 
 async function ensurePluginAllowlist(currentConfig: OpenClawConfig, channelType: string): Promise<void> {
-    if (channelType === 'feishu') {
-        const feishuPluginId = await resolveFeishuPluginId();
-        if (!currentConfig.plugins) {
-            currentConfig.plugins = {
-                allow: [feishuPluginId],
-                enabled: true,
-                entries: {
-                    [feishuPluginId]: { enabled: true }
-                }
-            };
-        } else {
-            currentConfig.plugins.enabled = true;
-            const allow: string[] = Array.isArray(currentConfig.plugins.allow)
-                ? (currentConfig.plugins.allow as string[])
-                : [];
-            // Keep only one active feishu plugin id to avoid doctor validation conflicts.
-            const normalizedAllow = allow.filter(
-                (pluginId) => pluginId !== 'feishu' && !FEISHU_PLUGIN_ID_CANDIDATES.includes(pluginId as typeof FEISHU_PLUGIN_ID_CANDIDATES[number])
-            );
-            if (!normalizedAllow.includes(feishuPluginId)) {
-                currentConfig.plugins.allow = [...normalizedAllow, feishuPluginId];
-            } else if (normalizedAllow.length !== allow.length) {
-                currentConfig.plugins.allow = normalizedAllow;
-            }
-
-            if (!currentConfig.plugins.entries) {
-                currentConfig.plugins.entries = {};
-            }
-            // Remove conflicting feishu entries; keep only the resolved plugin id.
-            delete currentConfig.plugins.entries['feishu'];
-            for (const candidateId of FEISHU_PLUGIN_ID_CANDIDATES) {
-                if (candidateId !== feishuPluginId) {
-                    delete currentConfig.plugins.entries[candidateId];
-                }
-            }
-
-            if (!currentConfig.plugins.entries[feishuPluginId]) {
-                currentConfig.plugins.entries[feishuPluginId] = {};
-            }
-            currentConfig.plugins.entries[feishuPluginId].enabled = true;
-        }
-    }
-
     if (channelType === 'dingtalk') {
         if (!currentConfig.plugins) {
             currentConfig.plugins = { allow: ['dingtalk'], enabled: true };
@@ -450,7 +387,7 @@ function transformChannelConfig(
         }
     }
 
-    if (channelType === 'feishu' || channelType === 'wecom') {
+    if (channelType === 'wecom') {
         const existingDmPolicy = existingAccountConfig.dmPolicy === 'pairing' ? 'open' : existingAccountConfig.dmPolicy;
         transformedConfig.dmPolicy = transformedConfig.dmPolicy ?? existingDmPolicy ?? 'open';
 
@@ -528,7 +465,7 @@ function migrateLegacyChannelConfigToAccounts(
 }
 
 /**
- * Throws if the unique credential (e.g. appId for Feishu) in `config` is
+ * Throws if the unique credential (e.g. clientId for DingTalk) in `config` is
  * already registered under a *different* account in the same channel section.
  * This prevents two agents from silently sharing the same bot connection.
  */
@@ -651,13 +588,13 @@ export async function saveChannelConfig(
         };
 
         // Most OpenClaw channel plugins read the default account's credentials
-        // from the top level of `channels.<type>` (e.g. channels.feishu.appId),
+        // from the top level of `channels.<type>` (e.g. channels.dingtalk.clientId),
         // not from `accounts.default`.  Mirror them there so plugins can discover
         // the credentials correctly.
         // This MUST run unconditionally (not just when saving the default account)
         // because migrateLegacyChannelConfigToAccounts() above strips top-level
         // credential keys on every invocation.  Without this, saving a non-default
-        // account (e.g. a sub-agent's Feishu bot) leaves the top-level credentials
+        // account (e.g. a sub-agent's DingTalk bot) leaves the top-level credentials
         // missing, breaking plugins that only read from the top level.
         const mirroredAccountId =
             typeof channelSection.defaultAccount === 'string' && channelSection.defaultAccount.trim()

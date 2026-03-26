@@ -134,7 +134,7 @@ describe('agent config lifecycle', () => {
         ],
       },
       channels: {
-        feishu: {
+        dingtalk: {
           enabled: true,
         },
       },
@@ -142,7 +142,7 @@ describe('agent config lifecycle', () => {
         {
           agentId: 'test2',
           match: {
-            channel: 'feishu',
+            channel: 'dingtalk',
           },
         },
       ],
@@ -166,7 +166,7 @@ describe('agent config lifecycle', () => {
     const { snapshot } = await deleteAgentConfig('test2');
 
     expect(snapshot.agents.map((agent) => agent.id)).toEqual(['main', 'test3']);
-    expect(snapshot.channelOwners.feishu).toBe('main');
+    expect(snapshot.channelOwners.dingtalk).toBe('main');
 
     const config = await readOpenClawJson();
     expect((config.agents as { list: Array<{ id: string }> }).list.map((agent) => agent.id)).toEqual([
@@ -231,7 +231,7 @@ describe('agent config lifecycle', () => {
         ],
       },
       channels: {
-        feishu: {
+        dingtalk: {
           enabled: true,
           defaultAccount: 'default',
           accounts: {
@@ -244,7 +244,7 @@ describe('agent config lifecycle', () => {
         {
           agentId: 'test3',
           match: {
-            channel: 'feishu',
+            channel: 'dingtalk',
             accountId: 'test2',
           },
         },
@@ -255,10 +255,10 @@ describe('agent config lifecycle', () => {
     await deleteAgentConfig('test2');
 
     const config = await readOpenClawJson();
-    const feishu = (config.channels as Record<string, unknown>).feishu as {
+    const dingtalk = (config.channels as Record<string, unknown>).dingtalk as {
       accounts?: Record<string, unknown>;
     };
-    expect(feishu.accounts?.test2).toBeDefined();
+    expect(dingtalk.accounts?.test2).toBeDefined();
   });
 
   it('allows the same agent to bind multiple different channels', async () => {
@@ -269,18 +269,18 @@ describe('agent config lifecycle', () => {
         ],
       },
       channels: {
-        feishu: { enabled: true },
+        dingtalk: { enabled: true },
         telegram: { enabled: true },
       },
     });
 
     const { assignChannelAccountToAgent, listAgentsSnapshot } = await import('@electron/utils/agent-config');
 
-    await assignChannelAccountToAgent('main', 'feishu', 'default');
+    await assignChannelAccountToAgent('main', 'dingtalk', 'default');
     await assignChannelAccountToAgent('main', 'telegram', 'default');
 
     const snapshot = await listAgentsSnapshot();
-    expect(snapshot.channelAccountOwners['feishu:default']).toBe('main');
+    expect(snapshot.channelAccountOwners['dingtalk:default']).toBe('main');
     expect(snapshot.channelAccountOwners['telegram:default']).toBe('main');
   });
 
@@ -292,7 +292,7 @@ describe('agent config lifecycle', () => {
         ],
       },
       channels: {
-        feishu: {
+        dingtalk: {
           enabled: true,
           defaultAccount: 'default',
           accounts: {
@@ -305,12 +305,12 @@ describe('agent config lifecycle', () => {
 
     const { assignChannelAccountToAgent, listAgentsSnapshot } = await import('@electron/utils/agent-config');
 
-    await assignChannelAccountToAgent('main', 'feishu', 'default');
-    await assignChannelAccountToAgent('main', 'feishu', 'alt');
+    await assignChannelAccountToAgent('main', 'dingtalk', 'default');
+    await assignChannelAccountToAgent('main', 'dingtalk', 'alt');
 
     const snapshot = await listAgentsSnapshot();
-    expect(snapshot.channelAccountOwners['feishu:default']).toBeUndefined();
-    expect(snapshot.channelAccountOwners['feishu:alt']).toBe('main');
+    expect(snapshot.channelAccountOwners['dingtalk:default']).toBeUndefined();
+    expect(snapshot.channelAccountOwners['dingtalk:alt']).toBe('main');
   });
 
   it('keeps a single owner for the same channel account', async () => {
@@ -322,7 +322,7 @@ describe('agent config lifecycle', () => {
         ],
       },
       channels: {
-        feishu: {
+        dingtalk: {
           enabled: true,
           accounts: {
             default: { enabled: true, appId: 'main-app' },
@@ -333,11 +333,11 @@ describe('agent config lifecycle', () => {
 
     const { assignChannelAccountToAgent, listAgentsSnapshot } = await import('@electron/utils/agent-config');
 
-    await assignChannelAccountToAgent('main', 'feishu', 'default');
-    await assignChannelAccountToAgent('test2', 'feishu', 'default');
+    await assignChannelAccountToAgent('main', 'dingtalk', 'default');
+    await assignChannelAccountToAgent('test2', 'dingtalk', 'default');
 
     const snapshot = await listAgentsSnapshot();
-    expect(snapshot.channelAccountOwners['feishu:default']).toBe('test2');
+    expect(snapshot.channelAccountOwners['dingtalk:default']).toBe('test2');
   });
 
   it('can clear one channel account binding without affecting another channel on the same agent', async () => {
@@ -348,19 +348,19 @@ describe('agent config lifecycle', () => {
         ],
       },
       channels: {
-        feishu: { enabled: true },
+        dingtalk: { enabled: true },
         telegram: { enabled: true },
       },
     });
 
     const { assignChannelAccountToAgent, clearChannelBinding, listAgentsSnapshot } = await import('@electron/utils/agent-config');
 
-    await assignChannelAccountToAgent('main', 'feishu', 'default');
+    await assignChannelAccountToAgent('main', 'dingtalk', 'default');
     await assignChannelAccountToAgent('main', 'telegram', 'default');
-    await clearChannelBinding('feishu', 'default');
+    await clearChannelBinding('dingtalk', 'default');
 
     const snapshot = await listAgentsSnapshot();
-    expect(snapshot.channelAccountOwners['feishu:default']).toBeUndefined();
+    expect(snapshot.channelAccountOwners['dingtalk:default']).toBeUndefined();
     expect(snapshot.channelAccountOwners['telegram:default']).toBe('main');
   });
 });

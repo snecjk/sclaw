@@ -47,7 +47,7 @@ def process_image(path):
         print(f"Error processing {path}: {e}")
 
 assets_dir = "src/assets/community"
-for filename in ["feishu-qr.png", "wecom-qr.png"]:
+for filename in ["wecom-qr.png"]:
     file_path = os.path.join(assets_dir, filename)
     if os.path.exists(file_path):
         process_image(file_path)

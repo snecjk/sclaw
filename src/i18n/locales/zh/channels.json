@@ -46,7 +46,7 @@
         "unassigned": "未绑定",
         "mainAccount": "主账号",
         "customIdLabel": "账号 ID",
-        "customIdPlaceholder": "例如：feishu-sales-bot",
+        "customIdPlaceholder": "例如：dingtalk-sales-bot",
         "customIdHint": "可自定义账号 ID，用于区分同一频道下的多个账号。",
         "invalidId": "账号 ID 不能为空",
         "idLabel": "ID: {{id}}",
@@ -214,27 +214,6 @@
                 "在您的系统上安装 signal-cli",
                 "注册或链接您的手机号码",
                 "在下方输入您的手机号码"
-            ]
-        },
-        "feishu": {
-            "description": "通过飞书官方推出的 OpenClaw 插件连接飞书/Lark 机器人",
-            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/GKn8wOvHnibpPNkNkPzcAvGlnzK#Py88dTltfoJc1jxAhIBcW3Pkn7b",
-            "fields": {
-                "appId": {
-                    "label": "应用 ID (App ID)",
-                    "placeholder": "cli_xxxxxx"
-                },
-                "appSecret": {
-                    "label": "应用密钥 (App Secret)",
-                    "placeholder": "您的应用密钥"
-                }
-            },
-            "instructions": [
-                "前往 飞书开放平台 (open.feishu.cn) 并创建企业自建应用",
-                "在应用详情页获取 App ID 和 App Secret 并填入下方",
-                "确保应用已开通“机器人”能力",
-                "保存配置后，根据网关提示扫码完成机器人创建",
-                "详细步骤请参考飞书官方文档"
             ]
         },
         "wecom": {

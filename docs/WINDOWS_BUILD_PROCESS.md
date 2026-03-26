@@ -138,7 +138,6 @@ node_modules/.pnpm/
 | @soimy/dingtalk | dingtalk |
 | @wecom/wecom-openclaw-plugin | wecom |
 | @sliverp/qqbot | qqbot |
-| @larksuite/openclaw-lark | feishu-openclaw-plugin |
 | @tencent-weixin/openclaw-weixin | openclaw-weixin |
 
 **处理逻辑**:

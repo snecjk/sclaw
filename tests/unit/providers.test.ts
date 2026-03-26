@@ -92,12 +92,8 @@ describe('provider metadata', () => {
     expect(getProviderDocsUrl(moonshot, 'en')).toBe('https://platform.moonshot.cn/');
     expect(getProviderDocsUrl(siliconflow, 'en')).toBe('https://docs.siliconflow.cn/cn/userguide/introduction');
     expect(getProviderDocsUrl(ark, 'en')).toBe('https://www.volcengine.com/');
-    expect(getProviderDocsUrl(custom, 'en')).toBe(
-      'https://icnnp7d0dymg.feishu.cn/wiki/BmiLwGBcEiloZDkdYnGc8RWnn6d#Ee1ldfvKJoVGvfxc32mcILwenth'
-    );
-    expect(getProviderDocsUrl(custom, 'zh-CN')).toBe(
-      'https://icnnp7d0dymg.feishu.cn/wiki/BmiLwGBcEiloZDkdYnGc8RWnn6d#IWQCdfe5fobGU3xf3UGcgbLynGh'
-    );
+    expect(getProviderDocsUrl(custom, 'en')).toBeUndefined();
+    expect(getProviderDocsUrl(custom, 'zh-CN')).toBeUndefined();
   });
 
   it('exposes OpenRouter and SiliconFlow model overrides by default', () => {

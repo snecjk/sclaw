@@ -435,7 +435,7 @@ async function initialize(): Promise<void> {
     logger.warn('Failed to repair bootstrap files:', error);
   });
 
-  // Pre-deploy built-in skills (feishu-doc, feishu-drive, feishu-perm, feishu-wiki)
+  // Pre-deploy built-in skills
   // to ~/.openclaw/skills/ so they are immediately available without manual install.
   sendStartupProgress('Installing built-in skills...');
   void ensureBuiltinSkillsInstalled().catch((error) => {
@@ -450,7 +450,7 @@ async function initialize(): Promise<void> {
     logger.warn('Failed to install preinstalled skills:', error);
   });
 
-  // Pre-deploy/upgrade bundled OpenClaw plugins (dingtalk, wecom, qqbot, feishu, wechat)
+  // Pre-deploy/upgrade bundled OpenClaw plugins (dingtalk, wecom, qqbot, wechat)
   // to ~/.openclaw/extensions/ so they are always up-to-date after an app update.
   sendStartupProgress('Installing plugins...');
   void ensureAllBundledPluginsInstalled().catch((error) => {

@@ -46,7 +46,7 @@
         "unassigned": "Unassigned",
         "mainAccount": "Primary Account",
         "customIdLabel": "Account ID",
-        "customIdPlaceholder": "e.g. feishu-sales-bot",
+        "customIdPlaceholder": "e.g. dingtalk-sales-bot",
         "customIdHint": "Use a custom account ID to distinguish multiple accounts under one channel.",
         "invalidId": "Account ID cannot be empty",
         "idLabel": "ID: {{id}}",
@@ -214,26 +214,6 @@
                 "Install signal-cli on your system",
                 "Register or link your phone number",
                 "Enter your phone number below"
-            ]
-        },
-        "feishu": {
-            "description": "Connect Feishu/Lark bot via WebSocket",
-            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/GKn8wOvHnibpPNkNkPzcAvGlnzK#GdHUdp9t9oqyegxwV8ScLvVGn1c",
-            "fields": {
-                "appId": {
-                    "label": "App ID",
-                    "placeholder": "cli_xxxxxx"
-                },
-                "appSecret": {
-                    "label": "App Secret",
-                    "placeholder": "Your app secret"
-                }
-            },
-            "instructions": [
-                "Read the documentation, then go to Feishu Open Platform",
-                "Create a new application",
-                "Get App ID and App Secret",
-                "Configure event subscription"
             ]
         },
         "wecom": {

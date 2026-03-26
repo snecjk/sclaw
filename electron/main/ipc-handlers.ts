@@ -35,7 +35,6 @@ import {
 import { checkUvInstalled, installUv, setupManagedPython } from '../utils/uv-setup';
 import {
   ensureDingTalkPluginInstalled,
-  ensureFeishuPluginInstalled,
   ensureQQBotPluginInstalled,
   ensureWeComPluginInstalled,
 } from '../utils/plugin-install';
@@ -833,7 +832,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
 
   // Create a new cron job
   // UI-created tasks have no delivery target — results go to the StoClaw chat page.
-  // Tasks created via external channels (Feishu, Discord, etc.) are handled
+  // Tasks created via external channels (DingTalk, Discord, etc.) are handled
   // directly by the OpenClaw Gateway and do not pass through this IPC handler.
   ipcMain.handle('cron:create', async (_, input: {
     name: string;
@@ -1277,7 +1276,7 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
   // Plugin-based channels require a full Gateway process restart to properly
   // initialize / tear-down plugin connections.  SIGUSR1 in-process reload is
   // not sufficient for channel plugins (see restartGatewayForAgentDeletion).
-  const forceRestartChannels = new Set(['dingtalk', 'wecom', 'whatsapp', 'feishu', 'qqbot']);
+  const forceRestartChannels = new Set(['dingtalk', 'wecom', 'whatsapp', 'qqbot']);
 
   const scheduleGatewayChannelRestart = (reason: string): void => {
     if (gatewayManager.getStatus().state !== 'stopped') {
@@ -1393,22 +1392,6 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
           return {
             success: false,
             error: installResult.warning || 'QQ Bot plugin install failed',
-          };
-        }
-        await saveChannelConfig(channelType, config);
-        scheduleGatewayChannelSaveRefresh(channelType, `channel:saveConfig (${channelType})`);
-        return {
-          success: true,
-          pluginInstalled: installResult.installed,
-          warning: installResult.warning,
-        };
-      }
-      if (channelType === 'feishu') {
-        const installResult = await ensureFeishuPluginInstalled();
-        if (!installResult.installed) {
-          return {
-            success: false,
-            error: installResult.warning || 'Feishu plugin install failed',
           };
         }
         await saveChannelConfig(channelType, config);

@@ -30,7 +30,7 @@ const execAsync = promisify(exec);
  * Force a full Gateway process restart after agent deletion.
  *
  * A SIGUSR1 in-process reload is NOT sufficient here: channel plugins
- * (e.g. Feishu) maintain long-lived WebSocket connections to external
+ * (e.g. DingTalk) maintain long-lived WebSocket connections to external
  * services and do not disconnect accounts that were removed from the
  * config during an in-process reload.  The only reliable way to drop
  * stale bot connections is to kill the Gateway process entirely and
@@ -121,7 +121,7 @@ export async function handleAgentRoutes(
       const snapshot = await createAgent(body.name, { inheritWorkspace: body.inheritWorkspace });
       // Sync provider API keys to the new agent's auth-profiles.json so the
       // embedded runner can authenticate with LLM providers when messages
-      // arrive via channel bots (e.g. Feishu). Without this, the copied
+      // arrive via channel bots (e.g. DingTalk). Without this, the copied
       // auth-profiles.json may contain a stale key → 401 from the LLM.
       syncAllProviderAuthToRuntime().catch((err) => {
         console.warn('[agents] Failed to sync provider auth after agent creation:', err);
@@ -174,7 +174,7 @@ export async function handleAgentRoutes(
         const agentId = decodeURIComponent(parts[0]);
         const { snapshot, removedEntry } = await deleteAgentConfig(agentId);
         // Await reload synchronously BEFORE responding to the client.
-        // This ensures the Feishu plugin has disconnected the deleted bot
+        // This ensures the channel plugin has disconnected the deleted bot
         // before the UI shows "delete success" and the user tries chatting.
         await restartGatewayForAgentDeletion(ctx);
         // Delete workspace after reload so the new config is already live.
