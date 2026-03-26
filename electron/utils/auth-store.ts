@@ -18,6 +18,8 @@ export interface SsoUserInfo {
   openId: string;
   signature: string;
   authenticatedAt: string;
+  stoToken?: string;
+  stoTokenExpiresAt?: string;
 }
 
 export interface AuthState {
@@ -82,4 +84,15 @@ export async function getSsoEnvironment(): Promise<SsoEnvironment> {
 export async function setSsoEnvironment(env: SsoEnvironment): Promise<void> {
   const store = await getAuthStore();
   store.set('ssoEnvironment', env);
+}
+
+/**
+ * Get the stored StoToken (if present and not expired).
+ */
+export async function getStoToken(): Promise<string | null> {
+  const store = await getAuthStore();
+  const user = store.get('user', null) as SsoUserInfo | null;
+  if (!user?.stoToken || !user.stoTokenExpiresAt) return null;
+  if (new Date(user.stoTokenExpiresAt) <= new Date()) return null;
+  return user.stoToken;
 }

@@ -48,7 +48,7 @@ export async function exchangeCodeForUser(
     getRoles: 'false',
     getModules: 'false',
   });
-  const url = `${baseUrl}/WebAPIV46/API/LogOn/LogOnByAuthorizationCode?${params.toString()}`;
+  const url = `${baseUrl}/WebAPIV46/API/LogOn/LogOnStoTokenByAuthorizationCode?${params.toString()}`;
 
   const response = await proxyAwareFetch(url, {
     method: 'POST',
@@ -70,6 +70,9 @@ export async function exchangeCodeForUser(
     throw new Error('SSO response missing UserInfo');
   }
 
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
   return {
     id: u.Id ?? '',
     userName: u.UserName ?? '',
@@ -78,7 +81,9 @@ export async function exchangeCodeForUser(
     departmentName: u.DepartmentName ?? '',
     openId: u.OpenId ?? '',
     signature: u.Signature ?? '',
-    authenticatedAt: new Date().toISOString(),
+    authenticatedAt: now.toISOString(),
+    stoToken: data.StoToken ?? '',
+    stoTokenExpiresAt: expiresAt.toISOString(),
   };
 }
 

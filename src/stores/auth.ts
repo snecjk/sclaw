@@ -21,6 +21,8 @@ export interface SsoUserInfo {
   openId: string;
   signature: string;
   authenticatedAt: string;
+  stoToken?: string;
+  stoTokenExpiresAt?: string;
 }
 
 interface AuthState {
