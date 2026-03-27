@@ -590,6 +590,26 @@ async function initialize(): Promise<void> {
   void ensureClawXContext().catch((error) => {
     logger.warn('Failed to merge StoClaw context into workspace:', error);
   });
+
+  // Start STO model sync if user is already authenticated
+  void (async () => {
+    try {
+      const { getAuthState, getStoToken } = await import('../utils/auth-store');
+      const { getStoModelSyncService } = await import('../services/providers/sto-model-sync');
+      const authState = await getAuthState();
+      const token = await getStoToken();
+      if (authState.isAuthenticated && token) {
+        const stoSync = getStoModelSyncService();
+        stoSync.setGatewayManager(gm);
+        void stoSync.syncModels().catch((err) =>
+          logger.warn('Startup STO model sync failed:', err),
+        );
+        stoSync.startPeriodicSync();
+      }
+    } catch (err) {
+      logger.warn('STO model sync startup check failed:', err);
+    }
+  })();
 }
 
 if (gotTheLock) {

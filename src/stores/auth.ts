@@ -88,6 +88,14 @@ export const useAuthStore = create<AuthState>()(
               isLoggingIn: false,
               error: null,
             });
+
+            // Trigger STO model sync and refresh provider list in UI
+            void hostApiFetch('/api/sto-model-sync', { method: 'POST' })
+              .then(() => import('@/stores/providers'))
+              .then(({ useProviderStore }) =>
+                useProviderStore.getState().refreshProviderSnapshot(),
+              )
+              .catch(() => {});
           } else {
             set({
               isLoggingIn: false,
@@ -113,6 +121,11 @@ export const useAuthStore = create<AuthState>()(
           user: null,
           error: null,
         });
+
+        // Refresh provider list to reflect STO model cleanup
+        void import('@/stores/providers').then(({ useProviderStore }) =>
+          useProviderStore.getState().refreshProviderSnapshot(),
+        ).catch(() => {});
       },
 
       setSsoEnvironment: async (env: SsoEnvironment) => {

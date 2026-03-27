@@ -1229,9 +1229,9 @@ function AddProviderDialog({
                     setShowAdvancedConfig(false);
                     setArkMode('apikey');
                   }}
-                  className="p-4 rounded-2xl border border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-center group"
+                  className="p-4 rounded-2xl border border-glass-border bg-[hsl(var(--glass-bg)/0.35)] hover:bg-[hsl(var(--glass-bg)/0.55)] backdrop-blur-sm transition-colors text-center group shadow-sm"
                 >
-                  <div className="h-12 w-12 mx-auto mb-3 flex items-center justify-center bg-black/5 dark:bg-white/5 rounded-xl shadow-sm border border-black/5 dark:border-white/5 group-hover:scale-105 transition-transform">
+                  <div className="h-12 w-12 mx-auto mb-3 flex items-center justify-center bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-sm rounded-xl shadow-sm border border-glass-border group-hover:scale-105 transition-transform">
                     {getProviderIconUrl(type.id) ? (
                       <img src={getProviderIconUrl(type.id)} alt={type.name} className={cn('h-6 w-6', shouldInvertInDark(type.id) && 'dark:invert')} />
                     ) : (
@@ -1244,8 +1244,8 @@ function AddProviderDialog({
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="flex items-center gap-3 p-4 rounded-2xl bg-white/60 dark:bg-white/15 border border-black/5 dark:border-white/5 shadow-sm">
-                <div className="h-10 w-10 shrink-0 flex items-center justify-center bg-black/5 dark:bg-white/5 rounded-xl">
+              <div className="flex items-center gap-3 p-4 rounded-2xl bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-sm border border-glass-border shadow-sm">
+                <div className="h-10 w-10 shrink-0 flex items-center justify-center bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-sm rounded-xl">
                   {getProviderIconUrl(selectedType!) ? (
                     <img src={getProviderIconUrl(selectedType!)} alt={typeInfo?.name} className={cn('h-6 w-6', shouldInvertInDark(selectedType!) && 'dark:invert')} />
                   ) : (
@@ -1521,7 +1521,7 @@ function AddProviderDialog({
 
                     {/* OAuth Active State Modal / Inline View */}
                     {oauthFlowing && (
-                      <div className="mt-4 p-5 border border-black/10 dark:border-white/10 rounded-2xl bg-white/60 dark:bg-white/15 shadow-sm relative overflow-hidden">
+                      <div className="mt-4 p-5 border border-glass-border rounded-2xl bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-sm shadow-sm relative overflow-hidden">
                         {/* Background pulse effect */}
                         <div className="absolute inset-0 bg-blue-500/5 animate-pulse" />
 
@@ -1544,7 +1544,7 @@ function AddProviderDialog({
                             <div className="space-y-4 w-full">
                               <div className="space-y-2">
                                 <h3 className="font-semibold text-[16px] text-foreground">Complete OpenAI Login</h3>
-                                <p className="text-[13px] text-muted-foreground text-left bg-black/5 dark:bg-white/5 p-4 rounded-xl">
+                                <p className="text-[13px] text-muted-foreground text-left bg-[hsl(var(--glass-bg)/0.4)] backdrop-blur-sm p-4 rounded-xl">
                                   {oauthData.message || 'Open the authorization page, complete login, then paste the callback URL or code below.'}
                                 </p>
                               </div>
@@ -1581,14 +1581,14 @@ function AddProviderDialog({
                             <div className="space-y-5 w-full">
                               <div className="space-y-2">
                                 <h3 className="font-semibold text-[16px] text-foreground">{t('aiProviders.oauth.approveLogin')}</h3>
-                                <div className="text-[13px] text-muted-foreground text-left mt-2 space-y-1.5 bg-black/5 dark:bg-white/5 p-4 rounded-xl">
+                                <div className="text-[13px] text-muted-foreground text-left mt-2 space-y-1.5 bg-[hsl(var(--glass-bg)/0.4)] backdrop-blur-sm p-4 rounded-xl">
                                   <p>1. {t('aiProviders.oauth.step1')}</p>
                                   <p>2. {t('aiProviders.oauth.step2')}</p>
                                   <p>3. {t('aiProviders.oauth.step3')}</p>
                                 </div>
                               </div>
 
-                              <div className="flex items-center justify-center gap-3 p-4 bg-[hsl(var(--glass-bg)/0.5)] border border-black/5 dark:border-white/5 rounded-xl shadow-inner">
+                              <div className="flex items-center justify-center gap-3 p-4 bg-[hsl(var(--glass-bg)/0.5)] border border-glass-border rounded-xl shadow-inner">
                                 <code className="text-3xl font-mono tracking-[0.2em] font-bold text-foreground">
                                   {oauthData.userCode}
                                 </code>
@@ -1631,7 +1631,7 @@ function AddProviderDialog({
                 )}
               </div>
 
-              <Separator className="bg-black/10 dark:bg-white/10" />
+              <Separator className="bg-glass-border/50" />
 
               <div className="flex justify-end gap-3">
                 <Button

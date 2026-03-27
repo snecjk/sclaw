@@ -101,11 +101,12 @@ export function initLogger(): void {
       mkdirSync(logDir, { recursive: true });
     }
 
-    const timestamp = new Date().toISOString().split('T')[0];
-    logFilePath = join(logDir, `stoclaw-${timestamp}.log`);
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    logFilePath = join(logDir, `stoclaw-${dateStr}.log`);
 
     // Write a separator for new session (sync is OK — happens once at startup)
-    const sessionHeader = `\n${'='.repeat(80)}\n[${new Date().toISOString()}] === StoClaw Session Start (v${app.getVersion()}) ===\n${'='.repeat(80)}\n`;
+    const sessionHeader = `\n${'='.repeat(80)}\n[${formatLocalTimestamp(now)}] === StoClaw Session Start (v${app.getVersion()}) ===\n${'='.repeat(80)}\n`;
     appendFileSync(logFilePath, sessionHeader);
   } catch (error) {
     console.error('Failed to initialize logger:', error);
@@ -128,8 +129,27 @@ export function getLogFilePath(): string | null {
 
 // ── Formatting ───────────────────────────────────────────────────
 
+/** Format a Date as local time with timezone offset: `YYYY-MM-DD HH:mm:ss.SSS±HH:MM` */
+function formatLocalTimestamp(date: Date = new Date()): string {
+  const pad = (n: number, len = 2) => String(n).padStart(len, '0');
+  const yyyy = date.getFullYear();
+  const MM = pad(date.getMonth() + 1);
+  const dd = pad(date.getDate());
+  const HH = pad(date.getHours());
+  const mm = pad(date.getMinutes());
+  const ss = pad(date.getSeconds());
+  const ms = pad(date.getMilliseconds(), 3);
+
+  const tzOffset = -date.getTimezoneOffset(); // minutes ahead of UTC
+  const sign = tzOffset >= 0 ? '+' : '-';
+  const tzH = pad(Math.floor(Math.abs(tzOffset) / 60));
+  const tzM = pad(Math.abs(tzOffset) % 60);
+
+  return `${yyyy}-${MM}-${dd} ${HH}:${mm}:${ss}.${ms}${sign}${tzH}:${tzM}`;
+}
+
 function formatMessage(level: string, message: string, ...args: unknown[]): string {
-  const timestamp = new Date().toISOString();
+  const timestamp = formatLocalTimestamp();
   const formattedArgs = args.length > 0 ? ' ' + args.map(arg => {
     if (arg instanceof Error) {
       return `${arg.message}\n${arg.stack || ''}`;

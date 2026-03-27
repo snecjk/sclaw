@@ -11,6 +11,7 @@ import { SsoLoginManager } from '../../utils/sso-login';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { logger } from '../../utils/logger';
+import { getStoModelSyncService } from '../../services/providers/sto-model-sync';
 
 const ssoLoginManager = new SsoLoginManager();
 
@@ -49,6 +50,16 @@ export async function handleAuthRoutes(
       const user = await ssoLoginManager.startLogin(env, ctx.mainWindow);
       await setAuthUser(user);
 
+      // Trigger STO model sync after successful login (fire-and-forget)
+      const stoSync = getStoModelSyncService();
+      if (ctx.gatewayManager) {
+        stoSync.setGatewayManager(ctx.gatewayManager);
+      }
+      void stoSync.syncModels().catch((err) =>
+        logger.warn('Post-login STO model sync failed:', err),
+      );
+      stoSync.startPeriodicSync();
+
       sendJson(res, 200, { success: true, user });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -75,10 +86,21 @@ export async function handleAuthRoutes(
       }
 
       await clearAuthUser();
+
+      // Cleanup STO models and stop periodic sync (fire-and-forget)
+      const stoSyncLogout = getStoModelSyncService();
+      void stoSyncLogout.cleanupOnLogout().catch((err) =>
+        logger.warn('STO model cleanup on logout failed:', err),
+      );
+
       sendJson(res, 200, { success: true });
     } catch (error) {
       // Always clear local auth even if SSO signOut fails
       await clearAuthUser().catch(() => {});
+
+      // Best-effort STO cleanup on error path too
+      void getStoModelSyncService().cleanupOnLogout().catch(() => {});
+
       sendJson(res, 200, { success: true });
     }
     return true;
