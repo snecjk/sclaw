@@ -1,19 +1,37 @@
 /**
  * TitleBar Component
- * macOS: empty drag region (native traffic lights handled by hiddenInset).
- * Windows: drag region with custom minimize/maximize/close controls.
+ * macOS: Logo + text on left, drag region in middle, native traffic lights on right.
+ * Windows: Logo + text on left, drag region in middle, custom minimize/maximize/close controls on right.
  * Linux: use native window chrome (no custom title bar).
  */
 import { useState, useEffect } from 'react';
 import { Minus, Square, X, Copy } from 'lucide-react';
 import { invokeIpc } from '@/lib/api-client';
+import logoSvg from '@/assets/logo.svg';
+
+function BrandLogo() {
+  return (
+    <div className="flex items-center gap-2 px-3">
+      <img src={logoSvg} alt="StoClaw" className="h-5 w-auto shrink-0" />
+      <span className="text-sm font-semibold whitespace-nowrap text-foreground/90">
+        StoClaw
+      </span>
+    </div>
+  );
+}
 
 export function TitleBar() {
   const platform = window.electron?.platform;
 
   if (platform === 'darwin') {
-    // macOS: just a drag region, traffic lights are native
-    return <div className="drag-region h-10 shrink-0 border-b glass" />;
+    // macOS: logo on left, drag region in middle, traffic lights are native
+    return (
+      <div className="drag-region flex h-10 shrink-0 items-center border-b glass">
+        <div className="no-drag">
+          <BrandLogo />
+        </div>
+      </div>
+    );
   }
 
   // Linux keeps the native frame/title bar for better IME compatibility.
@@ -51,7 +69,11 @@ function WindowsTitleBar() {
   };
 
   return (
-    <div className="drag-region flex h-10 shrink-0 items-center justify-end border-b glass">
+    <div className="drag-region flex h-10 shrink-0 items-center justify-between border-b glass">
+      {/* Left: Brand Logo */}
+      <div className="no-drag">
+        <BrandLogo />
+      </div>
 
       {/* Right: Window Controls */}
       <div className="no-drag flex h-full">

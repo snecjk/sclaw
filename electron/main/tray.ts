@@ -57,7 +57,7 @@ export function createTray(mainWindow: BrowserWindow, onToggleSprite?: () => voi
   tray = new Tray(icon);
   
   // Set tooltip
-  tray.setToolTip('StoClaw - AI Assistant');
+  tray.setToolTip('StoClaw - AI 助手');
   
   const showWindow = () => {
     if (mainWindow.isDestroyed()) return;
@@ -68,17 +68,17 @@ export function createTray(mainWindow: BrowserWindow, onToggleSprite?: () => voi
   // Create context menu
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Show StoClaw',
+      label: '显示 StoClaw',
       click: showWindow,
     },
+    // {
+    //   label: '精灵窗口',
+    //   click: () => {
+    //     onToggleSprite?.();
+    //   },
+    // },
     {
-      label: 'Toggle Sprite',
-      click: () => {
-        onToggleSprite?.();
-      },
-    },
-    {
-      label: 'Toggle Float Icon',
+      label: '显示/隐藏精灵',
       click: () => {
         onToggleFloatIcon?.();
       },
@@ -87,11 +87,11 @@ export function createTray(mainWindow: BrowserWindow, onToggleSprite?: () => voi
       type: 'separator',
     },
     {
-      label: 'Gateway Status',
+      label: '网关状态',
       enabled: false,
     },
     {
-      label: '  Running',
+      label: '  运行中',
       type: 'checkbox',
       checked: true,
       enabled: false,
@@ -100,10 +100,10 @@ export function createTray(mainWindow: BrowserWindow, onToggleSprite?: () => voi
       type: 'separator',
     },
     {
-      label: 'Quick Actions',
+      label: '快捷操作',
       submenu: [
         {
-          label: 'Open Chat',
+          label: '打开聊天',
           click: () => {
             if (mainWindow.isDestroyed()) return;
             mainWindow.show();
@@ -111,7 +111,7 @@ export function createTray(mainWindow: BrowserWindow, onToggleSprite?: () => voi
           },
         },
         {
-          label: 'Open Settings',
+          label: '打开设置',
           click: () => {
             if (mainWindow.isDestroyed()) return;
             mainWindow.show();
@@ -124,7 +124,7 @@ export function createTray(mainWindow: BrowserWindow, onToggleSprite?: () => voi
       type: 'separator',
     },
     {
-      label: 'Check for Updates...',
+      label: '检查更新...',
       click: () => {
         if (mainWindow.isDestroyed()) return;
         mainWindow.webContents.send('update:check');
@@ -134,7 +134,7 @@ export function createTray(mainWindow: BrowserWindow, onToggleSprite?: () => voi
       type: 'separator',
     },
     {
-      label: 'Quit StoClaw',
+      label: '退出 StoClaw',
       click: () => {
         app.quit();
       },

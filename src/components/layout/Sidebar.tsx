@@ -11,8 +11,8 @@ import {
   Puzzle,
   Clock,
   Settings as SettingsIcon,
-  PanelLeftClose,
-  PanelLeft,
+  ChevronLeft,
+  ChevronRight,
   Plus,
   Trash2,
   Cpu,
@@ -24,11 +24,9 @@ import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAgentsStore } from '@/stores/agents';
 import { useAuthStore } from '@/stores/auth';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useTranslation } from 'react-i18next';
-import logoSvg from '@/assets/logo.svg';
 
 type SessionBucketKey =
   | 'today'
@@ -201,36 +199,30 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'flex shrink-0 flex-col border-r glass transition-all duration-300',
-        sidebarCollapsed ? 'w-16' : 'w-52'
+        'relative flex shrink-0 flex-col border-r glass transition-all duration-300',
+        sidebarCollapsed ? 'w-16' : 'w-48'
       )}
     >
-      {/* Top Header Toggle */}
-      <div className={cn("flex items-center p-2 h-12", sidebarCollapsed ? "justify-center" : "justify-between")}>
-        {!sidebarCollapsed && (
-          <div className="flex items-center gap-2 px-2 overflow-hidden">
-            <img src={logoSvg} alt="StoClaw" className="h-5 w-auto shrink-0" />
-            <span className="text-sm font-semibold truncate whitespace-nowrap text-foreground/90">
-              StoClaw
-            </span>
-          </div>
+      {/* Collapse toggle button - positioned on right border, vertically centered */}
+      <button
+        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+        className={cn(
+          'absolute top-1/2 -right-3 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full',
+          'glass border transition-all duration-200',
+          'text-muted-foreground hover:text-foreground',
+          'hover:bg-black/5 dark:hover:bg-white/10'
         )}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-black/5 dark:hover:bg-white/10"
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-        >
-          {sidebarCollapsed ? (
-            <PanelLeft className="h-[18px] w-[18px]" />
-          ) : (
-            <PanelLeftClose className="h-[18px] w-[18px]" />
-          )}
-        </Button>
-      </div>
+        title={sidebarCollapsed ? t('common:sidebar.expand') : t('common:sidebar.collapse')}
+      >
+        {sidebarCollapsed ? (
+          <ChevronRight className="h-3.5 w-3.5" />
+        ) : (
+          <ChevronLeft className="h-3.5 w-3.5" />
+        )}
+      </button>
 
       {/* Navigation */}
-      <nav className="flex flex-col px-2 gap-0.5">
+      <nav className="flex flex-col px-2 pt-2 gap-0.5">
         <button
           onClick={() => {
             const { messages } = useChatStore.getState();
@@ -274,6 +266,7 @@ export function Sidebar() {
                     <div key={s.key} className="group relative flex items-center">
                       <button
                         onClick={() => { switchSession(s.key); navigate('/'); }}
+                        title={getSessionLabel(s.key, s.displayName, s.label)}
                         className={cn(
                           'w-full text-left rounded-lg px-2.5 py-1.5 text-[13px] transition-colors pr-7',
                           'hover:bg-black/5 dark:hover:bg-white/5',
