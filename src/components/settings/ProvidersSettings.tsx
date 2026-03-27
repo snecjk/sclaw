@@ -386,6 +386,7 @@ function ProviderCard({
     : providerDocsUrl;
   const canEditModelConfig = Boolean(typeInfo?.showBaseUrl || showModelIdField);
   const showUserAgentField = shouldShowUserAgentField(account);
+  const isStoManagedProvider = account.id.startsWith('sto-model-');
 
   useEffect(() => {
     if (isEditing) {
@@ -573,24 +574,28 @@ function ProviderCard({
                 <Check className="h-4 w-4" />
               </Button>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-white dark:hover:bg-card shadow-sm"
-              onClick={onEdit}
-              title={t('aiProviders.card.editKey')}
-            >
-              <Edit className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-full text-muted-foreground hover:text-destructive hover:bg-white dark:hover:bg-card shadow-sm"
-              onClick={onDelete}
-              title={t('aiProviders.card.delete')}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {!isStoManagedProvider && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-white dark:hover:bg-card shadow-sm"
+                onClick={onEdit}
+                title={t('aiProviders.card.editKey')}
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            )}
+            {!isStoManagedProvider && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full text-muted-foreground hover:text-destructive hover:bg-white dark:hover:bg-card shadow-sm"
+                onClick={onDelete}
+                title={t('aiProviders.card.delete')}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -1198,8 +1203,10 @@ function AddProviderDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 dark:bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl border border-glass-border shadow-2xl glass-panel overflow-hidden">
+    <div className="fixed inset-0 z-[100] bg-canvas-gradient/80 backdrop-blur-md flex items-center justify-center pt-10 pb-4 px-4">
+      <Card className="relative w-full max-w-2xl max-h-[calc(90vh-40px)] flex flex-col rounded-3xl border border-glass-border shadow-2xl bg-canvas-gradient overflow-hidden">
+        {/* Glass overlay */}
+        <div className="absolute inset-0 bg-[hsl(var(--glass-bg)/0.75)] backdrop-blur-xl -z-10 rounded-3xl" />
         <CardHeader className="relative pb-2 shrink-0">
           <CardTitle className="text-2xl font-serif font-normal">{t('aiProviders.dialog.title')}</CardTitle>
           <CardDescription className="text-[15px] mt-1 text-foreground/70">

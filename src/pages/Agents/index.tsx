@@ -364,8 +364,9 @@ function AddAgentDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 dark:bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <Card className="w-full max-w-md rounded-3xl border border-glass-border shadow-2xl glass-panel overflow-hidden">
+    <div className="fixed inset-0 z-[100] bg-canvas-gradient/80 backdrop-blur-md flex items-center justify-center pt-10 pb-4 px-4">
+      <Card className="relative w-full max-w-md rounded-3xl border border-glass-border shadow-2xl bg-canvas-gradient overflow-hidden">
+        <div className="absolute inset-0 bg-[hsl(var(--glass-bg)/0.75)] backdrop-blur-xl -z-10 rounded-3xl" />
         <CardHeader className="pb-2">
           <CardTitle className="text-2xl font-serif font-normal tracking-tight">
             {t('createDialog.title')}
@@ -471,8 +472,9 @@ function AgentSettingsModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 dark:bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl border border-glass-border shadow-2xl glass-panel overflow-hidden">
+    <div className="fixed inset-0 z-[100] bg-canvas-gradient/80 backdrop-blur-md flex items-center justify-center pt-10 pb-4 px-4">
+      <Card className="relative w-full max-w-2xl max-h-[calc(90vh-40px)] flex flex-col rounded-3xl border border-glass-border shadow-2xl bg-canvas-gradient overflow-hidden">
+        <div className="absolute inset-0 bg-[hsl(var(--glass-bg)/0.75)] backdrop-blur-xl -z-10 rounded-3xl" />
         <CardHeader className="flex flex-row items-start justify-between pb-2 shrink-0">
           <div>
             <CardTitle className="text-2xl font-serif font-normal tracking-tight">
