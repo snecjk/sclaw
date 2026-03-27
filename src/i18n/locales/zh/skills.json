@@ -17,8 +17,13 @@
     "searchMarketplace": "搜索市场...",
     "searchButton": "搜索",
     "actions": {
-        "enableVisible": "批量启用可见项",
-        "disableVisible": "批量禁用可见项",
+        "batchManage": "批量管理",
+        "batchEnable": "启用",
+        "batchDisable": "禁用",
+        "batchCancel": "取消",
+        "batchSelected": "已选 {{count}} 项",
+        "selectAll": "全选",
+        "deselectAll": "取消全选",
         "installSkill": "安装技能"
     },
     "noSkills": "未找到技能",

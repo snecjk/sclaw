@@ -17,8 +17,13 @@
     "searchMarketplace": "マーケットプレイスを検索...",
     "searchButton": "検索",
     "actions": {
-        "enableVisible": "表示中を一括有効化",
-        "disableVisible": "表示中を一括無効化",
+        "batchManage": "一括管理",
+        "batchEnable": "有効化",
+        "batchDisable": "無効化",
+        "batchCancel": "キャンセル",
+        "batchSelected": "{{count}} 件選択中",
+        "selectAll": "すべて選択",
+        "deselectAll": "選択解除",
         "installSkill": "スキルをインストール"
     },
     "noSkills": "スキルが見つかりません",

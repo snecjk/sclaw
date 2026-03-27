@@ -18,6 +18,8 @@ import {
   FileCode,
   Globe,
   Copy,
+  ListChecks,
+  Check,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -414,6 +416,8 @@ export function Skills() {
   const [installSheetOpen, setInstallSheetOpen] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
   const [selectedSource, setSelectedSource] = useState<'all' | 'built-in' | 'marketplace'>('all');
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchSelected, setBatchSelected] = useState<Set<string>>(new Set());
 
   const isGatewayRunning = gatewayStatus.state === 'running';
   const [showGatewayWarning, setShowGatewayWarning] = useState(false);
@@ -471,8 +475,27 @@ export function Skills() {
     marketplace: safeSkills.filter(s => !s.isBundled).length,
   };
 
-  const bulkToggleVisible = useCallback(async (enable: boolean) => {
-    const candidates = filteredSkills.filter((skill) => !skill.isCore && skill.enabled !== enable);
+  const toggleBatchSelect = useCallback((skillId: string) => {
+    setBatchSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(skillId)) {
+        next.delete(skillId);
+      } else {
+        next.add(skillId);
+      }
+      return next;
+    });
+  }, []);
+
+  const exitBatchMode = useCallback(() => {
+    setBatchMode(false);
+    setBatchSelected(new Set());
+  }, []);
+
+  const batchToggleSelected = useCallback(async (enable: boolean) => {
+    const candidates = filteredSkills.filter(
+      (skill) => batchSelected.has(skill.id) && !skill.isCore && skill.enabled !== enable
+    );
     if (candidates.length === 0) {
       toast.info(enable ? t('toast.noBatchEnableTargets') : t('toast.noBatchDisableTargets'));
       return;
@@ -495,10 +518,11 @@ export function Skills() {
     trackUiEvent('skills.batch_toggle', { enable, total: candidates.length, succeeded });
     if (succeeded === candidates.length) {
       toast.success(enable ? t('toast.batchEnabled', { count: succeeded }) : t('toast.batchDisabled', { count: succeeded }));
-      return;
+    } else {
+      toast.warning(t('toast.batchPartial', { success: succeeded, total: candidates.length }));
     }
-    toast.warning(t('toast.batchPartial', { success: succeeded, total: candidates.length }));
-  }, [disableSkill, enableSkill, filteredSkills, t]);
+    exitBatchMode();
+  }, [batchSelected, disableSkill, enableSkill, exitBatchMode, filteredSkills, t]);
 
   const handleToggle = useCallback(async (skillId: string, enable: boolean) => {
     try {
@@ -696,18 +720,11 @@ export function Skills() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => bulkToggleVisible(true)}
+              onClick={() => { setBatchMode(true); setBatchSelected(new Set()); }}
               className="h-8 text-[13px] font-medium rounded-md px-3 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none"
             >
-              {t('actions.enableVisible')}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => bulkToggleVisible(false)}
-              className="h-8 text-[13px] font-medium rounded-md px-3 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none"
-            >
-              {t('actions.disableVisible')}
+              <ListChecks className="h-4 w-4 mr-1.5" />
+              {t('actions.batchManage')}
             </Button>
             <Button
               variant="outline"
@@ -733,6 +750,55 @@ export function Skills() {
           </div>
         </div>
 
+        {/* Batch mode toolbar */}
+        {batchMode && (
+          <div className="flex items-center gap-3 mb-4 shrink-0 px-1">
+            <span className="text-[13px] text-foreground/70 font-medium">
+              {t('actions.batchSelected', { count: batchSelected.size })}
+            </span>
+            <div className="flex items-center gap-2 ml-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const allSelectableIds = filteredSkills.filter(s => !s.isCore).map(s => s.id);
+                  setBatchSelected((prev) => prev.size === allSelectableIds.length ? new Set() : new Set(allSelectableIds));
+                }}
+                className="h-8 text-[13px] font-medium rounded-md px-3 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none"
+              >
+                {batchSelected.size === filteredSkills.filter(s => !s.isCore).length && batchSelected.size > 0
+                  ? t('actions.deselectAll')
+                  : t('actions.selectAll')}
+              </Button>
+              <Button
+                size="sm"
+                disabled={batchSelected.size === 0}
+                onClick={() => batchToggleSelected(true)}
+                className="h-8 text-[13px] font-medium rounded-md px-3 shadow-none"
+              >
+                {t('actions.batchEnable')}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={batchSelected.size === 0}
+                onClick={() => batchToggleSelected(false)}
+                className="h-8 text-[13px] font-medium rounded-md px-3 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none"
+              >
+                {t('actions.batchDisable')}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={exitBatchMode}
+                className="h-8 text-[13px] font-medium rounded-md px-3 hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-muted-foreground"
+              >
+                {t('actions.batchCancel')}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto pr-2 pb-10 min-h-0 -mr-2">
           {error && (
@@ -746,62 +812,95 @@ export function Skills() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-1">
             {filteredSkills.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
                 <Puzzle className="h-10 w-10 mb-4 opacity-50" />
                 <p>{searchQuery ? t('noSkillsSearch') : t('noSkillsAvailable')}</p>
               </div>
             ) : (
-              filteredSkills.map((skill) => (
-                <div
-                  key={skill.id}
-                  className="group flex flex-col p-4 rounded-xl glass cursor-pointer transition-all duration-200 hover:shadow-lg"
-                  onClick={() => setSelectedSkill(skill)}
-                >
-                  {/* 顶部: 圆形图标 + 名称 + 标签 */}
-                  <div className="flex items-start gap-3 mb-3">
-                    {/* 圆形彩色背景图标 */}
-                    <div className="h-12 w-12 shrink-0 flex items-center justify-center text-2xl rounded-full bg-gradient-to-br from-violet-400 to-purple-500 dark:from-violet-500 dark:to-purple-600 shadow-sm">
-                      {skill.icon || '🧩'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <h3 className="text-[15px] font-semibold text-foreground truncate">{skill.name}</h3>
-                        {skill.isCore && <Lock className="h-3 w-3 text-muted-foreground shrink-0" />}
-                        {skill.isBundled && <Puzzle className="h-3 w-3 text-blue-500/70 shrink-0" />}
+              filteredSkills.map((skill) => {
+                const isSelected = batchSelected.has(skill.id);
+                const isSelectable = batchMode && !skill.isCore;
+                return (
+                  <div
+                    key={skill.id}
+                    className={cn(
+                      'group flex flex-col p-4 rounded-xl glass cursor-pointer transition-all duration-200 hover:shadow-lg',
+                      isSelected && 'ring-2 ring-primary/50'
+                    )}
+                    onClick={() => {
+                      if (batchMode) {
+                        if (isSelectable) toggleBatchSelect(skill.id);
+                      } else {
+                        setSelectedSkill(skill);
+                      }
+                    }}
+                  >
+                    {/* 顶部: 圆形图标 + 名称 + 标签 */}
+                    <div className="flex items-start gap-3 mb-3">
+                      {batchMode ? (
+                        <div
+                          className={cn(
+                            'h-12 w-12 shrink-0 flex items-center justify-center rounded-full border transition-colors',
+                            skill.isCore
+                              ? 'bg-muted/50 border-black/5 dark:border-white/5 cursor-not-allowed'
+                              : isSelected
+                                ? 'bg-primary border-primary text-primary-foreground'
+                                : 'glass border hover:border-primary/40'
+                          )}
+                        >
+                          {isSelected ? (
+                            <Check className="h-5 w-5" strokeWidth={2.5} />
+                          ) : (
+                            <span className="text-2xl">{skill.icon || '🧩'}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="h-12 w-12 shrink-0 flex items-center justify-center text-2xl rounded-full glass border shadow-sm">
+                          {skill.icon || '🧩'}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="text-[15px] font-semibold text-foreground truncate">{skill.name}</h3>
+                          {skill.isCore && <Lock className="h-3 w-3 text-muted-foreground shrink-0" />}
+                          {skill.isBundled && <Puzzle className="h-3 w-3 text-blue-500/70 shrink-0" />}
+                        </div>
+                        {skill.slug && skill.slug !== skill.name && (
+                          <span className="text-[11px] font-mono px-1.5 py-0.5 rounded border border-black/10 dark:border-white/10 text-muted-foreground mt-1 inline-block">
+                            {skill.slug}
+                          </span>
+                        )}
                       </div>
-                      {skill.slug && skill.slug !== skill.name && (
-                        <span className="text-[11px] font-mono px-1.5 py-0.5 rounded border border-black/10 dark:border-white/10 text-muted-foreground mt-1 inline-block">
-                          {skill.slug}
-                        </span>
+                    </div>
+
+                    {/* 描述 */}
+                    <p className="text-[13px] text-muted-foreground line-clamp-2 mb-3 flex-1 leading-relaxed">
+                      {skill.description}
+                    </p>
+
+                    {/* 底部: 来源 + 版本 + 开关 */}
+                    <div className="flex items-center justify-between pt-3 border-t border-black/5 dark:border-white/5" onClick={e => { if (!batchMode) e.stopPropagation(); }}>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="px-1.5 py-0 h-5 text-[10px] font-medium bg-black/5 dark:bg-white/10 border-0 shadow-none">
+                          {resolveSkillSourceLabel(skill, t)}
+                        </Badge>
+                        {skill.version && (
+                          <span className="text-[11px] font-mono text-muted-foreground">v{skill.version}</span>
+                        )}
+                      </div>
+                      {!batchMode && (
+                        <Switch
+                          checked={skill.enabled}
+                          onCheckedChange={(checked) => handleToggle(skill.id, checked)}
+                          disabled={skill.isCore}
+                        />
                       )}
                     </div>
                   </div>
-
-                  {/* 描述 */}
-                  <p className="text-[13px] text-muted-foreground line-clamp-2 mb-3 flex-1 leading-relaxed">
-                    {skill.description}
-                  </p>
-
-                  {/* 底部: 来源 + 版本 + 开关 */}
-                  <div className="flex items-center justify-between pt-3 border-t border-black/5 dark:border-white/5" onClick={e => e.stopPropagation()}>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="px-1.5 py-0 h-5 text-[10px] font-medium bg-black/5 dark:bg-white/10 border-0 shadow-none">
-                        {resolveSkillSourceLabel(skill, t)}
-                      </Badge>
-                      {skill.version && (
-                        <span className="text-[11px] font-mono text-muted-foreground">v{skill.version}</span>
-                      )}
-                    </div>
-                    <Switch
-                      checked={skill.enabled}
-                      onCheckedChange={(checked) => handleToggle(skill.id, checked)}
-                      disabled={skill.isCore}
-                    />
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -809,14 +908,14 @@ export function Skills() {
 
       <Sheet open={installSheetOpen} onOpenChange={setInstallSheetOpen}>
         <SheetContent
-          className="w-full sm:max-w-[560px] p-0 flex flex-col border-l border-glass-border glass-panel shadow-glass"
+          className="w-full sm:max-w-[450px] p-0 flex flex-col border-l border-glass-border glass-panel shadow-glass"
           side="right"
         >
-          <div className="px-7 py-6 border-b border-black/10 dark:border-white/10">
-            <h2 className="text-[24px] font-serif text-foreground font-normal tracking-tight">{t('marketplace.installDialogTitle')}</h2>
-            <p className="mt-1 text-[13px] text-foreground/70">{t('marketplace.installDialogSubtitle')}</p>
-            <div className="mt-4 flex flex-col md:flex-row gap-2">
-              <div className="relative flex items-center bg-black/5 dark:bg-white/5 rounded-xl px-3 py-2 border border-black/10 dark:border-white/10 flex-1">
+          <div className="px-8 py-8 border-b border-black/5 dark:border-white/5">
+            <h2 className="text-[28px] font-serif text-foreground font-normal tracking-tight">{t('marketplace.installDialogTitle')}</h2>
+            <p className="mt-2 text-[14px] text-foreground/70 font-medium">{t('marketplace.installDialogSubtitle')}</p>
+            <div className="mt-5 flex flex-col md:flex-row gap-2">
+              <div className="relative flex items-center glass rounded-xl px-3 py-2 border flex-1">
                 <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <Input
                   placeholder={t('searchMarketplace')}
@@ -844,7 +943,7 @@ export function Skills() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="flex-1 overflow-y-auto px-8 py-6">
             {searchError && (
               <div className="mb-4 p-4 rounded-xl border border-destructive/50 bg-destructive/10 text-destructive text-sm font-medium flex items-center gap-2">
                 <AlertCircle className="h-5 w-5 shrink-0" />
@@ -876,7 +975,7 @@ export function Skills() {
                       onClick={() => invokeIpc('shell:openExternal', `https://clawhub.ai/s/${skill.slug}`)}
                     >
                       <div className="flex items-start gap-4 flex-1 overflow-hidden pr-4">
-                        <div className="h-10 w-10 shrink-0 flex items-center justify-center text-xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl overflow-hidden">
+                        <div className="h-10 w-10 shrink-0 flex items-center justify-center text-xl glass border rounded-xl overflow-hidden">
                           📦
                         </div>
                         <div className="flex flex-col overflow-hidden">

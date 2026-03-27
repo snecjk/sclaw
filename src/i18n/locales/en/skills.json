@@ -17,8 +17,13 @@
     "searchMarketplace": "Search marketplace...",
     "searchButton": "Search",
     "actions": {
-        "enableVisible": "Enable Visible",
-        "disableVisible": "Disable Visible",
+        "batchManage": "Batch Manage",
+        "batchEnable": "Enable",
+        "batchDisable": "Disable",
+        "batchCancel": "Cancel",
+        "batchSelected": "{{count}} selected",
+        "selectAll": "Select All",
+        "deselectAll": "Deselect All",
         "installSkill": "Install Skills"
     },
     "noSkills": "No skills found",
