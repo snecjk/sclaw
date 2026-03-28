@@ -1384,27 +1384,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return toMs(msg.timestamp) >= userMsTs;
       };
 
-      if (isSendingNow && !pendingFinal) {
-        const hasRecentAssistantActivity = [...filteredMessages].reverse().some((msg) => {
-          if (msg.role !== 'assistant') return false;
-          return isAfterUserMsg(msg);
-        });
-        if (hasRecentAssistantActivity) {
-          set({ pendingFinal: true });
-        }
-      }
+      const hasRecentAssistantActivity = isSendingNow && [...filteredMessages].reverse().some((msg) => {
+        if (msg.role !== 'assistant') return false;
+        return isAfterUserMsg(msg);
+      });
+      const recentAssistant = [...filteredMessages].reverse().find((msg) => {
+        if (msg.role !== 'assistant') return false;
+        if (!hasNonToolAssistantContent(msg)) return false;
+        return isAfterUserMsg(msg);
+      });
+      const currentRecentAssistant = [...get().messages].reverse().find((msg) => {
+        if (msg.role !== 'assistant') return false;
+        if (!hasNonToolAssistantContent(msg)) return false;
+        return isAfterUserMsg(msg);
+      });
 
-      // If pendingFinal, check whether the AI produced a final text response.
-      if (pendingFinal || get().pendingFinal) {
-        const recentAssistant = [...filteredMessages].reverse().find((msg) => {
-          if (msg.role !== 'assistant') return false;
-          if (!hasNonToolAssistantContent(msg)) return false;
-          return isAfterUserMsg(msg);
-        });
-        if (recentAssistant) {
-          clearHistoryPoll();
-          set({ sending: false, activeRunId: null, pendingFinal: false });
-        }
+      if (recentAssistant || currentRecentAssistant) {
+        clearHistoryPoll();
+        set({ sending: false, activeRunId: null, pendingFinal: false });
+      } else if (hasRecentAssistantActivity && !pendingFinal) {
+        set({ pendingFinal: true });
       }
       };
 
@@ -1773,9 +1772,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
               // would be overwritten by the next turn's deltas and never appear in the UI.
               const currentStream = s.streamingMessage as RawMessage | null;
               const snapshotMsgs: RawMessage[] = [];
+              let streamHasOutput = false;
               if (currentStream) {
                 const streamRole = currentStream.role;
                 if (streamRole === 'assistant' || streamRole === undefined) {
+                  streamHasOutput = hasNonToolAssistantContent(currentStream);
                   // Use message's own id if available, otherwise derive a stable one from runId
                   const snapId = currentStream.id
                     || `${runId || 'run'}-turn-${s.messages.length}`;
@@ -1784,19 +1785,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
                       ...(currentStream as RawMessage),
                       role: 'assistant',
                       id: snapId,
+                      _attachedFiles: toolFiles.length > 0
+                        ? [...((currentStream as RawMessage)._attachedFiles || []), ...toolFiles]
+                        : (currentStream as RawMessage)._attachedFiles,
                     });
                   }
                 }
               }
+              const nextTools = updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools;
               return {
                 messages: snapshotMsgs.length > 0 ? [...s.messages, ...snapshotMsgs] : s.messages,
                 streamingText: '',
                 streamingMessage: null,
-                pendingFinal: true,
-                pendingToolImages: toolFiles.length > 0
-                  ? [...s.pendingToolImages, ...toolFiles]
-                  : s.pendingToolImages,
-                streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
+                sending: streamHasOutput ? false : s.sending,
+                activeRunId: streamHasOutput ? null : s.activeRunId,
+                pendingFinal: streamHasOutput ? false : true,
+                pendingToolImages: streamHasOutput
+                  ? []
+                  : (toolFiles.length > 0 ? [...s.pendingToolImages, ...toolFiles] : s.pendingToolImages),
+                streamingTools: streamHasOutput ? [] : nextTools,
               };
             });
             break;
@@ -1822,6 +1829,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
             // Check if message already exists (prevent duplicates)
             const alreadyExists = s.messages.some(m => m.id === msgId);
+            const incomingText = getMessageText(msgWithImages.content).trim();
+            let lastUserIndex = -1;
+            for (let i = s.messages.length - 1; i >= 0; i--) {
+              if (s.messages[i].role === 'user') {
+                lastUserIndex = i;
+                break;
+              }
+            }
+            const hasEquivalentAssistantAfterLastUser = hasOutput && incomingText.length > 0
+              && s.messages.slice(lastUserIndex + 1).some((m) => (
+                m.role === 'assistant'
+                && hasNonToolAssistantContent(m)
+                && getMessageText(m.content).trim() === incomingText
+              ));
             if (alreadyExists) {
               return toolOnly ? {
                 streamingText: '',
@@ -1836,6 +1857,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 activeRunId: hasOutput ? null : s.activeRunId,
                 pendingFinal: hasOutput ? false : true,
                 streamingTools,
+                ...clearPendingImages,
+              };
+            }
+            if (hasEquivalentAssistantAfterLastUser) {
+              return {
+                streamingText: '',
+                streamingMessage: null,
+                sending: false,
+                activeRunId: null,
+                pendingFinal: false,
+                streamingTools: [],
                 ...clearPendingImages,
               };
             }

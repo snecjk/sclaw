@@ -46,22 +46,53 @@ function pruneGatewayEventDedupe(now: number): void {
   }
 }
 
+function summarizeGatewayMessageContent(message: Record<string, unknown>): string {
+  const content = message.content;
+  if (typeof content === 'string') return content.trim().slice(0, 120);
+  if (Array.isArray(content)) {
+    return content
+      .map((block) => {
+        if (!block || typeof block !== 'object') return '';
+        const part = block as Record<string, unknown>;
+        if (typeof part.text === 'string') return part.text;
+        if (typeof part.thinking === 'string') return part.thinking;
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n')
+      .trim()
+      .slice(0, 120);
+  }
+  if (typeof message.text === 'string') return message.text.trim().slice(0, 120);
+  return '';
+}
+
 function buildGatewayEventDedupeKey(event: Record<string, unknown>): string | null {
   const runId = event.runId != null ? String(event.runId) : '';
   const sessionKey = event.sessionKey != null ? String(event.sessionKey) : '';
   const seq = event.seq != null ? String(event.seq) : '';
   const state = event.state != null ? String(event.state) : '';
-  if (runId || sessionKey || seq || state) {
-    return [runId, sessionKey, seq, state].join('|');
-  }
   const message = event.message;
   if (message && typeof message === 'object') {
     const msg = message as Record<string, unknown>;
     const messageId = msg.id != null ? String(msg.id) : '';
     const stopReason = msg.stopReason ?? msg.stop_reason;
-    if (messageId || stopReason) {
-      return `msg|${messageId}|${String(stopReason ?? '')}`;
+    const role = msg.role != null ? String(msg.role) : '';
+    const summary = summarizeGatewayMessageContent(msg);
+    if (messageId || stopReason || summary) {
+      return [
+        'msg',
+        runId,
+        state,
+        messageId,
+        String(stopReason ?? ''),
+        role,
+        summary,
+      ].join('|');
     }
+  }
+  if (runId || sessionKey || seq || state) {
+    return [runId, sessionKey, seq, state].join('|');
   }
   return null;
 }
@@ -190,16 +221,30 @@ function handleGatewayChatMessage(data: unknown): void {
       ? chatData.message as Record<string, unknown>
       : chatData;
 
-    if (payload.state) {
-      if (!shouldProcessGatewayEvent(payload)) return;
-      useChatStore.getState().handleChatEvent(payload);
+    if (payload.state != null) {
+      const normalizedEvent: Record<string, unknown> = {
+        ...chatData,
+        ...payload,
+        state: payload.state,
+        message: payload.message ?? chatData.message,
+        runId: payload.runId ?? chatData.runId,
+        sessionKey: payload.sessionKey ?? chatData.sessionKey,
+        seq: payload.seq ?? chatData.seq,
+        stream: payload.stream ?? chatData.stream,
+      };
+      if (!shouldProcessGatewayEvent(normalizedEvent)) return;
+      useChatStore.getState().handleChatEvent(normalizedEvent);
       return;
     }
 
-    const normalized = {
-      state: 'final',
+    const normalized: Record<string, unknown> = {
+      ...chatData,
+      state: chatData.state ?? payload.state ?? 'final',
       message: payload,
       runId: chatData.runId ?? payload.runId,
+      sessionKey: chatData.sessionKey ?? payload.sessionKey,
+      seq: chatData.seq ?? payload.seq,
+      stream: chatData.stream ?? payload.stream,
     };
     if (!shouldProcessGatewayEvent(normalized)) return;
     useChatStore.getState().handleChatEvent(normalized);
