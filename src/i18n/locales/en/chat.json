@@ -24,6 +24,7 @@
         "targetChip": "@{{agent}}",
         "agentPickerTitle": "Route the next message to another agent",
         "gatewayDisconnectedPlaceholder": "Gateway not connected...",
+        "messagePlaceholder": "Message {{agent}}",
         "send": "Send",
         "stop": "Stop",
         "gatewayConnected": "connected",

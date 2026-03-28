@@ -36,6 +36,8 @@ type SessionBucketKey =
   | 'withinMonth'
   | 'older';
 
+let didBootstrapFreshChat = false;
+
 interface NavItemProps {
   to: string;
   icon: React.ReactNode;
@@ -127,6 +129,7 @@ export function Sidebar() {
   const authUser = useAuthStore((s) => s.user);
   const authLogout = useAuthStore((s) => s.logout);
 
+  const location = useLocation();
   useEffect(() => {
     if (!isGatewayRunning) return;
     let cancelled = false;
@@ -134,17 +137,22 @@ export function Sidebar() {
     (async () => {
       await loadSessions();
       if (cancelled) return;
+      if (!didBootstrapFreshChat && location.pathname === '/' && !hasExistingMessages) {
+        didBootstrapFreshChat = true;
+        newSession();
+        return;
+      }
       await loadHistory(hasExistingMessages);
     })();
     return () => {
       cancelled = true;
     };
-  }, [isGatewayRunning, loadHistory, loadSessions]);
+  }, [isGatewayRunning, loadHistory, loadSessions, location.pathname, newSession]);
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
   const navigate = useNavigate();
-  const isOnChat = useLocation().pathname === '/';
+  const isOnChat = location.pathname === '/';
 
   const getSessionLabel = (key: string, displayName?: string, label?: string) =>
     sessionLabels[key] ?? label ?? displayName ?? key;
@@ -182,10 +190,17 @@ export function Sidebar() {
     (typeof sessionBuckets)[number]
   >;
 
+  const getEffectiveActivityMs = (sessionKey: string): number => {
+    const recorded = sessionLastActivity[sessionKey] ?? 0;
+    if (recorded > 0) return recorded;
+    const isFreshCurrentSession = sessionKey === currentSessionKey && !sessionLabels[sessionKey];
+    return isFreshCurrentSession ? nowMs : 0;
+  };
+
   for (const session of [...sessions].sort((a, b) =>
-    (sessionLastActivity[b.key] ?? 0) - (sessionLastActivity[a.key] ?? 0)
+    getEffectiveActivityMs(b.key) - getEffectiveActivityMs(a.key)
   )) {
-    const bucketKey = getSessionBucket(sessionLastActivity[session.key] ?? 0, nowMs);
+    const bucketKey = getSessionBucket(getEffectiveActivityMs(session.key), nowMs);
     sessionBucketMap[bucketKey].sessions.push(session);
   }
 

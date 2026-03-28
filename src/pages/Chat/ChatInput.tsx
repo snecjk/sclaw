@@ -109,6 +109,9 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
     [agents, targetAgentId],
   );
   const showAgentPicker = mentionableAgents.length > 0;
+  const composerPlaceholder = disabled
+    ? t('composer.gatewayDisconnectedPlaceholder')
+    : t('composer.messagePlaceholder', { agent: currentAgentName });
 
   // Auto-resize textarea
   useEffect(() => {
@@ -408,13 +411,20 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
         )}
 
         {/* Input Row */}
-        <div className={`relative glass rounded-[28px] border p-1.5 transition-all ${dragOver ? 'border-primary ring-1 ring-primary' : 'border-glass-border'}`}>
+        <div
+          className={cn(
+            'relative overflow-hidden rounded-[26px] border bg-white shadow-[0_6px_22px_rgba(99,102,241,0.08)] transition-all dark:bg-[#131a24]',
+            dragOver
+              ? 'border-primary/60 ring-2 ring-primary/18'
+              : 'border-primary/40 ring-1 ring-primary/18 dark:border-primary/30 dark:ring-primary/12',
+          )}
+        >
           {selectedTarget && (
-            <div className="px-2.5 pt-2 pb-1">
+            <div className="px-3 pt-3 pb-1">
               <button
                 type="button"
                 onClick={() => setTargetAgentId(null)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[13px] font-medium text-foreground transition-colors hover:bg-primary/10"
+                className="inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-primary/6 px-3 py-1 text-[13px] font-medium text-foreground transition-colors hover:bg-primary/10"
                 title={t('composer.clearTarget')}
               >
                 <span>{t('composer.targetChip', { agent: selectedTarget.name })}</span>
@@ -423,59 +433,7 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
             </div>
           )}
 
-          <div className="flex items-end gap-1.5">
-            {/* Attach Button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="shrink-0 h-10 w-10 rounded-full text-muted-foreground hover:bg-black/5 dark:hover:bg-white/10 hover:text-foreground transition-colors"
-              onClick={pickFiles}
-              disabled={disabled || sending}
-              title={t('composer.attachFiles')}
-            >
-              <Paperclip className="h-4 w-4" />
-            </Button>
-
-            {showAgentPicker && (
-              <div ref={pickerRef} className="relative shrink-0">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(
-                    'h-10 w-10 rounded-full text-muted-foreground hover:bg-black/5 dark:hover:bg-white/10 hover:text-foreground transition-colors',
-                    (pickerOpen || selectedTarget) && 'bg-primary/10 text-primary hover:bg-primary/20'
-                  )}
-                  onClick={() => setPickerOpen((open) => !open)}
-                  disabled={disabled || sending}
-                  title={t('composer.pickAgent')}
-                >
-                  <AtSign className="h-4 w-4" />
-                </Button>
-                {pickerOpen && (
-                  <div className="absolute left-0 bottom-full z-20 mb-2 w-72 overflow-hidden rounded-2xl border border-glass-border glass p-1.5">
-                    <div className="px-3 py-2 text-[11px] font-medium text-muted-foreground/80">
-                      {t('composer.agentPickerTitle', { currentAgent: currentAgentName })}
-                    </div>
-                    <div className="max-h-64 overflow-y-auto">
-                      {mentionableAgents.map((agent) => (
-                        <AgentPickerItem
-                          key={agent.id}
-                          agent={agent}
-                          selected={agent.id === targetAgentId}
-                          onSelect={() => {
-                            setTargetAgentId(agent.id);
-                            setPickerOpen(false);
-                            textareaRef.current?.focus();
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Textarea */}
+          <div className="px-4 pt-2.5">
             <div className="flex-1 relative">
               <Textarea
                 ref={textareaRef}
@@ -489,30 +447,86 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
                   isComposingRef.current = false;
                 }}
                 onPaste={handlePaste}
-                placeholder={disabled ? t('composer.gatewayDisconnectedPlaceholder') : ''}
+                placeholder={composerPlaceholder}
                 disabled={disabled}
-                className="min-h-[40px] max-h-[200px] resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none bg-transparent py-2.5 px-2 text-[15px] placeholder:text-muted-foreground/60 leading-relaxed"
+                className="!min-h-[42px] max-h-[120px] resize-none border-0 bg-transparent px-0 py-0 text-[15px] leading-5 text-foreground shadow-none placeholder:text-[15px] placeholder:text-muted-foreground/55 focus-visible:ring-0 focus-visible:ring-offset-0"
                 rows={1}
               />
             </div>
+          </div>
 
-            {/* Send Button */}
+          <div className="flex items-center justify-between gap-3 px-4 pb-1.5 pt-0.5">
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                type="button"
+                className="h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]"
+                onClick={pickFiles}
+                disabled={disabled || sending}
+                title={t('composer.attachFiles')}
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+              </Button>
+
+              {showAgentPicker && (
+                <div ref={pickerRef} className="relative shrink-0">
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    className={cn(
+                      'h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
+                      (pickerOpen || selectedTarget) && 'bg-primary/10 text-primary hover:bg-primary/12'
+                    )}
+                    onClick={() => setPickerOpen((open) => !open)}
+                    disabled={disabled || sending}
+                    title={t('composer.pickAgent')}
+                  >
+                    <AtSign className="h-3.5 w-3.5" />
+                  </Button>
+                  {pickerOpen && (
+                    <div className="absolute left-0 bottom-full z-20 mb-2 w-72 overflow-hidden rounded-2xl border border-glass-border glass p-1.5">
+                      <div className="px-3 py-2 text-[11px] font-medium text-muted-foreground/80">
+                        {t('composer.agentPickerTitle', { currentAgent: currentAgentName })}
+                      </div>
+                      <div className="max-h-64 overflow-y-auto">
+                        {mentionableAgents.map((agent) => (
+                          <AgentPickerItem
+                            key={agent.id}
+                            agent={agent}
+                            selected={agent.id === targetAgentId}
+                            onSelect={() => {
+                              setTargetAgentId(agent.id);
+                              setPickerOpen(false);
+                              textareaRef.current?.focus();
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <Button
               onClick={sending ? handleStop : handleSend}
               disabled={sending ? !canStop : !canSend}
               size="icon"
-              className={`shrink-0 h-10 w-10 rounded-full transition-colors ${
-                (sending || canSend)
-                  ? 'bg-black/5 dark:bg-white/10 text-foreground hover:bg-black/10 dark:hover:bg-white/20'
-                  : 'text-muted-foreground/50 hover:bg-transparent bg-transparent'
-              }`}
+              className={cn(
+                'h-9 w-9 shrink-0 rounded-full border transition-all',
+                sending
+                  ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-white/90'
+                  : canSend
+                    ? 'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(59,130,246,0.22)]'
+                    : 'border-black/8 bg-black/5 text-muted-foreground/55 dark:border-white/10 dark:bg-white/[0.06]'
+              )}
               variant="ghost"
               title={sending ? t('composer.stop') : t('composer.send')}
             >
               {sending ? (
-                <Square className="h-4 w-4" fill="currentColor" />
+                <Square className="h-3.5 w-3.5" fill="currentColor" />
               ) : (
-                <SendHorizontal className="h-[18px] w-[18px]" strokeWidth={2} />
+                <SendHorizontal className="h-4 w-4" strokeWidth={2.1} />
               )}
             </Button>
           </div>
