@@ -48,7 +48,7 @@ import jaSprite from './locales/ja/sprite.json';
 export const SUPPORTED_LANGUAGES = [
     { code: 'en', label: 'English' },
     { code: 'zh', label: '中文' },
-    { code: 'ja', label: '日本語' },
+    // { code: 'ja', label: '日本語' },
 ] as const satisfies ReadonlyArray<{ code: LanguageCode; label: string }>;
 
 const resources = {
