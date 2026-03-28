@@ -238,7 +238,7 @@ export function Sidebar() {
       </button>
 
       {/* Navigation */}
-      <nav className="flex flex-col px-2 pt-2 gap-0.5">
+      <nav className="flex flex-col px-2 pt-1.5 gap-0.5">
         <button
           onClick={() => {
             const { messages } = useChatStore.getState();
@@ -326,32 +326,36 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="p-2 mt-auto">
-        {/* User Info */}
         {authUser && (
-          <div className={cn(
-            'flex items-center gap-2 rounded-lg px-2.5 py-2 mb-1',
-            sidebarCollapsed ? 'justify-center px-0' : ''
-          )}>
+          <div className="mb-1">
             <div
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-semibold"
-              title={sidebarCollapsed ? authUser.realName : undefined}
+              className={cn(
+                'relative flex items-center gap-2 rounded-lg px-2.5 py-2',
+                'text-foreground/80 hover:bg-black/5 dark:hover:bg-white/5',
+                sidebarCollapsed ? 'justify-center px-0' : ''
+              )}
             >
-              {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
+              <div
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-semibold"
+                title={authUser.realName || authUser.userName || undefined}
+              >
+                {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
+              </div>
+              {!sidebarCollapsed && (
+                <>
+                  <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm">
+                    {authUser.realName || authUser.userName}
+                  </span>
+                  <button
+                    onClick={() => setShowLogoutConfirm(true)}
+                    className="flex shrink-0 items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:text-destructive hover:bg-destructive/10"
+                    title={t('auth:logout.button')}
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </button>
+                </>
+              )}
             </div>
-            {!sidebarCollapsed && (
-              <>
-                <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm text-foreground/80">
-                  {authUser.realName || authUser.userName}
-                </span>
-                <button
-                  onClick={() => setShowLogoutConfirm(true)}
-                  className="flex shrink-0 items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:text-destructive hover:bg-destructive/10"
-                  title={t('auth:logout.button')}
-                >
-                  <LogOut className="h-4 w-4" />
-                </button>
-              </>
-            )}
           </div>
         )}
 
