@@ -24,6 +24,7 @@
         "targetChip": "@{{agent}}",
         "agentPickerTitle": "将下一条消息直接发送给其他 Agent",
         "gatewayDisconnectedPlaceholder": "网关未连接...",
+        "messagePlaceholder": "给 {{agent}} 发送消息",
         "send": "发送",
         "stop": "停止",
         "gatewayConnected": "已连接",

@@ -24,6 +24,7 @@
         "targetChip": "@{{agent}}",
         "agentPickerTitle": "次のメッセージを別の Agent に直接送信します",
         "gatewayDisconnectedPlaceholder": "ゲートウェイ未接続...",
+        "messagePlaceholder": "{{agent}} にメッセージを送信",
         "send": "送信",
         "stop": "停止",
         "gatewayConnected": "接続済み",
