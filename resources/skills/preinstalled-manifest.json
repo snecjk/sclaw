@@ -33,9 +33,9 @@
       "autoEnable": true
     },
     {
-      "slug": "find-skills",
-      "repo": "vercel-labs/skills",
-      "repoPath": "skills/find-skills",
+      "slug": "find-skills-skill",
+      "repo": "openclaw/skills",
+      "repoPath": "skills/fangkelvin/find-skills-skill",
       "ref": "main",
       "version": "main",
       "autoEnable": true
