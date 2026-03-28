@@ -6,6 +6,14 @@ import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 
+// On Windows, the default bash may resolve to WSL bash (C:\Windows\System32\bash.exe)
+// instead of Git for Windows bash, causing failures when no WSL distro is installed.
+// Explicitly use PowerShell to avoid this issue.
+if (process.platform === 'win32') {
+  $.shell = 'powershell.exe';
+  $.prefix = '';
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const MANIFEST_PATH = join(ROOT, 'resources', 'skills', 'preinstalled-manifest.json');
