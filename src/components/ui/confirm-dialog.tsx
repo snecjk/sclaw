@@ -3,6 +3,7 @@
  * Keeps focus within the renderer to avoid Windows focus loss after native dialogs.
  */
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
@@ -71,7 +72,7 @@ export function ConfirmDialog({
     }
   };
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 backdrop-blur-sm"
       role="dialog"
@@ -81,8 +82,8 @@ export function ConfirmDialog({
     >
       <div
         className={cn(
-          'mx-4 max-w-md rounded-lg border border-glass-border glass-panel p-6',
-          'focus:outline-none'
+          'mx-4 w-full max-w-md rounded-xl border border-glass-border glass-panel p-6',
+          'shadow-2xl focus:outline-none'
         )}
         tabIndex={-1}
       >
@@ -108,6 +109,7 @@ export function ConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

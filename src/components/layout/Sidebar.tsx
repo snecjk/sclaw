@@ -151,6 +151,7 @@ export function Sidebar() {
 
   const { t } = useTranslation(['common', 'chat', 'auth']);
   const [sessionToDelete, setSessionToDelete] = useState<{ key: string; label: string } | null>(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
 
   useEffect(() => {
@@ -328,7 +329,7 @@ export function Sidebar() {
                   {authUser.realName || authUser.userName}
                 </span>
                 <button
-                  onClick={() => { void authLogout().then(() => navigate('/login')); }}
+                  onClick={() => setShowLogoutConfirm(true)}
                   className="flex shrink-0 items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:text-destructive hover:bg-destructive/10"
                   title={t('auth:logout.button')}
                 >
@@ -395,6 +396,21 @@ export function Sidebar() {
           setSessionToDelete(null);
         }}
         onCancel={() => setSessionToDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={showLogoutConfirm}
+        title={t('auth:logout.confirmTitle')}
+        message={t('auth:logout.confirmMessage')}
+        confirmLabel={t('auth:logout.button')}
+        cancelLabel={t('common:actions.cancel')}
+        variant="destructive"
+        onConfirm={async () => {
+          setShowLogoutConfirm(false);
+          await authLogout();
+          navigate('/login');
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
       />
     </aside>
   );
