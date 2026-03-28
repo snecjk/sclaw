@@ -1120,10 +1120,19 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
       toolsModified = true;
     }
 
+    const toolsWeb = (toolsConfig.web as Record<string, unknown> | undefined) || {};
+    const toolsWebSearch = (toolsWeb.search as Record<string, unknown> | undefined) || {};
+    if (toolsWebSearch.enabled !== false) {
+      toolsWebSearch.enabled = false;
+      toolsWeb.search = toolsWebSearch;
+      toolsConfig.web = toolsWeb;
+      toolsModified = true;
+    }
+
     if (toolsModified) {
       config.tools = toolsConfig;
       modified = true;
-      console.log('[sanitize] Enforced tools.profile="full" and tools.sessions.visibility="all" for OpenClaw 3.8+');
+      console.log('[sanitize] Enforced tools.profile="full", tools.sessions.visibility="all" and tools.web.search.enabled=false for OpenClaw 3.8+');
     }
 
     // ── plugins normalization ──────────────────────────────────────
