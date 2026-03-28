@@ -6,10 +6,12 @@
  */
 import { useEffect, useState } from 'react';
 import { AlertCircle, Loader2, Sparkles } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAgentsStore } from '@/stores/agents';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { ParticleConstellation } from '@/components/common/ParticleConstellation';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { ChatToolbar } from './ChatToolbar';
@@ -188,6 +190,11 @@ export function Chat() {
 
 // ── Welcome Screen ──────────────────────────────────────────────
 
+const buttonVariants = {
+  hidden: { opacity: 0, y: 12, scale: 0.95 },
+  visible: { opacity: 1, y: 0, scale: 1 },
+};
+
 function WelcomeScreen() {
   const { t } = useTranslation('chat');
   const quickActions = [
@@ -197,20 +204,40 @@ function WelcomeScreen() {
   ];
 
   return (
-    <div className="flex flex-col items-center justify-center text-center h-[60vh]">
-      <h1 className="text-4xl md:text-5xl font-serif text-foreground/80 mb-8 font-normal tracking-tight" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
-        {t('welcome.subtitle')}
-      </h1>
+    <div className="relative flex flex-col items-center justify-center text-center h-[60vh] overflow-hidden">
+      <ParticleConstellation className="z-0" />
 
-      <div className="flex flex-wrap items-center justify-center gap-2.5 max-w-lg w-full">
-        {quickActions.map(({ key, label }) => (
-          <button 
-            key={key}
-            className="px-4 py-1.5 rounded-full border border-glass-border text-[13px] font-medium text-foreground/70 hover:bg-white/20 dark:hover:bg-white/10 transition-colors glass-subtle"
-          >
-            {label}
-          </button>
-        ))}
+      <div className="relative z-10 flex flex-col items-center justify-center">
+        <motion.h1
+          className="text-4xl md:text-5xl font-serif text-foreground/80 mb-8 font-normal tracking-tight"
+          style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: 'easeOut' }}
+        >
+          {t('welcome.subtitle')}
+        </motion.h1>
+
+        <motion.div
+          className="flex flex-wrap items-center justify-center gap-2.5 max-w-lg w-full"
+          initial="hidden"
+          animate="visible"
+          variants={{
+            hidden: {},
+            visible: { transition: { staggerChildren: 0.1, delayChildren: 0.4 } },
+          }}
+        >
+          {quickActions.map(({ key, label }) => (
+            <motion.button
+              key={key}
+              className="px-4 py-1.5 rounded-full border border-glass-border text-[13px] font-medium text-foreground/70 hover:bg-white/20 dark:hover:bg-white/10 transition-colors glass-subtle"
+              variants={buttonVariants}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+            >
+              {label}
+            </motion.button>
+          ))}
+        </motion.div>
       </div>
     </div>
   );
