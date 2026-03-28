@@ -14,7 +14,6 @@ import clawxIcon from '@/assets/logo.svg';
 
 const SSO_ENVIRONMENTS: { value: SsoEnvironment; labelKey: string }[] = [
   { value: 'production-external', labelKey: 'auth:environment.production-external' },
-  { value: 'production-internal', labelKey: 'auth:environment.production-internal' },
   { value: 'daily-external', labelKey: 'auth:environment.daily-external' },
   { value: 'pre-release', labelKey: 'auth:environment.pre-release' },
 ];

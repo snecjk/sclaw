@@ -31,6 +31,7 @@ const STO_ACCOUNT_ID_PREFIX = 'sto-model-';
 
 const STO_DOMAINS: Record<string, string> = {
   'daily-external': 'https://baseinfo-aimemory-test.sto.cn',
+  'pre-release': 'https://pre-baseinfo-aimemory.sto.cn',
 };
 const STO_DOMAIN_DEFAULT = 'https://baseinfo-aimemory.sto.cn';
 

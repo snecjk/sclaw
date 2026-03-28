@@ -5,7 +5,6 @@
 
 export type SsoEnvironment =
   | 'daily-external'
-  | 'production-internal'
   | 'production-external'
   | 'pre-release';
 

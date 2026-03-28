@@ -8,7 +8,6 @@ import { proxyAwareFetch } from './proxy-fetch';
 
 export const SSO_ENVIRONMENTS: Record<SsoEnvironment, string> = {
   'daily-external': 'https://baseinfo-usercenterserviceapi-hq-test.sto.cn',
-  'production-internal': 'http://baseinfo-usercenterserviceapi.stosystem.com',
   'production-external': 'https://baseinfo-usercenterserviceapi.sto.cn',
   'pre-release': 'https://pre-baseinfo-usercenterservice-api-hq.sto.cn',
 };
