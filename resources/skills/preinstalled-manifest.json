@@ -41,25 +41,17 @@
       "autoEnable": true
     },
     {
-      "slug": "self-improving-agent",
-      "repo": "peterskoett/self-improving-agent",
-      "repoPath": ".",
-      "ref": "master",
-      "version": "main",
-      "autoEnable": true
-    },
-    {
-      "slug": "tavily-search",
-      "repo": "tavily-ai/skills",
-      "repoPath": "skills/tavily-search",
+      "slug": "browser-automation",
+      "repo": "openclaw/skills",
+      "repoPath": "skills/peytoncasper/browser-automation",
       "ref": "main",
       "version": "main",
       "autoEnable": true
     },
     {
-      "slug": "brave-web-search",
-      "repo": "brave/brave-search-skills",
-      "repoPath": "skills/web-search",
+      "slug": "data-visualization",
+      "repo": "openclaw/skills",
+      "repoPath": "skills/okaris/data-visualization-2",
       "ref": "main",
       "version": "main",
       "autoEnable": true
