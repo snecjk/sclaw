@@ -8,10 +8,6 @@
             "title": "Environment Check",
             "description": "Verifying system requirements"
         },
-        "provider": {
-            "title": "AI Provider",
-            "description": "Configure your AI service"
-        },
         "channel": {
             "title": "Connect a Channel",
             "description": "Connect a messaging platform (optional)"
@@ -114,7 +110,6 @@
     "complete": {
         "title": "Setup Complete!",
         "subtitle": "StoClaw is configured and ready to use. You can now start chatting with your AI assistant.",
-        "provider": "AI Provider",
         "components": "Components",
         "gateway": "Gateway",
         "running": "Running",

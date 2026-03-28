@@ -8,10 +8,6 @@
             "title": "環境チェック",
             "description": "システム要件を確認中"
         },
-        "provider": {
-            "title": "AIプロバイダー",
-            "description": "AIサービスを構成"
-        },
         "channel": {
             "title": "チャンネル接続",
             "description": "メッセージングプラットフォームを接続（オプション）"
@@ -114,7 +110,6 @@
     "complete": {
         "title": "セットアップ完了！",
         "subtitle": "StoClawの構成が完了し、使用準備が整いました。AIアシスタントとのチャットを開始できます。",
-        "provider": "AI プロバイダー",
         "components": "コンポーネント",
         "gateway": "ゲートウェイ",
         "running": "実行中",
