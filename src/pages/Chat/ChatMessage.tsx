@@ -5,9 +5,11 @@
  */
 import { useState, useCallback, useEffect, memo } from 'react';
 import { Sparkles, Copy, Check, ChevronDown, ChevronRight, Wrench, FileText, Film, Music, FileArchive, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { invokeIpc } from '@/lib/api-client';
@@ -43,6 +45,7 @@ export const ChatMessage = memo(function ChatMessage({
   isStreaming = false,
   streamingTools = [],
 }: ChatMessageProps) {
+  const { t } = useTranslation('chat');
   const isUser = message.role === 'user';
   const role = typeof message.role === 'string' ? message.role.toLowerCase() : '';
   const isToolResult = role === 'toolresult' || role === 'tool_result';
@@ -161,6 +164,7 @@ export const ChatMessage = memo(function ChatMessage({
             text={text}
             isUser={isUser}
             isStreaming={isStreaming}
+            streamingLabel={t('streaming.respondingBadge')}
           />
         )}
 
@@ -326,21 +330,39 @@ function MessageBubble({
   text,
   isUser,
   isStreaming,
+  streamingLabel,
 }: {
   text: string;
   isUser: boolean;
   isStreaming: boolean;
+  streamingLabel: string;
 }) {
+  const showStreamingChrome = isStreaming && !isUser;
+
   return (
     <div
       className={cn(
-        'relative rounded-2xl px-4 py-3',
+        'relative overflow-hidden rounded-2xl px-4 py-3 transition-[background-color,border-color,box-shadow] duration-300',
         !isUser && 'w-full',
         isUser
           ? 'bg-[#0a84ff] text-white shadow-sm'
-          : 'bg-white/30 dark:bg-white/[0.08] border border-glass-border text-foreground',
+          : showStreamingChrome
+            ? 'border border-primary/20 bg-white/45 dark:bg-white/[0.11] text-foreground shadow-[0_0_0_1px_rgba(59,130,246,0.05),0_12px_30px_rgba(15,23,42,0.10)]'
+            : 'bg-white/30 dark:bg-white/[0.08] border border-glass-border text-foreground',
       )}
     >
+      {showStreamingChrome && (
+        <>
+          <motion.div
+            className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-primary/10 to-transparent"
+            initial={{ x: '-120%' }}
+            animate={{ x: '120%' }}
+            transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+          />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
+        </>
+      )}
+
       {isUser ? (
         <p className="whitespace-pre-wrap break-words break-all text-sm">{text}</p>
       ) : (
@@ -378,11 +400,58 @@ function MessageBubble({
             {text}
           </ReactMarkdown>
           {isStreaming && (
-            <span className="inline-block w-2 h-4 bg-foreground/50 animate-pulse ml-0.5" />
+            <StreamingCursor />
           )}
         </div>
       )}
 
+      {showStreamingChrome && (
+        <div className="relative mt-3 flex items-center justify-between gap-3 border-t border-primary/10 pt-2 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-2 min-w-0">
+            <StreamingPulse />
+            <span className="truncate font-medium tracking-[0.02em] text-foreground/80">
+              {streamingLabel}
+            </span>
+          </div>
+          <span className="shrink-0 text-[10px] font-medium uppercase tracking-[0.24em] text-primary/70">
+            Live
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StreamingCursor() {
+  return (
+    <motion.span
+      className="ml-1 inline-flex h-[0.95rem] w-6 rounded-full align-[-0.1em] bg-primary/45 shadow-[0_0_0_1px_rgba(59,130,246,0.12)]"
+      animate={{
+        opacity: [0.35, 1, 0.45],
+        scaleX: [0.92, 1.08, 0.96],
+      }}
+      transition={{
+        duration: 1.4,
+        repeat: Infinity,
+        ease: 'easeInOut',
+      }}
+    />
+  );
+}
+
+function StreamingPulse() {
+  return (
+    <div className="relative flex h-2.5 w-2.5 items-center justify-center">
+      <motion.span
+        className="absolute h-2.5 w-2.5 rounded-full bg-primary/25"
+        animate={{ scale: [0.8, 1.8], opacity: [0.45, 0] }}
+        transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
+      />
+      <motion.span
+        className="relative h-1.5 w-1.5 rounded-full bg-primary"
+        animate={{ scale: [0.92, 1.15, 0.92] }}
+        transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+      />
     </div>
   );
 }

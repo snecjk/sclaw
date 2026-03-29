@@ -2,6 +2,9 @@ export interface PendingGatewayRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timeout: NodeJS.Timeout;
+  method?: string;
+  startedAt?: number;
+  params?: unknown;
 }
 
 export function clearPendingGatewayRequests(

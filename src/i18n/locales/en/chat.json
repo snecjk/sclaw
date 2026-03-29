@@ -31,6 +31,16 @@
         "gatewayStatus": "gateway {{state}} | port: {{port}} {{pid}}",
         "retryFailedAttachments": "Retry failed attachments"
     },
+    "streaming": {
+        "respondingBadge": "AI responding",
+        "thinkingBadge": "AI thinking",
+        "thinkingTitle": "Preparing the answer",
+        "thinkingDescription": "The model is analyzing context and drafting the response before text starts streaming.",
+        "processingBadge": "AI processing",
+        "processingTitle": "Merging tool results",
+        "processingDescription": "Tool output is ready, and the model is assembling it into the final reply.",
+        "jumpToLatest": "Jump to latest"
+    },
     "historyBuckets": {
         "today": "Today",
         "yesterday": "Yesterday",

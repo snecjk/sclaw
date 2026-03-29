@@ -31,6 +31,16 @@
         "gatewayStatus": "gateway {{state}} | port: {{port}} {{pid}}",
         "retryFailedAttachments": "重试失败的附件"
     },
+    "streaming": {
+        "respondingBadge": "AI 正在响应",
+        "thinkingBadge": "AI 正在思考",
+        "thinkingTitle": "正在组织答案",
+        "thinkingDescription": "模型正在分析上下文并准备输出，回复开始前会保持这个状态。",
+        "processingBadge": "AI 正在处理",
+        "processingTitle": "正在整理工具结果",
+        "processingDescription": "工具已经返回结果，模型正在整合信息并生成最终回复。",
+        "jumpToLatest": "回到最新"
+    },
     "historyBuckets": {
         "today": "今天",
         "yesterday": "昨天",

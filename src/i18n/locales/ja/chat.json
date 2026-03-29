@@ -31,6 +31,16 @@
         "gatewayStatus": "ゲートウェイ {{state}} | ポート: {{port}} {{pid}}",
         "retryFailedAttachments": "失敗した添付を再試行"
     },
+    "streaming": {
+        "respondingBadge": "AI 応答中",
+        "thinkingBadge": "AI 思考中",
+        "thinkingTitle": "回答を組み立てています",
+        "thinkingDescription": "モデルが文脈を整理し、テキスト出力を始める前に回答を準備しています。",
+        "processingBadge": "AI 処理中",
+        "processingTitle": "ツール結果を統合しています",
+        "processingDescription": "ツールの結果を受け取り、最終的な回答へまとめています。",
+        "jumpToLatest": "最新へ戻る"
+    },
     "historyBuckets": {
         "today": "今日",
         "yesterday": "昨日",

@@ -4,8 +4,8 @@
  * via gateway:rpc IPC. Session selector, thinking toggle, and refresh
  * are in the toolbar; messages render with markdown + streaming.
  */
-import { useEffect, useState } from 'react';
-import { AlertCircle, Loader2, Sparkles } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { AlertCircle, ArrowDown, Loader2, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
@@ -43,6 +43,7 @@ export function Chat() {
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
 
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const minLoading = useMinLoading(loading && messages.length > 0);
   const { contentRef, scrollRef } = useStickToBottomInstant(currentSessionKey);
 
@@ -91,6 +92,58 @@ export function Chat() {
   const hasAnyStreamContent = hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasStreamToolStatus;
 
   const isEmpty = messages.length === 0 && !sending;
+
+  const scrollToLatest = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) return;
+    scrollElement.scrollTo({
+      top: scrollElement.scrollHeight,
+      behavior,
+    });
+  }, [scrollRef]);
+
+  const updateJumpToLatestVisibility = useCallback(() => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) {
+      setShowJumpToLatest(false);
+      return;
+    }
+
+    const distanceFromBottom = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight;
+    setShowJumpToLatest(distanceFromBottom > 240);
+  }, [scrollRef]);
+
+  useEffect(() => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) return;
+
+    updateJumpToLatestVisibility();
+    scrollElement.addEventListener('scroll', updateJumpToLatestVisibility, { passive: true });
+    window.addEventListener('resize', updateJumpToLatestVisibility);
+
+    return () => {
+      scrollElement.removeEventListener('scroll', updateJumpToLatestVisibility);
+      window.removeEventListener('resize', updateJumpToLatestVisibility);
+    };
+  }, [currentSessionKey, scrollRef, updateJumpToLatestVisibility]);
+
+  useEffect(() => {
+    updateJumpToLatestVisibility();
+  }, [messages.length, shouldRenderStreaming, pendingFinal, updateJumpToLatestVisibility]);
+
+  const handleSend = useCallback((
+    text: string,
+    attachments?: Parameters<typeof sendMessage>[1],
+    targetAgentId?: Parameters<typeof sendMessage>[2],
+  ) => {
+    scrollToLatest('auto');
+    sendMessage(text, attachments, targetAgentId);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollToLatest('smooth');
+      });
+    });
+  }, [scrollToLatest, sendMessage]);
 
   return (
     <div className={cn("relative flex flex-col -m-6 transition-colors duration-500")} style={{ height: 'calc(100vh - 2.5rem)' }}>
@@ -167,9 +220,31 @@ export function Chat() {
         </div>
       )}
 
+      {/* Jump to latest */}
+      <div className="pointer-events-none shrink-0 px-4">
+        <div className="mx-auto flex max-w-4xl justify-center">
+          <motion.button
+            type="button"
+            onClick={() => scrollToLatest('smooth')}
+            className="pointer-events-auto mb-2 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-background/78 px-3 py-2 text-xs font-medium text-foreground shadow-[0_10px_26px_rgba(15,23,42,0.12)] backdrop-blur-md transition-colors hover:bg-background/92"
+            initial={false}
+            animate={{
+              opacity: showJumpToLatest ? 1 : 0,
+              y: showJumpToLatest ? 0 : 8,
+              scale: showJumpToLatest ? 1 : 0.96,
+              pointerEvents: showJumpToLatest ? 'auto' : 'none',
+            }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+            <span>{t('streaming.jumpToLatest')}</span>
+          </motion.button>
+        </div>
+      </div>
+
       {/* Input Area */}
       <ChatInput
-        onSend={sendMessage}
+        onSend={handleSend}
         onStop={abortRun}
         disabled={!isGatewayRunning}
         sending={sending}
@@ -246,19 +321,15 @@ function WelcomeScreen() {
 // ── Typing Indicator ────────────────────────────────────────────
 
 function TypingIndicator() {
+  const { t } = useTranslation('chat');
+
   return (
-    <div className="flex gap-3">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full mt-1 bg-white/30 dark:bg-white/[0.08] border border-glass-border text-foreground">
-        <Sparkles className="h-4 w-4" />
-      </div>
-      <div className="bg-white/30 dark:bg-white/[0.08] border border-glass-border text-foreground rounded-2xl px-4 py-3">
-        <div className="flex gap-1">
-          <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-          <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-          <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-        </div>
-      </div>
-    </div>
+    <AssistantActivityCard
+      badge={t('streaming.thinkingBadge')}
+      title={t('streaming.thinkingTitle')}
+      description={t('streaming.thinkingDescription')}
+      tone="thinking"
+    />
   );
 }
 
@@ -266,15 +337,101 @@ function TypingIndicator() {
 
 function ActivityIndicator({ phase }: { phase: 'tool_processing' }) {
   void phase;
+  const { t } = useTranslation('chat');
+
+  return (
+    <AssistantActivityCard
+      badge={t('streaming.processingBadge')}
+      title={t('streaming.processingTitle')}
+      description={t('streaming.processingDescription')}
+      tone="processing"
+    />
+  );
+}
+
+function AssistantActivityCard({
+  badge,
+  title,
+  description,
+  tone,
+}: {
+  badge: string;
+  title: string;
+  description: string;
+  tone: 'thinking' | 'processing';
+}) {
+  const isProcessing = tone === 'processing';
+
   return (
     <div className="flex gap-3">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full mt-1 bg-white/30 dark:bg-white/[0.08] border border-glass-border text-foreground">
-        <Sparkles className="h-4 w-4" />
+      <div className="relative mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/15 bg-white/40 text-foreground shadow-sm dark:bg-white/[0.10]">
+        <motion.span
+          className="absolute inset-0 rounded-full border border-primary/25"
+          animate={{ scale: [1, 1.18], opacity: [0.3, 0] }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'easeOut' }}
+        />
+        {isProcessing ? (
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        ) : (
+          <Sparkles className="h-4 w-4 text-primary" />
+        )}
       </div>
-      <div className="bg-white/30 dark:bg-white/[0.08] border border-glass-border text-foreground rounded-2xl px-4 py-3">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-          <span>Processing tool results…</span>
+
+      <div
+        className={cn(
+          'relative min-w-[280px] overflow-hidden rounded-2xl border px-4 py-3.5 text-foreground shadow-[0_10px_30px_rgba(15,23,42,0.08)]',
+          'bg-white/40 dark:bg-white/[0.10]',
+          isProcessing ? 'border-primary/15' : 'border-primary/20',
+        )}
+      >
+        <motion.div
+          className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-primary/10 to-transparent"
+          initial={{ x: '-120%' }}
+          animate={{ x: '120%' }}
+          transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+        />
+
+        <div className="relative flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.22em] text-primary/80">
+          <motion.span
+            className="h-2.5 w-8 rounded-full bg-primary/25"
+            animate={{
+              opacity: [0.45, 1, 0.55],
+              scaleX: [0.94, 1.04, 0.97],
+            }}
+            transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+          />
+          <span>{badge}</span>
+        </div>
+
+        <div className="relative mt-2">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            {isProcessing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+            )}
+            <span>{title}</span>
+          </div>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            {description}
+          </p>
+
+          <div className="mt-3 flex gap-2">
+            {[72, 56, 44].map((width, index) => (
+              <motion.span
+                key={`${tone}-${width}`}
+                className="h-1.5 rounded-full bg-primary/20"
+                style={{ width }}
+                animate={{ opacity: [0.3, 0.85, 0.35] }}
+                transition={{
+                  duration: 1.8,
+                  repeat: Infinity,
+                  ease: 'easeInOut',
+                  delay: index * 0.16,
+                }}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>

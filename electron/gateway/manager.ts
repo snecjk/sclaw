@@ -76,6 +76,90 @@ export interface GatewayManagerEvents {
   'chat:message': (data: { message: unknown }) => void;
 }
 
+function summarizeText(value: string, limit = 160): string {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  return normalized.length > limit ? `${normalized.slice(0, limit - 3)}...` : normalized;
+}
+
+function summarizeContent(content: unknown): string {
+  if (typeof content === 'string') return summarizeText(content);
+  if (!Array.isArray(content)) return '';
+  const parts = content
+    .map((block) => {
+      if (!block || typeof block !== 'object') return '';
+      const item = block as Record<string, unknown>;
+      if (typeof item.text === 'string') return item.text;
+      if (typeof item.thinking === 'string') return item.thinking;
+      if (item.type === 'tool_use' || item.type === 'toolCall') {
+        return `[tool:${String(item.name || item.id || 'unknown')}]`;
+      }
+      if (item.type === 'tool_result' || item.type === 'toolResult') {
+        const nested = summarizeContent(item.content);
+        return nested ? `[tool_result:${nested}]` : '[tool_result]';
+      }
+      return '';
+    })
+    .filter(Boolean)
+    .join(' ');
+  return summarizeText(parts);
+}
+
+function summarizeMessagePayload(message: unknown): string {
+  if (!message || typeof message !== 'object') return '';
+  const msg = message as Record<string, unknown>;
+  const parts: string[] = [];
+  if (msg.role != null) parts.push(`role=${String(msg.role)}`);
+  if (msg.id != null) parts.push(`id=${String(msg.id)}`);
+  const stopReason = msg.stopReason ?? msg.stop_reason;
+  if (stopReason != null) parts.push(`stopReason=${String(stopReason)}`);
+  const summary = summarizeContent(msg.content) || (typeof msg.text === 'string' ? summarizeText(msg.text) : '');
+  if (summary) parts.push(`text="${summary}"`);
+  return parts.join(' ');
+}
+
+function summarizeRpcPayload(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return `text="${summarizeText(value)}"`;
+  if (typeof value !== 'object') return String(value);
+
+  const data = value as Record<string, unknown>;
+  const parts: string[] = [];
+  if (data.sessionKey != null) parts.push(`sessionKey=${String(data.sessionKey)}`);
+  if (data.runId != null) parts.push(`runId=${String(data.runId)}`);
+  if (data.state != null) parts.push(`state=${String(data.state)}`);
+  if (data.phase != null) parts.push(`phase=${String(data.phase)}`);
+  if (data.seq != null) parts.push(`seq=${String(data.seq)}`);
+  if (typeof data.message === 'string') {
+    parts.push(`message="${summarizeText(data.message)}"`);
+  } else if (data.message && typeof data.message === 'object') {
+    const messageSummary = summarizeMessagePayload(data.message);
+    if (messageSummary) parts.push(messageSummary);
+  }
+  if (Array.isArray(data.messages)) parts.push(`messages=${data.messages.length}`);
+  if (Array.isArray(data.sessions)) parts.push(`sessions=${data.sessions.length}`);
+  if (data.error != null && typeof data.error !== 'object') parts.push(`error=${String(data.error)}`);
+  if (data.payload && typeof data.payload === 'object') {
+    const payloadSummary = summarizeRpcPayload(data.payload);
+    if (payloadSummary) parts.push(`payload{${payloadSummary}}`);
+  }
+  if (parts.length > 0) return parts.join(' ');
+
+  try {
+    return summarizeText(JSON.stringify(value));
+  } catch {
+    return String(value);
+  }
+}
+
+function shouldTraceGatewayMethod(method: string): boolean {
+  return method.startsWith('chat.') || method === 'sessions.list';
+}
+
+function shouldTraceGatewayEvent(eventName: string): boolean {
+  return eventName === 'chat' || eventName === 'agent' || eventName.startsWith('chat.');
+}
+
 /**
  * Gateway Manager
  * Handles starting, stopping, and communicating with the OpenClaw Gateway
@@ -641,6 +725,9 @@ export class GatewayManager extends EventEmitter {
         resolve: resolve as (value: unknown) => void,
         reject,
         timeout,
+        method,
+        startedAt: Date.now(),
+        params,
       });
 
       // Send request using OpenClaw protocol format
@@ -651,7 +738,12 @@ export class GatewayManager extends EventEmitter {
         params,
       };
 
-      console.log('WS send request:', request);
+      if (shouldTraceGatewayMethod(method)) {
+        const payloadSummary = summarizeRpcPayload(params);
+        logger.info(`[gateway-rpc] -> ${method} id=${id}${payloadSummary ? ` ${payloadSummary}` : ''}`);
+      } else {
+        logger.debug('WS send request:', request);
+      }
 
       try {
         this.ws.send(JSON.stringify(request));
@@ -801,19 +893,40 @@ export class GatewayManager extends EventEmitter {
 
     // Handle OpenClaw protocol response format: { type: "res", id: "...", ok: true/false, ... }
     if (msg.type === 'res' && typeof msg.id === 'string') {
+      const pendingRequest = this.pendingRequests.get(msg.id);
+      const method = pendingRequest?.method;
+      const durationMs = pendingRequest?.startedAt ? Date.now() - pendingRequest.startedAt : undefined;
       if (msg.ok === false || msg.error) {
         const errorObj = msg.error as { message?: string; code?: number } | undefined;
         const errorMsg = errorObj?.message || JSON.stringify(msg.error) || 'Unknown error';
+        if (method && shouldTraceGatewayMethod(method)) {
+          logger.warn(
+            `[gateway-rpc] <- ${method} id=${msg.id} status=error${durationMs != null ? ` durationMs=${durationMs}` : ''} error=${errorMsg}`,
+          );
+        }
         if (rejectPendingGatewayRequest(this.pendingRequests, msg.id, new Error(errorMsg))) {
           return;
         }
-      } else if (resolvePendingGatewayRequest(this.pendingRequests, msg.id, msg.payload ?? msg)) {
-        return;
+      } else {
+        const responsePayload = msg.payload ?? msg;
+        if (method && shouldTraceGatewayMethod(method)) {
+          const payloadSummary = summarizeRpcPayload(responsePayload);
+          logger.info(
+            `[gateway-rpc] <- ${method} id=${msg.id} status=ok${durationMs != null ? ` durationMs=${durationMs}` : ''}${payloadSummary ? ` ${payloadSummary}` : ''}`,
+          );
+        }
+        if (resolvePendingGatewayRequest(this.pendingRequests, msg.id, responsePayload)) {
+          return;
+        }
       }
     }
 
     // Handle OpenClaw protocol event format: { type: "event", event: "...", payload: {...} }
     if (msg.type === 'event' && typeof msg.event === 'string') {
+      if (shouldTraceGatewayEvent(msg.event)) {
+        const payloadSummary = summarizeRpcPayload(msg.payload);
+        logger.info(`[gateway-event] <- ${msg.event}${payloadSummary ? ` ${payloadSummary}` : ''}`);
+      }
       dispatchProtocolEvent(this, msg.event, msg.payload);
       return;
     }
