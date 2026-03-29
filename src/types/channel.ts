@@ -193,6 +193,22 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
         placeholder: 'channels:meta.dingtalk.fields.agentId.placeholder',
         required: false,
       },
+      {
+        key: 'cardTemplateId',
+        label: 'channels:meta.dingtalk.fields.cardTemplateId.label',
+        type: 'text',
+        placeholder: 'channels:meta.dingtalk.fields.cardTemplateId.placeholder',
+        required: false,
+        description: 'channels:meta.dingtalk.fields.cardTemplateId.description',
+      },
+      {
+        key: 'cardTemplateKey',
+        label: 'channels:meta.dingtalk.fields.cardTemplateKey.label',
+        type: 'text',
+        placeholder: 'channels:meta.dingtalk.fields.cardTemplateKey.placeholder',
+        required: false,
+        description: 'channels:meta.dingtalk.fields.cardTemplateKey.description',
+      },
     ],
     instructions: [
       'channels:meta.dingtalk.instructions.0',

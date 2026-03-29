@@ -192,6 +192,16 @@
                 "agentId": {
                     "label": "Agent ID（可选）",
                     "placeholder": "123456789"
+                },
+                "cardTemplateId": {
+                    "label": "互动卡片模板 ID（可选）",
+                    "placeholder": "填写钉钉互动卡片模板 ID",
+                    "description": "填写后将自动启用钉钉互动卡片回复和流式更新"
+                },
+                "cardTemplateKey": {
+                    "label": "卡片正文变量名（可选）",
+                    "placeholder": "content",
+                    "description": "卡片模板中用于显示回答正文的变量名，默认填写 content"
                 }
             },
             "instructions": [

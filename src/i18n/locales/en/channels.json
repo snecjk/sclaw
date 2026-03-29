@@ -192,6 +192,16 @@
                 "agentId": {
                     "label": "Agent ID (optional)",
                     "placeholder": "123456789"
+                },
+                "cardTemplateId": {
+                    "label": "Interactive Card Template ID (optional)",
+                    "placeholder": "Enter your DingTalk interactive card template ID",
+                    "description": "When set, StoClaw will automatically enable DingTalk card replies and streaming updates"
+                },
+                "cardTemplateKey": {
+                    "label": "Card Content Variable (optional)",
+                    "placeholder": "content",
+                    "description": "Variable name in the card template used to render the assistant reply body; defaults to content"
                 }
             },
             "instructions": [

@@ -62,6 +62,12 @@ const labelClasses = 'text-[14px] text-foreground/80 font-bold';
 const outlineButtonClasses = 'h-9 text-[13px] font-medium rounded-full px-4 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-foreground/80 hover:text-foreground';
 const primaryButtonClasses = 'h-9 text-[13px] font-medium rounded-full px-4 shadow-none';
 
+function normalizeConfigValues(channelType: ChannelType | null, values: Record<string, string>): Record<string, string> {
+  if (channelType !== 'dingtalk') return values;
+  if (values.cardTemplateKey?.trim()) return values;
+  return { ...values, cardTemplateKey: 'content' };
+}
+
 export function ChannelConfigModal({
   initialSelectedType = null,
   configuredTypes = [],
@@ -125,7 +131,7 @@ export function ChannelConfigModal({
 
     const shouldLoadExistingConfig = allowExistingConfig && configuredTypes.includes(selectedType);
     if (!shouldLoadExistingConfig) {
-      setConfigValues({});
+      setConfigValues(normalizeConfigValues(selectedType, {}));
       setIsExistingConfig(false);
       setLoadingConfig(false);
       setChannelName(showChannelName ? CHANNEL_NAMES[selectedType] : '');
@@ -133,7 +139,7 @@ export function ChannelConfigModal({
     }
 
     if (initialConfigValues) {
-      setConfigValues(initialConfigValues);
+      setConfigValues(normalizeConfigValues(selectedType, initialConfigValues));
       setIsExistingConfig(Object.keys(initialConfigValues).length > 0);
       setLoadingConfig(false);
       setChannelName(showChannelName ? CHANNEL_NAMES[selectedType] : '');
@@ -153,15 +159,15 @@ export function ChannelConfigModal({
         if (cancelled) return;
 
         if (result.success && result.values && Object.keys(result.values).length > 0) {
-          setConfigValues(result.values);
+          setConfigValues(normalizeConfigValues(selectedType, result.values));
           setIsExistingConfig(true);
         } else {
-          setConfigValues({});
+          setConfigValues(normalizeConfigValues(selectedType, {}));
           setIsExistingConfig(false);
         }
       } catch {
         if (!cancelled) {
-          setConfigValues({});
+          setConfigValues(normalizeConfigValues(selectedType, {}));
           setIsExistingConfig(false);
         }
       } finally {

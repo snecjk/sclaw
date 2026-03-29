@@ -160,6 +160,50 @@ describe('WeCom plugin configuration', () => {
   });
 });
 
+describe('DingTalk card configuration defaults', () => {
+  beforeEach(async () => {
+    vi.resetAllMocks();
+    vi.resetModules();
+    await rm(testHome, { recursive: true, force: true });
+    await rm(testUserData, { recursive: true, force: true });
+  });
+
+  it('enables card mode and streaming when a card template id is provided', async () => {
+    const { saveChannelConfig } = await import('@electron/utils/channel-config');
+
+    await saveChannelConfig(
+      'dingtalk',
+      {
+        clientId: 'ding-app',
+        clientSecret: 'secret',
+        cardTemplateId: 'tpl_123',
+      },
+      'default',
+    );
+
+    const config = await readOpenClawJson();
+    const channels = config.channels as Record<string, {
+      messageType?: string;
+      cardRealTimeStream?: boolean;
+      cardTemplateKey?: string;
+      accounts: Record<string, {
+        messageType?: string;
+        cardRealTimeStream?: boolean;
+        cardTemplateKey?: string;
+        cardTemplateId?: string;
+      }>;
+    }>;
+
+    expect(channels.dingtalk.messageType).toBe('card');
+    expect(channels.dingtalk.cardRealTimeStream).toBe(true);
+    expect(channels.dingtalk.cardTemplateKey).toBe('content');
+    expect(channels.dingtalk.accounts.default.cardTemplateId).toBe('tpl_123');
+    expect(channels.dingtalk.accounts.default.messageType).toBe('card');
+    expect(channels.dingtalk.accounts.default.cardRealTimeStream).toBe(true);
+    expect(channels.dingtalk.accounts.default.cardTemplateKey).toBe('content');
+  });
+});
+
 describe('WeChat dangling plugin cleanup', () => {
   beforeEach(async () => {
     vi.resetAllMocks();

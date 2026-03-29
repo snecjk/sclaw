@@ -192,6 +192,16 @@
                 "agentId": {
                     "label": "Agent ID（任意）",
                     "placeholder": "123456789"
+                },
+                "cardTemplateId": {
+                    "label": "インタラクティブカード テンプレート ID（任意）",
+                    "placeholder": "DingTalk のカードテンプレート ID を入力",
+                    "description": "入力すると DingTalk のカード返信とストリーミング更新が自動で有効になります"
+                },
+                "cardTemplateKey": {
+                    "label": "カード本文の変数名（任意）",
+                    "placeholder": "content",
+                    "description": "回答本文を表示するカードテンプレート内の変数名です。既定値は content です"
                 }
             },
             "instructions": [

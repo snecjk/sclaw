@@ -403,6 +403,22 @@ function transformChannelConfig(
         transformedConfig.allowFrom = allowFrom;
     }
 
+    if (channelType === 'dingtalk') {
+        const templateId = typeof transformedConfig.cardTemplateId === 'string'
+            ? transformedConfig.cardTemplateId.trim()
+            : '';
+        const templateKey = typeof transformedConfig.cardTemplateKey === 'string'
+            ? transformedConfig.cardTemplateKey.trim()
+            : '';
+
+        if (templateId) {
+            transformedConfig.cardTemplateId = templateId;
+            transformedConfig.cardTemplateKey = templateKey || 'content';
+            transformedConfig.messageType = 'card';
+            transformedConfig.cardRealTimeStream = true;
+        }
+    }
+
     return transformedConfig;
 }
 
