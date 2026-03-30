@@ -50,11 +50,16 @@ export class SsoLoginManager {
     return new Promise<SsoUserInfo>((resolve, reject) => {
       const ses = session.fromPartition(SSO_PARTITION);
 
+      const isMac = process.platform === 'darwin';
+
       const win = new BrowserWindow({
         width: 960,
         height: 750,
         parent: parentWindow,
-        modal: true,
+        // On macOS, modal + parent creates a "sheet" window without
+        // close/minimize/maximize buttons. Use non-modal child window
+        // instead so macOS renders native traffic-light controls.
+        modal: !isMac,
         show: false,
         resizable: true,
         autoHideMenuBar: true,
