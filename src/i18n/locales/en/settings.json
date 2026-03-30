@@ -83,7 +83,8 @@
       "fallbacks_other": "Fallbacks ({{count}}): {{names}}",
       "setDefault": "Set as default",
       "editKey": "Edit API key",
-      "delete": "Delete provider"
+      "delete": "Delete provider",
+      "switchModel": "Switch model"
     },
     "protocols": {
       "openai": "OpenAI Compatible",

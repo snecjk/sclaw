@@ -303,12 +303,28 @@ async function syncCustomProviderAgentModel(
   runtimeProviderKey: string,
   apiKey: string | undefined,
 ): Promise<void> {
-  if (config.type !== 'custom') {
+  if (config.type !== 'custom' && config.type !== 'sto') {
     return;
   }
 
   const resolvedKey = apiKey !== undefined ? (apiKey.trim() || null) : await getApiKey(config.id);
   if (!resolvedKey || !config.baseUrl) {
+    return;
+  }
+
+  // For STO providers, sync all models from metadata.customModels
+  if (config.type === 'sto') {
+    const account = await getProviderAccount(config.id);
+    const customModels = account?.metadata?.customModels ?? [];
+    const models = customModels.length > 0
+      ? customModels.map((id) => ({ id, name: id }))
+      : config.model ? [{ id: config.model, name: config.model }] : [];
+    await updateAgentModelProvider(runtimeProviderKey, {
+      baseUrl: normalizeProviderBaseUrl(config, config.baseUrl, config.apiProtocol || 'openai-completions'),
+      api: config.apiProtocol || 'openai-completions',
+      models,
+      apiKey: resolvedKey,
+    });
     return;
   }
 
@@ -544,17 +560,31 @@ export async function syncDefaultProviderToRuntime(
   }
 
   if (
-    provider.type === 'custom' &&
+    (provider.type === 'custom' || provider.type === 'sto') &&
     providerKey &&
     provider.baseUrl
   ) {
-    const modelId = provider.model;
-    await updateAgentModelProvider(ock, {
-      baseUrl: normalizeProviderBaseUrl(provider, provider.baseUrl, provider.apiProtocol || 'openai-completions'),
-      api: provider.apiProtocol || 'openai-completions',
-      models: modelId ? [{ id: modelId, name: modelId }] : [],
-      apiKey: providerKey,
-    });
+    if (provider.type === 'sto') {
+      const account = await getProviderAccount(provider.id);
+      const customModels = account?.metadata?.customModels ?? [];
+      const models = customModels.length > 0
+        ? customModels.map((id) => ({ id, name: id }))
+        : provider.model ? [{ id: provider.model, name: provider.model }] : [];
+      await updateAgentModelProvider(ock, {
+        baseUrl: normalizeProviderBaseUrl(provider, provider.baseUrl, provider.apiProtocol || 'openai-completions'),
+        api: provider.apiProtocol || 'openai-completions',
+        models,
+        apiKey: providerKey,
+      });
+    } else {
+      const modelId = provider.model;
+      await updateAgentModelProvider(ock, {
+        baseUrl: normalizeProviderBaseUrl(provider, provider.baseUrl, provider.apiProtocol || 'openai-completions'),
+        api: provider.apiProtocol || 'openai-completions',
+        models: modelId ? [{ id: modelId, name: modelId }] : [],
+        apiKey: providerKey,
+      });
+    }
   }
 
   scheduleGatewayRefresh(

@@ -7,6 +7,7 @@ import moonshot from './moonshot.svg';
 import siliconflow from './siliconflow.svg';
 import minimaxPortal from './minimax.svg';
 import qwenPortal from './qwen.svg';
+import sto from './sto.svg';
 import custom from './custom.svg';
 
 export const providerIcons: Record<string, string> = {
@@ -20,5 +21,6 @@ export const providerIcons: Record<string, string> = {
     'minimax-portal': minimaxPortal,
     'minimax-portal-cn': minimaxPortal,
     'qwen-portal': qwenPortal,
+    sto,
     custom,
 };

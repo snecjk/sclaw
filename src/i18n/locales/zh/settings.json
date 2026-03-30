@@ -83,7 +83,8 @@
       "fallbacks_other": "回退（{{count}} 个）：{{names}}",
       "setDefault": "设为默认",
       "editKey": "编辑 API 密钥",
-      "delete": "删除提供商"
+      "delete": "删除提供商",
+      "switchModel": "切换模型"
     },
     "protocols": {
       "openai": "OpenAI 兼容",

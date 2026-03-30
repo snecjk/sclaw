@@ -9,6 +9,7 @@ export const PROVIDER_TYPES = [
   'minimax-portal',
   'minimax-portal-cn',
   'qwen-portal',
+  'sto',
   'custom',
 ] as const;
 

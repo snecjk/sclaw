@@ -226,6 +226,23 @@ export const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     },
   },
   {
+    id: 'sto',
+    name: 'STO AI',
+    icon: '🏢',
+    placeholder: 'sto-token...',
+    requiresApiKey: false,
+    category: 'compatible',
+    envVar: 'STO_API_KEY',
+    supportedAuthModes: ['api_key'],
+    defaultAuthMode: 'api_key',
+    supportsMultipleAccounts: false,
+    providerConfig: {
+      baseUrl: 'https://baseinfo-aimemory.sto.cn/v1',
+      api: 'openai-completions',
+      apiKeyEnv: 'STO_API_KEY',
+    },
+  },
+  {
     id: 'custom',
     name: 'Custom',
     icon: '⚙️',

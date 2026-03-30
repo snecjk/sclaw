@@ -21,6 +21,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -370,6 +371,7 @@ function ProviderCard({
   const [showFallback, setShowFallback] = useState(false);
   const [validating, setValidating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [stoModelSaving, setStoModelSaving] = useState(false);
   const [arkMode, setArkMode] = useState<ArkMode>('apikey');
 
   const typeInfo = PROVIDER_TYPE_INFO.find((t) => t.id === account.vendorId);
@@ -386,7 +388,23 @@ function ProviderCard({
     : providerDocsUrl;
   const canEditModelConfig = Boolean(typeInfo?.showBaseUrl || showModelIdField);
   const showUserAgentField = shouldShowUserAgentField(account);
-  const isStoManagedProvider = account.id.startsWith('sto-model-');
+  const isStoManagedProvider = account.vendorId === 'sto';
+  const stoCustomModels = isStoManagedProvider
+    ? (account.metadata?.customModels ?? [])
+    : [];
+
+  const handleStoModelChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newModel = e.target.value;
+    if (newModel === account.model) return;
+    setStoModelSaving(true);
+    try {
+      await onSaveEdits({ updates: { model: newModel } });
+    } catch {
+      // onSaveEdits internally handles errors
+    } finally {
+      setStoModelSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (isEditing) {
@@ -530,12 +548,32 @@ function ProviderCard({
               <span className="capitalize">{vendor?.name || account.vendorId}</span>
               <span className="w-1 h-1 rounded-full bg-black/20 dark:bg-white/20" />
               <span>{getAuthModeLabel(account.authMode, t)}</span>
-              {account.model && (
+              {isStoManagedProvider && stoCustomModels.length > 0 ? (
+                <>
+                  <span className="w-1 h-1 rounded-full bg-black/20 dark:bg-white/20" />
+                  <Select
+                    value={account.model || ''}
+                    onChange={handleStoModelChange}
+                    disabled={stoModelSaving}
+                    title={t('aiProviders.card.switchModel')}
+                    className="h-6 w-auto max-w-[200px] rounded-md border-0 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 px-1.5 pr-7 py-0 text-[13px] text-muted-foreground focus-visible:ring-1 cursor-pointer"
+                  >
+                    {stoCustomModels.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </Select>
+                  {stoModelSaving && (
+                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                  )}
+                </>
+              ) : account.model ? (
                 <>
                   <span className="w-1 h-1 rounded-full bg-black/20 dark:bg-white/20" />
                   <span className="truncate max-w-[200px]">{account.model}</span>
                 </>
-              )}
+              ) : null}
               <span className="w-1 h-1 rounded-full bg-black/20 dark:bg-white/20" />
               <span className="flex items-center gap-1">
                 {hasConfiguredCredentials(account, status) ? (
@@ -1132,6 +1170,7 @@ function AddProviderDialog({
   };
 
   const availableTypes = PROVIDER_TYPE_INFO.filter((type) => {
+    if (type.id === 'sto') return false; // STO is managed by SSO sync, not manually added
     const vendor = vendorMap.get(type.id);
     if (!vendor) {
       return !existingVendorIds.has(type.id) || type.id === 'custom';

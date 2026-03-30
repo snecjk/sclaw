@@ -83,7 +83,8 @@
       "fallbacks_other": "フォールバック ({{count}}): {{names}}",
       "setDefault": "デフォルトに設定",
       "editKey": "API キーを編集",
-      "delete": "プロバイダーを削除"
+      "delete": "プロバイダーを削除",
+      "switchModel": "モデルを切替"
     },
     "protocols": {
       "openai": "OpenAI 互換",

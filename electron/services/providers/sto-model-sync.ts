@@ -1,10 +1,10 @@
 /**
  * STO Model Auto-Sync Service
  *
- * Fetches the model list from the STO AI-Memory API and reconciles
- * local ProviderAccount records so they stay in sync with the remote
- * catalog.  Each STO model is stored as an independent custom
- * ProviderAccount whose id starts with STO_ACCOUNT_ID_PREFIX.
+ * Fetches the model list from the STO AI-Memory API (OpenAI-compatible
+ * /v1/models endpoint) and maintains a single ProviderAccount (id='sto',
+ * vendorId='sto') whose metadata.customModels stays in sync with the
+ * remote catalog.
  */
 
 import type { GatewayManager } from '../../gateway/manager';
@@ -27,19 +27,21 @@ import { logger } from '../../utils/logger';
 // Constants
 // ---------------------------------------------------------------------------
 
-const STO_ACCOUNT_ID_PREFIX = 'sto-model-';
+const STO_ACCOUNT_ID = 'sto';
+
+/** Legacy prefix used before the single-account refactor. */
+const STO_LEGACY_ACCOUNT_ID_PREFIX = 'sto-model-';
 
 const STO_DOMAINS: Record<string, string> = {
-  'daily-external': 'https://baseinfo-aimemory-test.sto.cn',
-  'pre-release': 'https://pre-baseinfo-aimemory.sto.cn',
+  'daily-external': 'https://baseinfo-aimemory-test.sto.cn/agent',
+  'pre-release': 'https://pre-baseinfo-aimemory.sto.cn/agent',
 };
 const STO_DOMAIN_DEFAULT = 'https://baseinfo-aimemory.sto.cn';
 
-const STO_MODEL_LIST_PATH = '/agent/v1/models/list';
-/** The runtime appends /chat/completions for openai-completions protocol. */
-const STO_COMPLETIONS_BASE_PATH = '/agent/v1/models';
+/** Standard OpenAI-compatible model list path. */
+const STO_MODEL_LIST_PATH = '/v1/models';
 
-const SYNC_INTERVAL_MS = 20 * 60 * 1000; // 5 minutes
+const SYNC_INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,10 +50,10 @@ const SYNC_INTERVAL_MS = 20 * 60 * 1000; // 5 minutes
 export interface StoRemoteModel {
   id: string;
   name: string;
-  reasoning: boolean;
-  input: string[];
-  contextWindow: number;
-  maxTokens: number;
+  reasoning?: boolean;
+  input?: string[];
+  contextWindow?: number;
+  maxTokens?: number;
 }
 
 export interface StoSyncResult {
@@ -83,39 +85,32 @@ export class StoModelSyncService {
     return STO_DOMAINS[env] ?? STO_DOMAIN_DEFAULT;
   }
 
-  static buildAccountId(modelId: string): string {
-    return `${STO_ACCOUNT_ID_PREFIX}${modelId}`;
-  }
-
   static isStoManagedAccount(account: ProviderAccount): boolean {
-    return account.id.startsWith(STO_ACCOUNT_ID_PREFIX);
-  }
-
-  /** Check if local account config differs from remote model info */
-  static needsConfigUpdate(
-    account: ProviderAccount,
-    remoteModel: StoRemoteModel,
-    domain: string,
-  ): boolean {
-    const expectedBaseUrl = `${domain}${STO_COMPLETIONS_BASE_PATH}`;
     return (
-      account.label !== remoteModel.name ||
-      account.baseUrl !== expectedBaseUrl ||
-      account.model !== remoteModel.id ||
-      account.enabled !== true
+      account.id === STO_ACCOUNT_ID ||
+      account.id.startsWith(STO_LEGACY_ACCOUNT_ID_PREFIX)
     );
   }
 
   // -- Remote fetch --------------------------------------------------------
 
+  /**
+   * Fetch model list from the STO API using standard OpenAI /v1/models
+   * endpoint. Sends both stotoken header and Authorization: Bearer for
+   * compatibility.
+   */
   async fetchRemoteModels(
     domain: string,
     token: string,
   ): Promise<StoRemoteModel[]> {
     const url = `${domain}${STO_MODEL_LIST_PATH}`;
-    logger.info(`[sto-sync] Fetch sto remote models: url=${url}, stotoken:\n${token}`);
+    logger.info(`[sto-sync] Fetching remote models: url=${url}`);
+
     const response = await fetch(url, {
-      headers: { stotoken: token },
+      headers: {
+        stotoken: token,
+        Authorization: `Bearer ${token}`,
+      },
     });
 
     if (!response.ok) {
@@ -124,8 +119,13 @@ export class StoModelSyncService {
       );
     }
 
-    const data = (await response.json()) as { models?: StoRemoteModel[] };
-    return data.models ?? [];
+    const data = (await response.json()) as {
+      data?: StoRemoteModel[];
+      models?: StoRemoteModel[];
+    };
+
+    // Support both OpenAI standard format { data: [...] } and legacy { models: [...] }
+    return data.data ?? data.models ?? [];
   }
 
   // -- Core sync -----------------------------------------------------------
@@ -154,7 +154,7 @@ export class StoModelSyncService {
       defaultSet: null,
     };
 
-    // Step 1 — Auth preconditions
+    // Step 1 — Auth preconditions: get stotoken from SSO state
     const token = await getStoToken();
     if (!token) {
       result.error = 'no-token';
@@ -164,7 +164,7 @@ export class StoModelSyncService {
     const env = await getSsoEnvironment();
     const domain = StoModelSyncService.resolveDomain(env);
 
-    // Step 2 — Fetch remote models
+    // Step 2 — Fetch remote models via OpenAI-compatible /v1/models
     let remoteModels: StoRemoteModel[];
     try {
       remoteModels = await this.fetchRemoteModels(domain, token);
@@ -175,59 +175,71 @@ export class StoModelSyncService {
       return result;
     }
 
-    const remoteMap = new Map(
-      remoteModels.map((m) => [StoModelSyncService.buildAccountId(m.id), m]),
-    );
+    const remoteModelIds = remoteModels.map((m) => m.id);
 
-    // Step 3 — Load local STO accounts
-    const allAccounts = await listProviderAccounts();
-    const localStoAccounts = allAccounts.filter((a) =>
-      StoModelSyncService.isStoManagedAccount(a),
-    );
-    const localMap = new Map(localStoAccounts.map((a) => [a.id, a]));
-
-    // Step 4 — Diff
-    const toCreate: StoRemoteModel[] = [];
-    const toDelete: ProviderAccount[] = [];
-    const toUpdateConfig: { account: ProviderAccount; model: StoRemoteModel }[] = [];
-    const toCheckApiKey: ProviderAccount[] = [];
-
-    for (const [accountId, model] of remoteMap) {
-      const localAccount = localMap.get(accountId);
-      if (localAccount) {
-        if (StoModelSyncService.needsConfigUpdate(localAccount, model, domain)) {
-          toUpdateConfig.push({ account: localAccount, model });
-        } else {
-          toCheckApiKey.push(localAccount);
-        }
-      } else {
-        toCreate.push(model);
-      }
-    }
-
-    for (const [accountId, account] of localMap) {
-      if (!remoteMap.has(accountId)) {
-        toDelete.push(account);
-      }
+    if (remoteModelIds.length === 0) {
+      logger.info('[sto-sync] Remote model list is empty, skipping sync');
+      return result;
     }
 
     const providerService = getProviderService();
+    const allAccounts = await listProviderAccounts();
+
+    // Step 3 — Migrate legacy sto-model-* accounts (one-time)
+    const legacyAccounts = allAccounts.filter((a) =>
+      a.id.startsWith(STO_LEGACY_ACCOUNT_ID_PREFIX),
+    );
+
+    let legacyDefaultWasSto = false;
+    if (legacyAccounts.length > 0) {
+      const currentDefault = await getDefaultProviderAccountId();
+      legacyDefaultWasSto = Boolean(
+        currentDefault && currentDefault.startsWith(STO_LEGACY_ACCOUNT_ID_PREFIX),
+      );
+
+      for (const account of legacyAccounts) {
+        try {
+          const config = providerAccountToConfig(account);
+          await providerService.deleteAccount(account.id);
+          await syncDeletedProviderToRuntime(
+            config,
+            account.id,
+            this.gatewayManager ?? undefined,
+          );
+          result.deleted.push(account.id);
+        } catch (err) {
+          logger.warn(
+            `[sto-sync] Failed to delete legacy account ${account.id}:`,
+            err,
+          );
+        }
+      }
+      logger.info(
+        `[sto-sync] Migrated ${legacyAccounts.length} legacy sto-model-* account(s)`,
+      );
+    }
+
+    // Step 4 — Create or update the single STO account
+    const existingAccount = allAccounts.find((a) => a.id === STO_ACCOUNT_ID);
+    const expectedBaseUrl = `${domain}/v1`;
     const now = new Date().toISOString();
 
-    // Step 5 — Create new accounts
-    for (const model of toCreate) {
-      const accountId = StoModelSyncService.buildAccountId(model.id);
+    if (!existingAccount) {
+      // Create new single STO account
       const account: ProviderAccount = {
-        id: accountId,
-        vendorId: 'custom',
-        label: model.name,
+        id: STO_ACCOUNT_ID,
+        vendorId: 'sto',
+        label: 'STO AI',
         authMode: 'api_key',
-        baseUrl: `${domain}${STO_COMPLETIONS_BASE_PATH}`,
+        baseUrl: expectedBaseUrl,
         apiProtocol: 'openai-completions',
-        model: model.id,
+        model: remoteModelIds[0],
         enabled: true,
         isDefault: false,
-        metadata: { managedBy: 'sto-auto-sync' },
+        metadata: {
+          managedBy: 'sto-auto-sync',
+          customModels: remoteModelIds,
+        },
         createdAt: now,
         updatedAt: now,
       };
@@ -239,106 +251,87 @@ export class StoModelSyncService {
           token,
           this.gatewayManager ?? undefined,
         );
-        result.created.push(accountId);
+        result.created.push(STO_ACCOUNT_ID);
       } catch (err) {
-        logger.warn(`[sto-sync] Failed to create account ${accountId}:`, err);
+        logger.warn(`[sto-sync] Failed to create STO account:`, err);
       }
-    }
+    } else {
+      // Check if existing account needs updating
+      const currentModels = existingAccount.metadata?.customModels ?? [];
+      const modelsChanged =
+        currentModels.length !== remoteModelIds.length ||
+        !remoteModelIds.every((id, i) => currentModels[i] === id);
+      const baseUrlChanged = existingAccount.baseUrl !== expectedBaseUrl;
+      const currentModelRemoved =
+        existingAccount.model && !remoteModelIds.includes(existingAccount.model);
 
-    // Step 6 — Delete removed accounts
-    for (const account of toDelete) {
-      try {
-        const config = providerAccountToConfig(account);
-        await providerService.deleteAccount(account.id);
-        await syncDeletedProviderToRuntime(
-          config,
-          account.id,
-          this.gatewayManager ?? undefined,
-        );
-        result.deleted.push(account.id);
-      } catch (err) {
-        logger.warn(
-          `[sto-sync] Failed to delete account ${account.id}:`,
-          err,
-        );
-      }
-    }
-
-    // Step 7 — Update accounts with config changes
-    for (const { account, model } of toUpdateConfig) {
-      try {
-        const updatedAccount: ProviderAccount = {
-          ...account,
-          label: model.name,
-          baseUrl: `${domain}${STO_COMPLETIONS_BASE_PATH}`,
-          model: model.id,
+      if (modelsChanged || baseUrlChanged || currentModelRemoved || !existingAccount.enabled) {
+        const patch: Partial<ProviderAccount> = {
+          baseUrl: expectedBaseUrl,
           enabled: true,
-          updatedAt: new Date().toISOString(),
+          metadata: {
+            ...existingAccount.metadata,
+            managedBy: 'sto-auto-sync',
+            customModels: remoteModelIds,
+          },
+          updatedAt: now,
         };
-        await providerService.updateAccount(updatedAccount);
-        await storeApiKey(account.id, token);
-        await syncSavedProviderToRuntime(
-          providerAccountToConfig(updatedAccount),
-          token,
-          this.gatewayManager ?? undefined,
-        );
-        result.updated.push(account.id);
-      } catch (err) {
-        logger.warn(
-          `[sto-sync] Failed to update account ${account.id}:`,
-          err,
-        );
-      }
-    }
 
-    // Step 8 — Update API key only if changed
-    for (const account of toCheckApiKey) {
-      try {
-        const currentKey = await getApiKey(account.id);
-        if (currentKey !== token) {
-          await storeApiKey(account.id, token);
-          await syncProviderApiKeyToRuntime(account.vendorId, account.id, token);
-          result.updated.push(account.id);
+        if (currentModelRemoved) {
+          patch.model = remoteModelIds[0];
         }
-      } catch (err) {
-        logger.warn(
-          `[sto-sync] Failed to update API key for ${account.id}:`,
-          err,
-        );
-      }
-    }
 
-    // Step 9 — Set default if needed
-    const deletedIds = new Set(result.deleted);
-    const currentDefault = await getDefaultProviderAccountId();
-    const needsNewDefault =
-      !currentDefault || deletedIds.has(currentDefault);
-
-    if (needsNewDefault) {
-      // Pick the first STO model from the remote list (preserves server order)
-      const firstModel = remoteModels[0];
-      if (firstModel) {
-        const firstAccountId = StoModelSyncService.buildAccountId(
-          firstModel.id,
-        );
         try {
-          await providerService.setDefaultAccount(firstAccountId);
-          await syncDefaultProviderToRuntime(
-            firstAccountId,
+          await providerService.updateAccount(STO_ACCOUNT_ID, patch, token);
+          const updatedAccount = {
+            ...existingAccount,
+            ...patch,
+            id: STO_ACCOUNT_ID,
+          };
+          await syncSavedProviderToRuntime(
+            providerAccountToConfig(updatedAccount),
+            token,
             this.gatewayManager ?? undefined,
           );
-          result.defaultSet = firstAccountId;
+          result.updated.push(STO_ACCOUNT_ID);
         } catch (err) {
-          logger.warn(
-            `[sto-sync] Failed to set default account ${firstAccountId}:`,
-            err,
-          );
+          logger.warn(`[sto-sync] Failed to update STO account:`, err);
         }
+      } else {
+        // No config change — just make sure the API key (stotoken) is current
+        try {
+          const currentKey = await getApiKey(STO_ACCOUNT_ID);
+          if (currentKey !== token) {
+            await storeApiKey(STO_ACCOUNT_ID, token);
+            await syncProviderApiKeyToRuntime('sto', STO_ACCOUNT_ID, token);
+            result.updated.push(STO_ACCOUNT_ID);
+          }
+        } catch (err) {
+          logger.warn(`[sto-sync] Failed to update API key:`, err);
+        }
+      }
+    }
+
+    // Step 5 — Set default provider if needed
+    const currentDefault = await getDefaultProviderAccountId();
+    const needsNewDefault =
+      !currentDefault || legacyDefaultWasSto;
+
+    if (needsNewDefault) {
+      try {
+        await providerService.setDefaultAccount(STO_ACCOUNT_ID);
+        await syncDefaultProviderToRuntime(
+          STO_ACCOUNT_ID,
+          this.gatewayManager ?? undefined,
+        );
+        result.defaultSet = STO_ACCOUNT_ID;
+      } catch (err) {
+        logger.warn(`[sto-sync] Failed to set default account:`, err);
       }
     }
 
     logger.info(
-      `[sto-sync] Sync completed: created=${result.created.length}, deleted=${result.deleted.length}, updated=${result.updated.length}, default=${result.defaultSet ?? '(unchanged)'}`,
+      `[sto-sync] Sync completed: created=${result.created.length}, deleted=${result.deleted.length}, updated=${result.updated.length}, models=${remoteModelIds.length}, default=${result.defaultSet ?? '(unchanged)'}`,
     );
 
     return result;
@@ -399,7 +392,7 @@ export class StoModelSyncService {
 
     if (stoAccounts.length > 0) {
       logger.info(
-        `[sto-sync] Cleaned up ${stoAccounts.length} STO model account(s) on logout`,
+        `[sto-sync] Cleaned up ${stoAccounts.length} STO account(s) on logout`,
       );
     }
   }
