@@ -84,8 +84,33 @@ function buildChatEventDedupeKey(eventState: string, event: Record<string, unkno
   const runId = event.runId != null ? String(event.runId) : '';
   const sessionKey = event.sessionKey != null ? String(event.sessionKey) : '';
   const seq = event.seq != null ? String(event.seq) : '';
+  // For delta events, include message content length to avoid deduplicating
+  // successive streaming deltas that share the same runId/sessionKey/seq.
+  let contentLen = '';
+  if (eventState === 'delta') {
+    const msg = (event.message && typeof event.message === 'object')
+      ? event.message as Record<string, unknown>
+      : null;
+    if (msg) {
+      const content = msg.content;
+      if (typeof content === 'string') {
+        contentLen = String(content.length);
+      } else if (Array.isArray(content)) {
+        let total = 0;
+        for (const block of content) {
+          if (!block || typeof block !== 'object') continue;
+          const part = block as Record<string, unknown>;
+          if (typeof part.text === 'string') total += part.text.length;
+          else if (typeof part.thinking === 'string') total += part.thinking.length;
+        }
+        contentLen = String(total);
+      } else if (typeof msg.text === 'string') {
+        contentLen = String(msg.text.length);
+      }
+    }
+  }
   if (runId || sessionKey || seq || eventState) {
-    return [runId, sessionKey, seq, eventState].join('|');
+    return [runId, sessionKey, seq, eventState, contentLen].join('|');
   }
   const msg = (event.message && typeof event.message === 'object')
     ? event.message as Record<string, unknown>

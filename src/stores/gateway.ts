@@ -67,6 +67,23 @@ function summarizeGatewayMessageContent(message: Record<string, unknown>): strin
   return '';
 }
 
+function getGatewayMessageContentLength(message: Record<string, unknown>): number {
+  const content = message.content;
+  if (typeof content === 'string') return content.length;
+  if (Array.isArray(content)) {
+    let total = 0;
+    for (const block of content) {
+      if (!block || typeof block !== 'object') continue;
+      const part = block as Record<string, unknown>;
+      if (typeof part.text === 'string') total += part.text.length;
+      else if (typeof part.thinking === 'string') total += part.thinking.length;
+    }
+    return total;
+  }
+  if (typeof message.text === 'string') return message.text.length;
+  return 0;
+}
+
 function buildGatewayEventDedupeKey(event: Record<string, unknown>): string | null {
   const runId = event.runId != null ? String(event.runId) : '';
   const sessionKey = event.sessionKey != null ? String(event.sessionKey) : '';
@@ -79,6 +96,7 @@ function buildGatewayEventDedupeKey(event: Record<string, unknown>): string | nu
     const stopReason = msg.stopReason ?? msg.stop_reason;
     const role = msg.role != null ? String(msg.role) : '';
     const summary = summarizeGatewayMessageContent(msg);
+    const contentLen = getGatewayMessageContentLength(msg);
     if (messageId || stopReason || summary) {
       return [
         'msg',
@@ -88,6 +106,7 @@ function buildGatewayEventDedupeKey(event: Record<string, unknown>): string | nu
         String(stopReason ?? ''),
         role,
         summary,
+        String(contentLen),
       ].join('|');
     }
   }
