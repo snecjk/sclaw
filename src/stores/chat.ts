@@ -8,6 +8,7 @@ import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { buildCronSessionHistoryPath, isCronSessionKey } from './chat/cron-session-utils';
+import { sanitizeSessionDisplayField } from './chat/helpers';
 import {
   DEFAULT_CANONICAL_PREFIX,
   DEFAULT_SESSION_KEY,
@@ -695,7 +696,7 @@ function ensureSessionEntry(sessions: ChatSession[], sessionKey: string): ChatSe
   if (sessions.some((session) => session.key === sessionKey)) {
     return sessions;
   }
-  return [...sessions, { key: sessionKey, displayName: sessionKey }];
+  return [...sessions, { key: sessionKey }];
 }
 
 function clearSessionEntryFromMap<T extends Record<string, unknown>>(entries: T, sessionKey: string): T {
@@ -1040,14 +1041,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const data = await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.list', {});
         if (data) {
           const rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
-          const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => ({
-            key: String(s.key || ''),
-            label: s.label ? String(s.label) : undefined,
-            displayName: s.displayName ? String(s.displayName) : undefined,
-            thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
-            model: s.model ? String(s.model) : undefined,
-            updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
-          })).filter((s: ChatSession) => s.key);
+          const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
+            const key = String(s.key || '');
+            return {
+              key,
+              label: s.label ? String(s.label) : undefined,
+              displayName: sanitizeSessionDisplayField(
+                key,
+                s.displayName ? String(s.displayName) : undefined,
+              ),
+              thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
+              model: s.model ? String(s.model) : undefined,
+              updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
+            };
+          }).filter((s: ChatSession) => s.key);
 
           const canonicalBySuffix = new Map<string, string>();
           for (const session of sessions) {
@@ -1087,10 +1094,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
 
           const sessionsWithCurrent = !dedupedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
-            ? [
-              ...dedupedSessions,
-              { key: nextSessionKey, displayName: nextSessionKey },
-            ]
+            ? [...dedupedSessions, { key: nextSessionKey }]
             : dedupedSessions;
 
           const discoveredActivity = Object.fromEntries(
@@ -1168,6 +1172,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (key === get().currentSessionKey) return;
     set((s) => buildSessionSwitchPatch(s, key));
     get().loadHistory();
+  },
+
+  switchToAgentMainSession: (agentId: string) => {
+    const key = resolveMainSessionKeyForAgent(agentId);
+    if (!key) return;
+    get().switchSession(key);
   },
 
   // ── Delete session ──
@@ -1249,7 +1259,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ?? getCanonicalPrefixFromSessions(sessions)
       ?? DEFAULT_CANONICAL_PREFIX;
     const newKey = `${prefix}:session-${Date.now()}`;
-    const newSessionEntry: ChatSession = { key: newKey, displayName: newKey };
+    const newSessionEntry: ChatSession = { key: newKey };
     set((s) => ({
       currentSessionKey: newKey,
       currentAgentId: getAgentIdFromSessionKey(newKey),

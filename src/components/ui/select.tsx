@@ -12,9 +12,17 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <select
         className={cn(
-          'flex h-10 w-full rounded-md border border-glass-border bg-[hsl(var(--glass-bg)/0.7)] backdrop-blur-glass px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none bg-[length:16px_16px] bg-[right_12px_center] bg-no-repeat',
+          'flex h-10 w-full rounded-md border border-glass-border px-3 py-2 text-sm text-foreground',
+          /* Solid card fill in dark mode — native <select> often ignores glass hsl and paints system white */
+          'bg-[hsl(var(--glass-bg)/0.7)] backdrop-blur-glass dark:bg-[hsl(var(--card))] dark:backdrop-blur-none',
+          'dark:[color-scheme:dark]',
+          '[-webkit-appearance:none] appearance-none',
+          'bg-[length:16px_16px] bg-[right_12px_center] bg-no-repeat',
           'bg-[url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23888%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E")]',
-          'pr-10',
+          'dark:bg-[url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23a8b8c8%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22/%3E%3C/svg%3E")]',
+          'pr-10 ring-offset-background',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          'disabled:cursor-not-allowed disabled:opacity-50',
           className
         )}
         ref={ref}

@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { assistantChatCardBg, assistantChatCardBgStreaming } from '@/lib/surfaces';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { extractText, extractThinking, extractImages, extractToolUse, formatTimestamp } from './message-utils';
@@ -75,7 +76,7 @@ export const ChatMessage = memo(function ChatMessage({
     >
       {/* Avatar */}
       {!isUser && (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full mt-1 bg-white/30 dark:bg-white/[0.08] border border-glass-border text-foreground">
+        <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-[linear-gradient(180deg,rgba(125,211,252,0.16),rgba(56,189,248,0.10))] text-primary shadow-[0_12px_24px_rgba(56,189,248,0.10)]">
           <Sparkles className="h-4 w-4" />
         </div>
       )}
@@ -146,7 +147,7 @@ export const ChatMessage = memo(function ChatMessage({
                 ) : (
                   <div
                     key={`local-${i}`}
-                    className="w-36 h-36 rounded-xl border border-glass-border bg-white/30 dark:bg-white/[0.08] flex items-center justify-center text-muted-foreground"
+                    className="flex h-36 w-36 items-center justify-center rounded-2xl border border-primary/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(125,211,252,0.06))] text-muted-foreground"
                   >
                     <File className="h-8 w-8" />
                   </div>
@@ -208,7 +209,7 @@ export const ChatMessage = memo(function ChatMessage({
               }
               if (isImage && !file.preview) {
                 return (
-                  <div key={`local-${i}`} className="w-36 h-36 rounded-xl border border-glass-border bg-white/30 dark:bg-white/[0.08] flex items-center justify-center text-muted-foreground">
+                  <div key={`local-${i}`} className="flex h-36 w-36 items-center justify-center rounded-2xl border border-primary/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(125,211,252,0.06))] text-muted-foreground">
                     <File className="h-8 w-8" />
                   </div>
                 );
@@ -274,9 +275,9 @@ function ToolStatusBar({
           <div
             key={tool.toolCallId || tool.id || tool.name}
             className={cn(
-              'flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors',
-              isRunning && 'border-primary/30 bg-primary/5 text-foreground',
-              !isRunning && !isError && 'border-border/50 bg-muted/20 text-muted-foreground',
+              'flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs transition-all duration-300',
+              isRunning && 'border-primary/20 bg-[linear-gradient(135deg,rgba(125,211,252,0.14),rgba(56,189,248,0.08))] text-foreground shadow-[0_10px_20px_rgba(56,189,248,0.08)]',
+              !isRunning && !isError && cn('border-primary/10 text-muted-foreground', assistantChatCardBg),
               isError && 'border-destructive/30 bg-destructive/5 text-destructive',
             )}
           >
@@ -308,14 +309,14 @@ function AssistantHoverBar({ text, timestamp }: { text: string; timestamp?: numb
   }, [text]);
 
   return (
-    <div className="flex items-center justify-between w-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none px-1">
+    <div className="flex w-full select-none items-center justify-between px-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
       <span className="text-xs text-muted-foreground">
         {timestamp ? formatTimestamp(timestamp) : ''}
       </span>
       <Button
         variant="ghost"
         size="icon"
-        className="h-6 w-6"
+        className="h-7 w-7 rounded-full border border-primary/10 bg-primary/[0.04] hover:bg-primary/[0.08]"
         onClick={copyContent}
       >
         {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
@@ -345,10 +346,25 @@ function MessageBubble({
         'relative overflow-hidden rounded-2xl px-4 py-3 transition-[background-color,border-color,box-shadow] duration-300',
         !isUser && 'w-full',
         isUser
-          ? 'bg-[#0a84ff] text-white shadow-sm'
+          ? cn(
+              'border text-foreground',
+              'border-primary/22 dark:border-primary/55',
+              'bg-[linear-gradient(165deg,hsl(var(--primary)/0.26),hsl(var(--primary)/0.11))]',
+              'dark:bg-[linear-gradient(165deg,hsl(var(--primary)/0.45),hsl(var(--primary)/0.22))]',
+              'shadow-[0_10px_26px_rgba(56,189,248,0.11),inset_0_1px_0_0_hsl(var(--glass-highlight)/0.45)]',
+              'dark:shadow-[0_8px_28px_rgba(56,189,248,0.28),inset_0_1px_0_0_hsl(var(--glass-highlight)/0.18)]',
+            )
           : showStreamingChrome
-            ? 'border border-primary/20 bg-white/45 dark:bg-white/[0.11] text-foreground shadow-[0_0_0_1px_rgba(59,130,246,0.05),0_12px_30px_rgba(15,23,42,0.10)]'
-            : 'bg-white/30 dark:bg-white/[0.08] border border-glass-border text-foreground',
+            ? cn(
+                'border border-primary/20 text-foreground shadow-[0_0_0_1px_rgba(56,189,248,0.06),0_18px_34px_rgba(15,23,42,0.10)]',
+                'dark:border-primary/25 dark:shadow-[0_0_0_1px_rgba(56,189,248,0.12),0_14px_32px_rgba(0,0,0,0.45)]',
+                assistantChatCardBgStreaming,
+              )
+            : cn(
+                'border border-primary/10 text-foreground shadow-[0_12px_28px_rgba(15,23,42,0.08)]',
+                'dark:border-border dark:shadow-[0_10px_28px_rgba(0,0,0,0.4)]',
+                assistantChatCardBg,
+              ),
       )}
     >
       {showStreamingChrome && (
@@ -366,7 +382,7 @@ function MessageBubble({
       {isUser ? (
         <p className="whitespace-pre-wrap break-words break-all text-sm">{text}</p>
       ) : (
-        <div className="prose prose-sm dark:prose-invert max-w-none break-words break-all">
+        <div className="prose prose-sm max-w-none break-words break-all text-sm leading-normal dark:prose-invert">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
@@ -375,13 +391,13 @@ function MessageBubble({
                 const isInline = !match && !className;
                 if (isInline) {
                   return (
-                    <code className="bg-background/50 px-1.5 py-0.5 rounded text-sm font-mono break-words break-all" {...props}>
+                    <code className="rounded-md bg-background/55 px-1.5 py-0.5 text-sm font-mono break-all break-words text-primary" {...props}>
                       {children}
                     </code>
                   );
                 }
                 return (
-                  <pre className="bg-background/50 rounded-lg p-4 overflow-x-auto">
+                  <pre className="overflow-x-auto rounded-xl border border-primary/10 bg-background/55 p-4">
                     <code className={cn('text-sm font-mono', className)} {...props}>
                       {children}
                     </code>
@@ -414,7 +430,7 @@ function MessageBubble({
             </span>
           </div>
           <span className="shrink-0 text-[10px] font-medium uppercase tracking-[0.24em] text-primary/70">
-            Live
+            输出中
           </span>
         </div>
       )}
@@ -462,13 +478,18 @@ function ThinkingBlock({ content }: { content: string }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="w-full rounded-xl border border-glass-border bg-white/30 dark:bg-white/[0.08] text-[14px]">
+    <div
+      className={cn(
+        'w-full rounded-2xl border border-primary/10 text-[14px] shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
+        assistantChatCardBg,
+      )}
+    >
       <button
-        className="flex items-center gap-2 w-full px-3 py-2 text-muted-foreground hover:text-foreground transition-colors"
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-muted-foreground transition-colors hover:text-foreground"
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        <span className="font-medium">Thinking</span>
+        <span className="font-medium">思考过程</span>
       </button>
       {expanded && (
         <div className="px-3 pb-3 text-muted-foreground">
@@ -509,11 +530,12 @@ function FileCard({ file }: { file: AttachedFileMeta }) {
   return (
     <div 
       className={cn(
-        "flex items-center gap-3 rounded-xl border border-glass-border px-3 py-2.5 bg-white/30 dark:bg-white/[0.08] max-w-[220px]",
-        file.filePath && "cursor-pointer hover:bg-white/40 dark:hover:bg-white/15 transition-colors"
+        'flex max-w-[220px] items-center gap-3 rounded-2xl border border-primary/10 px-3 py-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
+        assistantChatCardBg,
+        file.filePath && 'cursor-pointer transition-all hover:border-primary/20 hover:bg-white/[0.97] dark:hover:bg-white/[0.12]',
       )}
       onClick={handleOpen}
-      title={file.filePath ? "Open file" : undefined}
+      title={file.filePath ? "打开文件" : undefined}
     >
       <FileIcon mimeType={file.mimeType} className="h-5 w-5 shrink-0 text-muted-foreground" />
       <div className="min-w-0 overflow-hidden">
@@ -546,7 +568,7 @@ function ImageThumbnail({
   void filePath; void base64; void mimeType;
   return (
     <div
-      className="relative w-36 h-36 rounded-xl border overflow-hidden border-glass-border bg-white/30 dark:bg-white/[0.08] group/img cursor-zoom-in"
+      className="group/img relative h-36 w-36 cursor-zoom-in overflow-hidden rounded-2xl border border-primary/10 bg-white/30 shadow-[0_10px_24px_rgba(15,23,42,0.08)] dark:bg-white/[0.08]"
       onClick={onPreview}
     >
       <img src={src} alt={fileName} className="w-full h-full object-cover" />
@@ -577,7 +599,10 @@ function ImagePreviewCard({
   void filePath; void base64; void mimeType;
   return (
     <div
-      className="relative max-w-xs rounded-xl border overflow-hidden border-glass-border bg-white/30 dark:bg-white/[0.08] group/img cursor-zoom-in"
+      className={cn(
+        'group/img relative max-w-xs cursor-zoom-in overflow-hidden rounded-2xl border border-primary/10 shadow-[0_10px_24px_rgba(15,23,42,0.08)]',
+        assistantChatCardBg,
+      )}
       onClick={onPreview}
     >
       <img src={src} alt={fileName} className="block w-full" />
@@ -672,9 +697,14 @@ function ToolCard({ name, input }: { name: string; input: unknown }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="rounded-xl border border-glass-border bg-white/30 dark:bg-white/[0.08] text-[14px]">
+    <div
+      className={cn(
+        'rounded-2xl border border-primary/10 text-[14px] shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
+        assistantChatCardBg,
+      )}
+    >
       <button
-        className="flex items-center gap-2 w-full px-3 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
+        className="flex w-full items-center gap-2 px-3 py-2 text-muted-foreground transition-colors hover:text-foreground"
         onClick={() => setExpanded(!expanded)}
       >
         <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
@@ -683,7 +713,7 @@ function ToolCard({ name, input }: { name: string; input: unknown }) {
         {expanded ? <ChevronDown className="h-3 w-3 ml-auto" /> : <ChevronRight className="h-3 w-3 ml-auto" />}
       </button>
       {expanded && input != null && (
-        <pre className="px-3 pb-2 text-xs text-muted-foreground overflow-x-auto">
+        <pre className="overflow-x-auto px-3 pb-3 text-xs text-muted-foreground">
           {typeof input === 'string' ? input : JSON.stringify(input, null, 2) as string}
         </pre>
       )}

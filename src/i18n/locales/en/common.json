@@ -13,7 +13,10 @@
         "deleteSessionConfirm": "Are you sure you want to delete session \"{{label}}\"?",
         "openClawPage": "OpenClaw Page",
         "expand": "Expand sidebar",
-        "collapse": "Collapse sidebar"
+        "collapse": "Collapse sidebar",
+        "emptyChatHistory": "No conversations yet",
+        "expandHistoryPanel": "Show conversation history",
+        "collapseHistoryPanel": "Hide conversation history"
     },
     "actions": {
         "save": "Save",

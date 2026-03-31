@@ -15,7 +15,11 @@
         "refresh": "刷新聊天",
         "showThinking": "显示思考过程",
         "hideThinking": "隐藏思考过程",
-        "currentAgent": "当前对话对象：{{agent}}"
+        "currentAgent": "当前对话对象：{{agent}}",
+        "conversationTargetLabel": "当前对话对象",
+        "switchAgentAria": "切换对话 Agent",
+        "switchAgentTitle": "切换到该 Agent 的主会话；新对话也会在该 Agent 下进行",
+        "defaultAgentMark": "（默认）"
     },
     "composer": {
         "attachFiles": "添加文件",
@@ -40,6 +44,9 @@
         "processingTitle": "正在整理工具结果",
         "processingDescription": "工具已经返回结果，模型正在整合信息并生成最终回复。",
         "jumpToLatest": "回到最新"
+    },
+    "sessionList": {
+        "mainSessionTitle": "主会话"
     },
     "historyBuckets": {
         "today": "今天",

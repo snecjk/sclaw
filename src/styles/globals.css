@@ -4,72 +4,68 @@
 
 @layer base {
   :root {
-    /* #f1ede1 */
-    --background: 45 36.4% 91.4%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
+    --background: 210 40% 98%;
+    --foreground: 218 42% 13%;
+    --card: 210 36% 99%;
+    --card-foreground: 218 42% 13%;
+    --popover: 210 36% 99%;
+    --popover-foreground: 218 42% 13%;
+    --primary: 196 90% 58%;
+    --primary-foreground: 214 52% 12%;
+    --secondary: 205 55% 96%;
+    --secondary-foreground: 218 42% 13%;
+    --muted: 205 44% 95%;
+    --muted-foreground: 214 16% 43%;
+    --accent: 205 76% 72%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --border: 204 32% 87%;
+    --input: 204 32% 87%;
+    --ring: 196 90% 58%;
     --radius: 0.5rem;
 
-    /* Glassmorphism */
-    --glass-bg: 0 0% 100%;
-    --glass-opacity: 0.55;
-    --glass-blur: 12px;
-    --glass-border: 0 0% 100% / 0.45;
-    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-    --glass-highlight: 0 0% 100% / 0.6;
-    --canvas-from: #e8dff5;
-    --canvas-via: #dce8f5;
-    --canvas-to: #e8f0e3;
+    --glass-bg: 210 45% 98%;
+    --glass-opacity: 0.72;
+    --glass-blur: 16px;
+    --glass-border: 196 92% 76% / 0.28;
+    --glass-shadow: 0 18px 48px rgba(20, 48, 76, 0.12);
+    --glass-highlight: 0 0% 100% / 0.82;
+    --canvas-from: #f4fbff;
+    --canvas-via: #eaf5ff;
+    --canvas-to: #f3f9ff;
   }
 
-  /* Neutral deep-gray dark palette */
   .dark {
-    --background: 240 4% 11%;
-    --foreground: 210 20% 96%;
-    --card: 240 3% 14%;
-    --card-foreground: 210 20% 96%;
-    --popover: 240 3% 14%;
-    --popover-foreground: 210 20% 96%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 240 3% 18%;
-    --secondary-foreground: 210 20% 96%;
-    --muted: 240 3% 18%;
-    --muted-foreground: 220 8% 72%;
-    --accent: 240 3% 22%;
-    --accent-foreground: 210 20% 96%;
-    --destructive: 0 65% 42%;
-    --destructive-foreground: 210 20% 96%;
-    --border: 240 3% 24%;
-    --input: 240 3% 18%;
-    --ring: 217.2 91.2% 59.8%;
+    --background: 207 53% 8%;
+    --foreground: 205 36% 96%;
+    --card: 207 42% 11%;
+    --card-foreground: 205 36% 96%;
+    --popover: 207 42% 11%;
+    --popover-foreground: 205 36% 96%;
+    --primary: 194 94% 69%;
+    --primary-foreground: 209 58% 9%;
+    --secondary: 208 34% 16%;
+    --secondary-foreground: 205 36% 96%;
+    --muted: 208 30% 15%;
+    --muted-foreground: 206 18% 72%;
+    --accent: 205 72% 76%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 72% 56%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 204 28% 20%;
+    --input: 204 28% 18%;
+    --ring: 194 94% 69%;
 
-    /* Glassmorphism */
-    --glass-bg: 240 4% 16%;
-    --glass-opacity: 0.45;
-    --glass-blur: 12px;
-    --glass-border: 0 0% 100% / 0.08;
-    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    --glass-highlight: 0 0% 100% / 0.06;
-    --canvas-from: #1a1038;
-    --canvas-via: #0f1a2e;
-    --canvas-to: #0a1f1a;
+    --glass-bg: 206 36% 13%;
+    --glass-opacity: 0.52;
+    --glass-blur: 18px;
+    --glass-border: 194 92% 74% / 0.14;
+    --glass-shadow: 0 24px 80px rgba(3, 12, 24, 0.54);
+    --glass-highlight: 0 0% 100% / 0.08;
+    --canvas-from: #07111c;
+    --canvas-via: #0b1a29;
+    --canvas-to: #102538;
   }
 }
 
@@ -79,8 +75,27 @@
   }
 
   body {
-    @apply text-foreground;
+    @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    min-height: 100vh;
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(circle at top, rgba(112, 212, 255, 0.14), transparent 32%),
+      radial-gradient(circle at 85% 18%, rgba(189, 227, 255, 0.11), transparent 24%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 36%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.24);
+    color: hsl(var(--foreground));
+  }
+
+  /* Native <select> / option: reduce system light chrome in dark mode (Electron/WebKit) */
+  .dark select option,
+  .dark select optgroup {
+    background-color: hsl(var(--popover));
+    color: hsl(var(--foreground));
   }
 }
 
@@ -93,18 +108,31 @@
     box-shadow: var(--glass-shadow), inset 0 1px 0 0 hsl(var(--glass-highlight));
   }
   .glass-panel {
-    background: hsl(var(--glass-bg) / 0.82);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background:
+      linear-gradient(180deg, hsl(var(--glass-highlight)) 0%, transparent 24%),
+      hsl(var(--glass-bg) / 0.82);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
     border-color: hsl(var(--glass-border));
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18), 0 8px 32px rgba(0, 0, 0, 0.1), inset 0 1px 0 0 hsl(var(--glass-highlight));
+    box-shadow:
+      0 24px 80px rgba(15, 23, 42, 0.18),
+      0 0 0 1px hsl(var(--primary) / 0.08),
+      inset 0 1px 0 0 hsl(var(--glass-highlight));
   }
   .dark .glass-panel {
-    background: hsl(var(--glass-bg) / 0.78);
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 0 hsl(var(--glass-highlight));
+    background:
+      linear-gradient(180deg, hsl(var(--glass-highlight)) 0%, transparent 24%),
+      hsl(var(--glass-bg) / 0.78);
+    box-shadow:
+      0 28px 90px rgba(2, 8, 23, 0.58),
+      0 0 0 1px hsl(var(--primary) / 0.1),
+      0 0 44px hsl(var(--primary) / 0.08),
+      inset 0 1px 0 0 hsl(var(--glass-highlight));
   }
   .glass-subtle {
-    background: hsl(var(--glass-bg) / 0.3);
+    background:
+      linear-gradient(180deg, hsl(var(--glass-highlight) / 0.24) 0%, transparent 44%),
+      hsl(var(--glass-bg) / 0.3);
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
     border-color: hsl(var(--glass-border));
@@ -112,6 +140,51 @@
   }
   .dark .glass-subtle {
     background: hsl(var(--glass-bg) / 0.25);
+  }
+
+  .neural-grid {
+    background-image:
+      linear-gradient(to right, hsl(var(--foreground) / 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--foreground) / 0.045) 1px, transparent 1px);
+    background-size: 36px 36px;
+    mask-image: radial-gradient(circle at center, black, transparent 85%);
+  }
+
+  .glow-badge {
+    background:
+      linear-gradient(135deg, hsl(var(--primary) / 0.2), hsl(var(--accent) / 0.14));
+    border: 1px solid hsl(var(--primary) / 0.2);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 20px hsl(var(--primary) / 0.12);
+    color: hsl(var(--foreground) / 0.88);
+  }
+
+  .signal-card {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at top left, hsl(var(--primary) / 0.16), transparent 42%),
+      linear-gradient(180deg, hsl(var(--glass-highlight) / 0.18), transparent 28%),
+      hsl(var(--glass-bg) / 0.32);
+    border: 1px solid hsl(var(--glass-border));
+    box-shadow:
+      0 18px 44px rgba(15, 23, 42, 0.18),
+      inset 0 1px 0 hsl(var(--glass-highlight));
+  }
+
+  .signal-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, transparent 0%, hsl(var(--primary) / 0.12) 45%, transparent 70%);
+    transform: translateX(-130%);
+    transition: transform 420ms ease;
+    pointer-events: none;
+  }
+
+  .signal-card:hover::after {
+    transform: translateX(130%);
   }
 }
 
@@ -152,9 +225,22 @@
   @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
 }
 
-/* Prose styling for markdown */
+/* Prose styling for markdown — match chat user bubble (text-sm / 14px) */
 .prose {
-  line-height: 1.6;
+  font-size: 0.875rem;
+  line-height: 1.625;
+}
+
+.prose :where(h1, h2, h3, h4, h5, h6) {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.45;
+  margin-top: 0.65em;
+  margin-bottom: 0.35em;
+}
+
+.prose :where(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
 }
 
 .prose p {

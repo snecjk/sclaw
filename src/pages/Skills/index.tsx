@@ -30,6 +30,7 @@ import { useSkillsStore } from '@/stores/skills';
 import { useGatewayStore } from '@/stores/gateway';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { cn } from '@/lib/utils';
+import { glassNestedCard, glassSectionSurface } from '@/lib/surfaces';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { trackUiEvent } from '@/lib/telemetry';
@@ -628,54 +629,61 @@ export function Skills() {
 
   if (loading) {
     return (
-      <div className="flex flex-col -m-6 min-h-[calc(100vh-2.5rem)] items-center justify-center">
-        <LoadingSpinner size="lg" />
+      <div className="mx-auto flex w-full max-w-5xl flex-col pb-10">
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <LoadingSpinner size="lg" />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col -m-6 h-[calc(100vh-2.5rem)] overflow-hidden">
-      <div className="w-full flex flex-col h-full p-10 pt-16">
-
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-start justify-between mb-6 shrink-0 gap-4">
-          <div>
-            <h1 className="text-5xl md:text-6xl font-serif text-foreground mb-3 font-normal tracking-tight" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
-              {t('title')}
-            </h1>
-            <p className="text-[17px] text-foreground/70 font-medium">
-              {t('subtitle')}
-            </p>
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
+      <header className="shrink-0 border-b border-primary/10 pb-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(56,189,248,0.12)]">
+              <Puzzle className="h-5 w-5" strokeWidth={2} />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-[1.65rem]">
+                {t('title')}
+              </h1>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                {t('subtitle')}
+              </p>
+            </div>
           </div>
-
-          <div className="flex items-center gap-3 md:mt-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:pt-0.5">
             {hasInstalledSkills && (
-              <button
+              <Button
+                type="button"
+                variant="outline"
                 onClick={handleOpenSkillsFolder}
-                className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors shrink-0 text-[13px] font-medium px-4 h-8 rounded-full border border-black/10 dark:border-white/10 flex items-center justify-center text-foreground/80 hover:text-foreground"
+                className="h-9 rounded-md border-glass-border bg-transparent px-4 text-[13px] font-medium shadow-none hover:bg-[hsl(var(--glass-bg)/0.35)]"
               >
-                <FolderOpen className="h-4 w-4 mr-2" />
+                <FolderOpen className="mr-2 h-4 w-4" />
                 {t('openFolder')}
-              </button>
+              </Button>
             )}
           </div>
         </div>
+      </header>
 
-        {/* Gateway Warning */}
+      <div className="flex flex-col gap-6">
         {showGatewayWarning && (
-          <div className="mb-6 p-4 rounded-xl border border-yellow-500/50 bg-yellow-500/10 flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-            <span className="text-yellow-700 dark:text-yellow-400 text-sm font-medium">
+          <div className="flex items-center gap-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-4">
+            <AlertCircle className="h-5 w-5 shrink-0 text-yellow-600 dark:text-yellow-400" />
+            <span className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
               {t('gatewayWarning')}
             </span>
           </div>
         )}
 
-        {/* Sub Navigation and Actions */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-black/10 dark:border-white/10 pb-4 mb-4 shrink-0 gap-4">
+        <section className={glassSectionSurface}>
+        <div className="flex flex-col gap-4 border-b border-primary/10 pb-4 mb-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center flex-wrap gap-4 text-[14px]">
-            <div className="relative group flex items-center bg-black/5 dark:bg-white/5 rounded-full px-3 py-1.5 focus-within:bg-black/10 transition-colors border border-transparent focus-within:border-black/10 dark:focus-within:border-white/10 mr-2">
+            <div className="group relative mr-2 flex items-center rounded-md border border-transparent bg-black/5 px-3 py-1.5 transition-colors focus-within:border-primary/15 focus-within:bg-[hsl(var(--glass-bg)/0.25)] dark:bg-white/5 dark:focus-within:bg-white/10">
               <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
               <input
                 placeholder={t('search')}
@@ -721,7 +729,7 @@ export function Skills() {
               variant="outline"
               size="sm"
               onClick={() => { setBatchMode(true); setBatchSelected(new Set()); }}
-              className="h-8 text-[13px] font-medium rounded-md px-3 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none"
+              className="h-8 rounded-md border-glass-border bg-transparent px-3 text-[13px] font-medium shadow-none hover:bg-[hsl(var(--glass-bg)/0.35)]"
             >
               <ListChecks className="h-4 w-4 mr-1.5" />
               {t('actions.batchManage')}
@@ -733,7 +741,7 @@ export function Skills() {
                 setInstallQuery('');
                 setInstallSheetOpen(true);
               }}
-              className="h-8 text-[13px] font-medium rounded-md px-3 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none"
+              className="h-8 rounded-md border-glass-border bg-transparent px-3 text-[13px] font-medium shadow-none hover:bg-[hsl(var(--glass-bg)/0.35)]"
             >
               {t('actions.installSkill')}
             </Button>
@@ -742,7 +750,7 @@ export function Skills() {
               size="icon"
               onClick={fetchSkills}
               disabled={!isGatewayRunning}
-              className="h-8 w-8 ml-1 rounded-md border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-muted-foreground hover:text-foreground"
+              className="ml-1 h-8 w-8 rounded-md border-glass-border bg-transparent text-muted-foreground shadow-none hover:bg-[hsl(var(--glass-bg)/0.35)] hover:text-foreground"
               title={t('refresh')}
             >
               <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
@@ -764,7 +772,7 @@ export function Skills() {
                   const allSelectableIds = filteredSkills.filter(s => !s.isCore).map(s => s.id);
                   setBatchSelected((prev) => prev.size === allSelectableIds.length ? new Set() : new Set(allSelectableIds));
                 }}
-                className="h-8 text-[13px] font-medium rounded-md px-3 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none"
+                className="h-8 rounded-md border-glass-border bg-transparent px-3 text-[13px] font-medium shadow-none hover:bg-[hsl(var(--glass-bg)/0.35)]"
               >
                 {batchSelected.size === filteredSkills.filter(s => !s.isCore).length && batchSelected.size > 0
                   ? t('actions.deselectAll')
@@ -783,7 +791,7 @@ export function Skills() {
                 size="sm"
                 disabled={batchSelected.size === 0}
                 onClick={() => batchToggleSelected(false)}
-                className="h-8 text-[13px] font-medium rounded-md px-3 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none"
+                className="h-8 rounded-md border-glass-border bg-transparent px-3 text-[13px] font-medium shadow-none hover:bg-[hsl(var(--glass-bg)/0.35)]"
               >
                 {t('actions.batchDisable')}
               </Button>
@@ -799,10 +807,9 @@ export function Skills() {
           </div>
         )}
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto pr-2 pb-10 min-h-0 -mr-2">
+        <div className="pb-2">
           {error && (
-            <div className="mb-4 p-4 rounded-xl border border-destructive/50 bg-destructive/10 text-destructive text-sm font-medium flex items-center gap-2">
+            <div className="mb-4 flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm font-medium text-destructive">
               <AlertCircle className="h-5 w-5 shrink-0" />
               <span>
                 {['fetchTimeoutError', 'fetchRateLimitError', 'timeoutError', 'rateLimitError'].includes(error)
@@ -826,8 +833,9 @@ export function Skills() {
                   <div
                     key={skill.id}
                     className={cn(
-                      'group flex flex-col p-4 rounded-xl glass cursor-pointer transition-all duration-200 hover:shadow-lg',
-                      isSelected && 'ring-2 ring-primary/50'
+                      'group flex flex-col cursor-pointer rounded-md border border-primary/10 p-4 transition-all duration-200 hover:border-primary/18 hover:shadow-md',
+                      glassNestedCard,
+                      isSelected && 'ring-2 ring-primary/50',
                     )}
                     onClick={() => {
                       if (batchMode) {
@@ -904,6 +912,7 @@ export function Skills() {
             )}
           </div>
         </div>
+        </section>
       </div>
 
       <Sheet open={installSheetOpen} onOpenChange={setInstallSheetOpen}>

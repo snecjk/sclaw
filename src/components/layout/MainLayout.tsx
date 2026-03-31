@@ -12,10 +12,10 @@ export function MainLayout() {
       {/* Title bar: drag region on macOS, icon + controls on Windows */}
       <TitleBar />
 
-      {/* Below the title bar: sidebar + content */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* Below the title bar: sidebar + content — x-visible so sidebar edge bumps can protrude */}
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-x-visible overflow-y-hidden">
         <Sidebar />
-        <main className="flex-1 overflow-auto p-6">
+        <main className="min-h-0 min-w-0 flex-1 overflow-auto p-6">
           <Outlet />
         </main>
       </div>

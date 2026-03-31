@@ -5,7 +5,7 @@
  * are in the toolbar; messages render with markdown + streaming.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, ArrowDown, Loader2, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowDown, Bot, Cpu, Loader2, Orbit, Sparkles, Workflow } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
@@ -18,6 +18,7 @@ import { ChatToolbar } from './ChatToolbar';
 import { extractImages, extractText, extractThinking, extractToolUse } from './message-utils';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { assistantChatCardBgStreaming } from '@/lib/surfaces';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 
@@ -147,13 +148,26 @@ export function Chat() {
 
   return (
     <div className={cn("relative flex flex-col -m-6 transition-colors duration-500")} style={{ height: 'calc(100vh - 2.5rem)' }}>
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.10),_transparent_28%),radial-gradient(circle_at_80%_20%,_rgba(191,219,254,0.10),_transparent_24%)]" />
+        <div className="absolute inset-0 neural-grid opacity-20" />
+        <ParticleConstellation
+          className="z-0 opacity-[0.88] dark:opacity-[0.74]"
+          particleCount={54}
+          connectionDistance={136}
+          speed={0.28}
+        />
+        <div className="absolute left-8 top-10 h-40 w-40 rounded-full bg-cyan-400/10 blur-[90px]" />
+        <div className="absolute right-8 top-20 h-48 w-48 rounded-full bg-sky-100/10 blur-[110px]" />
+      </div>
+
       {/* Toolbar */}
-      <div className="flex shrink-0 items-center justify-end px-4 py-2">
+      <div className="relative z-10 flex shrink-0 items-center justify-end px-4 py-2">
         <ChatToolbar />
       </div>
 
       {/* Messages Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
+      <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto px-4 py-4">
         <div ref={contentRef} className="max-w-4xl mx-auto space-y-4">
           {isEmpty ? (
             <WelcomeScreen />
@@ -220,23 +234,28 @@ export function Chat() {
         </div>
       )}
 
-      {/* Jump to latest */}
-      <div className="pointer-events-none shrink-0 px-4">
+      {/* Jump to latest — 仅在有提示时占位，高度贴齐按钮 */}
+      <div
+        className={cn(
+          'pointer-events-none shrink-0 overflow-hidden px-4',
+          showJumpToLatest ? 'py-0.5' : 'h-0 py-0',
+        )}
+      >
         <div className="mx-auto flex max-w-4xl justify-center">
           <motion.button
             type="button"
             onClick={() => scrollToLatest('smooth')}
-            className="pointer-events-auto mb-2 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-background/78 px-3 py-2 text-xs font-medium text-foreground shadow-[0_10px_26px_rgba(15,23,42,0.12)] backdrop-blur-md transition-colors hover:bg-background/92"
+            className="pointer-events-auto inline-flex h-7 items-center gap-1.5 rounded-full border border-primary/15 bg-white/45 px-2.5 text-[11px] font-medium leading-none text-foreground/90 shadow-none backdrop-blur-sm transition-colors hover:bg-white/60 dark:border-white/12 dark:bg-white/[0.08] dark:text-foreground/95 dark:hover:bg-white/[0.14] sm:h-8 sm:px-3 sm:text-xs"
             initial={false}
             animate={{
               opacity: showJumpToLatest ? 1 : 0,
-              y: showJumpToLatest ? 0 : 8,
+              y: showJumpToLatest ? 0 : 6,
               scale: showJumpToLatest ? 1 : 0.96,
               pointerEvents: showJumpToLatest ? 'auto' : 'none',
             }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
           >
-            <ArrowDown className="h-3.5 w-3.5" />
+            <ArrowDown className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
             <span>{t('streaming.jumpToLatest')}</span>
           </motion.button>
         </div>
@@ -273,44 +292,121 @@ const buttonVariants = {
 function WelcomeScreen() {
   const { t } = useTranslation('chat');
   const quickActions = [
-    { key: 'askQuestions', label: t('welcome.askQuestions') },
-    { key: 'creativeTasks', label: t('welcome.creativeTasks') },
-    { key: 'brainstorming', label: t('welcome.brainstorming') },
+    {
+      key: 'askQuestions',
+      label: t('welcome.askQuestions'),
+      description: t('welcome.askQuestionsDesc'),
+      icon: Cpu,
+    },
+    {
+      key: 'creativeTasks',
+      label: t('welcome.creativeTasks'),
+      description: t('welcome.creativeTasksDesc'),
+      icon: Workflow,
+    },
+    {
+      key: 'brainstorming',
+      label: t('welcome.brainstorming'),
+      description: '让多个助手一起分工，处理更复杂的事情。',
+      icon: Bot,
+    },
+  ];
+  const statusItems = [
+    { label: '状态', value: '已就绪' },
+    { label: '协作', value: '多助手' },
+    { label: '工具', value: '可调用' },
   ];
 
   return (
-    <div className="relative flex flex-col items-center justify-center text-center h-[60vh] overflow-hidden">
-      <ParticleConstellation className="z-0" />
+    <div className="relative flex h-[68vh] flex-col items-center justify-center overflow-hidden text-center">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute left-1/2 top-[18%] h-40 w-40 -translate-x-1/2 rounded-full bg-cyan-300/10 blur-[90px]" />
+      </div>
 
-      <div className="relative z-10 flex flex-col items-center justify-center">
-        <motion.h1
-          className="text-4xl md:text-5xl font-serif text-foreground/80 mb-8 font-normal tracking-tight"
-          style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}
-          initial={{ opacity: 0, y: 20 }}
+      <div className="relative z-10 flex max-w-4xl flex-col items-center justify-center">
+        <motion.div
+          className="mb-6 flex flex-wrap items-center justify-center gap-2.5"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+        >
+          <span className="glow-badge inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium uppercase tracking-[0.22em]">
+            <Orbit className="h-3.5 w-3.5" />
+            智能助手
+          </span>
+          <span className="glow-badge inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium uppercase tracking-[0.22em]">
+            <Sparkles className="h-3.5 w-3.5" />
+            灵感工作台
+          </span>
+          <span className="glow-badge inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium uppercase tracking-[0.22em]">
+            <Bot className="h-3.5 w-3.5" />
+            多助手协作
+          </span>
+        </motion.div>
+
+        <motion.div
+          className="space-y-4"
+          initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, ease: 'easeOut' }}
         >
-          {t('welcome.subtitle')}
-        </motion.h1>
+          <h1 className="text-5xl font-semibold tracking-[-0.05em] text-foreground md:text-6xl">
+            {t('welcome.subtitle')}
+          </h1>
+          <p className="mx-auto max-w-2xl text-base leading-7 text-muted-foreground md:text-lg">
+            在一个界面里完成对话、调用工具、协作处理和持续执行。
+          </p>
+        </motion.div>
 
         <motion.div
-          className="flex flex-wrap items-center justify-center gap-2.5 max-w-lg w-full"
+          className="mt-10 grid w-full max-w-4xl gap-4 md:grid-cols-3"
           initial="hidden"
           animate="visible"
           variants={{
             hidden: {},
-            visible: { transition: { staggerChildren: 0.1, delayChildren: 0.4 } },
+            visible: { transition: { staggerChildren: 0.1, delayChildren: 0.35 } },
           }}
         >
-          {quickActions.map(({ key, label }) => (
+          {quickActions.map(({ key, label, description, icon: Icon }) => (
             <motion.button
               key={key}
-              className="px-4 py-1.5 rounded-full border border-glass-border text-[13px] font-medium text-foreground/70 hover:bg-white/20 dark:hover:bg-white/10 transition-colors glass-subtle"
+              className="signal-card rounded-3xl px-5 py-5 text-left transition-transform duration-300 hover:-translate-y-1"
               variants={buttonVariants}
               transition={{ duration: 0.4, ease: 'easeOut' }}
             >
-              {label}
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                <Icon className="h-5 w-5" />
+              </div>
+              <div className="mt-4 text-[11px] font-medium uppercase tracking-[0.22em] text-foreground/45">
+                功能
+              </div>
+              <div className="mt-2 text-lg font-medium text-foreground">
+                {label}
+              </div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {description}
+              </p>
             </motion.button>
+          ))}
+        </motion.div>
+
+        <motion.div
+          className="mt-8 flex flex-wrap items-center justify-center gap-3"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: 'easeOut', delay: 0.55 }}
+        >
+          {statusItems.map((item) => (
+            <div
+              key={item.label}
+              className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3 backdrop-blur-md"
+            >
+              <div className="text-[11px] uppercase tracking-[0.22em] text-foreground/45">{item.label}</div>
+              <div className="mt-1 flex items-center gap-2 text-sm font-medium text-foreground/88">
+                <span className="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,0.7)]" />
+                {item.value}
+              </div>
+            </div>
           ))}
         </motion.div>
       </div>
@@ -364,7 +460,7 @@ function AssistantActivityCard({
 
   return (
     <div className="flex gap-3">
-      <div className="relative mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/15 bg-white/40 text-foreground shadow-sm dark:bg-white/[0.10]">
+      <div className="relative mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/15 bg-white/[0.88] text-foreground shadow-sm dark:bg-white/[0.12]">
         <motion.span
           className="absolute inset-0 rounded-full border border-primary/25"
           animate={{ scale: [1, 1.18], opacity: [0.3, 0] }}
@@ -380,7 +476,7 @@ function AssistantActivityCard({
       <div
         className={cn(
           'relative min-w-[280px] overflow-hidden rounded-2xl border px-4 py-3.5 text-foreground shadow-[0_10px_30px_rgba(15,23,42,0.08)]',
-          'bg-white/40 dark:bg-white/[0.10]',
+          assistantChatCardBgStreaming,
           isProcessing ? 'border-primary/15' : 'border-primary/20',
         )}
       >

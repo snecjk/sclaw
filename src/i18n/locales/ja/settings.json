@@ -76,6 +76,7 @@
     },
     "card": {
       "default": "デフォルト",
+      "running": "実行中",
       "configured": "構成済み",
       "noKey": "API キー未設定",
       "none": "なし",
@@ -84,7 +85,8 @@
       "setDefault": "デフォルトに設定",
       "editKey": "API キーを編集",
       "delete": "プロバイダーを削除",
-      "switchModel": "モデルを切替"
+      "switchModel": "モデルを切替",
+      "currentModel": "モデル"
     },
     "protocols": {
       "openai": "OpenAI 互換",

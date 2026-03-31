@@ -15,7 +15,11 @@
         "refresh": "Refresh chat",
         "showThinking": "Show thinking",
         "hideThinking": "Hide thinking",
-        "currentAgent": "Talking to {{agent}}"
+        "currentAgent": "Talking to {{agent}}",
+        "conversationTargetLabel": "Chat agent",
+        "switchAgentAria": "Switch conversation agent",
+        "switchAgentTitle": "Open this agent's main session; new chats stay under this agent",
+        "defaultAgentMark": "(default)"
     },
     "composer": {
         "attachFiles": "Attach files",
@@ -40,6 +44,9 @@
         "processingTitle": "Merging tool results",
         "processingDescription": "Tool output is ready, and the model is assembling it into the final reply.",
         "jumpToLatest": "Jump to latest"
+    },
+    "sessionList": {
+        "mainSessionTitle": "Main chat"
     },
     "historyBuckets": {
         "today": "Today",

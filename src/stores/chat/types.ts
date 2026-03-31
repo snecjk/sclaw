@@ -90,6 +90,8 @@ export interface ChatState {
   // Actions
   loadSessions: () => Promise<void>;
   switchSession: (key: string) => void;
+  /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
+  switchToAgentMainSession: (agentId: string) => void;
   newSession: () => void;
   deleteSession: (key: string) => Promise<void>;
   cleanupEmptySession: () => void;

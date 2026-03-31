@@ -15,7 +15,11 @@
         "refresh": "チャットを更新",
         "showThinking": "思考を表示",
         "hideThinking": "思考を非表示",
-        "currentAgent": "現在の会話相手: {{agent}}"
+        "currentAgent": "現在の会話相手: {{agent}}",
+        "conversationTargetLabel": "会話相手",
+        "switchAgentAria": "会話 Agent を切り替え",
+        "switchAgentTitle": "その Agent のメインセッションに切り替えます。新規チャットもこの Agent 配下になります",
+        "defaultAgentMark": "（既定）"
     },
     "composer": {
         "attachFiles": "ファイルを添付",
@@ -40,6 +44,9 @@
         "processingTitle": "ツール結果を統合しています",
         "processingDescription": "ツールの結果を受け取り、最終的な回答へまとめています。",
         "jumpToLatest": "最新へ戻る"
+    },
+    "sessionList": {
+        "mainSessionTitle": "メインチャット"
     },
     "historyBuckets": {
         "today": "今日",

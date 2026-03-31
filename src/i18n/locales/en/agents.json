@@ -5,6 +5,7 @@
     "addAgent": "Add Agent",
     "gatewayWarning": "Gateway service is not running. Agent/channel changes may take a moment to apply.",
     "defaultBadge": "default",
+    "runningBadge": "Running",
     "inherited": "inherited",
     "none": "none",
     "modelLine": "Model: {{model}}{{suffix}}",

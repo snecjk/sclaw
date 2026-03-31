@@ -1,6 +1,6 @@
 {
     "sidebar": {
-        "chat": "聊天",
+        "chat": "对话",
         "newChat": "新对话",
         "cronTasks": "任务",
         "skills": "技能",
@@ -13,7 +13,10 @@
         "deleteSessionConfirm": "确定要删除对话 \"{{label}}\" 吗？",
         "openClawPage": "OpenClaw 页面",
         "expand": "展开侧边栏",
-        "collapse": "收起侧边栏"
+        "collapse": "收起侧边栏",
+        "emptyChatHistory": "暂无历史会话",
+        "expandHistoryPanel": "展开历史会话",
+        "collapseHistoryPanel": "收起历史会话"
     },
     "actions": {
         "save": "保存",

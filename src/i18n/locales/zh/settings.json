@@ -76,6 +76,7 @@
     },
     "card": {
       "default": "默认",
+      "running": "运行中",
       "configured": "已配置",
       "noKey": "未设置 API 密钥",
       "none": "无",
@@ -84,7 +85,8 @@
       "setDefault": "设为默认",
       "editKey": "编辑 API 密钥",
       "delete": "删除提供商",
-      "switchModel": "切换模型"
+      "switchModel": "切换模型",
+      "currentModel": "当前模型"
     },
     "protocols": {
       "openai": "OpenAI 兼容",

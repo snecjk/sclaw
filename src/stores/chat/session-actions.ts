@@ -1,5 +1,10 @@
 import { invokeIpc } from '@/lib/api-client';
-import { getCanonicalPrefixFromSessions, getMessageText, toMs } from './helpers';
+import {
+  getCanonicalPrefixFromSessions,
+  getMessageText,
+  sanitizeSessionDisplayField,
+  toMs,
+} from './helpers';
 import { DEFAULT_CANONICAL_PREFIX, DEFAULT_SESSION_KEY, type ChatSession, type RawMessage } from './types';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 
@@ -38,14 +43,20 @@ export function createSessionActions(
         if (result.success && result.result) {
           const data = result.result;
           const rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
-          const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => ({
-            key: String(s.key || ''),
-            label: s.label ? String(s.label) : undefined,
-            displayName: s.displayName ? String(s.displayName) : undefined,
-            thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
-            model: s.model ? String(s.model) : undefined,
-            updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
-          })).filter((s: ChatSession) => s.key);
+          const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
+            const key = String(s.key || '');
+            return {
+              key,
+              label: s.label ? String(s.label) : undefined,
+              displayName: sanitizeSessionDisplayField(
+                key,
+                s.displayName ? String(s.displayName) : undefined,
+              ),
+              thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
+              model: s.model ? String(s.model) : undefined,
+              updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
+            };
+          }).filter((s: ChatSession) => s.key);
 
           const canonicalBySuffix = new Map<string, string>();
           for (const session of sessions) {
@@ -84,10 +95,7 @@ export function createSessionActions(
           }
 
           const sessionsWithCurrent = !dedupedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
-            ? [
-              ...dedupedSessions,
-              { key: nextSessionKey, displayName: nextSessionKey },
-            ]
+            ? [...dedupedSessions, { key: nextSessionKey }]
             : dedupedSessions;
 
           const discoveredActivity = Object.fromEntries(
@@ -260,7 +268,7 @@ export function createSessionActions(
         && !sessionLabels[currentSessionKey];
       const prefix = getCanonicalPrefixFromSessions(get().sessions) ?? DEFAULT_CANONICAL_PREFIX;
       const newKey = `${prefix}:session-${Date.now()}`;
-      const newSessionEntry: ChatSession = { key: newKey, displayName: newKey };
+      const newSessionEntry: ChatSession = { key: newKey };
       set((s) => ({
         currentSessionKey: newKey,
         currentAgentId: getAgentIdFromSessionKey(newKey),

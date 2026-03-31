@@ -5,6 +5,7 @@
     "addAgent": "Agent を追加",
     "gatewayWarning": "Gateway サービスが停止しています。Agent または Channel の変更が反映されるまで少し時間がかかる場合があります。",
     "defaultBadge": "default",
+    "runningBadge": "実行中",
     "inherited": "継承",
     "none": "なし",
     "modelLine": "Model: {{model}}{{suffix}}",

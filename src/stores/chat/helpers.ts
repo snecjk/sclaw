@@ -814,6 +814,23 @@ function getLastChatEventAt(): number {
   return _lastChatEventAt;
 }
 
+/** Raw session keys like `agent:main:main` must not be shown as human-readable titles. */
+function looksLikeTechnicalSessionDisplay(value: string): boolean {
+  return /^agent:[^:]+:.+/.test(value.trim());
+}
+
+/** Strip displayName when it is identical to the key or looks like an internal session id. */
+function sanitizeSessionDisplayField(
+  sessionKey: string,
+  displayName: string | undefined,
+): string | undefined {
+  const d = displayName?.trim();
+  if (!d) return undefined;
+  if (d === sessionKey) return undefined;
+  if (looksLikeTechnicalSessionDisplay(d)) return undefined;
+  return d;
+}
+
 export {
   toMs,
   clearErrorRecoveryTimer,
@@ -839,4 +856,6 @@ export {
   setErrorRecoveryTimer,
   setLastChatEventAt,
   getLastChatEventAt,
+  looksLikeTechnicalSessionDisplay,
+  sanitizeSessionDisplayField,
 };

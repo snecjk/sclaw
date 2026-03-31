@@ -76,6 +76,7 @@
     },
     "card": {
       "default": "Default",
+      "running": "Running",
       "configured": "Configured",
       "noKey": "No API key set",
       "none": "None",
@@ -84,7 +85,8 @@
       "setDefault": "Set as default",
       "editKey": "Edit API key",
       "delete": "Delete provider",
-      "switchModel": "Switch model"
+      "switchModel": "Switch model",
+      "currentModel": "Current model"
     },
     "protocols": {
       "openai": "OpenAI Compatible",

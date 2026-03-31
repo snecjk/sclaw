@@ -5,6 +5,7 @@
     "addAgent": "添加 Agent",
     "gatewayWarning": "Gateway 服务未运行。Agent 或频道变更可能需要一点时间生效。",
     "defaultBadge": "默认",
+    "runningBadge": "运行中",
     "inherited": "继承",
     "none": "无",
     "modelLine": "Model: {{model}}{{suffix}}",

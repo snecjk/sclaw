@@ -32,8 +32,8 @@ function createParticles(count: number, w: number, h: number, speed: number): Pa
       y: Math.random() * h,
       vx: Math.cos(angle) * v,
       vy: Math.sin(angle) * v,
-      radius: Math.random() * 1.5 + 1.5,
-      opacity: Math.random() * 0.4 + 0.3,
+      radius: Math.random() * 1.8 + 1.85,
+      opacity: Math.random() * 0.28 + 0.48,
     });
   }
   return particles;
@@ -41,13 +41,13 @@ function createParticles(count: number, w: number, h: number, speed: number): Pa
 
 function readThemeColors(): { dot: string; line: string } {
   const style = getComputedStyle(document.documentElement);
-  const fg = style.getPropertyValue('--foreground').trim();
+  const primary = style.getPropertyValue('--primary').trim();
   const isDark = document.documentElement.classList.contains('dark');
-  const dotAlpha = isDark ? 0.25 : 0.15;
-  const lineAlpha = isDark ? 0.12 : 0.08;
+  const dotAlpha = isDark ? 0.52 : 0.4;
+  const lineAlpha = isDark ? 0.28 : 0.22;
   return {
-    dot: `hsl(${fg} / ${dotAlpha})`,
-    line: `hsl(${fg} / ${lineAlpha})`,
+    dot: `hsl(${primary} / ${dotAlpha})`,
+    line: `hsl(${primary} / ${lineAlpha})`,
   };
 }
 

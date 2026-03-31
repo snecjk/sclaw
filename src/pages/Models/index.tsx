@@ -3,9 +3,12 @@ import { useTranslation } from 'react-i18next';
 import {
   ChevronLeft,
   ChevronRight,
+  Cpu,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { glassNestedCard, glassSectionSurface, glassSegmentTrack } from '@/lib/surfaces';
 import { useGatewayStore } from '@/stores/gateway';
 import { useSettingsStore } from '@/stores/settings';
 import { hostApiFetch } from '@/lib/host-api';
@@ -191,130 +194,143 @@ export function Models() {
   const pagedUsageHistory = filteredUsageHistory.slice((safeUsagePage - 1) * usagePageSize, safeUsagePage * usagePageSize);
   const usageLoading = isGatewayRunning && fetchState.status === 'loading';
 
+  const segmentWrap = glassSegmentTrack;
+  const segmentBtn = (active: boolean) =>
+    cn(
+      'rounded-[6px] px-3 text-[13px] font-medium',
+      active
+        ? 'bg-primary/[0.12] text-foreground shadow-[0_1px_0_hsl(var(--glass-highlight)/0.2)]'
+        : 'text-muted-foreground hover:bg-primary/[0.06] hover:text-foreground',
+    );
+
   return (
-    <div className="flex flex-col -m-6 h-[calc(100vh-2.5rem)] overflow-hidden">
-      <div className="w-full max-w-5xl mx-auto flex flex-col h-full p-10 pt-16">
-        
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-start justify-between mb-12 shrink-0 gap-4">
-          <div>
-            <h1 className="text-5xl md:text-6xl font-serif text-foreground mb-3 font-normal tracking-tight" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
+      <header className="shrink-0 border-b border-primary/10 pb-6">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(56,189,248,0.12)]">
+            <Cpu className="h-5 w-5" strokeWidth={2} />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-[1.65rem]">
               {t('dashboard:models.title')}
             </h1>
-            <p className="text-[17px] text-foreground/70 font-medium">
+            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
               {t('dashboard:models.subtitle')}
             </p>
           </div>
         </div>
+      </header>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto pr-2 pb-10 min-h-0 -mr-2 space-y-12">
-          
-          {/* AI Providers Section */}
+      <div className="flex flex-col gap-10">
+        <section className={glassSectionSurface}>
           <ProvidersSettings />
+        </section>
 
-          {/* Token Usage History Section */}
+        <section className={glassSectionSurface}>
+          <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
+            {t('dashboard:recentTokenHistory.title', 'Token Usage History')}
+          </h2>
           <div>
-            <h2 className="text-3xl font-serif text-foreground mb-6 font-normal tracking-tight" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
-              {t('dashboard:recentTokenHistory.title', 'Token Usage History')}
-            </h2>
-            <div>
-              {usageLoading ? (
-                <div className="flex items-center justify-center py-12 text-muted-foreground bg-black/5 dark:bg-white/5 rounded-3xl border border-transparent border-dashed">
-                  <FeedbackState state="loading" title={t('dashboard:recentTokenHistory.loading')} />
-                </div>
-              ) : visibleUsageHistory.length === 0 ? (
-                <div className="flex items-center justify-center py-12 text-muted-foreground bg-black/5 dark:bg-white/5 rounded-3xl border border-transparent border-dashed">
-                  <FeedbackState state="empty" title={t('dashboard:recentTokenHistory.empty')} />
-                </div>
-              ) : filteredUsageHistory.length === 0 ? (
-                <div className="flex items-center justify-center py-12 text-muted-foreground bg-black/5 dark:bg-white/5 rounded-3xl border border-transparent border-dashed">
-                  <FeedbackState state="empty" title={t('dashboard:recentTokenHistory.emptyForWindow')} />
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className="flex rounded-xl bg-transparent p-1 border border-black/10 dark:border-white/10">
-                        <Button
-                          variant={usageGroupBy === 'model' ? 'secondary' : 'ghost'}
-                          size="sm"
-                          onClick={() => {
-                            setUsageGroupBy('model');
-                            setUsagePage(1);
-                          }}
-                          className={usageGroupBy === 'model' ? "rounded-lg bg-black/5 dark:bg-white/10 text-foreground" : "rounded-lg text-muted-foreground"}
-                        >
-                          {t('dashboard:recentTokenHistory.groupByModel')}
-                        </Button>
-                        <Button
-                          variant={usageGroupBy === 'day' ? 'secondary' : 'ghost'}
-                          size="sm"
-                          onClick={() => {
-                            setUsageGroupBy('day');
-                            setUsagePage(1);
-                          }}
-                          className={usageGroupBy === 'day' ? "rounded-lg bg-black/5 dark:bg-white/10 text-foreground" : "rounded-lg text-muted-foreground"}
-                        >
-                          {t('dashboard:recentTokenHistory.groupByTime')}
-                        </Button>
-                      </div>
-                      <div className="flex rounded-xl bg-transparent p-1 border border-black/10 dark:border-white/10">
-                        <Button
-                          variant={usageWindow === '7d' ? 'secondary' : 'ghost'}
-                          size="sm"
-                          onClick={() => {
-                            setUsageWindow('7d');
-                            setUsagePage(1);
-                          }}
-                          className={usageWindow === '7d' ? "rounded-lg bg-black/5 dark:bg-white/10 text-foreground" : "rounded-lg text-muted-foreground"}
-                        >
-                          {t('dashboard:recentTokenHistory.last7Days')}
-                        </Button>
-                        <Button
-                          variant={usageWindow === '30d' ? 'secondary' : 'ghost'}
-                          size="sm"
-                          onClick={() => {
-                            setUsageWindow('30d');
-                            setUsagePage(1);
-                          }}
-                          className={usageWindow === '30d' ? "rounded-lg bg-black/5 dark:bg-white/10 text-foreground" : "rounded-lg text-muted-foreground"}
-                        >
-                          {t('dashboard:recentTokenHistory.last30Days')}
-                        </Button>
-                        <Button
-                          variant={usageWindow === 'all' ? 'secondary' : 'ghost'}
-                          size="sm"
-                          onClick={() => {
-                            setUsageWindow('all');
-                            setUsagePage(1);
-                          }}
-                          className={usageWindow === 'all' ? "rounded-lg bg-black/5 dark:bg-white/10 text-foreground" : "rounded-lg text-muted-foreground"}
-                        >
-                          {t('dashboard:recentTokenHistory.allTime')}
-                        </Button>
-                      </div>
-                    </div>
-                    <p className="text-[13px] font-medium text-muted-foreground">
-                      {t('dashboard:recentTokenHistory.showingLast', { count: filteredUsageHistory.length })}
-                    </p>
-                  </div>
-
-                  <UsageBarChart
-                    groups={usageGroups}
-                    emptyLabel={t('dashboard:recentTokenHistory.empty')}
-                    totalLabel={t('dashboard:recentTokenHistory.totalTokens')}
-                    inputLabel={t('dashboard:recentTokenHistory.inputShort')}
-                    outputLabel={t('dashboard:recentTokenHistory.outputShort')}
-                    cacheLabel={t('dashboard:recentTokenHistory.cacheShort')}
-                  />
-
-                  <div className="space-y-3 pt-2">
-                    {pagedUsageHistory.map((entry) => (
-                      <div
-                        key={`${entry.sessionId}-${entry.timestamp}`}
-                        className="rounded-2xl bg-transparent border border-black/10 dark:border-white/10 p-5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            {usageLoading ? (
+              <div className="flex items-center justify-center rounded-md border border-dashed border-primary/18 bg-white/50 py-12 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">
+                <FeedbackState state="loading" title={t('dashboard:recentTokenHistory.loading')} />
+              </div>
+            ) : visibleUsageHistory.length === 0 ? (
+              <div className="flex items-center justify-center rounded-md border border-dashed border-primary/18 bg-white/50 py-12 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">
+                <FeedbackState state="empty" title={t('dashboard:recentTokenHistory.empty')} />
+              </div>
+            ) : filteredUsageHistory.length === 0 ? (
+              <div className="flex items-center justify-center rounded-md border border-dashed border-primary/18 bg-white/50 py-12 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">
+                <FeedbackState state="empty" title={t('dashboard:recentTokenHistory.emptyForWindow')} />
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className={segmentWrap}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setUsageGroupBy('model');
+                          setUsagePage(1);
+                        }}
+                        className={segmentBtn(usageGroupBy === 'model')}
                       >
+                        {t('dashboard:recentTokenHistory.groupByModel')}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setUsageGroupBy('day');
+                          setUsagePage(1);
+                        }}
+                        className={segmentBtn(usageGroupBy === 'day')}
+                      >
+                        {t('dashboard:recentTokenHistory.groupByTime')}
+                      </Button>
+                    </div>
+                    <div className={segmentWrap}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setUsageWindow('7d');
+                          setUsagePage(1);
+                        }}
+                        className={segmentBtn(usageWindow === '7d')}
+                      >
+                        {t('dashboard:recentTokenHistory.last7Days')}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setUsageWindow('30d');
+                          setUsagePage(1);
+                        }}
+                        className={segmentBtn(usageWindow === '30d')}
+                      >
+                        {t('dashboard:recentTokenHistory.last30Days')}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setUsageWindow('all');
+                          setUsagePage(1);
+                        }}
+                        className={segmentBtn(usageWindow === 'all')}
+                      >
+                        {t('dashboard:recentTokenHistory.allTime')}
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-[13px] font-medium text-muted-foreground">
+                    {t('dashboard:recentTokenHistory.showingLast', { count: filteredUsageHistory.length })}
+                  </p>
+                </div>
+
+                <UsageBarChart
+                  groups={usageGroups}
+                  emptyLabel={t('dashboard:recentTokenHistory.empty')}
+                  totalLabel={t('dashboard:recentTokenHistory.totalTokens')}
+                  inputLabel={t('dashboard:recentTokenHistory.inputShort')}
+                  outputLabel={t('dashboard:recentTokenHistory.outputShort')}
+                  cacheLabel={t('dashboard:recentTokenHistory.cacheShort')}
+                />
+
+                <div className="space-y-3 pt-2">
+                  {pagedUsageHistory.map((entry) => (
+                    <div
+                      key={`${entry.sessionId}-${entry.timestamp}`}
+                      className={cn(
+                        'rounded-md border border-primary/12 p-4 transition-colors hover:border-primary/18 hover:shadow-md',
+                        glassNestedCard,
+                        'hover:bg-white/80 dark:hover:bg-[hsl(var(--glass-bg)/0.2)]',
+                      )}
+                    >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="font-semibold text-[15px] text-foreground truncate">
@@ -341,56 +357,56 @@ export function Models() {
                             <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-500"></div>{t('dashboard:recentTokenHistory.cacheWrite', { value: formatTokenCount(entry.cacheWriteTokens) })}</span>
                           )}
                           {typeof entry.costUsd === 'number' && Number.isFinite(entry.costUsd) && (
-                            <span className="flex items-center gap-1.5 ml-auto text-foreground/80 bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-md">{t('dashboard:recentTokenHistory.cost', { amount: entry.costUsd.toFixed(4) })}</span>
+                            <span className="ml-auto flex items-center gap-1.5 rounded-md bg-primary/[0.08] px-2 py-0.5 text-foreground/80">
+                              {t('dashboard:recentTokenHistory.cost', { amount: entry.costUsd.toFixed(4) })}
+                            </span>
                           )}
                           {devModeUnlocked && entry.content && (
                             <Button
                               variant="outline"
                               size="sm"
-                              className="h-6 rounded-full px-2.5 text-[11.5px] border-black/10 dark:border-white/10"
+                              className="h-6 rounded-md px-2.5 text-[11.5px] border-primary/15"
                               onClick={() => setSelectedUsageEntry(entry)}
                             >
                               {t('dashboard:recentTokenHistory.viewContent')}
                             </Button>
                           )}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3 pt-2">
-                    <p className="text-[13px] font-medium text-muted-foreground">
-                      {t('dashboard:recentTokenHistory.page', { current: safeUsagePage, total: usageTotalPages })}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setUsagePage((page) => Math.max(1, page - 1))}
-                        disabled={safeUsagePage <= 1}
-                        className="rounded-full px-4 h-9 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5"
-                      >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
-                        {t('dashboard:recentTokenHistory.prev')}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setUsagePage((page) => Math.min(usageTotalPages, page + 1))}
-                        disabled={safeUsagePage >= usageTotalPages}
-                        className="rounded-full px-4 h-9 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5"
-                      >
-                        {t('dashboard:recentTokenHistory.next')}
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
                     </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between gap-3 pt-2">
+                  <p className="text-[13px] font-medium text-muted-foreground">
+                    {t('dashboard:recentTokenHistory.page', { current: safeUsagePage, total: usageTotalPages })}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setUsagePage((page) => Math.max(1, page - 1))}
+                      disabled={safeUsagePage <= 1}
+                      className="h-9 rounded-md border-primary/15 px-4 bg-transparent hover:bg-primary/[0.06]"
+                    >
+                      <ChevronLeft className="mr-1 h-4 w-4" />
+                      {t('dashboard:recentTokenHistory.prev')}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setUsagePage((page) => Math.min(usageTotalPages, page + 1))}
+                      disabled={safeUsagePage >= usageTotalPages}
+                      className="h-9 rounded-md border-primary/15 px-4 bg-transparent hover:bg-primary/[0.06]"
+                    >
+                      {t('dashboard:recentTokenHistory.next')}
+                      <ChevronRight className="ml-1 h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
-
-        </div>
+        </section>
       </div>
       {devModeUnlocked && selectedUsageEntry && (
         <UsageContentPopup
@@ -443,7 +459,7 @@ function UsageBarChart({
 }) {
   if (groups.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-black/10 dark:border-white/10 p-8 text-center text-[14px] font-medium text-muted-foreground">
+      <div className="rounded-md border border-dashed border-primary/18 bg-white/50 p-8 text-center text-[14px] font-medium text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.25)]">
         {emptyLabel}
       </div>
     );
@@ -452,7 +468,7 @@ function UsageBarChart({
   const maxTokens = Math.max(...groups.map((group) => group.totalTokens), 1);
 
   return (
-    <div className="space-y-4 bg-transparent p-5 rounded-2xl border border-black/10 dark:border-white/10">
+    <div className={cn('space-y-4 rounded-md border border-primary/12 p-5', glassNestedCard)}>
       <div className="flex flex-wrap gap-4 text-[13px] font-medium text-muted-foreground mb-2">
         <span className="inline-flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-sky-500" />
@@ -475,9 +491,9 @@ function UsageBarChart({
               {totalLabel}: {formatTokenCount(group.totalTokens)}
             </span>
           </div>
-          <div className="h-3.5 overflow-hidden rounded-full bg-black/5 dark:bg-white/5">
+          <div className="h-3 overflow-hidden rounded-md bg-primary/[0.08]">
             <div
-              className="flex h-full overflow-hidden rounded-full"
+              className="flex h-full overflow-hidden rounded-md"
               style={{
                 width: group.totalTokens > 0
                   ? `${Math.max((group.totalTokens / maxTokens) * 100, 6)}%`
@@ -526,8 +542,8 @@ function UsageContentPopup({
   unknownModelLabel: string;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 backdrop-blur-sm px-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-3xl rounded-2xl border border-glass-border glass-panel shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm dark:bg-black/60" role="dialog" aria-modal="true">
+      <div className="glass-panel w-full max-w-3xl rounded-lg border border-glass-border shadow-xl">
         <div className="flex items-start justify-between gap-3 border-b border-glass-border px-5 py-4">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">{title}</p>
@@ -538,7 +554,7 @@ function UsageContentPopup({
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 rounded-full"
+            className="h-8 w-8 rounded-md"
             onClick={onClose}
             aria-label={closeLabel}
           >

@@ -413,10 +413,16 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
         {/* Input Row */}
         <div
           className={cn(
-            'relative overflow-hidden rounded-[26px] border bg-white shadow-[0_6px_22px_rgba(99,102,241,0.08)] transition-all dark:bg-[#131a24]',
+            'relative overflow-hidden rounded-2xl border bg-white shadow-[0_4px_14px_rgba(99,102,241,0.05)] transition-[box-shadow,border-color,ring-width,ring-color] duration-200 dark:bg-[#131a24]',
             dragOver
               ? 'border-primary/60 ring-2 ring-primary/18'
-              : 'border-primary/40 ring-1 ring-primary/18 dark:border-primary/30 dark:ring-primary/12',
+              : [
+                  'border-primary/40 ring-1 ring-primary/18 dark:border-primary/30 dark:ring-primary/12',
+                  'focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/22',
+                  'focus-within:shadow-[0_0_0_1px_rgba(56,189,248,0.06),0_0_20px_rgba(56,189,248,0.12),0_0_48px_rgba(56,189,248,0.06)]',
+                  'dark:focus-within:border-primary/40 dark:focus-within:ring-primary/28',
+                  'dark:focus-within:shadow-[0_0_0_1px_rgba(125,211,252,0.08),0_0_24px_rgba(56,189,248,0.16),0_0_56px_rgba(56,189,248,0.08)]',
+                ],
           )}
         >
           {selectedTarget && (

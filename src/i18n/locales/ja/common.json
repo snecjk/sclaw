@@ -13,7 +13,10 @@
         "deleteSessionConfirm": "セッション \"{{label}}\" を削除してもよろしいですか？",
         "openClawPage": "OpenClaw ページ",
         "expand": "サイドバーを展開",
-        "collapse": "サイドバーを折りたたむ"
+        "collapse": "サイドバーを折りたたむ",
+        "emptyChatHistory": "会話履歴はありません",
+        "expandHistoryPanel": "履歴パネルを開く",
+        "collapseHistoryPanel": "履歴パネルを閉じる"
     },
     "actions": {
         "save": "保存",

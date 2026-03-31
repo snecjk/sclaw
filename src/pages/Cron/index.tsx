@@ -31,6 +31,7 @@ import { useCronStore } from '@/stores/cron';
 import { useGatewayStore } from '@/stores/gateway';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { formatRelativeTime, cn } from '@/lib/utils';
+import { glassNestedCard, glassSectionSurface } from '@/lib/surfaces';
 import { toast } from 'sonner';
 import type { CronJob, CronJobCreateInput, ScheduleType } from '@/types/cron';
 import { CHANNEL_ICONS, type ChannelType } from '@/types/channel';
@@ -319,7 +320,7 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
           </div>
 
           {/* Enabled */}
-          <div className="flex items-center justify-between bg-[hsl(var(--glass-bg)/0.5)] p-4 rounded-2xl shadow-sm border border-glass-border">
+          <div className="flex items-center justify-between rounded-2xl border border-glass-border bg-white/75 p-4 shadow-sm dark:bg-[hsl(var(--glass-bg)/0.5)]">
             <div>
               <Label className="text-[14px] text-foreground/80 font-bold">{t('dialog.enableImmediately')}</Label>
               <p className="text-[13px] text-muted-foreground mt-0.5">
@@ -388,12 +389,15 @@ function CronJobCard({ job, onToggle, onEdit, onDelete, onTrigger }: CronJobCard
 
   return (
     <div
-      className="group flex flex-col p-5 rounded-2xl bg-transparent border border-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-all relative overflow-hidden cursor-pointer"
+      className={cn(
+        'group relative flex cursor-pointer flex-col rounded-md border border-primary/12 p-4 transition-colors hover:border-primary/18 hover:shadow-md',
+        glassNestedCard,
+      )}
       onClick={onEdit}
     >
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-4">
-          <div className="h-[46px] w-[46px] shrink-0 flex items-center justify-center text-foreground bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-full shadow-sm group-hover:scale-105 transition-transform">
+      <div className="mb-4 flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/12 bg-primary/[0.06] text-foreground shadow-sm transition-transform group-hover:scale-[1.02]">
             <Clock className={cn("h-5 w-5", job.enabled ? "text-foreground" : "text-muted-foreground")} />
           </div>
           <div className="flex flex-col min-w-0">
@@ -422,7 +426,7 @@ function CronJobCard({ job, onToggle, onEdit, onDelete, onTrigger }: CronJobCard
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col justify-end mt-2 pl-[62px]">
+      <div className="mt-2 flex flex-1 flex-col justify-end pl-14">
         <div className="flex items-start gap-2 mb-3">
           <MessageSquare className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
           <p className="text-[13.5px] text-muted-foreground line-clamp-2 leading-[1.5]">
@@ -542,33 +546,39 @@ export function Cron() {
 
   if (loading) {
     return (
-      <div className="flex flex-col -m-6 min-h-[calc(100vh-2.5rem)] items-center justify-center">
-        <LoadingSpinner size="lg" />
+      <div className="mx-auto flex w-full max-w-5xl flex-col pb-10">
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <LoadingSpinner size="lg" />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col -m-6 h-[calc(100vh-2.5rem)] overflow-hidden">
-      <div className="w-full max-w-5xl mx-auto flex flex-col h-full p-10 pt-16">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-start justify-between mb-12 shrink-0 gap-4">
-          <div>
-            <h1 className="text-5xl md:text-6xl font-serif text-foreground mb-3 font-normal tracking-tight" style={{ fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif' }}>
-              {t('title')}
-            </h1>
-            <p className="text-[17px] text-foreground/70 font-medium">
-              {t('subtitle')}
-            </p>
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
+      <header className="shrink-0 border-b border-primary/10 pb-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(56,189,248,0.12)]">
+              <Timer className="h-5 w-5" strokeWidth={2} />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-[1.65rem]">
+                {t('title')}
+              </h1>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                {t('subtitle')}
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-3 md:mt-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:pt-0.5">
             <Button
               variant="outline"
               onClick={fetchJobs}
               disabled={!isGatewayRunning}
-              className="h-9 text-[13px] font-medium rounded-full px-4 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-foreground/80 hover:text-foreground transition-colors"
+              className="h-9 rounded-md border-glass-border bg-transparent px-4 text-[13px] font-medium shadow-none hover:bg-[hsl(var(--glass-bg)/0.35)]"
             >
-              <RefreshCw className="h-3.5 w-3.5 mr-2" />
+              <RefreshCw className="mr-2 h-4 w-4" />
               {t('refresh')}
             </Button>
             <Button
@@ -577,93 +587,105 @@ export function Cron() {
                 setShowDialog(true);
               }}
               disabled={!isGatewayRunning}
-              className="h-9 text-[13px] font-medium rounded-full px-4 shadow-none"
+              className="h-9 rounded-md px-4 text-[13px] font-medium shadow-none"
             >
-              <Plus className="h-3.5 w-3.5 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
               {t('newTask')}
             </Button>
           </div>
         </div>
+      </header>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto pr-2 pb-10 min-h-0 -mr-2">
-          {/* Gateway Warning */}
-          {!isGatewayRunning && (
-            <div className="mb-8 p-4 rounded-xl border border-yellow-500/50 bg-yellow-500/10 flex items-center gap-3">
-              <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-              <span className="text-yellow-700 dark:text-yellow-400 text-sm font-medium">
-                {t('gatewayWarning')}
-              </span>
-            </div>
-          )}
+      <div className="flex flex-col gap-6">
+        {!isGatewayRunning && (
+          <div className="flex items-center gap-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-4">
+            <AlertCircle className="h-5 w-5 shrink-0 text-yellow-600 dark:text-yellow-400" />
+            <span className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
+              {t('gatewayWarning')}
+            </span>
+          </div>
+        )}
 
-          {/* Error Display */}
-          {error && (
-            <div className="mb-8 p-4 rounded-xl border border-destructive/50 bg-destructive/10 flex items-center gap-3">
-              <AlertCircle className="h-5 w-5 text-destructive" />
-              <span className="text-destructive text-sm font-medium">
-                {error}
-              </span>
-            </div>
-          )}
+        {error && (
+          <div className="flex items-center gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-4">
+            <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
+            <span className="text-sm font-medium text-destructive">{error}</span>
+          </div>
+        )}
 
-          {/* Statistics */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <div className="p-5 rounded-[24px] bg-black/5 dark:bg-white/5 border border-transparent flex flex-col justify-between min-h-[130px] relative overflow-hidden group hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Clock className="h-5 w-5 text-primary" />
-                </div>
+        <section className={glassSectionSurface}>
+          <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+            <div
+              className={cn(
+                'flex min-h-[112px] flex-col justify-between rounded-lg border border-primary/10 p-4 transition-colors hover:border-primary/18 hover:shadow-md',
+                glassNestedCard,
+              )}
+            >
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
+                <Clock className="h-4 w-4 text-primary" />
               </div>
-              <div className="mt-4 flex items-baseline gap-3">
-                <p className="text-[40px] leading-none font-serif text-foreground">{safeJobs.length}</p>
-                <p className="text-[14px] font-medium text-muted-foreground">{t('stats.total')}</p>
-              </div>
-            </div>
-
-            <div className="p-5 rounded-[24px] bg-black/5 dark:bg-white/5 border border-transparent flex flex-col justify-between min-h-[130px] relative overflow-hidden group hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="h-11 w-11 rounded-full bg-green-500/10 flex items-center justify-center">
-                  <Play className="h-5 w-5 text-green-600 dark:text-green-500 ml-0.5" />
-                </div>
-              </div>
-              <div className="mt-4 flex items-baseline gap-3">
-                <p className="text-[40px] leading-none font-serif text-foreground">{activeJobs.length}</p>
-                <p className="text-[14px] font-medium text-muted-foreground">{t('stats.active')}</p>
+              <div className="mt-3 flex items-baseline gap-2">
+                <p className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{safeJobs.length}</p>
+                <p className="text-[13px] font-medium text-muted-foreground">{t('stats.total')}</p>
               </div>
             </div>
 
-            <div className="p-5 rounded-[24px] bg-black/5 dark:bg-white/5 border border-transparent flex flex-col justify-between min-h-[130px] relative overflow-hidden group hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="h-11 w-11 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                  <Pause className="h-5 w-5 text-yellow-600 dark:text-yellow-500" />
-                </div>
+            <div
+              className={cn(
+                'flex min-h-[112px] flex-col justify-between rounded-lg border border-primary/10 p-4 transition-colors hover:border-primary/18 hover:shadow-md',
+                glassNestedCard,
+              )}
+            >
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-green-500/10">
+                <Play className="ml-0.5 h-4 w-4 text-green-600 dark:text-green-500" />
               </div>
-              <div className="mt-4 flex items-baseline gap-3">
-                <p className="text-[40px] leading-none font-serif text-foreground">{pausedJobs.length}</p>
-                <p className="text-[14px] font-medium text-muted-foreground">{t('stats.paused')}</p>
+              <div className="mt-3 flex items-baseline gap-2">
+                <p className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{activeJobs.length}</p>
+                <p className="text-[13px] font-medium text-muted-foreground">{t('stats.active')}</p>
               </div>
             </div>
 
-            <div className="p-5 rounded-[24px] bg-black/5 dark:bg-white/5 border border-transparent flex flex-col justify-between min-h-[130px] relative overflow-hidden group hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="h-11 w-11 rounded-full bg-destructive/10 flex items-center justify-center">
-                  <XCircle className="h-5 w-5 text-destructive" />
-                </div>
+            <div
+              className={cn(
+                'flex min-h-[112px] flex-col justify-between rounded-lg border border-primary/10 p-4 transition-colors hover:border-primary/18 hover:shadow-md',
+                glassNestedCard,
+              )}
+            >
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-yellow-500/10">
+                <Pause className="h-4 w-4 text-yellow-600 dark:text-yellow-500" />
               </div>
-              <div className="mt-4 flex items-baseline gap-3">
-                <p className="text-[40px] leading-none font-serif text-foreground">{failedJobs.length}</p>
-                <p className="text-[14px] font-medium text-muted-foreground">{t('stats.failed')}</p>
+              <div className="mt-3 flex items-baseline gap-2">
+                <p className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{pausedJobs.length}</p>
+                <p className="text-[13px] font-medium text-muted-foreground">{t('stats.paused')}</p>
+              </div>
+            </div>
+
+            <div
+              className={cn(
+                'flex min-h-[112px] flex-col justify-between rounded-lg border border-primary/10 p-4 transition-colors hover:border-primary/18 hover:shadow-md',
+                glassNestedCard,
+              )}
+            >
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-destructive/10">
+                <XCircle className="h-4 w-4 text-destructive" />
+              </div>
+              <div className="mt-3 flex items-baseline gap-2">
+                <p className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{failedJobs.length}</p>
+                <p className="text-[13px] font-medium text-muted-foreground">{t('stats.failed')}</p>
               </div>
             </div>
           </div>
 
-          {/* Jobs List */}
           {safeJobs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground bg-black/5 dark:bg-white/5 rounded-3xl border border-transparent border-dashed">
-              <Clock className="h-10 w-10 mb-4 opacity-50" />
-              <h3 className="text-lg font-medium mb-2 text-foreground">{t('empty.title')}</h3>
-              <p className="text-[14px] text-center mb-6 max-w-md">
+            <div
+              className={cn(
+                'flex flex-col items-center justify-center rounded-md border border-dashed border-primary/18 py-16 text-muted-foreground',
+                glassNestedCard,
+              )}
+            >
+              <Clock className="mb-4 h-10 w-10 opacity-50" />
+              <h3 className="mb-2 text-lg font-medium text-foreground">{t('empty.title')}</h3>
+              <p className="mb-6 max-w-md text-center text-[14px]">
                 {t('empty.description')}
               </p>
               <Button
@@ -672,14 +694,14 @@ export function Cron() {
                   setShowDialog(true);
                 }}
                 disabled={!isGatewayRunning}
-                className="rounded-full px-6 h-10"
+                className="h-9 rounded-md px-4 text-[13px] font-medium shadow-none"
               >
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="mr-2 h-4 w-4" />
                 {t('empty.create')}
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
               {safeJobs.map((job) => (
                 <CronJobCard
                   key={job.id}
@@ -695,8 +717,7 @@ export function Cron() {
               ))}
             </div>
           )}
-
-        </div>
+        </section>
       </div>
 
       {/* Create/Edit Dialog */}
