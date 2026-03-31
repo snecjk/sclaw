@@ -47,7 +47,7 @@ export async function exchangeCodeForUser(
     getRoles: 'false',
     getModules: 'false',
   });
-  const url = `${baseUrl}/WebAPIV46/API/LogOn/LogOnStoTokenByAuthorizationCode?${params.toString()}`;
+  const url = `${baseUrl}/WebAPIV46/API/LogOn/logOnByAuthorizationCodeForClaw?${params.toString()}`;
 
   const response = await proxyAwareFetch(url, {
     method: 'POST',
