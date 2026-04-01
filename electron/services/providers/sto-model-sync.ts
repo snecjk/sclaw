@@ -36,7 +36,7 @@ const STO_DOMAINS: Record<string, string> = {
   'daily-external': 'https://baseinfo-aimemory-test.sto.cn/agent',
   'pre-release': 'https://pre-baseinfo-aimemory.sto.cn/agent',
 };
-const STO_DOMAIN_DEFAULT = 'https://baseinfo-aimemory.sto.cn';
+const STO_DOMAIN_DEFAULT = 'https://baseinfo-aimemory.sto.cn/agent';
 
 /** Standard OpenAI-compatible model list path. */
 const STO_MODEL_LIST_PATH = '/v1/models';
