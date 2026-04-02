@@ -35,6 +35,8 @@ interface UpdateState {
   updateInfo: UpdateInfo | null;
   progress: ProgressInfo | null;
   error: string | null;
+  /** Server gray: no update offered for this account */
+  policyBlocked: boolean;
   isInitialized: boolean;
   /** Seconds remaining before auto-install, or null if inactive. */
   autoInstallCountdown: number | null;
@@ -56,6 +58,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   updateInfo: null,
   progress: null,
   error: null,
+  policyBlocked: false,
   isInitialized: false,
   autoInstallCountdown: null,
 
@@ -77,12 +80,14 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         info?: UpdateInfo;
         progress?: ProgressInfo;
         error?: string;
+        policyBlocked?: boolean;
       }>('update:status');
       set({
         status: status.status,
         updateInfo: status.info || null,
         progress: status.progress || null,
         error: status.error || null,
+        policyBlocked: Boolean(status.policyBlocked),
       });
     } catch (error) {
       console.error('Failed to get update status:', error);
@@ -97,12 +102,14 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         info?: UpdateInfo;
         progress?: ProgressInfo;
         error?: string;
+        policyBlocked?: boolean;
       };
       set({
         status: status.status,
         updateInfo: status.info || null,
         progress: status.progress || null,
         error: status.error || null,
+        policyBlocked: Boolean(status.policyBlocked),
       });
     });
 
@@ -130,7 +137,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   },
 
   checkForUpdates: async () => {
-    set({ status: 'checking', error: null });
+    set({ status: 'checking', error: null, policyBlocked: false });
     
     try {
       const result = await Promise.race([
@@ -144,6 +151,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
           info?: UpdateInfo;
           progress?: ProgressInfo;
           error?: string;
+          policyBlocked?: boolean;
         };
       };
       
@@ -153,18 +161,27 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
           updateInfo: result.status.info || null,
           progress: result.status.progress || null,
           error: result.status.error || null,
+          policyBlocked: Boolean(result.status.policyBlocked),
         });
       } else if (!result.success) {
-        set({ status: 'error', error: result.error || 'Failed to check for updates' });
+        set({
+          status: 'error',
+          error: result.error || 'Failed to check for updates',
+          policyBlocked: false,
+        });
       }
     } catch (error) {
-      set({ status: 'error', error: String(error) });
+      set({ status: 'error', error: String(error), policyBlocked: false });
     } finally {
       // In dev mode autoUpdater skips without emitting events, so the
       // status may still be 'checking' or even 'idle'. Catch both.
       const currentStatus = get().status;
       if (currentStatus === 'checking' || currentStatus === 'idle') {
-        set({ status: 'error', error: 'Update check completed without a result. This usually means the app is running in dev mode.' });
+        set({
+          status: 'error',
+          error: 'Update check completed without a result. This usually means the app is running in dev mode.',
+          policyBlocked: false,
+        });
       }
     }
   },

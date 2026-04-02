@@ -66,7 +66,7 @@ interface SettingsState {
 }
 
 const defaultSettings = {
-  theme: 'system' as Theme,
+  theme: 'dark' as Theme,
   language: resolveSupportedLanguage(typeof navigator !== 'undefined' ? navigator.language : undefined),
   startMinimized: false,
   launchAtStartup: false,
@@ -82,8 +82,8 @@ const defaultSettings = {
   proxyAllServer: '',
   proxyBypassRules: '<local>;localhost;127.0.0.1;::1',
   updateChannel: 'stable' as UpdateChannel,
-  autoCheckUpdate: false,
-  autoDownloadUpdate: false,
+  autoCheckUpdate: true,
+  autoDownloadUpdate: true,
   sidebarCollapsed: false,
   devModeUnlocked: false,
   setupComplete: false,
@@ -166,8 +166,20 @@ export const useSettingsStore = create<SettingsState>()(
       setProxyAllServer: (proxyAllServer) => set({ proxyAllServer }),
       setProxyBypassRules: (proxyBypassRules) => set({ proxyBypassRules }),
       setUpdateChannel: (updateChannel) => set({ updateChannel }),
-      setAutoCheckUpdate: (autoCheckUpdate) => set({ autoCheckUpdate }),
-      setAutoDownloadUpdate: (autoDownloadUpdate) => set({ autoDownloadUpdate }),
+      setAutoCheckUpdate: (autoCheckUpdate) => {
+        set({ autoCheckUpdate });
+        void hostApiFetch('/api/settings', {
+          method: 'PUT',
+          body: JSON.stringify({ autoCheckUpdate }),
+        }).catch(() => {});
+      },
+      setAutoDownloadUpdate: (autoDownloadUpdate) => {
+        set({ autoDownloadUpdate });
+        void hostApiFetch('/api/settings', {
+          method: 'PUT',
+          body: JSON.stringify({ autoDownloadUpdate }),
+        }).catch(() => {});
+      },
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       setDevModeUnlocked: (devModeUnlocked) => {
         set({ devModeUnlocked });
@@ -181,6 +193,18 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'stoclaw-settings',
+      version: 1,
+      migrate: (persisted, fromVersion) => {
+        const p = (persisted ?? {}) as Record<string, unknown>;
+        if (fromVersion === 0) {
+          return {
+            ...p,
+            autoCheckUpdate: true,
+            autoDownloadUpdate: true,
+          };
+        }
+        return persisted;
+      },
     }
   )
 );

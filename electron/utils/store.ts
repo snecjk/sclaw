@@ -47,6 +47,8 @@ export interface AppSettings {
   autoCheckUpdate: boolean;
   autoDownloadUpdate: boolean;
   skippedVersions: string[];
+  /** Set by main after one-shot migration to default-on update prefs */
+  _updatePrefsMigrationV1?: boolean;
 
   // UI State
   sidebarCollapsed: boolean;
@@ -74,7 +76,7 @@ function getSystemLocale(): string {
 function createDefaultSettings(): AppSettings {
   return {
     // General
-    theme: 'system',
+    theme: 'dark',
     language: resolveSupportedLanguage(getSystemLocale()),
     startMinimized: false,
     launchAtStartup: false,
@@ -97,8 +99,8 @@ function createDefaultSettings(): AppSettings {
 
     // Update
     updateChannel: 'stable',
-    autoCheckUpdate: false,
-    autoDownloadUpdate: false,
+    autoCheckUpdate: true,
+    autoDownloadUpdate: true,
     skippedVersions: [],
 
     // UI State
@@ -122,6 +124,13 @@ async function getSettingsStore() {
       name: 'settings',
       defaults: createDefaultSettings(),
     });
+    const store = settingsStoreInstance;
+    // Old installs persisted false; defaults alone do not overwrite. One-shot: turn on + mark done.
+    if (!store.has('_updatePrefsMigrationV1')) {
+      store.set('autoCheckUpdate', true);
+      store.set('autoDownloadUpdate', true);
+      store.set('_updatePrefsMigrationV1', true);
+    }
   }
   return settingsStoreInstance;
 }
@@ -146,11 +155,13 @@ export async function setSetting<K extends keyof AppSettings>(
 }
 
 /**
- * Get all settings
+ * Get all settings (omit internal migration flags from API surface)
  */
 export async function getAllSettings(): Promise<AppSettings> {
   const store = await getSettingsStore();
-  return store.store;
+  const all = { ...store.store } as AppSettings & { _updatePrefsMigrationV1?: boolean };
+  delete all._updatePrefsMigrationV1;
+  return all;
 }
 
 /**

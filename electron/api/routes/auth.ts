@@ -4,6 +4,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'http';
+import { app } from 'electron';
 import { getAuthState, setAuthUser, clearAuthUser, getSsoEnvironment, setSsoEnvironment } from '../../utils/auth-store';
 import type { SsoEnvironment } from '../../utils/auth-store';
 import { getBaseUrl, signOut } from '../../utils/sso-service';
@@ -12,6 +13,7 @@ import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { logger } from '../../utils/logger';
 import { getStoModelSyncService } from '../../services/providers/sto-model-sync';
+import { runPendingInstallReport } from '../../services/client-update-platform';
 
 const ssoLoginManager = new SsoLoginManager();
 
@@ -49,6 +51,8 @@ export async function handleAuthRoutes(
 
       const user = await ssoLoginManager.startLogin(env, ctx.mainWindow);
       await setAuthUser(user);
+
+      void runPendingInstallReport(app.getVersion(), process.platform);
 
       // Trigger STO model sync after successful login (fire-and-forget)
       const stoSync = getStoModelSyncService();

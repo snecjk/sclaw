@@ -25,6 +25,7 @@ export function UpdateSettings() {
     updateInfo,
     progress,
     error,
+    policyBlocked,
     isInitialized,
     autoInstallCountdown,
     init,
@@ -77,7 +78,9 @@ export function UpdateSettings() {
       case 'error':
         return error || t('updates.status.failed');
       case 'not-available':
-        return t('updates.status.latest');
+        return policyBlocked
+          ? t('updates.status.policyBlocked')
+          : t('updates.status.latest');
       default:
         return t('updates.status.check');
     }

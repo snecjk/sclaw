@@ -129,34 +129,56 @@ if (process.platform === 'linux') {
 // same port, then each treats the other's gateway as "orphaned" and kills
 // it - creating an infinite kill/restart loop on Windows.
 // The losing process must exit immediately so it never reaches Gateway startup.
-const gotElectronLock = app.requestSingleInstanceLock();
+const devSkipSingleInstance =
+  !app.isPackaged && process.env.STOCLAW_DEV_SKIP_SINGLE_INSTANCE === '1';
+
+let gotElectronLock = true;
+if (!devSkipSingleInstance) {
+  gotElectronLock = app.requestSingleInstanceLock();
+} else {
+  console.warn(
+    '[StoClaw] STOCLAW_DEV_SKIP_SINGLE_INSTANCE=1 — 允许多开；多个实例可能争抢网关端口 18789，仅用于调试',
+  );
+}
+
 if (!gotElectronLock) {
-  console.info('[StoClaw] Another instance already holds the single-instance lock; exiting duplicate process');
+  console.info(
+    [
+      '[StoClaw] 已有实例占用单实例锁，本进程退出。',
+      '若已关掉窗口仍如此：macOS 上主窗口可能只是隐藏到托盘，请在托盘退出或 Cmd+Q 完全退出；',
+      '或执行 pkill -f "[Ee]lectron.*stoclaw" / 活动监视器结束 StoClaw；',
+      '开发调试可设环境变量 STOCLAW_DEV_SKIP_SINGLE_INSTANCE=1 再 pnpm dev。',
+    ].join(' '),
+  );
   app.exit(0);
 }
 let releaseProcessInstanceFileLock: () => void = () => {};
 let gotFileLock = true;
 if (gotElectronLock) {
-  try {
-    const fileLock = acquireProcessInstanceFileLock({
-      userDataDir: app.getPath('userData'),
-      lockName: 'stoclaw',
-    });
-    gotFileLock = fileLock.acquired;
-    releaseProcessInstanceFileLock = fileLock.release;
-    if (!fileLock.acquired) {
-      const ownerDescriptor = fileLock.ownerPid
-        ? `${fileLock.ownerFormat ?? 'legacy'} pid=${fileLock.ownerPid}`
-        : fileLock.ownerFormat === 'unknown'
-          ? 'unknown lock format/content'
-          : 'unknown owner';
-      console.info(
-        `[StoClaw] Another instance already holds process lock (${fileLock.lockPath}, ${ownerDescriptor}); exiting duplicate process`,
-      );
-      app.exit(0);
+  if (devSkipSingleInstance) {
+    gotFileLock = true;
+  } else {
+    try {
+      const fileLock = acquireProcessInstanceFileLock({
+        userDataDir: app.getPath('userData'),
+        lockName: 'stoclaw',
+      });
+      gotFileLock = fileLock.acquired;
+      releaseProcessInstanceFileLock = fileLock.release;
+      if (!fileLock.acquired) {
+        const ownerDescriptor = fileLock.ownerPid
+          ? `${fileLock.ownerFormat ?? 'legacy'} pid=${fileLock.ownerPid}`
+          : fileLock.ownerFormat === 'unknown'
+            ? 'unknown lock format/content'
+            : 'unknown owner';
+        console.info(
+          `[StoClaw] Another instance already holds process lock (${fileLock.lockPath}, ${ownerDescriptor}); exiting duplicate process`,
+        );
+        app.exit(0);
+      }
+    } catch (error) {
+      console.warn('[StoClaw] Failed to acquire process instance file lock; continuing with Electron single-instance lock only', error);
     }
-  } catch (error) {
-    console.warn('[StoClaw] Failed to acquire process instance file lock; continuing with Electron single-instance lock only', error);
   }
 }
 const gotTheLock = gotElectronLock && gotFileLock;
@@ -294,6 +316,12 @@ function createMainWindow(): BrowserWindow {
   });
 
   win.on('close', (event) => {
+    // 开发包：关闭主窗口即退出进程，释放单实例锁；否则 macOS 上仅隐藏到托盘，
+    // 再跑 pnpm dev 会误判为第二实例而无法启动。
+    if (!app.isPackaged) {
+      setQuitting();
+      return;
+    }
     if (!isQuitting()) {
       event.preventDefault();
       win.hide();
@@ -303,6 +331,9 @@ function createMainWindow(): BrowserWindow {
   win.on('closed', () => {
     if (mainWindow === win) {
       mainWindow = null;
+    }
+    if (!app.isPackaged) {
+      app.quit();
     }
   });
 
@@ -657,6 +688,9 @@ if (gotTheLock) {
   // Application lifecycle
   app.whenReady().then(() => {
     _ts('app.whenReady() resolved');
+    void import('../services/client-update-platform').then(({ runPendingInstallReport }) =>
+      runPendingInstallReport(app.getVersion(), process.platform),
+    );
     void initialize().catch((error) => {
       logger.error('Application initialization failed:', error);
     });

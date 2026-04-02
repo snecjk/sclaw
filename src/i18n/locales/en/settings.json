@@ -171,6 +171,7 @@
       "autoInstalling": "Restarting to install update in {{seconds}}s...",
       "failed": "Update check failed",
       "latest": "You have the latest version",
+      "policyBlocked": "No update is offered for your account under the current release policy (e.g. gray release). Try again later.",
       "check": "Check for updates to get the latest features"
     },
     "action": {

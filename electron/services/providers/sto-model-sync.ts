@@ -22,6 +22,7 @@ import {
   syncProviderApiKeyToRuntime,
 } from './provider-runtime-sync';
 import { logger } from '../../utils/logger';
+import { buildStoMemoryCenterAuthHeaders } from '../../utils/sto-memory-api-auth';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -96,8 +97,7 @@ export class StoModelSyncService {
 
   /**
    * Fetch model list from the STO API using standard OpenAI /v1/models
-   * endpoint. Sends both stotoken header and Authorization: Bearer for
-   * compatibility.
+   * endpoint. Auth headers 与 client-update 等 Memory Center API 共用 buildStoMemoryCenterAuthHeaders。
    */
   async fetchRemoteModels(
     domain: string,
@@ -107,10 +107,7 @@ export class StoModelSyncService {
     logger.info(`[sto-sync] Fetching remote models: url=${url}`);
 
     const response = await fetch(url, {
-      headers: {
-        stotoken: token,
-        Authorization: `Bearer ${token}`,
-      },
+      headers: buildStoMemoryCenterAuthHeaders(token),
     });
 
     if (!response.ok) {

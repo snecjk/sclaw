@@ -171,6 +171,7 @@
       "autoInstalling": "将在 {{seconds}} 秒后重启并安装更新...",
       "failed": "检查更新失败",
       "latest": "您已拥有最新版本",
+      "policyBlocked": "当前发布策略下暂无向您推送的更新（灰度中请稍后再试）",
       "check": "检查更新以获取最新功能"
     },
     "action": {

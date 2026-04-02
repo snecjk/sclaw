@@ -2,24 +2,32 @@
  * Auto-Updater Module
  * Handles automatic application updates using electron-updater
  *
- * Update providers are configured in electron-builder.yml (OSS primary, GitHub fallback).
- * For prerelease channels (alpha, beta), the feed URL is overridden at runtime
- * to point at the channel-specific OSS directory (e.g. /alpha/, /beta/).
+ * When packaged and the user has a valid stoToken, the feed URL is resolved via
+ * memory-center POST /api/v1/client-updates/resolve (gray / cohort). Otherwise
+ * falls back to built-in OSS paths (electron-builder.yml + OSS_BASE_URL).
  */
 import { autoUpdater, UpdateInfo, ProgressInfo, UpdateDownloadedEvent } from 'electron-updater';
 import { BrowserWindow, app, ipcMain } from 'electron';
 import { logger } from '../utils/logger';
 import { EventEmitter } from 'events';
 import { setQuitting } from './app-state';
+import { getSsoEnvironment, getStoToken } from '../utils/auth-store';
+import {
+  resolveUpdatePolicy,
+  sendClientUpdateEventsFireAndForget,
+  writePendingInstallReport,
+} from '../services/client-update-platform';
 
-/** Base CDN URL (without trailing channel path) */
-const OSS_BASE_URL = 'https://oss.intelli-spectrum.com';
+/** 公网 OSS 根（与 memory-center client.update.oss.public.base 一致；无尾斜杠；channel 如 latest 拼在路径上） */
+const OSS_BASE_URL = 'https://ali-sto-wisdom-star.aliyuncs.com';
 
 export interface UpdateStatus {
   status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
   info?: UpdateInfo;
   progress?: ProgressInfo;
   error?: string;
+  /** Server gray: update_offered false — do not use public feed (UI copy differs from "latest") */
+  policyBlocked?: boolean;
 }
 
 export interface UpdaterEvents {
@@ -41,11 +49,18 @@ function detectChannel(version: string): string {
   return match ? match[1] : 'latest';
 }
 
+function builtInFeedForVersion(version: string): { url: string; channel: string } {
+  const channel = detectChannel(version);
+  return { url: `${OSS_BASE_URL}/${channel}`, channel };
+}
+
 export class AppUpdater extends EventEmitter {
   private mainWindow: BrowserWindow | null = null;
   private status: UpdateStatus = { status: 'idle' };
   private autoInstallTimer: NodeJS.Timeout | null = null;
   private autoInstallCountdown = 0;
+  /** Last server resolve feed_slug (telemetry) */
+  private lastFeedSlug: string | null = null;
 
   /** Delay (in seconds) before auto-installing a downloaded update. */
   private static readonly AUTO_INSTALL_DELAY_SECONDS = 5;
@@ -53,15 +68,13 @@ export class AppUpdater extends EventEmitter {
   constructor() {
     super();
 
-    // EventEmitter treats an unhandled 'error' event as fatal. Keep a default
-    // listener so updater failures surface in logs/UI without terminating main.
     this.on('error', (error: Error) => {
       logger.error('[Updater] AppUpdater emitted error:', error);
     });
-    
+
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
-    
+
     autoUpdater.logger = {
       info: (msg: string) => logger.info('[Updater]', msg),
       warn: (msg: string) => logger.warn('[Updater]', msg),
@@ -69,44 +82,114 @@ export class AppUpdater extends EventEmitter {
       debug: (msg: string) => logger.debug('[Updater]', msg),
     };
 
-    // Override feed URL for prerelease channels so that
-    // alpha -> /alpha/alpha-mac.yml, beta -> /beta/beta-mac.yml, etc.
-    const version = app.getVersion();
-    const channel = detectChannel(version);
-    const feedUrl = `${OSS_BASE_URL}/${channel}`;
+    const { url, channel } = builtInFeedForVersion(app.getVersion());
+    logger.info(`[Updater] Version: ${app.getVersion()}, channel: ${channel}, feedUrl: ${url}`);
 
-    logger.info(`[Updater] Version: ${version}, channel: ${channel}, feedUrl: ${feedUrl}`);
-
-    // Set channel so electron-updater requests the correct yml filename.
-    // e.g. channel "alpha" → requests alpha-mac.yml, channel "latest" → requests latest-mac.yml
     autoUpdater.channel = channel;
-
     autoUpdater.setFeedURL({
       provider: 'generic',
-      url: feedUrl,
+      url,
       useMultipleRangeRequest: false,
     });
 
     this.setupListeners();
   }
 
+  private applyBuiltInFeed(version: string): void {
+    const { url, channel } = builtInFeedForVersion(version);
+    autoUpdater.channel = channel;
+    autoUpdater.setFeedURL({
+      provider: 'generic',
+      url,
+      useMultipleRangeRequest: false,
+    });
+    logger.info(`[Updater] Built-in feed: ${url} (channel=${channel})`);
+  }
+
   /**
-   * Set the main window for sending update events
+   * Resolve server policy when logged in; fall back to built-in OSS on errors / no token.
+   * @returns 'hold' = do not call electron-updater (gray miss)
    */
+  private async applyServerPolicyBeforeCheck(): Promise<'proceed' | 'hold'> {
+    const version = app.getVersion();
+    const platform = process.platform;
+
+    const token = await getStoToken();
+    if (!token) {
+      this.applyBuiltInFeed(version);
+      this.lastFeedSlug = null;
+      return 'proceed';
+    }
+
+    const env = await getSsoEnvironment();
+    const data = await resolveUpdatePolicy(token, env, {
+      current_version: version,
+      platform,
+    });
+
+    sendClientUpdateEventsFireAndForget(env, [
+      {
+        event_type: 'policy_resolve',
+        client_version: version,
+        feed_slug: data?.feed_slug ?? null,
+        platform,
+      },
+    ]);
+
+    if (!data) {
+      logger.warn('[Updater] resolve failed — using built-in feed');
+      this.applyBuiltInFeed(version);
+      this.lastFeedSlug = null;
+      return 'proceed';
+    }
+
+    this.lastFeedSlug = data.feed_slug ?? null;
+
+    if (!data.update_offered) {
+      logger.info('[Updater] Server policy: update not offered for this user (gray hold)');
+      return 'hold';
+    }
+
+    const base = (data.feed_base_url || '').trim().replace(/\/$/, '');
+    const ch = (data.electron_channel || '').trim() || detectChannel(version);
+
+    if (base) {
+      autoUpdater.channel = ch;
+      autoUpdater.setFeedURL({
+        provider: 'generic',
+        url: base,
+        useMultipleRangeRequest: false,
+      });
+      logger.info(`[Updater] Server feed: ${base} (channel=${ch})`);
+      return 'proceed';
+    }
+
+    logger.warn('[Updater] resolve had no feed_base_url — using built-in feed');
+    this.applyBuiltInFeed(version);
+    return 'proceed';
+  }
+
+  private emitUpdateCheckTelemetry(): void {
+    void getSsoEnvironment().then((env) => {
+      sendClientUpdateEventsFireAndForget(env, [
+        {
+          event_type: 'update_check',
+          client_version: app.getVersion(),
+          feed_slug: this.lastFeedSlug,
+          platform: process.platform,
+        },
+      ]);
+    });
+  }
+
   setMainWindow(window: BrowserWindow): void {
     this.mainWindow = window;
   }
 
-  /**
-   * Get current update status
-   */
   getStatus(): UpdateStatus {
     return this.status;
   }
 
-  /**
-   * Setup auto-updater event listeners
-   */
   private setupListeners(): void {
     autoUpdater.on('checking-for-update', () => {
       this.updateStatus({ status: 'checking' });
@@ -114,12 +197,25 @@ export class AppUpdater extends EventEmitter {
     });
 
     autoUpdater.on('update-available', (info: UpdateInfo) => {
-      this.updateStatus({ status: 'available', info });
+      if (autoUpdater.autoDownload) {
+        void getSsoEnvironment().then((env) => {
+          sendClientUpdateEventsFireAndForget(env, [
+            {
+              event_type: 'download_start',
+              client_version: app.getVersion(),
+              target_version: info.version,
+              feed_slug: this.lastFeedSlug,
+              platform: process.platform,
+            },
+          ]);
+        });
+      }
+      this.updateStatus({ status: 'available', info, policyBlocked: false });
       this.emit('update-available', info);
     });
 
     autoUpdater.on('update-not-available', (info: UpdateInfo) => {
-      this.updateStatus({ status: 'not-available', info });
+      this.updateStatus({ status: 'not-available', info, policyBlocked: false });
       this.emit('update-not-available', info);
     });
 
@@ -129,6 +225,17 @@ export class AppUpdater extends EventEmitter {
     });
 
     autoUpdater.on('update-downloaded', (event: UpdateDownloadedEvent) => {
+      void getSsoEnvironment().then((env) => {
+        sendClientUpdateEventsFireAndForget(env, [
+          {
+            event_type: 'download_complete',
+            client_version: app.getVersion(),
+            target_version: event.version,
+            feed_slug: this.lastFeedSlug,
+            platform: process.platform,
+          },
+        ]);
+      });
       this.updateStatus({ status: 'downloaded', info: event });
       this.emit('update-downloaded', event);
 
@@ -143,68 +250,86 @@ export class AppUpdater extends EventEmitter {
     });
   }
 
-  /**
-   * Update status and notify renderer
-   */
   private updateStatus(newStatus: Partial<UpdateStatus>): void {
     this.status = {
       status: newStatus.status ?? this.status.status,
-      info: newStatus.info,
-      progress: newStatus.progress,
-      error: newStatus.error,
+      info: newStatus.info !== undefined ? newStatus.info : this.status.info,
+      progress: newStatus.progress !== undefined ? newStatus.progress : this.status.progress,
+      error: newStatus.error !== undefined ? newStatus.error : this.status.error,
+      policyBlocked:
+        newStatus.policyBlocked !== undefined ? newStatus.policyBlocked : this.status.policyBlocked,
     };
     this.sendToRenderer('update:status-changed', this.status);
   }
 
-  /**
-   * Send event to renderer process
-   */
   private sendToRenderer(channel: string, data: unknown): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(channel, data);
     }
   }
 
-  /**
-   * Check for updates.
-   * electron-updater automatically tries providers defined in electron-builder.yml in order.
-   *
-   * In dev mode (not packed), autoUpdater.checkForUpdates() silently returns
-   * null without emitting any events, so we must detect this and force a
-   * final status so the UI never gets stuck in 'checking'.
-   */
   async checkForUpdates(): Promise<UpdateInfo | null> {
     try {
+      const packaged = app.isPackaged;
+
+      this.updateStatus({ status: 'checking', policyBlocked: false });
+
+      const gate = await this.applyServerPolicyBeforeCheck();
+      if (gate === 'hold') {
+        this.updateStatus({ status: 'not-available', policyBlocked: true });
+        return null;
+      }
+
+      this.emitUpdateCheckTelemetry();
+
       const result = await autoUpdater.checkForUpdates();
 
-      // In dev mode (app not packaged), autoUpdater silently returns null
-      // without emitting ANY events (not even checking-for-update).
-      // Detect this and force an error so the UI never stays silent.
       if (result == null) {
+        if (!packaged) {
+          this.updateStatus({
+            status: 'error',
+            error: 'Update check skipped (dev mode – app is not packaged)',
+            policyBlocked: false,
+          });
+          return null;
+        }
         this.updateStatus({
           status: 'error',
-          error: 'Update check skipped (dev mode – app is not packaged)',
+          error: 'Update check did not return a result',
+          policyBlocked: false,
         });
         return null;
       }
 
-      // Safety net: if events somehow didn't fire, force a final state.
       if (this.status.status === 'checking' || this.status.status === 'idle') {
-        this.updateStatus({ status: 'not-available' });
+        this.updateStatus({ status: 'not-available', policyBlocked: false });
       }
 
       return result.updateInfo || null;
     } catch (error) {
       logger.error('[Updater] Check for updates failed:', error);
-      this.updateStatus({ status: 'error', error: (error as Error).message || String(error) });
+      this.updateStatus({
+        status: 'error',
+        error: (error as Error).message || String(error),
+        policyBlocked: false,
+      });
       throw error;
     }
   }
 
-  /**
-   * Download available update
-   */
   async downloadUpdate(): Promise<void> {
+    const tv = (this.status.info as UpdateInfo | undefined)?.version;
+    void getSsoEnvironment().then((env) => {
+      sendClientUpdateEventsFireAndForget(env, [
+        {
+          event_type: 'download_start',
+          client_version: app.getVersion(),
+          target_version: tv ?? null,
+          feed_slug: this.lastFeedSlug,
+          platform: process.platform,
+        },
+      ]);
+    });
     try {
       await autoUpdater.downloadUpdate();
     } catch (error) {
@@ -213,27 +338,23 @@ export class AppUpdater extends EventEmitter {
     }
   }
 
-  /**
-   * Install update and restart.
-   *
-   * On macOS, electron-updater delegates to Squirrel.Mac (ShipIt). The
-   * native quitAndInstall() spawns ShipIt then internally calls app.quit().
-   * However, the tray close handler in index.ts intercepts window close
-   * and hides to tray unless isQuitting is true. Squirrel's internal quit
-   * sometimes fails to trigger before-quit in time, so we set isQuitting
-   * BEFORE calling quitAndInstall(). This lets the native quit flow close
-   * the window cleanly while ShipIt runs independently to replace the app.
-   */
   quitAndInstall(): void {
     logger.info('[Updater] quitAndInstall called');
     setQuitting();
+    const info = this.status.info as UpdateInfo | undefined;
+    const tv = info?.version;
+    if (tv && app.isPackaged) {
+      void writePendingInstallReport({
+        targetVersion: tv,
+        feedSlug: this.lastFeedSlug,
+      }).finally(() => {
+        autoUpdater.quitAndInstall();
+      });
+      return;
+    }
     autoUpdater.quitAndInstall();
   }
 
-  /**
-   * Start a countdown that auto-installs the downloaded update.
-   * Sends `update:auto-install-countdown` events to the renderer each second.
-   */
   private startAutoInstallCountdown(): void {
     this.clearAutoInstallTimer();
     this.autoInstallCountdown = AppUpdater.AUTO_INSTALL_DELAY_SECONDS;
@@ -262,49 +383,33 @@ export class AppUpdater extends EventEmitter {
     }
   }
 
-  /**
-   * Set update channel (stable, beta, dev)
-   */
   setChannel(channel: 'stable' | 'beta' | 'dev'): void {
     autoUpdater.channel = channel;
   }
 
-  /**
-   * Set auto-download preference
-   */
   setAutoDownload(enable: boolean): void {
     autoUpdater.autoDownload = enable;
   }
 
-  /**
-   * Get current version
-   */
   getCurrentVersion(): string {
     return app.getVersion();
   }
 }
 
-/**
- * Register IPC handlers for update operations
- */
 export function registerUpdateHandlers(
   updater: AppUpdater,
-  mainWindow: BrowserWindow
+  mainWindow: BrowserWindow,
 ): void {
   updater.setMainWindow(mainWindow);
 
-  // Get current update status
   ipcMain.handle('update:status', () => {
     return updater.getStatus();
   });
 
-  // Get current version
   ipcMain.handle('update:version', () => {
     return updater.getCurrentVersion();
   });
 
-  // Check for updates – always return final status so the renderer
-  // never gets stuck in 'checking' waiting for a push event.
   ipcMain.handle('update:check', async () => {
     try {
       await updater.checkForUpdates();
@@ -314,7 +419,6 @@ export function registerUpdateHandlers(
     }
   });
 
-  // Download update
   ipcMain.handle('update:download', async () => {
     try {
       await updater.downloadUpdate();
@@ -324,31 +428,25 @@ export function registerUpdateHandlers(
     }
   });
 
-  // Install update and restart
   ipcMain.handle('update:install', () => {
     updater.quitAndInstall();
     return { success: true };
   });
 
-  // Set update channel
   ipcMain.handle('update:setChannel', (_, channel: 'stable' | 'beta' | 'dev') => {
     updater.setChannel(channel);
     return { success: true };
   });
 
-  // Set auto-download preference
   ipcMain.handle('update:setAutoDownload', (_, enable: boolean) => {
     updater.setAutoDownload(enable);
     return { success: true };
   });
 
-  // Cancel pending auto-install countdown
   ipcMain.handle('update:cancelAutoInstall', () => {
     updater.cancelAutoInstall();
     return { success: true };
   });
-
 }
 
-// Export singleton instance
 export const appUpdater = new AppUpdater();

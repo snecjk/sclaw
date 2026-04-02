@@ -9,14 +9,14 @@ describe('Settings Store', () => {
   beforeEach(() => {
     // Reset store to default state
     useSettingsStore.setState({
-      theme: 'system',
+      theme: 'dark',
       language: 'en',
       sidebarCollapsed: false,
       devModeUnlocked: false,
       gatewayAutoStart: true,
       gatewayPort: 18789,
-      autoCheckUpdate: false,
-      autoDownloadUpdate: false,
+      autoCheckUpdate: true,
+      autoDownloadUpdate: true,
       startMinimized: false,
       launchAtStartup: false,
       updateChannel: 'stable',
@@ -25,7 +25,7 @@ describe('Settings Store', () => {
   
   it('should have default values', () => {
     const state = useSettingsStore.getState();
-    expect(state.theme).toBe('system');
+    expect(state.theme).toBe('dark');
     expect(state.sidebarCollapsed).toBe(false);
     expect(state.gatewayAutoStart).toBe(true);
   });

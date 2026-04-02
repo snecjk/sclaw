@@ -1,42 +1,31 @@
 /**
  * SSO Login Page
- * Full-screen login page with SSO environment selector and login button.
+ * Full-screen login page; SSO 固定走生产环境（环境选择已隐藏）。
  */
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, LogIn, Orbit, ShieldCheck, Sparkles } from 'lucide-react';
 import { TitleBar } from '@/components/layout/TitleBar';
 import { Button } from '@/components/ui/button';
-import { Select } from '@/components/ui/select';
 import { ParticleConstellation } from '@/components/common/ParticleConstellation';
 import { useAuthStore } from '@/stores/auth';
-import type { SsoEnvironment } from '@/stores/auth';
 import clawxIcon from '@/assets/logo.svg';
 
-const SSO_ENVIRONMENTS: { value: SsoEnvironment; labelKey: string }[] = [
-  { value: 'production-external', labelKey: 'auth:environment.production-external' },
-  { value: 'daily-external', labelKey: 'auth:environment.daily-external' },
-  { value: 'pre-release', labelKey: 'auth:environment.pre-release' },
-];
+const DEFAULT_SSO_ENV = 'production-external' as const;
 
 export function Login() {
   const { t } = useTranslation(['auth']);
-  const ssoEnvironment = useAuthStore((s) => s.ssoEnvironment);
   const isLoggingIn = useAuthStore((s) => s.isLoggingIn);
   const error = useAuthStore((s) => s.error);
   const login = useAuthStore((s) => s.login);
   const setSsoEnvironment = useAuthStore((s) => s.setSsoEnvironment);
 
-  const [selectedEnv, setSelectedEnv] = useState<SsoEnvironment>(ssoEnvironment);
-
-  const handleEnvChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const env = e.target.value as SsoEnvironment;
-    setSelectedEnv(env);
-    void setSsoEnvironment(env);
-  };
+  useEffect(() => {
+    void setSsoEnvironment(DEFAULT_SSO_ENV);
+  }, [setSsoEnvironment]);
 
   const handleLogin = () => {
-    void login(selectedEnv);
+    void login(DEFAULT_SSO_ENV);
   };
 
   return (
@@ -91,35 +80,6 @@ export function Login() {
                   {t('auth:login.subtitle')}
                 </p>
               </div>
-            </div>
-
-            <div className="signal-card rounded-2xl p-4">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-200">
-                  <Orbit className="h-4.5 w-4.5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium uppercase tracking-[0.24em] text-foreground/55">
-                    {t('auth:environment.label')}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    登录前先选择要进入的环境。
-                  </p>
-                </div>
-              </div>
-
-              <Select
-                value={selectedEnv}
-                onChange={handleEnvChange}
-                disabled={isLoggingIn}
-                className="mt-4 h-12 rounded-2xl border-cyan-300/15 bg-[hsl(var(--glass-bg)/0.58)] text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_10px_30px_rgba(15,23,42,0.16)] hover:border-cyan-300/25 focus-visible:ring-cyan-400/40"
-              >
-                {SSO_ENVIRONMENTS.map((env) => (
-                  <option key={env.value} value={env.value}>
-                    {t(env.labelKey)}
-                  </option>
-                ))}
-              </Select>
             </div>
 
             {error && error !== 'SSO_LOGIN_CANCELLED' && (

@@ -52,9 +52,20 @@ export class SsoLoginManager {
 
       const isMac = process.platform === 'darwin';
 
+      // 与主窗口内容区同宽同高，视觉上与主题框架对齐
+      const pb = parentWindow.getContentBounds();
+      let width = Math.floor(pb.width);
+      let height = Math.floor(pb.height);
+      if (width < 400 || height < 400) {
+        width = 1280;
+        height = 860;
+      }
+
       const win = new BrowserWindow({
-        width: 960,
-        height: 750,
+        width,
+        height,
+        x: Math.floor(pb.x),
+        y: Math.floor(pb.y),
         parent: parentWindow,
         // On macOS, modal + parent creates a "sheet" window without
         // close/minimize/maximize buttons. Use non-modal child window

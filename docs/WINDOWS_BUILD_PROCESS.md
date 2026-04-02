@@ -382,7 +382,7 @@ asarUnpack:
 ```yaml
 publish:
   - provider: generic
-    url: https://oss.intelli-spectrum.com/latest
+    url: https://ali-sto-wisdom-star.aliyuncs.com/latest
   - provider: github
     owner: ValueCell-ai
     repo: StoClaw
