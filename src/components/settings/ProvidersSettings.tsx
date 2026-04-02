@@ -18,11 +18,17 @@ import {
   Copy,
   XCircle,
   ChevronDown,
+  Layers,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -130,6 +136,15 @@ function shouldShowUserAgentField(account: ProviderAccount): boolean {
 
 function shouldShowUserAgentFieldForNewProvider(providerType: ProviderType | null): boolean {
   return providerType === 'custom';
+}
+
+/** Short catalog line under STO model id (mirrors chat agent row subtitle). */
+function getStoModelCatalogSubtitle(modelId: string, t: (key: string) => string): string | null {
+  const id = modelId.toLowerCase();
+  if (id.includes('vl')) return t('aiProviders.card.stoModelHintVision');
+  if (id.includes('max')) return t('aiProviders.card.stoModelHintMax');
+  if (id.includes('plus')) return t('aiProviders.card.stoModelHintPlus');
+  return null;
 }
 
 function getAuthModeLabel(
@@ -397,8 +412,7 @@ function ProviderCard({
   const hasModelToolbar =
     (isStoManagedProvider && stoCustomModels.length > 0) || Boolean(account.model);
 
-  const handleStoModelChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newModel = e.target.value;
+  const applyStoModel = async (newModel: string) => {
     if (newModel === account.model) return;
     setStoModelSaving(true);
     try {
@@ -589,24 +603,69 @@ function ProviderCard({
           >
             {hasModelToolbar &&
               (isStoManagedProvider && stoCustomModels.length > 0 ? (
-                <>
-                  <Select
-                    value={account.model || ''}
-                    onChange={handleStoModelChange}
-                    disabled={stoModelSaving}
-                    title={t('aiProviders.card.switchModel')}
-                    className="h-9 min-h-9 w-full min-w-[160px] max-w-[260px] text-[13px] md:max-w-none"
+                <DropdownMenu>
+                  <div
+                    className={cn(
+                      'relative flex w-full min-w-[160px] max-w-[260px] items-stretch rounded-full border border-primary/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),transparent),rgba(255,255,255,0.24)] shadow-[0_8px_18px_rgba(15,23,42,0.06)] md:max-w-none',
+                      'dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent),rgba(255,255,255,0.04)]',
+                    )}
                   >
-                    {stoCustomModels.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </Select>
-                  {stoModelSaving ? (
-                    <Loader2 className="pointer-events-none absolute right-9 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-                  ) : null}
-                </>
+                    <DropdownMenuTrigger asChild disabled={stoModelSaving}>
+                      <button
+                        type="button"
+                        title={t('aiProviders.card.switchModel')}
+                        aria-label={`${t('aiProviders.card.currentModel')}: ${account.model || ''}`}
+                        className={cn(
+                          'flex h-8 min-h-8 w-full min-w-0 items-center gap-2 rounded-full py-0 pl-2.5 pr-2 text-left outline-none',
+                          'transition-colors hover:bg-black/[0.04] focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
+                          'dark:hover:bg-white/[0.06]',
+                          'disabled:pointer-events-none disabled:opacity-60',
+                        )}
+                      >
+                        <Layers className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                        <span className="min-w-0 flex-1 truncate font-mono text-[12px] font-medium text-foreground/90">
+                          {account.model || stoCustomModels[0]}
+                        </span>
+                        <ChevronDown
+                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                          aria-hidden
+                          strokeWidth={2.25}
+                        />
+                      </button>
+                    </DropdownMenuTrigger>
+                    {stoModelSaving ? (
+                      <Loader2 className="pointer-events-none absolute right-8 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+                    ) : null}
+                  </div>
+                  <DropdownMenuContent
+                    align="start"
+                    side="bottom"
+                    className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[12rem] max-w-[min(100vw-2rem,320px)]"
+                  >
+                    {stoCustomModels.map((m) => {
+                      const subtitle = getStoModelCatalogSubtitle(m, t);
+                      return (
+                        <DropdownMenuItem
+                          key={m}
+                          className={cn(
+                            'flex flex-col items-stretch gap-0.5',
+                            m === account.model && 'bg-primary/8 font-medium',
+                          )}
+                          onSelect={() => {
+                            void applyStoModel(m);
+                          }}
+                        >
+                          <span className="truncate font-mono text-[13px]">{m}</span>
+                          {subtitle ? (
+                            <span className="truncate text-[11px] font-normal text-muted-foreground">
+                              {subtitle}
+                            </span>
+                          ) : null}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               ) : (
                 <div className="flex h-9 w-full min-w-[160px] max-w-[260px] items-center truncate rounded-md border border-glass-border bg-transparent px-3 font-mono text-[13px] text-foreground/85 md:max-w-none">
                   {account.model}
