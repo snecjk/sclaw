@@ -111,6 +111,15 @@
         "searching": "ClawHubを検索中...",
         "noResults": "検索に一致するスキルが見つかりません。",
         "emptyPrompt": "新しいスキルを検索して機能を拡張しましょう。",
-        "searchError": "ClawHub検索に失敗しました。接続またはインストールを確認してください。"
+        "searchError": "ClawHub検索に失敗しました。接続またはインストールを確認してください。",
+        "installTabs": {
+            "stoPlaza": "STO スキルプラザ",
+            "officialClawHub": "公式 ClawHub",
+            "stoSearchPlaceholder": "STO内部スキルを検索...",
+            "stoEmptyPrompt": "STOの内部スキルを検索して機能を拡張しましょう。",
+            "stoNoResults": "一致するSTOスキルが見つかりません。",
+            "stoSearching": "STOスキルプラザを検索中...",
+            "stoComingSoon": "近日公開"
+        }
     }
 }

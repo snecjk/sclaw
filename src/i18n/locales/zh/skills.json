@@ -111,6 +111,15 @@
         "searching": "正在搜索 ClawHub...",
         "noResults": "未找到匹配的技能。",
         "emptyPrompt": "搜索新技能以扩展您的能力。",
-        "searchError": "ClawHub 搜索失败。请检查您的连接或安装。"
+        "searchError": "ClawHub 搜索失败。请检查您的连接或安装。",
+        "installTabs": {
+            "stoPlaza": "申通技能广场",
+            "officialClawHub": "官方 ClawHub",
+            "stoSearchPlaceholder": "搜索申通内部技能...",
+            "stoEmptyPrompt": "浏览申通内部技能以扩展您的能力。",
+            "stoNoResults": "未找到匹配的申通技能。",
+            "stoSearching": "正在搜索申通技能广场...",
+            "stoComingSoon": "即将上线"
+        }
     }
 }
