@@ -111,6 +111,21 @@
         "searching": "Searching ClawHub...",
         "noResults": "No skills found matching your search.",
         "emptyPrompt": "Search for new skills to expand your capabilities.",
-        "searchError": "ClawHub search failed. Check your connection or installation."
+        "searchError": "ClawHub search failed. Check your connection or installation.",
+        "installTabs": {
+            "stoPlaza": "STO Skill Plaza",
+            "officialClawHub": "Official ClawHub",
+            "stoSearchPlaceholder": "Search STO skills...",
+            "stoEmptyPrompt": "Browse STO internal skills to extend your capabilities.",
+            "stoNoResults": "No matching STO skills found.",
+            "stoSearching": "Searching STO Skill Plaza...",
+            "stoSearchError": "STO Skill Plaza search failed. Please check your login status or network connection.",
+            "stoComingSoon": "Coming Soon"
+        },
+        "install": "Install",
+        "installed": "Installed",
+        "installing": "Installing...",
+        "installSuccess": "{{name}} installed successfully",
+        "installError": "Installation failed: {{error}}"
     }
 }

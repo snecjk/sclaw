@@ -97,5 +97,51 @@ export async function handleSkillRoutes(
     return true;
   }
 
+  // ======================== STO Skill Plaza routes ========================
+
+  if (url.pathname === '/api/sto-skills/list' && req.method === 'GET') {
+    try {
+      sendJson(res, 200, { success: true, results: ctx.stoSkillService.listInstalled() });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/sto-skills/search' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<Record<string, unknown>>(req);
+      sendJson(res, 200, {
+        success: true,
+        results: await ctx.stoSkillService.search(body),
+      });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/sto-skills/install' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<Record<string, unknown>>(req);
+      await ctx.stoSkillService.install(body);
+      sendJson(res, 200, { success: true });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/sto-skills/uninstall' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<Record<string, unknown>>(req);
+      await ctx.stoSkillService.uninstall(body);
+      sendJson(res, 200, { success: true });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   return false;
 }

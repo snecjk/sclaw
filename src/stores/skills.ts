@@ -36,6 +36,16 @@ type ClawHubListResult = {
   baseDir?: string;
 };
 
+type StoListResult = {
+  slug: string;
+  name?: string;
+  description?: string;
+  author?: string;
+  version?: string;
+  source?: string;
+  baseDir?: string;
+};
+
 function mapErrorCodeToSkillErrorKey(
   code: AppError['code'],
   operation: 'fetch' | 'search' | 'install',
@@ -66,6 +76,12 @@ interface SkillsState {
   installing: Record<string, boolean>; // slug -> boolean
   error: string | null;
 
+  // STO skill plaza state
+  stoSearchResults: MarketplaceSkill[];
+  stoSearching: boolean;
+  stoSearchError: string | null;
+  stoInstalling: Record<string, boolean>;
+
   // Actions
   fetchSkills: () => Promise<void>;
   searchSkills: (query: string) => Promise<void>;
@@ -75,6 +91,11 @@ interface SkillsState {
   disableSkill: (skillId: string) => Promise<void>;
   setSkills: (skills: Skill[]) => void;
   updateSkill: (skillId: string, updates: Partial<Skill>) => void;
+
+  // STO actions
+  searchStoSkills: (query: string) => Promise<void>;
+  installStoSkill: (slug: string, version?: string, meta?: { name?: string; description?: string; author?: string }) => Promise<void>;
+  uninstallStoSkill: (slug: string) => Promise<void>;
 }
 
 export const useSkillsStore = create<SkillsState>((set, get) => ({
@@ -85,6 +106,12 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
   searchError: null,
   installing: {},
   error: null,
+
+  // STO state
+  stoSearchResults: [],
+  stoSearching: false,
+  stoSearchError: null,
+  stoInstalling: {},
 
   fetchSkills: async () => {
     // Only show loading state if we have no skills yet (initial load)
@@ -165,6 +192,67 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
             baseDir: cs.baseDir,
           });
         });
+      }
+
+      // 4. Merge with STO disk scan (skills installed from STO marketplace)
+      // This allows newly installed STO skills to appear immediately
+      // without waiting for a Gateway restart.
+      try {
+        const stoListResult = await hostApiFetch<{ success: boolean; results?: StoListResult[] }>('/api/sto-skills/list');
+        if (stoListResult.success && stoListResult.results) {
+          stoListResult.results.forEach((ss: StoListResult) => {
+            // Match by slug/id OR by baseDir (Gateway may use a different
+            // skillKey than the directory name, e.g. reading name from SKILL.md)
+            // Use case-insensitive comparison because Gateway lowercases the name.
+            const existing = combinedSkills.find(s =>
+              s.id.toLowerCase() === ss.slug.toLowerCase()
+              || (s.slug && s.slug.toLowerCase() === ss.slug.toLowerCase())
+              || (ss.baseDir && s.baseDir && s.baseDir === ss.baseDir)
+            );
+            if (existing) {
+              if (!existing.baseDir && ss.baseDir) {
+                existing.baseDir = ss.baseDir;
+              }
+              // Always set source to sto-marketplace for STO skills
+              // (Gateway may return a different source value)
+              existing.source = ss.source || 'sto-marketplace';
+              // Update slug to ensure correct uninstall path
+              // (Gateway may return lowercase skillKey instead of original slug)
+              if (ss.slug) {
+                existing.slug = ss.slug;
+              }
+              // Update name if still showing slug as name
+              if (ss.name && existing.name === existing.id) {
+                existing.name = ss.name;
+              }
+              // Update description/author from lock.json metadata
+              if (ss.description && (!existing.description || existing.description === '')) {
+                existing.description = ss.description;
+              }
+              if (ss.author && !existing.author) {
+                existing.author = ss.author;
+              }
+              return;
+            }
+            combinedSkills.push({
+              id: ss.slug,
+              slug: ss.slug,
+              name: ss.name || ss.slug,
+              description: ss.description || 'STO 技能已安装，等待网关加载...',
+              enabled: false,
+              icon: '⌛',
+              version: ss.version || 'unknown',
+              author: ss.author,
+              config: {},
+              isCore: false,
+              isBundled: false,
+              source: ss.source || 'sto-marketplace',
+              baseDir: ss.baseDir,
+            });
+          });
+        }
+      } catch {
+        // STO list is best-effort, don't block on failure
       }
 
       set({ skills: combinedSkills, loading: false });
@@ -287,5 +375,83 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
         skill.id === skillId ? { ...skill, ...updates } : skill
       ),
     }));
+  },
+
+  // ======================== STO Skill Plaza Actions ========================
+
+  searchStoSkills: async (query: string) => {
+    set({ stoSearching: true, stoSearchError: null });
+    try {
+      const result = await hostApiFetch<{ success: boolean; results?: MarketplaceSkill[]; error?: string }>('/api/sto-skills/search', {
+        method: 'POST',
+        body: JSON.stringify({ query }),
+      });
+      if (result.success) {
+        set({ stoSearchResults: result.results || [] });
+      } else {
+        throw normalizeAppError(new Error(result.error || 'STO search failed'), {
+          module: 'skills',
+          operation: 'search',
+        });
+      }
+    } catch (error) {
+      const appError = normalizeAppError(error, { module: 'skills', operation: 'search' });
+      set({ stoSearchError: mapErrorCodeToSkillErrorKey(appError.code, 'search') });
+    } finally {
+      set({ stoSearching: false });
+    }
+  },
+
+  installStoSkill: async (slug: string, version?: string, meta?: { name?: string; description?: string; author?: string }) => {
+    set((state) => ({ stoInstalling: { ...state.stoInstalling, [slug]: true } }));
+    try {
+      const result = await hostApiFetch<{ success: boolean; error?: string }>('/api/sto-skills/install', {
+        method: 'POST',
+        body: JSON.stringify({ slug, version, force: true, name: meta?.name, description: meta?.description, author: meta?.author }),
+      });
+      if (!result.success) {
+        const appError = normalizeAppError(new Error(result.error || 'STO install failed'), {
+          module: 'skills',
+          operation: 'install',
+        });
+        throw new Error(mapErrorCodeToSkillErrorKey(appError.code, 'install'));
+      }
+      // Restart gateway so it picks up the newly installed skill
+      await useGatewayStore.getState().restart();
+      // Refresh skills after gateway restart
+      await get().fetchSkills();
+    } catch (error) {
+      console.error('STO install error:', error);
+      throw error;
+    } finally {
+      set((state) => {
+        const newInstalling = { ...state.stoInstalling };
+        delete newInstalling[slug];
+        return { stoInstalling: newInstalling };
+      });
+    }
+  },
+
+  uninstallStoSkill: async (slug: string) => {
+    set((state) => ({ stoInstalling: { ...state.stoInstalling, [slug]: true } }));
+    try {
+      const result = await hostApiFetch<{ success: boolean; error?: string }>('/api/sto-skills/uninstall', {
+        method: 'POST',
+        body: JSON.stringify({ slug }),
+      });
+      if (!result.success) {
+        throw new Error(result.error || 'STO uninstall failed');
+      }
+      await get().fetchSkills();
+    } catch (error) {
+      console.error('STO uninstall error:', error);
+      throw error;
+    } finally {
+      set((state) => {
+        const newInstalling = { ...state.stoInstalling };
+        delete newInstalling[slug];
+        return { stoInstalling: newInstalling };
+      });
+    }
   },
 }));
