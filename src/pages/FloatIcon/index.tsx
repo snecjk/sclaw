@@ -48,10 +48,67 @@ export function FloatIcon() {
     }
   }, [theme]);
 
-  // Make body transparent
+  // 悬浮窗仅 56×56：锁定文档尺寸并禁止滚动（避免 macOS 出现滚动条）
   useEffect(() => {
     document.body.style.background = 'transparent';
     document.documentElement.style.background = 'transparent';
+
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById('root');
+
+    type Snap = { overflow: string; minHeight: string; height: string; width: string };
+    const snap = (el: HTMLElement): Snap => ({
+      overflow: el.style.overflow,
+      minHeight: el.style.minHeight,
+      height: el.style.height,
+      width: el.style.width,
+    });
+    const prevHtml = snap(html);
+    const prevBody = snap(body);
+    const prevRoot = root ? snap(root) : null;
+
+    const lock = (el: HTMLElement) => {
+      el.style.overflow = 'hidden';
+      el.style.minHeight = '0';
+      el.style.height = '100%';
+      el.style.width = '100%';
+    };
+    html.style.margin = '0';
+    html.style.padding = '0';
+    body.style.margin = '0';
+    body.style.padding = '0';
+    lock(html);
+    lock(body);
+    if (root) {
+      lock(root);
+      root.style.display = 'flex';
+      root.style.alignItems = 'center';
+      root.style.justifyContent = 'center';
+      root.style.boxSizing = 'border-box';
+    }
+
+    return () => {
+      const restore = (el: HTMLElement, p: Snap) => {
+        el.style.overflow = p.overflow;
+        el.style.minHeight = p.minHeight;
+        el.style.height = p.height;
+        el.style.width = p.width;
+      };
+      restore(html, prevHtml);
+      restore(body, prevBody);
+      html.style.margin = '';
+      html.style.padding = '';
+      body.style.margin = '';
+      body.style.padding = '';
+      if (root && prevRoot) {
+        restore(root, prevRoot);
+        root.style.display = '';
+        root.style.alignItems = '';
+        root.style.justifyContent = '';
+        root.style.boxSizing = '';
+      }
+    };
   }, []);
 
   const handleMouseDown = useCallback(async (e: React.MouseEvent) => {
@@ -103,17 +160,19 @@ export function FloatIcon() {
   return (
     <div
       onMouseDown={handleMouseDown}
-      className="w-[56px] h-[56px] rounded-full flex items-center justify-center cursor-pointer select-none
-        border border-glass-border shadow-glass glass-subtle
-        hover:scale-105 active:scale-95 transition-transform duration-150"
+      className="box-border h-[56px] w-[56px] shrink-0 cursor-pointer select-none overflow-hidden rounded-full border border-glass-border shadow-glass glass-subtle"
       style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
     >
-      <img
-        src={logoSvg}
-        alt="StoClaw"
-        className="w-9 h-9 pointer-events-none"
-        draggable={false}
-      />
+      <div className="flex h-full w-full items-center justify-center transition-transform duration-150 hover:scale-105 active:scale-95">
+        <img
+          src={logoSvg}
+          alt="StoClaw"
+          className="pointer-events-none max-h-[68%] max-w-[68%] object-contain"
+          width={38}
+          height={38}
+          draggable={false}
+        />
+      </div>
     </div>
   );
 }

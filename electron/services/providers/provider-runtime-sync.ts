@@ -290,11 +290,16 @@ async function syncRuntimeProviderConfig(
   config: ProviderConfig,
   context: RuntimeProviderSyncContext,
 ): Promise<void> {
+  // For custom/sto providers, default new models to multimodal (text + image) input
+  const defaultModelInput = (config.type === 'custom' || config.type === 'sto')
+    ? ['text', 'image']
+    : undefined;
   await syncProviderConfigToOpenClaw(context.runtimeProviderKey, config.model, {
     baseUrl: normalizeProviderBaseUrl(config, config.baseUrl || context.meta?.baseUrl, context.api),
     api: context.api,
     apiKeyEnv: context.meta?.apiKeyEnv,
     headers: config.headers ?? context.meta?.headers,
+    defaultModelInput,
   });
 }
 
@@ -312,13 +317,16 @@ async function syncCustomProviderAgentModel(
     return;
   }
 
+  // Default input capabilities for custom/sto provider models (support both text and image)
+  const DEFAULT_MODEL_INPUT: string[] = ['text', 'image'];
+
   // For STO providers, sync all models from metadata.customModels
   if (config.type === 'sto') {
     const account = await getProviderAccount(config.id);
     const customModels = account?.metadata?.customModels ?? [];
     const models = customModels.length > 0
-      ? customModels.map((id) => ({ id, name: id }))
-      : config.model ? [{ id: config.model, name: config.model }] : [];
+      ? customModels.map((id) => ({ id, name: id, input: DEFAULT_MODEL_INPUT }))
+      : config.model ? [{ id: config.model, name: config.model, input: DEFAULT_MODEL_INPUT }] : [];
     await updateAgentModelProvider(runtimeProviderKey, {
       baseUrl: normalizeProviderBaseUrl(config, config.baseUrl, config.apiProtocol || 'openai-completions'),
       api: config.apiProtocol || 'openai-completions',
@@ -332,7 +340,7 @@ async function syncCustomProviderAgentModel(
   await updateAgentModelProvider(runtimeProviderKey, {
     baseUrl: normalizeProviderBaseUrl(config, config.baseUrl, config.apiProtocol || 'openai-completions'),
     api: config.apiProtocol || 'openai-completions',
-    models: modelId ? [{ id: modelId, name: modelId }] : [],
+    models: modelId ? [{ id: modelId, name: modelId, input: DEFAULT_MODEL_INPUT }] : [],
     apiKey: resolvedKey,
   });
 }

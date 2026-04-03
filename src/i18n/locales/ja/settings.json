@@ -86,7 +86,10 @@
       "editKey": "API キーを編集",
       "delete": "プロバイダーを削除",
       "switchModel": "モデルを切替",
-      "currentModel": "モデル"
+      "currentModel": "モデル",
+      "stoModelHintVision": "マルチモーダル · 画像理解",
+      "stoModelHintMax": "高能力",
+      "stoModelHintPlus": "強化版"
     },
     "protocols": {
       "openai": "OpenAI 互換",
