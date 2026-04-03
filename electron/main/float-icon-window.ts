@@ -115,9 +115,13 @@ export function createFloatIconWindow(): BrowserWindow {
 
     const store = await getStore();
     const state: FloatIconState = store.get('floatIconState');
-    if (state.visible !== false && !win.isDestroyed()) {
+    const shouldShow = state.visible !== false;
+    if (shouldShow && !win.isDestroyed()) {
       win.show();
     }
+    // Update tray menu with actual visibility state after initialization
+    const { updateFloatIconVisible } = await import('./tray');
+    updateFloatIconVisible(shouldShow);
   })();
 
   // Load the float-icon route
@@ -163,6 +167,10 @@ export function showFloatIcon(): void {
   if (win) {
     win.show();
     void saveFloatIconState(win, true);
+    // Update tray menu checkbox state
+    import('./tray').then(({ updateFloatIconVisible }) => {
+      updateFloatIconVisible(true);
+    });
   }
 }
 
@@ -171,6 +179,10 @@ export function hideFloatIcon(): void {
   if (win) {
     win.hide();
     void saveFloatIconState(win, false);
+    // Update tray menu checkbox state
+    import('./tray').then(({ updateFloatIconVisible }) => {
+      updateFloatIconVisible(false);
+    });
   }
 }
 

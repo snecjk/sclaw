@@ -1,6 +1,6 @@
 appId: app.sto.claw.desktop
-productName: StoClaw
-copyright: Copyright © 2026 StoClaw
+productName: STO Claw
+copyright: Copyright © 2026 STO Claw
 # 使用 normal 压缩以加快安装速度（从 maximum 改为 normal）
 # maximum 使用 LZMA 压缩，解压极慢（3-5分钟）
 # normal 使用 Deflate，安装时间降至 1-2 分钟，体积增加约 15%
@@ -85,8 +85,8 @@ mac:
   entitlementsInherit: entitlements.mac.plist
   notarize: true
   extendInfo:
-    NSMicrophoneUsageDescription: StoClaw requires microphone access for voice features
-    NSCameraUsageDescription: StoClaw requires camera access for video features
+    NSMicrophoneUsageDescription: STO Claw requires microphone access for voice features
+    NSCameraUsageDescription: STO Claw requires camera access for video features
 
 dmg:
   background: resources/dmg-background.png
