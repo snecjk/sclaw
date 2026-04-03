@@ -83,6 +83,14 @@ SetCompressor zlib
   ; elevation this call silently fails — no crash, just no key written.
   WriteRegDWORD HKLM "SYSTEM\CurrentControlSet\Control\FileSystem" "LongPathsEnabled" 1
 
+  ; Clear authentication data from any previous installation.
+  ; This ensures users must re-authenticate after reinstalling rather than
+  ; silently reusing a stale/expired token from the old install.
+  ; Only auth-related files are removed — settings, providers, channels, etc. are preserved.
+  Delete "$APPDATA\stoclaw\sso-auth.json"
+  RMDir /r "$APPDATA\stoclaw\Local Storage"
+  RMDir /r "$APPDATA\stoclaw\Session Storage"
+
   ; Use PowerShell to update the current user's PATH.
   ; This avoids NSIS string-buffer limits and preserves long PATH values.
   InitPluginsDir

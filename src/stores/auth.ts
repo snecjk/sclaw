@@ -27,6 +27,8 @@ export interface SsoUserInfo {
 
 interface AuthState {
   isAuthenticated: boolean;
+  /** True after init() has completed at least once. Used to prevent auth guard from firing before the main-process status check resolves. */
+  isInitialized: boolean;
   user: SsoUserInfo | null;
   ssoEnvironment: SsoEnvironment;
   isLoggingIn: boolean;
@@ -43,6 +45,7 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       isAuthenticated: false,
+      isInitialized: false,
       user: null,
       ssoEnvironment: 'production-external',
       isLoggingIn: false,
@@ -61,9 +64,25 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: data.isAuthenticated,
             user: data.user,
             ssoEnvironment: data.ssoEnvironment,
+            isInitialized: true,
           });
+          // If already authenticated on startup, ensure STO models are synced and
+          // the renderer's provider list is up-to-date. The main process runs its
+          // own startup sync (index.ts), but the renderer may have fetched providers
+          // before that sync completed. This call deduplicates safely against any
+          // in-progress main-process sync.
+          if (data.isAuthenticated) {
+            void hostApiFetch('/api/sto-model-sync', { method: 'POST' })
+              .then(() => import('@/stores/providers'))
+              .then(({ useProviderStore }) =>
+                useProviderStore.getState().refreshProviderSnapshot(),
+              )
+              .catch(() => {});
+          }
         } catch {
-          // Keep renderer-persisted state as fallback
+          // Main-process unreachable — trust the renderer-persisted state as fallback.
+          // Still mark as initialized so the auth guard can proceed.
+          set({ isInitialized: true });
         }
       },
 
@@ -139,6 +158,8 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'stoclaw-auth',
       partialize: (state) => ({
+        // isInitialized is intentionally excluded — it must always start as false
+        // so the auth guard waits for the main-process check on every launch.
         isAuthenticated: state.isAuthenticated,
         user: state.user,
         ssoEnvironment: state.ssoEnvironment,
