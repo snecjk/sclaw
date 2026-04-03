@@ -397,20 +397,7 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
       onDrop={handleDrop}
     >
       <div className="w-full">
-        {/* Attachment Previews */}
-        {attachments.length > 0 && (
-          <div className="flex gap-2 mb-3 flex-wrap">
-            {attachments.map((att) => (
-              <AttachmentPreview
-                key={att.id}
-                attachment={att}
-                onRemove={() => removeAttachment(att.id)}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Input Row */}
+        {/* 单壳：附件缩略图与输入区同在一个圆角边框内（与 memory-center-web 助手输入一致） */}
         <div
           className={cn(
             'relative overflow-hidden rounded-2xl border bg-white shadow-[0_4px_14px_rgba(99,102,241,0.05)] transition-[box-shadow,border-color,ring-width,ring-color] duration-200 dark:bg-[#131a24]',
@@ -425,8 +412,25 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
                 ],
           )}
         >
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
+              {attachments.map((att) => (
+                <AttachmentPreview
+                  key={att.id}
+                  attachment={att}
+                  onRemove={() => removeAttachment(att.id)}
+                />
+              ))}
+            </div>
+          )}
+
           {selectedTarget && (
-            <div className="px-3 pt-3 pb-1">
+            <div
+              className={cn(
+                'px-4 pb-1',
+                attachments.length > 0 ? 'pt-2' : 'pt-3',
+              )}
+            >
               <button
                 type="button"
                 onClick={() => setTargetAgentId(null)}
@@ -439,7 +443,7 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
             </div>
           )}
 
-          <div className="px-4 pt-2.5">
+          <div className={cn('px-4', attachments.length > 0 ? 'pt-1.5' : 'pt-2.5')}>
             <div className="flex-1 relative">
               <Textarea
                 ref={textareaRef}
@@ -581,14 +585,14 @@ function AttachmentPreview({
   const isImage = attachment.mimeType.startsWith('image/') && attachment.preview;
 
   return (
-    <div className="relative group rounded-lg overflow-hidden border border-border">
+    <div className="relative group rounded-md overflow-hidden border border-border">
       {isImage ? (
-        // Image thumbnail
-        <div className="w-16 h-16">
+        // Image thumbnail（略小于原 16，删除钮贴右上角内侧）
+        <div className="h-12 w-12 shrink-0">
           <img
             src={attachment.preview!}
             alt={attachment.fileName}
-            className="w-full h-full object-cover"
+            className="h-full w-full object-cover"
           />
         </div>
       ) : (
@@ -618,12 +622,18 @@ function AttachmentPreview({
         </div>
       )}
 
-      {/* Remove button */}
+      {/* Remove：放在角内侧，flex 居中避免视觉偏移 */}
       <button
+        type="button"
         onClick={onRemove}
-        className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+        className={cn(
+          'absolute right-1 top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full',
+          'bg-destructive text-destructive-foreground shadow-sm ring-2 ring-background',
+          'opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100',
+        )}
+        aria-label="移除附件"
       >
-        <X className="h-3 w-3" />
+        <X className="h-3 w-3 shrink-0" strokeWidth={2.5} />
       </button>
     </div>
   );

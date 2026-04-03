@@ -469,6 +469,8 @@ interface RuntimeProviderConfigOverride {
   apiKeyEnv?: string;
   headers?: Record<string, string>;
   authHeader?: boolean;
+  /** Default input capabilities for new model entries (e.g. ['text', 'image']) */
+  defaultModelInput?: string[];
 }
 
 type ProviderEntryBuildOptions = {
@@ -480,6 +482,8 @@ type ProviderEntryBuildOptions = {
   modelIds?: string[];
   includeRegistryModels?: boolean;
   mergeExistingModels?: boolean;
+  /** Default input capabilities for new model entries (e.g. ['text', 'image']) */
+  defaultModelInput?: string[];
 };
 
 function normalizeModelRef(provider: string, modelOverride?: string): string | undefined {
@@ -532,10 +536,22 @@ function upsertOpenClawProviderEntry(
   const existingModels = options.mergeExistingModels && Array.isArray(existingProvider.models)
     ? (existingProvider.models as Array<Record<string, unknown>>)
     : [];
+  // All existing models, regardless of mergeExistingModels, used to preserve extra fields
+  const allExistingModels = Array.isArray(existingProvider.models)
+    ? (existingProvider.models as Array<Record<string, unknown>>)
+    : [];
   const registryModels = options.includeRegistryModels
     ? ((getProviderConfig(provider)?.models ?? []).map((m) => ({ ...m })) as Array<Record<string, unknown>>)
     : [];
-  const runtimeModels = (options.modelIds ?? []).map((id) => ({ id, name: id }));
+  // When re-syncing a model that already exists, preserve its extra fields (e.g. input, contextWindow)
+  const runtimeModels = (options.modelIds ?? []).map((id) => {
+    const existing = allExistingModels.find((e) => e.id === id);
+    if (existing) return { ...existing, id, name: id };
+    // New model entry: apply defaultModelInput if specified
+    return options.defaultModelInput
+      ? { id, name: id, input: options.defaultModelInput }
+      : { id, name: id };
+  });
 
   const nextProvider: Record<string, unknown> = {
     ...existingProvider,
@@ -612,6 +628,7 @@ export async function syncProviderConfigToOpenClaw(
         apiKeyEnv: override.apiKeyEnv,
         headers: override.headers,
         modelIds: modelId ? [modelId] : [],
+        defaultModelInput: override.defaultModelInput,
       });
     }
 
@@ -673,6 +690,7 @@ export async function setOpenClawDefaultModelWithOverride(
         headers: override.headers,
         authHeader: override.authHeader,
         modelIds: [modelId, ...fallbackModelIds],
+        defaultModelInput: override.defaultModelInput,
       });
     }
 
@@ -910,7 +928,7 @@ export async function updateAgentModelProvider(
   entry: {
     baseUrl?: string;
     api?: string;
-    models?: Array<{ id: string; name: string }>;
+    models?: Array<{ id: string; name: string; input?: string[] }>;
     apiKey?: string;
     /** When true, pi-ai sends Authorization: Bearer instead of x-api-key */
     authHeader?: boolean;

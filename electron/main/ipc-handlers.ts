@@ -1135,7 +1135,12 @@ function registerGatewayHandlers(
   // All other files are referenced by path in the message text so the model
   // can access them via tools (the same format channels use).
   const VISION_MIME_TYPES = new Set([
+    // Static images
     'image/png', 'image/jpeg', 'image/bmp', 'image/webp',
+    // Animated images
+    'image/gif',
+    // Modern image formats
+    'image/avif', 'image/heic', 'image/heif', 'image/tiff',
   ]);
 
   ipcMain.handle('chat:sendWithMedia', async (_, params: {

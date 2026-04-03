@@ -86,7 +86,10 @@
       "editKey": "Edit API key",
       "delete": "Delete provider",
       "switchModel": "Switch model",
-      "currentModel": "Current model"
+      "currentModel": "Current model",
+      "stoModelHintVision": "Multimodal · vision",
+      "stoModelHintMax": "Higher capability",
+      "stoModelHintPlus": "Enhanced"
     },
     "protocols": {
       "openai": "OpenAI Compatible",

@@ -1,31 +1,42 @@
 /**
  * SSO Login Page
- * Full-screen login page; SSO 固定走生产环境（环境选择已隐藏）。
+ * 开发模式（pnpm dev）显示 SSO 环境选择；正式打包产物隐藏选择并固定生产外网 SSO。
  */
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, LogIn, Orbit, ShieldCheck, Sparkles } from 'lucide-react';
 import { TitleBar } from '@/components/layout/TitleBar';
 import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/select';
 import { ParticleConstellation } from '@/components/common/ParticleConstellation';
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore, type SsoEnvironment } from '@/stores/auth';
 import clawxIcon from '@/assets/logo.svg';
 
-const DEFAULT_SSO_ENV = 'production-external' as const;
+const PRODUCTION_SSO_ENV: SsoEnvironment = 'production-external';
+
+const DEV_SSO_ENV_OPTIONS: SsoEnvironment[] = [
+  'daily-external',
+  'pre-release',
+  'production-internal',
+  'production-external',
+];
 
 export function Login() {
   const { t } = useTranslation(['auth']);
   const isLoggingIn = useAuthStore((s) => s.isLoggingIn);
   const error = useAuthStore((s) => s.error);
+  const ssoEnvironment = useAuthStore((s) => s.ssoEnvironment);
   const login = useAuthStore((s) => s.login);
   const setSsoEnvironment = useAuthStore((s) => s.setSsoEnvironment);
 
   useEffect(() => {
-    void setSsoEnvironment(DEFAULT_SSO_ENV);
+    if (import.meta.env.PROD) {
+      void setSsoEnvironment(PRODUCTION_SSO_ENV);
+    }
   }, [setSsoEnvironment]);
 
   const handleLogin = () => {
-    void login(DEFAULT_SSO_ENV);
+    void login(import.meta.env.PROD ? PRODUCTION_SSO_ENV : undefined);
   };
 
   return (
@@ -85,6 +96,27 @@ export function Login() {
             {error && error !== 'SSO_LOGIN_CANCELLED' && (
               <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive shadow-[0_10px_30px_rgba(127,29,29,0.12)]">
                 {t('auth:login.error', { error })}
+              </div>
+            )}
+
+            {import.meta.env.DEV && (
+              <div className="space-y-2">
+                <label htmlFor="sto-sso-env" className="text-xs font-medium uppercase tracking-[0.18em] text-foreground/55">
+                  {t('auth:environment.label')}
+                </label>
+                <Select
+                  id="sto-sso-env"
+                  value={ssoEnvironment}
+                  onChange={(e) => void setSsoEnvironment(e.target.value as SsoEnvironment)}
+                  disabled={isLoggingIn}
+                  className="h-11 rounded-xl border-white/12"
+                >
+                  {DEV_SSO_ENV_OPTIONS.map((env) => (
+                    <option key={env} value={env}>
+                      {t(`auth:environment.${env}`)}
+                    </option>
+                  ))}
+                </Select>
               </div>
             )}
 

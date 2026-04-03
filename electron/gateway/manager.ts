@@ -136,6 +136,15 @@ function summarizeRpcPayload(value: unknown): string {
     const messageSummary = summarizeMessagePayload(data.message);
     if (messageSummary) parts.push(messageSummary);
   }
+  if (Array.isArray(data.attachments)) {
+    let base64Chars = 0;
+    for (const item of data.attachments) {
+      if (item && typeof item === 'object' && typeof (item as { content?: unknown }).content === 'string') {
+        base64Chars += (item as { content: string }).content.length;
+      }
+    }
+    parts.push(`attachments=${data.attachments.length} base64Chars≈${base64Chars}`);
+  }
   if (Array.isArray(data.messages)) parts.push(`messages=${data.messages.length}`);
   if (Array.isArray(data.sessions)) parts.push(`sessions=${data.sessions.length}`);
   if (data.error != null && typeof data.error !== 'object') parts.push(`error=${String(data.error)}`);

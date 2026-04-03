@@ -217,13 +217,15 @@ function App() {
           </Route>
         </Routes>
 
-        {/* Global toast notifications */}
-        <Toaster
-          position="bottom-right"
-          richColors
-          closeButton
-          style={{ zIndex: 99999 }}
-        />
+        {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
+        {location.pathname !== '/float-icon' ? (
+          <Toaster
+            position="bottom-right"
+            richColors
+            closeButton
+            style={{ zIndex: 99999 }}
+          />
+        ) : null}
       </TooltipProvider>
     </ErrorBoundary>
   );

@@ -87,7 +87,12 @@ export async function handleGatewayRoutes(
         media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
       }>(req);
       const VISION_MIME_TYPES = new Set([
+        // Static images
         'image/png', 'image/jpeg', 'image/bmp', 'image/webp',
+        // Animated images
+        'image/gif',
+        // Modern image formats
+        'image/avif', 'image/heic', 'image/heif', 'image/tiff',
       ]);
       const imageAttachments: Array<{ content: string; mimeType: string; fileName: string }> = [];
       const fileReferences: string[] = [];

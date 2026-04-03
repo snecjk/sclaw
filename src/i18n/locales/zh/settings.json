@@ -86,7 +86,10 @@
       "editKey": "编辑 API 密钥",
       "delete": "删除提供商",
       "switchModel": "切换模型",
-      "currentModel": "当前模型"
+      "currentModel": "当前模型",
+      "stoModelHintVision": "多模态 · 视觉理解",
+      "stoModelHintMax": "高能力",
+      "stoModelHintPlus": "增强版"
     },
     "protocols": {
       "openai": "OpenAI 兼容",
