@@ -119,7 +119,13 @@
             "stoEmptyPrompt": "Browse STO internal skills to extend your capabilities.",
             "stoNoResults": "No matching STO skills found.",
             "stoSearching": "Searching STO Skill Plaza...",
+            "stoSearchError": "STO Skill Plaza search failed. Please check your login status or network connection.",
             "stoComingSoon": "Coming Soon"
-        }
+        },
+        "install": "Install",
+        "installed": "Installed",
+        "installing": "Installing...",
+        "installSuccess": "{{name}} installed successfully",
+        "installError": "Installation failed: {{error}}"
     }
 }

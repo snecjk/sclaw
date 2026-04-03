@@ -389,6 +389,7 @@ async function initialize(): Promise<void> {
     { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled },
     { ensureAllBundledPluginsInstalledAsync },
     { startHostApiServer },
+    stoSkillMod,
     spriteWindowMod,
     floatIconMod,
   ] = await Promise.all([
@@ -408,6 +409,7 @@ async function initialize(): Promise<void> {
     import('../utils/skill-config'),
     import('../utils/plugin-install'),
     import('../api/server'),
+    import('../services/sto-skill-service'),
     import('./sprite-window'),
     import('./float-icon-window'),
   ]);
@@ -417,6 +419,7 @@ async function initialize(): Promise<void> {
   // Use local references (guaranteed non-null) for subsequent setup calls.
   const gm = new gatewayMod.GatewayManager();
   const chs = new clawhubMod.ClawHubService();
+  const sss = new stoSkillMod.StoSkillService();
   const heb = new eventBusMod.HostEventBus();
   gatewayManager = gm;
   clawHubService = chs;
@@ -478,6 +481,7 @@ async function initialize(): Promise<void> {
   hostApiServer = startHostApiServer({
     gatewayManager: gm,
     clawHubService: chs,
+    stoSkillService: sss,
     eventBus: heb,
     mainWindow: window,
   });

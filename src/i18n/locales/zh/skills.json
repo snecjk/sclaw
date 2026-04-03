@@ -119,7 +119,13 @@
             "stoEmptyPrompt": "浏览申通内部技能以扩展您的能力。",
             "stoNoResults": "未找到匹配的申通技能。",
             "stoSearching": "正在搜索申通技能广场...",
+            "stoSearchError": "申通技能广场搜索失败，请检查登录状态或网络连接。",
             "stoComingSoon": "即将上线"
-        }
+        },
+        "install": "安装",
+        "installed": "已安装",
+        "installing": "安装中...",
+        "installSuccess": "{{name}} 安装成功",
+        "installError": "安装失败: {{error}}"
     }
 }

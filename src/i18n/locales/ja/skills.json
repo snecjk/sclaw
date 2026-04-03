@@ -119,7 +119,13 @@
             "stoEmptyPrompt": "STOの内部スキルを検索して機能を拡張しましょう。",
             "stoNoResults": "一致するSTOスキルが見つかりません。",
             "stoSearching": "STOスキルプラザを検索中...",
+            "stoSearchError": "STOスキルプラザの検索に失敗しました。ログイン状態またはネットワーク接続を確認してください。",
             "stoComingSoon": "近日公開"
-        }
+        },
+        "install": "インストール",
+        "installed": "インストール済み",
+        "installing": "インストール中...",
+        "installSuccess": "{{name}} のインストールに成功しました",
+        "installError": "インストールに失敗しました: {{error}}"
     }
 }

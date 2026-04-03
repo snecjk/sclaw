@@ -2,7 +2,7 @@
  * Skills Page
  * Browse and manage AI skills
  */
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   Search,
   Puzzle,
@@ -35,22 +35,12 @@ import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { trackUiEvent } from '@/lib/telemetry';
 import { toast } from 'sonner';
-import type { Skill, MarketplaceSkill } from '@/types/skill';
+import type { Skill } from '@/types/skill';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
 
-
-// STO Skill Plaza mock data (replace with real API when available)
-const STO_MOCK_SKILLS: MarketplaceSkill[] = [
-  { slug: 'sto-logistics-tracker', name: '物流追踪助手', description: '实时查询包裹物流状态与签收信息', version: '1.0.0', author: '申通技术部' },
-  { slug: 'sto-waybill-parser', name: '运单解析', description: '智能解析运单号并提取关键信息', version: '1.2.0', author: '申通技术部' },
-  { slug: 'sto-customer-service', name: '客服话术库', description: '提供标准客服回复模板和话术建议', version: '2.0.0', author: '申通客服中心' },
-  { slug: 'sto-route-optimizer', name: '路线优化', description: '优化配送路线规划，提升运输效率', version: '1.1.0', author: '申通技术部' },
-  { slug: 'sto-data-report', name: '数据报表', description: '生成业务分析报表和数据可视化', version: '1.0.0', author: '申通数据团队' },
-  { slug: 'sto-warehouse-mgmt', name: '仓储管理', description: '仓库库存和入出库管理工具', version: '0.9.0', author: '申通仓储部' },
-];
 
 // Skill detail dialog component
 interface SkillDetailDialogProps {
@@ -58,7 +48,7 @@ interface SkillDetailDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onToggle: (enabled: boolean) => void;
-  onUninstall?: (slug: string) => void;
+  onUninstall?: (slug: string, source?: string) => void;
   onOpenFolder?: (skill: Skill) => Promise<void> | void;
 }
 
@@ -377,7 +367,7 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall, onOp
               >
                 {isSaving ? t('detail.saving') : t('detail.saveConfig')}
               </Button>
-            )}
+            )}\n
 
             {!skill.isCore && (
               <Button
@@ -385,7 +375,7 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall, onOp
                 className="flex-1 h-[42px] text-[13px] rounded-full font-semibold shadow-sm bg-transparent border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-foreground/80 hover:text-foreground"
                 onClick={() => {
                   if (!skill.isBundled && onUninstall && skill.slug) {
-                    onUninstall(skill.slug);
+                    onUninstall(skill.slug, skill.source);
                     onClose();
                   } else {
                     onToggle(!skill.enabled);
@@ -418,7 +408,15 @@ export function Skills() {
     uninstallSkill,
     searching,
     searchError,
-    installing
+    installing,
+    // STO
+    stoSearchResults,
+    stoSearching,
+    stoSearchError,
+    stoInstalling,
+    searchStoSkills,
+    installStoSkill,
+    uninstallStoSkill,
   } = useSkillsStore();
   const { t } = useTranslation('skills');
   const gatewayStatus = useGatewayStore((state) => state.status);
@@ -457,13 +455,24 @@ export function Skills() {
 
   const safeSkills = Array.isArray(skills) ? skills : [];
 
-  const filteredStoSkills = useMemo(() => {
-    const q = stoSearchQuery.toLowerCase().trim();
-    if (!q) return STO_MOCK_SKILLS;
-    return STO_MOCK_SKILLS.filter(
-      (s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q)
-    );
-  }, [stoSearchQuery]);
+  // Trigger STO search when tab is active and query changes (debounced)
+  useEffect(() => {
+    if (activeInstallTab !== 'sto' || !installSheetOpen) return;
+    const timer = setTimeout(() => {
+      searchStoSkills(stoSearchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [stoSearchQuery, activeInstallTab, installSheetOpen, searchStoSkills]);
+
+  // Trigger initial STO load when sheet opens on STO tab
+  useEffect(() => {
+    if (installSheetOpen && activeInstallTab === 'sto') {
+      searchStoSkills(stoSearchQuery);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [installSheetOpen]);
+
+  const filteredStoSkills = stoSearchResults;
 
   const filteredSkills = safeSkills.filter((skill) => {
     const q = searchQuery.toLowerCase().trim();
@@ -639,14 +648,19 @@ export function Skills() {
     }
   }, [installSkill, enableSkill, t, skillsDirPath]);
 
-  const handleUninstall = useCallback(async (slug: string) => {
+  const handleUninstall = useCallback(async (slug: string, source?: string) => {
     try {
-      await uninstallSkill(slug);
+      // Use STO uninstall for sto-marketplace skills
+      if (source === 'sto-marketplace') {
+        await uninstallStoSkill(slug);
+      } else {
+        await uninstallSkill(slug);
+      }
       toast.success(t('toast.uninstalled'));
     } catch (err) {
       toast.error(t('toast.failedUninstall') + ': ' + String(err));
     }
-  }, [uninstallSkill, t]);
+  }, [uninstallSkill, uninstallStoSkill, t]);
 
   if (loading) {
     return (
@@ -989,46 +1003,90 @@ export function Skills() {
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto px-8 py-6">
-                {filteredStoSkills.length > 0 ? (
+                {stoSearching ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                    <LoadingSpinner className="h-6 w-6 mb-4" />
+                    <p>{t('marketplace.installTabs.stoSearching')}</p>
+                  </div>
+                ) : stoSearchError ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                    <AlertCircle className="h-10 w-10 mb-4 opacity-50 text-destructive" />
+                    <p>{t('marketplace.installTabs.stoSearchError')}</p>
+                  </div>
+                ) : filteredStoSkills.length > 0 ? (
                   <div className="flex flex-col gap-1">
-                    {filteredStoSkills.map((skill) => (
-                      <div
-                        key={skill.slug}
-                        className="group flex flex-row items-center justify-between py-3.5 px-3 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-colors border-b border-black/5 dark:border-white/5 last:border-0"
-                      >
-                        <div className="flex items-start gap-4 flex-1 overflow-hidden pr-4">
-                          <div className="h-10 w-10 shrink-0 flex items-center justify-center text-xl glass border rounded-xl overflow-hidden">
-                            📦
-                          </div>
-                          <div className="flex flex-col overflow-hidden">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="text-[15px] font-semibold text-foreground truncate">{skill.name}</h3>
-                              {skill.author && (
-                                <span className="text-xs text-muted-foreground">• {skill.author}</span>
-                              )}
+                    {filteredStoSkills.map((skill) => {
+                      const isStoInstalling = stoInstalling[skill.slug];
+                      // Use case-insensitive comparison because Gateway lowercases the skillKey
+                      const isAlreadyInstalled = safeSkills.some(s =>
+                        (s.slug && s.slug.toLowerCase() === skill.slug.toLowerCase())
+                        || s.id.toLowerCase() === skill.slug.toLowerCase()
+                      );
+                      return (
+                        <div
+                          key={skill.slug}
+                          className="group flex flex-row items-center justify-between py-3.5 px-3 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-colors border-b border-black/5 dark:border-white/5 last:border-0"
+                        >
+                          <div className="flex items-start gap-4 flex-1 overflow-hidden pr-4">
+                            <div className="h-10 w-10 shrink-0 flex items-center justify-center text-xl glass border rounded-xl overflow-hidden">
+                              📦
                             </div>
-                            <p className="text-[13.5px] text-muted-foreground line-clamp-1 pr-6 leading-relaxed">
-                              {skill.description}
-                            </p>
+                            <div className="flex flex-col overflow-hidden">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3 className="text-[15px] font-semibold text-foreground truncate">{skill.name}</h3>
+                                {skill.author && (
+                                  <span className="text-xs text-muted-foreground">• {skill.author}</span>
+                                )}
+                              </div>
+                              <p className="text-[13.5px] text-muted-foreground line-clamp-1 pr-6 leading-relaxed">
+                                {skill.description}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4 shrink-0">
+                            {skill.version && (
+                              <span className="text-[13px] font-mono text-muted-foreground mr-2">
+                                v{skill.version}
+                              </span>
+                            )}
+                            {isAlreadyInstalled ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled
+                                className="h-8 px-4 rounded-full shadow-none font-medium text-xs"
+                              >
+                                {t('marketplace.installed')}
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={isStoInstalling}
+                                onClick={async () => {
+                                  try {
+                                    await installStoSkill(skill.slug, skill.version, {
+                                      name: skill.name,
+                                      description: skill.description,
+                                      author: skill.author,
+                                    });
+                                    toast.success(t('marketplace.installSuccess', { name: skill.name }));
+                                  } catch (err) {
+                                    toast.error(t('marketplace.installError', { error: String(err) }));
+                                  }
+                                }}
+                                className="h-8 px-4 rounded-full shadow-none font-medium text-xs"
+                              >
+                                {isStoInstalling ? (
+                                  <LoadingSpinner className="h-3 w-3 mr-1" />
+                                ) : null}
+                                {isStoInstalling ? t('marketplace.installing') : t('marketplace.install')}
+                              </Button>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-4 shrink-0">
-                          {skill.version && (
-                            <span className="text-[13px] font-mono text-muted-foreground mr-2">
-                              v{skill.version}
-                            </span>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => toast.info(t('marketplace.installTabs.stoComingSoon'))}
-                            className="h-8 px-4 rounded-full shadow-none font-medium text-xs"
-                          >
-                            {t('marketplace.installTabs.stoComingSoon')}
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
@@ -1093,7 +1151,12 @@ export function Skills() {
                 {!searching && searchResults.length > 0 && (
                   <div className="flex flex-col gap-1">
                     {searchResults.map((skill) => {
-                      const isInstalled = safeSkills.some(s => s.id === skill.slug || s.name === skill.name);
+                      // Use case-insensitive comparison for slug, and also match by name
+                      const isInstalled = safeSkills.some(s =>
+                        s.id.toLowerCase() === skill.slug.toLowerCase()
+                        || (s.slug && s.slug.toLowerCase() === skill.slug.toLowerCase())
+                        || s.name === skill.name
+                      );
                       const isInstallLoading = !!installing[skill.slug];
 
                       return (
