@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { ParticleConstellation } from '@/components/common/ParticleConstellation';
 import { useAuthStore, type SsoEnvironment } from '@/stores/auth';
-import clawxIcon from '@/assets/logo.svg';
+import clawxIcon from '@/assets/rectangle_icon.png';
 
 const PRODUCTION_SSO_ENV: SsoEnvironment = 'production-external';
 
@@ -74,8 +74,8 @@ export function Login() {
             <div className="flex flex-col items-center gap-5">
               <div className="relative">
                 <div className="absolute inset-0 rounded-[26px] bg-cyan-400/20 blur-2xl" />
-                <div className="glass-subtle relative rounded-[26px] border border-cyan-300/20 p-5 shadow-[0_0_0_1px_rgba(103,232,249,0.12),0_24px_50px_rgba(8,47,73,0.26)]">
-                  <img src={clawxIcon} alt="StoClaw" className="h-14 w-14" />
+                <div className="relative overflow-hidden rounded-[16px] border border-cyan-300/20 shadow-[0_0_0_1px_rgba(103,232,249,0.12),0_24px_50px_rgba(8,47,73,0.26)]">
+                  <img src={clawxIcon} alt="StoClaw" className="h-16 w-16 object-cover" />
                 </div>
               </div>
 

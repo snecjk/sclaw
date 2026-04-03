@@ -4,7 +4,7 @@
  * Click toggles the sprite assistant; drag moves the icon.
  */
 import { useEffect, useRef, useCallback } from 'react';
-import logoSvg from '@/assets/logo.svg';
+import logoSvg from '@/assets/logo.ico';
 import { useSettingsStore } from '@/stores/settings';
 import { invokeIpc } from '@/lib/api-client';
 import i18n from '@/i18n';
@@ -160,7 +160,7 @@ export function FloatIcon() {
   return (
     <div
       onMouseDown={handleMouseDown}
-      className="box-border h-[56px] w-[56px] shrink-0 cursor-pointer select-none overflow-hidden rounded-full border border-glass-border shadow-glass glass-subtle"
+      className="box-border h-[76px] w-[76px] shrink-0 cursor-pointer select-none overflow-hidden"
       style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
     >
       <div className="flex h-full w-full items-center justify-center transition-transform duration-150 hover:scale-105 active:scale-95">
@@ -168,8 +168,8 @@ export function FloatIcon() {
           src={logoSvg}
           alt="StoClaw"
           className="pointer-events-none max-h-[68%] max-w-[68%] object-contain"
-          width={38}
-          height={38}
+          width={56}
+          height={56}
           draggable={false}
         />
       </div>

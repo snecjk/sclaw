@@ -6,6 +6,9 @@ import { Tray, Menu, BrowserWindow, app, nativeImage } from 'electron';
 import { join } from 'path';
 
 let tray: Tray | null = null;
+let floatIconVisible = true; // Track float icon visibility state
+let mainWindowRef: BrowserWindow | null = null;
+let onToggleFloatIconCallback: (() => void) | undefined;
 
 /**
  * Resolve the icons directory path (works in both dev and packaged mode)
@@ -18,9 +21,95 @@ function getIconsDir(): string {
 }
 
 /**
+ * Build context menu
+ */
+function buildContextMenu(): Menu {
+  const showWindow = () => {
+    if (!mainWindowRef || mainWindowRef.isDestroyed()) return;
+    mainWindowRef.show();
+    mainWindowRef.focus();
+  };
+
+  return Menu.buildFromTemplate([
+    {
+      label: '显示 StoClaw',
+      click: showWindow,
+    },
+    {
+      label: '显示精灵',
+      type: 'checkbox',
+      checked: floatIconVisible,
+      click: () => {
+        onToggleFloatIconCallback?.();
+      },
+    },
+    {
+      type: 'separator',
+    },
+    {
+      label: '网关状态',
+      enabled: false,
+    },
+    {
+      label: '  运行中',
+      type: 'checkbox',
+      checked: true,
+      enabled: false,
+    },
+    {
+      type: 'separator',
+    },
+    {
+      label: '快捷操作',
+      submenu: [
+        {
+          label: '打开聊天',
+          click: () => {
+            if (!mainWindowRef || mainWindowRef.isDestroyed()) return;
+            mainWindowRef.show();
+            mainWindowRef.webContents.send('navigate', '/');
+          },
+        },
+        {
+          label: '打开设置',
+          click: () => {
+            if (!mainWindowRef || mainWindowRef.isDestroyed()) return;
+            mainWindowRef.show();
+            mainWindowRef.webContents.send('navigate', '/settings');
+          },
+        },
+      ],
+    },
+    {
+      type: 'separator',
+    },
+    {
+      label: '检查更新...',
+      click: () => {
+        if (!mainWindowRef || mainWindowRef.isDestroyed()) return;
+        mainWindowRef.webContents.send('update:check');
+      },
+    },
+    {
+      type: 'separator',
+    },
+    {
+      label: '退出 StoClaw',
+      click: () => {
+        app.quit();
+      },
+    },
+  ]);
+}
+
+/**
  * Create system tray icon and menu
  */
-export function createTray(mainWindow: BrowserWindow, onToggleSprite?: () => void, onToggleFloatIcon?: () => void): Tray {
+export function createTray(mainWindow: BrowserWindow, _onToggleSprite?: () => void, onToggleFloatIcon?: () => void): Tray {
+  // Store references for menu rebuilding
+  mainWindowRef = mainWindow;
+  onToggleFloatIconCallback = onToggleFloatIcon;
+
   // Use platform-appropriate icon for system tray
   const iconsDir = getIconsDir();
   let iconPath: string;
@@ -53,96 +142,14 @@ export function createTray(mainWindow: BrowserWindow, onToggleSprite?: () => voi
   if (process.platform === 'darwin') {
     icon.setTemplateImage(true);
   }
-  
+
   tray = new Tray(icon);
-  
+
   // Set tooltip
   tray.setToolTip('StoClaw - AI 助手');
-  
-  const showWindow = () => {
-    if (mainWindow.isDestroyed()) return;
-    mainWindow.show();
-    mainWindow.focus();
-  };
 
-  // Create context menu
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: '显示 StoClaw',
-      click: showWindow,
-    },
-    // {
-    //   label: '精灵窗口',
-    //   click: () => {
-    //     onToggleSprite?.();
-    //   },
-    // },
-    {
-      label: '显示/隐藏精灵',
-      click: () => {
-        onToggleFloatIcon?.();
-      },
-    },
-    {
-      type: 'separator',
-    },
-    {
-      label: '网关状态',
-      enabled: false,
-    },
-    {
-      label: '  运行中',
-      type: 'checkbox',
-      checked: true,
-      enabled: false,
-    },
-    {
-      type: 'separator',
-    },
-    {
-      label: '快捷操作',
-      submenu: [
-        {
-          label: '打开聊天',
-          click: () => {
-            if (mainWindow.isDestroyed()) return;
-            mainWindow.show();
-            mainWindow.webContents.send('navigate', '/');
-          },
-        },
-        {
-          label: '打开设置',
-          click: () => {
-            if (mainWindow.isDestroyed()) return;
-            mainWindow.show();
-            mainWindow.webContents.send('navigate', '/settings');
-          },
-        },
-      ],
-    },
-    {
-      type: 'separator',
-    },
-    {
-      label: '检查更新...',
-      click: () => {
-        if (mainWindow.isDestroyed()) return;
-        mainWindow.webContents.send('update:check');
-      },
-    },
-    {
-      type: 'separator',
-    },
-    {
-      label: '退出 StoClaw',
-      click: () => {
-        app.quit();
-      },
-    },
-  ]);
-  
-  tray.setContextMenu(contextMenu);
-  
+  tray.setContextMenu(buildContextMenu());
+
   // Click to show window (Windows/Linux)
   tray.on('click', () => {
     if (mainWindow.isDestroyed()) return;
@@ -153,14 +160,14 @@ export function createTray(mainWindow: BrowserWindow, onToggleSprite?: () => voi
       mainWindow.focus();
     }
   });
-  
+
   // Double-click to show window (Windows)
   tray.on('double-click', () => {
     if (mainWindow.isDestroyed()) return;
     mainWindow.show();
     mainWindow.focus();
   });
-  
+
   return tray;
 }
 
@@ -170,6 +177,16 @@ export function createTray(mainWindow: BrowserWindow, onToggleSprite?: () => voi
 export function updateTrayStatus(status: string): void {
   if (tray) {
     tray.setToolTip(`StoClaw - ${status}`);
+  }
+}
+
+/**
+ * Update float icon visibility state and rebuild menu
+ */
+export function updateFloatIconVisible(visible: boolean): void {
+  floatIconVisible = visible;
+  if (tray) {
+    tray.setContextMenu(buildContextMenu());
   }
 }
 

@@ -14,7 +14,7 @@ function BrandLogo() {
     <div className="flex items-center gap-2 px-3">
       <img src={logoSvg} alt="StoClaw" className="h-5 w-auto shrink-0" />
       <span className="text-sm font-semibold whitespace-nowrap text-foreground/90">
-        StoClaw
+        STO Claw
       </span>
     </div>
   );
