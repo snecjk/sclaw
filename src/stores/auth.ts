@@ -10,7 +10,8 @@ export type SsoEnvironment =
   | 'daily-external'
   | 'production-internal'
   | 'production-external'
-  | 'pre-release';
+  | 'pre-release'
+  | 'local';
 
 export interface SsoUserInfo {
   id: string;

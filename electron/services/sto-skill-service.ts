@@ -20,6 +20,7 @@ import { logger } from '../utils/logger';
 const STO_SKILL_DOMAINS: Record<string, string> = {
   'daily-external': 'https://baseinfo-aimemory-test.sto.cn',
   'pre-release': 'https://pre-baseinfo-aimemory.sto.cn',
+  'local': 'http://127.0.0.1:7001',
 };
 const STO_SKILL_DOMAIN_DEFAULT = 'https://baseinfo-aimemory.sto.cn';
 

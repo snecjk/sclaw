@@ -19,6 +19,7 @@ const MEMORY_CENTER_ORIGIN: Record<SsoEnvironment, string> = {
   'daily-external': 'https://baseinfo-aimemory-test.sto.cn',
   'pre-release': 'https://pre-baseinfo-aimemory.sto.cn',
   'production-external': 'https://baseinfo-aimemory.sto.cn',
+  'local': 'http://127.0.0.1:7001',
 };
 
 export function getMemoryCenterApiOrigin(env: SsoEnvironment): string {

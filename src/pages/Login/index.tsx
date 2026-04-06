@@ -15,6 +15,7 @@ import clawxIcon from '@/assets/rectangle_icon.png';
 const PRODUCTION_SSO_ENV: SsoEnvironment = 'production-external';
 
 const DEV_SSO_ENV_OPTIONS: SsoEnvironment[] = [
+  'local',
   'daily-external',
   'pre-release',
   'production-internal',
