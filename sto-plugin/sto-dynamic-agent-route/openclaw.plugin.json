@@ -1,0 +1,65 @@
+{
+  "id": "sto-dynamic-agent-route",
+  "name": "申通动态模型路由",
+  "description": "申通动态模型路由插件，通过远程路由接口在 before_model_resolve 时动态切换模型 provider。",
+  "providers": ["sto-dynamic-agent-route"],
+  "providerAuthEnvVars": {
+    "sto-dynamic-agent-route": ["STO_DYNAMIC_ROUTE_API_KEY"]
+  },
+  "providerAuthChoices": [
+    {
+      "provider": "sto-dynamic-agent-route",
+      "method": "api-key",
+      "choiceId": "sto-dynamic-agent-route-api-key",
+      "choiceLabel": "STO Dynamic Route API key",
+      "groupId": "sto-dynamic-agent-route",
+      "groupLabel": "STO Dynamic Route",
+      "cliFlag": "--sto-api-key",
+      "cliOption": "--sto-api-key ",
+      "cliDescription": "STO Dynamic Route API key"
+    }
+  ],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "routeApiUrl": { "type": "string" },
+      "routeApiKey": { "type": "string" },
+      "providerBaseUrl": { "type": "string" },
+      "providerApiKey": { "type": "string" },
+      "defaultModel": { "type": "string" },
+      "timeoutMs": { "type": "number" },
+      "ssoAuthPath": { "type": "string" }
+    }
+  },
+  "uiHints": {
+    "routeApiUrl": {
+      "label": "路由 API 地址",
+      "help": "远程路由分发判断接口 URL"
+    },
+    "routeApiKey": {
+      "label": "路由 API Key",
+      "help": "调用路由接口的认证 Key（可选）"
+    },
+    "providerBaseUrl": {
+      "label": "模型 API 地址",
+      "help": "OpenAI-completions 兼容的模型服务 Base URL"
+    },
+    "providerApiKey": {
+      "label": "模型 API Key",
+      "help": "模型服务的 API Key"
+    },
+    "defaultModel": {
+      "label": "默认模型",
+      "help": "路由接口未指定模型时使用的默认模型 ID"
+    },
+    "timeoutMs": {
+      "label": "路由超时(ms)",
+      "help": "路由 API 调用超时时间，默认 3000ms"
+    },
+    "ssoAuthPath": {
+      "label": "SSO Auth 文件路径",
+      "help": "SSO 认证信息文件路径，默认 ~/.openclaw/sso-auth.json，其中 userName 和 stoToken 会作为 HTTP headers 注入到模型请求中"
+    }
+  }
+}

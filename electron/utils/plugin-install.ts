@@ -453,7 +453,7 @@ export function ensureWeChatPluginInstalled(): { installed: boolean; warning?: s
  * All bundled plugins, in the same order as after-pack.cjs BUNDLED_PLUGINS.
  */
 const ALL_BUNDLED_PLUGINS = [
-  { fn: ensureDingTalkPluginInstalled, label: 'DingTalk' },
+  // { fn: ensureDingTalkPluginInstalled, label: 'DingTalk' },
   { fn: ensureWeComPluginInstalled, label: 'WeCom' },
   { fn: ensureQQBotPluginInstalled, label: 'QQ Bot' },
   { fn: ensureWeChatPluginInstalled, label: 'WeChat' },
@@ -561,7 +561,7 @@ export async function ensureAllBundledPluginsInstalled(): Promise<void> {
  */
 export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
   const pluginSpecs = [
-    { dirName: 'dingtalk', label: 'DingTalk' },
+    // { dirName: 'dingtalk', label: 'DingTalk' },
     { dirName: 'wecom', label: 'WeCom' },
     { dirName: 'qqbot', label: 'QQ Bot' },
     { dirName: 'openclaw-weixin', label: 'WeChat' },

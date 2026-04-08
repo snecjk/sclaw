@@ -90,7 +90,7 @@ function normWin(p) {
 }
 
 const PLUGINS = [
-  { npmName: '@soimy/dingtalk', pluginId: 'dingtalk' },
+  // { npmName: '@soimy/dingtalk', pluginId: 'dingtalk' },
 ];
 
 // Now define the hash function after PLUGINS is defined
