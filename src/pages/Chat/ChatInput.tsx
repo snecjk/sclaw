@@ -389,8 +389,7 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
   return (
     <div
       className={cn(
-        "p-4 pb-6 w-full mx-auto transition-all duration-300",
-        isEmpty ? "max-w-3xl" : "max-w-4xl"
+        "px-6 pb-6 pt-2 w-full max-w-5xl mx-auto transition-all duration-300"
       )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
