@@ -43,6 +43,8 @@
         "processingBadge": "AI 正在处理",
         "processingTitle": "正在整理工具结果",
         "processingDescription": "工具已经返回结果，模型正在整合信息并生成最终回复。",
+        "completedLabel": "以上信息由 AI 提供",
+        "completedBadge": "已完成",
         "jumpToLatest": "回到最新"
     },
     "sessionList": {

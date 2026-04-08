@@ -621,7 +621,7 @@ function ModelTab({ agent }: { agent: AgentSummary }) {
 }
 
 // ── Skills Tab ────────────────────────────────────────────────────────────────
-function SkillsTab() {
+function SkillsTab({ agentId }: { agentId: string }) {
   const {
     skills, fetchSkills,
     enableSkill, disableSkill,
@@ -724,7 +724,7 @@ function SkillsTab() {
                     <Button variant="ghost" size="sm"
                       className="h-7 px-2 text-[11px] text-destructive/70 hover:text-destructive hover:bg-destructive/10"
                       onClick={async () => {
-                        try { await uninstallStoSkill(skill.slug!); toast.success('已卸载'); }
+                        try { await uninstallStoSkill(skill.slug!, agentId); toast.success('已卸载'); }
                         catch (err) { toast.error(String(err)); }
                       }}>
                       <Trash2 className="h-3 w-3" />
@@ -760,7 +760,7 @@ function SkillsTab() {
                       <Badge variant="secondary" className="shrink-0 text-[11px]">已安装</Badge>
                     ) : (
                       <Button size="sm" variant="outline" disabled={installing}
-                        onClick={() => void installStoSkill(s.slug, s.version, { name: s.name, description: s.description, author: s.author })}
+                        onClick={() => void installStoSkill(s.slug, s.version, { name: s.name, description: s.description, author: s.author }, agentId)}
                         className="h-7 shrink-0 rounded-md px-3 text-[12px]">
                         {installing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
                         安装
@@ -1244,7 +1244,7 @@ export function AgentDetailPage({ agent, onBack }: AgentDetailPageProps) {
             <ModelTab agent={agent} />
           </TabsContent>
           <TabsContent value="skills" forceMount className={tab !== 'skills' ? 'hidden' : ''}>
-            <SkillsTab />
+            <SkillsTab agentId={agent.id} />
           </TabsContent>
           <TabsContent value="tasks" forceMount className={tab !== 'tasks' ? 'hidden' : ''}>
             <TasksTab agentId={agent.id} />

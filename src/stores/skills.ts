@@ -94,8 +94,8 @@ interface SkillsState {
 
   // STO actions
   searchStoSkills: (query: string) => Promise<void>;
-  installStoSkill: (slug: string, version?: string, meta?: { name?: string; description?: string; author?: string }) => Promise<void>;
-  uninstallStoSkill: (slug: string) => Promise<void>;
+  installStoSkill: (slug: string, version?: string, meta?: { name?: string; description?: string; author?: string }, agentId?: string) => Promise<void>;
+  uninstallStoSkill: (slug: string, agentId?: string) => Promise<void>;
 }
 
 export const useSkillsStore = create<SkillsState>((set, get) => ({
@@ -402,12 +402,12 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
     }
   },
 
-  installStoSkill: async (slug: string, version?: string, meta?: { name?: string; description?: string; author?: string }) => {
+  installStoSkill: async (slug: string, version?: string, meta?: { name?: string; description?: string; author?: string }, agentId?: string) => {
     set((state) => ({ stoInstalling: { ...state.stoInstalling, [slug]: true } }));
     try {
       const result = await hostApiFetch<{ success: boolean; error?: string }>('/api/sto-skills/install', {
         method: 'POST',
-        body: JSON.stringify({ slug, version, force: true, name: meta?.name, description: meta?.description, author: meta?.author }),
+        body: JSON.stringify({ slug, version, force: true, name: meta?.name, description: meta?.description, author: meta?.author, agentId }),
       });
       if (!result.success) {
         const appError = normalizeAppError(new Error(result.error || 'STO install failed'), {
@@ -432,12 +432,12 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
     }
   },
 
-  uninstallStoSkill: async (slug: string) => {
+  uninstallStoSkill: async (slug: string, agentId?: string) => {
     set((state) => ({ stoInstalling: { ...state.stoInstalling, [slug]: true } }));
     try {
       const result = await hostApiFetch<{ success: boolean; error?: string }>('/api/sto-skills/uninstall', {
         method: 'POST',
-        body: JSON.stringify({ slug }),
+        body: JSON.stringify({ slug, agentId }),
       });
       if (!result.success) {
         throw new Error(result.error || 'STO uninstall failed');

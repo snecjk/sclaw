@@ -399,7 +399,7 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
         {/* 单壳：附件缩略图与输入区同在一个圆角边框内（与 memory-center-web 助手输入一致） */}
         <div
           className={cn(
-            'relative overflow-hidden rounded-2xl border bg-white shadow-[0_4px_14px_rgba(99,102,241,0.05)] transition-[box-shadow,border-color,ring-width,ring-color] duration-200 dark:bg-[#131a24]',
+            'relative overflow-visible rounded-2xl border bg-white shadow-[0_4px_14px_rgba(99,102,241,0.05)] transition-[box-shadow,border-color,ring-width,ring-color] duration-200 dark:bg-[#131a24]',
             dragOver
               ? 'border-primary/60 ring-2 ring-primary/18'
               : [
@@ -493,7 +493,7 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
                     <AtSign className="h-3.5 w-3.5" />
                   </Button>
                   {pickerOpen && (
-                    <div className="absolute left-0 bottom-full z-20 mb-2 w-72 overflow-hidden rounded-2xl border border-glass-border glass p-1.5">
+                    <div className="absolute left-0 bottom-full z-50 mb-2 w-72 overflow-hidden rounded-2xl border border-glass-border glass p-1.5">
                       <div className="px-3 py-2 text-[11px] font-medium text-muted-foreground/80">
                         {t('composer.agentPickerTitle', { currentAgent: currentAgentName })}
                       </div>
