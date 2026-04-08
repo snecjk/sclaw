@@ -11,6 +11,7 @@
     "filter": {
         "all": "全部 ({{count}})",
         "builtIn": "内置 ({{count}})",
+        "enterprise": "企业内部 ({{count}})",
         "marketplace": "市场 ({{count}})"
     },
     "search": "搜索技能...",

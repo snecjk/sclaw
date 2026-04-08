@@ -1,4 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { readFile, writeFile, mkdir } from 'fs/promises';
+import { join, basename } from 'path';
 import {
   assignChannelToAgent,
   clearChannelBinding,
@@ -8,7 +10,15 @@ import {
   removeAgentWorkspaceDirectory,
   resolveAccountIdForAgent,
   updateAgentName,
+  updateAgentModel,
+  getAgentWorkspacePath,
 } from '../../utils/agent-config';
+
+/** Filenames allowed for workspace-file read/write (security allow-list). */
+const ALLOWED_WORKSPACE_FILES = new Set([
+  'SOUL.md', 'AGENTS.md', 'CLAUDE.md', 'SYSTEM.md', 'RULES.md',
+  'TOOLS.md', 'USER.md', 'IDENTITY.md', 'HEARTBEAT.md', 'BOOT.md',
+]);
 import { deleteChannelAccountConfig } from '../../utils/channel-config';
 import { syncAllProviderAuthToRuntime } from '../../services/providers/provider-runtime-sync';
 import type { HostApiContext } from '../context';
@@ -217,6 +227,100 @@ export async function handleAgentRoutes(
         sendJson(res, 200, { success: true, ...snapshot });
       } catch (error) {
         sendJson(res, 500, { success: false, error: String(error) });
+      }
+      return true;
+    }
+  }
+
+  // ── Workspace File: GET /api/agents/:id/workspace-file?filename=... ──────
+  if (
+    url.pathname.startsWith('/api/agents/') &&
+    req.method === 'GET' &&
+    url.searchParams.has('filename')
+  ) {
+    const suffix = url.pathname.slice('/api/agents/'.length);
+    const parts = suffix.split('/').filter(Boolean);
+    if (parts.length === 2 && parts[1] === 'workspace-file') {
+      const agentId = decodeURIComponent(parts[0]);
+      const filename = basename(url.searchParams.get('filename') ?? '');
+      if (!filename || !ALLOWED_WORKSPACE_FILES.has(filename)) {
+        sendJson(res, 400, { success: false, error: `Filename '${filename}' is not allowed` });
+        return true;
+      }
+      try {
+        const workspaceDir = await getAgentWorkspacePath(agentId);
+        if (!workspaceDir) {
+          sendJson(res, 404, { success: false, error: `Agent '${agentId}' not found` });
+          return true;
+        }
+        const filePath = join(workspaceDir, filename);
+        const content = await readFile(filePath, 'utf-8');
+        sendJson(res, 200, { success: true, exists: true, content });
+      } catch (err: unknown) {
+        const isNotFound = (err as NodeJS.ErrnoException).code === 'ENOENT';
+        if (isNotFound) {
+          sendJson(res, 200, { success: true, exists: false, content: '' });
+        } else {
+          sendJson(res, 500, { success: false, error: String(err) });
+        }
+      }
+      return true;
+    }
+  }
+
+  // ── Workspace File: PUT /api/agents/:id/workspace-file ────────────────────
+  if (
+    url.pathname.startsWith('/api/agents/') &&
+    req.method === 'PUT'
+  ) {
+    const suffix = url.pathname.slice('/api/agents/'.length);
+    const parts = suffix.split('/').filter(Boolean);
+    if (parts.length === 2 && parts[1] === 'workspace-file') {
+      const agentId = decodeURIComponent(parts[0]);
+      try {
+        const body = await parseJsonBody<{ filename: string; content: string }>(req);
+        const filename = basename(body.filename ?? '');
+        if (!filename || !ALLOWED_WORKSPACE_FILES.has(filename)) {
+          sendJson(res, 400, { success: false, error: `Filename '${filename}' is not allowed` });
+          return true;
+        }
+        const workspaceDir = await getAgentWorkspacePath(agentId);
+        if (!workspaceDir) {
+          sendJson(res, 404, { success: false, error: `Agent '${agentId}' not found` });
+          return true;
+        }
+        // Ensure workspace directory exists
+        await mkdir(workspaceDir, { recursive: true });
+        const filePath = join(workspaceDir, filename);
+        await writeFile(filePath, body.content ?? '', 'utf-8');
+        sendJson(res, 200, { success: true, filename, workspaceDir });
+      } catch (err) {
+        sendJson(res, 500, { success: false, error: String(err) });
+      }
+      return true;
+    }
+  }
+
+  // ── Model: PUT /api/agents/:id/model ─────────────────────────────────────
+  if (
+    url.pathname.startsWith('/api/agents/') &&
+    req.method === 'PUT'
+  ) {
+    const suffix = url.pathname.slice('/api/agents/'.length);
+    const parts = suffix.split('/').filter(Boolean);
+    if (parts.length === 2 && parts[1] === 'model') {
+      const agentId = decodeURIComponent(parts[0]);
+      try {
+        const body = await parseJsonBody<{ model: string }>(req);
+        const model = (body.model ?? '').trim();
+        if (!model) {
+          sendJson(res, 400, { success: false, error: 'model is required' });
+          return true;
+        }
+        const snapshot = await updateAgentModel(agentId, model);
+        sendJson(res, 200, { success: true, snapshot });
+      } catch (err) {
+        sendJson(res, 500, { success: false, error: String(err) });
       }
       return true;
     }

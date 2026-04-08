@@ -53,5 +53,23 @@
         "channelAssignFailed": "分配频道失败：{{error}}",
         "channelRemoved": "{{channel}} 已移除",
         "channelRemoveFailed": "移除频道失败：{{error}}"
+    },
+    "detail": {
+        "tabInfo": "基础信息",
+        "tabModel": "模型",
+        "tabSkills": "技能",
+        "tabTasks": "任务",
+        "tabChannels": "频道",
+        "basicInfo": "基本信息",
+        "constraintFiles": "约束文件",
+        "currentModel": "当前模型",
+        "selectModel": "切换模型",
+        "modelSaved": "模型已保存",
+        "modelInheritedDesc": "继承自全局配置",
+        "noModelsConfigured": "尚未配置任何模型，请先在模型页面添加",
+        "builtinSkills": "内置技能（默认安装）",
+        "installedSkills": "已安装技能",
+        "skillMarketplace": "技能广场",
+        "searchSkillsPlaceholder": "搜索企业内部技能..."
     }
 }

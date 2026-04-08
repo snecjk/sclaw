@@ -11,6 +11,7 @@
     "filter": {
         "all": "すべて ({{count}})",
         "builtIn": "内蔵 ({{count}})",
+        "enterprise": "エンタープライズ ({{count}})",
         "marketplace": "マーケットプレイス ({{count}})"
     },
     "search": "スキルを検索...",

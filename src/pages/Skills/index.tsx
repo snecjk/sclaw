@@ -424,7 +424,7 @@ export function Skills() {
   const [installQuery, setInstallQuery] = useState('');
   const [installSheetOpen, setInstallSheetOpen] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
-  const [selectedSource, setSelectedSource] = useState<'all' | 'built-in' | 'marketplace'>('all');
+  const [selectedSource, setSelectedSource] = useState<'all' | 'built-in' | 'marketplace' | 'enterprise'>('all');
   const [batchMode, setBatchMode] = useState(false);
   const [batchSelected, setBatchSelected] = useState<Set<string>>(new Set());
   const [activeInstallTab, setActiveInstallTab] = useState<'sto' | 'clawhub'>('sto');
@@ -489,6 +489,8 @@ export function Skills() {
       matchesSource = !!skill.isBundled;
     } else if (selectedSource === 'marketplace') {
       matchesSource = !skill.isBundled;
+    } else if (selectedSource === 'enterprise') {
+      matchesSource = skill.source === 'sto-marketplace';
     }
 
     return matchesSearch && matchesSource;
@@ -504,6 +506,7 @@ export function Skills() {
     all: safeSkills.length,
     builtIn: safeSkills.filter(s => s.isBundled).length,
     marketplace: safeSkills.filter(s => !s.isBundled).length,
+    enterprise: safeSkills.filter(s => s.source === 'sto-marketplace').length,
   };
 
   const toggleBatchSelect = useCallback((skillId: string) => {
@@ -716,6 +719,29 @@ export function Skills() {
         )}
 
         <section className={glassSectionSurface}>
+        {/* Tab bar */}
+        <div className="-mx-6 -mt-6 mb-6 flex items-stretch border-b border-primary/10 px-2 pt-1">
+          {([
+            { key: 'all' as const, label: t('filter.all', { count: sourceStats.all }) },
+            { key: 'built-in' as const, label: t('filter.builtIn', { count: sourceStats.builtIn }) },
+            { key: 'enterprise' as const, label: t('filter.enterprise', { count: sourceStats.enterprise }) },
+            { key: 'marketplace' as const, label: t('filter.marketplace', { count: sourceStats.marketplace }) },
+          ]).map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setSelectedSource(key)}
+              className={cn(
+                'relative -mb-px border-b-2 border-transparent px-5 py-3 text-[13px] font-medium transition-colors',
+                selectedSource === key
+                  ? 'border-primary text-foreground'
+                  : 'text-muted-foreground/60 hover:text-foreground/80',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="flex flex-col gap-4 border-b border-primary/10 pb-4 mb-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center flex-wrap gap-4 text-[14px]">
             <div className="group relative mr-2 flex items-center rounded-md border border-transparent bg-black/5 px-3 py-1.5 transition-colors focus-within:border-primary/15 focus-within:bg-[hsl(var(--glass-bg)/0.25)] dark:bg-white/5 dark:focus-within:bg-white/10">
@@ -735,27 +761,6 @@ export function Skills() {
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
-            </div>
-
-            <div className="flex items-center gap-6">
-              <button
-                onClick={() => setSelectedSource('all')}
-                className={cn("font-medium transition-colors flex items-center gap-1.5", selectedSource === 'all' ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
-              >
-                {t('filter.all', { count: sourceStats.all })}
-              </button>
-              <button
-                onClick={() => setSelectedSource('built-in')}
-                className={cn("font-medium transition-colors flex items-center gap-1.5", selectedSource === 'built-in' ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
-              >
-                {t('filter.builtIn', { count: sourceStats.builtIn })}
-              </button>
-              <button
-                onClick={() => setSelectedSource('marketplace')}
-                className={cn("font-medium transition-colors flex items-center gap-1.5", selectedSource === 'marketplace' ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
-              >
-                {t('filter.marketplace', { count: sourceStats.marketplace })}
-              </button>
             </div>
           </div>
 
@@ -935,6 +940,7 @@ export function Skills() {
                       </div>
                       {!batchMode && (
                         <Switch
+                          size="sm"
                           checked={skill.enabled}
                           onCheckedChange={(checked) => handleToggle(skill.id, checked)}
                           disabled={skill.isCore}

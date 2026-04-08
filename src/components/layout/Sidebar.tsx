@@ -252,10 +252,10 @@ export function Sidebar() {
   }
 
   const navItems = [
-    { to: '/models', icon: <Cpu className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.models') },
     { to: '/agents', icon: <Bot className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.agents') },
-    { to: '/channels', icon: <Network className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.channels') },
     { to: '/skills', icon: <Puzzle className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.skills') },
+    { to: '/channels', icon: <Network className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.channels') },
+    { to: '/models', icon: <Cpu className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.models') },
     { to: '/cron', icon: <Clock className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.cronTasks') },
   ];
 
