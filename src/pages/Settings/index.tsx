@@ -487,9 +487,9 @@ export function Settings() {
   ];
 
   return (
-    <div className="flex w-full gap-8">
+    <div className="flex w-full gap-4">
       {/* Left sub-navigation */}
-      <nav className="w-44 shrink-0 pt-1">
+      <nav className="w-36 shrink-0 pt-1">
         <div className="flex flex-col gap-0.5">
           {subNavItems.map(item => {
             const Icon = item.icon;
@@ -519,7 +519,7 @@ export function Settings() {
         {activeSection === 'models' && <Models />}
         {activeSection === 'channels' && <Channels />}
         {activeSection === 'general' && (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 pb-10">
+    <div className="flex w-full max-w-3xl flex-col gap-8 pb-10">
       <header className="shrink-0 border-b border-primary/10 pb-6">
         <div className="flex items-start gap-3">
           <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(56,189,248,0.12)]">
