@@ -43,6 +43,8 @@
         "processingBadge": "AI 処理中",
         "processingTitle": "ツール結果を統合しています",
         "processingDescription": "ツールの結果を受け取り、最終的な回答へまとめています。",
+        "completedLabel": "AIが生成した情報",
+        "completedBadge": "完了",
         "jumpToLatest": "最新へ戻る"
     },
     "sessionList": {

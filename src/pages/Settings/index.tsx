@@ -12,7 +12,14 @@ import {
   Copy,
   FileText,
   Settings2,
+  Bot,
+  Cpu,
+  Network,
 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Agents } from '../Agents';
+import { Models } from '../Models';
+import { Channels } from '../Channels';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -455,6 +462,13 @@ export function Settings() {
     toast.success(t('developer.telemetryCleared'));
   };
 
+  const location = useLocation();
+  const navigate = useNavigate();
+  const activeSection = location.pathname.startsWith('/settings/agents') ? 'agents'
+    : location.pathname.startsWith('/settings/models') ? 'models'
+    : location.pathname.startsWith('/settings/channels') ? 'channels'
+    : 'general';
+
   const handleWsDiagnosticToggle = (enabled: boolean) => {
     setGatewayWsDiagnosticEnabled(enabled);
     setWsDiagnosticEnabled(enabled);
@@ -465,8 +479,47 @@ export function Settings() {
     );
   };
 
+  const subNavItems = [
+    { id: 'general', path: '/settings', label: t('appearance.title'), icon: Settings2 },
+    { id: 'agents', path: '/settings/agents', label: t('common:sidebar.agents'), icon: Bot },
+    { id: 'models', path: '/settings/models', label: t('common:sidebar.models'), icon: Cpu },
+    { id: 'channels', path: '/settings/channels', label: t('common:sidebar.channels'), icon: Network },
+  ];
+
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
+    <div className="flex w-full gap-4">
+      {/* Left sub-navigation */}
+      <nav className="w-36 shrink-0 pt-1">
+        <div className="flex flex-col gap-0.5">
+          {subNavItems.map(item => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => navigate(item.path)}
+                className={cn(
+                  'flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all text-left w-full',
+                  activeSection === item.id
+                    ? 'bg-primary/[0.1] text-foreground border border-primary/15'
+                    : 'text-muted-foreground hover:bg-primary/[0.06] hover:text-foreground border border-transparent',
+                )}
+              >
+                <Icon className="h-4 w-4 shrink-0" strokeWidth={2} />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      {/* Right content */}
+      <div className="flex-1 min-w-0">
+        {activeSection === 'agents' && <Agents />}
+        {activeSection === 'models' && <Models />}
+        {activeSection === 'channels' && <Channels />}
+        {activeSection === 'general' && (
+    <div className="flex w-full max-w-3xl flex-col gap-8 pb-10">
       <header className="shrink-0 border-b border-primary/10 pb-6">
         <div className="flex items-start gap-3">
           <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(56,189,248,0.12)]">
@@ -482,7 +535,6 @@ export function Settings() {
           </div>
         </div>
       </header>
-
       <div className="flex flex-col gap-6">
           <section className={glassSectionSurface}>
             <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
@@ -1096,6 +1148,9 @@ export function Settings() {
               </div>
             </div>
           </section>
+      </div>
+    </div>
+        )}
       </div>
     </div>
   );

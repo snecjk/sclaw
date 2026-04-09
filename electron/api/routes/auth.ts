@@ -5,7 +5,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'http';
 import { app } from 'electron';
-import { getAuthState, setAuthUser, clearAuthUser, getSsoEnvironment, setSsoEnvironment } from '../../utils/auth-store';
+import { getAuthState, setAuthUser, clearAuthUser, getSsoEnvironment, setSsoEnvironment, getStoToken } from '../../utils/auth-store';
 import type { SsoEnvironment } from '../../utils/auth-store';
 import { getBaseUrl, signOut } from '../../utils/sso-service';
 import { SsoLoginManager } from '../../utils/sso-login';
@@ -27,6 +27,22 @@ export async function handleAuthRoutes(
   if (url.pathname === '/api/auth/status' && req.method === 'GET') {
     try {
       const state = await getAuthState();
+      // If marked as authenticated but stoToken is expired, auto-clear to force re-login.
+      // This handles the case where the app is reinstalled and the old auth data (userData
+      // directory) persists across uninstall, leaving an expired token in the store.
+      if (state.isAuthenticated) {
+        const token = await getStoToken();
+        if (!token) {
+          await clearAuthUser();
+          logger.info('Auth status: stoToken expired or missing, clearing auth state to force re-login');
+          sendJson(res, 200, {
+            isAuthenticated: false,
+            user: null,
+            ssoEnvironment: state.ssoEnvironment,
+          });
+          return true;
+        }
+      }
       sendJson(res, 200, {
         isAuthenticated: state.isAuthenticated,
         user: state.user,

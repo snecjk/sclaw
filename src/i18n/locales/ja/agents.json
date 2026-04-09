@@ -53,5 +53,23 @@
         "channelAssignFailed": "Channel の割り当てに失敗しました: {{error}}",
         "channelRemoved": "{{channel}} を削除しました",
         "channelRemoveFailed": "Channel の削除に失敗しました: {{error}}"
+    },
+    "detail": {
+        "tabInfo": "基本情報",
+        "tabModel": "モデル",
+        "tabSkills": "スキル",
+        "tabTasks": "タスク",
+        "tabChannels": "チャンネル",
+        "basicInfo": "基本情報",
+        "constraintFiles": "制約ファイル",
+        "currentModel": "現在のモデル",
+        "selectModel": "モデル変更",
+        "modelSaved": "モデルを保存しました",
+        "modelInheritedDesc": "グローバル設定から継承",
+        "noModelsConfigured": "モデルが設定されていません。モデルページで追加してください。",
+        "builtinSkills": "ビルトインスキル（デフォルトインストール）",
+        "installedSkills": "インストール済みスキル",
+        "skillMarketplace": "スキルマーケットプレイス",
+        "searchSkillsPlaceholder": "エンタープライズスキルを検索..."
     }
 }

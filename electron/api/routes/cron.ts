@@ -279,6 +279,9 @@ function transformCronJob(job: GatewayCronJob) {
     ? new Date(job.state.nextRunAtMs).toISOString()
     : undefined;
 
+  // Extract agentId stored in description JSON metadata
+  const agentId = extractAgentIdFromDescription(job.description);
+
   return {
     id: job.id,
     name: job.name,
@@ -286,11 +289,23 @@ function transformCronJob(job: GatewayCronJob) {
     schedule: job.schedule,
     target,
     enabled: job.enabled,
+    agentId,
     createdAt: new Date(job.createdAtMs).toISOString(),
     updatedAt: new Date(job.updatedAtMs).toISOString(),
     lastRun,
     nextRun,
   };
+}
+
+/** Extract agentId from the JSON metadata stored in a job's description field. */
+function extractAgentIdFromDescription(description?: string): string | null {
+  if (!description) return null;
+  try {
+    const meta = JSON.parse(description) as Record<string, unknown>;
+    return typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function handleCronRoutes(
@@ -342,9 +357,10 @@ export async function handleCronRoutes(
 
   if (url.pathname === '/api/cron/jobs' && req.method === 'GET') {
     try {
+      const filterAgentId = url.searchParams.get('agentId')?.trim() || null;
       const result = await ctx.gatewayManager.rpc('cron.list', { includeDisabled: true });
       const data = result as { jobs?: GatewayCronJob[] };
-      const jobs = data?.jobs ?? [];
+      let jobs = data?.jobs ?? [];
       for (const job of jobs) {
         const isIsolatedAgent =
           (job.sessionTarget === 'isolated' || !job.sessionTarget) &&
@@ -369,6 +385,10 @@ export async function handleCronRoutes(
           }
         }
       }
+      // Filter by agentId when provided (agent detail page)
+      if (filterAgentId) {
+        jobs = jobs.filter((job) => extractAgentIdFromDescription(job.description) === filterAgentId);
+      }
       sendJson(res, 200, jobs.map(transformCronJob));
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -378,7 +398,9 @@ export async function handleCronRoutes(
 
   if (url.pathname === '/api/cron/jobs' && req.method === 'POST') {
     try {
-      const input = await parseJsonBody<{ name: string; message: string; schedule: string; enabled?: boolean }>(req);
+      const input = await parseJsonBody<{ name: string; message: string; schedule: string; enabled?: boolean; agentId?: string }>(req);
+      const agentId = input.agentId?.trim() || null;
+      const description = agentId ? JSON.stringify({ agentId }) : undefined;
       const result = await ctx.gatewayManager.rpc('cron.add', {
         name: input.name,
         schedule: { kind: 'cron', expr: input.schedule },
@@ -387,6 +409,7 @@ export async function handleCronRoutes(
         wakeMode: 'next-heartbeat',
         sessionTarget: 'isolated',
         delivery: { mode: 'none' },
+        ...(description ? { description } : {}),
       });
       sendJson(res, 200, result && typeof result === 'object' ? transformCronJob(result as GatewayCronJob) : result);
     } catch (error) {

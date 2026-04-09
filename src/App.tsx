@@ -102,6 +102,7 @@ function App() {
   const initGateway = useGatewayStore((state) => state.init);
   const initProviders = useProviderStore((state) => state.init);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthInitialized = useAuthStore((state) => state.isInitialized);
   const initAuth = useAuthStore((state) => state.init);
 
   useEffect(() => {
@@ -128,8 +129,11 @@ function App() {
 
   // Auth guard: redirect to login if not authenticated, then to setup if not complete
   // Skip auth guard for sprite and float-icon routes (they manage their own initialization)
+  // Also skip until isAuthInitialized is true — this prevents the persisted isAuthenticated=true
+  // from bypassing login on reinstall before the main-process token-expiry check completes.
   useEffect(() => {
     if (location.pathname === '/sprite' || location.pathname === '/float-icon') return;
+    if (!isAuthInitialized) return;
     if (!isAuthenticated && !location.pathname.startsWith('/login')) {
       navigate('/login');
     } else if (isAuthenticated && location.pathname.startsWith('/login')) {
@@ -138,7 +142,7 @@ function App() {
     } else if (isAuthenticated && !setupComplete && !location.pathname.startsWith('/setup')) {
       navigate('/setup');
     }
-  }, [isAuthenticated, setupComplete, location.pathname, navigate]);
+  }, [isAuthenticated, isAuthInitialized, setupComplete, location.pathname, navigate]);
 
   // Listen for navigation events from main process
   useEffect(() => {

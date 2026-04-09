@@ -53,5 +53,23 @@
         "channelAssignFailed": "Failed to assign channel: {{error}}",
         "channelRemoved": "{{channel}} removed",
         "channelRemoveFailed": "Failed to remove channel: {{error}}"
+    },
+    "detail": {
+        "tabInfo": "Basic Info",
+        "tabModel": "Model",
+        "tabSkills": "Skills",
+        "tabTasks": "Tasks",
+        "tabChannels": "Channels",
+        "basicInfo": "Basic Information",
+        "constraintFiles": "Constraint Files",
+        "currentModel": "Current Model",
+        "selectModel": "Switch Model",
+        "modelSaved": "Model saved",
+        "modelInheritedDesc": "Inherited from global config",
+        "noModelsConfigured": "No models configured. Please add one in the Models page.",
+        "builtinSkills": "Built-in Skills (installed by default)",
+        "installedSkills": "Installed Skills",
+        "skillMarketplace": "Skill Marketplace",
+        "searchSkillsPlaceholder": "Search enterprise skills..."
     }
 }

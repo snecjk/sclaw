@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Bot, Plus, RefreshCw, Settings2, Trash2, X } from 'lucide-react';
+import { AlertCircle, Bot, Plus, RefreshCw, Settings2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,19 +11,13 @@ import { useAgentsStore } from '@/stores/agents';
 import { useGatewayStore } from '@/stores/gateway';
 import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
-import { CHANNEL_ICONS, CHANNEL_NAMES, type ChannelType } from '@/types/channel';
+import { CHANNEL_NAMES, type ChannelType } from '@/types/channel';
 import type { AgentSummary } from '@/types/agent';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { glassNestedCard, glassSectionSurface } from '@/lib/surfaces';
-import telegramIcon from '@/assets/channels/telegram.svg';
-import discordIcon from '@/assets/channels/discord.svg';
-import whatsappIcon from '@/assets/channels/whatsapp.svg';
-import wechatIcon from '@/assets/channels/wechat.svg';
-import dingtalkIcon from '@/assets/channels/dingtalk.svg';
-import wecomIcon from '@/assets/channels/wecom.svg';
-import qqIcon from '@/assets/channels/qq.svg';
+import { AgentDetailPage } from './AgentDetailPage';
 
 interface ChannelAccountItem {
   accountId: string;
@@ -113,6 +107,16 @@ export function Agents() {
     );
   }
 
+  // ── Detail view ────────────────────────────────────────────────────────────
+  if (activeAgent) {
+    return (
+      <AgentDetailPage
+        agent={activeAgent}
+        onBack={() => setActiveAgentId(null)}
+      />
+    );
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
       <header className="shrink-0 border-b border-primary/10 pb-6">
@@ -192,14 +196,6 @@ export function Agents() {
             setShowAddDialog(false);
             toast.success(t('toast.agentCreated'));
           }}
-        />
-      )}
-
-      {activeAgent && (
-        <AgentSettingsModal
-          agent={activeAgent}
-          channelGroups={channelGroups}
-          onClose={() => setActiveAgentId(null)}
         />
       )}
 
@@ -327,27 +323,6 @@ function AgentCard({
 const inputClasses = 'h-[44px] rounded-md font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-glass border-glass-border focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40';
 const labelClasses = 'text-[14px] text-foreground/80 font-bold';
 
-function ChannelLogo({ type }: { type: ChannelType }) {
-  switch (type) {
-    case 'telegram':
-      return <img src={telegramIcon} alt="Telegram" className="w-[20px] h-[20px] dark:invert" />;
-    case 'discord':
-      return <img src={discordIcon} alt="Discord" className="w-[20px] h-[20px] dark:invert" />;
-    case 'whatsapp':
-      return <img src={whatsappIcon} alt="WhatsApp" className="w-[20px] h-[20px] dark:invert" />;
-    case 'wechat':
-      return <img src={wechatIcon} alt="WeChat" className="w-[20px] h-[20px] dark:invert" />;
-    case 'dingtalk':
-      return <img src={dingtalkIcon} alt="DingTalk" className="w-[20px] h-[20px] dark:invert" />;
-    case 'wecom':
-      return <img src={wecomIcon} alt="WeCom" className="w-[20px] h-[20px] dark:invert" />;
-    case 'qqbot':
-      return <img src={qqIcon} alt="QQ" className="w-[20px] h-[20px] dark:invert" />;
-    default:
-      return <span className="text-[20px] leading-none">{CHANNEL_ICONS[type] || '💬'}</span>;
-  }
-}
-
 function AddAgentDialog({
   onClose,
   onCreate,
@@ -429,173 +404,6 @@ function AddAgentDialog({
                 t('common:actions.save')
               )}
             </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function AgentSettingsModal({
-  agent,
-  channelGroups,
-  onClose,
-}: {
-  agent: AgentSummary;
-  channelGroups: ChannelGroupItem[];
-  onClose: () => void;
-}) {
-  const { t } = useTranslation('agents');
-  const { updateAgent } = useAgentsStore();
-  const [name, setName] = useState(agent.name);
-  const [savingName, setSavingName] = useState(false);
-
-  useEffect(() => {
-    setName(agent.name);
-  }, [agent.name]);
-
-  const handleSaveName = async () => {
-    if (!name.trim() || name.trim() === agent.name) return;
-    setSavingName(true);
-    try {
-      await updateAgent(agent.id, name.trim());
-      toast.success(t('toast.agentUpdated'));
-    } catch (error) {
-      toast.error(t('toast.agentUpdateFailed', { error: String(error) }));
-    } finally {
-      setSavingName(false);
-    }
-  };
-
-  const assignedChannels = channelGroups.flatMap((group) =>
-    group.accounts
-      .filter((account) => account.agentId === agent.id)
-      .map((account) => ({
-        channelType: group.channelType as ChannelType,
-        accountId: account.accountId,
-        name:
-          account.accountId === 'default'
-            ? t('settingsDialog.mainAccount')
-            : account.name || account.accountId,
-        error: account.lastError,
-      })),
-  );
-
-  return (
-    <div className="fixed inset-0 z-[100] bg-canvas-gradient/80 backdrop-blur-md flex items-center justify-center pt-10 pb-4 px-4">
-      <Card className="relative flex max-h-[calc(90vh-40px)] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-glass-border bg-canvas-gradient shadow-2xl">
-        <div className="absolute inset-0 -z-10 rounded-lg bg-[hsl(var(--glass-bg)/0.75)] backdrop-blur-xl" />
-        <CardHeader className="flex flex-row items-start justify-between pb-2 shrink-0">
-          <div>
-            <CardTitle className="text-2xl font-serif font-normal tracking-tight">
-              {t('settingsDialog.title', { name: agent.name })}
-            </CardTitle>
-            <CardDescription className="text-[15px] mt-1 text-foreground/70">
-              {t('settingsDialog.description')}
-            </CardDescription>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="rounded-full h-8 w-8 -mr-2 -mt-2 text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-6 pt-4 overflow-y-auto flex-1 p-6">
-          <div className="space-y-4">
-            <div className="space-y-2.5">
-              <Label htmlFor="agent-settings-name" className={labelClasses}>{t('settingsDialog.nameLabel')}</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="agent-settings-name"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  readOnly={agent.isDefault}
-                  className={inputClasses}
-                />
-                {!agent.isDefault && (
-                  <Button
-                    variant="outline"
-                    onClick={() => void handleSaveName()}
-                    disabled={savingName || !name.trim() || name.trim() === agent.name}
-                    className="h-[44px] rounded-md border-glass-border bg-[hsl(var(--glass-bg)/0.5)] px-4 text-[13px] font-medium shadow-none backdrop-blur-glass hover:bg-white/20 dark:hover:bg-white/10 text-foreground/80 hover:text-foreground"
-                  >
-                    {savingName ? (
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                    ) : (
-                      t('common:actions.save')
-                    )}
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className={cn('space-y-1 rounded-xl border border-primary/10 p-4', glassNestedCard)}>
-                <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/80 font-medium">
-                  {t('settingsDialog.agentIdLabel')}
-                </p>
-                <p className="font-mono text-[13px] text-foreground">{agent.id}</p>
-              </div>
-              <div className={cn('space-y-1 rounded-xl border border-primary/10 p-4', glassNestedCard)}>
-                <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/80 font-medium">
-                  {t('settingsDialog.modelLabel')}
-                </p>
-                <p className="text-[13.5px] text-foreground">
-                  {agent.modelDisplay}
-                  {agent.inheritedModel ? ` (${t('inherited')})` : ''}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-xl font-serif text-foreground font-normal tracking-tight">
-                  {t('settingsDialog.channelsTitle')}
-                </h3>
-                <p className="text-[14px] text-foreground/70 mt-1">{t('settingsDialog.channelsDescription')}</p>
-              </div>
-            </div>
-
-            {assignedChannels.length === 0 && agent.channelTypes.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-4 text-[13.5px] text-muted-foreground">
-                {t('settingsDialog.noChannels')}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {assignedChannels.map((channel) => (
-                  <div
-                    key={`${channel.channelType}-${channel.accountId}`}
-                    className={cn('flex items-center justify-between rounded-xl border border-primary/10 p-4', glassNestedCard)}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-[40px] w-[40px] shrink-0 flex items-center justify-center text-foreground bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-full shadow-sm">
-                        <ChannelLogo type={channel.channelType} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[15px] font-semibold text-foreground">{channel.name}</p>
-                        <p className="text-[13.5px] text-muted-foreground">
-                          {CHANNEL_NAMES[channel.channelType]} · {channel.accountId === 'default' ? t('settingsDialog.mainAccount') : channel.accountId}
-                        </p>
-                        {channel.error && (
-                          <p className="text-xs text-destructive mt-1">{channel.error}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="shrink-0" />
-                  </div>
-                ))}
-                {assignedChannels.length === 0 && agent.channelTypes.length > 0 && (
-                  <div className="rounded-2xl border border-dashed border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-4 text-[13.5px] text-muted-foreground">
-                    {t('settingsDialog.channelsManagedInChannels')}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </CardContent>
       </Card>

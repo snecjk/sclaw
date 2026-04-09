@@ -166,6 +166,8 @@ export const ChatMessage = memo(function ChatMessage({
             isUser={isUser}
             isStreaming={isStreaming}
             streamingLabel={t('streaming.respondingBadge')}
+            completedLabel={t('streaming.completedLabel')}
+            completedBadge={t('streaming.completedBadge')}
           />
         )}
 
@@ -332,11 +334,15 @@ function MessageBubble({
   isUser,
   isStreaming,
   streamingLabel,
+  completedLabel,
+  completedBadge,
 }: {
   text: string;
   isUser: boolean;
   isStreaming: boolean;
   streamingLabel: string;
+  completedLabel: string;
+  completedBadge: string;
 }) {
   const showStreamingChrome = isStreaming && !isUser;
 
@@ -431,6 +437,17 @@ function MessageBubble({
           </div>
           <span className="shrink-0 text-[10px] font-medium uppercase tracking-[0.24em] text-primary/70">
             输出中
+          </span>
+        </div>
+      )}
+      {!isUser && !isStreaming && (
+        <div className="relative mt-3 flex items-center justify-between gap-3 border-t border-border/30 pt-2">
+          <span className="truncate text-[10px] text-muted-foreground/45">{completedLabel}</span>
+          <span className="shrink-0 flex items-center gap-1 text-[10px] font-medium text-emerald-500/70 dark:text-emerald-400/60">
+            <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+              <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            {completedBadge}
           </span>
         </div>
       )}

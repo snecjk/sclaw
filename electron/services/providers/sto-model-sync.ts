@@ -36,6 +36,7 @@ const STO_LEGACY_ACCOUNT_ID_PREFIX = 'sto-model-';
 const STO_DOMAINS: Record<string, string> = {
   'daily-external': 'https://baseinfo-aimemory-test.sto.cn/agent',
   'pre-release': 'https://pre-baseinfo-aimemory.sto.cn/agent',
+  'local': 'http://127.0.0.1:7001/agent',
 };
 const STO_DOMAIN_DEFAULT = 'https://baseinfo-aimemory.sto.cn/agent';
 

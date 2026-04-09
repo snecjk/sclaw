@@ -11,6 +11,7 @@
     "filter": {
         "all": "All ({{count}})",
         "builtIn": "Built-in ({{count}})",
+        "enterprise": "Enterprise ({{count}})",
         "marketplace": "Marketplace ({{count}})"
     },
     "search": "Search skills...",

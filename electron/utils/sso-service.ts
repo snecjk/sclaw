@@ -10,6 +10,8 @@ export const SSO_ENVIRONMENTS: Record<SsoEnvironment, string> = {
   'daily-external': 'https://baseinfo-usercenterserviceapi-hq-test.sto.cn',
   'production-external': 'https://baseinfo-usercenterserviceapi.sto.cn',
   'pre-release': 'https://pre-baseinfo-usercenterservice-api-hq.sto.cn',
+  // Local env uses the same SSO server as daily-external
+  'local': 'https://baseinfo-usercenterserviceapi-hq-test.sto.cn',
 };
 
 export const SYSTEM_CODE = 'sto_claw';
