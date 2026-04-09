@@ -162,13 +162,13 @@ export function Chat() {
       </div>
 
       {/* Toolbar */}
-      <div className="relative z-10 flex shrink-0 items-center justify-end px-4 py-2">
+      <div className="relative z-10 flex shrink-0 items-center justify-between px-6 py-2">
         <ChatToolbar />
       </div>
 
       {/* Messages Area */}
-      <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto px-4 py-4">
-        <div ref={contentRef} className="max-w-4xl mx-auto space-y-4">
+      <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto px-6 py-4">
+        <div ref={contentRef} className="max-w-5xl mx-auto space-y-4">
           {isEmpty ? (
             <WelcomeScreen />
           ) : (
@@ -218,8 +218,8 @@ export function Chat() {
 
       {/* Error bar */}
       {error && (
-        <div className="px-4 py-2 bg-destructive/10 border-t border-destructive/20">
-          <div className="max-w-4xl mx-auto flex items-center justify-between">
+        <div className="px-6 py-2 bg-destructive/10 border-t border-destructive/20">
+          <div className="max-w-5xl mx-auto flex items-center justify-between">
             <p className="text-sm text-destructive flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
               {error}
@@ -237,11 +237,11 @@ export function Chat() {
       {/* Jump to latest — 仅在有提示时占位，高度贴齐按钮 */}
       <div
         className={cn(
-          'pointer-events-none shrink-0 overflow-hidden px-4',
+          'pointer-events-none shrink-0 overflow-hidden px-6',
           showJumpToLatest ? 'py-0.5' : 'h-0 py-0',
         )}
       >
-        <div className="mx-auto flex max-w-4xl justify-center">
+        <div className="max-w-5xl mx-auto flex justify-center">
           <motion.button
             type="button"
             onClick={() => scrollToLatest('smooth')}

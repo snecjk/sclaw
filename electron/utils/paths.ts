@@ -41,6 +41,15 @@ export function getOpenClawSkillsDir(): string {
 }
 
 /**
+ * Get agent-scoped skills directory
+ * Used when a skill is installed from an Agent detail page,
+ * scoping it to ~/.openclaw/agents/{agentId}/agent/skills/
+ */
+export function getOpenClawAgentSkillsDir(agentId: string): string {
+  return join(getOpenClawConfigDir(), 'agents', agentId, 'agent', 'skills');
+}
+
+/**
  * Get StoClaw config directory
  */
 export function getClawXConfigDir(): string {

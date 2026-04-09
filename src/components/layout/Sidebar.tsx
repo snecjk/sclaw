@@ -5,19 +5,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Network,
-  Bot,
   Puzzle,
   Clock,
   Settings as SettingsIcon,
   Plus,
   Trash2,
-  Cpu,
   LogOut,
   MessageSquare,
   ChevronLeft,
   ChevronRight,
+  Globe,
+  Check,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+} from '@/components/ui/dropdown-menu';
+import { useSettingsStore } from '@/stores/settings';
+import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
@@ -132,6 +146,11 @@ export function Sidebar() {
 
   const authUser = useAuthStore((s) => s.user);
   const authLogout = useAuthStore((s) => s.logout);
+
+  const language = useSettingsStore((s) => s.language);
+  const setLanguage = useSettingsStore((s) => s.setLanguage);
+  const theme = useSettingsStore((s) => s.theme);
+  const setTheme = useSettingsStore((s) => s.setTheme);
 
   const location = useLocation();
   const [chatPanelOpen, setChatPanelOpen] = useState(() => location.pathname === '/');
@@ -252,9 +271,6 @@ export function Sidebar() {
   }
 
   const navItems = [
-    { to: '/models', icon: <Cpu className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.models') },
-    { to: '/agents', icon: <Bot className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.agents') },
-    { to: '/channels', icon: <Network className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.channels') },
     { to: '/skills', icon: <Puzzle className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.skills') },
     { to: '/cron', icon: <Clock className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.cronTasks') },
   ];
@@ -411,35 +427,100 @@ export function Sidebar() {
           {navItems.map((item) => (
             <RailNavItem key={item.to} to={item.to} icon={item.icon} label={item.label} />
           ))}
-          <RailNavItem
-            to="/settings"
-            icon={<SettingsIcon className="h-5 w-5" strokeWidth={2} />}
-            label={t('sidebar.settings')}
-          />
         </nav>
 
         {authUser && (
-          <div className="relative z-10 mt-auto flex flex-col items-center gap-1.5 px-1 pb-2 pt-1">
-            <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/20 text-sm font-semibold text-primary"
-              title={isGatewayRunning ? t('status.connected') : t('status.disconnected')}
-            >
-              {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
-            </div>
-            <span
-              className="max-w-full px-0.5 text-center text-[13px] font-medium leading-snug text-foreground/80 line-clamp-2 break-words"
-              title={authUser.realName || authUser.userName || undefined}
-            >
-              {authUser.realName || authUser.userName}
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowLogoutConfirm(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-              title={t('auth:logout.button')}
-            >
-              <LogOut className="h-[18px] w-[18px]" strokeWidth={2} />
-            </button>
+          <div className="relative z-10 mt-auto px-1 pb-2 pt-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full flex-col items-center gap-1.5 rounded-xl px-1 py-2 transition-colors hover:bg-primary/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  title={isGatewayRunning ? t('status.connected') : t('status.disconnected')}
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/20 text-sm font-semibold text-primary">
+                    {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
+                  </div>
+                  <span
+                    className="max-w-full px-0.5 text-center text-[13px] font-medium leading-snug text-foreground/80 line-clamp-2 break-words"
+                    title={authUser.realName || authUser.userName || undefined}
+                  >
+                    {authUser.realName || authUser.userName}
+                  </span>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="right" align="end" sideOffset={8} className="w-40">
+                {/* Settings */}
+                <DropdownMenuItem
+                  onClick={() => navigate('/settings')}
+                  className="gap-2"
+                >
+                  <SettingsIcon className="h-4 w-4 shrink-0" strokeWidth={2} />
+                  {t('sidebar.settings')}
+                </DropdownMenuItem>
+
+                {/* Language submenu */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="gap-2">
+                    <Globe className="h-4 w-4 shrink-0" strokeWidth={2} />
+                    <span className="flex-1">{t('settings:appearance.language')}</span>
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" strokeWidth={2} />
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent sideOffset={4}>
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                      <DropdownMenuItem
+                        key={lang.code}
+                        onClick={() => setLanguage(lang.code)}
+                        className="gap-2"
+                      >
+                        {language === lang.code
+                          ? <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
+                          : <span className="w-3.5 shrink-0" />}
+                        {lang.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
+                {/* Theme submenu */}
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="gap-2">
+                    {theme === 'light'
+                      ? <Sun className="h-4 w-4 shrink-0" strokeWidth={2} />
+                      : theme === 'dark'
+                        ? <Moon className="h-4 w-4 shrink-0" strokeWidth={2} />
+                        : <Monitor className="h-4 w-4 shrink-0" strokeWidth={2} />}
+                    <span className="flex-1">{t('settings:appearance.theme')}</span>
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" strokeWidth={2} />
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent sideOffset={4}>
+                    {(['light', 'dark', 'system'] as const).map((t_value) => (
+                      <DropdownMenuItem
+                        key={t_value}
+                        onClick={() => setTheme(t_value)}
+                        className="gap-2"
+                      >
+                        {theme === t_value
+                          ? <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
+                          : <span className="w-3.5 shrink-0" />}
+                        {t(`settings:appearance.${t_value}`)}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
+                <DropdownMenuSeparator />
+
+                {/* Logout */}
+                <DropdownMenuItem
+                  onClick={() => setShowLogoutConfirm(true)}
+                  className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                >
+                  <LogOut className="h-4 w-4 shrink-0" strokeWidth={2} />
+                  {t('auth:logout.button')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
 

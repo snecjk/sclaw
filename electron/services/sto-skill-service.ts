@@ -8,7 +8,7 @@ import path from 'path';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
 
-import { getOpenClawConfigDir, getOpenClawSkillsDir } from '../utils/paths';
+import { getOpenClawConfigDir, getOpenClawSkillsDir, getOpenClawAgentSkillsDir } from '../utils/paths';
 import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { logger } from '../utils/logger';
@@ -46,10 +46,14 @@ export interface StoSkillInstallParams {
   name?: string;
   description?: string;
   author?: string;
+  // If set, install into agent-scoped directory instead of global skills dir
+  agentId?: string;
 }
 
 export interface StoSkillUninstallParams {
   slug: string;
+  // If set, uninstall from agent-scoped directory instead of global skills dir
+  agentId?: string;
 }
 
 export interface StoSkillResult {
@@ -143,6 +147,14 @@ export class StoSkillService {
       throw new Error(`STO 技能下载失败 (${res.status}): ${text}`);
     }
 
+    // Determine install directory: agent-scoped or global
+    const skillsDir = params.agentId
+      ? getOpenClawAgentSkillsDir(params.agentId)
+      : this.skillsDir;
+    if (!fs.existsSync(skillsDir)) {
+      fs.mkdirSync(skillsDir, { recursive: true });
+    }
+
     // Save to a temp file
     const tmpZipPath = path.join(this.workDir, `.tmp-sto-skill-${params.slug}-${Date.now()}.zip`);
     try {
@@ -155,7 +167,7 @@ export class StoSkillService {
       await pipeline(body, fileStream);
 
       // Extract ZIP
-      const targetDir = path.join(this.skillsDir, params.slug);
+      const targetDir = path.join(skillsDir, params.slug);
       if (params.force && fs.existsSync(targetDir)) {
         await fs.promises.rm(targetDir, { recursive: true, force: true });
       }
@@ -195,7 +207,10 @@ export class StoSkillService {
    * Uninstall a skill (same as ClawHub: delete dir + update lock).
    */
   async uninstall(params: StoSkillUninstallParams): Promise<void> {
-    const skillDir = path.join(this.skillsDir, params.slug);
+    const skillsDir = params.agentId
+      ? getOpenClawAgentSkillsDir(params.agentId)
+      : this.skillsDir;
+    const skillDir = path.join(skillsDir, params.slug);
     if (fs.existsSync(skillDir)) {
       logger.info(`[StoSkillService] uninstall: removing ${skillDir}`);
       await fs.promises.rm(skillDir, { recursive: true, force: true });

@@ -20,6 +20,8 @@ import {
   Copy,
   ListChecks,
   Check,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -424,11 +426,12 @@ export function Skills() {
   const [installQuery, setInstallQuery] = useState('');
   const [installSheetOpen, setInstallSheetOpen] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
-  const [selectedSource, setSelectedSource] = useState<'all' | 'built-in' | 'marketplace'>('all');
+  const [selectedSource, setSelectedSource] = useState<'all' | 'built-in' | 'marketplace' | 'enterprise'>('all');
   const [batchMode, setBatchMode] = useState(false);
   const [batchSelected, setBatchSelected] = useState<Set<string>>(new Set());
   const [activeInstallTab, setActiveInstallTab] = useState<'sto' | 'clawhub'>('sto');
   const [stoSearchQuery, setStoSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   const isGatewayRunning = gatewayStatus.state === 'running';
   const [showGatewayWarning, setShowGatewayWarning] = useState(false);
@@ -489,6 +492,8 @@ export function Skills() {
       matchesSource = !!skill.isBundled;
     } else if (selectedSource === 'marketplace') {
       matchesSource = !skill.isBundled;
+    } else if (selectedSource === 'enterprise') {
+      matchesSource = skill.source === 'sto-marketplace';
     }
 
     return matchesSearch && matchesSource;
@@ -504,6 +509,7 @@ export function Skills() {
     all: safeSkills.length,
     builtIn: safeSkills.filter(s => s.isBundled).length,
     marketplace: safeSkills.filter(s => !s.isBundled).length,
+    enterprise: safeSkills.filter(s => s.source === 'sto-marketplace').length,
   };
 
   const toggleBatchSelect = useCallback((skillId: string) => {
@@ -716,6 +722,58 @@ export function Skills() {
         )}
 
         <section className={glassSectionSurface}>
+        {/* Tab bar */}
+        <div className="-mx-6 -mt-6 mb-6 flex items-stretch border-b border-primary/10 px-2 pt-1">
+          {([
+            { key: 'all' as const, label: t('filter.all', { count: sourceStats.all }) },
+            { key: 'built-in' as const, label: t('filter.builtIn', { count: sourceStats.builtIn }) },
+            { key: 'enterprise' as const, label: t('filter.enterprise', { count: sourceStats.enterprise }) },
+            { key: 'marketplace' as const, label: t('filter.marketplace', { count: sourceStats.marketplace }) },
+          ]).map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setSelectedSource(key)}
+              className={cn(
+                'relative -mb-px border-b-2 border-transparent px-5 py-3 text-[13px] font-medium transition-colors',
+                selectedSource === key
+                  ? 'border-primary text-foreground'
+                  : 'text-muted-foreground/60 hover:text-foreground/80',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+          {/* 视图切换按钮 */}
+          <div className="ml-auto flex items-center gap-0.5 pr-1 pb-1 self-end">
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              title="列表视图"
+              className={cn(
+                'flex h-7 w-7 items-center justify-center rounded-md transition-colors',
+                viewMode === 'list'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground/50 hover:text-foreground/70 hover:bg-black/5 dark:hover:bg-white/5',
+              )}
+            >
+              <List className="h-4 w-4" strokeWidth={1.8} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              title="卡片视图"
+              className={cn(
+                'flex h-7 w-7 items-center justify-center rounded-md transition-colors',
+                viewMode === 'grid'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground/50 hover:text-foreground/70 hover:bg-black/5 dark:hover:bg-white/5',
+              )}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" strokeWidth={1.8} />
+            </button>
+          </div>
+        </div>
         <div className="flex flex-col gap-4 border-b border-primary/10 pb-4 mb-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center flex-wrap gap-4 text-[14px]">
             <div className="group relative mr-2 flex items-center rounded-md border border-transparent bg-black/5 px-3 py-1.5 transition-colors focus-within:border-primary/15 focus-within:bg-[hsl(var(--glass-bg)/0.25)] dark:bg-white/5 dark:focus-within:bg-white/10">
@@ -735,27 +793,6 @@ export function Skills() {
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
-            </div>
-
-            <div className="flex items-center gap-6">
-              <button
-                onClick={() => setSelectedSource('all')}
-                className={cn("font-medium transition-colors flex items-center gap-1.5", selectedSource === 'all' ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
-              >
-                {t('filter.all', { count: sourceStats.all })}
-              </button>
-              <button
-                onClick={() => setSelectedSource('built-in')}
-                className={cn("font-medium transition-colors flex items-center gap-1.5", selectedSource === 'built-in' ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
-              >
-                {t('filter.builtIn', { count: sourceStats.builtIn })}
-              </button>
-              <button
-                onClick={() => setSelectedSource('marketplace')}
-                className={cn("font-medium transition-colors flex items-center gap-1.5", selectedSource === 'marketplace' ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
-              >
-                {t('filter.marketplace', { count: sourceStats.marketplace })}
-              </button>
             </div>
           </div>
 
@@ -854,14 +891,102 @@ export function Skills() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-1">
-            {filteredSkills.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                <Puzzle className="h-10 w-10 mb-4 opacity-50" />
-                <p>{searchQuery ? t('noSkillsSearch') : t('noSkillsAvailable')}</p>
-              </div>
-            ) : (
-              filteredSkills.map((skill) => {
+          {filteredSkills.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+              <Puzzle className="h-10 w-10 mb-4 opacity-50" />
+              <p>{searchQuery ? t('noSkillsSearch') : t('noSkillsAvailable')}</p>
+            </div>
+          ) : viewMode === 'list' ? (
+            /* ===== 列表视图 ===== */
+            <div className="flex flex-col divide-y divide-black/5 dark:divide-white/5">
+              {filteredSkills.map((skill) => {
+                const isSelected = batchSelected.has(skill.id);
+                const isSelectable = batchMode && !skill.isCore;
+                return (
+                  <div
+                    key={skill.id}
+                    className={cn(
+                      'group flex flex-row items-center gap-4 cursor-pointer px-2 py-3 transition-all duration-200 hover:bg-primary/[0.04] rounded-md',
+                      isSelected && 'bg-primary/[0.06] ring-1 ring-primary/30 rounded-md',
+                    )}
+                    onClick={() => {
+                      if (batchMode) {
+                        if (isSelectable) toggleBatchSelect(skill.id);
+                      } else {
+                        setSelectedSkill(skill);
+                      }
+                    }}
+                  >
+                    {/* 图标 */}
+                    {batchMode ? (
+                      <div
+                        className={cn(
+                          'h-10 w-10 shrink-0 flex items-center justify-center rounded-full border transition-colors',
+                          skill.isCore
+                            ? 'bg-muted/50 border-black/5 dark:border-white/5 cursor-not-allowed'
+                            : isSelected
+                              ? 'bg-primary border-primary text-primary-foreground'
+                              : 'glass border hover:border-primary/40'
+                        )}
+                      >
+                        {isSelected ? (
+                          <Check className="h-4 w-4" strokeWidth={2.5} />
+                        ) : (
+                          <span className="text-xl">{skill.icon || '🧩'}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="h-10 w-10 shrink-0 flex items-center justify-center text-xl rounded-full glass border shadow-sm">
+                        {skill.icon || '🧩'}
+                      </div>
+                    )}
+
+                    {/* 名称 + 描述 */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <h3 className="text-[14px] font-semibold text-foreground truncate">{skill.name}</h3>
+                        {skill.isCore && <Lock className="h-3 w-3 text-muted-foreground shrink-0" />}
+                        {skill.isBundled && <Puzzle className="h-3 w-3 text-blue-500/70 shrink-0" />}
+                        {skill.slug && skill.slug !== skill.name && (
+                          <span className="text-[11px] font-mono px-1.5 py-0 rounded border border-black/10 dark:border-white/10 text-muted-foreground inline-block">
+                            {skill.slug}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[12.5px] text-muted-foreground truncate leading-relaxed">
+                        {skill.description}
+                      </p>
+                    </div>
+
+                    {/* 来源 + 版本 */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant="secondary" className="px-1.5 py-0 h-5 text-[10px] font-medium bg-black/5 dark:bg-white/10 border-0 shadow-none">
+                        {resolveSkillSourceLabel(skill, t)}
+                      </Badge>
+                      {skill.version && (
+                        <span className="text-[11px] font-mono text-muted-foreground">v{skill.version}</span>
+                      )}
+                    </div>
+
+                    {/* 开关 */}
+                    {!batchMode && (
+                      <div className="shrink-0" onClick={e => e.stopPropagation()}>
+                        <Switch
+                          size="sm"
+                          checked={skill.enabled}
+                          onCheckedChange={(checked) => handleToggle(skill.id, checked)}
+                          disabled={skill.isCore}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* ===== 卡片视图 ===== */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-1">
+              {filteredSkills.map((skill) => {
                 const isSelected = batchSelected.has(skill.id);
                 const isSelectable = batchMode && !skill.isCore;
                 return (
@@ -935,6 +1060,7 @@ export function Skills() {
                       </div>
                       {!batchMode && (
                         <Switch
+                          size="sm"
                           checked={skill.enabled}
                           onCheckedChange={(checked) => handleToggle(skill.id, checked)}
                           disabled={skill.isCore}
@@ -943,9 +1069,9 @@ export function Skills() {
                     </div>
                   </div>
                 );
-              })
-            )}
-          </div>
+              })}
+            </div>
+          )}
         </div>
         </section>
       </div>

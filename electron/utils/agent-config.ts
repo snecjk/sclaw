@@ -522,6 +522,20 @@ export async function listAgentsSnapshot(): Promise<AgentsSnapshot> {
   return buildSnapshotFromConfig(config);
 }
 
+/**
+ * Returns the expanded (absolute) workspace directory path for a given agent.
+ * Returns null if the agent is not found.
+ */
+export async function getAgentWorkspacePath(agentId: string): Promise<string | null> {
+  const config = await readOpenClawConfig() as AgentConfigDocument;
+  const { entries } = normalizeAgentsConfig(config);
+  const entry = entries.find((e) => e.id === agentId);
+  if (!entry) return null;
+  const raw = entry.workspace
+    || (entry.id === MAIN_AGENT_ID ? getDefaultWorkspacePath(config) : `~/.openclaw/workspace-${entry.id}`);
+  return expandPath(raw);
+}
+
 export async function listConfiguredAgentIds(): Promise<string[]> {
   const config = await readOpenClawConfig() as AgentConfigDocument;
   const { entries } = normalizeAgentsConfig(config);
@@ -594,6 +608,31 @@ export async function updateAgentName(agentId: string, name: string): Promise<Ag
 
     await writeOpenClawConfig(config);
     logger.info('Updated agent name', { agentId, name: normalizedName });
+    return buildSnapshotFromConfig(config);
+  });
+}
+
+export async function updateAgentModel(agentId: string, model: string): Promise<AgentsSnapshot> {
+  return withConfigLock(async () => {
+    const config = await readOpenClawConfig() as AgentConfigDocument;
+    const { agentsConfig, entries } = normalizeAgentsConfig(config);
+    const index = entries.findIndex((entry) => entry.id === agentId);
+    if (index === -1) {
+      throw new Error(`Agent "${agentId}" not found`);
+    }
+
+    entries[index] = {
+      ...entries[index],
+      model: model.trim(),
+    };
+
+    config.agents = {
+      ...agentsConfig,
+      list: entries,
+    };
+
+    await writeOpenClawConfig(config);
+    logger.info('Updated agent model', { agentId, model: model.trim() });
     return buildSnapshotFromConfig(config);
   });
 }
