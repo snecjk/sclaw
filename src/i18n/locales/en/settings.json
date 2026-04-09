@@ -2,7 +2,7 @@
   "title": "Settings",
   "subtitle": "Configure your StoClaw experience",
   "appearance": {
-    "title": "General",
+    "title": "Preferences",
     "description": "Customize the look and feel",
     "theme": "Theme",
     "light": "Light",
