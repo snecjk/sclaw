@@ -162,7 +162,7 @@ export function Chat() {
       </div>
 
       {/* Toolbar */}
-      <div className="relative z-10 flex shrink-0 items-center justify-end px-6 py-2">
+      <div className="relative z-10 flex shrink-0 items-center justify-between px-6 py-2">
         <ChatToolbar />
       </div>
 

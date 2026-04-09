@@ -18,17 +18,10 @@ import {
   Copy,
   XCircle,
   ChevronDown,
-  Layers,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -287,40 +280,56 @@ export function ProvidersSettings() {
         </div>
       ) : (
         <div className="space-y-3">
-          {displayProviders.map((item) => (
-            <ProviderCard
-              key={item.account.id}
-              item={item}
-              allProviders={displayProviders}
-              isDefault={item.account.id === defaultAccountId}
-              isEditing={editingProvider === item.account.id}
-              onEdit={() => setEditingProvider(item.account.id)}
-              onCancelEdit={() => setEditingProvider(null)}
-              onDelete={() => handleDeleteProvider(item.account.id)}
-              onSetDefault={() => handleSetDefault(item.account.id)}
-              onSaveEdits={async (payload) => {
-                const updates: Partial<ProviderAccount> = {};
-                if (payload.updates) {
-                  if (payload.updates.baseUrl !== undefined) updates.baseUrl = payload.updates.baseUrl;
-                  if (payload.updates.apiProtocol !== undefined) updates.apiProtocol = payload.updates.apiProtocol;
-                  if (payload.updates.headers !== undefined) updates.headers = payload.updates.headers;
-                  if (payload.updates.model !== undefined) updates.model = payload.updates.model;
-                  if (payload.updates.fallbackModels !== undefined) updates.fallbackModels = payload.updates.fallbackModels;
-                  if (payload.updates.fallbackProviderIds !== undefined) {
-                    updates.fallbackAccountIds = payload.updates.fallbackProviderIds;
+          {displayProviders.flatMap((item) => {
+            const stoCustomModels: string[] = item.account.vendorId === 'sto'
+              ? (item.account.metadata?.customModels ?? [])
+              : [];
+            if (stoCustomModels.length > 0) {
+              return stoCustomModels.map((m) => (
+                <StoModelRow
+                  key={`sto-${item.account.id}-${m}`}
+                  modelId={m}
+                  account={item.account}
+                  vendor={item.vendor}
+                  isDefault={item.account.id === defaultAccountId}
+                />
+              ));
+            }
+            return [
+              <ProviderCard
+                key={item.account.id}
+                item={item}
+                allProviders={displayProviders}
+                isDefault={item.account.id === defaultAccountId}
+                isEditing={editingProvider === item.account.id}
+                onEdit={() => setEditingProvider(item.account.id)}
+                onCancelEdit={() => setEditingProvider(null)}
+                onDelete={() => handleDeleteProvider(item.account.id)}
+                onSetDefault={() => handleSetDefault(item.account.id)}
+                onSaveEdits={async (payload) => {
+                  const updates: Partial<ProviderAccount> = {};
+                  if (payload.updates) {
+                    if (payload.updates.baseUrl !== undefined) updates.baseUrl = payload.updates.baseUrl;
+                    if (payload.updates.apiProtocol !== undefined) updates.apiProtocol = payload.updates.apiProtocol;
+                    if (payload.updates.headers !== undefined) updates.headers = payload.updates.headers;
+                    if (payload.updates.model !== undefined) updates.model = payload.updates.model;
+                    if (payload.updates.fallbackModels !== undefined) updates.fallbackModels = payload.updates.fallbackModels;
+                    if (payload.updates.fallbackProviderIds !== undefined) {
+                      updates.fallbackAccountIds = payload.updates.fallbackProviderIds;
+                    }
                   }
-                }
-                await updateAccount(
-                  item.account.id,
-                  updates,
-                  payload.newApiKey
-                );
-                setEditingProvider(null);
-              }}
-              onValidateKey={(key, options) => validateAccountApiKey(item.account.id, key, options)}
-              devModeUnlocked={devModeUnlocked}
-            />
-          ))}
+                  await updateAccount(
+                    item.account.id,
+                    updates,
+                    payload.newApiKey
+                  );
+                  setEditingProvider(null);
+                }}
+                onValidateKey={(key, options) => validateAccountApiKey(item.account.id, key, options)}
+                devModeUnlocked={devModeUnlocked}
+              />,
+            ];
+          })}
         </div>
       )}
 
@@ -335,6 +344,82 @@ export function ProvidersSettings() {
           devModeUnlocked={devModeUnlocked}
         />
       )}
+    </div>
+  );
+}
+
+function StoModelRow({
+  modelId,
+  account,
+  vendor,
+  isDefault,
+}: {
+  modelId: string;
+  account: ProviderAccount;
+  vendor?: ProviderVendorInfo;
+  isDefault: boolean;
+}) {
+  const { t } = useTranslation('settings');
+  const isCurrentModel = isDefault && modelId === account.model;
+  const subtitle = getStoModelCatalogSubtitle(modelId, t);
+
+  return (
+    <div
+      className={cn(
+        'group relative flex flex-col overflow-hidden rounded-md border border-primary/12 p-4 transition-all hover:border-primary/18 hover:shadow-md',
+        !isCurrentModel && glassNestedCard,
+        !isCurrentModel && 'hover:bg-white/80 dark:hover:bg-[hsl(var(--glass-bg)/0.2)]',
+        isCurrentModel && 'border-primary/20 bg-primary/[0.06]',
+      )}
+    >
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between md:gap-6">
+        <div className="flex min-w-0 flex-1 items-start gap-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/12 bg-primary/[0.06] text-foreground shadow-sm transition-transform group-hover:scale-[1.02]">
+            {getProviderIconUrl(account.vendorId) ? (
+              <img
+                src={getProviderIconUrl(account.vendorId)}
+                alt={account.vendorId}
+                className={cn('h-5 w-5', shouldInvertInDark(account.vendorId) && 'dark:invert')}
+              />
+            ) : (
+              <span className="text-xl">{vendor?.icon || '⚙️'}</span>
+            )}
+          </div>
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold text-[15px]">{modelId}</span>
+              <span className="inline-flex items-center rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-700 shadow-sm dark:border-sky-400/25 dark:bg-sky-400/14 dark:text-sky-200">
+                {t('aiProviders.card.builtin', '内置')}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
+              <span>{vendor?.name || account.label}</span>
+              {subtitle && (
+                <>
+                  <span className="h-1 w-1 shrink-0 rounded-full bg-black/20 dark:bg-white/20" />
+                  <span>{subtitle}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+        <div
+          className={cn(
+            'flex w-full shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t border-black/5 pt-3 dark:border-white/5',
+            'md:ml-auto md:grid md:w-[min(100%,26rem)] md:shrink-0 md:grid-cols-[auto_220px_1fr] md:items-center md:gap-x-3 md:border-t-0 md:pt-0',
+          )}
+        >
+          <span className="shrink-0 text-[11px] font-semibold leading-tight text-muted-foreground md:justify-self-end">
+            {t('aiProviders.card.modelId', '模型 ID')}
+          </span>
+          <div className="relative min-w-0 md:w-[220px]">
+            <div className="flex h-9 w-full min-w-[160px] max-w-[260px] items-center truncate rounded-md border border-glass-border bg-transparent px-3 font-mono text-[13px] text-foreground/85">
+              {modelId}
+            </div>
+          </div>
+          <span aria-hidden />
+        </div>
+      </div>
     </div>
   );
 }
@@ -388,7 +473,6 @@ function ProviderCard({
   const [showFallback, setShowFallback] = useState(false);
   const [validating, setValidating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [stoModelSaving, setStoModelSaving] = useState(false);
   const [arkMode, setArkMode] = useState<ArkMode>('apikey');
 
   const typeInfo = PROVIDER_TYPE_INFO.find((t) => t.id === account.vendorId);
@@ -411,18 +495,6 @@ function ProviderCard({
     : [];
   const hasModelToolbar =
     (isStoManagedProvider && stoCustomModels.length > 0) || Boolean(account.model);
-
-  const applyStoModel = async (newModel: string) => {
-    if (newModel === account.model) return;
-    setStoModelSaving(true);
-    try {
-      await onSaveEdits({ updates: { model: newModel } });
-    } catch {
-      // onSaveEdits internally handles errors
-    } finally {
-      setStoModelSaving(false);
-    }
-  };
 
   useEffect(() => {
     if (isEditing) {
@@ -533,6 +605,8 @@ function ProviderCard({
 
   const currentLabelClasses = isDefault ? "text-[13px] text-muted-foreground" : labelClasses;
   const currentSectionLabelClasses = isDefault ? "text-[14px] font-bold text-foreground/80" : labelClasses;
+  const showInlineModelSelector = hasModelToolbar && !isStoManagedProvider;
+  const hasStatusLabel = !isStoManagedProvider && !hasConfiguredCredentials(account, status);
 
   return (
     <div
@@ -553,12 +627,16 @@ function ProviderCard({
             )}
           </div>
           <div className="min-w-0 flex-1 space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
               <span className="font-semibold text-[15px]">{account.label}</span>
-              {isDefault && (
-                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/35 bg-emerald-500/14 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 shadow-sm dark:border-emerald-400/30 dark:bg-emerald-400/18 dark:text-emerald-100">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                  {t('aiProviders.card.running')}
+              {isStoManagedProvider && (
+                <span className="inline-flex shrink-0 items-center rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-700 shadow-sm dark:border-sky-400/25 dark:bg-sky-400/14 dark:text-sky-200">
+                  {t('aiProviders.card.builtin', '内置')}
+                </span>
+              )}
+              {account.vendorId === 'custom' && (
+                <span className="inline-flex shrink-0 items-center rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 shadow-sm dark:border-amber-400/25 dark:bg-amber-400/14 dark:text-amber-200">
+                  {t('aiProviders.card.custom', '自定义')}
                 </span>
               )}
             </div>
@@ -584,152 +662,66 @@ function ProviderCard({
         <div
           className={cn(
             'flex w-full shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t border-black/5 pt-3 dark:border-white/5',
-            'md:ml-auto md:grid md:w-[min(100%,38rem)] md:shrink-0 md:grid-cols-[8rem_220px_1px_1fr_auto] md:items-center md:gap-x-3 md:border-t-0 md:pt-0',
+            'md:ml-auto md:grid md:w-[min(100%,26rem)] md:shrink-0 md:grid-cols-[auto_220px_1fr] md:items-center md:gap-x-3 md:border-t-0 md:pt-0',
           )}
         >
           <span
             className={cn(
-              'shrink-0 text-end text-[11px] font-semibold leading-tight text-muted-foreground md:w-32 md:justify-self-end',
-              !hasModelToolbar && 'max-md:hidden md:invisible',
+              'shrink-0 text-[11px] font-semibold leading-tight text-muted-foreground md:justify-self-end',
+              !showInlineModelSelector && 'max-md:hidden md:invisible',
             )}
           >
-            {t('aiProviders.card.currentModel')}
+            {t('aiProviders.card.modelId', '模型 ID')}
           </span>
           <div
             className={cn(
-              'relative min-w-0 md:w-[220px] md:max-w-[220px] md:justify-self-start',
-              !hasModelToolbar && 'max-md:hidden md:invisible md:pointer-events-none',
+              'relative min-w-0 md:w-[220px]',
+              !showInlineModelSelector && 'max-md:hidden md:invisible md:pointer-events-none',
             )}
           >
-            {hasModelToolbar &&
-              (isStoManagedProvider && stoCustomModels.length > 0 ? (
-                <DropdownMenu>
-                  <div
-                    className={cn(
-                      'relative flex w-full min-w-[160px] max-w-[260px] items-stretch rounded-full border border-primary/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),transparent),rgba(255,255,255,0.24)] shadow-[0_8px_18px_rgba(15,23,42,0.06)] md:max-w-none',
-                      'dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent),rgba(255,255,255,0.04)]',
-                    )}
-                  >
-                    <DropdownMenuTrigger asChild disabled={stoModelSaving}>
-                      <button
-                        type="button"
-                        title={t('aiProviders.card.switchModel')}
-                        aria-label={`${t('aiProviders.card.currentModel')}: ${account.model || ''}`}
-                        className={cn(
-                          'flex h-8 min-h-8 w-full min-w-0 items-center gap-2 rounded-full py-0 pl-2.5 pr-2 text-left outline-none',
-                          'transition-colors hover:bg-black/[0.04] focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
-                          'dark:hover:bg-white/[0.06]',
-                          'disabled:pointer-events-none disabled:opacity-60',
-                        )}
-                      >
-                        <Layers className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-                        <span className="min-w-0 flex-1 truncate font-mono text-[12px] font-medium text-foreground/90">
-                          {account.model || stoCustomModels[0]}
-                        </span>
-                        <ChevronDown
-                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                          aria-hidden
-                          strokeWidth={2.25}
-                        />
-                      </button>
-                    </DropdownMenuTrigger>
-                    {stoModelSaving ? (
-                      <Loader2 className="pointer-events-none absolute right-8 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-                    ) : null}
-                  </div>
-                  <DropdownMenuContent
-                    align="start"
-                    side="bottom"
-                    className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[12rem] max-w-[min(100vw-2rem,320px)]"
-                  >
-                    {stoCustomModels.map((m) => {
-                      const subtitle = getStoModelCatalogSubtitle(m, t);
-                      return (
-                        <DropdownMenuItem
-                          key={m}
-                          className={cn(
-                            'flex flex-col items-stretch gap-0.5',
-                            m === account.model && 'bg-primary/8 font-medium',
-                          )}
-                          onSelect={() => {
-                            void applyStoModel(m);
-                          }}
-                        >
-                          <span className="truncate font-mono text-[13px]">{m}</span>
-                          {subtitle ? (
-                            <span className="truncate text-[11px] font-normal text-muted-foreground">
-                              {subtitle}
-                            </span>
-                          ) : null}
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <div className="flex h-9 w-full min-w-[160px] max-w-[260px] items-center truncate rounded-md border border-glass-border bg-transparent px-3 font-mono text-[13px] text-foreground/85 md:max-w-none">
-                  {account.model}
-                </div>
-              ))}
-          </div>
-          <span
-            className={cn(
-              'hidden h-3 w-px shrink-0 bg-border/70 sm:block md:justify-self-center',
-              !hasModelToolbar && 'md:invisible',
+            {showInlineModelSelector && (
+              <div className="flex h-9 w-full min-w-[160px] max-w-[260px] items-center truncate rounded-md border border-glass-border bg-transparent px-3 font-mono text-[13px] text-foreground/85">
+                {account.model}
+              </div>
             )}
-            aria-hidden
-          />
-
-          <span className="flex shrink-0 items-center gap-1.5 text-[13px] text-muted-foreground md:min-w-0 md:justify-self-start">
-            {hasConfiguredCredentials(account, status) ? (
-              <>
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />
-                {t('aiProviders.card.configured')}
-              </>
-            ) : (
-              <>
+          </div>
+          <div className="flex items-center gap-1 max-sm:w-full max-sm:justify-end md:justify-self-end">
+            {hasStatusLabel && (
+              <span className="hidden h-3 w-px shrink-0 bg-border/70 mr-1.5 sm:block" aria-hidden />
+            )}
+            {!isStoManagedProvider && !hasConfiguredCredentials(account, status) && (
+              <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground mr-1.5">
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
                 {t('aiProviders.dialog.apiKeyMissing')}
-              </>
+              </span>
             )}
-          </span>
-          {!isEditing && (
-            <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 max-sm:w-full max-sm:justify-end md:justify-self-end">
-              {!isDefault && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-md text-muted-foreground shadow-sm hover:bg-card hover:text-blue-600"
-                  onClick={onSetDefault}
-                  title={t('aiProviders.card.setDefault')}
-                >
-                  <Check className="h-4 w-4" />
-                </Button>
-              )}
-              {!isStoManagedProvider && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-md text-muted-foreground shadow-sm hover:bg-card hover:text-foreground"
-                  onClick={onEdit}
-                  title={t('aiProviders.card.editKey')}
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-              )}
-              {!isStoManagedProvider && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-md text-muted-foreground shadow-sm hover:bg-card hover:text-destructive"
-                  onClick={onDelete}
-                  title={t('aiProviders.card.delete')}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          )}
+            {!isEditing && (
+              <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                {!isStoManagedProvider && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 rounded-md text-muted-foreground shadow-sm hover:bg-card hover:text-foreground"
+                    onClick={onEdit}
+                    title={t('aiProviders.card.editKey')}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                )}
+                {!isStoManagedProvider && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 rounded-md text-muted-foreground shadow-sm hover:bg-card hover:text-destructive"
+                    onClick={onDelete}
+                    title={t('aiProviders.card.delete')}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

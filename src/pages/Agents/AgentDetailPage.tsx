@@ -509,6 +509,7 @@ function buildModelOptions(
 function ModelTab({ agent }: { agent: AgentSummary }) {
   const { t } = useTranslation('agents');
   const { accounts, statuses, vendors, defaultAccountId, init } = useProviderStore();
+  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [saving, setSaving] = useState(false);
 
@@ -517,13 +518,15 @@ function ModelTab({ agent }: { agent: AgentSummary }) {
   const providerItems = buildProviderListItems(accounts, statuses, vendors, defaultAccountId);
   const modelOptions = buildModelOptions(providerItems);
 
-  // Pre-select if agent already has a configured model
+  // Always sync selectedModelId from the agent prop whenever agent.modelDisplay changes
+  // (e.g. when Chat toolbar switches the model and fetchAgents() refreshes the store).
+  // Guard: don't override while a save is in-flight.
   useEffect(() => {
-    if (!selectedModelId && agent.modelDisplay) {
-      const match = modelOptions.find((opt) => opt.modelId === agent.modelDisplay);
-      if (match) setSelectedModelId(match.modelId);
+    if (!saving && agent.modelDisplay) {
+      setSelectedModelId(agent.modelDisplay);
     }
-  }, [modelOptions, agent.modelDisplay, selectedModelId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent.id, agent.modelDisplay]);
 
   const handleSave = async () => {
     if (!selectedModelId) return;
@@ -534,6 +537,8 @@ function ModelTab({ agent }: { agent: AgentSummary }) {
         body: JSON.stringify({ model: selectedModelId }),
       });
       toast.success(t('detail.modelSaved'));
+      // Refresh agents store so Chat toolbar and other views reflect the change
+      void fetchAgents();
     } catch (err) {
       toast.error(`保存模型失败: ${String(err)}`);
     } finally { setSaving(false); }
