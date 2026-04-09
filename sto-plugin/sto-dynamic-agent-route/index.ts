@@ -184,8 +184,14 @@ export default definePluginEntry({
 		// Also captures agent context for wrapStreamFn to use as HTTP headers.
 		api.on("before_model_resolve", async (event, ctx) => {
 			api.logger.debug?.(
-				`[${TAG}] before_model_resolve: fired — agentId=${ctx.agentId ?? "(none)"}, channelId=${ctx.channelId ?? "(none)"}, prompt="${event.prompt.slice(0, 80)}${event.prompt.length > 80 ? "..." : ""}"`,
+				`[${TAG}] before_model_resolve: fired — agentId=${ctx.agentId ?? "(none)"}, channelId=${ctx.channelId ?? "(none)"}, prompt="${event.prompt}"}"`,
 			);
+
+			if (ctx.trigger != "user") {
+				api.logger.info(`[${ctx.trigger}] using default model.`)
+				return undefined;
+			}
+
 
 			// Capture agent context for wrapStreamFn to inject as headers later.
 			lastHookAgentContext = {
