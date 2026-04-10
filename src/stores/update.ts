@@ -121,18 +121,11 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     set({ isInitialized: true });
 
     // Apply persisted settings from the settings store
-    const { autoCheckUpdate, autoDownloadUpdate } = useSettingsStore.getState();
+    const { autoDownloadUpdate } = useSettingsStore.getState();
 
     // Sync auto-download preference to the main process
     if (autoDownloadUpdate) {
       invokeIpc('update:setAutoDownload', true).catch(() => {});
-    }
-
-    // Auto-check for updates on startup (respects user toggle)
-    if (autoCheckUpdate) {
-      setTimeout(() => {
-        get().checkForUpdates().catch(() => {});
-      }, 10000);
     }
   },
 
