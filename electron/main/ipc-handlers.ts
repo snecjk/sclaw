@@ -46,6 +46,9 @@ import { browserOAuthManager, type BrowserOAuthProviderType } from '../utils/bro
 import { applyProxySettings } from './proxy';
 import { syncLaunchAtStartupSettingFromStore } from './launch-at-startup';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
+import { getStoToken } from '../utils/auth-store';
+import { resolveStoBaseUrl } from '../utils/sto-domain';
+import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { getRecentTokenUsageHistory } from '../utils/token-usage';
 import { getProviderService } from '../services/providers/provider-service';
 import {
@@ -647,6 +650,59 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             await handleProxySettingsChange();
             await syncLaunchAtStartupSettingFromStore();
             data = { success: true, settings };
+            break;
+          }
+          return {
+            id: request.id,
+            ok: false,
+            error: {
+              code: 'UNSUPPORTED',
+              message: `APP_REQUEST_UNSUPPORTED:${request.module}.${request.action}`,
+            },
+          };
+        }
+        case 'question': {
+          if (request.action === 'split') {
+            const payload = request.payload as {
+              prompt?: string;
+              agentId?: string;
+              sessionId?: string;
+            } | undefined;
+            const prompt = payload?.prompt;
+            if (!prompt || typeof prompt !== 'string') {
+              data = [];
+              break;
+            }
+            const token = await getStoToken();
+            if (!token) { data = []; break; }
+
+            const baseUrl = await resolveStoBaseUrl();
+            const url = `${baseUrl}/agent/v1/biz-agent/question-split`;
+            const headers = {
+              ...buildStoMemoryCenterAuthHeaders(token),
+              'Content-Type': 'application/json',
+            };
+
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 10_000);
+            try {
+              const resp = await proxyAwareFetch(url, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                  prompt,
+                  agentId: payload?.agentId,
+                  sessionId: payload?.sessionId,
+                }),
+                signal: controller.signal,
+              });
+              clearTimeout(timer);
+              if (!resp.ok) { data = []; break; }
+              data = await resp.json();
+            } catch {
+              clearTimeout(timer);
+              data = [];
+            }
             break;
           }
           return {

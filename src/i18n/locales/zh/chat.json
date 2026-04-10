@@ -62,5 +62,14 @@
         "withinTwoWeeks": "两周内",
         "withinMonth": "一个月内",
         "older": "一个月之前"
-    }
+    },
+    "queue": {
+        "label": "待发送 ({{count}})",
+        "remove": "从队列中移除",
+        "moveUp": "上移",
+        "moveDown": "下移",
+        "fileCount": "{{count}} 个文件",
+        "queueFull": "队列已满（最多 {{max}} 条）"
+    },
+    "splitting": "正在分析问题..."
 }

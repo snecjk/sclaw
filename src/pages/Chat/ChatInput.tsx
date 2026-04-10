@@ -35,6 +35,7 @@ export interface FileAttachment {
 interface ChatInputProps {
   onSend: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => void;
   onStop?: () => void;
+  onQueue?: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => void;
   disabled?: boolean;
   sending?: boolean;
   isEmpty?: boolean;
@@ -84,7 +85,7 @@ function readFileAsBase64(file: globalThis.File): Promise<string> {
 
 // ── Component ────────────────────────────────────────────────────
 
-export function ChatInput({ onSend, onStop, disabled = false, sending = false, isEmpty = false }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending = false }: ChatInputProps) {
   const { t } = useTranslation('chat');
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
@@ -288,7 +289,7 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
 
   const allReady = attachments.length === 0 || attachments.every(a => a.status === 'ready');
   const hasFailedAttachments = attachments.some((a) => a.status === 'error');
-  const canSend = (input.trim() || attachments.length > 0) && allReady && !disabled && !sending;
+  const canSend = (input.trim() || attachments.length > 0) && allReady && !disabled;
   const canStop = sending && !disabled && !!onStop;
 
   const handleSend = useCallback(() => {
@@ -310,10 +311,15 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    onSend(textToSend, attachmentsToSend, targetAgentId);
+    // When AI is responding and queue callback is available, add to queue instead of sending directly
+    if (sending && onQueue) {
+      onQueue(textToSend, attachmentsToSend, targetAgentId);
+    } else {
+      onSend(textToSend, attachmentsToSend, targetAgentId);
+    }
     setTargetAgentId(null);
     setPickerOpen(false);
-  }, [input, attachments, canSend, onSend, targetAgentId]);
+  }, [input, attachments, canSend, onSend, onQueue, sending, targetAgentId]);
 
   const handleStop = useCallback(() => {
     if (!canStop) return;
@@ -471,7 +477,7 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
                 type="button"
                 className="h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]"
                 onClick={pickFiles}
-                disabled={disabled || sending}
+                disabled={disabled}
                 title={t('composer.attachFiles')}
               >
                 <Paperclip className="h-3.5 w-3.5" />
@@ -487,7 +493,7 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
                       (pickerOpen || selectedTarget) && 'bg-primary/10 text-primary hover:bg-primary/12'
                     )}
                     onClick={() => setPickerOpen((open) => !open)}
-                    disabled={disabled || sending}
+                    disabled={disabled}
                     title={t('composer.pickAgent')}
                   >
                     <AtSign className="h-3.5 w-3.5" />
@@ -517,27 +523,43 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
               )}
             </div>
 
-            <Button
-              onClick={sending ? handleStop : handleSend}
-              disabled={sending ? !canStop : !canSend}
-              size="icon"
-              className={cn(
-                'h-9 w-9 shrink-0 rounded-full border transition-all',
-                sending
-                  ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-white/90'
-                  : canSend
-                    ? 'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(59,130,246,0.22)]'
-                    : 'border-black/8 bg-black/5 text-muted-foreground/55 dark:border-white/10 dark:bg-white/[0.06]'
-              )}
-              variant="ghost"
-              title={sending ? t('composer.stop') : t('composer.send')}
-            >
-              {sending ? (
-                <Square className="h-3.5 w-3.5" fill="currentColor" />
-              ) : (
+            {/* When sending: show Send (to queue) if there's input, otherwise show Stop */}
+            {sending && canSend ? (
+              <Button
+                onClick={handleSend}
+                size="icon"
+                className={cn(
+                  'h-9 w-9 shrink-0 rounded-full border transition-all',
+                  'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(59,130,246,0.22)]',
+                )}
+                variant="ghost"
+                title={t('composer.send')}
+              >
                 <SendHorizontal className="h-4 w-4" strokeWidth={2.1} />
-              )}
-            </Button>
+              </Button>
+            ) : (
+              <Button
+                onClick={sending ? handleStop : handleSend}
+                disabled={sending ? !canStop : !canSend}
+                size="icon"
+                className={cn(
+                  'h-9 w-9 shrink-0 rounded-full border transition-all',
+                  sending
+                    ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-white/90'
+                    : canSend
+                      ? 'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(59,130,246,0.22)]'
+                      : 'border-black/8 bg-black/5 text-muted-foreground/55 dark:border-white/10 dark:bg-white/[0.06]'
+                )}
+                variant="ghost"
+                title={sending ? t('composer.stop') : t('composer.send')}
+              >
+                {sending ? (
+                  <Square className="h-3.5 w-3.5" fill="currentColor" />
+                ) : (
+                  <SendHorizontal className="h-4 w-4" strokeWidth={2.1} />
+                )}
+              </Button>
+            )}
           </div>
         </div>
         <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px] text-muted-foreground/60 px-4">

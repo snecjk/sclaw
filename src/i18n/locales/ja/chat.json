@@ -57,5 +57,14 @@
         "withinTwoWeeks": "2週間以内",
         "withinMonth": "1か月以内",
         "older": "1か月より前"
-    }
+    },
+    "queue": {
+        "label": "送信待ち ({{count}})",
+        "remove": "キューから削除",
+        "moveUp": "上へ移動",
+        "moveDown": "下へ移動",
+        "fileCount": "{{count}} 件のファイル",
+        "queueFull": "キューが満杯です（最大 {{max}} 件）"
+    },
+    "splitting": "質問を分析中..."
 }
