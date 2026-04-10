@@ -243,13 +243,16 @@ pnpm test                 # Run unit tests
 pnpm run comms:replay     # Compute communication replay metrics
 pnpm run comms:baseline   # Refresh communication baseline snapshot
 pnpm run comms:compare    # Compare replay metrics against baseline thresholds
+```
 
 ## Token Quota Guard
 
-StoClaw checks `GET /agent/v1/token-quota/check` before sending chat messages.
+StoClaw checks the host route `GET /api/token-quota/check` before sending chat messages.
+The host route proxies to upstream `GET /agent/v1/token-quota/check`.
 When daily quota is exceeded, send is blocked client-side and the user sees a quota message.
-Quota policy: personal DB config first, fallback to Apollo `claw.default.token.limit`.
+Backend policy is expected to prefer personal DB config first, then Apollo `claw.default.token.limit`.
 
+```bash
 # Build & Package
 pnpm run build:vite       # Build frontend only
 pnpm build                # Full production build (with packaging assets)
