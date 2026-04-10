@@ -2,7 +2,7 @@
   "title": "Settings",
   "subtitle": "Configure your StoClaw experience",
   "appearance": {
-    "title": "General",
+    "title": "Preferences",
     "description": "Customize the look and feel",
     "theme": "Theme",
     "light": "Light",
@@ -163,7 +163,7 @@
     "title": "Updates",
     "description": "Keep StoClaw up to date",
     "autoCheck": "Auto-check for updates",
-    "autoCheckDesc": "Check for updates on startup",
+    "autoCheckDesc": "Periodically check with the server for updates (default ~6h; configurable per release)",
     "autoDownload": "Auto-update",
     "autoDownloadDesc": "Automatically download and install updates",
     "status": {

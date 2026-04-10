@@ -162,7 +162,7 @@
     "title": "アップデート",
     "description": "StoClaw を最新に保つ",
     "autoCheck": "自動更新チェック",
-    "autoCheckDesc": "起動時に更新を確認",
+    "autoCheckDesc": "一定間隔でサーバーに更新を確認（既定は約6時間、リリース設定で変更可）",
     "autoDownload": "自動アップデート",
     "autoDownloadDesc": "更新を自動的にダウンロードしてインストール",
     "status": {
