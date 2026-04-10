@@ -244,6 +244,12 @@ pnpm run comms:replay     # Compute communication replay metrics
 pnpm run comms:baseline   # Refresh communication baseline snapshot
 pnpm run comms:compare    # Compare replay metrics against baseline thresholds
 
+## Token Quota Guard
+
+StoClaw checks `GET /agent/v1/token-quota/check` before sending chat messages.
+When daily quota is exceeded, send is blocked client-side and the user sees a quota message.
+Quota policy: personal DB config first, fallback to Apollo `claw.default.token.limit`.
+
 # Build & Package
 pnpm run build:vite       # Build frontend only
 pnpm build                # Full production build (with packaging assets)
