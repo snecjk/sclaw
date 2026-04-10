@@ -250,7 +250,6 @@ pnpm run comms:compare    # Compare replay metrics against baseline thresholds
 StoClaw checks the host route `GET /api/token-quota/check` before sending chat messages.
 The host route proxies to upstream `GET /agent/v1/token-quota/check`.
 When daily quota is exceeded, send is blocked client-side and the user sees a quota message.
-Backend policy is expected to prefer personal DB config first, then Apollo `claw.default.token.limit`.
 
 ```bash
 # Build & Package
