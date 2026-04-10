@@ -13,8 +13,10 @@ import { useGatewayStore } from '@/stores/gateway';
 import { useSettingsStore } from '@/stores/settings';
 import { hostApiFetch } from '@/lib/host-api';
 import { trackUiEvent } from '@/lib/telemetry';
+import { formatMillionToken } from '@/lib/token-display';
 import { ProvidersSettings } from '@/components/settings/ProvidersSettings';
 import { FeedbackState } from '@/components/common/FeedbackState';
+import { MillionTokenText } from '@/components/common/MillionTokenText';
 import {
   filterUsageHistoryByWindow,
   groupUsageHistory,
@@ -230,6 +232,7 @@ export function Models() {
           <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
             {t('dashboard:recentTokenHistory.title', 'Token Usage History')}
           </h2>
+          <p className="mb-4 text-[12px] text-muted-foreground">Token 展示单位按值自适应：Token / 千Token / 百万Token（保留 2 位小数）</p>
           <div>
             {usageLoading ? (
               <div className="flex items-center justify-center rounded-md border border-dashed border-primary/18 bg-white/50 py-12 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">
@@ -341,7 +344,7 @@ export function Models() {
                             </p>
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="font-bold text-[15px]">{formatTokenCount(entry.totalTokens)}</p>
+                            <p className="font-bold text-[15px]"><MillionTokenText value={entry.totalTokens} /></p>
                             <p className="text-[12px] text-muted-foreground mt-0.5">
                               {formatUsageTimestamp(entry.timestamp)}
                             </p>
@@ -422,7 +425,7 @@ export function Models() {
 }
 
 function formatTokenCount(value: number): string {
-  return Intl.NumberFormat().format(value);
+  return formatMillionToken(value);
 }
 
 function formatUsageTimestamp(timestamp: string): string {
@@ -487,8 +490,8 @@ function UsageBarChart({
         <div key={group.label} className="space-y-1.5">
           <div className="flex items-center justify-between gap-3 text-[13.5px]">
             <span className="truncate font-semibold text-foreground">{group.label}</span>
-            <span className="text-muted-foreground font-medium">
-              {totalLabel}: {formatTokenCount(group.totalTokens)}
+                            <span className="text-muted-foreground font-medium">
+              {totalLabel}: <MillionTokenText value={group.totalTokens} />
             </span>
           </div>
           <div className="h-3 overflow-hidden rounded-md bg-primary/[0.08]">
