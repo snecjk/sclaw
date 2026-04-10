@@ -1511,6 +1511,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const currentSessionKey = targetSessionKey;
 
+    try {
+      const quotaCheck = await hostApiFetch<{ allowed?: boolean; used?: number; limit?: number }>('/api/token-quota/check');
+      if (quotaCheck && quotaCheck.allowed === false) {
+        set({
+          error: typeof quotaCheck.used === 'number' && typeof quotaCheck.limit === 'number'
+            ? `Daily token quota exceeded (${quotaCheck.used}/${quotaCheck.limit}).`
+            : 'Daily token quota exceeded.',
+          sending: false,
+        });
+        return;
+      }
+    } catch {
+      // Fail open: quota checks should never block message delivery when unavailable.
+    }
+
     // Add user message optimistically (with local file metadata for UI display)
     const nowMs = Date.now();
     const userMsg: RawMessage = {

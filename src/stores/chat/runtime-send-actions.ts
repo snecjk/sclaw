@@ -1,4 +1,5 @@
 import { invokeIpc } from '@/lib/api-client';
+import { hostApiFetch } from '@/lib/host-api';
 import { useAgentsStore } from '@/stores/agents';
 import { useSkillsStore } from '@/stores/skills';
 import {
@@ -38,6 +39,19 @@ function ensureSessionEntry(sessions: ChatSession[], sessionKey: string): ChatSe
     return sessions;
   }
   return [...sessions, { key: sessionKey }];
+}
+
+type TokenQuotaCheckResult = {
+  allowed?: boolean;
+  used?: number;
+  limit?: number;
+};
+
+function formatQuotaExceededMessage(used?: number, limit?: number): string {
+  if (typeof used === 'number' && typeof limit === 'number') {
+    return `Daily token quota exceeded (${used}/${limit}).`;
+  }
+  return 'Daily token quota exceeded.';
 }
 
 export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<RuntimeActions, 'sendMessage' | 'abortRun'> {
@@ -81,6 +95,19 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       }
 
       const currentSessionKey = targetSessionKey;
+
+      try {
+        const quotaCheck = await hostApiFetch<TokenQuotaCheckResult>('/api/token-quota/check');
+        if (quotaCheck && quotaCheck.allowed === false) {
+          set({
+            error: formatQuotaExceededMessage(quotaCheck.used, quotaCheck.limit),
+            sending: false,
+          });
+          return;
+        }
+      } catch {
+        // Fail open: quota checks should never block message delivery when unavailable.
+      }
 
       // Add user message optimistically (with local file metadata for UI display)
       const nowMs = Date.now();

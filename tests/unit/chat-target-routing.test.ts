@@ -1,29 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { gatewayRpcMock, hostApiFetchMock, agentsState } = vi.hoisted(() => ({
-  gatewayRpcMock: vi.fn(),
+const { invokeIpcMock, hostApiFetchMock, agentsState } = vi.hoisted(() => ({
+  invokeIpcMock: vi.fn(),
   hostApiFetchMock: vi.fn(),
   agentsState: {
     agents: [] as Array<Record<string, unknown>>,
   },
 }));
 
-vi.mock('@/stores/gateway', () => ({
-  useGatewayStore: {
-    getState: () => ({
-      rpc: gatewayRpcMock,
-    }),
-  },
+vi.mock('@/lib/api-client', () => ({
+  invokeIpc: (...args: unknown[]) => invokeIpcMock(...args),
+}));
+
+vi.mock('@/lib/host-api', () => ({
+  hostApiFetch: (...args: unknown[]) => hostApiFetchMock(...args),
 }));
 
 vi.mock('@/stores/agents', () => ({
   useAgentsStore: {
     getState: () => agentsState,
   },
-}));
-
-vi.mock('@/lib/host-api', () => ({
-  hostApiFetch: (...args: unknown[]) => hostApiFetchMock(...args),
 }));
 
 describe('chat target routing', () => {
@@ -58,25 +54,39 @@ describe('chat target routing', () => {
       },
     ];
 
-    gatewayRpcMock.mockReset();
-    gatewayRpcMock.mockImplementation(async (method: string) => {
-      if (method === 'chat.history') {
-        return { messages: [] };
+    invokeIpcMock.mockReset();
+    invokeIpcMock.mockImplementation(async (channel: string, ...args: unknown[]) => {
+      if (channel === 'gateway:rpc') {
+        const [method] = args as [string];
+        if (method === 'chat.history') {
+          return { success: true, result: { messages: [] } };
+        }
+        if (method === 'chat.send') {
+          return { success: true, result: { runId: 'run-text' } };
+        }
+        if (method === 'chat.abort') {
+          return { success: true, result: { ok: true } };
+        }
+        if (method === 'sessions.list') {
+          return { success: true, result: { sessions: [] } };
+        }
       }
-      if (method === 'chat.send') {
-        return { runId: 'run-text' };
+      if (channel === 'chat:sendWithMedia') {
+        return { success: true, result: { runId: 'run-media' } };
       }
-      if (method === 'chat.abort') {
-        return { ok: true };
-      }
-      if (method === 'sessions.list') {
-        return { sessions: [] };
-      }
-      throw new Error(`Unexpected gateway RPC: ${method}`);
+      throw new Error(`Unexpected invokeIpc call: ${channel}`);
     });
 
     hostApiFetchMock.mockReset();
-    hostApiFetchMock.mockResolvedValue({ success: true, result: { runId: 'run-media' } });
+    hostApiFetchMock.mockImplementation(async (path: string) => {
+      if (path === '/api/token-quota/check') {
+        return { allowed: true, used: 0, limit: 100 };
+      }
+      if (path === '/api/chat/send-with-media') {
+        return { success: true, result: { runId: 'run-media' } };
+      }
+      throw new Error(`Unexpected hostApiFetch call: ${path}`);
+    });
   });
 
   afterEach(() => {
@@ -115,16 +125,22 @@ describe('chat target routing', () => {
     expect(state.sessions.some((session) => session.key === 'agent:research:desk')).toBe(true);
     expect(state.messages.at(-1)?.content).toBe('Hello direct agent');
 
-    const historyCall = gatewayRpcMock.mock.calls.find(([method]) => method === 'chat.history');
-    expect(historyCall?.[1]).toEqual({ sessionKey: 'agent:research:desk', limit: 200 });
+    expect(hostApiFetchMock).toHaveBeenCalledWith('/api/token-quota/check');
 
-    const sendCall = gatewayRpcMock.mock.calls.find(([method]) => method === 'chat.send');
-    expect(sendCall?.[1]).toMatchObject({
+    const historyCall = invokeIpcMock.mock.calls.find(
+      ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.history',
+    );
+    expect(historyCall?.[2]).toEqual({ sessionKey: 'agent:research:desk', limit: 200 });
+
+    const sendCall = invokeIpcMock.mock.calls.find(
+      ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.send',
+    );
+    expect(sendCall?.[2]).toMatchObject({
       sessionKey: 'agent:research:desk',
       message: 'Hello direct agent',
       deliver: false,
     });
-    expect(typeof (sendCall?.[1] as { idempotencyKey?: unknown })?.idempotencyKey).toBe('string');
+    expect(typeof (sendCall?.[2] as { idempotencyKey?: unknown })?.idempotencyKey).toBe('string');
   });
 
   it('uses the selected agent main session for attachment sends', async () => {
@@ -166,24 +182,113 @@ describe('chat target routing', () => {
     );
 
     expect(useChatStore.getState().currentSessionKey).toBe('agent:research:desk');
+    expect(hostApiFetchMock).toHaveBeenCalledWith('/api/token-quota/check');
 
-    expect(hostApiFetchMock).toHaveBeenCalledWith(
-      '/api/chat/send-with-media',
-      expect.objectContaining({
-        method: 'POST',
-        body: expect.any(String),
-      }),
-    );
+    const mediaCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send-with-media');
+    expect(mediaCall?.[1]).toMatchObject({
+      method: 'POST',
+      body: expect.any(String),
+    });
 
-    const payload = JSON.parse(
-      (hostApiFetchMock.mock.calls[0]?.[1] as { body: string }).body,
-    ) as {
+    const payload = JSON.parse((mediaCall?.[1] as { body: string }).body) as {
       sessionKey: string;
       message: string;
       media: Array<{ filePath: string }>;
     };
-
     expect(payload.sessionKey).toBe('agent:research:desk');
+    expect(payload.message).toBe('Process the attached file(s).');
+    expect(payload.media[0]?.filePath).toBe('/tmp/design.png');
+  });
+
+  it('blocks send when the daily token quota is exhausted', async () => {
+    hostApiFetchMock.mockResolvedValueOnce({ allowed: false, used: 1200, limit: 1200 });
+
+    const { useChatStore } = await import('@/stores/chat');
+
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      currentAgentId: 'main',
+      sessions: [{ key: 'agent:main:main' }],
+      messages: [],
+      sessionLabels: {},
+      sessionLastActivity: {},
+      sending: false,
+      activeRunId: null,
+      streamingText: '',
+      streamingMessage: null,
+      streamingTools: [],
+      pendingFinal: false,
+      lastUserMessageAt: null,
+      pendingToolImages: [],
+      error: null,
+      loading: false,
+      thinkingLevel: null,
+      showThinking: true,
+    });
+
+    await useChatStore.getState().sendMessage('Blocked by quota');
+
+    const state = useChatStore.getState();
+    expect(state.messages).toHaveLength(0);
+    expect(state.error).toContain('1200/1200');
+    expect(invokeIpcMock.mock.calls.some(([channel, method]) => channel === 'gateway:rpc' && method === 'chat.send')).toBe(false);
+    expect(invokeIpcMock.mock.calls.some(([channel]) => channel === 'chat:sendWithMedia')).toBe(false);
+    expect(hostApiFetchMock.mock.calls.some(([path]) => path === '/api/chat/send-with-media')).toBe(false);
+  });
+
+  it('fails open when the quota check errors', async () => {
+    hostApiFetchMock.mockRejectedValueOnce(new Error('quota check unavailable'));
+
+    const { useChatStore } = await import('@/stores/chat');
+
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      currentAgentId: 'main',
+      sessions: [{ key: 'agent:main:main' }],
+      messages: [],
+      sessionLabels: {},
+      sessionLastActivity: {},
+      sending: false,
+      activeRunId: null,
+      streamingText: '',
+      streamingMessage: null,
+      streamingTools: [],
+      pendingFinal: false,
+      lastUserMessageAt: null,
+      pendingToolImages: [],
+      error: null,
+      loading: false,
+      thinkingLevel: null,
+      showThinking: true,
+    });
+
+    await useChatStore.getState().sendMessage(
+      '',
+      [
+        {
+          fileName: 'design.png',
+          mimeType: 'image/png',
+          fileSize: 128,
+          stagedPath: '/tmp/design.png',
+          preview: 'data:image/png;base64,abc',
+        },
+      ],
+    );
+
+    expect(hostApiFetchMock).toHaveBeenCalledWith('/api/token-quota/check');
+
+    const mediaCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send-with-media');
+    expect(mediaCall?.[1]).toMatchObject({
+      method: 'POST',
+      body: expect.any(String),
+    });
+
+    const payload = JSON.parse((mediaCall?.[1] as { body: string }).body) as {
+      sessionKey: string;
+      message: string;
+      media: Array<{ filePath: string }>;
+    };
+    expect(payload.sessionKey).toBe('agent:main:main');
     expect(payload.message).toBe('Process the attached file(s).');
     expect(payload.media[0]?.filePath).toBe('/tmp/design.png');
   });
