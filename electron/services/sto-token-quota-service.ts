@@ -9,7 +9,7 @@ import { getSsoEnvironment, getStoToken, type SsoEnvironment } from '../utils/au
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { logger } from '../utils/logger';
 
-const STO_TOKEN_QUOTA_DOMAINS: Record<string, string> = {
+const STO_TOKEN_QUOTA_DOMAINS: Partial<Record<SsoEnvironment, string>> = {
   'daily-external': 'https://baseinfo-aimemory-test.sto.cn',
   'pre-release': 'https://pre-baseinfo-aimemory.sto.cn',
   'local': 'http://127.0.0.1:7001',
@@ -18,8 +18,57 @@ const STO_TOKEN_QUOTA_DOMAINS: Record<string, string> = {
 const STO_TOKEN_QUOTA_DOMAIN_DEFAULT = 'https://baseinfo-aimemory.sto.cn';
 const STO_TOKEN_QUOTA_PATH = '/agent/v1/token-quota/check';
 
+export interface StoTokenQuotaData {
+  remaining?: number;
+  limit?: number;
+  used?: number;
+  quota?: number;
+  resetAt?: string;
+  [key: string]: unknown;
+}
+
+export interface StoTokenQuotaCheckResponse {
+  success: boolean;
+  data: StoTokenQuotaData;
+}
+
+export class StoTokenQuotaServiceError extends Error {
+  statusCode: number;
+
+  constructor(message: string, statusCode: number) {
+    super(message);
+    this.name = 'StoTokenQuotaServiceError';
+    this.statusCode = statusCode;
+  }
+}
+
 function resolveStoTokenQuotaBaseUrl(env: SsoEnvironment): string {
   return STO_TOKEN_QUOTA_DOMAINS[env] || STO_TOKEN_QUOTA_DOMAIN_DEFAULT;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseStoTokenQuotaResponse(payload: unknown): StoTokenQuotaCheckResponse {
+  if (!isRecord(payload)) {
+    throw new StoTokenQuotaServiceError(
+      'STO token quota response payload is malformed',
+      502,
+    );
+  }
+
+  if (typeof payload.success !== 'boolean' || !isRecord(payload.data)) {
+    throw new StoTokenQuotaServiceError(
+      'STO token quota response payload is malformed',
+      502,
+    );
+  }
+
+  return {
+    success: payload.success,
+    data: payload.data as StoTokenQuotaData,
+  };
 }
 
 export class StoTokenQuotaService {
@@ -27,10 +76,13 @@ export class StoTokenQuotaService {
     return resolveStoTokenQuotaBaseUrl(env);
   }
 
-  async checkTokenQuota(): Promise<unknown> {
+  async checkTokenQuota(): Promise<StoTokenQuotaCheckResponse> {
     const token = await getStoToken();
     if (!token) {
-      throw new Error('未登录或 stoToken 已过期，请重新登录');
+      throw new StoTokenQuotaServiceError(
+        '未登录或 stoToken 已过期，请重新登录',
+        401,
+      );
     }
 
     const env = await getSsoEnvironment();
@@ -45,10 +97,14 @@ export class StoTokenQuotaService {
 
     if (!response.ok) {
       const text = await response.text().catch(() => '');
-      throw new Error(`STO token quota check failed (${response.status}): ${text}`);
+      throw new StoTokenQuotaServiceError(
+        `STO token quota check failed (${response.status}): ${text}`,
+        response.status === 403 ? 403 : 401,
+      );
     }
 
-    return response.json();
+    const payload = await response.json() as unknown;
+    return parseStoTokenQuotaResponse(payload);
   }
 }
 

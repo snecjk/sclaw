@@ -5,6 +5,24 @@ import { sendJson } from '../route-utils';
 import { getStoTokenQuotaService } from '../../services/sto-token-quota-service';
 import { logger } from '../../utils/logger';
 
+function resolveTokenQuotaStatusCode(error: unknown): number {
+  if (typeof error === 'object' && error !== null && 'statusCode' in error) {
+    const statusCode = Number((error as { statusCode?: unknown }).statusCode);
+    if (statusCode === 401 || statusCode === 403) {
+      return statusCode;
+    }
+  }
+
+  const message = String(error);
+  if (/未登录|stoToken|unauthori[sz]ed/i.test(message)) {
+    return 401;
+  }
+  if (/forbidden|403/i.test(message)) {
+    return 403;
+  }
+  return 500;
+}
+
 export async function handleTokenQuotaRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -18,7 +36,8 @@ export async function handleTokenQuotaRoutes(
       sendJson(res, 200, result);
     } catch (error) {
       logger.error('[token-quota] Check route error:', error);
-      sendJson(res, 500, { success: false, error: String(error) });
+      const statusCode = resolveTokenQuotaStatusCode(error);
+      sendJson(res, statusCode, { success: false, error: String(error) });
     }
     return true;
   }

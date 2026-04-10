@@ -56,4 +56,25 @@ describe('handleTokenQuotaRoutes', () => {
       { success: false, error: 'Error: boom' },
     );
   });
+
+  it('returns 401 for auth-like service errors', async () => {
+    const authError = Object.assign(new Error('未登录或 stoToken 已过期，请重新登录'), {
+      statusCode: 401,
+    });
+    checkTokenQuotaMock.mockRejectedValueOnce(authError);
+    const { handleTokenQuotaRoutes } = await import('@electron/api/routes/token-quota');
+
+    await handleTokenQuotaRoutes(
+      { method: 'GET' } as IncomingMessage,
+      {} as ServerResponse,
+      new URL('http://127.0.0.1:3210/api/token-quota/check'),
+      {} as never,
+    );
+
+    expect(sendJsonMock).toHaveBeenCalledWith(
+      expect.anything(),
+      401,
+      { success: false, error: 'Error: 未登录或 stoToken 已过期，请重新登录' },
+    );
+  });
 });
