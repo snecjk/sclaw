@@ -8,7 +8,7 @@ import { logger } from '../../utils/logger';
 function resolveTokenQuotaStatusCode(error: unknown): number {
   if (typeof error === 'object' && error !== null && 'statusCode' in error) {
     const statusCode = Number((error as { statusCode?: unknown }).statusCode);
-    if (statusCode === 401 || statusCode === 403) {
+    if (Number.isInteger(statusCode) && statusCode >= 400 && statusCode < 600) {
       return statusCode;
     }
   }

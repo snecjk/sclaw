@@ -51,6 +51,38 @@ describe('StoTokenQuotaService', () => {
     });
   });
 
+  it('preserves upstream 429 status codes', async () => {
+    getStoTokenMock.mockResolvedValueOnce('token-1');
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      statusText: 'Too Many Requests',
+      text: async () => 'rate limited',
+    });
+    const { StoTokenQuotaService } = await import('@electron/services/sto-token-quota-service');
+
+    await expect(new StoTokenQuotaService().checkTokenQuota()).rejects.toMatchObject({
+      message: 'STO token quota check failed (429): rate limited',
+      statusCode: 429,
+    });
+  });
+
+  it('preserves upstream 502 status codes', async () => {
+    getStoTokenMock.mockResolvedValueOnce('token-1');
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      statusText: 'Bad Gateway',
+      text: async () => 'gateway error',
+    });
+    const { StoTokenQuotaService } = await import('@electron/services/sto-token-quota-service');
+
+    await expect(new StoTokenQuotaService().checkTokenQuota()).rejects.toMatchObject({
+      message: 'STO token quota check failed (502): gateway error',
+      statusCode: 502,
+    });
+  });
+
   it('throws a clear error when the upstream payload is malformed', async () => {
     getStoTokenMock.mockResolvedValueOnce('token-1');
     fetchMock.mockResolvedValueOnce({

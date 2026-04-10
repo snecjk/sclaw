@@ -97,9 +97,10 @@ export class StoTokenQuotaService {
 
     if (!response.ok) {
       const text = await response.text().catch(() => '');
+      const statusCode = response.status;
       throw new StoTokenQuotaServiceError(
-        `STO token quota check failed (${response.status}): ${text}`,
-        response.status === 403 ? 403 : 401,
+        `STO token quota check failed (${statusCode}): ${text}`,
+        statusCode,
       );
     }
 

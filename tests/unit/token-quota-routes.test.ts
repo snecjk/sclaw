@@ -77,4 +77,25 @@ describe('handleTokenQuotaRoutes', () => {
       { success: false, error: 'Error: 未登录或 stoToken 已过期，请重新登录' },
     );
   });
+
+  it('returns the provided upstream status code when it is a valid HTTP error code', async () => {
+    const upstreamError = Object.assign(new Error('Bad Gateway'), {
+      statusCode: 502,
+    });
+    checkTokenQuotaMock.mockRejectedValueOnce(upstreamError);
+    const { handleTokenQuotaRoutes } = await import('@electron/api/routes/token-quota');
+
+    await handleTokenQuotaRoutes(
+      { method: 'GET' } as IncomingMessage,
+      {} as ServerResponse,
+      new URL('http://127.0.0.1:3210/api/token-quota/check'),
+      {} as never,
+    );
+
+    expect(sendJsonMock).toHaveBeenCalledWith(
+      expect.anything(),
+      502,
+      { success: false, error: 'Error: Bad Gateway' },
+    );
+  });
 });
