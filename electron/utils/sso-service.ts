@@ -5,6 +5,8 @@
 
 import type { SsoEnvironment, SsoUserInfo } from './auth-store';
 import { proxyAwareFetch } from './proxy-fetch';
+import { logger } from './logger';
+
 
 export const SSO_ENVIRONMENTS: Record<SsoEnvironment, string> = {
   'daily-external': 'https://baseinfo-usercenterserviceapi-hq-test.sto.cn',
@@ -101,7 +103,7 @@ export async function signOut(
       openId,
     });
     const url = `${baseUrl}/webapiv46/api/logon/signOut?${params.toString()}`;
-
+    logger.info("signOut ", url)
     const response = await proxyAwareFetch(url, { method: 'GET' });
     if (!response.ok) return false;
 

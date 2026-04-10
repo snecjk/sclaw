@@ -5,7 +5,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'http';
 import { app } from 'electron';
-import { getAuthState, setAuthUser, clearAuthUser, getSsoEnvironment, setSsoEnvironment, getStoToken } from '../../utils/auth-store';
+import { getAuthState, setAuthUser, clearAuthUser, getSsoEnvironment, setSsoEnvironment, getStoToken, syncSsoAuthToOpenClaw, removeSsoAuthFromOpenClaw } from '../../utils/auth-store';
 import type { SsoEnvironment } from '../../utils/auth-store';
 import { getBaseUrl, signOut } from '../../utils/sso-service';
 import { SsoLoginManager } from '../../utils/sso-login';
@@ -34,6 +34,7 @@ export async function handleAuthRoutes(
         const token = await getStoToken();
         if (!token) {
           await clearAuthUser();
+          void removeSsoAuthFromOpenClaw();
           logger.info('Auth status: stoToken expired or missing, clearing auth state to force re-login');
           sendJson(res, 200, {
             isAuthenticated: false,
@@ -67,6 +68,7 @@ export async function handleAuthRoutes(
 
       const user = await ssoLoginManager.startLogin(env, ctx.mainWindow);
       await setAuthUser(user);
+      void syncSsoAuthToOpenClaw(user);
 
       void runPendingInstallReport(app.getVersion(), process.platform);
 
@@ -106,6 +108,7 @@ export async function handleAuthRoutes(
       }
 
       await clearAuthUser();
+      void removeSsoAuthFromOpenClaw();
 
       // Cleanup STO models and stop periodic sync (fire-and-forget)
       const stoSyncLogout = getStoModelSyncService();
@@ -117,6 +120,7 @@ export async function handleAuthRoutes(
     } catch (error) {
       // Always clear local auth even if SSO signOut fails
       await clearAuthUser().catch(() => {});
+      void removeSsoAuthFromOpenClaw();
 
       // Best-effort STO cleanup on error path too
       void getStoModelSyncService().cleanupOnLogout().catch(() => {});
