@@ -80,7 +80,7 @@ describe('chat target routing', () => {
     hostApiFetchMock.mockReset();
     hostApiFetchMock.mockImplementation(async (path: string) => {
       if (path === '/api/token-quota/check') {
-        return { allowed: true, used: 0, limit: 100 };
+        return { success: true, data: { allowed: true, used_today: 0, limit: 100 } };
       }
       if (path === '/api/chat/send-with-media') {
         return { success: true, result: { runId: 'run-media' } };
@@ -201,7 +201,12 @@ describe('chat target routing', () => {
   });
 
   it('blocks send when the daily token quota is exhausted', async () => {
-    hostApiFetchMock.mockResolvedValueOnce({ allowed: false, used: 1200, limit: 1200 });
+    hostApiFetchMock.mockImplementationOnce(async (path: string) => {
+      if (path === '/api/token-quota/check') {
+        return { success: true, data: { allowed: false, used_today: 1200, limit: 1200 } };
+      }
+      throw new Error(`Unexpected hostApiFetch call: ${path}`);
+    });
 
     const { useChatStore } = await import('@/stores/chat');
 

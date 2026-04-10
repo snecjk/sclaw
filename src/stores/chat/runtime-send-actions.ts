@@ -42,14 +42,33 @@ function ensureSessionEntry(sessions: ChatSession[], sessionKey: string): ChatSe
 }
 
 type TokenQuotaCheckResult = {
+  success: boolean;
+  data?: {
+    allowed?: boolean;
+    used_today?: number;
+    limit?: number;
+  };
+};
+
+export type DailyTokenQuotaState = {
   allowed?: boolean;
-  used?: number;
+  used_today?: number;
   limit?: number;
 };
 
-function formatQuotaExceededMessage(used?: number, limit?: number): string {
-  if (typeof used === 'number' && typeof limit === 'number') {
-    return `Daily token quota exceeded (${used}/${limit}).`;
+export async function checkDailyTokenQuota(): Promise<DailyTokenQuotaState | null> {
+  try {
+    const quotaCheck = await hostApiFetch<TokenQuotaCheckResult>('/api/token-quota/check');
+    if (!quotaCheck?.success || !quotaCheck.data) return null;
+    return quotaCheck.data;
+  } catch {
+    return null;
+  }
+}
+
+export function formatQuotaExceededMessage(usedToday?: number, limit?: number): string {
+  if (typeof usedToday === 'number' && typeof limit === 'number') {
+    return `Daily token quota exceeded (${usedToday}/${limit}).`;
   }
   return 'Daily token quota exceeded.';
 }
@@ -96,17 +115,13 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
 
       const currentSessionKey = targetSessionKey;
 
-      try {
-        const quotaCheck = await hostApiFetch<TokenQuotaCheckResult>('/api/token-quota/check');
-        if (quotaCheck && quotaCheck.allowed === false) {
-          set({
-            error: formatQuotaExceededMessage(quotaCheck.used, quotaCheck.limit),
-            sending: false,
-          });
-          return;
-        }
-      } catch {
-        // Fail open: quota checks should never block message delivery when unavailable.
+      const quotaCheck = await checkDailyTokenQuota();
+      if (quotaCheck && quotaCheck.allowed === false) {
+        set({
+          error: formatQuotaExceededMessage(quotaCheck.used_today, quotaCheck.limit),
+          sending: false,
+        });
+        return;
       }
 
       // Add user message optimistically (with local file metadata for UI display)

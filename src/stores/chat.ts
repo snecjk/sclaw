@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
+import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
 import { buildCronSessionHistoryPath, isCronSessionKey } from './chat/cron-session-utils';
 import { sanitizeSessionDisplayField } from './chat/helpers';
 import {
@@ -1511,19 +1512,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const currentSessionKey = targetSessionKey;
 
-    try {
-      const quotaCheck = await hostApiFetch<{ allowed?: boolean; used?: number; limit?: number }>('/api/token-quota/check');
-      if (quotaCheck && quotaCheck.allowed === false) {
-        set({
-          error: typeof quotaCheck.used === 'number' && typeof quotaCheck.limit === 'number'
-            ? `Daily token quota exceeded (${quotaCheck.used}/${quotaCheck.limit}).`
-            : 'Daily token quota exceeded.',
-          sending: false,
-        });
-        return;
-      }
-    } catch {
-      // Fail open: quota checks should never block message delivery when unavailable.
+    const quotaCheck = await checkDailyTokenQuota();
+    if (quotaCheck && quotaCheck.allowed === false) {
+      set({
+        error: formatQuotaExceededMessage(quotaCheck.used_today, quotaCheck.limit),
+        sending: false,
+      });
+      return;
     }
 
     // Add user message optimistically (with local file metadata for UI display)
