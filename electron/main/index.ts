@@ -640,6 +640,14 @@ async function initialize(): Promise<void> {
           logger.warn('Startup STO model sync failed:', err),
         );
         stoSync.startPeriodicSync();
+
+        // Auto-create department biz agents on startup (fire-and-forget)
+        const { getStoBizAgentSyncService } = await import('../services/sto-biz-agent-sync');
+        const bizAgentSync = getStoBizAgentSyncService();
+        bizAgentSync.setGatewayManager(gm);
+        void bizAgentSync.syncAgents().catch((err) =>
+          logger.warn('Startup STO biz-agent sync failed:', err),
+        );
       }
     } catch (err) {
       logger.warn('STO model sync startup check failed:', err);

@@ -87,6 +87,15 @@ export async function handleAuthRoutes(
       );
       stoSync.startPeriodicSync();
 
+      // Auto-create department biz agents after login (fire-and-forget)
+      import('../../services/sto-biz-agent-sync').then(({ getStoBizAgentSyncService }) => {
+        const bizAgentSync = getStoBizAgentSyncService();
+        bizAgentSync.setGatewayManager(ctx.gatewayManager);
+        void bizAgentSync.syncAgents().catch((err) =>
+          logger.warn('Post-login STO biz-agent sync failed:', err),
+        );
+      }).catch((err) => logger.warn('Failed to load sto-biz-agent-sync module:', err));
+
       sendJson(res, 200, { success: true, user });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
