@@ -7,7 +7,10 @@
 import { useState, useEffect } from 'react';
 import { Minus, Square, X, Copy } from 'lucide-react';
 import { invokeIpc } from '@/lib/api-client';
+import { getCurrentEnvConfig } from '../../../shared/env-config';
 import logoSvg from '@/assets/logo.svg';
+
+const envConfig = getCurrentEnvConfig();
 
 function BrandLogo() {
   return (
@@ -16,6 +19,14 @@ function BrandLogo() {
       <span className="text-sm font-semibold whitespace-nowrap text-foreground/90">
         STO Claw
       </span>
+      {envConfig.displaySuffix && (
+        <span
+          className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
+          style={{ backgroundColor: envConfig.badgeColor }}
+        >
+          {envConfig.displaySuffix}
+        </span>
+      )}
     </div>
   );
 }

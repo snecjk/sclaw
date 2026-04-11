@@ -277,6 +277,11 @@ const electronAPI = {
    * Check if running in development
    */
   isDev: process.env.NODE_ENV === 'development' || !!process.env.VITE_DEV_SERVER_URL,
+
+  /**
+   * Build environment identifier (development | test | staging | production)
+   */
+  appEnv: (import.meta.env.VITE_APP_ENV as string) || 'production',
 };
 
 // Expose the API to the renderer process

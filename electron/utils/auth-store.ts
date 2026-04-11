@@ -7,6 +7,7 @@ import { writeFile, unlink } from 'fs/promises';
 import { join } from 'path';
 import { getOpenClawConfigDir, ensureDir } from './paths';
 import { logger } from './logger';
+import { getCurrentEnvConfig } from '../../shared/env-config';
 
 export type SsoEnvironment =
   | 'daily-external'
@@ -39,7 +40,7 @@ const SYSTEM_CODE = 'sto_claw';
 function createDefaultAuthState(): AuthState {
   return {
     isAuthenticated: false,
-    ssoEnvironment: 'production-external',
+    ssoEnvironment: getCurrentEnvConfig().ssoEnvironment as SsoEnvironment,
     user: null,
     systemCode: SYSTEM_CODE,
   };
@@ -61,9 +62,10 @@ async function getAuthStore() {
 
 export async function getAuthState(): Promise<AuthState> {
   const store = await getAuthStore();
+  const defaultSsoEnv = getCurrentEnvConfig().ssoEnvironment as SsoEnvironment;
   return {
     isAuthenticated: store.get('isAuthenticated', false),
-    ssoEnvironment: store.get('ssoEnvironment', 'production-external'),
+    ssoEnvironment: store.get('ssoEnvironment', defaultSsoEnv),
     user: store.get('user', null),
     systemCode: store.get('systemCode', SYSTEM_CODE),
   };
@@ -84,7 +86,7 @@ export async function clearAuthUser(): Promise<void> {
 
 export async function getSsoEnvironment(): Promise<SsoEnvironment> {
   const store = await getAuthStore();
-  return store.get('ssoEnvironment', 'production-external');
+  return store.get('ssoEnvironment', getCurrentEnvConfig().ssoEnvironment as SsoEnvironment);
 }
 
 export async function setSsoEnvironment(env: SsoEnvironment): Promise<void> {

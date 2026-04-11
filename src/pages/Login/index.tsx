@@ -1,6 +1,6 @@
 /**
  * SSO Login Page
- * 开发模式（pnpm dev）显示 SSO 环境选择；正式打包产物隐藏选择并固定生产外网 SSO。
+ * 开发模式（pnpm dev）显示 SSO 环境选择；其他构建环境根据 env-config 固定 SSO 环境。
  */
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -10,9 +10,10 @@ import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { ParticleConstellation } from '@/components/common/ParticleConstellation';
 import { useAuthStore, type SsoEnvironment } from '@/stores/auth';
+import { getCurrentEnvConfig } from '../../../shared/env-config';
 import clawxIcon from '@/assets/rectangle_icon.png';
 
-const PRODUCTION_SSO_ENV: SsoEnvironment = 'production-external';
+const envConfig = getCurrentEnvConfig();
 
 const DEV_SSO_ENV_OPTIONS: SsoEnvironment[] = [
   'local',
@@ -31,13 +32,13 @@ export function Login() {
   const setSsoEnvironment = useAuthStore((s) => s.setSsoEnvironment);
 
   useEffect(() => {
-    if (import.meta.env.PROD) {
-      void setSsoEnvironment(PRODUCTION_SSO_ENV);
+    if (!envConfig.isDevelopment) {
+      void setSsoEnvironment(envConfig.ssoEnvironment as SsoEnvironment);
     }
   }, [setSsoEnvironment]);
 
   const handleLogin = () => {
-    void login(import.meta.env.PROD ? PRODUCTION_SSO_ENV : undefined);
+    void login(envConfig.isDevelopment ? undefined : (envConfig.ssoEnvironment as SsoEnvironment));
   };
 
   return (
@@ -100,7 +101,7 @@ export function Login() {
               </div>
             )}
 
-            {import.meta.env.DEV && (
+            {envConfig.isDevelopment && (
               <div className="space-y-2">
                 <label htmlFor="sto-sso-env" className="text-xs font-medium uppercase tracking-[0.18em] text-foreground/55">
                   {t('auth:environment.label')}

@@ -233,6 +233,29 @@ function patchBrokenModules(nodeModulesDir) {
     }
   }
 
+  // lru-cache v7: only exports the class as `module.exports = LRUCache` (default).
+  // Newer packages like hosted-git-info@9 use `const { LRUCache } = require('lru-cache')`
+  // expecting a named export from lru-cache v11+.  Since bundle-openclaw.mjs BFS
+  // deduplication keeps the first version encountered (v7), we add a named export
+  // shim so both import styles work.
+  const lruIndexPath = join(nodeModulesDir, 'lru-cache', 'index.js');
+  if (existsSync(lruIndexPath)) {
+    try {
+      const lruContent = readFileSync(lruIndexPath, 'utf8');
+      if (!lruContent.includes('module.exports.LRUCache')) {
+        writeFileSync(
+          lruIndexPath,
+          lruContent + '\n// Shim: expose named export for lru-cache v11+ consumers\nmodule.exports.LRUCache = module.exports;\n',
+          'utf8'
+        );
+        count++;
+        console.log('[after-pack] 🩹 Patched lru-cache/index.js: added named LRUCache export for v11+ compat');
+      }
+    } catch (err) {
+      console.warn('[after-pack] ⚠️  Failed to patch lru-cache:', err.message);
+    }
+  }
+
   // https-proxy-agent: add a CJS `require` condition only when we can point to
   // a real CommonJS entry. Mapping `require` to an ESM file can cause
   // ERR_REQUIRE_CYCLE_MODULE in Node.js CLI/TUI flows.

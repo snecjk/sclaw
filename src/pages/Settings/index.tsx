@@ -48,6 +48,7 @@ import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { hostApiFetch } from '@/lib/host-api';
 import { cn } from '@/lib/utils';
 import { glassSectionSurface } from '@/lib/surfaces';
+import { getCurrentEnvConfig } from '../../../shared/env-config';
 
 const proxyFieldInputClassName = cn(
   'h-10 rounded-md font-mono text-[13px]',
@@ -1137,6 +1138,17 @@ export function Settings() {
               </p>
               <p>{t('about.basedOn')}</p>
               <p>{t('about.version', { version: currentVersion })}</p>
+              {!getCurrentEnvConfig().isProduction && (
+                <p className="flex items-center gap-2">
+                  <span className="text-foreground/70">{t('about.environment', { defaultValue: '环境' })}:</span>
+                  <span
+                    className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-bold leading-none text-white"
+                    style={{ backgroundColor: getCurrentEnvConfig().badgeColor }}
+                  >
+                    {getCurrentEnvConfig().displayLabel}
+                  </span>
+                </p>
+              )}
               <div className="flex gap-4 pt-3">
                 <Button
                   variant="link"
