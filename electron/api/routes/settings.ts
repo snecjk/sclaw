@@ -3,6 +3,7 @@ import { applyProxySettings } from '../../main/proxy';
 import { syncLaunchAtStartupSettingFromStore } from '../../main/launch-at-startup';
 import { syncProxyConfigToOpenClaw } from '../../utils/openclaw-proxy';
 import { getAllSettings, getSetting, resetSettings, setSetting, type AppSettings } from '../../utils/store';
+import { appUpdater } from '../../main/updater';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -54,6 +55,9 @@ export async function handleSettingsRoutes(
       if (patchTouchesLaunchAtStartup(patch)) {
         await syncLaunchAtStartupSettingFromStore();
       }
+      if (Object.prototype.hasOwnProperty.call(patch, 'autoCheckUpdate')) {
+        await appUpdater.syncPeriodicCheckFromSettings(patch.autoCheckUpdate === true);
+      }
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -89,6 +93,9 @@ export async function handleSettingsRoutes(
       if (key === 'launchAtStartup') {
         await syncLaunchAtStartupSettingFromStore();
       }
+      if (key === 'autoCheckUpdate') {
+        await appUpdater.syncPeriodicCheckFromSettings(body.value === true);
+      }
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -101,7 +108,9 @@ export async function handleSettingsRoutes(
       await resetSettings();
       await handleProxySettingsChange(ctx);
       await syncLaunchAtStartupSettingFromStore();
-      sendJson(res, 200, { success: true, settings: await getAllSettings() });
+      const settings = await getAllSettings();
+      await appUpdater.syncPeriodicCheckFromSettings(settings.autoCheckUpdate === true);
+      sendJson(res, 200, { success: true, settings });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

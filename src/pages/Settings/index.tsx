@@ -15,6 +15,8 @@ import {
   Bot,
   Cpu,
   Network,
+  Activity,
+  Terminal,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Agents } from '../Agents';
@@ -468,6 +470,9 @@ export function Settings() {
   const activeSection = location.pathname.startsWith('/settings/agents') ? 'agents'
     : location.pathname.startsWith('/settings/models') ? 'models'
     : location.pathname.startsWith('/settings/channels') ? 'channels'
+    : location.pathname.startsWith('/settings/gateway') ? 'gateway'
+    : location.pathname.startsWith('/settings/updates') ? 'updates'
+    : location.pathname.startsWith('/settings/developer') ? 'developer'
     : 'general';
 
   const handleWsDiagnosticToggle = (enabled: boolean) => {
@@ -480,37 +485,91 @@ export function Settings() {
     );
   };
 
-  const subNavItems = [
-    { id: 'general', path: '/settings', label: t('appearance.title'), icon: Settings2 },
-    { id: 'agents', path: '/settings/agents', label: t('common:sidebar.agents'), icon: Bot },
-    { id: 'models', path: '/settings/models', label: t('common:sidebar.models'), icon: Cpu },
-    { id: 'channels', path: '/settings/channels', label: t('common:sidebar.channels'), icon: Network },
-  ];
+  const navBtnClass = (active: boolean) =>
+    cn(
+      'flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all text-left w-full',
+      active
+        ? 'bg-primary/[0.1] text-foreground border border-primary/15'
+        : 'text-muted-foreground hover:bg-primary/[0.06] hover:text-foreground border border-transparent',
+    );
 
   return (
     <div className="flex w-full gap-4">
       {/* Left sub-navigation */}
-      <nav className="w-36 shrink-0 pt-1">
-        <div className="flex flex-col gap-0.5">
-          {subNavItems.map(item => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => navigate(item.path)}
-                className={cn(
-                  'flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all text-left w-full',
-                  activeSection === item.id
-                    ? 'bg-primary/[0.1] text-foreground border border-primary/15'
-                    : 'text-muted-foreground hover:bg-primary/[0.06] hover:text-foreground border border-transparent',
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" strokeWidth={2} />
-                {item.label}
+      <nav className="w-44 shrink-0 pt-1">
+        <div className="flex flex-col gap-5">
+
+          {/* 通用 */}
+          <div>
+            <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/55">
+              通用
+            </p>
+            <div className="flex flex-col gap-0.5">
+              <button type="button" onClick={() => navigate('/settings')} className={navBtnClass(activeSection === 'general')}>
+                <Settings2 className="h-4 w-4 shrink-0" strokeWidth={2} />
+                {t('appearance.title')}
               </button>
-            );
-          })}
+            </div>
+          </div>
+
+          {/* 工作区 */}
+          <div>
+            <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/55">
+              工作区
+            </p>
+            <div className="flex flex-col gap-0.5">
+              {([
+                { id: 'agents', path: '/settings/agents', label: t('common:sidebar.agents'), icon: Bot },
+                { id: 'models', path: '/settings/models', label: t('common:sidebar.models'), icon: Cpu },
+                { id: 'channels', path: '/settings/channels', label: t('common:sidebar.channels'), icon: Network },
+              ] as const).map(item => {
+                const Icon = item.icon;
+                return (
+                  <button key={item.id} type="button" onClick={() => navigate(item.path)} className={navBtnClass(activeSection === item.id)}>
+                    <Icon className="h-4 w-4 shrink-0" strokeWidth={2} />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 系统 */}
+          <div>
+            <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/55">
+              系统
+            </p>
+            <div className="flex flex-col gap-0.5">
+              {([
+                { id: 'gateway', path: '/settings/gateway', label: t('gateway.title'), icon: Activity },
+                { id: 'updates', path: '/settings/updates', label: t('updates.title'), icon: RefreshCw },
+              ] as const).map(item => {
+                const Icon = item.icon;
+                return (
+                  <button key={item.id} type="button" onClick={() => navigate(item.path)} className={navBtnClass(activeSection === item.id)}>
+                    <Icon className="h-4 w-4 shrink-0" strokeWidth={2} />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 开发者 */}
+          {devModeUnlocked && (
+            <div>
+              <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/55">
+                开发者
+              </p>
+              <div className="flex flex-col gap-0.5">
+                <button type="button" onClick={() => navigate('/settings/developer')} className={navBtnClass(activeSection === 'developer')}>
+                  <Terminal className="h-4 w-4 shrink-0" strokeWidth={2} />
+                  {t('developer.title')}
+                </button>
+              </div>
+            </div>
+          )}
+
         </div>
       </nav>
 
@@ -603,7 +662,14 @@ export function Settings() {
               </div>
             </div>
           </section>
+      </div>
+    </div>
+        )}
 
+        {/* Gateway section */}
+        {activeSection === 'gateway' && (
+    <div className="flex w-full max-w-3xl flex-col gap-8 pb-10">
+      <div className="flex flex-col gap-6">
           <section className={glassSectionSurface}>
             <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
               {t('gateway.title')}
@@ -712,8 +778,14 @@ export function Settings() {
 
             </div>
           </section>
+      </div>
+    </div>
+        )}
 
-          {devModeUnlocked && (
+        {/* Developer section */}
+        {activeSection === 'developer' && devModeUnlocked && (
+    <div className="flex w-full max-w-3xl flex-col gap-8 pb-10">
+      <div className="flex flex-col gap-6">
             <section className={glassSectionSurface}>
                 <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
                   {t('developer.title')}
@@ -1088,8 +1160,14 @@ export function Settings() {
                   </div>
                 </div>
             </section>
-          )}
+      </div>
+    </div>
+        )}
 
+        {/* Updates section */}
+        {activeSection === 'updates' && (
+    <div className="flex w-full max-w-3xl flex-col gap-8 pb-10">
+      <div className="flex flex-col gap-6">
           <section className={glassSectionSurface}>
             <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
               {t('updates.title')}

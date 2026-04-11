@@ -496,8 +496,8 @@ async function initialize(): Promise<void> {
   // Register update handlers
   registerUpdateHandlers(appUpdater, window);
 
-  // Note: Auto-check for updates is driven by the renderer (update store init)
-  // so it respects the user's "Auto-check for updates" setting.
+  // Auto-check for updates: main process schedules resolve + electron-updater on an interval
+  // (server check_interval_seconds, default 6h; first run ~10s after launch when enabled).
 
   // Repair any bootstrap files that only contain StoClaw markers (no OpenClaw
   // template content). This fixes a race condition where ensureClawXContext()

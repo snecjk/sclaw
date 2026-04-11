@@ -12,6 +12,7 @@ import { logger } from '../utils/logger';
 import { EventEmitter } from 'events';
 import { setQuitting } from './app-state';
 import { getSsoEnvironment, getStoToken } from '../utils/auth-store';
+import { getSetting } from '../utils/store';
 import {
   resolveUpdatePolicy,
   sendClientUpdateEventsFireAndForget,
@@ -21,6 +22,19 @@ import { getCurrentEnvConfig } from '../../shared/env-config';
 
 /** OSS base URL determined by build environment (env-config) */
 const OSS_BASE_URL = getCurrentEnvConfig().updateBaseUrl;
+
+/** 与 memory-center 发版默认 check_interval_seconds 一致 */
+const DEFAULT_CHECK_INTERVAL_SEC = 21600;
+const MIN_CHECK_INTERVAL_SEC = 300;
+const MAX_CHECK_INTERVAL_SEC = 7 * 24 * 3600;
+/** 启动后首次自动检查延迟（秒），与原先渲染进程行为接近 */
+const STARTUP_CHECK_DELAY_MS = 10_000;
+
+function clampCheckIntervalSec(sec: number | undefined | null): number {
+  const v =
+    typeof sec === 'number' && Number.isFinite(sec) ? Math.floor(sec) : DEFAULT_CHECK_INTERVAL_SEC;
+  return Math.min(Math.max(v, MIN_CHECK_INTERVAL_SEC), MAX_CHECK_INTERVAL_SEC);
+}
 
 export interface UpdateStatus {
   status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
@@ -62,6 +76,12 @@ export class AppUpdater extends EventEmitter {
   private autoInstallCountdown = 0;
   /** Last server resolve feed_slug (telemetry) */
   private lastFeedSlug: string | null = null;
+
+  /** Next scheduled interval after resolve (ms); default 6h */
+  private nextCheckIntervalMs = DEFAULT_CHECK_INTERVAL_SEC * 1000;
+  private periodicCheckTimer: NodeJS.Timeout | null = null;
+  /** First auto-check after launch uses short delay; cleared after any check completes */
+  private useStartupDelayForNextSchedule = true;
 
   /** Delay (in seconds) before auto-installing a downloaded update. */
   private static readonly AUTO_INSTALL_DELAY_SECONDS = 5;
@@ -111,15 +131,20 @@ export class AppUpdater extends EventEmitter {
    * Resolve server policy when logged in; fall back to built-in OSS on errors / no token.
    * @returns 'hold' = do not call electron-updater (gray miss)
    */
-  private async applyServerPolicyBeforeCheck(): Promise<'proceed' | 'hold'> {
+  private async applyServerPolicyBeforeCheck(): Promise<{
+    gate: 'proceed' | 'hold';
+    checkIntervalSec: number;
+  }> {
     const version = app.getVersion();
     const platform = process.platform;
+    const defaultInterval = DEFAULT_CHECK_INTERVAL_SEC;
 
     const token = await getStoToken();
     if (!token) {
       this.applyBuiltInFeed(version);
       this.lastFeedSlug = null;
-      return 'proceed';
+      this.nextCheckIntervalMs = defaultInterval * 1000;
+      return { gate: 'proceed', checkIntervalSec: defaultInterval };
     }
 
     const env = await getSsoEnvironment();
@@ -141,14 +166,18 @@ export class AppUpdater extends EventEmitter {
       logger.warn('[Updater] resolve failed — using built-in feed');
       this.applyBuiltInFeed(version);
       this.lastFeedSlug = null;
-      return 'proceed';
+      this.nextCheckIntervalMs = defaultInterval * 1000;
+      return { gate: 'proceed', checkIntervalSec: defaultInterval };
     }
+
+    const checkIntervalSec = clampCheckIntervalSec(data.check_interval_seconds);
+    this.nextCheckIntervalMs = checkIntervalSec * 1000;
 
     this.lastFeedSlug = data.feed_slug ?? null;
 
     if (!data.update_offered) {
       logger.info('[Updater] Server policy: update not offered for this user (gray hold)');
-      return 'hold';
+      return { gate: 'hold', checkIntervalSec };
     }
 
     const base = (data.feed_base_url || '').trim().replace(/\/$/, '');
@@ -162,12 +191,12 @@ export class AppUpdater extends EventEmitter {
         useMultipleRangeRequest: false,
       });
       logger.info(`[Updater] Server feed: ${base} (channel=${ch})`);
-      return 'proceed';
+      return { gate: 'proceed', checkIntervalSec };
     }
 
     logger.warn('[Updater] resolve had no feed_base_url — using built-in feed');
     this.applyBuiltInFeed(version);
-    return 'proceed';
+    return { gate: 'proceed', checkIntervalSec };
   }
 
   private emitUpdateCheckTelemetry(): void {
@@ -269,13 +298,61 @@ export class AppUpdater extends EventEmitter {
     }
   }
 
-  async checkForUpdates(): Promise<UpdateInfo | null> {
+  private clearPeriodicCheckTimer(): void {
+    if (this.periodicCheckTimer) {
+      clearTimeout(this.periodicCheckTimer);
+      this.periodicCheckTimer = null;
+    }
+  }
+
+  /**
+   * If auto-check is enabled, schedule the next run: first time after launch uses a short delay,
+   * then uses server `check_interval_seconds` (default 6h).
+   */
+  private async reschedulePeriodicCheckIfEnabled(): Promise<void> {
+    const enabled = await getSetting('autoCheckUpdate');
+    if (!enabled) {
+      this.clearPeriodicCheckTimer();
+      return;
+    }
+    this.clearPeriodicCheckTimer();
+    const delay = this.useStartupDelayForNextSchedule
+      ? STARTUP_CHECK_DELAY_MS
+      : this.nextCheckIntervalMs;
+    this.periodicCheckTimer = setTimeout(() => {
+      this.periodicCheckTimer = null;
+      void this.checkForUpdates({ periodic: true }).catch((err) => {
+        logger.warn('[Updater] Periodic update check failed:', err);
+      });
+    }, delay);
+    logger.info(`[Updater] Next auto update check in ${Math.round(delay / 1000)}s`);
+  }
+
+  /**
+   * Call when `autoCheckUpdate` changes or after app registers update handlers.
+   * @param freshStart — if true, next scheduled check uses startup delay (e.g. user re-enabled auto-check).
+   */
+  async syncPeriodicCheckFromSettings(freshStart = false): Promise<void> {
+    if (freshStart) {
+      this.useStartupDelayForNextSchedule = true;
+    }
+    const enabled = await getSetting('autoCheckUpdate');
+    if (!enabled) {
+      this.clearPeriodicCheckTimer();
+      return;
+    }
+    await this.reschedulePeriodicCheckIfEnabled();
+  }
+
+  async checkForUpdates(opts?: { periodic?: boolean }): Promise<UpdateInfo | null> {
+    const periodic = opts?.periodic === true;
+    const prevSnapshot = periodic ? { ...this.status } : null;
     try {
       const packaged = app.isPackaged;
 
       this.updateStatus({ status: 'checking', policyBlocked: false });
 
-      const gate = await this.applyServerPolicyBeforeCheck();
+      const { gate } = await this.applyServerPolicyBeforeCheck();
       if (gate === 'hold') {
         this.updateStatus({ status: 'not-available', policyBlocked: true });
         return null;
@@ -287,11 +364,15 @@ export class AppUpdater extends EventEmitter {
 
       if (result == null) {
         if (!packaged) {
-          this.updateStatus({
-            status: 'error',
-            error: 'Update check skipped (dev mode – app is not packaged)',
-            policyBlocked: false,
-          });
+          if (periodic && prevSnapshot) {
+            this.updateStatus({ ...prevSnapshot });
+          } else {
+            this.updateStatus({
+              status: 'error',
+              error: 'Update check skipped (dev mode – app is not packaged)',
+              policyBlocked: false,
+            });
+          }
           return null;
         }
         this.updateStatus({
@@ -309,12 +390,19 @@ export class AppUpdater extends EventEmitter {
       return result.updateInfo || null;
     } catch (error) {
       logger.error('[Updater] Check for updates failed:', error);
+      if (periodic && prevSnapshot) {
+        this.updateStatus({ ...prevSnapshot });
+        return null;
+      }
       this.updateStatus({
         status: 'error',
         error: (error as Error).message || String(error),
         policyBlocked: false,
       });
       throw error;
+    } finally {
+      this.useStartupDelayForNextSchedule = false;
+      void this.reschedulePeriodicCheckIfEnabled();
     }
   }
 
@@ -448,6 +536,8 @@ export function registerUpdateHandlers(
     updater.cancelAutoInstall();
     return { success: true };
   });
+
+  void updater.syncPeriodicCheckFromSettings();
 }
 
 export const appUpdater = new AppUpdater();

@@ -626,6 +626,9 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             if (isLaunchAtStartupKey(key)) {
               await syncLaunchAtStartupSettingFromStore();
             }
+            if (key === 'autoCheckUpdate') {
+              await appUpdater.syncPeriodicCheckFromSettings(value === true);
+            }
             data = { success: true };
             break;
           }
@@ -641,6 +644,9 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             if (entries.some(([key]) => isLaunchAtStartupKey(key))) {
               await syncLaunchAtStartupSettingFromStore();
             }
+            if (Object.prototype.hasOwnProperty.call(patch, 'autoCheckUpdate')) {
+              await appUpdater.syncPeriodicCheckFromSettings(patch.autoCheckUpdate === true);
+            }
             data = { success: true };
             break;
           }
@@ -649,6 +655,7 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             const settings = await getAllSettings();
             await handleProxySettingsChange();
             await syncLaunchAtStartupSettingFromStore();
+            await appUpdater.syncPeriodicCheckFromSettings(settings.autoCheckUpdate === true);
             data = { success: true, settings };
             break;
           }
@@ -2109,6 +2116,9 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
     if (key === 'launchAtStartup') {
       await syncLaunchAtStartupSettingFromStore();
     }
+    if (key === 'autoCheckUpdate') {
+      await appUpdater.syncPeriodicCheckFromSettings(value === true);
+    }
 
     return { success: true };
   });
@@ -2132,6 +2142,9 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
     if (entries.some(([key]) => key === 'launchAtStartup')) {
       await syncLaunchAtStartupSettingFromStore();
     }
+    if (Object.prototype.hasOwnProperty.call(patch, 'autoCheckUpdate')) {
+      await appUpdater.syncPeriodicCheckFromSettings(patch.autoCheckUpdate === true);
+    }
 
     return { success: true };
   });
@@ -2141,6 +2154,7 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
     const settings = await getAllSettings();
     await handleProxySettingsChange();
     await syncLaunchAtStartupSettingFromStore();
+    await appUpdater.syncPeriodicCheckFromSettings(settings.autoCheckUpdate === true);
     return { success: true, settings };
   });
 }

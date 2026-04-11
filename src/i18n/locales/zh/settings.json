@@ -2,7 +2,7 @@
   "title": "设置",
   "subtitle": "配置您的 StoClaw 体验",
   "appearance": {
-    "title": "通用",
+    "title": "偏好设置",
     "description": "自定义外观和风格",
     "theme": "主题",
     "light": "浅色",
@@ -163,7 +163,7 @@
     "title": "更新",
     "description": "保持 StoClaw 最新",
     "autoCheck": "自动检查更新",
-    "autoCheckDesc": "启动时检查更新",
+    "autoCheckDesc": "按间隔向服务端检查更新（默认约每 6 小时，可由发版配置调整）",
     "autoDownload": "自动更新",
     "autoDownloadDesc": "自动下载并安装更新",
     "status": {
