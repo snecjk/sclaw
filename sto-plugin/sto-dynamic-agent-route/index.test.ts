@@ -67,7 +67,6 @@ describe("sto-dynamic-agent-route plugin", () => {
 		it("returns provider config when fully configured", async () => {
 			const api = buildApi({
 				providerBaseUrl: "https://api.example.com/v1",
-				providerApiKey: "sk-test-key",
 				defaultModel: "qwen-72b",
 			});
 			register.register(api as any);
@@ -79,7 +78,7 @@ describe("sto-dynamic-agent-route plugin", () => {
 				provider: {
 					baseUrl: "https://api.example.com/v1",
 					api: "openai-completions",
-					apiKey: "sk-test-key",
+					apiKey: "default",
 					models: [
 						expect.objectContaining({
 							id: "qwen-72b",
@@ -171,7 +170,6 @@ describe("sto-dynamic-agent-route plugin", () => {
 			const api = buildApi({
 				routeApiUrl: "https://route.example.com/api/resolve",
 				providerBaseUrl: "https://api.example.com/v1",
-				providerApiKey: "sk-test",
 				defaultModel: "qwen-72b",
 				ssoAuthPath: ssoPath,
 			});
@@ -207,9 +205,7 @@ describe("sto-dynamic-agent-route plugin", () => {
 	describe("before_model_resolve hook", () => {
 		const defaultPluginConfig = {
 			routeApiUrl: "https://route.example.com/api/resolve",
-			routeApiKey: "route-key-123",
 			providerBaseUrl: "https://api.example.com/v1",
-			providerApiKey: "sk-test-key",
 			defaultModel: "qwen-72b",
 		};
 
@@ -317,29 +313,8 @@ describe("sto-dynamic-agent-route plugin", () => {
 			expect(globalThis.fetch).not.toHaveBeenCalled();
 		});
 
-		it("sends Authorization header when routeApiKey is configured", async () => {
+		it("does not send Authorization header", async () => {
 			const api = buildApi(defaultPluginConfig);
-			register.register(api as any);
-
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				new Response(JSON.stringify({ shouldOverride: false }), { status: 200 }),
-			);
-
-			await hooks.before_model_resolve(hookEvent, hookCtx);
-
-			expect(globalThis.fetch).toHaveBeenCalledWith(
-				"https://route.example.com/api/resolve",
-				expect.objectContaining({
-					method: "POST",
-					headers: expect.objectContaining({
-						Authorization: "Bearer route-key-123",
-					}),
-				}),
-			);
-		});
-
-		it("omits Authorization header when routeApiKey is not configured", async () => {
-			const api = buildApi({ ...defaultPluginConfig, routeApiKey: undefined });
 			register.register(api as any);
 
 			vi.mocked(globalThis.fetch).mockResolvedValue(

@@ -4,16 +4,14 @@ import { resolve } from "node:path";
 import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
 
 const PROVIDER_ID = "sto-dynamic-agent-route";
-const DEFAULT_TIMEOUT_MS = 3000;
+const DEFAULT_MODEL_ID = "sto-route-model";
+const DEFAULT_TIMEOUT_MS = 10000;
 const DEFAULT_SSO_AUTH_PATH = "~/.openclaw/sso-auth.json";
 const TAG = "sto-dynamic-agent-route";
 
 type StoDynamicRouteConfig = {
 	routeApiUrl?: string;
-	routeApiKey?: string;
 	providerBaseUrl?: string;
-	providerApiKey?: string;
-	defaultModel?: string;
 	timeoutMs?: number;
 	ssoAuthPath?: string;
 };
@@ -65,21 +63,18 @@ export default definePluginEntry({
 	register(api: OpenClawPluginApi) {
 		const pluginCfg = (api.pluginConfig ?? {}) as StoDynamicRouteConfig;
 		const routeApiUrl = pluginCfg.routeApiUrl?.trim();
-		const routeApiKey = pluginCfg.routeApiKey?.trim();
 		const providerBaseUrl = pluginCfg.providerBaseUrl?.trim();
-		const providerApiKey = pluginCfg.providerApiKey?.trim();
-		const defaultModel = pluginCfg.defaultModel?.trim();
 		const timeoutMs = pluginCfg.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 		const ssoAuthPath = pluginCfg.ssoAuthPath?.trim() || DEFAULT_SSO_AUTH_PATH;
 
 		const ENV_VAR = "STO_DYNAMIC_ROUTE_API_KEY";
 
 		api.logger.info?.(
-			`[${TAG}] plugin registering — routeApiUrl=${routeApiUrl ?? "(not set)"}, providerBaseUrl=${providerBaseUrl ?? "(not set)"}, defaultModel=${defaultModel ?? "(not set)"}, ssoAuthPath=${ssoAuthPath}`,
+			`[${TAG}] plugin registering — routeApiUrl=${routeApiUrl ?? "(not set)"}, providerBaseUrl=${providerBaseUrl ?? "(not set)"}, ssoAuthPath=${ssoAuthPath}`,
 		);
 
 		// Register the OpenAI-completions compatible provider.
-		// The provider is only active when providerBaseUrl, providerApiKey, and defaultModel are configured.
+		// The provider is only active when providerBaseUrl and defaultModel are configured.
 		api.registerProvider({
 			id: PROVIDER_ID,
 			label: "STO Dynamic Route",
@@ -88,29 +83,29 @@ export default definePluginEntry({
 			catalog: {
 				order: "simple",
 				run: async (ctx) => {
-					if (!providerBaseUrl || !providerApiKey || !defaultModel) {
+					if (!providerBaseUrl) {
 						api.logger.debug?.(
-							`[${TAG}] catalog: provider inactive — missing providerBaseUrl=${!providerBaseUrl}, providerApiKey=${!providerApiKey}, defaultModel=${!defaultModel}`,
+							`[${TAG}] catalog: provider inactive — missing providerBaseUrl=${!providerBaseUrl}`,
 						);
 						return null;
 					}
 					api.logger.debug?.(
-						`[${TAG}] catalog: returning provider config — baseUrl=${providerBaseUrl}, model=${defaultModel}`,
+						`[${TAG}] catalog: returning provider config — baseUrl=${providerBaseUrl}`,
 					);
 					return {
 						provider: {
 							baseUrl: providerBaseUrl,
 							api: "openai-completions" as const,
-							apiKey: providerApiKey,
+							apiKey: "default",
 							models: [
 								{
-									id: defaultModel,
-									name: defaultModel,
+									id: DEFAULT_MODEL_ID,
+									name: DEFAULT_MODEL_ID,
 									reasoning: false,
-									input: ["text" as const],
+									input: ["text" as const, "image" as const],
 									cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-									contextWindow: 128_000,
-									maxTokens: 16_384,
+									contextWindow: 128_0000,
+									maxTokens: 16_3840,
 								},
 							],
 						},
@@ -217,9 +212,6 @@ export default definePluginEntry({
 			const headers: Record<string, string> = {
 				"Content-Type": "application/json",
 			};
-			if (routeApiKey) {
-				headers["Authorization"] = `Bearer ${routeApiKey}`;
-			}
 
 			const ssoAuth = await readSsoAuth(ssoAuthPath);
 			if (ssoAuth.userName) {
@@ -259,7 +251,7 @@ export default definePluginEntry({
 				);
 
 				if (result.shouldOverride) {
-					const modelOverride = result.model?.trim() || defaultModel;
+					const modelOverride = result.model?.trim() || DEFAULT_MODEL_ID;
 					if (!modelOverride) {
 						api.logger.warn?.(
 							`[${TAG}] before_model_resolve: routing API returned shouldOverride but no model specified and no defaultModel configured`,
