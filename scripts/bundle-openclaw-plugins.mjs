@@ -22,6 +22,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const OUTPUT_ROOT = path.join(ROOT, 'build', 'openclaw-plugins');
 const NODE_MODULES = path.join(ROOT, 'node_modules');
+const STO_PLUGIN_ROOT = path.join(ROOT, 'sto-plugin');
 const CACHE_DIR = path.join(ROOT, '.download-cache', 'openclaw-plugins');
 const CACHE_MANIFEST = path.join(CACHE_DIR, 'manifest.json');
 
@@ -90,21 +91,62 @@ function normWin(p) {
 }
 
 const PLUGINS = [
-  // { npmName: '@soimy/dingtalk', pluginId: 'dingtalk' },
+  // { type: 'npm', npmName: '@soimy/dingtalk', pluginId: 'dingtalk' },
+  { type: 'local', localDir: 'sto-dynamic-agent-route', pluginId: 'sto-dynamic-agent-route' },
 ];
+
+// Filter for excluding test files and unnecessary dirs when copying local plugins.
+function bundleCopyFilter(src) {
+  const base = path.basename(src);
+  if (/\.(test|spec)\.(ts|js|mjs)$/.test(base)) return false;
+  if (base === '__tests__' || base === 'node_modules') return false;
+  return true;
+}
+
+// Recursively hash all non-test source files in a local plugin directory.
+// Files are sorted by relative path to ensure deterministic hashing.
+function hashLocalPluginDir(pluginDir, hash) {
+  const files = [];
+  function walk(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules' || entry.name === '__tests__') continue;
+        walk(fullPath);
+      } else if (entry.isFile()) {
+        if (/\.(test|spec)\.(ts|js|mjs)$/.test(entry.name)) continue;
+        files.push(fullPath);
+      }
+    }
+  }
+  walk(pluginDir);
+  files.sort();
+  for (const file of files) {
+    const rel = path.relative(pluginDir, file);
+    hash.update(rel + ':' + fs.readFileSync(file, 'utf8'));
+  }
+}
 
 // Now define the hash function after PLUGINS is defined
 function calculatePluginsHash() {
   try {
     const hash = createHash('sha256');
-    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
     
-    // Include plugin versions in hash
     for (const plugin of PLUGINS) {
-      const pluginPkgPath = path.join(NODE_MODULES, ...plugin.npmName.split('/'), 'package.json');
-      if (fs.existsSync(pluginPkgPath)) {
-        const pluginPkg = JSON.parse(fs.readFileSync(pluginPkgPath, 'utf8'));
-        hash.update(`${plugin.npmName}@${pluginPkg.version || 'unknown'}`);
+      if (plugin.type === 'npm') {
+        // npm plugins: use version from node_modules
+        const pluginPkgPath = path.join(NODE_MODULES, ...plugin.npmName.split('/'), 'package.json');
+        if (fs.existsSync(pluginPkgPath)) {
+          const pluginPkg = JSON.parse(fs.readFileSync(pluginPkgPath, 'utf8'));
+          hash.update(`npm:${plugin.npmName}@${pluginPkg.version || 'unknown'}`);
+        }
+      } else if (plugin.type === 'local') {
+        // local plugins: hash all source file contents for change detection
+        const pluginDir = path.join(STO_PLUGIN_ROOT, plugin.localDir);
+        if (fs.existsSync(pluginDir)) {
+          hash.update(`local:${plugin.pluginId}:`);
+          hashLocalPluginDir(pluginDir, hash);
+        }
       }
     }
     
@@ -154,35 +196,20 @@ function listPackages(nodeModulesDir) {
   return result;
 }
 
-function bundleOnePlugin({ npmName, pluginId }) {
-  const pkgPath = path.join(NODE_MODULES, ...npmName.split('/'));
-  if (!fs.existsSync(pkgPath)) {
-    throw new Error(`Missing dependency "${npmName}". Run pnpm install first.`);
-  }
-
-  const realPluginPath = fs.realpathSync(pkgPath);
-  const outputDir = path.join(OUTPUT_ROOT, pluginId);
-
-  echo`📦 Bundling plugin ${npmName} -> ${outputDir}`;
-
-  if (fs.existsSync(outputDir)) {
-    fs.rmSync(outputDir, { recursive: true, force: true });
-  }
-  fs.mkdirSync(outputDir, { recursive: true });
-
-  // 1) Copy plugin package itself
-  fs.cpSync(realPluginPath, outputDir, { recursive: true, dereference: true });
-
-  // 2) Collect transitive deps from pnpm virtual store
+/**
+ * Collect transitive dependencies from pnpm virtual store using BFS,
+ * then copy them flattened into outputDir/node_modules/.
+ * Shared by both npm and local plugin bundlers.
+ */
+function collectAndCopyTransitiveDeps(realPluginPath, pluginName, outputDir) {
   const collected = new Map();
   const queue = [];
   const rootVirtualNM = getVirtualStoreNodeModules(realPluginPath);
   if (!rootVirtualNM) {
-    throw new Error(`Cannot resolve virtual store node_modules for ${npmName}`);
+    return { copiedCount: 0, skippedDupes: 0 };
   }
-  queue.push({ nodeModulesDir: rootVirtualNM, skipPkg: npmName });
+  queue.push({ nodeModulesDir: rootVirtualNM, skipPkg: pluginName });
 
-  // Skip peerDependencies — they're provided by the host openclaw gateway.
   const SKIP_PACKAGES = new Set(['typescript', '@playwright/test']);
   const SKIP_SCOPES = ['@types/'];
   try {
@@ -214,7 +241,6 @@ function bundleOnePlugin({ npmName, pluginId }) {
     }
   }
 
-  // 3) Copy flattened deps into plugin/node_modules
   const outputNodeModules = path.join(outputDir, 'node_modules');
   fs.mkdirSync(outputNodeModules, { recursive: true });
 
@@ -239,17 +265,109 @@ function bundleOnePlugin({ npmName, pluginId }) {
     }
   }
 
+  return { copiedCount, skippedDupes };
+}
+
+function bundleOnePlugin({ npmName, pluginId }) {
+  const pkgPath = path.join(NODE_MODULES, ...npmName.split('/'));
+  if (!fs.existsSync(pkgPath)) {
+    throw new Error(`Missing dependency "${npmName}". Run pnpm install first.`);
+  }
+
+  const realPluginPath = fs.realpathSync(pkgPath);
+  const outputDir = path.join(OUTPUT_ROOT, pluginId);
+
+  echo`📦 Bundling npm plugin ${npmName} -> ${outputDir}`;
+
+  if (fs.existsSync(outputDir)) {
+    fs.rmSync(outputDir, { recursive: true, force: true });
+  }
+  fs.mkdirSync(outputDir, { recursive: true });
+
+  // 1) Copy plugin package itself
+  fs.cpSync(realPluginPath, outputDir, { recursive: true, dereference: true });
+
+  // 2) Collect and copy transitive deps
+  const rootVirtualNM = getVirtualStoreNodeModules(realPluginPath);
+  if (!rootVirtualNM) {
+    throw new Error(`Cannot resolve virtual store node_modules for ${npmName}`);
+  }
+  const { copiedCount, skippedDupes } = collectAndCopyTransitiveDeps(realPluginPath, npmName, outputDir);
+
   const manifestPath = path.join(outputDir, 'openclaw.plugin.json');
   if (!fs.existsSync(manifestPath)) {
     throw new Error(`Missing openclaw.plugin.json in bundled plugin output: ${pluginId}`);
   }
 
-  // 4) Patch plugin ID mismatch: some npm packages hardcode a different ID in
-  //    their JS output than what openclaw.plugin.json declares.  The Gateway
-  //    validates that these match, so we fix it post-copy.
+  // 3) Patch plugin ID mismatch
   patchPluginId(outputDir, pluginId);
 
   echo`   ✅ ${pluginId}: copied ${copiedCount} deps (skipped dupes: ${skippedDupes})`;
+}
+
+/**
+ * Bundle a local plugin from sto-plugin/<localDir>/ into the output directory.
+ * Copies source files (excluding tests), and if the plugin has npm dependencies,
+ * resolves them from the project's node_modules via the same BFS logic.
+ */
+function bundleOneLocalPlugin({ localDir, pluginId }) {
+  const sourceDir = path.join(STO_PLUGIN_ROOT, localDir);
+  if (!fs.existsSync(sourceDir)) {
+    throw new Error(`Local plugin directory not found: ${sourceDir}`);
+  }
+  if (!fs.existsSync(path.join(sourceDir, 'openclaw.plugin.json'))) {
+    throw new Error(`Missing openclaw.plugin.json in local plugin: ${sourceDir}`);
+  }
+
+  const outputDir = path.join(OUTPUT_ROOT, pluginId);
+
+  echo`📦 Bundling local plugin ${localDir} -> ${outputDir}`;
+
+  if (fs.existsSync(outputDir)) {
+    fs.rmSync(outputDir, { recursive: true, force: true });
+  }
+  fs.mkdirSync(outputDir, { recursive: true });
+
+  // 1) Copy plugin source files (excluding test files and node_modules)
+  fs.cpSync(sourceDir, outputDir, { recursive: true, filter: bundleCopyFilter });
+
+  // 2) If the plugin has npm dependencies, resolve and copy them
+  let copiedCount = 0;
+  let skippedDupes = 0;
+  try {
+    const pluginPkg = JSON.parse(fs.readFileSync(path.join(outputDir, 'package.json'), 'utf8'));
+    const deps = Object.keys(pluginPkg.dependencies || {});
+    if (deps.length > 0) {
+      for (const depName of deps) {
+        const depPath = path.join(NODE_MODULES, ...depName.split('/'));
+        if (!fs.existsSync(depPath)) {
+          echo`   ⚠️  Dependency "${depName}" not found in root node_modules, skipping`;
+          continue;
+        }
+        const realDepPath = fs.realpathSync(depPath);
+        const result = collectAndCopyTransitiveDeps(realDepPath, depName, outputDir);
+        copiedCount += result.copiedCount;
+        skippedDupes += result.skippedDupes;
+
+        // Also copy the dependency itself
+        const destNM = path.join(outputDir, 'node_modules', depName);
+        if (!fs.existsSync(destNM)) {
+          try {
+            fs.mkdirSync(normWin(path.dirname(destNM)), { recursive: true });
+            fs.cpSync(normWin(realDepPath), normWin(destNM), { recursive: true, dereference: true });
+            copiedCount++;
+          } catch (err) {
+            echo`   ⚠️  Skipped ${depName}: ${err.message}`;
+          }
+        }
+      }
+    }
+  } catch { /* no package.json or parse error — skip deps */ }
+
+  // 3) Patch plugin ID mismatch (if applicable)
+  patchPluginId(outputDir, pluginId);
+
+  echo`   ✅ ${pluginId}: local plugin bundled${copiedCount > 0 ? `, copied ${copiedCount} deps (skipped dupes: ${skippedDupes})` : ' (no deps)'}`;
 }
 
 /**
@@ -321,7 +439,11 @@ if (isCacheValid(cacheKey)) {
 fs.mkdirSync(OUTPUT_ROOT, { recursive: true });
 
 for (const plugin of PLUGINS) {
-  bundleOnePlugin(plugin);
+  if (plugin.type === 'local') {
+    bundleOneLocalPlugin(plugin);
+  } else {
+    bundleOnePlugin(plugin);
+  }
 }
 
 // Save to cache for future builds
