@@ -8,45 +8,70 @@ import { getOpenClawDir, getOpenClawResolvedDir } from './paths';
 
 const require = createRequire(import.meta.url);
 
-// Resolve dependencies from OpenClaw package context (pnpm-safe)
-const openclawPath = getOpenClawDir();
-const openclawResolvedPath = getOpenClawResolvedDir();
-const openclawRequire = createRequire(join(openclawResolvedPath, 'package.json'));
+// --- Lazy-loaded Baileys & QRCode dependencies ---
+// These are resolved on first use (inside WhatsAppLoginManager.start()) rather
+// than at module-load time.  This prevents the app from crashing at startup when
+// the OpenClaw bundle does not ship @whiskeysockets/baileys (e.g. production
+// builds where WhatsApp support is optional).
 
-function resolveOpenClawPackageJson(packageName: string): string {
-    const specifier = `${packageName}/package.json`;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _baileys: { makeWASocket: any; initAuth: any; DisconnectReason: any; fetchLatestBaileysVersion: any } | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _qr: { QRCode: any; QRErrorCorrectLevel: any } | null = null;
+let _baileysPath: string | null = null;
+let _initError: string | null = null;
+
+function ensureBaileysLoaded(): void {
+    if (_baileys) return;        // already loaded
+    if (_initError) throw new Error(_initError); // previous attempt failed
+
+    const openclawPath = getOpenClawDir();
+    const openclawResolvedPath = getOpenClawResolvedDir();
+    const openclawRequire = createRequire(join(openclawResolvedPath, 'package.json'));
+
+    function resolveOpenClawPackageJson(packageName: string): string {
+        const specifier = `${packageName}/package.json`;
+        try {
+            return openclawRequire.resolve(specifier);
+        } catch (err) {
+            const reason = err instanceof Error ? err.message : String(err);
+            throw new Error(
+                `Failed to resolve "${packageName}" from OpenClaw context. ` +
+                `openclawPath=${openclawPath}, resolvedPath=${openclawResolvedPath}. ${reason}`,
+                { cause: err }
+            );
+        }
+    }
+
     try {
-        return openclawRequire.resolve(specifier);
+        const baileysDir = dirname(resolveOpenClawPackageJson('@whiskeysockets/baileys'));
+        const qrcodeTerminalDir = dirname(resolveOpenClawPackageJson('qrcode-terminal'));
+        _baileysPath = baileysDir;
+
+        const baileysMod = require(baileysDir);
+        _baileys = {
+            makeWASocket: baileysMod.default,
+            initAuth: baileysMod.useMultiFileAuthState,
+            DisconnectReason: baileysMod.DisconnectReason,
+            fetchLatestBaileysVersion: baileysMod.fetchLatestBaileysVersion,
+        };
+
+        _qr = {
+            QRCode: require(join(qrcodeTerminalDir, 'vendor', 'QRCode', 'index.js')),
+            QRErrorCorrectLevel: require(join(qrcodeTerminalDir, 'vendor', 'QRCode', 'QRErrorCorrectLevel.js')),
+        };
     } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
-        throw new Error(
-            `Failed to resolve "${packageName}" from OpenClaw context. ` +
-            `openclawPath=${openclawPath}, resolvedPath=${openclawResolvedPath}. ${reason}`,
-            { cause: err }
-        );
+        _initError = err instanceof Error ? err.message : String(err);
+        throw err;
     }
 }
-
-const baileysPath = dirname(resolveOpenClawPackageJson('@whiskeysockets/baileys'));
-const qrcodeTerminalPath = dirname(resolveOpenClawPackageJson('qrcode-terminal'));
-
-// Load Baileys dependencies dynamically
-const {
-    default: makeWASocket,
-    useMultiFileAuthState: initAuth, // Rename to avoid React hook linter error
-    DisconnectReason,
-    fetchLatestBaileysVersion
-} = require(baileysPath);
-
-// Load QRCode dependencies dynamically
-const QRCodeModule = require(join(qrcodeTerminalPath, 'vendor', 'QRCode', 'index.js'));
-const QRErrorCorrectLevelModule = require(join(qrcodeTerminalPath, 'vendor', 'QRCode', 'QRErrorCorrectLevel.js'));
 
 // Types from Baileys (approximate since we don't have types for dynamic require)
 interface BaileysError extends Error {
     output?: { statusCode?: number };
 }
-type BaileysSocket = ReturnType<typeof makeWASocket>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type BaileysSocket = any;
 type ConnectionState = {
     connection: 'close' | 'open' | 'connecting';
     lastDisconnect?: {
@@ -57,11 +82,8 @@ type ConnectionState = {
 
 // --- QR Generation Logic (Adapted from OpenClaw) ---
 
-const QRCode = QRCodeModule;
-const QRErrorCorrectLevel = QRErrorCorrectLevelModule;
-
 function createQrMatrix(input: string) {
-    const qr = new QRCode(-1, QRErrorCorrectLevel.L);
+    const qr = new _qr!.QRCode(-1, _qr!.QRErrorCorrectLevel.L);
     qr.addData(input);
     qr.make();
     return qr;
@@ -234,6 +256,9 @@ export class WhatsAppLoginManager extends EventEmitter {
         if (!this.active) return;
 
         try {
+            // Lazily resolve Baileys & QR dependencies on first use
+            ensureBaileysLoaded();
+
             // Path where OpenClaw expects WhatsApp credentials
             const authDir = join(homedir(), '.openclaw', 'credentials', 'whatsapp', accountId);
 
@@ -248,7 +273,7 @@ export class WhatsAppLoginManager extends EventEmitter {
             let pino: (...args: unknown[]) => Record<string, unknown>;
             try {
                 // Try to resolve pino from baileys context since it's a dependency of baileys
-                const baileysRequire = createRequire(join(baileysPath, 'package.json'));
+                const baileysRequire = createRequire(join(_baileysPath!, 'package.json'));
                 pino = baileysRequire('pino');
             } catch (e) {
                 console.warn('[WhatsAppLogin] Could not load pino from baileys, trying root', e);
@@ -270,14 +295,14 @@ export class WhatsAppLoginManager extends EventEmitter {
             }
 
             console.log('[WhatsAppLogin] Loading auth state...');
-            const { state, saveCreds } = await initAuth(authDir);
+            const { state, saveCreds } = await _baileys!.initAuth(authDir);
 
             console.log('[WhatsAppLogin] Fetching latest version...');
-            const { version } = await fetchLatestBaileysVersion();
+            const { version } = await _baileys!.fetchLatestBaileysVersion();
 
             console.log(`[WhatsAppLogin] Starting login for ${accountId}, version: ${version}`);
 
-            this.socket = makeWASocket({
+            this.socket = _baileys!.makeWASocket({
                 version,
                 auth: state,
                 printQRInTerminal: false,
@@ -317,7 +342,7 @@ export class WhatsAppLoginManager extends EventEmitter {
                     if (connection === 'close') {
                         const error = lastDisconnect?.error as BaileysError | undefined;
                         const statusCode = error?.output?.statusCode;
-                        const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+                        const isLoggedOut = statusCode === _baileys!.DisconnectReason.loggedOut;
                         // Treat 401 as transient if we haven't exhausted retries (max 2 attempts)
                         // This handles the case where WhatsApp's session hasn't fully released
                         const shouldReconnect = !isLoggedOut || this.retryCount < 2;
@@ -340,7 +365,7 @@ export class WhatsAppLoginManager extends EventEmitter {
                         } else {
                             // Logged out or explicitly stopped
                             this.active = false;
-                            if (error?.output?.statusCode === DisconnectReason.loggedOut) {
+                            if (error?.output?.statusCode === _baileys!.DisconnectReason.loggedOut) {
                                 try {
                                     rmSync(authDir, { recursive: true, force: true });
                                 } catch (err) {

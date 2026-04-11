@@ -565,7 +565,7 @@ exports.default = async function afterPack(context) {
   //       directory doesn't exist (build/openclaw-plugins/ may not be pre-generated)
   //     - node_modules/ is excluded by .gitignore so the deps copy must be manual
   const BUNDLED_PLUGINS = [
-    { type: 'npm', npmName: '@soimy/dingtalk', pluginId: 'dingtalk' },
+    // { type: 'npm', npmName: '@soimy/dingtalk', pluginId: 'dingtalk' },
     { type: 'local', localDir: 'sto-dynamic-agent-route', pluginId: 'sto-dynamic-agent-route' },
   ];
 
