@@ -16,6 +16,7 @@ export const initialChatState: Pick<
   | 'pendingFinal'
   | 'lastUserMessageAt'
   | 'pendingToolImages'
+  | 'dailyTokenQuotaStatus'
   | 'sessions'
   | 'currentSessionKey'
   | 'currentAgentId'
@@ -36,6 +37,7 @@ export const initialChatState: Pick<
   pendingFinal: false,
   lastUserMessageAt: null,
   pendingToolImages: [],
+  dailyTokenQuotaStatus: null,
 
   sessions: [],
   currentSessionKey: DEFAULT_SESSION_KEY,

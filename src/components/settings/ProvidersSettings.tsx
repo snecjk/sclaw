@@ -451,7 +451,9 @@ function ProviderCard({
   onEdit,
   onCancelEdit,
   onDelete,
-  onSetDefault,
+  // NOTE: 暂保留该回调以兼容父组件传参和后续恢复「设为默认」按钮。
+  // 当前卡片 UI 未使用它，前缀下划线避免 TS 未使用参数报错。
+  onSetDefault: _onSetDefault,
   onSaveEdits,
   onValidateKey,
   devModeUnlocked,

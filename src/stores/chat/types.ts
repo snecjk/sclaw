@@ -57,6 +57,13 @@ export interface ToolStatus {
   updatedAt: number;
 }
 
+export interface DailyTokenQuotaStatus {
+  allowed?: boolean;
+  usedToday?: number;
+  limit?: number;
+  checkedAt: string;
+}
+
 export interface ChatState {
   // Messages
   messages: RawMessage[];
@@ -73,6 +80,8 @@ export interface ChatState {
   lastUserMessageAt: number | null;
   /** Images collected from tool results, attached to the next assistant message */
   pendingToolImages: AttachedFileMeta[];
+  /** Last successful daily token quota check result. */
+  dailyTokenQuotaStatus: DailyTokenQuotaStatus | null;
 
   // Sessions
   sessions: ChatSession[];

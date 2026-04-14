@@ -124,6 +124,8 @@ describe('chat target routing', () => {
     expect(state.currentAgentId).toBe('research');
     expect(state.sessions.some((session) => session.key === 'agent:research:desk')).toBe(true);
     expect(state.messages.at(-1)?.content).toBe('Hello direct agent');
+    expect(state.dailyTokenQuotaStatus?.usedToday).toBe(0);
+    expect(state.dailyTokenQuotaStatus?.limit).toBe(100);
 
     expect(hostApiFetchMock).toHaveBeenCalledWith('/api/token-quota/check');
 
@@ -236,6 +238,8 @@ describe('chat target routing', () => {
     const state = useChatStore.getState();
     expect(state.messages).toHaveLength(0);
     expect(state.error).toContain('1200/1200');
+    expect(state.dailyTokenQuotaStatus?.usedToday).toBe(1200);
+    expect(state.dailyTokenQuotaStatus?.limit).toBe(1200);
     expect(invokeIpcMock.mock.calls.some(([channel, method]) => channel === 'gateway:rpc' && method === 'chat.send')).toBe(false);
     expect(invokeIpcMock.mock.calls.some(([channel]) => channel === 'chat:sendWithMedia')).toBe(false);
     expect(hostApiFetchMock.mock.calls.some(([path]) => path === '/api/chat/send-with-media')).toBe(false);

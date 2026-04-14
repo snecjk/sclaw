@@ -41,6 +41,12 @@ function toMs(ts: number): number {
   return ts < 1e12 ? ts * 1000 : ts;
 }
 
+function toNumberIfFinite(value: unknown): number | undefined {
+  if (typeof value !== 'number') return undefined;
+  if (!Number.isFinite(value)) return undefined;
+  return value;
+}
+
 // Timer for fallback history polling during active sends.
 // If no streaming events arrive within a few seconds, we periodically
 // poll chat.history to surface intermediate tool-call turns.
@@ -1015,6 +1021,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   pendingFinal: false,
   lastUserMessageAt: null,
   pendingToolImages: [],
+  dailyTokenQuotaStatus: null,
 
   sessions: [],
   currentSessionKey: DEFAULT_SESSION_KEY,
@@ -1513,6 +1520,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const currentSessionKey = targetSessionKey;
 
     const quotaCheck = await checkDailyTokenQuota();
+    if (quotaCheck) {
+      set({
+        dailyTokenQuotaStatus: {
+          allowed: quotaCheck.allowed,
+          usedToday: toNumberIfFinite(quotaCheck.used_today),
+          limit: toNumberIfFinite(quotaCheck.limit),
+          checkedAt: new Date().toISOString(),
+        },
+      });
+    }
     if (quotaCheck && quotaCheck.allowed === false) {
       set({
         error: formatQuotaExceededMessage(quotaCheck.used_today, quotaCheck.limit),

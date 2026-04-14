@@ -18,7 +18,10 @@ export function toMillionTokenValue(value: number | null | undefined): number | 
 
 export function formatMillionToken(value: number | null | undefined, fallback = '--'): string {
   const tokenDisplay = formatTokenDisplay(value, fallback)
-  return tokenDisplay === fallback ? fallback : `${tokenDisplay.valueText} ${tokenDisplay.unit}`
+  // NOTE: formatTokenDisplay 返回 string | 对象；即使不是 fallback，仍可能是任意 string。
+  // 这里用类型守卫显式收窄，避免直接访问联合类型字段导致 TS 报错。
+  if (typeof tokenDisplay === 'string') return fallback
+  return `${tokenDisplay.valueText} ${tokenDisplay.unit}`
 }
 
 export function formatTokenDisplay(

@@ -7,7 +7,7 @@
  * are sent with the message (no base64 over WebSocket).
  */
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { SendHorizontal, Square, X, Paperclip, FileText, Film, Music, FileArchive, File, Loader2, AtSign } from 'lucide-react';
+import { SendHorizontal, Square, X, Paperclip, FileText, Film, Music, FileArchive, File, Loader2, AtSign, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { hostApiFetch } from '@/lib/host-api';
@@ -49,6 +49,22 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
+function formatBeijingDate(isoText?: string): string {
+  const date = isoText ? new Date(isoText) : new Date();
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value ?? '';
+  const month = parts.find((part) => part.type === 'month')?.value ?? '';
+  const day = parts.find((part) => part.type === 'day')?.value ?? '';
+  if (!year || !month || !day) return '';
+  return `${year}-${month}-${day}`;
+}
+
 function FileIcon({ mimeType, className }: { mimeType: string; className?: string }) {
   if (mimeType.startsWith('video/')) return <Film className={className} />;
   if (mimeType.startsWith('audio/')) return <Music className={className} />;
@@ -84,7 +100,7 @@ function readFileAsBase64(file: globalThis.File): Promise<string> {
 
 // ── Component ────────────────────────────────────────────────────
 
-export function ChatInput({ onSend, onStop, disabled = false, sending = false, isEmpty = false }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, disabled = false, sending = false, isEmpty: _isEmpty = false }: ChatInputProps) {
   const { t } = useTranslation('chat');
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
@@ -96,6 +112,7 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
   const gatewayStatus = useGatewayStore((s) => s.status);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
+  const dailyTokenQuotaStatus = useChatStore((s) => s.dailyTokenQuotaStatus);
   const currentAgentName = useMemo(
     () => (agents ?? []).find((agent) => agent.id === currentAgentId)?.name ?? currentAgentId,
     [agents, currentAgentId],
@@ -112,6 +129,21 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
   const composerPlaceholder = disabled
     ? t('composer.gatewayDisconnectedPlaceholder')
     : t('composer.messagePlaceholder', { agent: currentAgentName });
+  const dailyTokenQuotaText = useMemo(() => {
+    const usedToday = dailyTokenQuotaStatus?.usedToday;
+    const limit = dailyTokenQuotaStatus?.limit;
+    if (!Number.isFinite(usedToday) || !Number.isFinite(limit)) return '';
+    const dayText = formatBeijingDate(dailyTokenQuotaStatus?.checkedAt);
+    if (!dayText) return '';
+    return `${dayText}: 已使用${Number(usedToday).toLocaleString('zh-CN')}/上限${Number(limit).toLocaleString('zh-CN')}`;
+  }, [dailyTokenQuotaStatus]);
+  const dailyTokenQuotaAlert = useMemo(() => {
+    const usedToday = dailyTokenQuotaStatus?.usedToday;
+    const limit = dailyTokenQuotaStatus?.limit;
+    if (!Number.isFinite(usedToday) || !Number.isFinite(limit)) return false;
+    if (dailyTokenQuotaStatus?.allowed === false) return true;
+    return Number(usedToday) > Number(limit);
+  }, [dailyTokenQuotaStatus]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -553,19 +585,32 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false, i
               })}
             </span>
           </div>
-          {hasFailedAttachments && (
-            <Button
-              variant="link"
-              size="sm"
-              className="h-auto p-0 text-[11px]"
-              onClick={() => {
-                setAttachments((prev) => prev.filter((att) => att.status !== 'error'));
-                void pickFiles();
-              }}
-            >
-              {t('composer.retryFailedAttachments')}
-            </Button>
-          )}
+          <div className="flex items-center gap-3">
+            {dailyTokenQuotaText ? (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 text-[11px]",
+                  dailyTokenQuotaAlert ? "text-red-500" : "text-amber-500/95",
+                )}
+              >
+                {dailyTokenQuotaAlert ? <AlertCircle className="h-3.5 w-3.5" /> : null}
+                {dailyTokenQuotaText}
+              </span>
+            ) : null}
+            {hasFailedAttachments && (
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-[11px]"
+                onClick={() => {
+                  setAttachments((prev) => prev.filter((att) => att.status !== 'error'));
+                  void pickFiles();
+                }}
+              >
+                {t('composer.retryFailedAttachments')}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

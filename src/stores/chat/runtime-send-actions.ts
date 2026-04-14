@@ -56,6 +56,12 @@ export type DailyTokenQuotaState = {
   limit?: number;
 };
 
+function toNumberIfFinite(value: unknown): number | undefined {
+  if (typeof value !== 'number') return undefined;
+  if (!Number.isFinite(value)) return undefined;
+  return value;
+}
+
 export async function checkDailyTokenQuota(): Promise<DailyTokenQuotaState | null> {
   try {
     const quotaCheck = await hostApiFetch<TokenQuotaCheckResult>('/api/token-quota/check');
@@ -116,6 +122,16 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       const currentSessionKey = targetSessionKey;
 
       const quotaCheck = await checkDailyTokenQuota();
+      if (quotaCheck) {
+        set({
+          dailyTokenQuotaStatus: {
+            allowed: quotaCheck.allowed,
+            usedToday: toNumberIfFinite(quotaCheck.used_today),
+            limit: toNumberIfFinite(quotaCheck.limit),
+            checkedAt: new Date().toISOString(),
+          },
+        });
+      }
       if (quotaCheck && quotaCheck.allowed === false) {
         set({
           error: formatQuotaExceededMessage(quotaCheck.used_today, quotaCheck.limit),
