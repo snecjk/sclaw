@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { hostApiFetch } from '@/lib/host-api';
+import { getCurrentEnvConfig } from '../../shared/env-config';
 
 export type SsoEnvironment =
   | 'daily-external'
@@ -48,7 +49,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isInitialized: false,
       user: null,
-      ssoEnvironment: 'production-external',
+      ssoEnvironment: getCurrentEnvConfig().ssoEnvironment as SsoEnvironment,
       isLoggingIn: false,
       error: null,
 

@@ -18,9 +18,10 @@ import {
   sendClientUpdateEventsFireAndForget,
   writePendingInstallReport,
 } from '../services/client-update-platform';
+import { getCurrentEnvConfig } from '../../shared/env-config';
 
-/** 公网 OSS 根（与 memory-center client.update.oss.public.base 一致；无尾斜杠；channel 如 latest 拼在路径上） */
-const OSS_BASE_URL = 'https://ali-sto-wisdom-star.aliyuncs.com';
+/** OSS base URL determined by build environment (env-config) */
+const OSS_BASE_URL = getCurrentEnvConfig().updateBaseUrl;
 
 /** 与 memory-center 发版默认 check_interval_seconds 一致 */
 const DEFAULT_CHECK_INTERVAL_SEC = 21600;

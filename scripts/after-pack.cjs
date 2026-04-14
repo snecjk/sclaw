@@ -233,6 +233,29 @@ function patchBrokenModules(nodeModulesDir) {
     }
   }
 
+  // lru-cache v7: only exports the class as `module.exports = LRUCache` (default).
+  // Newer packages like hosted-git-info@9 use `const { LRUCache } = require('lru-cache')`
+  // expecting a named export from lru-cache v11+.  Since bundle-openclaw.mjs BFS
+  // deduplication keeps the first version encountered (v7), we add a named export
+  // shim so both import styles work.
+  const lruIndexPath = join(nodeModulesDir, 'lru-cache', 'index.js');
+  if (existsSync(lruIndexPath)) {
+    try {
+      const lruContent = readFileSync(lruIndexPath, 'utf8');
+      if (!lruContent.includes('module.exports.LRUCache')) {
+        writeFileSync(
+          lruIndexPath,
+          lruContent + '\n// Shim: expose named export for lru-cache v11+ consumers\nmodule.exports.LRUCache = module.exports;\n',
+          'utf8'
+        );
+        count++;
+        console.log('[after-pack] 🩹 Patched lru-cache/index.js: added named LRUCache export for v11+ compat');
+      }
+    } catch (err) {
+      console.warn('[after-pack] ⚠️  Failed to patch lru-cache:', err.message);
+    }
+  }
+
   // https-proxy-agent: add a CJS `require` condition only when we can point to
   // a real CommonJS entry. Mapping `require` to an ESM file can cause
   // ERR_REQUIRE_CYCLE_MODULE in Node.js CLI/TUI flows.
@@ -447,6 +470,76 @@ function bundlePlugin(nodeModulesRoot, npmName, destDir) {
   return true;
 }
 
+/**
+ * Bundle a local plugin into the packaged resources directory.
+ * Prefers the pre-built output from bundle-openclaw-plugins.mjs if available,
+ * otherwise falls back to copying raw source from sto-plugin/<localDir>/.
+ */
+function bundleLocalPlugin(preBuildDir, rawSourceDir, nodeModulesRoot, destDir) {
+  // Filter for excluding test files when copying from raw source
+  function copyFilter(src) {
+    const name = basename(src);
+    if (/\.(test|spec)\.(ts|js|mjs)$/.test(name)) return false;
+    if (name === '__tests__' || name === 'node_modules') return false;
+    return true;
+  }
+
+  // Prefer pre-built output (already has deps bundled by bundle-openclaw-plugins.mjs)
+  if (existsSync(join(preBuildDir, 'openclaw.plugin.json'))) {
+    console.log(`[after-pack]   Using pre-built output: ${preBuildDir}`);
+    if (existsSync(normWin(destDir))) rmSync(normWin(destDir), { recursive: true, force: true });
+    mkdirSync(normWin(destDir), { recursive: true });
+    cpSync(normWin(preBuildDir), normWin(destDir), { recursive: true, dereference: true });
+    return true;
+  }
+
+  // Fallback: copy from raw source directory
+  if (!existsSync(join(rawSourceDir, 'openclaw.plugin.json'))) {
+    console.warn(`[after-pack] ⚠️  Local plugin not found at ${rawSourceDir}`);
+    return false;
+  }
+
+  console.log(`[after-pack]   Copying from raw source: ${rawSourceDir}`);
+  if (existsSync(normWin(destDir))) rmSync(normWin(destDir), { recursive: true, force: true });
+  mkdirSync(normWin(destDir), { recursive: true });
+  cpSync(normWin(rawSourceDir), normWin(destDir), { recursive: true, dereference: true, filter: copyFilter });
+
+  // If the plugin has npm dependencies, resolve and copy them
+  const pkgJsonPath = join(destDir, 'package.json');
+  if (existsSync(pkgJsonPath)) {
+    try {
+      const pkg = JSON.parse(require('fs').readFileSync(pkgJsonPath, 'utf8'));
+      const deps = Object.keys(pkg.dependencies || {});
+      for (const depName of deps) {
+        const depPath = join(nodeModulesRoot, ...depName.split('/'));
+        if (!existsSync(depPath)) {
+          console.warn(`[after-pack]   ⚠️  Dependency "${depName}" not found, skipping`);
+          continue;
+        }
+        let realDepPath;
+        try { realDepPath = realpathSync(depPath); } catch { realDepPath = depPath; }
+
+        const depDest = join(destDir, 'node_modules', depName);
+        mkdirSync(normWin(dirname(depDest)), { recursive: true });
+        cpSync(normWin(realDepPath), normWin(depDest), { recursive: true, dereference: true });
+
+        // Also collect transitive deps for this dependency
+        const ok = bundlePlugin(nodeModulesRoot, depName, join(destDir, '__tmp_dep_bundle'));
+        if (ok) {
+          const tmpNM = join(destDir, '__tmp_dep_bundle', 'node_modules');
+          if (existsSync(tmpNM)) {
+            const targetNM = join(destDir, 'node_modules');
+            cpSync(normWin(tmpNM), normWin(targetNM), { recursive: true, dereference: true });
+          }
+          rmSync(join(destDir, '__tmp_dep_bundle'), { recursive: true, force: true });
+        }
+      }
+    } catch { /* ignore parse errors */ }
+  }
+
+  return true;
+}
+
 // ── Main hook ────────────────────────────────────────────────────────────────
 
 exports.default = async function afterPack(context) {
@@ -495,14 +588,28 @@ exports.default = async function afterPack(context) {
   //       directory doesn't exist (build/openclaw-plugins/ may not be pre-generated)
   //     - node_modules/ is excluded by .gitignore so the deps copy must be manual
   const BUNDLED_PLUGINS = [
-    { npmName: '@soimy/dingtalk', pluginId: 'dingtalk' },
+    // { type: 'npm', npmName: '@soimy/dingtalk', pluginId: 'dingtalk' },
+    { type: 'local', localDir: 'sto-dynamic-agent-route', pluginId: 'sto-dynamic-agent-route' },
   ];
 
+  const localPluginSourceRoot = join(__dirname, '..', 'sto-plugin');
+  const preBuildRoot = join(__dirname, '..', 'build', 'openclaw-plugins');
+
   mkdirSync(pluginsDestRoot, { recursive: true });
-  for (const { npmName, pluginId } of BUNDLED_PLUGINS) {
-    const pluginDestDir = join(pluginsDestRoot, pluginId);
-    console.log(`[after-pack] Bundling plugin ${npmName} -> ${pluginDestDir}`);
-    const ok = bundlePlugin(nodeModulesRoot, npmName, pluginDestDir);
+  for (const plugin of BUNDLED_PLUGINS) {
+    const pluginDestDir = join(pluginsDestRoot, plugin.pluginId);
+    let ok;
+
+    if (plugin.type === 'local') {
+      const preBuildDir = join(preBuildRoot, plugin.pluginId);
+      const rawSourceDir = join(localPluginSourceRoot, plugin.localDir);
+      console.log(`[after-pack] Bundling local plugin ${plugin.pluginId} -> ${pluginDestDir}`);
+      ok = bundleLocalPlugin(preBuildDir, rawSourceDir, nodeModulesRoot, pluginDestDir);
+    } else {
+      console.log(`[after-pack] Bundling plugin ${plugin.npmName} -> ${pluginDestDir}`);
+      ok = bundlePlugin(nodeModulesRoot, plugin.npmName, pluginDestDir);
+    }
+
     if (ok) {
       const pluginNM = join(pluginDestDir, 'node_modules');
       cleanupUnnecessaryFiles(pluginDestDir);
@@ -511,7 +618,7 @@ exports.default = async function afterPack(context) {
         cleanupNativePlatformPackages(pluginNM, platform, arch);
       }
       // Fix hardcoded plugin ID mismatches in compiled JS
-      patchPluginIds(pluginDestDir, pluginId);
+      patchPluginIds(pluginDestDir, plugin.pluginId);
     }
   }
 

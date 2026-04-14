@@ -41,6 +41,7 @@ import {
 import { createSignalQuitHandler } from './signal-quit';
 import { acquireProcessInstanceFileLock } from './process-instance-lock';
 import { getSetting } from '../utils/store';
+import { getCurrentEnvConfig } from '../../shared/env-config';
 
 _ts('static imports loaded');
 
@@ -255,6 +256,12 @@ function createWindow(): BrowserWindow {
   // finishes its first paint. This is much better UX than a blank desktop.
   win.show();
   _ts('window shown (dark bg)');
+
+  // Set window title with environment suffix for non-production builds
+  const envCfg = getCurrentEnvConfig();
+  if (envCfg.displaySuffix) {
+    win.setTitle(`STO Claw ${envCfg.displaySuffix}`);
+  }
 
   // Log when the renderer actually finishes first paint (diagnostic).
   win.once('ready-to-show', () => {
@@ -640,6 +647,14 @@ async function initialize(): Promise<void> {
           logger.warn('Startup STO model sync failed:', err),
         );
         stoSync.startPeriodicSync();
+
+        // Auto-create department biz agents on startup (fire-and-forget)
+        const { getStoBizAgentSyncService } = await import('../services/sto-biz-agent-sync');
+        const bizAgentSync = getStoBizAgentSyncService();
+        bizAgentSync.setGatewayManager(gm);
+        void bizAgentSync.syncAgents().catch((err) =>
+          logger.warn('Startup STO biz-agent sync failed:', err),
+        );
       }
     } catch (err) {
       logger.warn('STO model sync startup check failed:', err);

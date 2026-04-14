@@ -4,6 +4,10 @@
  */
 import { Tray, Menu, BrowserWindow, app, nativeImage } from 'electron';
 import { join } from 'path';
+import { getCurrentEnvConfig } from '../../shared/env-config';
+
+const envConfig = getCurrentEnvConfig();
+const envSuffix = envConfig.displaySuffix ? ` ${envConfig.displaySuffix}` : '';
 
 let tray: Tray | null = null;
 let floatIconVisible = true; // Track float icon visibility state
@@ -32,7 +36,7 @@ function buildContextMenu(): Menu {
 
   return Menu.buildFromTemplate([
     {
-      label: '显示 StoClaw',
+      label: `显示 StoClaw${envSuffix}`,
       click: showWindow,
     },
     {
@@ -94,7 +98,7 @@ function buildContextMenu(): Menu {
       type: 'separator',
     },
     {
-      label: '退出 StoClaw',
+      label: `退出 StoClaw${envSuffix}`,
       click: () => {
         app.quit();
       },
@@ -146,7 +150,7 @@ export function createTray(mainWindow: BrowserWindow, _onToggleSprite?: () => vo
   tray = new Tray(icon);
 
   // Set tooltip
-  tray.setToolTip('StoClaw - AI 助手');
+  tray.setToolTip(`StoClaw - AI 助手${envSuffix}`);
 
   tray.setContextMenu(buildContextMenu());
 

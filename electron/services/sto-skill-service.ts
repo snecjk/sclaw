@@ -9,25 +9,10 @@ import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
 
 import { getOpenClawConfigDir, getOpenClawSkillsDir, getOpenClawAgentSkillsDir } from '../utils/paths';
-import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
+import { getStoToken } from '../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
+import { resolveStoBaseUrl } from '../utils/sto-domain';
 import { logger } from '../utils/logger';
-
-// ---------------------------------------------------------------------------
-// Domain resolution (without /agent suffix – skills API lives at /v1/skills)
-// ---------------------------------------------------------------------------
-
-const STO_SKILL_DOMAINS: Record<string, string> = {
-  'daily-external': 'https://baseinfo-aimemory-test.sto.cn',
-  'pre-release': 'https://pre-baseinfo-aimemory.sto.cn',
-  'local': 'http://127.0.0.1:7001',
-};
-const STO_SKILL_DOMAIN_DEFAULT = 'https://baseinfo-aimemory.sto.cn';
-
-async function resolveStoSkillBaseUrl(): Promise<string> {
-  const env = await getSsoEnvironment();
-  return STO_SKILL_DOMAINS[env] || STO_SKILL_DOMAIN_DEFAULT;
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -86,7 +71,7 @@ export class StoSkillService {
    * Search / list skills from STO marketplace.
    */
   async search(params: StoSkillSearchParams): Promise<StoSkillResult[]> {
-    const baseUrl = await resolveStoSkillBaseUrl();
+    const baseUrl = await resolveStoBaseUrl();
     const token = await getStoToken();
     if (!token) throw new Error('未登录或 stoToken 已过期，请重新登录');
 
@@ -133,7 +118,7 @@ export class StoSkillService {
    *   3. Update lock.json
    */
   async install(params: StoSkillInstallParams): Promise<void> {
-    const baseUrl = await resolveStoSkillBaseUrl();
+    const baseUrl = await resolveStoBaseUrl();
     const token = await getStoToken();
     if (!token) throw new Error('未登录或 stoToken 已过期，请重新登录');
 

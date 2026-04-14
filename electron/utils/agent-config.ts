@@ -586,6 +586,55 @@ export async function createAgent(
   });
 }
 
+/**
+ * Create an agent with an explicit ID (instead of auto-generating from name).
+ * Used by the biz-agent sync service to create agents whose ID matches the
+ * remote `code` field, enabling dedup-by-code on subsequent syncs.
+ */
+export async function createAgentWithId(
+  id: string,
+  name: string,
+  options?: { inheritWorkspace?: boolean },
+): Promise<AgentsSnapshot> {
+  if (!id || !id.trim()) throw new Error('Agent ID must not be empty');
+  if (id === MAIN_AGENT_ID) throw new Error('Cannot create agent with reserved ID "main"');
+
+  return withConfigLock(async () => {
+    const config = await readOpenClawConfig() as AgentConfigDocument;
+    const { agentsConfig, entries, syntheticMain } = normalizeAgentsConfig(config);
+    const existingIds = new Set(entries.map((entry) => entry.id));
+    const diskIds = await listExistingAgentIdsOnDisk();
+
+    if (existingIds.has(id) || diskIds.has(id)) {
+      throw new Error(`Agent with ID "${id}" already exists`);
+    }
+
+    const normalizedName = normalizeAgentName(name);
+    const nextEntries = syntheticMain ? [createImplicitMainEntry(config), ...entries.filter((_, index) => index > 0)] : [...entries];
+    const newAgent: AgentListEntry = {
+      id,
+      name: normalizedName,
+      workspace: `~/.openclaw/workspace-${id}`,
+      agentDir: getDefaultAgentDirPath(id),
+    };
+
+    if (!nextEntries.some((entry) => entry.id === MAIN_AGENT_ID) && syntheticMain) {
+      nextEntries.unshift(createImplicitMainEntry(config));
+    }
+    nextEntries.push(newAgent);
+
+    config.agents = {
+      ...agentsConfig,
+      list: nextEntries,
+    };
+
+    await provisionAgentFilesystem(config, newAgent, { inheritWorkspace: options?.inheritWorkspace });
+    await writeOpenClawConfig(config);
+    logger.info('Created agent config entry (explicit ID)', { agentId: id, inheritWorkspace: !!options?.inheritWorkspace });
+    return buildSnapshotFromConfig(config);
+  });
+}
+
 export async function updateAgentName(agentId: string, name: string): Promise<AgentsSnapshot> {
   return withConfigLock(async () => {
     const config = await readOpenClawConfig() as AgentConfigDocument;

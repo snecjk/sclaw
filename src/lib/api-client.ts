@@ -82,6 +82,7 @@ const UNIFIED_CHANNELS = new Set<string>([
   'cron:toggle',
   'cron:trigger',
   'usage:recentTokenHistory',
+  'question:split',
 ]);
 
 const customInvokers = new Map<Exclude<TransportKind, 'ipc'>, TransportInvoker>();

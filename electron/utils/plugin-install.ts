@@ -168,10 +168,17 @@ function patchPluginEntryIds(targetDir: string): void {
 // ── Plugin npm name mapping ──────────────────────────────────────────────────
 
 const PLUGIN_NPM_NAMES: Record<string, string> = {
-  dingtalk: '@soimy/dingtalk',
-  wecom: '@wecom/wecom-openclaw-plugin',
-  qqbot: '@sliverp/qqbot',
-  'openclaw-weixin': '@tencent-weixin/openclaw-weixin',
+  // dingtalk: '@soimy/dingtalk',
+  // wecom: '@wecom/wecom-openclaw-plugin',
+  // qqbot: '@sliverp/qqbot',
+  // 'openclaw-weixin': '@tencent-weixin/openclaw-weixin',
+};
+
+// ── Local plugin directory mapping ───────────────────────────────────────────
+// Maps plugin dir names to their source directory under sto-plugin/.
+
+const LOCAL_PLUGIN_DIRS: Record<string, string> = {
+  'sto-dynamic-agent-route': 'sto-dynamic-agent-route',
 };
 
 // ── Version helper ───────────────────────────────────────────────────────────
@@ -405,6 +412,46 @@ export function ensurePluginInstalled(
         }
       }
     }
+
+    // Dev mode fallback for local plugins: copy from sto-plugin/ directory
+    const localDir = LOCAL_PLUGIN_DIRS[pluginDirName];
+    if (localDir) {
+      const localSourceDir = join(process.cwd(), 'sto-plugin', localDir);
+      if (existsSync(fsPath(join(localSourceDir, 'openclaw.plugin.json')))) {
+        const installedVersion = existsSync(fsPath(targetPkgJson)) ? readPluginVersion(targetPkgJson) : null;
+        const sourceVersion = readPluginVersion(join(localSourceDir, 'package.json'));
+        if (sourceVersion && (!installedVersion || sourceVersion !== installedVersion)) {
+          logger.info(
+            `[plugin] ${installedVersion ? 'Upgrading' : 'Installing'} ${pluginLabel} plugin: ` +
+            `${installedVersion ? `${installedVersion} → ${sourceVersion}` : sourceVersion} (dev/sto-plugin)`,
+          );
+          try {
+            mkdirSync(fsPath(join(homedir(), '.openclaw', 'extensions')), { recursive: true });
+            rmSync(fsPath(targetDir), { recursive: true, force: true });
+            cpSync(fsPath(localSourceDir), fsPath(targetDir), {
+              recursive: true,
+              filter: (src: string) => {
+                const base = path.basename(src);
+                if (/\.(test|spec)\.(ts|js)$/.test(base)) return false;
+                if (base === '__tests__' || base === 'node_modules') return false;
+                return true;
+              },
+            });
+            fixupPluginManifest(targetDir);
+            if (existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) {
+              return { installed: true };
+            }
+          } catch (err) {
+            logger.warn(
+              `[plugin] Failed to install ${pluginLabel} from sto-plugin/`,
+              toErrorDiagnostic(err),
+            );
+          }
+        } else if (existsSync(fsPath(targetManifest))) {
+          return { installed: true }; // same version, already installed
+        }
+      }
+    }
   }
 
   return {
@@ -447,16 +494,25 @@ export function ensureWeChatPluginInstalled(): { installed: boolean; warning?: s
   return ensurePluginInstalled('openclaw-weixin', buildCandidateSources('openclaw-weixin'), 'WeChat');
 }
 
+export function ensureStoDynamicRoutePluginInstalled(): { installed: boolean; warning?: string } {
+  return ensurePluginInstalled(
+    'sto-dynamic-agent-route',
+    buildCandidateSources('sto-dynamic-agent-route'),
+    'STO Dynamic Route',
+  );
+}
+
 // ── Bulk startup installer ───────────────────────────────────────────────────
 
 /**
  * All bundled plugins, in the same order as after-pack.cjs BUNDLED_PLUGINS.
  */
 const ALL_BUNDLED_PLUGINS = [
-  { fn: ensureDingTalkPluginInstalled, label: 'DingTalk' },
+  // { fn: ensureDingTalkPluginInstalled, label: 'DingTalk' },
   { fn: ensureWeComPluginInstalled, label: 'WeCom' },
   { fn: ensureQQBotPluginInstalled, label: 'QQ Bot' },
   { fn: ensureWeChatPluginInstalled, label: 'WeChat' },
+  { fn: ensureStoDynamicRoutePluginInstalled, label: 'STO Dynamic Route' },
 ] as const;
 
 async function ensurePluginInstalledAsync(
@@ -561,10 +617,11 @@ export async function ensureAllBundledPluginsInstalled(): Promise<void> {
  */
 export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
   const pluginSpecs = [
-    { dirName: 'dingtalk', label: 'DingTalk' },
+    // { dirName: 'dingtalk', label: 'DingTalk' },
     { dirName: 'wecom', label: 'WeCom' },
     { dirName: 'qqbot', label: 'QQ Bot' },
     { dirName: 'openclaw-weixin', label: 'WeChat' },
+    { dirName: 'sto-dynamic-agent-route', label: 'STO Dynamic Route' },
   ] as const;
 
   for (const { dirName, label } of pluginSpecs) {

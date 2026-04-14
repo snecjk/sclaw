@@ -24,6 +24,7 @@ import {
   isOpenClawOAuthPluginProviderKey,
 } from './provider-keys';
 import { withConfigLock } from './config-mutex';
+import { resolveStoBaseUrl } from './sto-domain';
 
 const AUTH_STORE_VERSION = 1;
 const AUTH_PROFILE_FILENAME = 'auth-profiles.json';
@@ -1226,6 +1227,82 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
     if (modified) {
       await writeOpenClawJson(config);
       console.log('[sanitize] openclaw.json sanitized successfully');
+    }
+  });
+}
+
+/**
+ * Configure the sto-dynamic-agent-route plugin in openclaw.json after SSO login.
+ * Adds models.providers entry and plugins.allow/entries with environment-specific URLs.
+ */
+export async function syncStoDynamicRoutePluginToOpenClaw(): Promise<void> {
+  return withConfigLock(async () => {
+    const stoBaseUrl = await resolveStoBaseUrl();
+    const config = await readOpenClawJson();
+
+    // 1. Upsert models.providers.sto-dynamic-agent-route
+    upsertOpenClawProviderEntry(config, 'sto-dynamic-agent-route', {
+      baseUrl: `${stoBaseUrl}/agent/v1/biz-agent`,
+      api: 'openai-completions',
+      apiKeyEnv: 'sk-your-model-api-key',
+      modelIds: ['sto-route-model'],
+      defaultModelInput: ['text', 'image'],
+    });
+
+    // 2. Configure plugins section
+    const plugins = (config.plugins || {}) as Record<string, unknown>;
+    plugins.enabled = true;
+
+    const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
+    if (!allow.includes('sto-dynamic-agent-route')) {
+      allow.push('sto-dynamic-agent-route');
+    }
+    plugins.allow = allow;
+
+    const entries = (plugins.entries || {}) as Record<string, unknown>;
+    entries['sto-dynamic-agent-route'] = {
+      enabled: true,
+      config: {
+        routeApiUrl: `${stoBaseUrl}/agent/v1/biz-agent/resolve`,
+        providerBaseUrl: `${stoBaseUrl}/agent/v1/biz-agent`,
+      },
+    };
+    plugins.entries = entries;
+    config.plugins = plugins;
+
+    await writeOpenClawJson(config);
+    console.log(`Configured sto-dynamic-agent-route plugin (baseUrl=${stoBaseUrl}/agent/v1/biz-agent)`);
+  });
+}
+
+/**
+ * Disable the sto-dynamic-agent-route plugin in openclaw.json on logout or token expiry.
+ * Sets enabled=false and removes the provider entry, but preserves plugin config for re-login.
+ */
+export async function removeStoDynamicRoutePluginFromOpenClaw(): Promise<void> {
+  return withConfigLock(async () => {
+    const config = await readOpenClawJson();
+    let modified = false;
+
+    // Disable plugin in entries (preserve config for re-login)
+    const plugins = config.plugins as Record<string, unknown> | undefined;
+    const entries = (plugins?.entries ?? {}) as Record<string, Record<string, unknown>>;
+    if (entries['sto-dynamic-agent-route']) {
+      entries['sto-dynamic-agent-route'].enabled = false;
+      modified = true;
+    }
+
+    // Remove provider from models.providers
+    const models = config.models as Record<string, unknown> | undefined;
+    const providers = (models?.providers ?? {}) as Record<string, unknown>;
+    if (providers['sto-dynamic-agent-route']) {
+      delete providers['sto-dynamic-agent-route'];
+      modified = true;
+    }
+
+    if (modified) {
+      await writeOpenClawJson(config);
+      console.log('Disabled sto-dynamic-agent-route plugin config');
     }
   });
 }

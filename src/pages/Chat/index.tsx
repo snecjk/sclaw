@@ -6,16 +6,19 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, ArrowDown, Bot, Cpu, Loader2, Orbit, Sparkles, Workflow } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAgentsStore } from '@/stores/agents';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ParticleConstellation } from '@/components/common/ParticleConstellation';
 import { ChatMessage } from './ChatMessage';
-import { ChatInput } from './ChatInput';
+import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatToolbar } from './ChatToolbar';
+import { PendingQueuePanel } from './PendingQueuePanel';
 import { extractImages, extractText, extractThinking, extractToolUse } from './message-utils';
+import { useMessageQueueStore, createAutoSendWatcher } from '@/stores/message-queue';
+import { invokeApi } from '@/lib/api-client';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { assistantChatCardBgStreaming } from '@/lib/surfaces';
@@ -43,8 +46,15 @@ export function Chat() {
 
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
 
+  // ── Message Queue ──
+  const queue = useMessageQueueStore((s) => s.queue);
+  const queueRemove = useMessageQueueStore((s) => s.remove);
+  const queueMoveUp = useMessageQueueStore((s) => s.moveUp);
+  const queueMoveDown = useMessageQueueStore((s) => s.moveDown);
+
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const [splitting, setSplitting] = useState(false);
   const minLoading = useMinLoading(loading && messages.length > 0);
   const { contentRef, scrollRef } = useStickToBottomInstant(currentSessionKey);
 
@@ -68,7 +78,7 @@ export function Chat() {
   // Update timestamp when sending starts
   useEffect(() => {
     if (sending && streamingTimestamp === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setStreamingTimestamp(Date.now() / 1000);
     } else if (!sending && streamingTimestamp !== 0) {
       setStreamingTimestamp(0);
@@ -132,19 +142,58 @@ export function Chat() {
     updateJumpToLatestVisibility();
   }, [messages.length, shouldRenderStreaming, pendingFinal, updateJumpToLatestVisibility]);
 
-  const handleSend = useCallback((
+  const handleSend = useCallback(async (
     text: string,
     attachments?: Parameters<typeof sendMessage>[1],
     targetAgentId?: Parameters<typeof sendMessage>[2],
   ) => {
     scrollToLatest('auto');
-    sendMessage(text, attachments, targetAgentId);
+
+    // Call question-split API (silent fallback on failure)
+    setSplitting(true);
+    let parts: Array<{ type: string; context: string }> | null = null;
+    try {
+      const { currentAgentId, currentSessionKey } = useChatStore.getState();
+      parts = await invokeApi<Array<{ type: string; context: string }>>('question:split', {
+        prompt: text,
+        agentId: currentAgentId,
+        sessionId: currentSessionKey,
+      });
+    } catch {
+      // Silent fallback — send original text
+    } finally {
+      setSplitting(false);
+    }
+
+    if (parts && parts.length > 1) {
+      sendMessage(parts[0].context, attachments, targetAgentId);
+      for (let i = 1; i < parts.length; i++) {
+        useMessageQueueStore.getState().enqueue(parts[i].context, undefined, targetAgentId);
+      }
+    } else {
+      sendMessage(text, attachments, targetAgentId);
+    }
+
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         scrollToLatest('smooth');
       });
     });
   }, [scrollToLatest, sendMessage]);
+
+  const handleQueue = useCallback((
+    text: string,
+    attachments?: FileAttachment[],
+    targetAgentId?: string | null,
+  ) => {
+    useMessageQueueStore.getState().enqueue(text, attachments, targetAgentId);
+  }, []);
+
+  // Auto-send watcher: sends queued messages one-by-one when AI finishes responding
+  useEffect(() => {
+    const unsub = createAutoSendWatcher(() => scrollToLatest('auto'));
+    return unsub;
+  }, [scrollToLatest]);
 
   return (
     <div className={cn("relative flex flex-col -m-6 transition-colors duration-500")} style={{ height: 'calc(100vh - 2.5rem)' }}>
@@ -261,10 +310,37 @@ export function Chat() {
         </div>
       </div>
 
+      {/* Splitting indicator */}
+      <AnimatePresence>
+        {splitting && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="shrink-0 px-6"
+          >
+            <div className="max-w-5xl mx-auto flex items-center gap-2 rounded-lg border border-primary/15 bg-white/50 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm dark:bg-white/[0.06]">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+              <span>{t('splitting')}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Pending Message Queue */}
+      <PendingQueuePanel
+        queue={queue}
+        onRemove={queueRemove}
+        onMoveUp={queueMoveUp}
+        onMoveDown={queueMoveDown}
+      />
+
       {/* Input Area */}
       <ChatInput
         onSend={handleSend}
         onStop={abortRun}
+        onQueue={handleQueue}
         disabled={!isGatewayRunning}
         sending={sending}
         isEmpty={isEmpty}
