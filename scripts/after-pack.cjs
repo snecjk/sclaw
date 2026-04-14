@@ -645,4 +645,67 @@ exports.default = async function afterPack(context) {
     rmSync(llamaCppDir, { recursive: true, force: true });
     console.log('[after-pack] ✅ Removed @node-llama-cpp (not needed, using Ollama/vLLM HTTP API instead).');
   }
+
+  // 6. Remove excluded OpenClaw built-in skills (not needed for StoClaw distribution)
+  const EXCLUDED_SKILLS = [
+    'apple-notes',
+    'apple-reminders',
+    'bear-notes',
+    'blogwatcher',
+    'blucli',
+    'bluebubbles',
+    'discord',
+    'eightctl',
+    'gemini',
+    'gh-issues',
+    'github',
+    'gog',
+    'nano-pdf',
+    'wacli',
+    'voice-call',
+    'trello',
+    'tmux',
+    'summarize',
+    'spotify-player',
+    'songsee',
+    'ordercli',
+    'openhue',
+    'openai-whisper-api',
+    'openai-whisper',
+    'notion',
+    'imsg',
+    'model-usage',
+    'oracle',
+  ];
+
+  const openclawSkillsDir = join(openclawRoot, 'skills');
+  if (existsSync(openclawSkillsDir)) {
+    let removedSkills = 0;
+    for (const slug of EXCLUDED_SKILLS) {
+      const skillDir = join(openclawSkillsDir, slug);
+      if (existsSync(skillDir)) {
+        rmSync(skillDir, { recursive: true, force: true });
+        removedSkills++;
+      }
+    }
+    if (removedSkills > 0) {
+      console.log(`[after-pack] ✅ Removed ${removedSkills} excluded built-in skills.`);
+    }
+  }
+
+  // Also remove excluded skills from the dist/extensions bundled skills (if present)
+  const openclawDistSkillsDir = join(openclawRoot, 'dist', 'skills');
+  if (existsSync(openclawDistSkillsDir)) {
+    let removedDistSkills = 0;
+    for (const slug of EXCLUDED_SKILLS) {
+      const skillDir = join(openclawDistSkillsDir, slug);
+      if (existsSync(skillDir)) {
+        rmSync(skillDir, { recursive: true, force: true });
+        removedDistSkills++;
+      }
+    }
+    if (removedDistSkills > 0) {
+      console.log(`[after-pack] ✅ Removed ${removedDistSkills} excluded skills from dist/.`);
+    }
+  }
 };
