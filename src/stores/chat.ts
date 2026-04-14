@@ -999,6 +999,29 @@ function hasNonToolAssistantContent(message: RawMessage | undefined): boolean {
   return false;
 }
 
+/**
+ * Check whether a message contains actual text output (user-visible answer).
+ * Unlike hasNonToolAssistantContent, this excludes thinking blocks — they are
+ * internal reasoning and should NOT be treated as a completed response.
+ */
+function hasAssistantTextOutput(message: RawMessage | undefined): boolean {
+  if (!message) return false;
+  if (typeof message.content === 'string' && message.content.trim()) return true;
+
+  const content = message.content;
+  if (Array.isArray(content)) {
+    for (const block of content as ContentBlock[]) {
+      if (block.type === 'text' && block.text && block.text.trim()) return true;
+      if (block.type === 'image') return true;
+    }
+  }
+
+  const msg = message as unknown as Record<string, unknown>;
+  if (typeof msg.text === 'string' && msg.text.trim()) return true;
+
+  return false;
+}
+
 // ── Store ────────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -1425,12 +1448,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
       const recentAssistant = [...filteredMessages].reverse().find((msg) => {
         if (msg.role !== 'assistant') return false;
-        if (!hasNonToolAssistantContent(msg)) return false;
+        // Use hasAssistantTextOutput (not hasNonToolAssistantContent) so that
+        // intermediate thinking+tool_use turns don't prematurely end the run.
+        if (!hasAssistantTextOutput(msg)) return false;
         return isAfterUserMsg(msg);
       });
       const currentRecentAssistant = [...get().messages].reverse().find((msg) => {
         if (msg.role !== 'assistant') return false;
-        if (!hasNonToolAssistantContent(msg)) return false;
+        if (!hasAssistantTextOutput(msg)) return false;
         return isAfterUserMsg(msg);
       });
 
@@ -1807,11 +1832,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               // would be overwritten by the next turn's deltas and never appear in the UI.
               const currentStream = s.streamingMessage as RawMessage | null;
               const snapshotMsgs: RawMessage[] = [];
-              let streamHasOutput = false;
               if (currentStream) {
                 const streamRole = currentStream.role;
                 if (streamRole === 'assistant' || streamRole === undefined) {
-                  streamHasOutput = hasNonToolAssistantContent(currentStream);
                   // Use message's own id if available, otherwise derive a stable one from runId
                   const snapId = currentStream.id
                     || `${runId || 'run'}-turn-${s.messages.length}`;
@@ -1827,20 +1850,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   }
                 }
               }
-              const nextTools = updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools;
               return {
                 messages: snapshotMsgs.length > 0 ? [...s.messages, ...snapshotMsgs] : s.messages,
                 streamingText: '',
                 streamingMessage: null,
-                sending: streamHasOutput ? false : s.sending,
-                activeRunId: streamHasOutput ? null : s.activeRunId,
-                pendingFinal: streamHasOutput ? false : true,
-                pendingToolImages: streamHasOutput
-                  ? []
-                  : (toolFiles.length > 0 ? [...s.pendingToolImages, ...toolFiles] : s.pendingToolImages),
-                streamingTools: streamHasOutput ? [] : nextTools,
+                // Keep sending/activeRunId unchanged — the agent run is still
+                // in progress; only the intermediate tool turn completed.
+                pendingFinal: true,
+                pendingToolImages: toolFiles.length > 0
+                  ? [...s.pendingToolImages, ...toolFiles]
+                  : s.pendingToolImages,
+                streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
               };
             });
+            // Reload history to surface the complete intermediate turn
+            // (with full thinking + tool_use blocks) from the Gateway's
+            // authoritative record. Streaming deltas may not carry these
+            // content blocks, so the snapshot above can be incomplete.
+            void get().loadHistory(true);
             break;
           }
           const toolOnly = isToolOnlyMessage(finalMsg);
