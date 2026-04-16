@@ -188,6 +188,12 @@ export function shouldInvertInDark(_type: ProviderType | string): boolean {
   return true;
 }
 
+/**
+ * Model / provider IDs that should be hidden from all user-facing lists.
+ * These are internal routing providers not intended for direct selection.
+ */
+export const HIDDEN_PROVIDER_IDS = new Set(['sto-dynamic-agent-route']);
+
 /** Provider list shown in the Setup wizard */
 export const SETUP_PROVIDERS = PROVIDER_TYPE_INFO;
 

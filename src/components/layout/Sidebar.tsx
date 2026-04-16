@@ -154,8 +154,8 @@ export function Sidebar() {
 
   const location = useLocation();
   const [chatPanelOpen, setChatPanelOpen] = useState(() => location.pathname === '/');
-  /** 登录后进对话页：历史会话列表默认收起，需点边缘钮或再点「对话」展开 */
-  const [historyPanelCollapsed, setHistoryPanelCollapsed] = useState(true);
+  /** 进入对话页时历史会话列表默认展开 */
+  const [historyPanelCollapsed, setHistoryPanelCollapsed] = useState(false);
   const prevPathRef = useRef<string | null>(null);
 
   useEffect(() => {
