@@ -19,6 +19,7 @@ import {
   Sun,
   Moon,
   Monitor,
+  Bookmark,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -272,6 +273,7 @@ export function Sidebar() {
 
   const navItems = [
     { to: '/skills', icon: <Puzzle className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.skills') },
+    { to: '/subscriptions', icon: <Bookmark className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.subscriptions') },
     { to: '/cron', icon: <Clock className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.cronTasks') },
   ];
 

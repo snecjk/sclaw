@@ -1,0 +1,37 @@
+{
+    "title": "Subscriptions",
+    "subtitle": "Browse and subscribe to platform features",
+    "search": "Search features...",
+    "refresh": "Refresh",
+    "filter": {
+        "all": "All ({{count}})",
+        "ai-enhanced": "AI Enhanced",
+        "data-analysis": "Data Analysis",
+        "efficiency-tools": "Efficiency Tools",
+        "communication": "Communication",
+        "security": "Security",
+        "automation": "Automation"
+    },
+    "actions": {
+        "subscribe": "Subscribe",
+        "unsubscribe": "Unsubscribe",
+        "subscribing": "Subscribing..."
+    },
+    "status": {
+        "subscribed": "Subscribed",
+        "unsubscribed": "Not subscribed"
+    },
+    "empty": "No features available",
+    "noResults": "No matching features found",
+    "detail": {
+        "tags": "Tags",
+        "subscriptionStatus": "Subscription Status",
+        "lastUpdated": "Last Updated",
+        "featureDetail": "Feature Details"
+    },
+    "toast": {
+        "subscribed": "Subscribed successfully",
+        "unsubscribed": "Unsubscribed successfully",
+        "error": "Operation failed"
+    }
+}

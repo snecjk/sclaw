@@ -16,7 +16,8 @@
         "collapse": "Collapse sidebar",
         "emptyChatHistory": "No conversations yet",
         "expandHistoryPanel": "Show conversation history",
-        "collapseHistoryPanel": "Hide conversation history"
+        "collapseHistoryPanel": "Hide conversation history",
+        "subscriptions": "Subscriptions"
     },
     "actions": {
         "save": "Save",

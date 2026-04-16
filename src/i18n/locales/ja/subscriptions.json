@@ -1,0 +1,37 @@
+{
+    "title": "サブスクリプション",
+    "subtitle": "プラットフォーム機能を閲覧・購読",
+    "search": "機能を検索...",
+    "refresh": "更新",
+    "filter": {
+        "all": "すべて ({{count}})",
+        "ai-enhanced": "AI強化",
+        "data-analysis": "データ分析",
+        "efficiency-tools": "効率化ツール",
+        "communication": "コミュニケーション",
+        "security": "セキュリティ",
+        "automation": "自動化"
+    },
+    "actions": {
+        "subscribe": "購読",
+        "unsubscribe": "購読解除",
+        "subscribing": "購読中..."
+    },
+    "status": {
+        "subscribed": "購読中",
+        "unsubscribed": "未購読"
+    },
+    "empty": "利用可能な機能はありません",
+    "noResults": "一致する機能が見つかりません",
+    "detail": {
+        "tags": "タグ",
+        "subscriptionStatus": "購読状態",
+        "lastUpdated": "最終更新",
+        "featureDetail": "機能の詳細"
+    },
+    "toast": {
+        "subscribed": "購読しました",
+        "unsubscribed": "購読を解除しました",
+        "error": "操作に失敗しました"
+    }
+}
