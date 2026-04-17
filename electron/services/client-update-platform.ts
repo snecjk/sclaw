@@ -70,7 +70,7 @@ export async function resolveUpdatePolicy(
   body: ClientUpdatePolicyPayload,
 ): Promise<ClientUpdatePolicyData | null> {
   const origin = getMemoryCenterApiOrigin(env);
-  const url = `${origin}/api/v1/client-updates/resolve`;
+  const url = `${origin}/agent/v1/client-updates/resolve`;
   try {
     const res = await proxyAwareFetch(url, {
       method: 'POST',
@@ -102,7 +102,7 @@ export async function postClientUpdateEvents(
 ): Promise<void> {
   if (events.length === 0) return;
   const origin = getMemoryCenterApiOrigin(env);
-  const url = `${origin}/api/v1/client-updates/events`;
+  const url = `${origin}/agent/v1/client-updates/events`;
   try {
     const res = await proxyAwareFetch(url, {
       method: 'POST',

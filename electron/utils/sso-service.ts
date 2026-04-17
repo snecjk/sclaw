@@ -38,6 +38,23 @@ export function buildLoginUrl(baseUrl: string, callbackUrl: string): string {
 }
 
 /**
+ * Decode the payload of a JWT (no signature verification) and return the
+ * parsed JSON object.  Returns `null` when the token is not a valid JWT.
+ */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    // base64url → base64
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = Buffer.from(base64, 'base64').toString('utf-8');
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Exchange a temporary authorization code for user info.
  */
 export async function exchangeCodeForUser(
@@ -74,7 +91,22 @@ export async function exchangeCodeForUser(
   }
 
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const stoToken: string = data.StoToken ?? '';
+
+  // Derive expiry from the JWT `exp` claim; fall back to 7 days if the
+  // token is not a valid JWT or the `exp` field is missing.
+  // Subtract 5 minutes so the client expires before the server, avoiding
+  // edge-case requests with an almost-expired token.
+  const LOCAL_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+  let expiresAt: Date;
+  const jwtPayload = stoToken ? decodeJwtPayload(stoToken) : null;
+  if (jwtPayload && typeof jwtPayload.exp === 'number') {
+    expiresAt = new Date(jwtPayload.exp * 1000 - LOCAL_EXPIRY_BUFFER_MS);
+    logger.info(`StoToken JWT exp: ${new Date(jwtPayload.exp * 1000).toISOString()}, local expiry (−5min): ${expiresAt.toISOString()}`);
+  } else {
+    expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000 - LOCAL_EXPIRY_BUFFER_MS);
+    logger.info('StoToken is not a JWT or missing exp claim, falling back to 7-day expiry (−5min)');
+  }
 
   return {
     id: u.Id ?? '',
@@ -85,7 +117,7 @@ export async function exchangeCodeForUser(
     openId: u.OpenId ?? '',
     signature: u.Signature ?? '',
     authenticatedAt: now.toISOString(),
-    stoToken: data.StoToken ?? '',
+    stoToken,
     stoTokenExpiresAt: expiresAt.toISOString(),
   };
 }

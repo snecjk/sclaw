@@ -162,6 +162,26 @@ function App() {
     };
   }, [navigate]);
 
+  // Listen for token-expired event from main process.
+  // When StoToken expires, clear renderer auth state so the auth guard
+  // automatically redirects to the login page.
+  useEffect(() => {
+    const handleTokenExpired = () => {
+      useAuthStore.setState({
+        isAuthenticated: false,
+        user: null,
+      });
+    };
+
+    const unsubscribe = window.electron.ipcRenderer.on('auth:token-expired', handleTokenExpired);
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, []);
+
   // Apply theme
   useEffect(() => {
     const root = window.document.documentElement;
