@@ -78,6 +78,7 @@ export class StoBizAgentSyncService {
     let remoteAgents: BizAgentItem[];
     try {
       remoteAgents = await this.fetchRemoteAgents(token);
+      logger.info(`fetch-remoteAgents:${JSON.stringify(remoteAgents)}`)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.warn(`[sto-biz-agent] Failed to fetch department agents: ${message}`);
