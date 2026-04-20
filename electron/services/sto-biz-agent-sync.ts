@@ -10,7 +10,7 @@ import type { GatewayManager } from '../gateway/manager';
 import { getStoToken } from '../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
-import { listConfiguredAgentIds, createAgentWithId } from '../utils/agent-config';
+import { listConfiguredAgentIds, createAgentWithId, setAgentFileTransformByOSS } from '../utils/agent-config';
 import { syncAllProviderAuthToRuntime } from './providers/provider-runtime-sync';
 import { logger } from '../utils/logger';
 
@@ -22,6 +22,7 @@ interface BizAgentItem {
   name: string;
   code: string;
   description: string;
+  fileTransformByOSS?: boolean;
 }
 
 export interface StoBizAgentSyncResult {
@@ -105,13 +106,25 @@ export class StoBizAgentSyncService {
       }
 
       if (existingIds.has(code)) {
+        try {
+          await setAgentFileTransformByOSS(code, item.fileTransformByOSS === true);
+        } catch (err) {
+          logger.warn(
+            `[sto-biz-agent] Failed to update fileTransformByOSS for existing agent ${code}: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        }
         logger.info(`[sto-biz-agent] Skipping existing agent: ${code}`);
         result.skipped.push(code);
         continue;
       }
 
       try {
-        await createAgentWithId(code, item.name, { inheritWorkspace: true });
+        await createAgentWithId(code, item.name, {
+          inheritWorkspace: true,
+          fileTransformByOSS: item.fileTransformByOSS === true,
+        });
         result.created.push(code);
         existingIds.add(code);
         logger.info(`[sto-biz-agent] Created agent: id=${code}, name=${item.name}`);
