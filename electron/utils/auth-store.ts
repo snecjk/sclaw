@@ -95,13 +95,39 @@ export async function setSsoEnvironment(env: SsoEnvironment): Promise<void> {
 }
 
 /**
+ * Notify all renderer windows that the StoToken has expired so they can
+ * redirect to the login page.  Uses dynamic import of `electron` to stay
+ * test-friendly (import fails gracefully outside Electron).
+ */
+async function notifyRendererTokenExpired(): Promise<void> {
+  try {
+    const { BrowserWindow } = await import('electron');
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('auth:token-expired');
+      }
+    }
+  } catch {
+    // Ignore – electron unavailable (unit-test environment).
+  }
+}
+
+/**
  * Get the stored StoToken (if present and not expired).
+ * When an expired token is detected the auth state is automatically cleared
+ * and all renderer windows are notified so the UI can redirect to login.
  */
 export async function getStoToken(): Promise<string | null> {
   const store = await getAuthStore();
   const user = store.get('user', null) as SsoUserInfo | null;
   if (!user?.stoToken || !user.stoTokenExpiresAt) return null;
-  if (new Date(user.stoTokenExpiresAt) <= new Date()) return null;
+  if (new Date(user.stoTokenExpiresAt) <= new Date()) {
+    logger.info('StoToken expired, clearing auth state and notifying renderer to redirect to login');
+    await clearAuthUser();
+    void removeSsoAuthFromOpenClaw();
+    void notifyRendererTokenExpired();
+    return null;
+  }
   return user.stoToken;
 }
 

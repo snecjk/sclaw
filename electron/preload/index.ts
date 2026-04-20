@@ -190,6 +190,7 @@ const electronAPI = {
         'oauth:error',
         'openclaw:cli-installed',
         'startup-progress',
+        'auth:token-expired',
       ];
 
       if (validChannels.includes(channel)) {
