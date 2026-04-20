@@ -6,6 +6,7 @@
 import type { SsoEnvironment, SsoUserInfo } from './auth-store';
 import { proxyAwareFetch } from './proxy-fetch';
 import { logger } from './logger';
+import { toCSTISOString } from './time-utils';
 
 
 export const SSO_ENVIRONMENTS: Record<SsoEnvironment, string> = {
@@ -102,7 +103,7 @@ export async function exchangeCodeForUser(
   const jwtPayload = stoToken ? decodeJwtPayload(stoToken) : null;
   if (jwtPayload && typeof jwtPayload.exp === 'number') {
     expiresAt = new Date(jwtPayload.exp * 1000 - LOCAL_EXPIRY_BUFFER_MS);
-    logger.info(`StoToken JWT exp: ${new Date(jwtPayload.exp * 1000).toISOString()}, local expiry (−5min): ${expiresAt.toISOString()}`);
+    logger.info(`StoToken JWT exp: ${toCSTISOString(new Date(jwtPayload.exp * 1000))}, local expiry (−5min): ${toCSTISOString(expiresAt)}`);
   } else {
     expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000 - LOCAL_EXPIRY_BUFFER_MS);
     logger.info('StoToken is not a JWT or missing exp claim, falling back to 7-day expiry (−5min)');
@@ -116,9 +117,9 @@ export async function exchangeCodeForUser(
     departmentName: u.DepartmentName ?? '',
     openId: u.OpenId ?? '',
     signature: u.Signature ?? '',
-    authenticatedAt: now.toISOString(),
+    authenticatedAt: toCSTISOString(now),
     stoToken,
-    stoTokenExpiresAt: expiresAt.toISOString(),
+    stoTokenExpiresAt: toCSTISOString(expiresAt),
   };
 }
 
