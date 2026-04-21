@@ -14,6 +14,7 @@ import { Chat } from './pages/Chat';
 import { Agents } from './pages/Agents';
 import { Channels } from './pages/Channels';
 import { Skills } from './pages/Skills';
+import { Subscriptions } from './pages/Subscriptions';
 import { Cron } from './pages/Cron';
 import { Settings } from './pages/Settings';
 import { Setup } from './pages/Setup';
@@ -236,6 +237,7 @@ function App() {
             <Route path="/agents" element={<Agents />} />
             <Route path="/channels" element={<Channels />} />
             <Route path="/skills" element={<Skills />} />
+            <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/cron" element={<Cron />} />
             <Route path="/settings/*" element={<Settings />} />
           </Route>

@@ -19,7 +19,7 @@ import { useAgentsStore } from '@/stores/agents';
 import { useSkillsStore } from '@/stores/skills';
 import { useProviderStore } from '@/stores/providers';
 import { buildProviderListItems } from '@/lib/provider-accounts';
-import { getProviderIconUrl, shouldInvertInDark } from '@/lib/providers';
+import { getProviderIconUrl, shouldInvertInDark, HIDDEN_PROVIDER_IDS } from '@/lib/providers';
 import { hostApiFetch } from '@/lib/host-api';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import { glassNestedCard, glassSectionSurface } from '@/lib/surfaces';
@@ -473,6 +473,7 @@ function buildModelOptions(
 ): ModelOption[] {
   const options: ModelOption[] = [];
   for (const { account, vendor } of providerItems) {
+    if (HIDDEN_PROVIDER_IDS.has(account.id) || HIDDEN_PROVIDER_IDS.has(account.vendorId)) continue;
     const iconUrl = getProviderIconUrl(account.vendorId);
     const invertDark = shouldInvertInDark(account.vendorId);
     const subLabel = account.label || vendor?.name || account.vendorId;
@@ -480,6 +481,7 @@ function buildModelOptions(
     if (customModels && customModels.length > 0) {
       // STO-style: expand each model from the catalog as a separate option
       for (const modelId of customModels) {
+        if (HIDDEN_PROVIDER_IDS.has(modelId)) continue;
         options.push({
           key: `${account.id}::${modelId}`,
           modelId,
@@ -492,15 +494,17 @@ function buildModelOptions(
       }
     } else if (account.model) {
       // Single-model account (non-STO)
-      options.push({
-        key: account.id,
-        modelId: account.model,
-        accountId: account.id,
-        displayName: account.label || account.id,
-        subLabel: account.model,
-        iconUrl,
-        invertDark,
-      });
+      if (!HIDDEN_PROVIDER_IDS.has(account.model)) {
+        options.push({
+          key: account.id,
+          modelId: account.model,
+          accountId: account.id,
+          displayName: account.label || account.id,
+          subLabel: account.model,
+          iconUrl,
+          invertDark,
+        });
+      }
     }
   }
   return options;

@@ -1,0 +1,37 @@
+{
+    "title": "数据订阅中心",
+    "subtitle": "浏览和订阅平台数据",
+    "search": "搜索功能...",
+    "refresh": "刷新",
+    "filter": {
+        "all": "全部 ({{count}})",
+        "ai-enhanced": "AI 增强",
+        "data-analysis": "数据分析",
+        "efficiency-tools": "效率工具",
+        "communication": "通信集成",
+        "security": "安全防护",
+        "automation": "自动化"
+    },
+    "actions": {
+        "subscribe": "订阅",
+        "unsubscribe": "取消订阅",
+        "subscribing": "订阅中..."
+    },
+    "status": {
+        "subscribed": "已订阅",
+        "unsubscribed": "未订阅"
+    },
+    "empty": "暂无可用功能",
+    "noResults": "未找到匹配的功能",
+    "detail": {
+        "tags": "分类标签",
+        "subscriptionStatus": "订阅状态",
+        "lastUpdated": "最后更新",
+        "featureDetail": "功能详情"
+    },
+    "toast": {
+        "subscribed": "订阅成功",
+        "unsubscribed": "已取消订阅",
+        "error": "操作失败"
+    }
+}

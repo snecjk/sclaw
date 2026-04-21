@@ -39,6 +39,7 @@ import {
   resolveProviderModelForSave,
   shouldShowProviderModelId,
   shouldInvertInDark,
+  HIDDEN_PROVIDER_IDS,
 } from '@/lib/providers';
 import {
   buildProviderAccountId,
@@ -180,7 +181,8 @@ export function ProvidersSettings() {
   const vendorMap = new Map(vendors.map((vendor) => [vendor.id, vendor]));
   const existingVendorIds = new Set(accounts.map((account) => account.vendorId));
   const displayProviders = useMemo(
-    () => buildProviderListItems(accounts, statuses, vendors, defaultAccountId),
+    () => buildProviderListItems(accounts, statuses, vendors, defaultAccountId)
+      .filter((item) => !HIDDEN_PROVIDER_IDS.has(item.account.id) && !HIDDEN_PROVIDER_IDS.has(item.account.vendorId)),
     [accounts, statuses, vendors, defaultAccountId],
   );
 
@@ -282,7 +284,7 @@ export function ProvidersSettings() {
         <div className="space-y-3">
           {displayProviders.flatMap((item) => {
             const stoCustomModels: string[] = item.account.vendorId === 'sto'
-              ? (item.account.metadata?.customModels ?? [])
+              ? (item.account.metadata?.customModels ?? []).filter((m: string) => !HIDDEN_PROVIDER_IDS.has(m))
               : [];
             if (stoCustomModels.length > 0) {
               return stoCustomModels.map((m) => (

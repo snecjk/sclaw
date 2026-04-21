@@ -16,7 +16,8 @@
         "collapse": "サイドバーを折りたたむ",
         "emptyChatHistory": "会話履歴はありません",
         "expandHistoryPanel": "履歴パネルを開く",
-        "collapseHistoryPanel": "履歴パネルを閉じる"
+        "collapseHistoryPanel": "履歴パネルを閉じる",
+        "subscriptions": "サブスクリプション"
     },
     "actions": {
         "save": "保存",
