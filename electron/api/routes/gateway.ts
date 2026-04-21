@@ -2,6 +2,11 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { PORTS } from '../../utils/config';
 import { buildOpenClawControlUiUrl } from '../../utils/openclaw-control-ui';
 import { getSetting } from '../../utils/store';
+import { getStoToken } from '../../utils/auth-store';
+import { buildStoMemoryCenterAuthHeaders } from '../../utils/sto-memory-api-auth';
+import { resolveStoBaseUrl } from '../../utils/sto-domain';
+import { listAgentsSnapshot } from '../../utils/agent-config';
+import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -11,6 +16,46 @@ export async function handleGatewayRoutes(
   url: URL,
   ctx: HostApiContext,
 ): Promise<boolean> {
+  const BIZ_AGENT_TEMP_UPLOAD_PATH = '/agent/v1/biz-agent/attachments/upload';
+  const getAgentIdFromSessionKey = (sessionKey: string): string => {
+    if (!sessionKey.startsWith('agent:')) return 'main';
+    const [, agentId] = sessionKey.split(':');
+    return (agentId || 'main').trim().toLowerCase();
+  };
+  const shouldTransformAttachmentsByOSS = async (sessionKey: string): Promise<boolean> => {
+    const snapshot = await listAgentsSnapshot();
+    const agentId = getAgentIdFromSessionKey(sessionKey);
+    const agent = snapshot.agents.find((entry) => entry.id.trim().toLowerCase() === agentId);
+    return agent?.fileTransformByOSS === true;
+  };
+  const uploadMediaToTempOSS = async (filePath: string, fileName: string): Promise<string> => {
+    const token = await getStoToken();
+    if (!token) {
+      throw new Error('stoToken is missing, cannot upload media to OSS');
+    }
+    const fsP = await import('node:fs/promises');
+    const fileBuffer = await fsP.readFile(filePath);
+    const formData = new (globalThis as { FormData: new () => any }).FormData();
+    const BlobCtor = (globalThis as { Blob: new (parts: Array<Buffer>) => any }).Blob;
+    formData.append('file', new BlobCtor([fileBuffer]), fileName);
+    const baseUrl = await resolveStoBaseUrl();
+    const resp = await proxyAwareFetch(`${baseUrl}${BIZ_AGENT_TEMP_UPLOAD_PATH}`, {
+      method: 'POST',
+      headers: buildStoMemoryCenterAuthHeaders(token),
+      body: formData,
+    });
+    if (!resp.ok) {
+      const bodyText = await resp.text().catch(() => '');
+      throw new Error(`temp OSS upload failed: ${resp.status} ${bodyText}`);
+    }
+    const payload = await resp.json() as { success?: boolean; data?: { url?: string }; url?: string };
+    const url = payload.data?.url || payload.url;
+    if (!url) {
+      throw new Error('temp OSS upload response missing url');
+    }
+    return url;
+  };
+
   if (url.pathname === '/api/app/gateway-info' && req.method === 'GET') {
     const status = ctx.gatewayManager.getStatus();
     const token = await getSetting('gatewayToken');
@@ -96,9 +141,15 @@ export async function handleGatewayRoutes(
       ]);
       const imageAttachments: Array<{ content: string; mimeType: string; fileName: string }> = [];
       const fileReferences: string[] = [];
+      const transformByOSS = await shouldTransformAttachmentsByOSS(body.sessionKey);
       if (body.media && body.media.length > 0) {
         const fsP = await import('node:fs/promises');
         for (const m of body.media) {
+          if (transformByOSS) {
+            const ossTempUrl = await uploadMediaToTempOSS(m.filePath, m.fileName);
+            fileReferences.push(`[media attached: ${ossTempUrl} (${m.mimeType}) | ${ossTempUrl}]`);
+            continue;
+          }
           fileReferences.push(`[media attached: ${m.filePath} (${m.mimeType}) | ${m.filePath}]`);
           if (VISION_MIME_TYPES.has(m.mimeType)) {
             const fileBuffer = await fsP.readFile(m.filePath);
