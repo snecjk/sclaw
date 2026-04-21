@@ -43,6 +43,7 @@ interface AgentListEntry extends Record<string, unknown> {
   workspace?: string;
   agentDir?: string;
   model?: string | AgentModelConfig;
+  fileTransformByOSS?: boolean;
 }
 
 interface AgentsConfig extends Record<string, unknown> {
@@ -86,6 +87,7 @@ export interface AgentSummary {
   agentDir: string;
   mainSessionKey: string;
   channelTypes: string[];
+  fileTransformByOSS: boolean;
 }
 
 export interface AgentsSnapshot {
@@ -505,6 +507,7 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
       channelTypes: configuredChannels
         .filter((ct) => ownedChannels.has(ct))
         .map((channelType) => toUiChannelType(channelType)),
+      fileTransformByOSS: entry.fileTransformByOSS === true,
     };
   });
 
@@ -594,7 +597,7 @@ export async function createAgent(
 export async function createAgentWithId(
   id: string,
   name: string,
-  options?: { inheritWorkspace?: boolean },
+  options?: { inheritWorkspace?: boolean; fileTransformByOSS?: boolean },
 ): Promise<AgentsSnapshot> {
   if (!id || !id.trim()) throw new Error('Agent ID must not be empty');
   if (id === MAIN_AGENT_ID) throw new Error('Cannot create agent with reserved ID "main"');
@@ -616,6 +619,7 @@ export async function createAgentWithId(
       name: normalizedName,
       workspace: `~/.openclaw/workspace-${id}`,
       agentDir: getDefaultAgentDirPath(id),
+      fileTransformByOSS: options?.fileTransformByOSS === true,
     };
 
     if (!nextEntries.some((entry) => entry.id === MAIN_AGENT_ID) && syntheticMain) {
@@ -631,6 +635,31 @@ export async function createAgentWithId(
     await provisionAgentFilesystem(config, newAgent, { inheritWorkspace: options?.inheritWorkspace });
     await writeOpenClawConfig(config);
     logger.info('Created agent config entry (explicit ID)', { agentId: id, inheritWorkspace: !!options?.inheritWorkspace });
+    return buildSnapshotFromConfig(config);
+  });
+}
+
+export async function setAgentFileTransformByOSS(agentId: string, enabled: boolean): Promise<AgentsSnapshot> {
+  return withConfigLock(async () => {
+    const config = await readOpenClawConfig() as AgentConfigDocument;
+    const { agentsConfig, entries } = normalizeAgentsConfig(config);
+    const index = entries.findIndex((entry) => entry.id === agentId);
+    if (index === -1) {
+      throw new Error(`Agent "${agentId}" not found`);
+    }
+
+    entries[index] = {
+      ...entries[index],
+      fileTransformByOSS: enabled,
+    };
+
+    config.agents = {
+      ...agentsConfig,
+      list: entries,
+    };
+
+    await writeOpenClawConfig(config);
+    logger.info('Updated agent fileTransformByOSS', { agentId, enabled });
     return buildSnapshotFromConfig(config);
   });
 }
