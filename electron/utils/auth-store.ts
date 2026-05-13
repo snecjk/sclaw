@@ -5,6 +5,7 @@
 
 import { writeFile, unlink } from 'fs/promises';
 import { join } from 'path';
+import { homedir } from 'node:os';
 import { getOpenClawConfigDir, ensureDir } from './paths';
 import { logger } from './logger';
 import { getCurrentEnvConfig } from '../../shared/env-config';
@@ -75,6 +76,7 @@ export async function setAuthUser(user: SsoUserInfo): Promise<void> {
   const store = await getAuthStore();
   store.set('isAuthenticated', true);
   store.set('user', user);
+  await syncSsoAuthToSaiCli(user);
 }
 
 export async function clearAuthUser(): Promise<void> {
@@ -82,6 +84,7 @@ export async function clearAuthUser(): Promise<void> {
   const store = await getAuthStore();
   store.set('isAuthenticated', false);
   store.set('user', null);
+  await removeSsoAuthFromSaiCli();
 }
 
 export async function getSsoEnvironment(): Promise<SsoEnvironment> {
@@ -144,6 +147,48 @@ export async function syncSsoAuthToOpenClaw(user: SsoUserInfo): Promise<void> {
     await writeFile(filePath, JSON.stringify({ ...user }, null, 2), 'utf-8');
   } catch (err) {
     logger.warn('Failed to sync SSO auth to ~/.openclaw/sso-auth.json:', err);
+  }
+}
+
+/**
+ * Write SSO token to ~/.sai/sso-auth.json so SAI CLI can share the login session.
+ */
+export async function syncSsoAuthToSaiCli(user: SsoUserInfo): Promise<void> {
+  try {
+    const dir = join(homedir(), '.sai');
+    ensureDir(dir);
+    const filePath = join(dir, 'sso-auth.json');
+    logger.info('Sync SSO auth to SAI CLI', filePath);
+    await writeFile(
+      filePath,
+      JSON.stringify(
+        {
+          access_token: user.stoToken,
+          token_type: 'Bearer',
+          expires_at: user.stoTokenExpiresAt,
+          user_id: user.id,
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+  } catch (err) {
+    logger.warn('Failed to sync SSO auth to ~/.sai/sso-auth.json:', err);
+  }
+}
+
+/**
+ * Remove ~/.sai/sso-auth.json on logout or token expiry.
+ */
+export async function removeSsoAuthFromSaiCli(): Promise<void> {
+  try {
+    const filePath = join(homedir(), '.sai', 'sso-auth.json');
+    logger.info('Remove SSO auth from SAI CLI', filePath);
+    await unlink(filePath);
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') return;
+    logger.warn('Failed to remove ~/.sai/sso-auth.json:', err);
   }
 }
 

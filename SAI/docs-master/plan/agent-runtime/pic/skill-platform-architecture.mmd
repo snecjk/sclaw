@@ -1,0 +1,52 @@
+graph TB
+    subgraph "Skill 管理平台"
+        direction TB
+        
+        Create["Skill 创建/编辑"]
+        Sandbox["沙箱测试环境"]
+        Review["审核工作流"]
+        AutoPublish["审核通过自动触发"]
+        
+        Create -->|"提交"| Sandbox
+        Sandbox -->|"测试通过"| Review
+        Sandbox -.->|"测试失败"| Create
+        
+        Review -->|"通过"| AutoPublish
+        Review -.->|"驳回"| Create
+        
+        subgraph "自动发布流程"
+            direction LR
+            GenId["生成 skillId"]
+            WriteIndex["写入元数据索引"]
+            Compile["SkillCompiler 编译"]
+            PublishOSS["OSS 发布"]
+            
+            AutoPublish --> GenId --> WriteIndex --> Compile --> PublishOSS
+        end
+    end
+    
+    subgraph "版本管理（贯穿全生命周期）"
+        direction LR
+        V1["草稿版本"]
+        V2["测试版本"]
+        V3["候选版本"]
+        V4["正式版本"]
+        
+        V1 -.->|"提交沙箱"| V2 -.->|"沙箱通过"| V3 -.->|"审核通过"| V4
+    end
+    
+    PublishOSS -->|"发布到"| OSS["OSS 存储<br/>sai/skill/"]
+    
+    OSS -->|"Agent 主动拉取"| Agent["Agent Runtime<br/>· 拉取索引 · 加载执行包<br/>· NLU 决策 · 执行 Skill"]
+    
+    classDef stage fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef auto fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef version fill:#fff3e0,stroke:#e65100,stroke-width:1px,stroke-dasharray: 5 5
+    classDef storage fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    classDef agent fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    
+    class Create,Sandbox,Review stage
+    class AutoPublish,GenId,WriteIndex,Compile,PublishOSS auto
+    class V1,V2,V3,V4 version
+    class OSS storage
+    class Agent agent

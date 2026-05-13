@@ -393,6 +393,7 @@ async function initialize(): Promise<void> {
     { syncAllProviderAuthToRuntime },
     { ensureClawXContext, repairClawXOnlyBootstrapFiles },
     { autoInstallCliIfNeeded, generateCompletionCache, installCompletionToProfile },
+    { autoInstallSaiCliIfNeeded },
     { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled },
     { ensureAllBundledPluginsInstalledAsync },
     { startHostApiServer },
@@ -413,6 +414,7 @@ async function initialize(): Promise<void> {
     import('../services/providers/provider-runtime-sync'),
     import('../utils/openclaw-workspace'),
     import('../utils/openclaw-cli'),
+    import('../utils/sai-cli'),
     import('../utils/skill-config'),
     import('../utils/plugin-install'),
     import('../api/server'),
@@ -530,6 +532,12 @@ async function initialize(): Promise<void> {
       installCompletionToProfile();
     }).catch((error) => {
       logger.warn('CLI auto-install failed:', error);
+    });
+
+    await autoInstallSaiCliIfNeeded((installedPath) => {
+      mainWindow?.webContents.send('sai:cli-installed', installedPath);
+    }).catch((error) => {
+      logger.warn('SAI CLI auto-install failed:', error);
     });
   });
 

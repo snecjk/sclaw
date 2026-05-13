@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 800" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+<defs>
+  <marker id="arrowBlue" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="10" markerHeight="7" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/>
+  </marker>
+  <marker id="arrowRed" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="10" markerHeight="7" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444"/>
+  </marker>
+  <marker id="arrowGreen" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="10" markerHeight="7" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#059669"/>
+  </marker>
+  <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+    <feDropShadow dx="2" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.08"/>
+  </filter>
+  <filter id="shadowSmall" x="-5%" y="-5%" width="110%" height="110%">
+    <feDropShadow dx="1" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.06"/>
+  </filter>
+</defs>
+<rect width="1100" height="800" fill="#ffffff"/>
+<text x="550" y="36" text-anchor="middle" font-size="20" font-weight="700" fill="#1e293b">PoP Token 安全鉴权链路图 (v2)</text>
+<line x1="320" y1="46" x2="780" y2="46" stroke="#e2e8f0" stroke-width="1.5"/>
+<rect x="30" y="70" width="380" height="550" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="6,3"/>
+<rect x="30" y="70" width="380" height="28" rx="12" fill="#e0e7ff"/>
+<text x="50" y="89" font-size="14" font-weight="600" fill="#3730a3">客户端层 (Client)</text>
+<rect x="50" y="120" width="340" height="180" rx="8" fill="#ffffff" stroke="#38bdf8" stroke-width="1.5" filter="url(#shadowSmall)"/>
+<rect x="50" y="120" width="340" height="24" rx="8" fill="#bae6fd"/>
+<rect x="50" y="130" width="340" height="14" fill="#bae6fd"/>
+<text x="70" y="137" font-size="12" font-weight="600" fill="#0369a1">云上 Docker 环境</text>
+<text x="70" y="160" font-size="11" fill="#334155">启动时 K8s Secret 注入只读密钥：</text>
+<text x="70" y="175" font-size="10" font-family="monospace" fill="#64748b">/run/secrets/sai-cli-sign-key</text>
+<rect x="70" y="190" width="300" height="32" rx="4" fill="#f0f9ff" stroke="#bae6fd"/>
+<text x="85" y="204" font-size="11" font-weight="500" fill="#334155">CLI 直接读取密钥签名：</text>
+<text x="85" y="218" font-size="10" fill="#64748b">原始 Token + 容器标识 + 时间戳</text>
+<rect x="50" y="330" width="340" height="240" rx="8" fill="#ffffff" stroke="#86efac" stroke-width="1.5" filter="url(#shadowSmall)"/>
+<rect x="50" y="330" width="340" height="24" rx="8" fill="#bbf7d0"/>
+<rect x="50" y="340" width="340" height="14" fill="#bbf7d0"/>
+<text x="70" y="347" font-size="12" font-weight="600" fill="#15803d">本地客户端环境 (Local Client)</text>
+<text x="70" y="375" font-size="11" fill="#334155">安装 CLI 附带后台代理 (sai-agent)</text>
+<text x="70" y="395" font-size="11" fill="#334155">密钥存入 OS Keychain (非明文，防 AI 窃取)</text>
+<rect x="70" y="410" width="300" height="55" rx="4" fill="#f0fdf4" stroke="#86efac"/>
+<text x="85" y="428" font-size="11" font-weight="500" fill="#334155">CLI 调用时请求 sai-agent 签名：</text>
+<text x="85" y="443" font-size="10" fill="#64748b">CLI --&gt; 127.0.0.1:8899</text>
+<text x="85" y="456" font-size="10" fill="#64748b">sai-agent 读取私钥生成签名</text>
+<rect x="80" y="260" width="280" height="65" rx="6" fill="#fff7ed" stroke="#fb923c" stroke-width="1"/>
+<text x="220" y="278" text-anchor="middle" font-size="11" font-weight="600" fill="#c2410c">请求包 (双环境汇聚)</text>
+<text x="90" y="294" font-size="10" fill="#64748b">Authorization: Bearer &lt;stotoken&gt;</text>
+<text x="90" y="308" font-size="10" fill="#64748b">X-Signature: &lt;环境签名&gt; | X-Timestamp</text>
+<text x="90" y="322" font-size="10" fill="#64748b">X-User-Query: &lt;用户原声&gt; (监控)</text>
+<rect x="440" y="70" width="360" height="550" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="6,3"/>
+<rect x="440" y="70" width="360" height="28" rx="12" fill="#ede9fe"/>
+<text x="460" y="89" font-size="14" font-weight="600" fill="#5b21b6">云端统一网关 (Gateway)</text>
+<rect x="460" y="120" width="320" height="330" rx="8" fill="#ffffff" stroke="#a78bfa" stroke-width="1.5" filter="url(#shadowSmall)"/>
+<rect x="460" y="120" width="320" height="24" rx="8" fill="#d8b4fe"/>
+<rect x="460" y="130" width="320" height="14" fill="#d8b4fe"/>
+<text x="480" y="137" font-size="12" font-weight="600" fill="#6b21a8">PoP 签名校验引擎</text>
+<rect x="480" y="165" width="280" height="28" rx="4" fill="#f5f3ff" stroke="#c084fc" stroke-width="0.5"/>
+<text x="495" y="183" font-size="11" fill="#334155">1. 提取 Token, 签名, 用户原声</text>
+<rect x="480" y="200" width="280" height="28" rx="4" fill="#f5f3ff" stroke="#c084fc" stroke-width="0.5"/>
+<text x="495" y="218" font-size="11" fill="#334155">2. 验证签名合法性 + 环境匹配</text>
+<rect x="480" y="235" width="280" height="28" rx="4" fill="#f5f3ff" stroke="#c084fc" stroke-width="0.5"/>
+<text x="495" y="253" font-size="11" fill="#334155">3. 校验防重放 (30s 滑动窗口)</text>
+<rect x="480" y="270" width="280" height="28" rx="4" fill="#f5f3ff" stroke="#c084fc" stroke-width="0.5"/>
+<text x="495" y="288" font-size="11" fill="#334155">4. 校验通过 → 采集审计日志</text>
+<rect x="480" y="305" width="280" height="28" rx="4" fill="#f5f3ff" stroke="#c084fc" stroke-width="0.5"/>
+<text x="495" y="323" font-size="11" fill="#334155">5. 剥离安全 Header (X-Signature 等)</text>
+<rect x="480" y="340" width="280" height="28" rx="4" fill="#f5f3ff" stroke="#c084fc" stroke-width="0.5"/>
+<text x="495" y="358" font-size="11" fill="#334155">6. 校验失败 → 拦截并返回 403</text>
+<rect x="480" y="390" width="280" height="42" rx="6" fill="#f0fdf4" stroke="#86efac"/>
+<text x="620" y="406" text-anchor="middle" font-size="11" font-weight="600" fill="#15803d">透传请求 (已清洗)</text>
+<text x="620" y="422" text-anchor="middle" font-size="10" fill="#64748b">Authorization: Bearer &lt;原始 stotoken&gt;</text>
+<rect x="830" y="70" width="250" height="550" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="6,3"/>
+<rect x="830" y="70" width="250" height="28" rx="12" fill="#dcfce7"/>
+<text x="850" y="89" font-size="14" font-weight="600" fill="#166534">下游业务 API 层</text>
+<rect x="850" y="120" width="210" height="260" rx="8" fill="#ffffff" stroke="#4ade80" stroke-width="1.5" filter="url(#shadowSmall)"/>
+<rect x="850" y="120" width="210" height="24" rx="8" fill="#bbf7d0"/>
+<rect x="850" y="130" width="210" height="14" fill="#bbf7d0"/>
+<text x="870" y="137" font-size="12" font-weight="600" fill="#15803d">业务 API 服务</text>
+<text x="870" y="165" font-size="11" fill="#334155">* 接收原始 stotoken</text>
+<text x="870" y="185" font-size="11" fill="#334155">* 照常验证 Token 权限</text>
+<text x="870" y="205" font-size="11" fill="#334155">* 执行业务逻辑</text>
+<text x="870" y="230" font-size="11" fill="#334155">零感知网关拦截</text>
+<text x="870" y="250" font-size="11" fill="#334155">零改造业务代码</text>
+<text x="870" y="270" font-size="11" fill="#334155">零修改鉴权流程</text>
+<path d="M430,210 L460,210" fill="none" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+<rect x="390" y="194" width="80" height="20" rx="4" fill="#ffffff" stroke="#2563eb" stroke-width="0.5"/>
+<text x="430" y="208" text-anchor="middle" font-size="10" font-weight="500" fill="#2563eb">请求转发</text>
+<path d="M430,405 L460,405" fill="none" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+<rect x="390" y="389" width="80" height="20" rx="4" fill="#ffffff" stroke="#2563eb" stroke-width="0.5"/>
+<text x="430" y="403" text-anchor="middle" font-size="10" font-weight="500" fill="#2563eb">请求转发</text>
+<path d="M800,410 L850,410" fill="none" stroke="#059669" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+<rect x="770" y="394" width="90" height="28" rx="4" fill="#ffffff" stroke="#059669" stroke-width="0.5"/>
+<text x="815" y="406" text-anchor="middle" font-size="10" font-weight="500" fill="#059669">校验成功</text>
+<text x="815" y="418" text-anchor="middle" font-size="9" fill="#64748b">仅带原始Token</text>
+<path d="M620,350 L620,650 L300,650 L300,610" fill="none" stroke="#ef4444" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrowRed)"/>
+<rect x="430" y="634" width="100" height="24" rx="4" fill="#ffffff" stroke="#ef4444" stroke-width="0.5"/>
+<text x="480" y="650" text-anchor="middle" font-size="10" font-weight="500" fill="#ef4444">返回 403 拒绝</text>
+<rect x="30" y="650" width="1050" height="130" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+<text x="50" y="672" font-size="13" font-weight="600" fill="#334155">核心设计说明</text>
+<line x1="50" y1="695" x2="90" y2="695" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+<text x="95" y="699" font-size="11" fill="#475569">客户端 -> 网关：携带 Token + X-Signature (环境证明) + X-User-Query (原声)</text>
+<line x1="50" y1="720" x2="90" y2="720" stroke="#059669" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+<text x="95" y="724" font-size="11" fill="#475569">网关 -> 业务API：剥离安全 Header，仅透传原始 Token (零侵入)</text>
+<line x1="50" y1="745" x2="90" y2="745" stroke="#ef4444" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrowRed)"/>
+<text x="95" y="749" font-size="11" fill="#475569">签名/环境校验失败：直接拦截 403，请求不达下游，保障绝对安全</text>
+<text x="850" y="699" font-size="11" font-weight="600" fill="#1e293b">安全特性：Token 离开特定环境即失效 | 零侵入下游业务系统</text>
+<text x="850" y="720" font-size="11" fill="#64748b">云上：K8s Secret 密钥 | 本地：OS Keychain + sai-agent 代理签名</text>
+<text x="850" y="741" font-size="11" fill="#64748b">符合 OAuth 2.0 DPoP 标准 | 防 AI 窃取 | 防重放 | 防越权复用</text>
+</svg>

@@ -669,6 +669,50 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             },
           };
         }
+        case 'sai': {
+          if (request.action === 'checkInstalled') {
+            data = await import('../utils/sai-cli').then((m) => m.saiCheckInstalled());
+            break;
+          }
+          if (request.action === 'version') {
+            data = await import('../utils/sai-cli').then((m) => m.saiVersion());
+            break;
+          }
+          if (request.action === 'whoami') {
+            data = await import('../utils/sai-cli').then((m) => m.saiWhoami());
+            break;
+          }
+          if (request.action === 'discover') {
+            const payload = request.payload as { context?: string } | undefined;
+            data = await import('../utils/sai-cli').then((m) => m.saiDiscover(payload?.context));
+            break;
+          }
+          if (request.action === 'list') {
+            const payload = request.payload as { product?: string; module?: string } | undefined;
+            data = await import('../utils/sai-cli').then((m) => m.saiList(payload));
+            break;
+          }
+          if (request.action === 'execute') {
+            const payload = request.payload as
+              | { commandPath: string; params?: Record<string, unknown> }
+              | undefined;
+            if (!payload?.commandPath) {
+              throw new Error('Invalid sai.execute payload: commandPath required');
+            }
+            data = await import('../utils/sai-cli').then((m) =>
+              m.saiExecute(payload.commandPath, payload.params),
+            );
+            break;
+          }
+          return {
+            id: request.id,
+            ok: false,
+            error: {
+              code: 'UNSUPPORTED',
+              message: `APP_REQUEST_UNSUPPORTED:${request.module}.${request.action}`,
+            },
+          };
+        }
         case 'question': {
           if (request.action === 'split') {
             const payload = request.payload as {

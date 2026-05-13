@@ -83,6 +83,12 @@ const UNIFIED_CHANNELS = new Set<string>([
   'cron:trigger',
   'usage:recentTokenHistory',
   'question:split',
+  'sai:checkInstalled',
+  'sai:version',
+  'sai:whoami',
+  'sai:discover',
+  'sai:list',
+  'sai:execute',
 ]);
 
 const customInvokers = new Map<Exclude<TransportKind, 'ipc'>, TransportInvoker>();
