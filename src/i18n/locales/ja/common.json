@@ -1,5 +1,13 @@
 {
     "sidebar": {
+        "home": "ホーム",
+        "myData": "マイデータ",
+        "workspace": "ワークスペース",
+        "sessionList": "会話一覧",
+        "toggleSidebarCollapse": "サイドバーを折りたたむ",
+        "toggleSidebarExpand": "サイドバーを展開",
+        "appVersionLabel": "v {{version}}",
+        "enterpriseTag": "エンタープライズ",
         "chat": "チャット",
         "newChat": "新しいチャット",
         "cronTasks": "定期タスク",

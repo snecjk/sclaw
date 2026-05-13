@@ -1,0 +1,64 @@
+{
+  "hero": {
+    "title": "STO Claw，让网点运营更高效",
+    "subtitle": "搭载 AI 智能工作平台，重塑网点智慧运营新模式，赋能网点高效智能运营"
+  },
+  "summary": {
+    "heading": "数据概览",
+    "recon": {
+      "title": "昨日总部对账结果",
+      "pill": "利息到账",
+      "status": "已完成",
+      "stat1Label": "总收支",
+      "stat1Value": "128,560",
+      "stat1Unit": "元",
+      "stat2Label": "收入",
+      "stat2Value": "98,750",
+      "stat2Unit": "元",
+      "stat3Label": "支出",
+      "stat3Value": "29,810",
+      "stat3Unit": "元",
+      "footerTeam": "王牌结算小组",
+      "footerHint": "存在异常 4 项"
+    },
+    "customer": {
+      "title": "昨日异常客户跟踪",
+      "pill": "客户服务",
+      "status": "已处理",
+      "stat1Label": "异常项",
+      "stat1Value": "3",
+      "stat1Unit": "项",
+      "stat2Label": "涉及客户",
+      "stat2Value": "6",
+      "stat2Unit": "个",
+      "stat3Label": "影响金额",
+      "stat3Value": "10,000",
+      "stat3Unit": "元",
+      "footerTeam": "客户跟踪小组",
+      "footerHint": "存在异常 3 项"
+    },
+    "cost": {
+      "title": "本月出港成本报表",
+      "pill": "出港成本",
+      "status": "已完成",
+      "stat1Label": "出港单票成本",
+      "stat1Value": "2.36",
+      "stat1Unit": "元/票",
+      "stat2Label": "客户成本异常",
+      "stat2Value": "3",
+      "stat2Unit": "个",
+      "footerTeam": "出港成本小组",
+      "footerHint": "存在异常 1 项"
+    }
+  },
+  "assistant": {
+    "placeholder": "请输入您的问题，支持自然语言提问或上传文件…",
+    "uploadFile": "上传文件",
+    "skillCall": "技能调用",
+    "dataAnalysis": "数据分析",
+    "workflow": "工作流调用",
+    "send": "发送",
+    "gatewayRequired": "请先连接网关后再发送。",
+    "sendFailed": "发送失败，请到对话页查看详情。"
+  }
+}
