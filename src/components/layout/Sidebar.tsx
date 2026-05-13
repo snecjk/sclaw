@@ -48,7 +48,7 @@ import { useTranslation } from 'react-i18next';
 import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
 import logoSvg from '@/assets/logo.svg';
 import packageJson from '../../../package.json';
-import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
+import { taskDetailPath, listTaskEntryIds, type StoTaskId } from '@/lib/sto-tasks';
 
 type SessionBucketKey =
   | 'today'
@@ -99,24 +99,53 @@ const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' | 'taskAbn
   { id: 'outbound-cost', labelKey: 'taskOutboundCost' },
 ];
 
-/** 侧栏「任务列表」文本链（浅灰选中底，对齐设计稿图二）。 */
-function SidebarTaskTextLink({ to, label, showDot }: { to: string; label: string; showDot?: boolean }) {
+/** 侧栏任务：主标题 + 日期药丸子项（对齐设计稿）。 */
+function SidebarTaskGroup({
+  taskId,
+  label,
+  showDot,
+}: {
+  taskId: StoTaskId;
+  label: string;
+  showDot?: boolean;
+}) {
   const { pathname } = useLocation();
-  const isActive = matchPath({ path: to, end: true, caseSensitive: false }, pathname) != null;
+  const { t } = useTranslation('tasks');
+  const entries = listTaskEntryIds(taskId);
+  const underTask = pathname.startsWith(`/tasks/${taskId}`);
 
   return (
-    <NavLink
-      to={to}
+    <div
       className={cn(
-        'flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium transition-colors',
-        isActive
-          ? 'bg-black/[0.06] text-foreground dark:bg-white/[0.1]'
-          : 'text-foreground/85 hover:bg-black/[0.04] dark:text-foreground/80 dark:hover:bg-white/[0.06]',
+        'rounded-lg px-2 py-1.5 transition-colors',
+        underTask ? 'bg-black/[0.04] dark:bg-white/[0.06]' : 'hover:bg-black/[0.02] dark:hover:bg-white/[0.04]',
       )}
     >
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      {showDot ? <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" aria-hidden /> : null}
-    </NavLink>
+      <div className="flex items-center justify-between gap-2 px-0.5">
+        <span className="text-[13px] font-medium text-foreground">{label}</span>
+        {showDot ? <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" aria-hidden /> : null}
+      </div>
+      <div className="mt-1.5 flex flex-col items-start gap-1">
+        {entries.map((entryId) => {
+          const to = taskDetailPath(taskId, entryId);
+          const active = pathname === to;
+          return (
+            <NavLink
+              key={entryId}
+              to={to}
+              className={cn(
+                'relative z-[1] inline-flex w-full max-w-full justify-start rounded-full px-2.5 py-1 text-left text-xs font-medium transition-colors',
+                active
+                  ? 'bg-[#ededed] text-foreground dark:bg-white/[0.12]'
+                  : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground dark:bg-white/[0.08]',
+              )}
+            >
+              {t(`sidebarEntry.${taskId}.${entryId}`)}
+            </NavLink>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -381,6 +410,8 @@ export function Sidebar() {
           sidebarCollapsed ? 'px-0' : 'px-2',
         )}
       >
+        {/* 固定区：避免下方 flex-1 会话占位在滚动叠层时盖住任务子链（如第二条日期药丸） */}
+        <div className="relative z-10 flex shrink-0 flex-col gap-1">
         <div className={cn('flex flex-col gap-1', sidebarCollapsed && 'mt-2')}>
           {primaryNav.map((item) => (
             <SidebarNavLink
@@ -402,9 +433,9 @@ export function Sidebar() {
         {!sidebarCollapsed ? (
           <div className="mt-1 flex flex-col gap-0.5">
             {STO_TASK_NAV.map((item) => (
-              <SidebarTaskTextLink
+              <SidebarTaskGroup
                 key={item.id}
-                to={taskDetailPath(item.id)}
+                taskId={item.id}
                 label={t(`common:sidebar.${item.labelKey}`)}
                 showDot={item.dot}
               />
@@ -472,8 +503,9 @@ export function Sidebar() {
             <TooltipContent side="right">{t('common:sidebar.newChat')}</TooltipContent>
           </Tooltip>
         )}
+        </div>
 
-        <div className="min-h-0 flex-1 space-y-1 pb-2 pt-1">
+        <div className="relative z-0 min-h-0 flex-1 overflow-y-auto overflow-x-hidden space-y-1 pb-2 pt-1">
           {sidebarCollapsed && sessionsOrderedForCollapse.length > 0 ? (
             <div className="flex flex-col gap-1">
               {sessionsOrderedForCollapse.map((s) => {

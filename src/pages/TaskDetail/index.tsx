@@ -1,7 +1,7 @@
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { isStoTaskId, type StoTaskId } from '@/lib/sto-tasks';
+import { isStoTaskId, isValidTaskEntry, taskLatestPath, type StoTaskId } from '@/lib/sto-tasks';
 import { HomeAssistant } from '@/pages/Home/HomeAssistant';
 import { cn } from '@/lib/utils';
 
@@ -83,7 +83,7 @@ function TaskDetailBody({ taskId }: { taskId: StoTaskId }) {
  * 任务「最新一条」详情表面（占位数据 + 真实导航），对齐 OpenSpec home-task-list-surface。
  */
 export function TaskDetail() {
-  const { taskId } = useParams<{ taskId: string }>();
+  const { taskId, entryId } = useParams<{ taskId: string; entryId?: string }>();
   const { t } = useTranslation('tasks');
 
   if (!taskId || !isStoTaskId(taskId)) {
@@ -91,6 +91,14 @@ export function TaskDetail() {
   }
 
   const id = taskId;
+
+  if (!entryId) {
+    return <Navigate to={taskLatestPath(id)} replace />;
+  }
+
+  if (!isValidTaskEntry(id, entryId)) {
+    return <Navigate to={taskLatestPath(id)} replace />;
+  }
 
   return (
     <div className="mx-auto w-full max-w-[var(--sto-main-inner-max)] pb-10">

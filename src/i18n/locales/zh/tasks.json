@@ -1,5 +1,17 @@
 {
   "backHome": "返回首页",
+  "sidebarEntry": {
+    "hq-reconciliation": {
+      "2026-05-10": "2026年05月10日",
+      "2026-05-09": "2026年05月09日"
+    },
+    "abnormal-customers": {
+      "2026-05-10": "2026年05月10日"
+    },
+    "outbound-cost": {
+      "2026-05": "2026年05月"
+    }
+  },
   "detail": {
     "hq-reconciliation": {
       "pageTitle": "2026年05月10日 · 昨日总部对账",

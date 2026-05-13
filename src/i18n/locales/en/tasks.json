@@ -1,5 +1,17 @@
 {
   "backHome": "Back to home",
+  "sidebarEntry": {
+    "hq-reconciliation": {
+      "2026-05-10": "May 10, 2026",
+      "2026-05-09": "May 9, 2026"
+    },
+    "abnormal-customers": {
+      "2026-05-10": "May 10, 2026"
+    },
+    "outbound-cost": {
+      "2026-05": "May 2026"
+    }
+  },
   "detail": {
     "hq-reconciliation": {
       "pageTitle": "May 10, 2026 · Yesterday HQ reconciliation",

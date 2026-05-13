@@ -235,6 +235,7 @@ function App() {
           {/* Main application routes */}
           <Route element={<MainLayout />}>
             <Route path="/" element={<Home />} />
+            <Route path="/tasks/:taskId/:entryId" element={<TaskDetail />} />
             <Route path="/tasks/:taskId" element={<TaskDetail />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/models" element={<Models />} />

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
+import { taskLatestPath, type StoTaskId } from '@/lib/sto-tasks';
 
 function StatusChip({ children, variant }: { children: React.ReactNode; variant: 'ok' | 'neutral' }) {
   return (
@@ -44,7 +44,7 @@ function SummaryCard({ taskId, base, statusVariant, columns }: SummaryCardProps)
 
   return (
     <Link
-      to={taskDetailPath(taskId)}
+      to={taskLatestPath(taskId)}
       className={cn(
         'flex min-w-[260px] flex-1 flex-col rounded-[24px] bg-white p-4 shadow-[0_4px_24px_rgba(15,23,42,0.06)] ring-1 ring-[var(--sto-sidebar-border)]',
         'transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-[0_24px_80px_rgba(15,23,42,0.12)]',
