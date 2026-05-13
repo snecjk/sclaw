@@ -41,8 +41,16 @@
     --sto-sidebar-border: #e8eaef;
     --sto-accent: #ff8c00;
     --sto-accent-soft: #fff3e0;
+    /* 侧栏主导航选中态：与 docs/sto-design.md Brand-6 一致 */
+    --sto-brand-6: #ff6f00;
     --sto-sidebar-w-expanded: 248px;
     --sto-sidebar-w-collapsed: 72px;
+    /* 折叠侧栏主导航项（设计标注：59×28、padding 5px 10px、未选中图标 #7A8494） */
+    --sto-sidebar-collapsed-nav-item-w: 59px;
+    --sto-sidebar-collapsed-nav-item-h: 28px;
+    --sto-sidebar-collapsed-nav-py: 5px;
+    --sto-sidebar-collapsed-nav-px: 10px;
+    --sto-sidebar-collapsed-nav-icon-idle: #7a8494;
     --sto-main-inner-max: 1100px;
     --sto-content-pad-x: 20px;
   }
@@ -83,8 +91,14 @@
     --sto-sidebar-border: hsl(204 28% 18%);
     --sto-accent: #ff9f2e;
     --sto-accent-soft: hsl(32 45% 14%);
+    --sto-brand-6: #ff6f00;
     --sto-sidebar-w-expanded: 248px;
     --sto-sidebar-w-collapsed: 72px;
+    --sto-sidebar-collapsed-nav-item-w: 59px;
+    --sto-sidebar-collapsed-nav-item-h: 28px;
+    --sto-sidebar-collapsed-nav-py: 5px;
+    --sto-sidebar-collapsed-nav-px: 10px;
+    --sto-sidebar-collapsed-nav-icon-idle: #9aa5b8;
     --sto-main-inner-max: 1100px;
     --sto-content-pad-x: 20px;
   }

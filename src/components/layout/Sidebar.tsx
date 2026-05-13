@@ -2,7 +2,7 @@
  * Sidebar — 单列宽侧栏（248px / 72px），对齐 STO Claw 归档设计稿。
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import {
   Puzzle,
   Clock,
@@ -84,6 +84,14 @@ function getAgentIdFromSessionKey(sessionKey: string): string {
   return agentId || 'main';
 }
 
+/** 折叠侧栏会话/任务项：首字 + …（对齐设计稿） */
+function collapsedEntryLabel(full: string): string {
+  const s = full.trim();
+  if (!s) return '…';
+  const first = [...s][0];
+  return `${first}…`;
+}
+
 function SidebarNavLink({
   to,
   end,
@@ -97,29 +105,32 @@ function SidebarNavLink({
   label: string;
   collapsed: boolean;
 }) {
-  const link = (
-    <NavLink
-      to={to}
-      end={end}
-      className={({ isActive }) =>
-        cn(
-          'relative flex items-center gap-3 rounded-xl py-2.5 text-[14px] font-medium transition-colors',
-          collapsed ? 'mx-1 justify-center px-0' : 'px-3',
+  const { pathname } = useLocation();
+  // 使用路径匹配生成 className（字符串），避免 TooltipTrigger asChild 与 NavLink 的函数 className 合并时被破坏，导致选中态（橙底白图标）不生效。
+  const isActive = matchPath({ path: to, end: Boolean(end), caseSensitive: false }, pathname) != null;
+
+  const linkClassName = cn(
+    'relative flex items-center font-medium leading-none transition-colors [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
+    collapsed
+      ? cn(
+          'mx-auto box-border min-h-0 shrink-0 justify-center gap-0 rounded-full text-[13px]',
+          'h-[var(--sto-sidebar-collapsed-nav-item-h)] w-[var(--sto-sidebar-collapsed-nav-item-w)] max-w-[calc(100%-10px)] py-[var(--sto-sidebar-collapsed-nav-py)] px-[var(--sto-sidebar-collapsed-nav-px)]',
           isActive
-            ? 'bg-[var(--sto-accent-soft)] text-[var(--sto-accent)] shadow-sm ring-1 ring-[rgba(255,140,0,0.35)] dark:bg-amber-950/40 dark:text-[var(--sto-accent)]'
-            : 'text-muted-foreground hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.06]',
+            ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]'
+            : 'text-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]',
         )
-      }
-    >
-      {({ isActive }) => (
-        <>
-          {isActive && !collapsed ? (
-            <span className="absolute left-0 top-1/2 h-8 w-[3px] -translate-y-1/2 rounded-r-full bg-[var(--sto-accent)]" />
-          ) : null}
-          <span className="flex shrink-0 items-center justify-center">{icon}</span>
-          {!collapsed ? <span className="min-w-0 flex-1 truncate">{label}</span> : null}
-        </>
-      )}
+      : cn(
+          'h-[28.5px] min-h-[28.5px] shrink-0 gap-[10px] rounded-xl px-[10px] text-[13px]',
+          isActive
+            ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]'
+            : 'text-[#86909c] [&_svg]:stroke-[#86909c] hover:bg-black/[0.04] hover:text-foreground hover:[&_svg]:stroke-foreground dark:text-muted-foreground dark:[&_svg]:stroke-[hsl(var(--muted-foreground))] dark:hover:bg-white/[0.06] dark:hover:text-foreground dark:hover:[&_svg]:stroke-foreground',
+        ),
+  );
+
+  const link = (
+    <NavLink to={to} end={end} className={linkClassName}>
+      <span className="flex shrink-0 items-center justify-center">{icon}</span>
+      {!collapsed ? <span className="min-w-0 flex-1 truncate">{label}</span> : null}
     </NavLink>
   );
 
@@ -270,6 +281,8 @@ export function Sidebar() {
     sessionBucketMap[bucketKey].sessions.push(session);
   }
 
+  const sessionsOrderedForCollapse = sessionBuckets.flatMap((b) => b.sessions);
+
   const appVersionShort = packageJson.version?.split('-')[0] ?? packageJson.version;
 
   const toggleBucket = (key: SessionBucketKey) => {
@@ -277,17 +290,17 @@ export function Sidebar() {
   };
 
   const primaryNav = [
-    { to: '/', end: true, icon: <Home className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.home') },
-    { to: '/chat', end: true, icon: <MessageSquare className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.chat') },
-    { to: '/cron', icon: <Clock className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
-    { to: '/skills', icon: <Puzzle className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
-    { to: '/models', icon: <BarChart3 className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
+    { to: '/', end: true, icon: <Home className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.home') },
+    { to: '/chat', end: true, icon: <MessageSquare className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.chat') },
+    { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
+    { to: '/skills', icon: <Puzzle className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
+    { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
   ];
 
   const workspaceNav = [
-    { to: '/agents', icon: <Bot className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.agents') },
-    { to: '/channels', icon: <Radio className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.channels') },
-    { to: '/subscriptions', icon: <Bookmark className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.subscriptions') },
+    { to: '/agents', icon: <Bot className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.agents') },
+    { to: '/channels', icon: <Radio className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.channels') },
+    { to: '/subscriptions', icon: <Bookmark className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.subscriptions') },
   ];
 
   return (
@@ -297,13 +310,21 @@ export function Sidebar() {
         sidebarCollapsed ? 'w-[var(--sto-sidebar-w-collapsed)]' : 'w-[var(--sto-sidebar-w-expanded)]',
       )}
     >
-      <div
-        className={cn(
-          'flex shrink-0 items-start justify-between gap-2 border-b border-[var(--sto-sidebar-border)] px-3 pb-3 pt-3',
-          sidebarCollapsed && 'flex-col items-center border-transparent px-2 pb-2',
-        )}
-      >
-        {!sidebarCollapsed ? (
+      {sidebarCollapsed ? (
+        <div className="flex shrink-0 flex-col items-center border-b border-transparent px-2 pb-2 pt-3">
+          <button
+            type="button"
+            aria-expanded={false}
+            aria-label={t('common:sidebar.toggleSidebarExpand')}
+            title={t('common:sidebar.toggleSidebarExpand')}
+            onClick={() => setSidebarCollapsed(false)}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card"
+          >
+            <ChevronRight className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+          </button>
+        </div>
+      ) : (
+        <div className="flex shrink-0 items-start justify-between gap-2 border-b border-[var(--sto-sidebar-border)] px-3 pb-3 pt-3">
           <div className="flex min-w-0 flex-1 items-center gap-2.5 pl-1">
             <img src={logoSvg} alt="" className="h-10 w-10 shrink-0 rounded-[10px] object-contain" width={40} height={40} />
             <div className="min-w-0">
@@ -313,32 +334,26 @@ export function Sidebar() {
               </div>
             </div>
           </div>
-        ) : (
-          <div className="flex w-full justify-center pt-0.5">
-            <img src={logoSvg} alt="" className="h-9 w-9 rounded-[10px] object-contain" width={36} height={36} />
-          </div>
-        )}
-        <button
-          type="button"
-          aria-expanded={!sidebarCollapsed}
-          aria-label={sidebarCollapsed ? t('common:sidebar.toggleSidebarExpand') : t('common:sidebar.toggleSidebarCollapse')}
-          title={sidebarCollapsed ? t('common:sidebar.toggleSidebarExpand') : t('common:sidebar.toggleSidebarCollapse')}
-          onClick={() => setSidebarCollapsed((c) => !c)}
-          className={cn(
-            'flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[var(--sto-sidebar-border)] bg-white text-muted-foreground transition-colors hover:border-[rgba(255,140,0,0.45)] hover:text-[var(--sto-accent)] dark:bg-card dark:text-muted-foreground',
-            sidebarCollapsed && 'mt-1',
-          )}
-        >
-          {sidebarCollapsed ? (
-            <ChevronRight className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
-          ) : (
+          <button
+            type="button"
+            aria-expanded={true}
+            aria-label={t('common:sidebar.toggleSidebarCollapse')}
+            title={t('common:sidebar.toggleSidebarCollapse')}
+            onClick={() => setSidebarCollapsed(true)}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card"
+          >
             <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
-          )}
-        </button>
-      </div>
+          </button>
+        </div>
+      )}
 
-      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-2 pb-2 pt-2">
-        <div className="flex flex-col gap-0.5">
+      <nav
+        className={cn(
+          'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden pb-2 pt-2',
+          sidebarCollapsed ? 'px-0' : 'px-2',
+        )}
+      >
+        <div className={cn('flex flex-col gap-1', sidebarCollapsed && 'mt-2')}>
           {primaryNav.map((item) => (
             <SidebarNavLink
               key={item.to}
@@ -358,7 +373,7 @@ export function Sidebar() {
         ) : (
           <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
         )}
-        <div className="flex flex-col gap-0.5">
+        <div className="flex flex-col gap-1">
           {workspaceNav.map((item) => (
             <SidebarNavLink
               key={item.to}
@@ -403,9 +418,9 @@ export function Sidebar() {
                   if (messages.length > 0) newSession();
                   navigate('/chat');
                 }}
-                className="mx-1 mt-1 flex h-10 w-10 items-center justify-center self-center rounded-xl border border-[rgba(255,140,0,0.35)] bg-[var(--sto-accent-soft)] text-[var(--sto-accent)] dark:bg-amber-950/35"
+                className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card"
               >
-                <Plus className="h-[17px] w-[17px]" strokeWidth={2} aria-hidden />
+                <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
               </button>
             </TooltipTrigger>
             <TooltipContent side="right">{t('common:sidebar.newChat')}</TooltipContent>
@@ -413,6 +428,39 @@ export function Sidebar() {
         )}
 
         <div className="min-h-0 flex-1 space-y-1 pb-2 pt-1">
+          {sidebarCollapsed && sessionsOrderedForCollapse.length > 0 ? (
+            <div className="flex flex-col gap-1">
+              {sessionsOrderedForCollapse.map((s) => {
+                const full = getSessionLabel(s.key, s.displayName, s.label);
+                const short = collapsedEntryLabel(full);
+                const active = isOnChat && currentSessionKey === s.key;
+                return (
+                  <Tooltip key={s.key} delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          switchSession(s.key);
+                          navigate('/chat');
+                        }}
+                        title={full}
+                        className={cn(
+                          'mx-auto flex min-h-0 min-w-0 items-center justify-center rounded-full font-medium leading-none transition-colors',
+                          'h-[var(--sto-sidebar-collapsed-nav-item-h)] w-[var(--sto-sidebar-collapsed-nav-item-w)] max-w-[calc(100%-10px)] py-[var(--sto-sidebar-collapsed-nav-py)] px-[var(--sto-sidebar-collapsed-nav-px)] text-[13px]',
+                          active
+                            ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] dark:bg-[var(--sto-brand-6)]'
+                            : 'text-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]',
+                        )}
+                      >
+                        <span className="truncate">{short}</span>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">{full}</TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </div>
+          ) : null}
           {!sidebarCollapsed &&
             (sessions.length === 0 ? (
               <p className="px-2 pt-2 text-center text-[12px] leading-relaxed text-muted-foreground/80">
@@ -503,7 +551,7 @@ export function Sidebar() {
                 title={isGatewayRunning ? t('common:status.connected') : t('common:status.disconnected')}
               >
                 {sidebarCollapsed ? (
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary">
+                  <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[13px] font-semibold text-[var(--sto-brand-6)] dark:bg-card">
                     {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
                   </span>
                 ) : (

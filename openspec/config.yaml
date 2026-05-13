@@ -12,7 +12,7 @@ context: |
   - Vitest for unit tests, Playwright for E2E
 
   Key directories:
-  - src/pages/: Page-level components (Agents, Channels, Chat, Cron, FloatIcon, Login, Models, Settings, Setup, Skills, Sprite, Subscriptions)
+  - src/pages/: Page-level components (Home, Agents, Channels, Chat, Cron, FloatIcon, Login, Models, Settings, Setup, Skills, Sprite, Subscriptions)
   - src/components/: Shared components (channels, common, layout, settings, ui)
   - src/stores/: Zustand stores (agents, auth, channels, chat, cron, gateway, message-queue, providers, settings, skills, subscriptions, update)
   - src/hooks/: Custom React hooks
@@ -23,6 +23,7 @@ context: |
   - electron/shared/: Shared types between Main and Renderer
   - electron/api/: API definitions
   - openspec/: OpenSpec change management
+  - docs/sto-design.md: STO UI theme constitution — brand, functional, neutral colors, token naming (Foundation→Property→Modifier); single source of truth for page/shell theming in specs and implementation.
 
   Business module mapping (capability naming reference):
   - Chat page → chat-* (e.g., chat-message-sync, chat-file-attachment)
@@ -49,15 +50,18 @@ rules:
     - Cross-cutting capabilities MUST use semantic concern names (e.g., `realtime-message-delivery`, NOT `chat-and-channels-update`)
     - Keep proposals under 2 pages; focus on WHY not HOW
     - Always include explicit New Capabilities and Modified Capabilities lists
+    - If the change materially affects user-visible page or shell theming, the proposal SHOULD note alignment with docs/sto-design.md (STO theme constitution)
 
   design:
     - Every key decision MUST include rationale and at least one alternative considered
     - Document risks with [Risk] → Mitigation format
     - Keep design focused on architecture, not line-by-line implementation
+    - UI or shell appearance decisions (colors, emphasis, status hues, typography contrast) MUST align with docs/sto-design.md; cite that document or its token names (e.g., Brand-6, Grey-10) instead of ad-hoc hex-only descriptions
 
   specs:
     - Every requirement MUST use SHALL or MUST for normative statements
     - Every requirement MUST have at least one scenario with exactly four hashtags (`#### Scenario:`)
+    - Renderer-visible theming requirements (page chrome, primary actions, success/warning/danger/info semantics) MUST be stated in terms consistent with docs/sto-design.md (semantic tokens / Property categories); arbitrary hex in requirements is discouraged except when quoting the canonical palette from that doc
     - Scenarios MUST use `- **WHEN**` and `- **THEN**` format
     - For MODIFIED requirements, copy the ENTIRE requirement block from the existing spec before editing
     - DO NOT add direct `window.electron.ipcRenderer.invoke(...)` calls in pages/components; use host-api instead

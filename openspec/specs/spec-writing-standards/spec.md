@@ -33,6 +33,18 @@ Every requirement in a spec.md SHALL use SHALL or MUST for normative statements,
 - **THEN** the scenario header SHALL use exactly four hashtags (`#### Scenario: Name`)
 - **AND** the scenario body SHALL use `- **WHEN**` and `- **THEN**` format
 
+### Requirement: UI and shell theming specs align with STO design constitution
+Any spec.md requirement that normatively defines user-visible colors, brand emphasis, status colors (success, warning, danger, info), or page/shell background and text hierarchy for the renderer SHALL be consistent with `docs/sto-design.md` and SHALL express colors using semantic token or Property language from that document (e.g., Brand-6 for primary emphasis, Grey-10 for default text, Danger for destructive actions) rather than unconstrained ad-hoc hex values, except when the requirement explicitly quotes canonical values from `docs/sto-design.md`.
+
+#### Scenario: Authoring a page-level visual requirement
+- **WHEN** a spec author adds a new requirement about a primary call-to-action color on a page
+- **THEN** the requirement SHALL reference brand or semantic fill/text tokens aligned with `docs/sto-design.md`
+- **AND** the requirement SHALL NOT mandate a random hex as the product primary without mapping it to the STO palette or documenting an approved exception in the same change’s design.md
+
+#### Scenario: Reviewing a status or feedback color
+- **WHEN** a requirement describes error, success, or warning presentation in the UI
+- **THEN** the requirement SHALL map the intent to Danger, Success, or Warning semantics (or equivalent token names) as defined in `docs/sto-design.md`
+
 ### Requirement: Task artifacts reference corresponding specs
 Every task in tasks.md SHALL explicitly reference the spec requirement it implements, using the requirement name or identifier.
 
