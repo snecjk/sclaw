@@ -1,7 +1,7 @@
 /**
  * Sidebar — 单列宽侧栏（248px / 72px），对齐 STO Claw 归档设计稿。
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import {
   Puzzle,
@@ -99,7 +99,7 @@ const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' | 'taskAbn
   { id: 'outbound-cost', labelKey: 'taskOutboundCost' },
 ];
 
-/** 侧栏任务：主标题 + 日期药丸子项（对齐设计稿）。 */
+/** 侧栏任务：主标题可折叠 + 日期药丸子项（对齐设计稿）。 */
 function SidebarTaskGroup({
   taskId,
   label,
@@ -113,6 +113,15 @@ function SidebarTaskGroup({
   const { t } = useTranslation('tasks');
   const entries = listTaskEntryIds(taskId);
   const underTask = pathname.startsWith(`/tasks/${taskId}`);
+  const [open, setOpen] = useState(true);
+  const prevUnderTask = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    if (prevUnderTask.current === false && underTask) setOpen(true);
+    prevUnderTask.current = underTask;
+  }, [underTask]);
+
+  const panelId = `sto-sidebar-task-${taskId}-entries`;
 
   return (
     <div
@@ -121,30 +130,46 @@ function SidebarTaskGroup({
         underTask ? 'bg-black/[0.04] dark:bg-white/[0.06]' : 'hover:bg-black/[0.02] dark:hover:bg-white/[0.04]',
       )}
     >
-      <div className="flex items-center justify-between gap-2 px-0.5">
-        <span className="text-[13px] font-medium text-foreground">{label}</span>
-        {showDot ? <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" aria-hidden /> : null}
-      </div>
-      <div className="mt-1.5 flex flex-col items-start gap-1">
-        {entries.map((entryId) => {
-          const to = taskDetailPath(taskId, entryId);
-          const active = pathname === to;
-          return (
-            <NavLink
-              key={entryId}
-              to={to}
-              className={cn(
-                'relative z-[1] inline-flex w-full max-w-full justify-start rounded-full px-2.5 py-1 text-left text-xs font-medium transition-colors',
-                active
-                  ? 'bg-[#ededed] text-foreground dark:bg-white/[0.12]'
-                  : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground dark:bg-white/[0.08]',
-              )}
-            >
-              {t(`sidebarEntry.${taskId}.${entryId}`)}
-            </NavLink>
-          );
-        })}
-      </div>
+      <button
+        type="button"
+        id={`sto-sidebar-task-${taskId}-toggle`}
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 rounded-md px-0.5 py-0.5 text-left outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.06]"
+      >
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{label}</span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {showDot ? <span className="h-2 w-2 rounded-full bg-red-500" aria-hidden /> : null}
+          <ChevronDown
+            className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open ? 'rotate-180' : '')}
+            aria-hidden
+            strokeWidth={2}
+          />
+        </span>
+      </button>
+      {open ? (
+        <div id={panelId} className="mt-1.5 flex flex-col items-start gap-1" role="region" aria-labelledby={`sto-sidebar-task-${taskId}-toggle`}>
+          {entries.map((entryId) => {
+            const to = taskDetailPath(taskId, entryId);
+            const active = pathname === to;
+            return (
+              <NavLink
+                key={entryId}
+                to={to}
+                className={cn(
+                  'relative z-[1] inline-flex w-full max-w-full justify-start rounded-full px-2.5 py-1 text-left text-xs font-medium transition-colors',
+                  active
+                    ? 'bg-[#ededed] text-foreground dark:bg-white/[0.12]'
+                    : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground dark:bg-white/[0.08]',
+                )}
+              >
+                {t(`sidebarEntry.${taskId}.${entryId}`)}
+              </NavLink>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
