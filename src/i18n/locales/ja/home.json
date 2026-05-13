@@ -1,0 +1,64 @@
+{
+  "hero": {
+    "title": "STO Claw — 拠点オペレーションを効率化",
+    "subtitle": "AI ワークスペースで日次業務を速く、引き継ぎを明確に。"
+  },
+  "summary": {
+    "heading": "データ概要",
+    "recon": {
+      "title": "本社照合（昨日）",
+      "pill": "利息計上",
+      "status": "完了",
+      "stat1Label": "収支",
+      "stat1Value": "128,560",
+      "stat1Unit": "CNY",
+      "stat2Label": "収入",
+      "stat2Value": "98,750",
+      "stat2Unit": "CNY",
+      "stat3Label": "支出",
+      "stat3Value": "29,810",
+      "stat3Unit": "CNY",
+      "footerTeam": "精算チーム",
+      "footerHint": "例外 4 件"
+    },
+    "customer": {
+      "title": "例外顧客フォロー（昨日）",
+      "pill": "カスタマー",
+      "status": "処理済",
+      "stat1Label": "例外",
+      "stat1Value": "3",
+      "stat1Unit": "件",
+      "stat2Label": "顧客数",
+      "stat2Value": "6",
+      "stat2Unit": "社",
+      "stat3Label": "影響額",
+      "stat3Value": "10,000",
+      "stat3Unit": "CNY",
+      "footerTeam": "顧客トラッキング",
+      "footerHint": "例外 3 件"
+    },
+    "cost": {
+      "title": "出港コスト（当月）",
+      "pill": "出港コスト",
+      "status": "完了",
+      "stat1Label": "1 票あたり",
+      "stat1Value": "2.36",
+      "stat1Unit": "CNY/票",
+      "stat2Label": "コスト異常",
+      "stat2Value": "3",
+      "stat2Unit": "社",
+      "footerTeam": "コストチーム",
+      "footerHint": "例外 1 件"
+    }
+  },
+  "assistant": {
+    "placeholder": "自然言語で質問するか、ファイルを添付…",
+    "uploadFile": "ファイルをアップロード",
+    "skillCall": "スキル呼び出し",
+    "dataAnalysis": "データ分析",
+    "workflow": "ワークフロー",
+    "send": "送信",
+    "gatewayRequired": "送信前にゲートウェイを接続してください。",
+    "sendFailed": "送信に失敗しました。チャット画面で確認してください。"
+  }
+}

@@ -1,8 +1,16 @@
 {
     "sidebar": {
+        "home": "Home",
+        "myData": "My data",
+        "workspace": "Workspace",
+        "sessionList": "Conversations",
+        "toggleSidebarCollapse": "Collapse sidebar",
+        "toggleSidebarExpand": "Expand sidebar",
+        "appVersionLabel": "v {{version}}",
+        "enterpriseTag": "Enterprise",
         "chat": "Chat",
         "newChat": "New Chat",
-        "cronTasks": "Cron Tasks",
+        "cronTasks": "Scheduled tasks",
         "skills": "Skills",
         "agents": "Agents",
         "channels": "Channels",

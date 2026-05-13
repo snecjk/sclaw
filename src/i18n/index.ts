@@ -19,6 +19,7 @@ import enSetup from './locales/en/setup.json';
 import enAuth from './locales/en/auth.json';
 import enSprite from './locales/en/sprite.json';
 import enSubscriptions from './locales/en/subscriptions.json';
+import enHome from './locales/en/home.json';
 
 // ZH
 import zhCommon from './locales/zh/common.json';
@@ -33,6 +34,7 @@ import zhSetup from './locales/zh/setup.json';
 import zhAuth from './locales/zh/auth.json';
 import zhSprite from './locales/zh/sprite.json';
 import zhSubscriptions from './locales/zh/subscriptions.json';
+import zhHome from './locales/zh/home.json';
 
 // JA
 import jaCommon from './locales/ja/common.json';
@@ -47,6 +49,7 @@ import jaSetup from './locales/ja/setup.json';
 import jaAuth from './locales/ja/auth.json';
 import jaSprite from './locales/ja/sprite.json';
 import jaSubscriptions from './locales/ja/subscriptions.json';
+import jaHome from './locales/ja/home.json';
 
 export const SUPPORTED_LANGUAGES = [
     { code: 'en', label: 'English' },
@@ -68,6 +71,7 @@ const resources = {
         auth: enAuth,
         sprite: enSprite,
         subscriptions: enSubscriptions,
+        home: enHome,
     },
     zh: {
         common: zhCommon,
@@ -82,6 +86,7 @@ const resources = {
         auth: zhAuth,
         sprite: zhSprite,
         subscriptions: zhSubscriptions,
+        home: zhHome,
     },
     ja: {
         common: jaCommon,
@@ -96,6 +101,7 @@ const resources = {
         auth: jaAuth,
         sprite: jaSprite,
         subscriptions: jaSubscriptions,
+        home: jaHome,
     },
 };
 
@@ -107,7 +113,7 @@ i18n
         fallbackLng: 'en',
         supportedLngs: [...SUPPORTED_LANGUAGE_CODES],
         defaultNS: 'common',
-        ns: ['common', 'settings', 'dashboard', 'chat', 'channels', 'agents', 'skills', 'cron', 'setup', 'auth', 'sprite', 'subscriptions'],
+        ns: ['common', 'settings', 'dashboard', 'chat', 'channels', 'agents', 'skills', 'cron', 'setup', 'auth', 'sprite', 'subscriptions', 'home'],
         interpolation: {
             escapeValue: false, // React already escapes
         },

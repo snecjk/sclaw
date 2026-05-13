@@ -1,8 +1,7 @@
 /**
- * Sidebar Component
- * Narrow icon rail + optional chat panel (new session + history) to the right.
+ * Sidebar — 单列宽侧栏（248px / 72px），对齐 STO Claw 归档设计稿。
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Puzzle,
@@ -20,6 +19,11 @@ import {
   Moon,
   Monitor,
   Bookmark,
+  Home,
+  BarChart3,
+  Bot,
+  Radio,
+  ChevronDown,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -31,6 +35,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSettingsStore } from '@/stores/settings';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
@@ -41,6 +46,8 @@ import { useAuthStore } from '@/stores/auth';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useTranslation } from 'react-i18next';
 import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
+import logoSvg from '@/assets/logo.svg';
+import packageJson from '../../../package.json';
 
 type SessionBucketKey =
   | 'today'
@@ -50,61 +57,9 @@ type SessionBucketKey =
   | 'withinMonth'
   | 'older';
 
-/** 本次渲染进程内是否已完成「首次进入对话页」的新会话（避免先打开其它页再点对话仍落在旧会话上） */
 let didBootstrapFreshChat = false;
 
-const RAIL_WIDTH_CLASS = 'w-[5.25rem]';
-/** Open width of the chat history column (narrower than before for less visual weight) */
-const HISTORY_PANEL_WIDTH_CLASS = 'w-[12rem]';
-
-/** Smooth bump along the seam: straight vertical at x=0, quadratic arc outward (matches h-20 = 80px). */
-const HISTORY_EDGE_CLIP_PATH =
-  'path("M 0 0 L 0 80 Q 48 40 0 0 Z")' as const;
-
-const historyEdgeArcClipStyle: CSSProperties = {
-  clipPath: HISTORY_EDGE_CLIP_PATH,
-  WebkitClipPath: HISTORY_EDGE_CLIP_PATH,
-};
-
-interface RailNavItemProps {
-  to: string;
-  icon: React.ReactNode;
-  label: string;
-  end?: boolean;
-  onClick?: (e: React.MouseEvent<HTMLAnchorElement>) => void;
-}
-
-function RailNavItem({ to, icon, label, end, onClick }: RailNavItemProps) {
-  return (
-    <NavLink
-      to={to}
-      end={end}
-      onClick={onClick}
-      className={({ isActive }) =>
-        cn(
-          'relative mx-1 flex flex-col items-center gap-1.5 rounded-xl px-1 py-3 transition-all duration-300 ease-out',
-          'border border-transparent text-foreground/75 hover:bg-primary/[0.06] hover:text-foreground',
-          'active:scale-[0.97]',
-          isActive && 'border-primary/15 bg-primary/[0.1] text-foreground shadow-[0_8px_20px_rgba(14,165,233,0.08)]',
-        )
-      }
-    >
-      {({ isActive }) => (
-        <>
-          {isActive && (
-            <span className="absolute left-0 top-1/2 h-10 w-[3px] -translate-y-1/2 rounded-r-full bg-primary shadow-[0_0_14px_rgba(56,189,248,0.75)]" />
-          )}
-          <div className={cn('flex shrink-0 items-center justify-center', isActive ? 'text-foreground' : 'text-muted-foreground')}>
-            {icon}
-          </div>
-          <span className="max-w-[5rem] text-center text-[13px] font-medium leading-snug line-clamp-2">
-            {label}
-          </span>
-        </>
-      )}
-    </NavLink>
-  );
-}
+const INITIAL_NOW_MS = Date.now();
 
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   if (!activityMs || activityMs <= 0) return 'older';
@@ -123,12 +78,63 @@ function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   return 'older';
 }
 
-const INITIAL_NOW_MS = Date.now();
-
 function getAgentIdFromSessionKey(sessionKey: string): string {
   if (!sessionKey.startsWith('agent:')) return 'main';
   const [, agentId] = sessionKey.split(':');
   return agentId || 'main';
+}
+
+function SidebarNavLink({
+  to,
+  end,
+  icon,
+  label,
+  collapsed,
+}: {
+  to: string;
+  end?: boolean;
+  icon: ReactNode;
+  label: string;
+  collapsed: boolean;
+}) {
+  const link = (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        cn(
+          'relative flex items-center gap-3 rounded-xl py-2.5 text-[14px] font-medium transition-colors',
+          collapsed ? 'mx-1 justify-center px-0' : 'px-3',
+          isActive
+            ? 'bg-[var(--sto-accent-soft)] text-[var(--sto-accent)] shadow-sm ring-1 ring-[rgba(255,140,0,0.35)] dark:bg-amber-950/40 dark:text-[var(--sto-accent)]'
+            : 'text-muted-foreground hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.06]',
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          {isActive && !collapsed ? (
+            <span className="absolute left-0 top-1/2 h-8 w-[3px] -translate-y-1/2 rounded-r-full bg-[var(--sto-accent)]" />
+          ) : null}
+          <span className="flex shrink-0 items-center justify-center">{icon}</span>
+          {!collapsed ? <span className="min-w-0 flex-1 truncate">{label}</span> : null}
+        </>
+      )}
+    </NavLink>
+  );
+
+  if (collapsed) {
+    return (
+      <Tooltip delayDuration={200}>
+        <TooltipTrigger asChild>{link}</TooltipTrigger>
+        <TooltipContent side="right" className="max-w-[14rem]">
+          {label}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return link;
 }
 
 export function Sidebar() {
@@ -154,24 +160,20 @@ export function Sidebar() {
   const setTheme = useSettingsStore((s) => s.setTheme);
 
   const location = useLocation();
-  const [chatPanelOpen, setChatPanelOpen] = useState(() => location.pathname === '/');
-  /** 进入对话页时历史会话列表默认展开 */
-  const [historyPanelCollapsed, setHistoryPanelCollapsed] = useState(false);
-  const prevPathRef = useRef<string | null>(null);
+  const navigate = useNavigate();
+  const isOnChat = location.pathname.startsWith('/chat');
 
-  useEffect(() => {
-    const cur = location.pathname;
-    const prev = prevPathRef.current;
-    prevPathRef.current = cur;
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [bucketOpen, setBucketOpen] = useState<Record<SessionBucketKey, boolean>>({
+    today: true,
+    yesterday: true,
+    withinWeek: true,
+    withinTwoWeeks: true,
+    withinMonth: true,
+    older: true,
+  });
 
-    if (cur !== '/') {
-      setChatPanelOpen(false);
-      return;
-    }
-    if (prev !== null && prev !== '/') {
-      setChatPanelOpen(true);
-    }
-  }, [location.pathname]);
+  const { t } = useTranslation(['common', 'chat', 'auth']);
 
   useEffect(() => {
     if (!isGatewayRunning) return;
@@ -180,16 +182,17 @@ export function Sidebar() {
       await loadSessions();
       if (cancelled) return;
 
-      if (location.pathname !== '/') {
+      if (!isOnChat) {
         const hasExistingMessages = useChatStore.getState().messages.length > 0;
         await loadHistory(hasExistingMessages);
         return;
       }
 
-      // 首次进入 /（含：启动先进其它页再点「对话」）：始终新开一条会话，不再依赖「当时 messages 是否为空」
       if (!didBootstrapFreshChat) {
         didBootstrapFreshChat = true;
-        newSession();
+        if (useChatStore.getState().sessions.length === 0) {
+          newSession();
+        }
         await loadHistory(false);
         return;
       }
@@ -200,15 +203,14 @@ export function Sidebar() {
     return () => {
       cancelled = true;
     };
-  }, [isGatewayRunning, loadHistory, loadSessions, location.pathname, newSession]);
+  }, [isGatewayRunning, isOnChat, loadHistory, loadSessions, newSession]);
 
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
-  const navigate = useNavigate();
-  const isOnChat = location.pathname === '/';
-
-  const { t } = useTranslation(['common', 'chat', 'auth']);
+  useEffect(() => {
+    void fetchAgents();
+  }, [fetchAgents]);
 
   const getSessionLabel = useCallback(
     (key: string, displayName?: string, label?: string) => {
@@ -224,6 +226,7 @@ export function Sidebar() {
     },
     [sessionLabels, t],
   );
+
   const [sessionToDelete, setSessionToDelete] = useState<{ key: string; label: string } | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
@@ -234,10 +237,6 @@ export function Sidebar() {
     }, 60 * 1000);
     return () => window.clearInterval(timer);
   }, []);
-
-  useEffect(() => {
-    void fetchAgents();
-  }, [fetchAgents]);
 
   const agentNameById = useMemo(
     () => Object.fromEntries((agents ?? []).map((agent) => [agent.id, agent.name])),
@@ -271,362 +270,359 @@ export function Sidebar() {
     sessionBucketMap[bucketKey].sessions.push(session);
   }
 
-  const navItems = [
-    { to: '/skills', icon: <Puzzle className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.skills') },
-    { to: '/subscriptions', icon: <Bookmark className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.subscriptions') },
-    { to: '/cron', icon: <Clock className="h-5 w-5" strokeWidth={2} />, label: t('sidebar.cronTasks') },
+  const appVersionShort = packageJson.version?.split('-')[0] ?? packageJson.version;
+
+  const toggleBucket = (key: SessionBucketKey) => {
+    setBucketOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const primaryNav = [
+    { to: '/', end: true, icon: <Home className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.home') },
+    { to: '/chat', end: true, icon: <MessageSquare className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.chat') },
+    { to: '/cron', icon: <Clock className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
+    { to: '/skills', icon: <Puzzle className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
+    { to: '/models', icon: <BarChart3 className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
   ];
 
-  /**
-   * Shared chat strip state machine (对话 + 边缘钮共用).
-   * - 全关 → 全开（含历史）
-   * - 仅历史收起 → 展开历史
-   * - 全开 → 边缘钮：收起历史；对话：整块收起（与原先点对话一致）
-   */
-  const stepChatSidebar = (source: 'edge' | 'chatNav') => {
-    if (!chatPanelOpen) {
-      setChatPanelOpen(true);
-      setHistoryPanelCollapsed(false);
-      return;
-    }
-    if (historyPanelCollapsed) {
-      setHistoryPanelCollapsed(false);
-      return;
-    }
-    if (source === 'chatNav') {
-      setChatPanelOpen(false);
-    } else {
-      setHistoryPanelCollapsed(true);
-    }
-  };
-
-  const handleChatNavClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    if (location.pathname === '/') {
-      e.preventDefault();
-      stepChatSidebar('chatNav');
-    }
-  };
-
-  const handleChatPanelEdgeToggle = () => {
-    stepChatSidebar('edge');
-  };
-
-  const showHistoryEdgeToggleOnRail = isOnChat && (!chatPanelOpen || historyPanelCollapsed);
-  const showHistoryEdgeToggleOnPanel = isOnChat && chatPanelOpen && !historyPanelCollapsed;
-
-  const historyPanelToggleLabel =
-    !chatPanelOpen
-      ? t('sidebar.expand')
-      : historyPanelCollapsed
-        ? t('sidebar.expandHistoryPanel')
-        : t('sidebar.collapseHistoryPanel');
-
-  /** Glass + quadratic clip: reads as a soft tab growing out of the panel edge (not a separate block). */
-  const historyEdgeArcClass = cn(
-    'glass flex h-20 w-[40px] shrink-0 items-center justify-center',
-    'border-0 p-0',
-    'text-muted-foreground/48',
-    'shadow-[2px_0_14px_rgba(15,23,42,0.07)] dark:shadow-[2px_0_18px_rgba(0,0,0,0.35)]',
-    'transition-[color,filter,box-shadow] duration-200',
-    'hover:text-muted-foreground/82 hover:shadow-[3px_0_18px_rgba(56,189,248,0.1)]',
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0',
-    'active:opacity-90',
-  );
-
-  const sessionList = (
-    <>
-      {sessionBuckets.map((bucket) =>
-        bucket.sessions.length > 0 ? (
-          <div key={bucket.key} className="pt-2">
-            <div className="px-2 pb-1 text-[11px] font-medium tracking-tight text-muted-foreground/60">
-              {bucket.label}
-            </div>
-            {bucket.sessions.map((s) => {
-              const agentId = getAgentIdFromSessionKey(s.key);
-              const agentName = agentNameById[agentId] || agentId;
-              return (
-                <div key={s.key} className="group relative flex items-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      switchSession(s.key);
-                      navigate('/');
-                    }}
-                    title={getSessionLabel(s.key, s.displayName, s.label)}
-                    className={cn(
-                      'w-full rounded-xl px-2.5 py-2 pr-7 text-left text-[13px] transition-all duration-300',
-                      'border border-transparent hover:border-primary/10 hover:bg-primary/[0.05]',
-                      isOnChat && currentSessionKey === s.key
-                        ? 'border-primary/15 bg-primary/[0.08] font-medium text-foreground shadow-[0_10px_20px_rgba(56,189,248,0.08)]'
-                        : 'text-foreground/75',
-                    )}
-                  >
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className="truncate">{getSessionLabel(s.key, s.displayName, s.label)}</span>
-                      <span className="truncate text-[10px] text-muted-foreground/80">{agentName}</span>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={t('common:actions.delete')}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSessionToDelete({
-                        key: s.key,
-                        label: getSessionLabel(s.key, s.displayName, s.label),
-                      });
-                    }}
-                    className={cn(
-                      'absolute right-1 flex items-center justify-center rounded p-0.5 transition-opacity',
-                      'opacity-0 group-hover:opacity-100',
-                      'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
-                    )}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        ) : null,
-      )}
-    </>
-  );
+  const workspaceNav = [
+    { to: '/agents', icon: <Bot className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.agents') },
+    { to: '/channels', icon: <Radio className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.channels') },
+    { to: '/subscriptions', icon: <Bookmark className="h-5 w-5" strokeWidth={1.75} />, label: t('common:sidebar.subscriptions') },
+  ];
 
   return (
-    <div className="flex h-full shrink-0 overflow-visible">
-      {/* Narrow rail */}
-      <aside
+    <aside
+      className={cn(
+        'flex h-full shrink-0 flex-col border-r border-[var(--sto-sidebar-border)] bg-[var(--sto-sidebar-bg)] transition-[width] duration-200 ease-out',
+        sidebarCollapsed ? 'w-[var(--sto-sidebar-w-collapsed)]' : 'w-[var(--sto-sidebar-w-expanded)]',
+      )}
+    >
+      <div
         className={cn(
-          'relative flex shrink-0 flex-col overflow-visible border-r glass',
-          RAIL_WIDTH_CLASS,
+          'flex shrink-0 items-start justify-between gap-2 border-b border-[var(--sto-sidebar-border)] px-3 pb-3 pt-3',
+          sidebarCollapsed && 'flex-col items-center border-transparent px-2 pb-2',
         )}
       >
-        {showHistoryEdgeToggleOnRail && (
-          <button
-            type="button"
-            aria-expanded={chatPanelOpen && !historyPanelCollapsed}
-            aria-label={historyPanelToggleLabel}
-            title={historyPanelToggleLabel}
-            onClick={handleChatPanelEdgeToggle}
-            style={historyEdgeArcClipStyle}
-            className={cn(
-              'absolute left-full top-1/2 z-30 -translate-x-1/2 -translate-y-1/2',
-              historyEdgeArcClass,
-            )}
-          >
-            <ChevronRight className="relative z-10 h-4 w-4 -translate-x-px" strokeWidth={1.65} />
-          </button>
-        )}
-        <nav className="relative z-10 flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden py-2">
-          <RailNavItem
-            to="/"
-            end
-            icon={<MessageSquare className="h-5 w-5" strokeWidth={2} />}
-            label={t('sidebar.chat')}
-            onClick={handleChatNavClick}
-          />
-          {navItems.map((item) => (
-            <RailNavItem key={item.to} to={item.to} icon={item.icon} label={item.label} />
-          ))}
-        </nav>
-
-        {authUser && (
-          <div className="relative z-10 mt-auto px-1 pb-2 pt-1">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="flex w-full flex-col items-center gap-1.5 rounded-xl px-1 py-2 transition-colors hover:bg-primary/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                  title={isGatewayRunning ? t('status.connected') : t('status.disconnected')}
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/20 text-sm font-semibold text-primary">
-                    {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
-                  </div>
-                  <span
-                    className="max-w-full px-0.5 text-center text-[13px] font-medium leading-snug text-foreground/80 line-clamp-2 break-words"
-                    title={authUser.realName || authUser.userName || undefined}
-                  >
-                    {authUser.realName || authUser.userName}
-                  </span>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="right" align="end" sideOffset={8} className="w-40">
-                {/* Settings */}
-                <DropdownMenuItem
-                  onClick={() => navigate('/settings')}
-                  className="gap-2"
-                >
-                  <SettingsIcon className="h-4 w-4 shrink-0" strokeWidth={2} />
-                  {t('sidebar.settings')}
-                </DropdownMenuItem>
-
-                {/* Language submenu */}
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="gap-2">
-                    <Globe className="h-4 w-4 shrink-0" strokeWidth={2} />
-                    <span className="flex-1">{t('settings:appearance.language')}</span>
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" strokeWidth={2} />
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent sideOffset={4}>
-                    {SUPPORTED_LANGUAGES.map((lang) => (
-                      <DropdownMenuItem
-                        key={lang.code}
-                        onClick={() => setLanguage(lang.code)}
-                        className="gap-2"
-                      >
-                        {language === lang.code
-                          ? <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
-                          : <span className="w-3.5 shrink-0" />}
-                        {lang.label}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-
-                {/* Theme submenu */}
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="gap-2">
-                    {theme === 'light'
-                      ? <Sun className="h-4 w-4 shrink-0" strokeWidth={2} />
-                      : theme === 'dark'
-                        ? <Moon className="h-4 w-4 shrink-0" strokeWidth={2} />
-                        : <Monitor className="h-4 w-4 shrink-0" strokeWidth={2} />}
-                    <span className="flex-1">{t('settings:appearance.theme')}</span>
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" strokeWidth={2} />
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent sideOffset={4}>
-                    {(['light', 'dark', 'system'] as const).map((t_value) => (
-                      <DropdownMenuItem
-                        key={t_value}
-                        onClick={() => setTheme(t_value)}
-                        className="gap-2"
-                      >
-                        {theme === t_value
-                          ? <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
-                          : <span className="w-3.5 shrink-0" />}
-                        {t(`settings:appearance.${t_value}`)}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-
-                <DropdownMenuSeparator />
-
-                {/* Logout */}
-                <DropdownMenuItem
-                  onClick={() => setShowLogoutConfirm(true)}
-                  className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
-                >
-                  <LogOut className="h-4 w-4 shrink-0" strokeWidth={2} />
-                  {t('auth:logout.button')}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        )}
-
-        <ConfirmDialog
-          open={!!sessionToDelete}
-          title={t('common:actions.confirm')}
-          message={t('common:sidebar.deleteSessionConfirm', { label: sessionToDelete?.label })}
-          confirmLabel={t('common:actions.delete')}
-          cancelLabel={t('common:actions.cancel')}
-          variant="destructive"
-          onConfirm={async () => {
-            if (!sessionToDelete) return;
-            await deleteSession(sessionToDelete.key);
-            if (currentSessionKey === sessionToDelete.key) navigate('/');
-            setSessionToDelete(null);
-          }}
-          onCancel={() => setSessionToDelete(null)}
-        />
-
-        <ConfirmDialog
-          open={showLogoutConfirm}
-          title={t('auth:logout.confirmTitle')}
-          message={t('auth:logout.confirmMessage')}
-          confirmLabel={t('auth:logout.button')}
-          cancelLabel={t('common:actions.cancel')}
-          variant="destructive"
-          onConfirm={async () => {
-            setShowLogoutConfirm(false);
-            await authLogout();
-            navigate('/login');
-          }}
-          onCancel={() => setShowLogoutConfirm(false)}
-        />
-      </aside>
-
-      {/* Chat column: keep mounted on / so width can animate (对话收起不再整段卸载，避免生硬跳变) */}
-      {isOnChat && (
-        <div
-          className={cn(
-            'relative h-full shrink-0 overflow-visible',
-            'min-w-0 transition-[width] duration-[420ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)]',
-            chatPanelOpen && !historyPanelCollapsed ? HISTORY_PANEL_WIDTH_CLASS : 'w-0',
-            (!chatPanelOpen || historyPanelCollapsed) && 'pointer-events-none',
-          )}
-        >
-          <aside
-            className={cn(
-              'relative flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden border-r glass',
-              !chatPanelOpen || historyPanelCollapsed ? 'border-transparent' : undefined,
-            )}
-            aria-hidden={!chatPanelOpen || historyPanelCollapsed}
-          >
-            <div className="flex h-full min-h-0 w-full min-w-0 flex-col">
-              <div className="shrink-0 p-2 pb-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const { messages } = useChatStore.getState();
-                    if (messages.length > 0) newSession();
-                    navigate('/');
-                  }}
-                  className={cn(
-                    'flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-300',
-                    'border border-primary/15 bg-[linear-gradient(135deg,rgba(125,211,252,0.16),rgba(56,189,248,0.10))] text-foreground shadow-[0_8px_20px_rgba(56,189,248,0.08)] hover:border-primary/25',
-                  )}
-                >
-                  <Plus className="h-[17px] w-[17px] shrink-0" strokeWidth={2} />
-                  <span className="truncate text-left">{t('sidebar.newChat')}</span>
-                </button>
-              </div>
-              <div
-                className="mx-3 mb-1 mt-0.5 h-px shrink-0 bg-[linear-gradient(90deg,transparent,hsl(var(--primary)/0.22),hsl(var(--primary)/0.08),transparent)] dark:bg-[linear-gradient(90deg,transparent,hsl(var(--primary)/0.28),hsl(var(--primary)/0.12),transparent)]"
-                role="separator"
-                aria-hidden
-              />
-              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-8 pt-2">
-                {sessions.length === 0 ? (
-                  <p className="px-2 pt-3 text-center text-[12px] leading-relaxed text-muted-foreground/70">
-                    {t('sidebar.emptyChatHistory')}
-                  </p>
-                ) : (
-                  sessionList
-                )}
+        {!sidebarCollapsed ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2.5 pl-1">
+            <img src={logoSvg} alt="" className="h-10 w-10 shrink-0 rounded-[10px] object-contain" width={40} height={40} />
+            <div className="min-w-0">
+              <div className="text-[17px] font-bold leading-tight tracking-tight text-foreground">STO Claw</div>
+              <div className="text-xs text-muted-foreground">
+                {t('common:sidebar.appVersionLabel', { version: appVersionShort })}
               </div>
             </div>
-          </aside>
-          {showHistoryEdgeToggleOnPanel && (
-            <button
-              type="button"
-              aria-expanded
-              aria-label={historyPanelToggleLabel}
-              title={historyPanelToggleLabel}
-              onClick={handleChatPanelEdgeToggle}
-              style={historyEdgeArcClipStyle}
-              className={cn(
-                'absolute right-0 top-1/2 z-30 -translate-y-1/2 translate-x-1/2',
-                historyEdgeArcClass,
-              )}
-            >
-              <ChevronLeft className="relative z-10 h-4 w-4 -translate-x-2" strokeWidth={1.65} />
-            </button>
+          </div>
+        ) : (
+          <div className="flex w-full justify-center pt-0.5">
+            <img src={logoSvg} alt="" className="h-9 w-9 rounded-[10px] object-contain" width={36} height={36} />
+          </div>
+        )}
+        <button
+          type="button"
+          aria-expanded={!sidebarCollapsed}
+          aria-label={sidebarCollapsed ? t('common:sidebar.toggleSidebarExpand') : t('common:sidebar.toggleSidebarCollapse')}
+          title={sidebarCollapsed ? t('common:sidebar.toggleSidebarExpand') : t('common:sidebar.toggleSidebarCollapse')}
+          onClick={() => setSidebarCollapsed((c) => !c)}
+          className={cn(
+            'flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[var(--sto-sidebar-border)] bg-white text-muted-foreground transition-colors hover:border-[rgba(255,140,0,0.45)] hover:text-[var(--sto-accent)] dark:bg-card dark:text-muted-foreground',
+            sidebarCollapsed && 'mt-1',
+          )}
+        >
+          {sidebarCollapsed ? (
+            <ChevronRight className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+          ) : (
+            <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+          )}
+        </button>
+      </div>
+
+      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-2 pb-2 pt-2">
+        <div className="flex flex-col gap-0.5">
+          {primaryNav.map((item) => (
+            <SidebarNavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              icon={item.icon}
+              label={item.label}
+              collapsed={sidebarCollapsed}
+            />
+          ))}
+        </div>
+
+        {!sidebarCollapsed ? (
+          <p className="mt-4 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+            {t('common:sidebar.workspace')}
+          </p>
+        ) : (
+          <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
+        )}
+        <div className="flex flex-col gap-0.5">
+          {workspaceNav.map((item) => (
+            <SidebarNavLink
+              key={item.to}
+              to={item.to}
+              icon={item.icon}
+              label={item.label}
+              collapsed={sidebarCollapsed}
+            />
+          ))}
+        </div>
+
+        {!sidebarCollapsed ? (
+          <p className="mt-4 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+            {t('common:sidebar.sessionList')}
+          </p>
+        ) : (
+          <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
+        )}
+
+        {!sidebarCollapsed ? (
+          <button
+            type="button"
+            onClick={() => {
+              const { messages } = useChatStore.getState();
+              if (messages.length > 0) newSession();
+              navigate('/chat');
+            }}
+            className="mx-1 mt-1 flex items-center gap-2 rounded-xl border border-[rgba(255,140,0,0.35)] bg-[var(--sto-accent-soft)] px-3 py-2.5 text-left text-[13px] font-semibold text-[var(--sto-accent)] shadow-sm transition-colors hover:opacity-95 dark:bg-amber-950/35"
+          >
+            <Plus className="h-[17px] w-[17px] shrink-0" strokeWidth={2} aria-hidden />
+            <span className="truncate">{t('common:sidebar.newChat')}</span>
+          </button>
+        ) : (
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={t('common:sidebar.newChat')}
+                title={t('common:sidebar.newChat')}
+                onClick={() => {
+                  const { messages } = useChatStore.getState();
+                  if (messages.length > 0) newSession();
+                  navigate('/chat');
+                }}
+                className="mx-1 mt-1 flex h-10 w-10 items-center justify-center self-center rounded-xl border border-[rgba(255,140,0,0.35)] bg-[var(--sto-accent-soft)] text-[var(--sto-accent)] dark:bg-amber-950/35"
+              >
+                <Plus className="h-[17px] w-[17px]" strokeWidth={2} aria-hidden />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">{t('common:sidebar.newChat')}</TooltipContent>
+          </Tooltip>
+        )}
+
+        <div className="min-h-0 flex-1 space-y-1 pb-2 pt-1">
+          {!sidebarCollapsed &&
+            (sessions.length === 0 ? (
+              <p className="px-2 pt-2 text-center text-[12px] leading-relaxed text-muted-foreground/80">
+                {t('common:sidebar.emptyChatHistory')}
+              </p>
+            ) : (
+              sessionBuckets.map((bucket) =>
+                bucket.sessions.length > 0 ? (
+                <div key={bucket.key} className="rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => toggleBucket(bucket.key)}
+                    className="flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
+                  >
+                    <span className="truncate">{bucket.label}</span>
+                    <ChevronDown
+                      className={cn('h-4 w-4 shrink-0 transition-transform', bucketOpen[bucket.key] ? 'rotate-180' : '')}
+                      aria-hidden
+                    />
+                  </button>
+                  {bucketOpen[bucket.key] &&
+                    bucket.sessions.map((s) => {
+                      const agentId = getAgentIdFromSessionKey(s.key);
+                      const agentName = agentNameById[agentId] || agentId;
+                      return (
+                        <div key={s.key} className="group relative flex items-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              switchSession(s.key);
+                              navigate('/chat');
+                            }}
+                            title={getSessionLabel(s.key, s.displayName, s.label)}
+                            className={cn(
+                              'w-full rounded-xl py-2 text-left text-[13px] transition-colors',
+                              'px-2.5 pr-8',
+                              isOnChat && currentSessionKey === s.key
+                                ? 'bg-[var(--sto-accent-soft)] font-medium text-[var(--sto-accent)] ring-1 ring-[rgba(255,140,0,0.35)] dark:bg-amber-950/35'
+                                : 'text-foreground/80 hover:bg-black/[0.04] dark:hover:bg-white/[0.05]',
+                            )}
+                          >
+                            <div className="flex min-w-0 flex-col gap-0.5">
+                              <span className="truncate">{getSessionLabel(s.key, s.displayName, s.label)}</span>
+                              <span className="truncate text-[10px] text-muted-foreground/85">{agentName}</span>
+                            </div>
+                          </button>
+                          {!sidebarCollapsed ? (
+                            <button
+                              type="button"
+                              aria-label={t('common:actions.delete')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSessionToDelete({
+                                  key: s.key,
+                                  label: getSessionLabel(s.key, s.displayName, s.label),
+                                });
+                              }}
+                              className={cn(
+                                'absolute right-1 flex items-center justify-center rounded p-0.5 transition-opacity',
+                                'opacity-0 group-hover:opacity-100',
+                                'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
+                              )}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                </div>
+              ) : null,
+              )
+            )
           )}
         </div>
-      )}
-    </div>
+      </nav>
+
+      {authUser ? (
+        <div className="shrink-0 border-t border-[var(--sto-sidebar-border)] p-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  'flex w-full rounded-xl border border-transparent bg-white/80 text-left transition-colors hover:border-[rgba(255,140,0,0.35)] hover:bg-white dark:bg-card/80 dark:hover:bg-card',
+                  sidebarCollapsed ? 'flex-col items-center justify-center gap-0 p-2' : 'items-center gap-2 p-2',
+                )}
+                title={isGatewayRunning ? t('common:status.connected') : t('common:status.disconnected')}
+              >
+                {sidebarCollapsed ? (
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary">
+                    {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
+                  </span>
+                ) : (
+                  <>
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-sm font-semibold text-foreground">
+                          {authUser.realName || authUser.userName}
+                        </span>
+                        <span className="shrink-0 rounded bg-[var(--sto-accent-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[#b45309] dark:bg-amber-950/50 dark:text-amber-200">
+                          {t('common:sidebar.enterpriseTag')}
+                        </span>
+                      </div>
+                      <span className="truncate text-[11px] text-muted-foreground">
+                        ID {authUser.id}
+                        {authUser.departmentName ? ` · ${authUser.departmentName}` : ''}
+                      </span>
+                    </div>
+                    <SettingsIcon className="h-5 w-5 shrink-0 text-muted-foreground" strokeWidth={1.5} aria-hidden />
+                  </>
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="right" align="end" sideOffset={8} className="w-48">
+              <DropdownMenuItem onClick={() => navigate('/settings')} className="gap-2">
+                <SettingsIcon className="h-4 w-4 shrink-0" strokeWidth={2} />
+                {t('common:sidebar.settings')}
+              </DropdownMenuItem>
+
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="gap-2">
+                  <Globe className="h-4 w-4 shrink-0" strokeWidth={2} />
+                  <span className="flex-1">{t('settings:appearance.language')}</span>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" strokeWidth={2} />
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent sideOffset={4}>
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <DropdownMenuItem key={lang.code} onClick={() => setLanguage(lang.code)} className="gap-2">
+                      {language === lang.code ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
+                      ) : (
+                        <span className="w-3.5 shrink-0" />
+                      )}
+                      {lang.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="gap-2">
+                  {theme === 'light' ? (
+                    <Sun className="h-4 w-4 shrink-0" strokeWidth={2} />
+                  ) : theme === 'dark' ? (
+                    <Moon className="h-4 w-4 shrink-0" strokeWidth={2} />
+                  ) : (
+                    <Monitor className="h-4 w-4 shrink-0" strokeWidth={2} />
+                  )}
+                  <span className="flex-1">{t('settings:appearance.theme')}</span>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" strokeWidth={2} />
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent sideOffset={4}>
+                  {(['light', 'dark', 'system'] as const).map((t_value) => (
+                    <DropdownMenuItem key={t_value} onClick={() => setTheme(t_value)} className="gap-2">
+                      {theme === t_value ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
+                      ) : (
+                        <span className="w-3.5 shrink-0" />
+                      )}
+                      {t(`settings:appearance.${t_value}`)}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+
+              <DropdownMenuSeparator />
+
+              <DropdownMenuItem
+                onClick={() => setShowLogoutConfirm(true)}
+                className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+              >
+                <LogOut className="h-4 w-4 shrink-0" strokeWidth={2} />
+                {t('auth:logout.button')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ) : null}
+
+      <ConfirmDialog
+        open={!!sessionToDelete}
+        title={t('common:actions.confirm')}
+        message={t('common:sidebar.deleteSessionConfirm', { label: sessionToDelete?.label })}
+        confirmLabel={t('common:actions.delete')}
+        cancelLabel={t('common:actions.cancel')}
+        variant="destructive"
+        onConfirm={async () => {
+          if (!sessionToDelete) return;
+          await deleteSession(sessionToDelete.key);
+          if (currentSessionKey === sessionToDelete.key) navigate('/chat');
+          setSessionToDelete(null);
+        }}
+        onCancel={() => setSessionToDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={showLogoutConfirm}
+        title={t('auth:logout.confirmTitle')}
+        message={t('auth:logout.confirmMessage')}
+        confirmLabel={t('auth:logout.button')}
+        cancelLabel={t('common:actions.cancel')}
+        variant="destructive"
+        onConfirm={async () => {
+          setShowLogoutConfirm(false);
+          await authLogout();
+          navigate('/login');
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
+    </aside>
   );
 }

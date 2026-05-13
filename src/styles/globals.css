@@ -34,6 +34,17 @@
     --canvas-from: #f4fbff;
     --canvas-via: #eaf5ff;
     --canvas-to: #f3f9ff;
+
+    /* STO Claw 壳层（归档设计稿对齐） */
+    --sto-page-bg: #f7f8fa;
+    --sto-sidebar-bg: #f3f4f6;
+    --sto-sidebar-border: #e8eaef;
+    --sto-accent: #ff8c00;
+    --sto-accent-soft: #fff3e0;
+    --sto-sidebar-w-expanded: 248px;
+    --sto-sidebar-w-collapsed: 72px;
+    --sto-main-inner-max: 1100px;
+    --sto-content-pad-x: 20px;
   }
 
   .dark {
@@ -66,6 +77,16 @@
     --canvas-from: #07111c;
     --canvas-via: #0b1a29;
     --canvas-to: #102538;
+
+    --sto-page-bg: hsl(207 53% 9%);
+    --sto-sidebar-bg: hsl(208 40% 11%);
+    --sto-sidebar-border: hsl(204 28% 18%);
+    --sto-accent: #ff9f2e;
+    --sto-accent-soft: hsl(32 45% 14%);
+    --sto-sidebar-w-expanded: 248px;
+    --sto-sidebar-w-collapsed: 72px;
+    --sto-main-inner-max: 1100px;
+    --sto-content-pad-x: 20px;
   }
 }
 
@@ -185,6 +206,11 @@
 
   .signal-card:hover::after {
     transform: translateX(130%);
+  }
+
+  .sto-tool-btn {
+    @apply inline-flex items-center gap-1.5 rounded-lg border border-[var(--sto-sidebar-border)] bg-white px-2.5 py-2 text-[13px] font-medium text-muted-foreground transition-colors;
+    @apply hover:border-[rgba(255,140,0,0.45)] hover:text-[var(--sto-accent)] dark:border-border dark:bg-transparent;
   }
 }
 

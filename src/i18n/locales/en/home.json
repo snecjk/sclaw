@@ -1,0 +1,64 @@
+{
+  "hero": {
+    "title": "STO Claw — run your branch smarter",
+    "subtitle": "An AI workspace for branches: faster daily ops, clearer hand-offs, and less busywork."
+  },
+  "summary": {
+    "heading": "Overview",
+    "recon": {
+      "title": "Yesterday HQ reconciliation",
+      "pill": "Interest posted",
+      "status": "Done",
+      "stat1Label": "Net",
+      "stat1Value": "128,560",
+      "stat1Unit": "CNY",
+      "stat2Label": "Income",
+      "stat2Value": "98,750",
+      "stat2Unit": "CNY",
+      "stat3Label": "Expense",
+      "stat3Value": "29,810",
+      "stat3Unit": "CNY",
+      "footerTeam": "Settlement squad",
+      "footerHint": "4 exceptions — view"
+    },
+    "customer": {
+      "title": "Yesterday exception customers",
+      "pill": "Customer care",
+      "status": "Handled",
+      "stat1Label": "Exceptions",
+      "stat1Value": "3",
+      "stat1Unit": "items",
+      "stat2Label": "Customers",
+      "stat2Value": "6",
+      "stat2Unit": "",
+      "stat3Label": "Amount at risk",
+      "stat3Value": "10,000",
+      "stat3Unit": "CNY",
+      "footerTeam": "Customer tracking",
+      "footerHint": "3 exceptions — view"
+    },
+    "cost": {
+      "title": "Outbound cost (MTD)",
+      "pill": "Outbound cost",
+      "status": "Done",
+      "stat1Label": "Cost per parcel",
+      "stat1Value": "2.36",
+      "stat1Unit": "CNY/parcel",
+      "stat2Label": "Cost anomalies",
+      "stat2Value": "3",
+      "stat2Unit": "accounts",
+      "footerTeam": "Outbound cost squad",
+      "footerHint": "1 exception — view"
+    }
+  },
+  "assistant": {
+    "placeholder": "Ask in natural language or attach a file…",
+    "uploadFile": "Upload file",
+    "skillCall": "Skills",
+    "dataAnalysis": "Data analysis",
+    "workflow": "Workflow",
+    "send": "Send",
+    "gatewayRequired": "Connect the gateway before sending.",
+    "sendFailed": "Could not send. Open Chat for details."
+  }
+}
