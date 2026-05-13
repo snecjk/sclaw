@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { assistantChatCardBg, assistantChatCardBgStreaming } from '@/lib/surfaces';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
-import { extractText, extractThinking, extractImages, extractToolUse, formatTimestamp } from './message-utils';
+import { extractText, extractThinking, extractImages, extractToolUse, formatTimestamp, extractPreviewableRefs } from './message-utils';
 
 interface ChatMessageProps {
   message: RawMessage;
@@ -29,6 +29,7 @@ interface ChatMessageProps {
     durationMs?: number;
     summary?: string;
   }>;
+  onPreviewFile?: (file: AttachedFileMeta) => void;
 }
 
 interface ExtractedImage { url?: string; data?: string; mimeType: string; }
@@ -45,6 +46,7 @@ export const ChatMessage = memo(function ChatMessage({
   showThinking,
   isStreaming = false,
   streamingTools = [],
+  onPreviewFile,
 }: ChatMessageProps) {
   const { t } = useTranslation('chat');
   const isUser = message.role === 'user';
@@ -61,11 +63,16 @@ export const ChatMessage = memo(function ChatMessage({
   const attachedFiles = message._attachedFiles || [];
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
 
+  // Extract previewable refs from message text (local paths / localhost URLs)
+  const extractedRefs = extractPreviewableRefs(text).filter(
+    (ref) => !attachedFiles.some((f) => f.filePath === ref.filePath),
+  );
+
   // Never render tool result messages in chat UI
   if (isToolResult) return null;
 
   const hasStreamingToolStatus = isStreaming && streamingTools.length > 0;
-  if (!hasText && !visibleThinking && images.length === 0 && visibleTools.length === 0 && attachedFiles.length === 0 && !hasStreamingToolStatus) return null;
+  if (!hasText && !visibleThinking && images.length === 0 && visibleTools.length === 0 && attachedFiles.length === 0 && extractedRefs.length === 0 && !hasStreamingToolStatus) return null;
 
   return (
     <div
@@ -154,7 +161,7 @@ export const ChatMessage = memo(function ChatMessage({
                 );
               }
               // Non-image files → file card
-              return <FileCard key={`local-${i}`} file={file} />;
+              return <FileCard key={`local-${i}`} file={file} onPreviewFile={onPreviewFile} />;
             })}
           </div>
         )}
@@ -168,6 +175,7 @@ export const ChatMessage = memo(function ChatMessage({
             streamingLabel={t('streaming.respondingBadge')}
             completedLabel={t('streaming.completedLabel')}
             completedBadge={t('streaming.completedBadge')}
+            onPreviewFile={onPreviewFile}
           />
         )}
 
@@ -192,7 +200,7 @@ export const ChatMessage = memo(function ChatMessage({
         )}
 
         {/* File attachments — assistant messages (below text) */}
-        {!isUser && attachedFiles.length > 0 && (
+        {!isUser && (attachedFiles.length > 0 || extractedRefs.length > 0) && (
           <div className="flex flex-wrap gap-2">
             {attachedFiles.map((file, i) => {
               const isImage = file.mimeType.startsWith('image/');
@@ -216,8 +224,15 @@ export const ChatMessage = memo(function ChatMessage({
                   </div>
                 );
               }
-              return <FileCard key={`local-${i}`} file={file} />;
+              return <FileCard key={`local-${i}`} file={file} onPreviewFile={onPreviewFile} />;
             })}
+            {extractedRefs.map((ref, i) => (
+              <FileCard
+                key={`extracted-${i}`}
+                file={{ ...ref, fileSize: 0, preview: null }}
+                onPreviewFile={onPreviewFile}
+              />
+            ))}
           </div>
         )}
 
@@ -336,6 +351,7 @@ function MessageBubble({
   streamingLabel,
   completedLabel,
   completedBadge,
+  onPreviewFile,
 }: {
   text: string;
   isUser: boolean;
@@ -343,6 +359,7 @@ function MessageBubble({
   streamingLabel: string;
   completedLabel: string;
   completedBadge: string;
+  onPreviewFile?: (file: AttachedFileMeta) => void;
 }) {
   const showStreamingChrome = isStreaming && !isUser;
 
@@ -411,6 +428,32 @@ function MessageBubble({
                 );
               },
               a({ href, children }) {
+                if (href?.startsWith('preview://') && onPreviewFile) {
+                  const target = href.slice('preview://'.length);
+                  const fileName = target.split('/').pop() || '';
+                  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+                  const mimeMap: Record<string, string> = {
+                    html: 'text/html', htm: 'text/html',
+                    pdf: 'application/pdf',
+                    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+                    gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp',
+                    md: 'text/markdown',
+                  };
+                  return (
+                    <button
+                      onClick={() => onPreviewFile({
+                        filePath: target,
+                        fileName,
+                        mimeType: mimeMap[ext] || 'text/html',
+                        fileSize: 0,
+                        preview: null,
+                      })}
+                      className="inline bg-transparent border-0 p-0 text-primary hover:underline break-words break-all cursor-pointer font-inherit"
+                    >
+                      {children}
+                    </button>
+                  );
+                }
                 return (
                   <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-words break-all">
                     {children}
@@ -419,7 +462,7 @@ function MessageBubble({
               },
             }}
           >
-            {text}
+            {onPreviewFile ? preprocessTextForPreviewLinks(text) : text}
           </ReactMarkdown>
           {isStreaming && (
             <StreamingCursor />
@@ -453,6 +496,42 @@ function MessageBubble({
       )}
     </div>
   );
+}
+
+/** Wrap local file paths and web URLs in preview:// markdown links so ReactMarkdown can render them as clickable buttons. */
+function preprocessTextForPreviewLinks(text: string): string {
+  // Protect code blocks and inline code from being modified
+  const codeBlocks: string[] = [];
+  text = text.replace(/```[\s\S]*?```/g, (match) => {
+    codeBlocks.push(match);
+    return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+  });
+
+  const inlineCodes: string[] = [];
+  text = text.replace(/`[^`]*`/g, (match) => {
+    inlineCodes.push(match);
+    return `__INLINE_CODE_${inlineCodes.length - 1}__`;
+  });
+
+  // Replace web URLs
+  text = text.replace(
+    /(https?:\/\/[^\s)\]"',;<>]+)/g,
+    '[$1](preview://$1)',
+  );
+
+  // Replace absolute file paths
+  text = text.replace(
+    /(\/(?:[\w.-]+\/)*[\w.-]+\.\w{2,})/g,
+    '[$1](preview://$1)',
+  );
+
+  // Restore inline code
+  text = text.replace(/__INLINE_CODE_(\d+)__/g, (_, i) => inlineCodes[Number(i)]);
+
+  // Restore code blocks
+  text = text.replace(/__CODE_BLOCK_(\d+)__/g, (_, i) => codeBlocks[Number(i)]);
+
+  return text;
 }
 
 function StreamingCursor() {
@@ -537,22 +616,26 @@ function FileIcon({ mimeType, className }: { mimeType: string; className?: strin
   return <File className={className} />;
 }
 
-function FileCard({ file }: { file: AttachedFileMeta }) {
+function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFile?: (file: AttachedFileMeta) => void }) {
   const handleOpen = useCallback(() => {
-    if (file.filePath) {
+    if (onPreviewFile) {
+      onPreviewFile(file);
+    } else if (file.filePath) {
       invokeIpc('shell:openPath', file.filePath);
     }
-  }, [file.filePath]);
+  }, [file, onPreviewFile]);
+
+  const isPreviewable = ['text/html', 'text/markdown', 'application/pdf'].some((t) => file.mimeType === t) || file.mimeType.startsWith('image/');
 
   return (
     <div 
       className={cn(
         'flex max-w-[220px] items-center gap-3 rounded-2xl border border-primary/10 px-3 py-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
         assistantChatCardBg,
-        file.filePath && 'cursor-pointer transition-all hover:border-primary/20 hover:bg-white/[0.97] dark:hover:bg-white/[0.12]',
+        (file.filePath || onPreviewFile) && 'cursor-pointer transition-all hover:border-primary/20 hover:bg-white/[0.97] dark:hover:bg-white/[0.12]',
       )}
       onClick={handleOpen}
-      title={file.filePath ? "打开文件" : undefined}
+      title={isPreviewable ? '点击预览' : file.filePath ? '打开文件' : undefined}
     >
       <FileIcon mimeType={file.mimeType} className="h-5 w-5 shrink-0 text-muted-foreground" />
       <div className="min-w-0 overflow-hidden">
@@ -561,6 +644,9 @@ function FileCard({ file }: { file: AttachedFileMeta }) {
           {file.fileSize > 0 ? formatFileSize(file.fileSize) : 'File'}
         </p>
       </div>
+      {isPreviewable && onPreviewFile && (
+        <span className="ml-auto shrink-0 text-[10px] text-primary/70">预览</span>
+      )}
     </div>
   );
 }

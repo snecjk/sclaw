@@ -158,6 +158,44 @@ export async function handleFileRoutes(
     return true;
   }
 
+  if (url.pathname === '/api/files/read' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ filePath: string; encoding?: 'utf-8' | 'base64' }>(req);
+      const fsP = await import('node:fs/promises');
+      const encoding = body.encoding || 'utf-8';
+      if (encoding === 'base64') {
+        const buf = await fsP.readFile(body.filePath);
+        sendJson(res, 200, { content: buf.toString('base64'), encoding: 'base64' });
+      } else {
+        const content = await fsP.readFile(body.filePath, 'utf-8');
+        sendJson(res, 200, { content, encoding: 'utf-8' });
+      }
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/files/serve' && req.method === 'GET') {
+    try {
+      const filePath = url.searchParams.get('path');
+      if (!filePath) {
+        sendJson(res, 400, { success: false, error: 'Missing path parameter' });
+        return true;
+      }
+      const fsP = await import('node:fs/promises');
+      const buf = await fsP.readFile(filePath);
+      const ext = extname(filePath).toLowerCase();
+      const mimeType = getMimeType(ext);
+      res.setHeader('Content-Type', mimeType);
+      res.statusCode = 200;
+      res.end(buf);
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/files/save-image' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{

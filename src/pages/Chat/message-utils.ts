@@ -202,6 +202,135 @@ export function extractToolUse(message: RawMessage | unknown): Array<{ id: strin
 }
 
 /**
+ * Determine if an attached file is previewable in the side panel.
+ */
+const PREVIEWABLE_MIME_PREFIXES = [
+  'text/html',
+  'application/pdf',
+  'text/markdown',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'text/plain',
+  'text/csv',
+  'application/json',
+];
+
+export function isPreviewableFile(file: { mimeType: string; filePath?: string }): boolean {
+  if (!file.filePath) return false;
+  return PREVIEWABLE_MIME_PREFIXES.some((prefix) =>
+    prefix.endsWith('/') ? file.mimeType.startsWith(prefix) : file.mimeType === prefix,
+  );
+}
+
+function extToMimeType(ext: string): string {
+  const map: Record<string, string> = {
+    html: 'text/html', htm: 'text/html',
+    pdf: 'application/pdf',
+    md: 'text/markdown', txt: 'text/plain',
+    json: 'application/json', csv: 'text/csv',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  };
+  return map[ext] || 'application/octet-stream';
+}
+
+/**
+ * Extract previewable local file paths and localhost URLs from plain text.
+ * Matches absolute paths like /Users/.../file.html and localhost URLs like http://localhost:8080/path.
+ */
+export function extractPreviewableRefs(text: string): Array<{ filePath: string; fileName: string; mimeType: string }> {
+  const results: Array<{ filePath: string; fileName: string; mimeType: string }> = [];
+  const seen = new Set<string>();
+
+  function addIfNotImage(filePath: string, fileName: string, ext: string) {
+    const mimeType = extToMimeType(ext);
+    if (mimeType.startsWith('image/')) return;
+    if (seen.has(filePath)) return;
+    seen.add(filePath);
+    results.push({ filePath, fileName, mimeType });
+  }
+
+  // Web URLs (localhost and external)
+  const urlRegex = /(https?:\/\/[^\s)\]"',;<>]+)/g;
+  let match;
+  while ((match = urlRegex.exec(text)) !== null) {
+    const url = match[1];
+    const fileName = url.split('/').pop() || 'index.html';
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    addIfNotImage(url, fileName, ext);
+  }
+
+  // Absolute file paths (Unix / Windows)
+  const pathRegex = /(\/(?:[\w.-]+\/)*[\w.-]+\.\w{2,})/g;
+  while ((match = pathRegex.exec(text)) !== null) {
+    const path = match[1];
+    const fileName = path.split('/').pop() || '';
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    addIfNotImage(path, fileName, ext);
+  }
+
+  return results;
+}
+
+/**
+ * Extract previewable files from an array of messages.
+ * Includes both _attachedFiles and references found in message text.
+ */
+export function usePreviewableFiles(messages: Array<unknown & { _attachedFiles?: Array<{ mimeType: string; filePath?: string; fileName: string }>; content?: unknown }>) {
+  const seen = new Set<string>();
+  const result: Array<{ mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }> = [];
+
+  function addItem(item: { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }) {
+    if (seen.has(item.filePath)) return;
+    seen.add(item.filePath);
+    result.push(item);
+  }
+
+  for (const msg of messages) {
+    // Path 1: explicit attached files
+    if (msg._attachedFiles) {
+      for (const file of msg._attachedFiles) {
+        if (!isPreviewableFile(file)) continue;
+        const fp = file.filePath || file.fileName;
+        if (!fp) continue;
+        addItem({
+          mimeType: file.mimeType,
+          filePath: fp,
+          fileName: file.fileName,
+          fileSize: (file as { fileSize?: number }).fileSize ?? 0,
+          preview: (file as { preview?: string | null }).preview ?? null,
+        });
+      }
+    }
+
+    // Path 2: references in message text
+    const text = extractText(msg);
+    if (text) {
+      const refs = extractPreviewableRefs(text);
+      for (const ref of refs) {
+        addItem({
+          mimeType: ref.mimeType,
+          filePath: ref.filePath,
+          fileName: ref.fileName,
+          fileSize: 0,
+          preview: null,
+        });
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * Format a Unix timestamp (seconds) to relative time string.
  */
 export function formatTimestamp(timestamp: unknown): string {

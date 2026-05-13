@@ -4,10 +4,10 @@
  * via gateway:rpc IPC. Session selector, thinking toggle, and refresh
  * are in the toolbar; messages render with markdown + streaming.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowDown, Bot, Cpu, Loader2, Orbit, Sparkles, Workflow } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useChatStore, type RawMessage } from '@/stores/chat';
+import { useChatStore, type RawMessage, type AttachedFileMeta } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAgentsStore } from '@/stores/agents';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
@@ -16,7 +16,8 @@ import { ChatMessage } from './ChatMessage';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatToolbar } from './ChatToolbar';
 import { PendingQueuePanel } from './PendingQueuePanel';
-import { extractImages, extractText, extractThinking, extractToolUse } from './message-utils';
+import { ChatPreviewPanel } from './ChatPreviewPanel';
+import { extractImages, extractText, extractThinking, extractToolUse, usePreviewableFiles } from './message-utils';
 import { useMessageQueueStore, createAutoSendWatcher } from '@/stores/message-queue';
 import { invokeApi } from '@/lib/api-client';
 import { useTranslation } from 'react-i18next';
@@ -55,6 +56,8 @@ export function Chat() {
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [splitting, setSplitting] = useState(false);
+  const [showPreviewPanel, setShowPreviewPanel] = useState(true);
+  const [activePreviewFilePath, setActivePreviewFilePath] = useState<string | null>(null);
   const minLoading = useMinLoading(loading && messages.length > 0);
   const { contentRef, scrollRef } = useStickToBottomInstant(currentSessionKey);
 
@@ -189,6 +192,17 @@ export function Chat() {
     useMessageQueueStore.getState().enqueue(text, attachments, targetAgentId);
   }, []);
 
+  // Collect previewable files from messages and streaming message
+  const allMessagesForPreview = useMemo(() => {
+    const arr = [...messages] as Array<{ _attachedFiles?: AttachedFileMeta[] }>;
+    if (streamMsg) {
+      arr.push(streamMsg as unknown as { _attachedFiles?: AttachedFileMeta[] });
+    }
+    return arr;
+  }, [messages, streamMsg]);
+  const previewableFiles = usePreviewableFiles(allMessagesForPreview);
+  const hasPreviewableFiles = previewableFiles.length > 0;
+
   // Auto-send watcher: sends queued messages one-by-one when AI finishes responding
   useEffect(() => {
     const unsub = createAutoSendWatcher(() => scrollToLatest('auto'));
@@ -196,7 +210,9 @@ export function Chat() {
   }, [scrollToLatest]);
 
   return (
-    <div className={cn("relative flex flex-col -m-6 transition-colors duration-500")} style={{ height: 'calc(100vh - 2.5rem)' }}>
+    <div className={cn("relative flex -m-6 transition-colors duration-500")} style={{ height: 'calc(100vh - 2.5rem)' }}>
+      {/* Left: Chat area */}
+      <div className="relative flex flex-1 flex-col min-w-0">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.10),_transparent_28%),radial-gradient(circle_at_80%_20%,_rgba(191,219,254,0.10),_transparent_24%)]" />
         <div className="absolute inset-0 neural-grid opacity-20" />
@@ -227,6 +243,13 @@ export function Chat() {
                   key={msg.id || `msg-${idx}`}
                   message={msg}
                   showThinking={showThinking}
+                  onPreviewFile={(file) => {
+                    console.log('file', file);
+                    if (file.filePath) {
+                      setActivePreviewFilePath(file.filePath);
+                      setShowPreviewPanel(true);
+                    }
+                  }}
                 />
               ))}
 
@@ -248,6 +271,12 @@ export function Chat() {
                   showThinking={showThinking}
                   isStreaming
                   streamingTools={streamingTools}
+                  onPreviewFile={(file) => {
+                    if (file.filePath) {
+                      setActivePreviewFilePath(file.filePath);
+                      setShowPreviewPanel(true);
+                    }
+                  }}
                 />
               )}
 
@@ -353,6 +382,41 @@ export function Chat() {
             <LoadingSpinner size="md" />
           </div>
         </div>
+      )}
+      </div>
+
+      {/* Right: Preview Panel */}
+      <AnimatePresence>
+        {hasPreviewableFiles && showPreviewPanel && (
+          <motion.div
+            initial={{ opacity: 0, x: 40 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 40 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="shrink-0 overflow-hidden w-[40vw] min-w-[380px] max-w-[560px]"
+          >
+            <ChatPreviewPanel
+              files={previewableFiles}
+              activeFilePath={activePreviewFilePath}
+              onSelectFile={setActivePreviewFilePath}
+              onClose={() => setShowPreviewPanel(false)}
+              className="h-full w-full"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating toggle button when panel is hidden but files exist */}
+      {hasPreviewableFiles && !showPreviewPanel && (
+        <button
+          onClick={() => setShowPreviewPanel(true)}
+          className="absolute right-4 top-4 z-20 inline-flex h-8 items-center gap-1.5 rounded-full border border-primary/15 bg-white/60 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white/80 dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
+        >
+          <span>预览产物</span>
+          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] text-primary">
+            {previewableFiles.length}
+          </span>
+        </button>
       )}
     </div>
   );

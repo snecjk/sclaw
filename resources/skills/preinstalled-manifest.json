@@ -55,6 +55,11 @@
       "ref": "main",
       "version": "main",
       "autoEnable": true
+    },
+    {
+      "slug": "table-css-gen",
+      "local": true,
+      "autoEnable": true
     }
   ]
 }
