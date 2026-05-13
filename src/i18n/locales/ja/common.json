@@ -25,7 +25,11 @@
         "emptyChatHistory": "会話履歴はありません",
         "expandHistoryPanel": "履歴パネルを開く",
         "collapseHistoryPanel": "履歴パネルを閉じる",
-        "subscriptions": "サブスクリプション"
+        "subscriptions": "サブスクリプション",
+        "taskList": "タスク一覧",
+        "taskHqReconciliation": "本社照合結果",
+        "taskAbnormalCustomers": "異常顧客フォロー",
+        "taskOutboundCost": "出港コストレポート"
     },
     "actions": {
         "save": "保存",

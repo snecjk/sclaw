@@ -25,7 +25,11 @@
         "emptyChatHistory": "No conversations yet",
         "expandHistoryPanel": "Show conversation history",
         "collapseHistoryPanel": "Hide conversation history",
-        "subscriptions": "Subscriptions"
+        "subscriptions": "Subscriptions",
+        "taskList": "Task list",
+        "taskHqReconciliation": "HQ reconciliation",
+        "taskAbnormalCustomers": "Abnormal customer tracking",
+        "taskOutboundCost": "Outbound cost report"
     },
     "actions": {
         "save": "Save",

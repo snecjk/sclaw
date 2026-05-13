@@ -48,6 +48,7 @@ import { useTranslation } from 'react-i18next';
 import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
 import logoSvg from '@/assets/logo.svg';
 import packageJson from '../../../package.json';
+import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
 
 type SessionBucketKey =
   | 'today'
@@ -90,6 +91,33 @@ function collapsedEntryLabel(full: string): string {
   if (!s) return '…';
   const first = [...s][0];
   return `${first}…`;
+}
+
+const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' | 'taskAbnormalCustomers' | 'taskOutboundCost'; dot?: boolean }[] = [
+  { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation', dot: true },
+  { id: 'abnormal-customers', labelKey: 'taskAbnormalCustomers' },
+  { id: 'outbound-cost', labelKey: 'taskOutboundCost' },
+];
+
+/** 侧栏「任务列表」文本链（浅灰选中底，对齐设计稿图二）。 */
+function SidebarTaskTextLink({ to, label, showDot }: { to: string; label: string; showDot?: boolean }) {
+  const { pathname } = useLocation();
+  const isActive = matchPath({ path: to, end: true, caseSensitive: false }, pathname) != null;
+
+  return (
+    <NavLink
+      to={to}
+      className={cn(
+        'flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium transition-colors',
+        isActive
+          ? 'bg-black/[0.06] text-foreground dark:bg-white/[0.1]'
+          : 'text-foreground/85 hover:bg-black/[0.04] dark:text-foreground/80 dark:hover:bg-white/[0.06]',
+      )}
+    >
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {showDot ? <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" aria-hidden /> : null}
+    </NavLink>
+  );
 }
 
 function SidebarNavLink({
@@ -365,6 +393,24 @@ export function Sidebar() {
             />
           ))}
         </div>
+
+        {!sidebarCollapsed ? (
+          <p className="mt-4 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+            {t('common:sidebar.taskList')}
+          </p>
+        ) : null}
+        {!sidebarCollapsed ? (
+          <div className="mt-1 flex flex-col gap-0.5">
+            {STO_TASK_NAV.map((item) => (
+              <SidebarTaskTextLink
+                key={item.id}
+                to={taskDetailPath(item.id)}
+                label={t(`common:sidebar.${item.labelKey}`)}
+                showDot={item.dot}
+              />
+            ))}
+          </div>
+        ) : null}
 
         {!sidebarCollapsed ? (
           <p className="mt-4 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">

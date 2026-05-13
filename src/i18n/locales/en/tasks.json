@@ -1,0 +1,89 @@
+{
+  "backHome": "Back to home",
+  "detail": {
+    "hq-reconciliation": {
+      "pageTitle": "May 10, 2026 · Yesterday HQ reconciliation",
+      "intro": "Yesterday HQ reconciliation is ready. Key figures are below.",
+      "metaReconTime": "Reconciliation time",
+      "metaReconTimeValue": "2026-05-10 06:00",
+      "metaGenerated": "Generated at",
+      "metaGeneratedValue": "2026-05-10 08:30",
+      "summaryTitle": "Summary",
+      "summary": {
+        "headers": ["Indicator", "Amount (CNY)"],
+        "rows": [
+          ["Total in / out", "128,560"],
+          ["Income", "98,750"],
+          ["Expense", "29,810"]
+        ]
+      },
+      "abnormalTitle": "Exceptions",
+      "abnormal": {
+        "headers": ["Serial", "Channel", "Amount (CNY)", "Status"],
+        "rows": [
+          ["RC-20260510-001", "East direct", "1,240", "Variance"],
+          ["RC-20260510-014", "Franchise", "860", "Unmatched"],
+          ["RC-20260510-022", "Key accounts", "420", "In review"],
+          ["RC-20260510-031", "Hub", "310", "Pending"]
+        ]
+      },
+      "threadLine1": "System: An HTML version was generated with A4 landscape print margins.",
+      "threadLine2": "User: I want to view the HTML format"
+    },
+    "abnormal-customers": {
+      "pageTitle": "May 10, 2026 · Yesterday abnormal customer tracking",
+      "intro": "Yesterday abnormal customer summary is ready. Please review open items.",
+      "metaReconTime": "Cutoff",
+      "metaReconTimeValue": "2026-05-10 06:00",
+      "metaGenerated": "Generated at",
+      "metaGeneratedValue": "2026-05-10 09:00",
+      "summaryTitle": "Summary",
+      "summary": {
+        "headers": ["Indicator", "Value"],
+        "rows": [
+          ["Abnormal items", "3"],
+          ["Customers involved", "6"],
+          ["Affected amount", "10,000 CNY"]
+        ]
+      },
+      "abnormalTitle": "Exceptions",
+      "abnormal": {
+        "headers": ["Customer", "Type", "Amount (CNY)", "Status"],
+        "rows": [
+          ["Customer A", "Payment delay", "3,200", "Following up"],
+          ["Customer B", "Recon diff", "2,100", "Pending"],
+          ["Customer C", "Duplicate charge", "1,800", "Assigned"]
+        ]
+      },
+      "threadLine1": "System: Abnormal customers for yesterday are summarized; export by customer is available later.",
+      "threadLine2": "User: Filter customers with impact over 2000"
+    },
+    "outbound-cost": {
+      "pageTitle": "May 2026 · Outbound cost report",
+      "intro": "This month outbound cost report is ready for branch review.",
+      "metaReconTime": "Period",
+      "metaReconTimeValue": "2026-05-01 — 2026-05-10",
+      "metaGenerated": "Generated at",
+      "metaGeneratedValue": "2026-05-10 10:00",
+      "summaryTitle": "Summary",
+      "summary": {
+        "headers": ["Indicator", "Value"],
+        "rows": [
+          ["Outbound cost per ticket", "2.36 CNY / ticket"],
+          ["Customer cost anomalies", "3"]
+        ]
+      },
+      "abnormalTitle": "Exceptions",
+      "abnormal": {
+        "headers": ["Lane", "Per-ticket cost", "Target", "Status"],
+        "rows": [
+          ["East–South", "2.58 CNY / ticket", "2.40", "High"],
+          ["East–Southwest", "2.21 CNY / ticket", "2.40", "OK"],
+          ["HQ–Hub", "2.72 CNY / ticket", "2.45", "High"]
+        ]
+      },
+      "threadLine1": "System: Costs are aggregated by lane; chart view may come in a later release.",
+      "threadLine2": "User: Export this month as PDF"
+    }
+  }
+}

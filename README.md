@@ -73,6 +73,8 @@ When you launch StoClaw for the first time, the **Setup Wizard** will guide you 
 
 The wizard preselects your system language when it is supported, and falls back to English otherwise.
 
+Main shell routes include the dashboard home (`/`), prototype STO task reports under `/tasks/:taskId` (fixed keys: `hq-reconciliation`, `abnormal-customers`, `outbound-cost`), and chat (`/chat`).
+
 > Note for Moonshot (Kimi): StoClaw keeps Kimi web search enabled by default.  
 > When Moonshot is configured, StoClaw also syncs Kimi web search to the China endpoint (`https://api.moonshot.cn/v1`) in OpenClaw config.
 
@@ -219,7 +221,7 @@ Chain multiple skills together to create sophisticated automation pipelines. Pro
 │   ├── lib/                 # Unified frontend API + error model
 │   ├── stores/              # Zustand stores (settings/chat/gateway)
 │   ├── components/          # Reusable UI components
-│   ├── pages/               # Setup/Home/Chat/Channels/Skills/Cron/Settings
+│   ├── pages/               # Setup/Home/TaskDetail/Chat/Channels/Skills/Cron/Settings
 │   ├── i18n/                # Localization resources
 │   └── types/               # TypeScript type definitions
 ├── tests/

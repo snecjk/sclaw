@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
 
 function StatusChip({ children, variant }: { children: React.ReactNode; variant: 'ok' | 'neutral' }) {
   return (
@@ -31,19 +32,19 @@ function StatBlock({ label, value, unit }: { label: string; value: string; unit?
 }
 
 interface SummaryCardProps {
-  to: string;
+  taskId: StoTaskId;
   base: 'recon' | 'customer' | 'cost';
   statusVariant: 'ok' | 'neutral';
   columns: 2 | 3;
 }
 
-function SummaryCard({ to, base, statusVariant, columns }: SummaryCardProps) {
+function SummaryCard({ taskId, base, statusVariant, columns }: SummaryCardProps) {
   const { t } = useTranslation('home');
   const p = `summary.${base}` as const;
 
   return (
     <Link
-      to={to}
+      to={taskDetailPath(taskId)}
       className={cn(
         'flex min-w-[260px] flex-1 flex-col rounded-[24px] bg-white p-4 shadow-[0_4px_24px_rgba(15,23,42,0.06)] ring-1 ring-[var(--sto-sidebar-border)]',
         'transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-[0_24px_80px_rgba(15,23,42,0.12)]',
@@ -101,9 +102,9 @@ export function HomeSummaryCards({ className }: { className?: string }) {
         {t('summary.heading')}
       </h2>
       <div className="-mx-1 flex gap-5 overflow-x-auto pb-1 pt-1 [scrollbar-gutter:stable]">
-        <SummaryCard to="/chat" base="recon" statusVariant="ok" columns={3} />
-        <SummaryCard to="/models" base="customer" statusVariant="neutral" columns={3} />
-        <SummaryCard to="/cron" base="cost" statusVariant="ok" columns={2} />
+        <SummaryCard taskId="hq-reconciliation" base="recon" statusVariant="ok" columns={3} />
+        <SummaryCard taskId="abnormal-customers" base="customer" statusVariant="neutral" columns={3} />
+        <SummaryCard taskId="outbound-cost" base="cost" statusVariant="ok" columns={2} />
       </div>
     </section>
   );
