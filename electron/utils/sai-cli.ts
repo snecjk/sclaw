@@ -27,7 +27,11 @@ function resolveSaiBinary(): string | null {
   const userBin = join(homedir(), '.sai', 'bin', binaryName);
   if (existsSync(userBin)) return userBin;
 
-  // 2. Let shell resolve via PATH
+  // 2. Bundled binary (packaged or development mode)
+  const bundled = getBundledSaiPath();
+  if (bundled) return bundled;
+
+  // 3. Let shell resolve via PATH
   return binaryName;
 }
 
