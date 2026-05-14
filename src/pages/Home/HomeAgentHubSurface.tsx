@@ -3,19 +3,11 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  ArrowUp,
-  Bot,
-  BrainCircuit,
-  Cpu,
-  Paperclip,
-  RefreshCw,
-  Repeat2,
-  ChevronDown,
-} from 'lucide-react';
+import { Bot, BrainCircuit, Cpu, RefreshCw, Repeat2, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
+import { useMessageQueueStore } from '@/stores/message-queue';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAgentsStore } from '@/stores/agents';
 import { useProviderStore } from '@/stores/providers';
@@ -29,7 +21,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { buildProviderListItems } from '@/lib/provider-accounts';
 import { buildChatModelOptions } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
+import { invokeApi } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
+import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
 
 /** sto-design Grey-10 主标题 / 默认正文 */
 const TEXT_PRIMARY = 'text-[#1D2129] dark:text-foreground';
@@ -62,7 +56,6 @@ const hubSelectTrigger = cn(
 export function HomeAgentHubSurface() {
   const { t } = useTranslation(['home', 'chat']);
   const navigate = useNavigate();
-  const [text, setText] = useState('');
   const [selectedModelId, setSelectedModelId] = useState('');
   const [modelSaving, setModelSaving] = useState(false);
 
@@ -70,6 +63,7 @@ export function HomeAgentHubSurface() {
   const isGatewayRunning = gatewayStatus.state === 'running';
   const sendMessage = useChatStore((s) => s.sendMessage);
   const newSession = useChatStore((s) => s.newSession);
+  const abortRun = useChatStore((s) => s.abortRun);
   const sending = useChatStore((s) => s.sending);
   const error = useChatStore((s) => s.error);
   const refresh = useChatStore((s) => s.refresh);
@@ -169,9 +163,6 @@ export function HomeAgentHubSurface() {
   const agentSelectDisabled = !isGatewayRunning || sending || agentRows.length === 0;
   const modelSelectDisabled = !isGatewayRunning || sending || modelOptions.length === 0;
 
-  const trimmed = text.trim();
-  const canSend = trimmed.length > 0 && !sending && isGatewayRunning;
-
   const gatewayLine = useMemo(() => {
     const port = gatewayStatus.port ?? 18789;
     const pid = gatewayStatus.pid;
@@ -184,24 +175,57 @@ export function HomeAgentHubSurface() {
     return t('agentHub.gatewayLineDisconnected', { port });
   }, [gatewayStatus.port, gatewayStatus.pid, gatewayStatus.state, t]);
 
-  const handleSend = useCallback(async () => {
-    if (!trimmed) return;
-    if (!isGatewayRunning) {
-      toast.error(t('assistant.gatewayRequired'));
-      return;
-    }
-    const { sessions } = useChatStore.getState();
-    if (sessions.length === 0) {
+  const handleHubQueue = useCallback(
+    (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
+      useMessageQueueStore.getState().enqueue(text, attachments, targetAgentId);
+    },
+    [],
+  );
+
+  const handleHubSend = useCallback(
+    async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
+      if (!isGatewayRunning) {
+        toast.error(t('assistant.gatewayRequired'));
+        return;
+      }
+      // Same as sidebar「新对话」: new transcript key before first user message.
       newSession();
-    }
-    try {
-      await sendMessage(trimmed);
-      setText('');
+
+      let parts: Array<{ type: string; context: string }> | null = null;
+      try {
+        const { currentAgentId: agentId, currentSessionKey } = useChatStore.getState();
+        parts = await invokeApi<Array<{ type: string; context: string }>>('question:split', {
+          prompt: text,
+          agentId: agentId,
+          sessionId: currentSessionKey,
+        });
+      } catch {
+        // Silent fallback — same as Chat page
+      }
+
+      const failed = () => Boolean(useChatStore.getState().error);
+
+      if (parts && parts.length > 1) {
+        await sendMessage(parts[0].context, attachments, targetAgentId);
+        if (failed()) {
+          toast.error(t('assistant.sendFailed'));
+          return;
+        }
+        for (let i = 1; i < parts.length; i++) {
+          useMessageQueueStore.getState().enqueue(parts[i].context, undefined, targetAgentId);
+        }
+      } else {
+        await sendMessage(text, attachments, targetAgentId);
+        if (failed()) {
+          toast.error(t('assistant.sendFailed'));
+          return;
+        }
+      }
+
       navigate('/chat');
-    } catch {
-      toast.error(t('assistant.sendFailed'));
-    }
-  }, [isGatewayRunning, navigate, newSession, sendMessage, t, trimmed]);
+    },
+    [isGatewayRunning, navigate, newSession, sendMessage, t],
+  );
 
   return (
     <div
@@ -463,65 +487,16 @@ export function HomeAgentHubSurface() {
         </div>
 
         <div className="mx-auto mt-auto w-full max-w-[960px] flex-1 pt-10">
-          <section
-            className={cn(
-              'flex flex-col rounded-[20px] border bg-white p-4 shadow-[0_4px_20px_rgba(29,33,41,0.07)] dark:bg-card',
-              BORDER_DEFAULT,
-              'ring-1 ring-[rgba(255,183,140,0.45)] dark:ring-[rgba(255,160,100,0.22)]',
-            )}
-            aria-label={t('agentHub.inputPlaceholder')}
-          >
-            <label htmlFor="home-agent-hub-input" className="sr-only">
-              {t('agentHub.inputPlaceholder')}
-            </label>
-            <textarea
-              id="home-agent-hub-input"
-              rows={4}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={t('agentHub.inputPlaceholder')}
-              className={cn(
-                'min-h-[5rem] w-full resize-none border-0 bg-transparent text-[15px] leading-relaxed outline-none ring-0',
-                TEXT_PRIMARY,
-                'placeholder:text-[#86909C] dark:placeholder:text-muted-foreground',
-              )}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  void handleSend();
-                }
-              }}
+          <section className="flex flex-col" aria-label={t('agentHub.inputPlaceholder')}>
+            <ChatInput
+              variant="embedded"
+              onSend={handleHubSend}
+              onStop={() => void abortRun()}
+              onQueue={handleHubQueue}
+              disabled={!isGatewayRunning}
+              sending={sending}
             />
-            {error ? <p className="mt-1 text-sm text-destructive">{error}</p> : null}
-            <div className="mt-3 flex items-center justify-between gap-3">
-              <button
-                type="button"
-                className={cn(
-                  'flex items-center gap-1.5 rounded-lg py-1.5 text-left text-sm transition-colors',
-                  TEXT_SECONDARY,
-                  'hover:bg-black/[0.03] hover:text-[#1D2129] dark:hover:bg-white/[0.05] dark:hover:text-foreground',
-                )}
-                title={t('assistant.uploadFile')}
-              >
-                <Paperclip className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} aria-hidden />
-                <span>{t('assistant.uploadFile')}</span>
-              </button>
-              <button
-                type="button"
-                disabled={!canSend}
-                aria-label={t('assistant.send')}
-                title={t('assistant.send')}
-                onClick={() => void handleSend()}
-                className={cn(
-                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors',
-                  canSend
-                    ? 'bg-[#FF6F00] text-white shadow-sm hover:bg-[#D95700] dark:bg-[var(--sto-brand-6)] dark:hover:bg-[#D95700]'
-                    : 'cursor-not-allowed bg-[#E5E6EB] text-[#AEB4BD] dark:bg-muted dark:text-muted-foreground',
-                )}
-              >
-                <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.25} aria-hidden />
-              </button>
-            </div>
+            {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
           </section>
           <p className={cn('mt-3 text-center text-xs leading-relaxed', TEXT_SECONDARY)}>{t('assistant.footerDisclaimer')}</p>
         </div>
