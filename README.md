@@ -73,7 +73,9 @@ When you launch StoClaw for the first time, the **Setup Wizard** will guide you 
 
 The wizard preselects your system language when it is supported, and falls back to English otherwise.
 
-Main shell routes include the dashboard home (`/`), prototype STO task reports under `/tasks/:taskId` (fixed keys: `hq-reconciliation`, `abnormal-customers`, `outbound-cost`), and chat (`/chat`).
+Main shell routes include the dashboard home (`/`), prototype STO task reports under `/tasks/:taskId` (fixed keys: `hq-reconciliation`, `abnormal-customers`, `outbound-cost`), and chat (`/chat`). **CRM week-report surface:** after SSO login, the app loads a policy whitelist from the STO policy service; the policy API host is chosen from **`VITE_APP_ENV`** only (`development`/`test` → `zc-test.sto.cn`, `staging` → `pre-zc.sto.cn`, `production` → `zc.sto.cn`). Only users whose SSO `userName` matches a whitelist `userCode` see the home task summary cards and can stay on `/tasks/*`; otherwise the home shows the legacy layout and `/tasks/*` redirects to `/`. Failed or timed-out policy requests are treated as **not** whitelisted (fail-closed).
+
+Default shell uses the **provincial sidebar** (省区版本样式): home, scheduled tasks, skills, the STO task list block, and time-bucketed conversation history; chat and “my data” stay off the primary rail, the workspace group and conversation-list chrome are hidden, and the large user card is replaced by a compact settings entry (same menu: settings, language, theme, logout). To restore the **full** navigation rail for local builds, set `VITE_STOCLAW_SIDEBAR_LAYOUT=full` in `.env.development.local` or the build environment.
 
 > Note for Moonshot (Kimi): StoClaw keeps Kimi web search enabled by default.  
 > When Moonshot is configured, StoClaw also syncs Kimi web search to the China endpoint (`https://api.moonshot.cn/v1`) in OpenClaw config.

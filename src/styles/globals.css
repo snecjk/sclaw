@@ -345,6 +345,33 @@
   }
 }
 
+/* Home hero mascot idle (钉钉录屏 / 归档 styles.css hero-mascot-idle) */
+@keyframes hero-mascot-idle {
+
+  0%,
+  100% {
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+
+  35% {
+    transform: translateY(-8px) scale(1.03) rotate(-1.4deg);
+  }
+
+  70% {
+    transform: translateY(-4px) scale(1.015) rotate(1.1deg);
+  }
+}
+
+.hero-mascot-idle {
+  animation: hero-mascot-idle 4.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-mascot-idle {
+    animation: none;
+  }
+}
+
 /* Glassmorphism toast override */
 [data-sonner-toaster] [data-sonner-toast] {
   background: hsl(var(--glass-bg) / var(--glass-opacity)) !important;

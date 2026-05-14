@@ -1,7 +1,7 @@
 {
   "hero": {
-    "title": "STO Claw — run your branch smarter",
-    "subtitle": "An AI workspace for branches: faster daily ops, clearer hand-offs, and less busywork."
+    "title": "STO Claw — smarter business management",
+    "subtitle": "An AI workspace that drives team collaboration and stronger day-to-day operations."
   },
   "summary": {
     "heading": "Overview",
@@ -47,6 +47,9 @@
       "stat2Label": "Cost anomalies",
       "stat2Value": "3",
       "stat2Unit": "accounts",
+      "stat3Label": "Routes flagged",
+      "stat3Value": "12",
+      "stat3Unit": "",
       "footerTeam": "Outbound cost squad",
       "footerHint": "1 exception — view"
     }
@@ -58,7 +61,40 @@
     "dataAnalysis": "Data analysis",
     "workflow": "Workflow",
     "send": "Send",
+    "footerDisclaimer": "STO Claw is AI-assisted; verify important information with your team before acting.",
     "gatewayRequired": "Connect the gateway before sending.",
     "sendFailed": "Could not send. Open Chat for details."
+  },
+  "agentHub": {
+    "conversationLabel": "Conversation target",
+    "mainAgentDefault": "Main Agent (default)",
+    "modelLabel": "Model",
+    "modelBuiltin": "qwen3.5-plus (built-in)",
+    "refreshTitle": "Refresh",
+    "brainTitle": "Quick capabilities",
+    "modeChipsGroupLabel": "Capability labels (display only, not interactive)",
+    "modeAssistant": "Smart assistant",
+    "modeWorkbench": "Inspiration workbench",
+    "modeMulti": "Multi-assistant collaboration",
+    "headline": "What can I do for you?",
+    "subline": "Chat, call tools, collaborate, and keep work moving forward in one place.",
+    "functionTag": "Feature",
+    "cardTasksTitle": "Handle tasks",
+    "cardTasksDesc": "Work through task-oriented requests.",
+    "cardExecTitle": "Keep executing",
+    "cardExecDesc": "Drive multi-step work forward continuously.",
+    "cardMultiTitle": "Parallel multi-agents",
+    "cardMultiDesc": "Let multiple assistants divide work for harder problems.",
+    "statusLabel": "Status",
+    "statusReady": "Ready",
+    "collabLabel": "Collaboration",
+    "collabValue": "Multi-assistant",
+    "toolsLabel": "Tools",
+    "toolsValue": "Available",
+    "inputPlaceholder": "Message Main Agent",
+    "gatewayLineConnected": "gateway connected | port: {{port}} | pid: {{pid}}",
+    "gatewayLineConnecting": "gateway connecting | port: {{port}}",
+    "gatewayLineDisconnected": "gateway disconnected | port: {{port}}",
+    "usageHint": "See Chat and Settings for usage"
   }
 }

@@ -1,7 +1,7 @@
 {
   "hero": {
-    "title": "STO Claw — 拠点オペレーションを効率化",
-    "subtitle": "AI ワークスペースで日次業務を速く、引き継ぎを明確に。"
+    "title": "STO Claw — 経営管理をより効率的に",
+    "subtitle": "AI ワークスペースで組織の連携と現場オペレーションを強化します。"
   },
   "summary": {
     "heading": "データ概要",
@@ -47,6 +47,9 @@
       "stat2Label": "コスト異常",
       "stat2Value": "3",
       "stat2Unit": "社",
+      "stat3Label": "ルート指摘",
+      "stat3Value": "12",
+      "stat3Unit": "件",
       "footerTeam": "コストチーム",
       "footerHint": "例外 1 件"
     }
@@ -58,7 +61,40 @@
     "dataAnalysis": "データ分析",
     "workflow": "ワークフロー",
     "send": "送信",
+    "footerDisclaimer": "STO Claw は AI 補助です。重要な情報は業務で確認のうえご利用ください。",
     "gatewayRequired": "送信前にゲートウェイを接続してください。",
     "sendFailed": "送信に失敗しました。チャット画面で確認してください。"
+  },
+  "agentHub": {
+    "conversationLabel": "会話の相手",
+    "mainAgentDefault": "Main Agent（既定）",
+    "modelLabel": "モデル",
+    "modelBuiltin": "qwen3.5-plus 内蔵",
+    "refreshTitle": "更新",
+    "brainTitle": "クイック機能",
+    "modeChipsGroupLabel": "能力シーン（表示のみ、操作不可）",
+    "modeAssistant": "スマートアシスタント",
+    "modeWorkbench": "インスピレーション作業台",
+    "modeMulti": "マルチエージェント連携",
+    "headline": "今日は何をお手伝いしますか？",
+    "subline": "会話・ツール呼び出し・共同作業・継続実行を、ひとつの画面で進められます。",
+    "functionTag": "機能",
+    "cardTasksTitle": "タスク処理",
+    "cardTasksDesc": "タスク指向の依頼に対応します。",
+    "cardExecTitle": "継続実行",
+    "cardExecDesc": "複数ステップの作業を継続的に前進させます。",
+    "cardMultiTitle": "マルチエージェント並列",
+    "cardMultiDesc": "複数のアシスタントに役割分担させ、より複雑な仕事に対応します。",
+    "statusLabel": "状態",
+    "statusReady": "準備完了",
+    "collabLabel": "連携",
+    "collabValue": "マルチアシスタント",
+    "toolsLabel": "ツール",
+    "toolsValue": "呼び出し可",
+    "inputPlaceholder": "Main Agent にメッセージを送る",
+    "gatewayLineConnected": "gateway 接続済み | port: {{port}} | pid: {{pid}}",
+    "gatewayLineConnecting": "gateway 接続中 | port: {{port}}",
+    "gatewayLineDisconnected": "gateway 未接続 | port: {{port}}",
+    "usageHint": "利用量はチャットと設定で確認できます"
   }
 }

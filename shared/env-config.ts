@@ -89,3 +89,16 @@ export function getAppEnv(): AppEnvironment {
   const env = (import.meta.env.VITE_APP_ENV as string) || 'production';
   return (ENV_CONFIGS[env as AppEnvironment] ? env : 'production') as AppEnvironment;
 }
+
+/**
+ * STO 策略域 Host（CRM 周报白名单等），**仅**由编译时 `VITE_APP_ENV` 决定，与 SSO 环境无关。
+ */
+export function getStoPolicyReportApiHostForAppEnv(env: AppEnvironment): string {
+  if (env === 'development' || env === 'test') return 'zc-test.sto.cn';
+  if (env === 'staging') return 'pre-zc.sto.cn';
+  return 'zc.sto.cn';
+}
+
+export function getStoPolicyReportApiHost(): string {
+  return getStoPolicyReportApiHostForAppEnv(getAppEnv());
+}

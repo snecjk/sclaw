@@ -31,7 +31,8 @@
         "taskAbnormalCustomers": "异常客户跟踪",
         "taskOutboundCost": "出港成本报表",
         "toggleTaskListSection": "展开或收起任务列表",
-        "toggleWorkspaceSection": "展开或收起工作台"
+        "toggleWorkspaceSection": "展开或收起工作台",
+        "compactAccountMenu": "账户与设置"
     },
     "actions": {
         "save": "保存",

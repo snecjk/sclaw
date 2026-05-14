@@ -173,6 +173,8 @@ function App() {
       useAuthStore.setState({
         isAuthenticated: false,
         user: null,
+        crmWeekReportSurfaceAllowed: false,
+        crmWeekReportPolicyStatus: 'idle',
       });
     };
 

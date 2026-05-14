@@ -18,7 +18,7 @@ import { useAgentsStore } from '@/stores/agents';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { buildProviderListItems } from '@/lib/provider-accounts';
-import { HIDDEN_PROVIDER_IDS } from '@/lib/providers';
+import { buildChatModelOptions } from '@/lib/chat-model-options';
 import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 import { hostApiFetch } from '@/lib/host-api';
@@ -38,46 +38,6 @@ const pillBtn = cn(
   'dark:hover:bg-white/[0.06]',
   'disabled:pointer-events-none disabled:opacity-60',
 );
-
-// ── Model option type (mirrors AgentDetailPage) ───────────────────────────────
-interface ModelOption {
-  key: string;
-  modelId: string;
-  accountId: string;
-  displayName: string;
-  subLabel: string;
-  isBuiltin: boolean;  // true = STO AI built-in, false = user custom
-}
-
-function buildChatModelOptions(
-  providerItems: ReturnType<typeof buildProviderListItems>,
-): ModelOption[] {
-  const options: ModelOption[] = [];
-  for (const { account, vendor } of providerItems) {
-    if (HIDDEN_PROVIDER_IDS.has(account.id) || HIDDEN_PROVIDER_IDS.has(account.vendorId)) continue;
-    const subLabel = account.label || vendor?.name || account.vendorId;
-    const isBuiltin = account.vendorId === 'sto';
-    const customModels = account.metadata?.customModels as string[] | undefined;
-    if (customModels && customModels.length > 0) {
-      for (const modelId of customModels) {
-        if (HIDDEN_PROVIDER_IDS.has(modelId)) continue;
-        options.push({ key: `${account.id}::${modelId}`, modelId, accountId: account.id, displayName: modelId, subLabel, isBuiltin });
-      }
-    } else if (account.model) {
-      if (!HIDDEN_PROVIDER_IDS.has(account.model)) {
-        options.push({
-          key: `${account.id}::${account.model}`,
-          modelId: account.model,
-          accountId: account.id,
-          displayName: account.label || account.model,
-          subLabel: account.model,
-          isBuiltin,
-        });
-      }
-    }
-  }
-  return options;
-}
 
 export function ChatToolbar() {
   const refresh = useChatStore((s) => s.refresh);

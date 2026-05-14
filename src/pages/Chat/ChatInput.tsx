@@ -39,6 +39,8 @@ interface ChatInputProps {
   disabled?: boolean;
   sending?: boolean;
   isEmpty?: boolean;
+  /** Full-width embed (e.g. home agent hub): no page gutters, hide gateway/quota footer row. */
+  variant?: 'default' | 'embedded';
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -101,7 +103,15 @@ function readFileAsBase64(file: globalThis.File): Promise<string> {
 
 // ── Component ────────────────────────────────────────────────────
 
-export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending = false, isEmpty: _isEmpty = false }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  onStop,
+  onQueue,
+  disabled = false,
+  sending = false,
+  isEmpty: _isEmpty = false,
+  variant = 'default',
+}: ChatInputProps) {
   const { t } = useTranslation('chat');
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
@@ -424,10 +434,13 @@ export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending =
     [stageBufferFiles],
   );
 
+  const isEmbedded = variant === 'embedded';
+
   return (
     <div
       className={cn(
-        "px-6 pb-6 pt-2 w-full max-w-5xl mx-auto transition-all duration-300"
+        'w-full transition-all duration-300',
+        isEmbedded ? 'px-0 pb-0 pt-0' : 'mx-auto max-w-5xl px-6 pb-6 pt-2',
       )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -594,46 +607,62 @@ export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending =
             )}
           </div>
         </div>
-        <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px] text-muted-foreground/60 px-4">
-          <div className="flex items-center gap-1.5">
-            <div className={cn("w-1.5 h-1.5 rounded-full", gatewayStatus.state === 'running' ? "bg-green-500/80" : "bg-red-500/80")} />
-            <span>
-              {t('composer.gatewayStatus', {
-                state: gatewayStatus.state === 'running'
-                  ? t('composer.gatewayConnected')
-                  : gatewayStatus.state,
-                port: gatewayStatus.port,
-                pid: gatewayStatus.pid ? `| pid: ${gatewayStatus.pid}` : '',
-              })}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            {dailyTokenQuotaText ? (
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 text-[11px]",
-                  dailyTokenQuotaAlert ? "text-red-500" : "text-amber-500/95",
-                )}
-              >
-                {dailyTokenQuotaAlert ? <AlertCircle className="h-3.5 w-3.5" /> : null}
-                {dailyTokenQuotaText}
+        {!isEmbedded ? (
+          <div className="mt-2.5 flex items-center justify-between gap-2 px-4 text-[11px] text-muted-foreground/60">
+            <div className="flex items-center gap-1.5">
+              <div className={cn("w-1.5 h-1.5 rounded-full", gatewayStatus.state === 'running' ? "bg-green-500/80" : "bg-red-500/80")} />
+              <span>
+                {t('composer.gatewayStatus', {
+                  state: gatewayStatus.state === 'running'
+                    ? t('composer.gatewayConnected')
+                    : gatewayStatus.state,
+                  port: gatewayStatus.port,
+                  pid: gatewayStatus.pid ? `| pid: ${gatewayStatus.pid}` : '',
+                })}
               </span>
-            ) : null}
-            {hasFailedAttachments && (
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto p-0 text-[11px]"
-                onClick={() => {
-                  setAttachments((prev) => prev.filter((att) => att.status !== 'error'));
-                  void pickFiles();
-                }}
-              >
-                {t('composer.retryFailedAttachments')}
-              </Button>
-            )}
+            </div>
+            <div className="flex items-center gap-3">
+              {dailyTokenQuotaText ? (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 text-[11px]",
+                    dailyTokenQuotaAlert ? "text-red-500" : "text-amber-500/95",
+                  )}
+                >
+                  {dailyTokenQuotaAlert ? <AlertCircle className="h-3.5 w-3.5" /> : null}
+                  {dailyTokenQuotaText}
+                </span>
+              ) : null}
+              {hasFailedAttachments && (
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-[11px]"
+                  onClick={() => {
+                    setAttachments((prev) => prev.filter((att) => att.status !== 'error'));
+                    void pickFiles();
+                  }}
+                >
+                  {t('composer.retryFailedAttachments')}
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
+        ) : hasFailedAttachments ? (
+          <div className="mt-2 flex justify-end px-4">
+            <Button
+              variant="link"
+              size="sm"
+              className="h-auto p-0 text-[11px] text-muted-foreground/80"
+              onClick={() => {
+                setAttachments((prev) => prev.filter((att) => att.status !== 'error'));
+                void pickFiles();
+              }}
+            >
+              {t('composer.retryFailedAttachments')}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

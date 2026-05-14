@@ -31,7 +31,8 @@
         "taskAbnormalCustomers": "Abnormal customer tracking",
         "taskOutboundCost": "Outbound cost report",
         "toggleTaskListSection": "Expand or collapse task list",
-        "toggleWorkspaceSection": "Expand or collapse workspace"
+        "toggleWorkspaceSection": "Expand or collapse workspace",
+        "compactAccountMenu": "Account and settings"
     },
     "actions": {
         "save": "Save",
