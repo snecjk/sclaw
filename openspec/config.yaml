@@ -73,4 +73,4 @@ rules:
     - For communication-related changes (gateway events, runtime send/receive, delivery, fallback), run `pnpm run comms:replay` and `pnpm run comms:compare`
     - After functional changes, review `README.md`, `README.zh-CN.md`, and `README.ja-JP.md` for required updates; update docs in the same PR/commit
     - Tasks MUST be grouped under numbered headings (e.g., `## 1. Group Name`)
-    - Each task MUST use checkbox format: `- [ ] X.Y Task description`
+    - Each task MUST use checkbox format (markdown list items like "- [ ] X.Y Task description")

@@ -31,7 +31,8 @@
         "taskAbnormalCustomers": "異常顧客フォロー",
         "taskOutboundCost": "出港コストレポート",
         "toggleTaskListSection": "タスク一覧を展開または折りたたむ",
-        "toggleWorkspaceSection": "ワークスペースを展開または折りたたむ"
+        "toggleWorkspaceSection": "ワークスペースを展開または折りたたむ",
+        "compactAccountMenu": "アカウントと設定"
     },
     "actions": {
         "save": "保存",

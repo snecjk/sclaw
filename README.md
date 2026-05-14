@@ -75,6 +75,8 @@ The wizard preselects your system language when it is supported, and falls back 
 
 Main shell routes include the dashboard home (`/`), prototype STO task reports under `/tasks/:taskId` (fixed keys: `hq-reconciliation`, `abnormal-customers`, `outbound-cost`), and chat (`/chat`).
 
+Default shell uses the **provincial sidebar** (省区版本样式): home, scheduled tasks, skills, the STO task list block, and time-bucketed conversation history; chat and “my data” stay off the primary rail, the workspace group and conversation-list chrome are hidden, and the large user card is replaced by a compact settings entry (same menu: settings, language, theme, logout). To restore the **full** navigation rail for local builds, set `VITE_STOCLAW_SIDEBAR_LAYOUT=full` in `.env.development.local` or the build environment.
+
 > Note for Moonshot (Kimi): StoClaw keeps Kimi web search enabled by default.  
 > When Moonshot is configured, StoClaw also syncs Kimi web search to the China endpoint (`https://api.moonshot.cn/v1`) in OpenClaw config.
 

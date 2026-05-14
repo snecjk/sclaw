@@ -49,6 +49,7 @@ import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
 import logoSvg from '@/assets/logo.svg';
 import packageJson from '../../../package.json';
 import { taskDetailPath, listTaskEntryIds, type StoTaskId } from '@/lib/sto-tasks';
+import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
 
 type SessionBucketKey =
   | 'today'
@@ -312,6 +313,8 @@ export function Sidebar() {
 
   const { t } = useTranslation(['common', 'chat', 'auth']);
 
+  const sidebarVis = useMemo(() => getSidebarVisibility(getSidebarLayoutVariant()), []);
+
   useEffect(() => {
     if (!isGatewayRunning) return;
     let cancelled = false;
@@ -415,13 +418,25 @@ export function Sidebar() {
     setBucketOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const primaryNav = [
-    { to: '/', end: true, icon: <Home className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.home') },
-    { to: '/chat', end: true, icon: <MessageSquare className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.chat') },
-    { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
-    { to: '/skills', icon: <Puzzle className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
-    { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
-  ];
+  const primaryNav = useMemo(() => {
+    const all: Array<{
+      to: string;
+      end?: boolean;
+      icon: ReactNode;
+      label: string;
+    }> = [
+      { to: '/', end: true, icon: <Home className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.home') },
+      { to: '/chat', end: true, icon: <MessageSquare className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.chat') },
+      { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
+      { to: '/skills', icon: <Puzzle className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
+      { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
+    ];
+    return all.filter((item) => {
+      if (item.to === '/chat' && !sidebarVis.primaryChat) return false;
+      if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
+      return true;
+    });
+  }, [sidebarVis.primaryChat, sidebarVis.primaryMyData, t]);
 
   const workspaceNav = [
     { to: '/agents', icon: <Bot className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.agents') },
@@ -516,18 +531,20 @@ export function Sidebar() {
           </div>
         ) : null}
 
-        {!sidebarCollapsed ? (
-          <SidebarCollapsibleSectionLabel
-            group="workspace"
-            open={workspaceSectionOpen}
-            onToggle={() => setWorkspaceSectionOpen((o) => !o)}
-            label={t('common:sidebar.workspace')}
-            toggleAriaLabel={t('common:sidebar.toggleWorkspaceSection')}
-          />
-        ) : (
-          <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
-        )}
-        {(sidebarCollapsed || workspaceSectionOpen) && (
+        {sidebarVis.workspace ? (
+          !sidebarCollapsed ? (
+            <SidebarCollapsibleSectionLabel
+              group="workspace"
+              open={workspaceSectionOpen}
+              onToggle={() => setWorkspaceSectionOpen((o) => !o)}
+              label={t('common:sidebar.workspace')}
+              toggleAriaLabel={t('common:sidebar.toggleWorkspaceSection')}
+            />
+          ) : (
+            <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
+          )
+        ) : null}
+        {sidebarVis.workspace && (sidebarCollapsed || workspaceSectionOpen) && (
         <div className="flex flex-col gap-1">
           {workspaceNav.map((item) => (
             <SidebarNavLink
@@ -541,47 +558,51 @@ export function Sidebar() {
         </div>
         )}
 
-        {!sidebarCollapsed ? (
-          <p className="mt-4 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
-            {t('common:sidebar.sessionList')}
-          </p>
-        ) : (
-          <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
-        )}
+        {sidebarVis.conversationChrome ? (
+          !sidebarCollapsed ? (
+            <p className="mt-4 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+              {t('common:sidebar.sessionList')}
+            </p>
+          ) : (
+            <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
+          )
+        ) : null}
 
-        {!sidebarCollapsed ? (
-          <button
-            type="button"
-            onClick={() => {
-              const { messages } = useChatStore.getState();
-              if (messages.length > 0) newSession();
-              navigate('/chat');
-            }}
-            className="mx-1 mt-1 flex items-center gap-2 rounded-xl border border-[rgba(255,140,0,0.35)] bg-[var(--sto-accent-soft)] px-3 py-2.5 text-left text-[13px] font-semibold text-[var(--sto-accent)] shadow-sm transition-colors hover:opacity-95 dark:bg-amber-950/35"
-          >
-            <Plus className="h-[17px] w-[17px] shrink-0" strokeWidth={2} aria-hidden />
-            <span className="truncate">{t('common:sidebar.newChat')}</span>
-          </button>
-        ) : (
-          <Tooltip delayDuration={200}>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label={t('common:sidebar.newChat')}
-                title={t('common:sidebar.newChat')}
-                onClick={() => {
-                  const { messages } = useChatStore.getState();
-                  if (messages.length > 0) newSession();
-                  navigate('/chat');
-                }}
-                className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card"
-              >
-                <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">{t('common:sidebar.newChat')}</TooltipContent>
-          </Tooltip>
-        )}
+        {sidebarVis.conversationChrome ? (
+          !sidebarCollapsed ? (
+            <button
+              type="button"
+              onClick={() => {
+                const { messages } = useChatStore.getState();
+                if (messages.length > 0) newSession();
+                navigate('/chat');
+              }}
+              className="mx-1 mt-1 flex items-center gap-2 rounded-xl border border-[rgba(255,140,0,0.35)] bg-[var(--sto-accent-soft)] px-3 py-2.5 text-left text-[13px] font-semibold text-[var(--sto-accent)] shadow-sm transition-colors hover:opacity-95 dark:bg-amber-950/35"
+            >
+              <Plus className="h-[17px] w-[17px] shrink-0" strokeWidth={2} aria-hidden />
+              <span className="truncate">{t('common:sidebar.newChat')}</span>
+            </button>
+          ) : (
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={t('common:sidebar.newChat')}
+                  title={t('common:sidebar.newChat')}
+                  onClick={() => {
+                    const { messages } = useChatStore.getState();
+                    if (messages.length > 0) newSession();
+                    navigate('/chat');
+                  }}
+                  className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card"
+                >
+                  <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">{t('common:sidebar.newChat')}</TooltipContent>
+            </Tooltip>
+          )
+        ) : null}
         </div>
 
         <div className="relative z-0 min-h-0 flex-1 overflow-y-auto overflow-x-hidden space-y-1 pb-2 pt-1">
@@ -703,32 +724,49 @@ export function Sidebar() {
                 type="button"
                 className={cn(
                   'flex w-full rounded-xl border border-transparent bg-white/80 text-left transition-colors hover:border-[rgba(255,140,0,0.35)] hover:bg-white dark:bg-card/80 dark:hover:bg-card',
-                  sidebarCollapsed ? 'flex-col items-center justify-center gap-0 p-2' : 'items-center gap-2 p-2',
+                  sidebarVis.userProfileCard
+                    ? sidebarCollapsed
+                      ? 'flex-col items-center justify-center gap-0 p-2'
+                      : 'items-center gap-2 p-2'
+                    : 'items-center justify-center p-2',
                 )}
-                title={isGatewayRunning ? t('common:status.connected') : t('common:status.disconnected')}
+                title={
+                  sidebarVis.userProfileCard
+                    ? isGatewayRunning
+                      ? t('common:status.connected')
+                      : t('common:status.disconnected')
+                    : `${t('common:sidebar.compactAccountMenu')} — ${isGatewayRunning ? t('common:status.connected') : t('common:status.disconnected')}`
+                }
+                aria-label={sidebarVis.userProfileCard ? undefined : t('common:sidebar.compactAccountMenu')}
               >
-                {sidebarCollapsed ? (
-                  <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[13px] font-semibold text-[var(--sto-brand-6)] dark:bg-card">
-                    {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
-                  </span>
-                ) : (
+                {sidebarVis.userProfileCard ? (
                   <>
-                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-semibold text-foreground">
-                          {authUser.realName || authUser.userName}
-                        </span>
-                        <span className="shrink-0 rounded bg-[var(--sto-accent-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[#b45309] dark:bg-amber-950/50 dark:text-amber-200">
-                          {t('common:sidebar.enterpriseTag')}
-                        </span>
-                      </div>
-                      <span className="truncate text-[11px] text-muted-foreground">
-                        ID {authUser.id}
-                        {authUser.departmentName ? ` · ${authUser.departmentName}` : ''}
+                    {sidebarCollapsed ? (
+                      <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[13px] font-semibold text-[var(--sto-brand-6)] dark:bg-card">
+                        {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
                       </span>
-                    </div>
-                    <SettingsIcon className="h-5 w-5 shrink-0 text-muted-foreground" strokeWidth={1.5} aria-hidden />
+                    ) : (
+                      <>
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate text-sm font-semibold text-foreground">
+                              {authUser.realName || authUser.userName}
+                            </span>
+                            <span className="shrink-0 rounded bg-[var(--sto-accent-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[#b45309] dark:bg-amber-950/50 dark:text-amber-200">
+                              {t('common:sidebar.enterpriseTag')}
+                            </span>
+                          </div>
+                          <span className="truncate text-[11px] text-muted-foreground">
+                            ID {authUser.id}
+                            {authUser.departmentName ? ` · ${authUser.departmentName}` : ''}
+                          </span>
+                        </div>
+                        <SettingsIcon className="h-5 w-5 shrink-0 text-muted-foreground" strokeWidth={1.5} aria-hidden />
+                      </>
+                    )}
                   </>
+                ) : (
+                  <SettingsIcon className="h-5 w-5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden />
                 )}
               </button>
             </DropdownMenuTrigger>
