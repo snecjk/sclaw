@@ -87,20 +87,33 @@ const cardShell = cn(
   'dark:border-border dark:bg-card',
 );
 
-interface SummaryCardProps {
-  taskId: StoTaskId;
-  base: 'recon' | 'customer' | 'cost';
-  statusVariant: 'ok' | 'neutral';
-  columns: 2 | 3;
-  disabled?: boolean;
-}
+type SummaryCardBase = 'recon' | 'customer' | 'cost';
 
-function SummaryCard({ taskId, base, statusVariant, columns, disabled = false }: SummaryCardProps) {
+type SummaryCardProps =
+  | {
+      disabled: true;
+      avatarSeed: string;
+      base: SummaryCardBase;
+      statusVariant: 'ok' | 'neutral';
+      columns: 2 | 3;
+    }
+  | {
+      disabled?: false;
+      avatarSeed: string;
+      linkToLatest: StoTaskId;
+      base: SummaryCardBase;
+      statusVariant: 'ok' | 'neutral';
+      columns: 2 | 3;
+    };
+
+function SummaryCard(props: SummaryCardProps) {
+  const { avatarSeed, base, statusVariant, columns } = props;
+  const disabled = props.disabled === true;
   const { t } = useTranslation('home');
   const p = `summary.${base}` as const;
   const bodyCaption = t(`${p}.bodyCaption`, { defaultValue: '' }).trim();
   const showStackBody = Boolean(bodyCaption);
-  const avatarUrls = useMemo(() => pickThreeAvatars(`${taskId}:${base}`), [taskId, base]);
+  const avatarUrls = useMemo(() => pickThreeAvatars(avatarSeed), [avatarSeed]);
 
   const inner = (
     <>
@@ -173,9 +186,11 @@ function SummaryCard({ taskId, base, statusVariant, columns, disabled = false }:
     );
   }
 
+  const { linkToLatest } = props as Extract<SummaryCardProps, { linkToLatest: StoTaskId }>;
+
   return (
     <Link
-      to={taskLatestPath(taskId)}
+      to={taskLatestPath(linkToLatest)}
       className={cn(cardShell, 'transition-shadow duration-200 hover:shadow-[0_8px_24px_rgba(29,33,41,0.1)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)]')}
     >
       {inner}
@@ -191,9 +206,15 @@ export function HomeSummaryCards({ className }: { className?: string }) {
         {t('summary.heading')}
       </h2>
       <div className="grid grid-cols-1 gap-5 md:grid-cols-3 md:gap-5">
-        <SummaryCard taskId="hq-reconciliation" base="recon" statusVariant="ok" columns={3} />
-        <SummaryCard taskId="abnormal-customers" base="customer" statusVariant="neutral" columns={2} disabled />
-        <SummaryCard taskId="outbound-cost" base="cost" statusVariant="ok" columns={2} disabled />
+        <SummaryCard
+          avatarSeed="hq-reconciliation:recon"
+          linkToLatest="hq-reconciliation"
+          base="recon"
+          statusVariant="ok"
+          columns={3}
+        />
+        <SummaryCard disabled avatarSeed="summary-customer" base="customer" statusVariant="neutral" columns={2} />
+        <SummaryCard disabled avatarSeed="summary-cost" base="cost" statusVariant="ok" columns={2} />
       </div>
     </section>
   );

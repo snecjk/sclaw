@@ -94,10 +94,8 @@ function collapsedEntryLabel(full: string): string {
   return `${first}…`;
 }
 
-const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' | 'taskAbnormalCustomers' | 'taskOutboundCost'; dot?: boolean }[] = [
+const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation'; dot?: boolean }[] = [
   { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation', dot: true },
-  { id: 'abnormal-customers', labelKey: 'taskAbnormalCustomers' },
-  { id: 'outbound-cost', labelKey: 'taskOutboundCost' },
 ];
 
 /** 侧栏任务：主标题可折叠 + 日期药丸子项（对齐设计稿）。 */
