@@ -29,7 +29,9 @@
         "taskList": "タスク一覧",
         "taskHqReconciliation": "本社照合結果",
         "taskAbnormalCustomers": "異常顧客フォロー",
-        "taskOutboundCost": "出港コストレポート"
+        "taskOutboundCost": "出港コストレポート",
+        "toggleTaskListSection": "タスク一覧を展開または折りたたむ",
+        "toggleWorkspaceSection": "ワークスペースを展開または折りたたむ"
     },
     "actions": {
         "save": "保存",

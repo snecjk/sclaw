@@ -29,7 +29,9 @@
         "taskList": "Task list",
         "taskHqReconciliation": "HQ reconciliation",
         "taskAbnormalCustomers": "Abnormal customer tracking",
-        "taskOutboundCost": "Outbound cost report"
+        "taskOutboundCost": "Outbound cost report",
+        "toggleTaskListSection": "Expand or collapse task list",
+        "toggleWorkspaceSection": "Expand or collapse workspace"
     },
     "actions": {
         "save": "Save",

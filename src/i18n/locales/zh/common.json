@@ -29,7 +29,9 @@
         "taskList": "任务列表",
         "taskHqReconciliation": "总部对账结果",
         "taskAbnormalCustomers": "异常客户跟踪",
-        "taskOutboundCost": "出港成本报表"
+        "taskOutboundCost": "出港成本报表",
+        "toggleTaskListSection": "展开或收起任务列表",
+        "toggleWorkspaceSection": "展开或收起工作台"
     },
     "actions": {
         "save": "保存",

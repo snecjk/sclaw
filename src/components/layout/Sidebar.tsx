@@ -174,6 +174,48 @@ function SidebarTaskGroup({
   );
 }
 
+/** 任务列表 / 工作台：悬浮显示展开方向图标，点击整行收缩或展开下方内容（对齐钉钉录屏交互）。 */
+function SidebarCollapsibleSectionLabel({
+  group,
+  open,
+  onToggle,
+  label,
+  toggleAriaLabel,
+}: {
+  group: 'tasklist' | 'workspace';
+  open: boolean;
+  onToggle: () => void;
+  label: string;
+  toggleAriaLabel: string;
+}) {
+  const groupClass = group === 'tasklist' ? 'group/tasklist' : 'group/workspace';
+  const iconReveal =
+    group === 'tasklist'
+      ? 'opacity-0 transition-opacity group-hover/tasklist:opacity-100 group-focus-within/tasklist:opacity-100'
+      : 'opacity-0 transition-opacity group-hover/workspace:opacity-100 group-focus-within/workspace:opacity-100';
+
+  return (
+    <div className={cn(groupClass, 'mt-4')}>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label={toggleAriaLabel}
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80 outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.06]"
+      >
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className={cn('flex shrink-0 text-muted-foreground/90', iconReveal)} aria-hidden>
+          {open ? (
+            <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5" strokeWidth={2} />
+          )}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 function SidebarNavLink({
   to,
   end,
@@ -257,6 +299,8 @@ export function Sidebar() {
   const isOnChat = location.pathname.startsWith('/chat');
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [taskListSectionOpen, setTaskListSectionOpen] = useState(true);
+  const [workspaceSectionOpen, setWorkspaceSectionOpen] = useState(true);
   const [bucketOpen, setBucketOpen] = useState<Record<SessionBucketKey, boolean>>({
     today: true,
     yesterday: true,
@@ -451,11 +495,15 @@ export function Sidebar() {
         </div>
 
         {!sidebarCollapsed ? (
-          <p className="mt-4 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
-            {t('common:sidebar.taskList')}
-          </p>
+          <SidebarCollapsibleSectionLabel
+            group="tasklist"
+            open={taskListSectionOpen}
+            onToggle={() => setTaskListSectionOpen((o) => !o)}
+            label={t('common:sidebar.taskList')}
+            toggleAriaLabel={t('common:sidebar.toggleTaskListSection')}
+          />
         ) : null}
-        {!sidebarCollapsed ? (
+        {!sidebarCollapsed && taskListSectionOpen ? (
           <div className="mt-1 flex flex-col gap-0.5">
             {STO_TASK_NAV.map((item) => (
               <SidebarTaskGroup
@@ -469,12 +517,17 @@ export function Sidebar() {
         ) : null}
 
         {!sidebarCollapsed ? (
-          <p className="mt-4 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
-            {t('common:sidebar.workspace')}
-          </p>
+          <SidebarCollapsibleSectionLabel
+            group="workspace"
+            open={workspaceSectionOpen}
+            onToggle={() => setWorkspaceSectionOpen((o) => !o)}
+            label={t('common:sidebar.workspace')}
+            toggleAriaLabel={t('common:sidebar.toggleWorkspaceSection')}
+          />
         ) : (
           <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
         )}
+        {(sidebarCollapsed || workspaceSectionOpen) && (
         <div className="flex flex-col gap-1">
           {workspaceNav.map((item) => (
             <SidebarNavLink
@@ -486,6 +539,7 @@ export function Sidebar() {
             />
           ))}
         </div>
+        )}
 
         {!sidebarCollapsed ? (
           <p className="mt-4 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
