@@ -1,13 +1,11 @@
 /**
  * 无 CRM 周报策略权限时的首页：智能助手工作台概览（色板对齐 docs/sto-design.md）。
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import { Bot, BrainCircuit, Cpu, RefreshCw, Repeat2, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
-import { useMessageQueueStore } from '@/stores/message-queue';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAgentsStore } from '@/stores/agents';
 import { useProviderStore } from '@/stores/providers';
@@ -21,9 +19,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { buildProviderListItems } from '@/lib/provider-accounts';
 import { buildChatModelOptions } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
-import { invokeApi } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
-import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
+import { ChatInput } from '@/pages/Chat/ChatInput';
+import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 
 /** sto-design Grey-10 主标题 / 默认正文 */
 const TEXT_PRIMARY = 'text-[#1D2129] dark:text-foreground';
@@ -55,14 +53,11 @@ const hubSelectTrigger = cn(
 
 export function HomeAgentHubSurface() {
   const { t } = useTranslation(['home', 'chat']);
-  const navigate = useNavigate();
   const [selectedModelId, setSelectedModelId] = useState('');
   const [modelSaving, setModelSaving] = useState(false);
 
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
-  const sendMessage = useChatStore((s) => s.sendMessage);
-  const newSession = useChatStore((s) => s.newSession);
   const abortRun = useChatStore((s) => s.abortRun);
   const sending = useChatStore((s) => s.sending);
   const error = useChatStore((s) => s.error);
@@ -175,78 +170,10 @@ export function HomeAgentHubSurface() {
     return t('agentHub.gatewayLineDisconnected', { port });
   }, [gatewayStatus.port, gatewayStatus.pid, gatewayStatus.state, t]);
 
-  const handleHubQueue = useCallback(
-    (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
-      useMessageQueueStore.getState().enqueue(text, attachments, targetAgentId);
-    },
-    [],
-  );
-
-  const handleHubSend = useCallback(
-    async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
-      if (!isGatewayRunning) {
-        toast.error(t('assistant.gatewayRequired'));
-        return;
-      }
-      // Same as sidebar「新对话」: new transcript key before first user message.
-      newSession();
-
-      let parts: Array<{ type: string; context: string }> | null = null;
-      try {
-        const { currentAgentId: agentId, currentSessionKey } = useChatStore.getState();
-        parts = await invokeApi<Array<{ type: string; context: string }>>('question:split', {
-          prompt: text,
-          agentId: agentId,
-          sessionId: currentSessionKey,
-        });
-      } catch {
-        // Silent fallback — same as Chat page
-      }
-
-      const failed = () => Boolean(useChatStore.getState().error);
-
-      if (parts && parts.length > 1) {
-        await sendMessage(parts[0].context, attachments, targetAgentId);
-        if (failed()) {
-          toast.error(t('assistant.sendFailed'));
-          return;
-        }
-        for (let i = 1; i < parts.length; i++) {
-          useMessageQueueStore.getState().enqueue(parts[i].context, undefined, targetAgentId);
-        }
-      } else {
-        await sendMessage(text, attachments, targetAgentId);
-        if (failed()) {
-          toast.error(t('assistant.sendFailed'));
-          return;
-        }
-      }
-
-      navigate('/chat');
-    },
-    [isGatewayRunning, navigate, newSession, sendMessage, t],
-  );
+  const { handleHubSend, handleHubQueue } = useHomeChatEntrySend();
 
   return (
-    <div
-      className={cn(
-        'relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-[linear-gradient(180deg,#FAFBFC_0%,#F0F4FF_55%,#F5F6F7_100%)]',
-        'dark:border-border dark:bg-[linear-gradient(180deg,hsl(207_42%_11%)_0%,hsl(209_40%_9%)_100%)]',
-        BORDER_DEFAULT,
-      )}
-    >
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.4] dark:opacity-25"
-        aria-hidden
-        style={{
-          backgroundImage: `
-            radial-gradient(circle at 1px 1px, rgba(194, 208, 255, 0.5) 1px, transparent 0),
-            radial-gradient(circle at 1px 1px, rgba(213, 219, 230, 0.4) 1px, transparent 0)
-          `,
-          backgroundSize: '28px 28px, 20px 20px',
-        }}
-      />
-      <div className="relative z-[1] flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className={cn('flex flex-wrap items-end justify-between gap-3 border-b px-4 py-4 sm:px-6', BORDER_DEFAULT)}>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className={cn('text-xs font-medium', TEXT_SECONDARY)}>{t('agentHub.conversationLabel')}</span>
@@ -508,7 +435,6 @@ export function HomeAgentHubSurface() {
           </span>
           <span className="tabular-nums text-[#4E5969] dark:text-muted-foreground">{t('agentHub.usageHint')}</span>
         </div>
-      </div>
       </div>
     </div>
   );

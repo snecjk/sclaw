@@ -111,3 +111,90 @@ describe('saveProviderKeyToOpenClaw', () => {
     logSpy.mockRestore();
   });
 });
+
+describe('setOpenClawDefaultModelWithOverride main agent model ref', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    await rm(testHome, { recursive: true, force: true });
+    await rm(testUserData, { recursive: true, force: true });
+  });
+
+  it('rewrites agents.list main model from bare id to qualified primary', async () => {
+    await writeOpenClawJson({
+      agents: {
+        defaults: {
+          model: { primary: 'qwen/old', fallbacks: [] },
+        },
+        list: [
+          {
+            id: 'main',
+            name: 'Main',
+            default: true,
+            workspace: '~/.openclaw/workspace',
+            agentDir: '~/.openclaw/agents/main/agent',
+            model: 'qwen3.5-plus',
+          },
+        ],
+      },
+      models: { mode: 'merge', providers: {} },
+      gateway: { mode: 'local' },
+    });
+
+    const { setOpenClawDefaultModelWithOverride } = await import('@electron/utils/openclaw-auth');
+
+    await setOpenClawDefaultModelWithOverride(
+      'sto',
+      'qwen3.5-plus',
+      {
+        baseUrl: 'https://baseinfo-aimemory.sto.cn/agent/v1',
+        api: 'openai-completions',
+      },
+      [],
+    );
+
+    const raw = await readFile(join(testHome, '.openclaw', 'openclaw.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { agents: { list: Array<{ id: string; model?: string }> } };
+    const main = parsed.agents.list.find((e) => e.id === 'main');
+    expect(main?.model).toBe('sto/qwen3.5-plus');
+  });
+
+  it('does not overwrite main agent model when already qualified', async () => {
+    await writeOpenClawJson({
+      agents: {
+        defaults: {
+          model: { primary: 'qwen/turbo', fallbacks: [] },
+        },
+        list: [
+          {
+            id: 'main',
+            name: 'Main',
+            default: true,
+            workspace: '~/.openclaw/workspace',
+            agentDir: '~/.openclaw/agents/main/agent',
+            model: 'qwen/turbo',
+          },
+        ],
+      },
+      models: { mode: 'merge', providers: {} },
+      gateway: { mode: 'local' },
+    });
+
+    const { setOpenClawDefaultModelWithOverride } = await import('@electron/utils/openclaw-auth');
+
+    await setOpenClawDefaultModelWithOverride(
+      'sto',
+      'qwen3.5-plus',
+      {
+        baseUrl: 'https://baseinfo-aimemory.sto.cn/agent/v1',
+        api: 'openai-completions',
+      },
+      [],
+    );
+
+    const raw = await readFile(join(testHome, '.openclaw', 'openclaw.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { agents: { list: Array<{ id: string; model?: string }> } };
+    const main = parsed.agents.list.find((e) => e.id === 'main');
+    expect(main?.model).toBe('qwen/turbo');
+  });
+});

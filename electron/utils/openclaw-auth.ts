@@ -428,6 +428,7 @@ export async function setOpenClawDefaultModel(
     };
     agents.defaults = defaults;
     config.agents = agents;
+    syncMainAgentListModelIfBare(config, model);
 
     // Configure models.providers for providers that need explicit registration.
     const providerCfg = getProviderConfig(provider);
@@ -491,6 +492,33 @@ function normalizeModelRef(provider: string, modelOverride?: string): string | u
   const rawModel = modelOverride || getProviderDefaultModel(provider);
   if (!rawModel) return undefined;
   return rawModel.startsWith(`${provider}/`) ? rawModel : `${provider}/${rawModel}`;
+}
+
+/**
+ * OpenClaw resolves bare model ids on agents.list (e.g. "qwen3.5-plus") to the wrong
+ * provider (e.g. anthropic/qwen3.5-plus), then model-fallback may land on cursor-local.
+ * When we set agents.defaults.model.primary to a qualified ref, align main agent's
+ * string model to the same ref if it is still unqualified.
+ */
+function syncMainAgentListModelIfBare(config: Record<string, unknown>, primaryRef: string): void {
+  const agents = config.agents as Record<string, unknown> | undefined;
+  if (!agents || typeof agents !== 'object') return;
+  const list = agents.list;
+  if (!Array.isArray(list)) return;
+
+  agents.list = list.map((entry) => {
+    if (!entry || typeof entry !== 'object') return entry;
+    const e = entry as Record<string, unknown>;
+    if (e.id !== 'main') return entry;
+    const m = e.model;
+    if (typeof m !== 'string' || !m.trim()) return entry;
+    const trimmed = m.trim();
+    if (!trimmed.includes('/')) {
+      return { ...e, model: primaryRef };
+    }
+    return entry;
+  });
+  config.agents = agents;
 }
 
 function extractModelId(provider: string, modelRef: string): string {
@@ -682,6 +710,7 @@ export async function setOpenClawDefaultModelWithOverride(
     };
     agents.defaults = defaults;
     config.agents = agents;
+    syncMainAgentListModelIfBare(config, model);
 
     if (override.baseUrl && override.api) {
       upsertOpenClawProviderEntry(config, provider, {
