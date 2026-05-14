@@ -69,6 +69,12 @@ const INITIAL_NOW_MS = Date.now();
 const SIDEBAR_COLLAPSED_TOOLTIP_SURFACE =
   '!bg-popover text-popover-foreground shadow-md backdrop-blur-none border-border';
 
+/** Footer account dropdown — panel and row hover (design spec). */
+const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS = 'w-48 rounded-[12px] border-0 shadow-lg';
+const SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS = 'rounded-[12px] border-0 shadow-lg';
+const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
+  'hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7]';
+
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   if (!activityMs || activityMs <= 0) return 'older';
 
@@ -839,21 +845,33 @@ export function Sidebar() {
                 )}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent side="right" align="end" sideOffset={8} className="w-48">
-              <DropdownMenuItem onClick={() => navigate('/settings')} className="gap-2">
+            <DropdownMenuContent
+              side="right"
+              align="end"
+              sideOffset={8}
+              className={SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS}
+            >
+              <DropdownMenuItem
+                onClick={() => navigate('/settings')}
+                className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+              >
                 <SettingsIcon className="h-4 w-4 shrink-0" strokeWidth={2} />
                 {t('common:sidebar.settings')}
               </DropdownMenuItem>
 
               <DropdownMenuSub>
-                <DropdownMenuSubTrigger className="gap-2">
+                <DropdownMenuSubTrigger className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}>
                   <Globe className="h-4 w-4 shrink-0" strokeWidth={2} />
                   <span className="flex-1">{t('settings:appearance.language')}</span>
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent sideOffset={4}>
+                <DropdownMenuSubContent sideOffset={4} className={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}>
                   {SUPPORTED_LANGUAGES.map((lang) => (
-                    <DropdownMenuItem key={lang.code} onClick={() => setLanguage(lang.code)} className="gap-2">
+                    <DropdownMenuItem
+                      key={lang.code}
+                      onClick={() => setLanguage(lang.code)}
+                      className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+                    >
                       {language === lang.code ? (
                         <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
                       ) : (
@@ -866,7 +884,7 @@ export function Sidebar() {
               </DropdownMenuSub>
 
               <DropdownMenuSub>
-                <DropdownMenuSubTrigger className="gap-2">
+                <DropdownMenuSubTrigger className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}>
                   {theme === 'light' ? (
                     <Sun className="h-4 w-4 shrink-0" strokeWidth={2} />
                   ) : theme === 'dark' ? (
@@ -877,9 +895,13 @@ export function Sidebar() {
                   <span className="flex-1">{t('settings:appearance.theme')}</span>
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent sideOffset={4}>
+                <DropdownMenuSubContent sideOffset={4} className={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}>
                   {(['light', 'dark', 'system'] as const).map((t_value) => (
-                    <DropdownMenuItem key={t_value} onClick={() => setTheme(t_value)} className="gap-2">
+                    <DropdownMenuItem
+                      key={t_value}
+                      onClick={() => setTheme(t_value)}
+                      className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+                    >
                       {theme === t_value ? (
                         <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
                       ) : (
@@ -895,7 +917,10 @@ export function Sidebar() {
 
               <DropdownMenuItem
                 onClick={() => setShowLogoutConfirm(true)}
-                className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                className={cn(
+                  'gap-2 text-destructive focus:text-destructive',
+                  SIDEBAR_ACCOUNT_MENU_ITEM_HOVER,
+                )}
               >
                 <LogOut className="h-4 w-4 shrink-0" strokeWidth={2} />
                 {t('auth:logout.button')}
