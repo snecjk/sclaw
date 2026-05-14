@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { isStoTaskId, isValidTaskEntry, taskLatestPath, type StoTaskId } from '@/lib/sto-tasks';
 import { HomeAssistant } from '@/pages/Home/HomeAssistant';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/stores/auth';
 
 function TaskTable({
   title,
@@ -85,6 +86,11 @@ function TaskDetailBody({ taskId }: { taskId: StoTaskId }) {
 export function TaskDetail() {
   const { taskId, entryId } = useParams<{ taskId: string; entryId?: string }>();
   const { t } = useTranslation('tasks');
+  const crmWeekReportSurfaceAllowed = useAuthStore((s) => s.crmWeekReportSurfaceAllowed);
+
+  if (!crmWeekReportSurfaceAllowed) {
+    return <Navigate to="/" replace />;
+  }
 
   if (!taskId || !isStoTaskId(taskId)) {
     return <Navigate to="/" replace />;
