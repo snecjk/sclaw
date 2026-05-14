@@ -450,15 +450,18 @@ export function ChatInput({
         {/* 单壳：附件缩略图与输入区同在一个圆角边框内（与 memory-center-web 助手输入一致） */}
         <div
           className={cn(
-            'relative overflow-visible rounded-2xl border bg-white shadow-[0_4px_14px_rgba(99,102,241,0.05)] transition-[box-shadow,border-color,ring-width,ring-color] duration-200 dark:bg-[#131a24]',
+            // sto-design: Grey-4 默认描边；Brand-3 悬停边、Brand-5/6 聚焦与拖拽（与 hub 顶栏 hover:border-[#FFC17A] 一致）
+            'relative overflow-visible rounded-2xl border bg-white transition-[box-shadow,border-color,ring-width,ring-color] duration-200 dark:bg-[#131a24]',
+            'border-[#E5E6EB] shadow-[0_4px_14px_rgba(29,33,41,0.05)] ring-1 ring-transparent dark:border-border dark:shadow-[0_4px_14px_rgba(0,0,0,0.22)]',
             dragOver
-              ? 'border-primary/60 ring-2 ring-primary/18'
+              ? 'border-[#FFC17A] ring-2 ring-[#FFC17A]/35 dark:border-[#FFC17A] dark:ring-[#FFC17A]/30'
               : [
-                  'border-primary/40 ring-1 ring-primary/18 dark:border-primary/30 dark:ring-primary/12',
-                  'focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/22',
-                  'focus-within:shadow-[0_0_0_1px_rgba(56,189,248,0.06),0_0_20px_rgba(56,189,248,0.12),0_0_48px_rgba(56,189,248,0.06)]',
-                  'dark:focus-within:border-primary/40 dark:focus-within:ring-primary/28',
-                  'dark:focus-within:shadow-[0_0_0_1px_rgba(125,211,252,0.08),0_0_24px_rgba(56,189,248,0.16),0_0_56px_rgba(56,189,248,0.08)]',
+                  'hover:border-[#FFC17A] hover:shadow-[0_4px_20px_rgba(255,183,140,0.14)]',
+                  'dark:hover:border-[#FFC17A]/90 dark:hover:shadow-[0_4px_20px_rgba(255,183,140,0.1)]',
+                  'focus-within:border-[#FF8D2A] focus-within:ring-2 focus-within:ring-[#FF6F00]/22',
+                  'focus-within:shadow-[0_0_0_1px_rgba(255,141,42,0.4),0_4px_20px_rgba(255,111,0,0.1)]',
+                  'dark:focus-within:border-[#FF8D2A] dark:focus-within:ring-[#FF6F00]/28',
+                  'dark:focus-within:shadow-[0_0_0_1px_rgba(255,141,42,0.28),0_4px_24px_rgba(255,111,0,0.14)]',
                 ],
           )}
         >

@@ -228,25 +228,7 @@ export function HomeAgentHubSurface() {
   );
 
   return (
-    <div
-      className={cn(
-        'relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-[linear-gradient(180deg,#FAFBFC_0%,#F0F4FF_55%,#F5F6F7_100%)]',
-        'dark:border-border dark:bg-[linear-gradient(180deg,hsl(207_42%_11%)_0%,hsl(209_40%_9%)_100%)]',
-        BORDER_DEFAULT,
-      )}
-    >
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.4] dark:opacity-25"
-        aria-hidden
-        style={{
-          backgroundImage: `
-            radial-gradient(circle at 1px 1px, rgba(194, 208, 255, 0.5) 1px, transparent 0),
-            radial-gradient(circle at 1px 1px, rgba(213, 219, 230, 0.4) 1px, transparent 0)
-          `,
-          backgroundSize: '28px 28px, 20px 20px',
-        }}
-      />
-      <div className="relative z-[1] flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className={cn('flex flex-wrap items-end justify-between gap-3 border-b px-4 py-4 sm:px-6', BORDER_DEFAULT)}>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className={cn('text-xs font-medium', TEXT_SECONDARY)}>{t('agentHub.conversationLabel')}</span>
@@ -508,7 +490,6 @@ export function HomeAgentHubSurface() {
           </span>
           <span className="tabular-nums text-[#4E5969] dark:text-muted-foreground">{t('agentHub.usageHint')}</span>
         </div>
-      </div>
       </div>
     </div>
   );
