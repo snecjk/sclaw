@@ -24,7 +24,8 @@
         "switchModelTitle": "切换对话模型",
         "modelTagBuiltin": "内置",
         "modelTagCustom": "自定义",
-        "noModels": "暂无可用模型"
+        "noModels": "暂无可用模型",
+        "modelSwitchFailed": "切换模型失败：{{message}}"
     },
     "composer": {
         "attachFiles": "添加文件",

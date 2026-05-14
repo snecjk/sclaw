@@ -19,7 +19,8 @@
         "conversationTargetLabel": "会話相手",
         "switchAgentAria": "会話 Agent を切り替え",
         "switchAgentTitle": "その Agent のメインセッションに切り替えます。新規チャットもこの Agent 配下になります",
-        "defaultAgentMark": "（既定）"
+        "defaultAgentMark": "（既定）",
+        "modelSwitchFailed": "モデルの切り替えに失敗しました：{{message}}"
     },
     "composer": {
         "attachFiles": "ファイルを添付",
