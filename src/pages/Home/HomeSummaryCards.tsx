@@ -1,9 +1,12 @@
-import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { taskLatestPath, type StoTaskId } from '@/lib/sto-tasks';
+import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
+import { formatLocalYmd } from '@/lib/sto-task-entry-label';
+import { STO_TASK_PENDING_COMPOSE_KEY } from '@/lib/sto-task-compose-storage';
+import { useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import avatar01 from '@/assets/avatars/avatar-01.png.png';
 import avatar02 from '@/assets/avatars/avatar-02.png.png';
 import avatar03 from '@/assets/avatars/avatar-03.png.png';
@@ -100,7 +103,7 @@ type SummaryCardProps =
   | {
       disabled?: false;
       avatarSeed: string;
-      linkToLatest: StoTaskId;
+      stoTaskTarget: StoTaskId;
       base: SummaryCardBase;
       statusVariant: 'ok' | 'neutral';
       columns: 2 | 3;
@@ -110,6 +113,25 @@ function SummaryCard(props: SummaryCardProps) {
   const { avatarSeed, base, statusVariant, columns } = props;
   const disabled = props.disabled === true;
   const { t } = useTranslation('home');
+  const navigate = useNavigate();
+  const ensureSubitem = useStoTaskSubitemsStore((s) => s.ensureSubitem);
+  const stoTaskTarget = !disabled ? (props as Extract<SummaryCardProps, { stoTaskTarget: StoTaskId }>).stoTaskTarget : null;
+
+  const openSubitem = useCallback(() => {
+    if (!stoTaskTarget) return;
+    const entryId = formatLocalYmd(new Date());
+    ensureSubitem(stoTaskTarget, entryId);
+    try {
+      sessionStorage.setItem(
+        STO_TASK_PENDING_COMPOSE_KEY,
+        JSON.stringify({ taskId: stoTaskTarget, entryId, cardBase: base }),
+      );
+    } catch {
+      /* ignore quota */
+    }
+    navigate(taskDetailPath(stoTaskTarget, entryId));
+  }, [base, ensureSubitem, navigate, stoTaskTarget]);
+
   const p = `summary.${base}` as const;
   const bodyCaption = t(`${p}.bodyCaption`, { defaultValue: '' }).trim();
   const showStackBody = Boolean(bodyCaption);
@@ -186,15 +208,17 @@ function SummaryCard(props: SummaryCardProps) {
     );
   }
 
-  const { linkToLatest } = props as Extract<SummaryCardProps, { linkToLatest: StoTaskId }>;
-
   return (
-    <Link
-      to={taskLatestPath(linkToLatest)}
-      className={cn(cardShell, 'transition-shadow duration-200 hover:shadow-[0_8px_24px_rgba(29,33,41,0.1)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)]')}
+    <button
+      type="button"
+      onClick={openSubitem}
+      className={cn(
+        cardShell,
+        'w-full text-left transition-shadow duration-200 hover:shadow-[0_8px_24px_rgba(29,33,41,0.1)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)]',
+      )}
     >
       {inner}
-    </Link>
+    </button>
   );
 }
 
@@ -208,7 +232,7 @@ export function HomeSummaryCards({ className }: { className?: string }) {
       <div className="grid grid-cols-1 gap-5 md:grid-cols-3 md:gap-5">
         <SummaryCard
           avatarSeed="hq-reconciliation:recon"
-          linkToLatest="hq-reconciliation"
+          stoTaskTarget="hq-reconciliation"
           base="recon"
           statusVariant="ok"
           columns={3}

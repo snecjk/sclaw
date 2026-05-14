@@ -41,6 +41,8 @@ interface ChatInputProps {
   isEmpty?: boolean;
   /** Full-width embed (e.g. home agent hub): no page gutters, hide gateway/quota footer row. */
   variant?: 'default' | 'embedded';
+  /** One-time seed into the textarea (e.g. task subitem default prompt). */
+  seedText?: string;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -111,6 +113,7 @@ export function ChatInput({
   sending = false,
   isEmpty: _isEmpty = false,
   variant = 'default',
+  seedText,
 }: ChatInputProps) {
   const { t } = useTranslation('chat');
   const [input, setInput] = useState('');
@@ -120,6 +123,7 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
+  const seedAppliedRef = useRef(false);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
@@ -170,6 +174,12 @@ export function ChatInput({
       textareaRef.current.focus();
     }
   }, [disabled]);
+
+  useEffect(() => {
+    if (!seedText?.trim() || seedAppliedRef.current) return;
+    seedAppliedRef.current = true;
+    setInput(seedText);
+  }, [seedText]);
 
   useEffect(() => {
     if (!targetAgentId) return;

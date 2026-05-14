@@ -22,7 +22,8 @@
       "stat3Value": "29,810",
       "stat3Unit": "CNY",
       "footerTeam": "精算チーム",
-      "footerHint": "例外 4 件"
+      "footerHint": "例外 4 件",
+      "defaultComposePrompt": "2026年5月の全国低価格荷物量を照会し、日報を生成し、編集可能にする。"
     },
     "customer": {
       "title": "政策価格試算",
@@ -38,7 +39,8 @@
       "stat3Value": "",
       "stat3Unit": "",
       "footerTeam": "政策サービスセンター",
-      "footerHint": "異常顧客 2 件"
+      "footerHint": "異常顧客 2 件",
+      "defaultComposePrompt": "政策価格試算シナリオ（プレースホルダー）。"
     },
     "cost": {
       "title": "顧客リテンション",
@@ -54,7 +56,8 @@
       "stat3Value": "",
       "stat3Unit": "",
       "footerTeam": "政策サービスセンター",
-      "footerHint": "異常顧客 7 件"
+      "footerHint": "異常顧客 7 件",
+      "defaultComposePrompt": "顧客リテンションのフォローアップ（プレースホルダー）。"
     }
   },
   "assistant": {

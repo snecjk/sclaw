@@ -5,9 +5,9 @@ export const STO_TASK_IDS = ['hq-reconciliation'] as const;
 
 export type StoTaskId = (typeof STO_TASK_IDS)[number];
 
-/** 各主任务下子项 id（URL 段），顺序首条为「最新」 */
+/** 各主任务下子项 id（URL 段），顺序首条为「最新」；空数组表示仅有总览路由 `/tasks/:taskId` */
 export const STO_TASK_ENTRIES: Record<StoTaskId, readonly string[]> = {
-  'hq-reconciliation': ['2026-05-10', '2026-05-09'],
+  'hq-reconciliation': [],
 };
 
 export function isStoTaskId(id: string): id is StoTaskId {
@@ -16,6 +16,10 @@ export function isStoTaskId(id: string): id is StoTaskId {
 
 export function listTaskEntryIds(taskId: StoTaskId): readonly string[] {
   return STO_TASK_ENTRIES[taskId];
+}
+
+export function taskHasSubEntries(taskId: StoTaskId): boolean {
+  return STO_TASK_ENTRIES[taskId].length > 0;
 }
 
 export function getLatestTaskEntryId(taskId: StoTaskId): string {
@@ -27,12 +31,24 @@ export function isValidTaskEntry(taskId: StoTaskId, entryId: string): boolean {
   return (STO_TASK_ENTRIES[taskId] as readonly string[]).includes(entryId);
 }
 
+/** `YYYY-MM-DD` (calendar date segment in routes). */
+export function isYmdEntryId(entryId: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(entryId);
+}
+
+/** 主任务总览（无子项时使用） */
+export function taskOverviewPath(taskId: StoTaskId): string {
+  return `/tasks/${taskId}`;
+}
+
 /** 指定子项详情页 */
 export function taskDetailPath(taskId: StoTaskId, entryId: string): string {
   return `/tasks/${taskId}/${entryId}`;
 }
 
-/** 该主任务「最新一条」子项 */
+/** 该主任务「最新一条」子项；无子项时等同于 {@link taskOverviewPath} */
 export function taskLatestPath(taskId: StoTaskId): string {
-  return taskDetailPath(taskId, getLatestTaskEntryId(taskId));
+  const list = STO_TASK_ENTRIES[taskId];
+  if (list.length === 0) return taskOverviewPath(taskId);
+  return taskDetailPath(taskId, list[0]);
 }

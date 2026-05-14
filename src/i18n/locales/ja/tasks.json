@@ -1,15 +1,14 @@
 {
   "backHome": "ホームに戻る",
-  "sidebarEntry": {
-    "hq-reconciliation": {
-      "2026-05-10": "2026年05月10日",
-      "2026-05-09": "2026年05月09日"
-    }
-  },
+  "sidebarMaterialTitle": "{{date}}の資料",
+  "subitemMaterialHeading": "{{date}}の資料",
+  "subitemChatEmpty": "まだメッセージがありません。送信して開始してください。",
+  "overviewHint": "ホームの該当カードから開くと、当日の資料サブ項目を作成し会話を開始します。",
+  "unreadBadge": "未読",
   "detail": {
     "hq-reconciliation": {
-      "pageTitle": "2026-05-10 · 昨日の週次会議資料",
-      "intro": "昨日の週次会議資料の準備ができました。主要指標は以下です。",
+      "pageTitle": "週次会議資料",
+      "intro": "プロトタイプ概要（以下はサンプルデータです）。",
       "metaReconTime": "照合時刻",
       "metaReconTimeValue": "2026-05-10 06:00",
       "metaGenerated": "生成日時",

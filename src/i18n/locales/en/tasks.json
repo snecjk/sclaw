@@ -1,15 +1,14 @@
 {
   "backHome": "Back to home",
-  "sidebarEntry": {
-    "hq-reconciliation": {
-      "2026-05-10": "May 10, 2026",
-      "2026-05-09": "May 9, 2026"
-    }
-  },
+  "sidebarMaterialTitle": "{{date}} materials",
+  "subitemMaterialHeading": "{{date}} materials",
+  "subitemChatEmpty": "No messages yet. Send a message to start.",
+  "overviewHint": "Open the matching card on Home to create today’s material sub-item and start the chat session.",
+  "unreadBadge": "Unread",
   "detail": {
     "hq-reconciliation": {
-      "pageTitle": "May 10, 2026 · Yesterday weekly meeting materials",
-      "intro": "Yesterday’s weekly meeting materials are ready. Key figures are below.",
+      "pageTitle": "Weekly meeting materials",
+      "intro": "Prototype overview (sample figures below).",
       "metaReconTime": "Reconciliation time",
       "metaReconTimeValue": "2026-05-10 06:00",
       "metaGenerated": "Generated at",

@@ -1,7 +1,7 @@
 /**
  * Sidebar — 单列宽侧栏（248px / 72px），对齐 STO Claw 归档设计稿。
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import {
   Puzzle,
@@ -48,7 +48,10 @@ import { useTranslation } from 'react-i18next';
 import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
 import logoSvg from '@/assets/logo.svg';
 import packageJson from '../../../package.json';
-import { taskDetailPath, listTaskEntryIds, type StoTaskId } from '@/lib/sto-tasks';
+import { taskDetailPath, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
+import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
+import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
+import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
 
 type SessionBucketKey =
@@ -98,7 +101,54 @@ const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation'; dot?: boo
   { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation', dot: true },
 ];
 
-/** 侧栏任务：主标题可折叠 + 日期药丸子项（对齐设计稿）。 */
+function SidebarTaskDateLinks({ taskId, entries }: { taskId: StoTaskId; entries: readonly string[] }) {
+  const { pathname } = useLocation();
+  const { t, i18n } = useTranslation('tasks');
+  const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
+  const sessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
+  const isSubitemUnread = useStoTaskSubitemsStore((s) => s.isSubitemUnread);
+  const markSubitemReadFromActivity = useStoTaskSubitemsStore((s) => s.markSubitemReadFromActivity);
+  return (
+    <>
+      {entries.map((entryId) => {
+        const to = taskDetailPath(taskId, entryId);
+        const active = pathname === to;
+        const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)] ?? '';
+        const activity = sk ? (sessionLastActivity[sk] ?? 0) : 0;
+        const unread = isSubitemUnread(taskId, entryId, activity);
+        const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
+        const label = t('sidebarMaterialTitle', { date: dateLabel });
+        return (
+          <NavLink
+            key={entryId}
+            to={to}
+            onClick={() => {
+              if (!sk) return;
+              const a = useChatStore.getState().sessionLastActivity[sk] ?? 0;
+              if (a > 0) markSubitemReadFromActivity(taskId, entryId, a);
+            }}
+            className={cn(
+              'relative z-[1] inline-flex w-full max-w-full items-center justify-between gap-2 rounded-full px-2.5 py-1 text-left text-xs font-medium transition-colors',
+              active
+                ? 'bg-[#ededed] text-foreground dark:bg-white/[0.12]'
+                : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground dark:bg-white/[0.08]',
+            )}
+          >
+            <span className="min-w-0 flex-1 truncate">{label}</span>
+            {unread ? (
+              <span
+                className="h-2 w-2 shrink-0 rounded-full bg-[hsl(var(--destructive))]"
+                aria-label={t('unreadBadge', { defaultValue: 'Unread' })}
+              />
+            ) : null}
+          </NavLink>
+        );
+      })}
+    </>
+  );
+}
+
+/** 侧栏任务：有子项时为可折叠 + 药丸链接；无子项时为主项直达总览。 */
 function SidebarTaskGroup({
   taskId,
   label,
@@ -109,9 +159,24 @@ function SidebarTaskGroup({
   showDot?: boolean;
 }) {
   const { pathname } = useLocation();
-  const { t } = useTranslation('tasks');
-  const entries = listTaskEntryIds(taskId);
-  const underTask = pathname.startsWith(`/tasks/${taskId}`);
+  const rawEntryIds = useStoTaskSubitemsStore((s) => s.entriesByTask[taskId]);
+  const ensureSubitem = useStoTaskSubitemsStore((s) => s.ensureSubitem);
+  const entries = useMemo(() => {
+    const ids = rawEntryIds ?? [];
+    return [...new Set(ids)].sort((a, b) => b.localeCompare(a));
+  }, [rawEntryIds]);
+
+  useLayoutEffect(() => {
+    for (const entryId of entries) {
+      ensureSubitem(taskId, entryId);
+    }
+  }, [entries, taskId, ensureSubitem]);
+  const overviewTo = taskOverviewPath(taskId);
+  const underTask =
+    entries.length > 0
+      ? pathname.startsWith(`/tasks/${taskId}`)
+      : pathname === overviewTo || pathname.startsWith(`${overviewTo}/`);
+
   const [open, setOpen] = useState(true);
   const prevUnderTask = useRef<boolean | null>(null);
 
@@ -123,6 +188,21 @@ function SidebarTaskGroup({
     }
     prevUnderTask.current = underTask;
   }, [underTask]);
+
+  if (entries.length === 0) {
+    return (
+      <NavLink
+        to={overviewTo}
+        className={cn(
+          'flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left transition-colors',
+          underTask ? 'bg-black/[0.04] dark:bg-white/[0.06]' : 'hover:bg-black/[0.02] dark:hover:bg-white/[0.04]',
+        )}
+      >
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{label}</span>
+        {showDot ? <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" aria-hidden /> : null}
+      </NavLink>
+    );
+  }
 
   const panelId = `sto-sidebar-task-${taskId}-entries`;
 
@@ -153,24 +233,7 @@ function SidebarTaskGroup({
       </button>
       {open ? (
         <div id={panelId} className="mt-1.5 flex flex-col items-start gap-1" role="region" aria-labelledby={`sto-sidebar-task-${taskId}-toggle`}>
-          {entries.map((entryId) => {
-            const to = taskDetailPath(taskId, entryId);
-            const active = pathname === to;
-            return (
-              <NavLink
-                key={entryId}
-                to={to}
-                className={cn(
-                  'relative z-[1] inline-flex w-full max-w-full justify-start rounded-full px-2.5 py-1 text-left text-xs font-medium transition-colors',
-                  active
-                    ? 'bg-[#ededed] text-foreground dark:bg-white/[0.12]'
-                    : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground dark:bg-white/[0.08]',
-                )}
-              >
-                {t(`sidebarEntry.${taskId}.${entryId}`)}
-              </NavLink>
-            );
-          })}
+          <SidebarTaskDateLinks taskId={taskId} entries={entries} />
         </div>
       ) : null}
     </div>
@@ -399,6 +462,11 @@ export function Sidebar() {
     (typeof sessionBuckets)[number]
   >;
 
+  const visibleSessions = useMemo(
+    () => sessions.filter((session) => !isHiddenStoTaskSubitemChatSessionKey(session.key)),
+    [sessions],
+  );
+
   const getEffectiveActivityMs = (sessionKey: string): number => {
     const recorded = sessionLastActivity[sessionKey] ?? 0;
     if (recorded > 0) return recorded;
@@ -406,7 +474,7 @@ export function Sidebar() {
     return isFreshCurrentSession ? nowMs : 0;
   };
 
-  for (const session of [...sessions].sort((a, b) =>
+  for (const session of [...visibleSessions].sort((a, b) =>
     getEffectiveActivityMs(b.key) - getEffectiveActivityMs(a.key),
   )) {
     const bucketKey = getSessionBucket(getEffectiveActivityMs(session.key), nowMs);
@@ -643,7 +711,7 @@ export function Sidebar() {
             </div>
           ) : null}
           {!sidebarCollapsed &&
-            (sessions.length === 0 ? (
+            (visibleSessions.length === 0 ? (
               <p className="px-2 pt-2 text-center text-[12px] leading-relaxed text-muted-foreground/80">
                 {t('common:sidebar.emptyChatHistory')}
               </p>
