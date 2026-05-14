@@ -1,7 +1,7 @@
 {
   "hero": {
-    "title": "STO Claw — run your branch smarter",
-    "subtitle": "An AI workspace for branches: faster daily ops, clearer hand-offs, and less busywork."
+    "title": "STO Claw — smarter business management",
+    "subtitle": "An AI workspace that drives team collaboration and stronger day-to-day operations."
   },
   "summary": {
     "heading": "Overview",
@@ -47,6 +47,9 @@
       "stat2Label": "Cost anomalies",
       "stat2Value": "3",
       "stat2Unit": "accounts",
+      "stat3Label": "Routes flagged",
+      "stat3Value": "12",
+      "stat3Unit": "",
       "footerTeam": "Outbound cost squad",
       "footerHint": "1 exception — view"
     }
@@ -58,6 +61,7 @@
     "dataAnalysis": "Data analysis",
     "workflow": "Workflow",
     "send": "Send",
+    "footerDisclaimer": "STO Claw is AI-assisted; verify important information with your team before acting.",
     "gatewayRequired": "Connect the gateway before sending.",
     "sendFailed": "Could not send. Open Chat for details."
   }

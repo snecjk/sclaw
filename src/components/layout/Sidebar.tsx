@@ -202,14 +202,14 @@ function SidebarCollapsibleSectionLabel({
         aria-expanded={open}
         aria-label={toggleAriaLabel}
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80 outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.06]"
+        className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.05]"
       >
         <span className="min-w-0 flex-1 truncate">{label}</span>
         <span className={cn('flex shrink-0 text-muted-foreground/90', iconReveal)} aria-hidden>
           {open ? (
-            <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} />
+            <ChevronDown className="h-4 w-4" strokeWidth={2} />
           ) : (
-            <ChevronRight className="h-3.5 w-3.5" strokeWidth={2} />
+            <ChevronRight className="h-4 w-4" strokeWidth={2} />
           )}
         </span>
       </button>

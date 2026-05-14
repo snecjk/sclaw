@@ -1,14 +1,16 @@
 {
   "hero": {
-    "title": "STO Claw，让网点运营更高效",
-    "subtitle": "搭载 AI 智能工作平台，重塑网点智慧运营新模式，赋能网点高效智能运营"
+    "title": "STO Claw，让经营管理更高效",
+    "subtitle": "搭载AI智能工作台，驱动组织高效协同，赋能经营管理新价值"
   },
   "summary": {
     "heading": "数据概览",
     "recon": {
-      "title": "昨日总部对账结果",
-      "pill": "利息到账",
+      "title": "周会材料生成",
+      "pill": "经营管理",
       "status": "已完成",
+      "bodyCaption": "材料模块",
+      "bodyDetail": "单量、损益、客户营销、执行力",
       "stat1Label": "总收支",
       "stat1Value": "128,560",
       "stat1Unit": "元",
@@ -18,37 +20,40 @@
       "stat3Label": "支出",
       "stat3Value": "29,810",
       "stat3Unit": "元",
-      "footerTeam": "王牌结算小组",
-      "footerHint": "存在异常 4 项"
+      "footerTeam": "政策服务中心",
+      "footerHint": "待核对2个模版"
     },
     "customer": {
-      "title": "昨日异常客户跟踪",
-      "pill": "客户服务",
+      "title": "政策定价测算",
+      "pill": "定价测算",
       "status": "已处理",
-      "stat1Label": "异常项",
-      "stat1Value": "3",
+      "stat1Label": "准入客户",
+      "stat1Value": "10",
       "stat1Unit": "项",
-      "stat2Label": "涉及客户",
-      "stat2Value": "6",
+      "stat2Label": "政策提报",
+      "stat2Value": "7",
       "stat2Unit": "个",
-      "stat3Label": "影响金额",
-      "stat3Value": "10,000",
-      "stat3Unit": "元",
-      "footerTeam": "客户跟踪小组",
-      "footerHint": "存在异常 3 项"
+      "stat3Label": "损益偏差",
+      "stat3Value": "2",
+      "stat3Unit": "个",
+      "footerTeam": "政策服务中心",
+      "footerHint": "存在异常客户2个"
     },
     "cost": {
-      "title": "本月出港成本报表",
-      "pill": "出港成本",
+      "title": "客户留存管理",
+      "pill": "客户服务",
       "status": "已完成",
-      "stat1Label": "出港单票成本",
-      "stat1Value": "2.36",
-      "stat1Unit": "元/票",
-      "stat2Label": "客户成本异常",
-      "stat2Value": "3",
-      "stat2Unit": "个",
-      "footerTeam": "出港成本小组",
-      "footerHint": "存在异常 1 项"
+      "stat1Label": "新增客户",
+      "stat1Value": "1.5",
+      "stat1Unit": "万",
+      "stat2Label": "保有客户",
+      "stat2Value": "30.2",
+      "stat2Unit": "万",
+      "stat3Label": "流失客户",
+      "stat3Value": "-2.8",
+      "stat3Unit": "万",
+      "footerTeam": "政策服务中心",
+      "footerHint": "存在异常客户7个"
     }
   },
   "assistant": {
@@ -58,6 +63,7 @@
     "dataAnalysis": "数据分析",
     "workflow": "工作流调用",
     "send": "发送",
+    "footerDisclaimer": "STO Claw 为AI辅助，重要信息请与业务核对后使用",
     "gatewayRequired": "请先连接网关后再发送。",
     "sendFailed": "发送失败，请到对话页查看详情。"
   }
