@@ -30,7 +30,8 @@ const TEXT_SECONDARY = 'text-[#86909C] dark:text-muted-foreground';
 /** sto-design Grey-4 边框 */
 const BORDER_DEFAULT = 'border-[#E5E6EB] dark:border-border';
 /** sto-design Blue-1 浅底、Blue-6 图标主色（Link/Info） */
-const INFO_ICON_WRAP = 'bg-[#F0F4FF] text-[#4760FE] dark:bg-blue-950/35 dark:text-blue-300';
+const INFO_ICON_WRAP =
+  'bg-link-muted text-link dark:bg-[hsl(231_35%_18%)] dark:text-[hsl(var(--link))]';
 /** sto-design Grey-3 底 + Grey-9 字：能力场景 pill 纯展示（无选中、无交互、无 hover） */
 const MODE_CHIP_DECORATIVE =
   'rounded-full border border-transparent bg-[#F0F2F5] px-4 py-2 text-sm font-medium text-[#4E5969] dark:bg-muted dark:text-muted-foreground';
@@ -186,7 +187,7 @@ export function HomeAgentHubSurface() {
                 aria-label={`${t('agentHub.conversationLabel')}, ${triggerLabel}. ${t('chat:toolbar.switchAgentAria')}`}
               >
                 <span className="flex min-w-0 flex-1 items-center gap-2">
-                  <Bot className="h-4 w-4 shrink-0 text-[#4760FE] dark:text-blue-400" strokeWidth={1.75} aria-hidden />
+                  <Bot className="h-4 w-4 shrink-0 text-[#4760FE] dark:text-[hsl(var(--link))]" strokeWidth={1.75} aria-hidden />
                   <span className="truncate font-medium">{triggerLabel}</span>
                 </span>
                 <ChevronDown className="h-4 w-4 shrink-0 text-[#C9CDD4] dark:text-muted-foreground" strokeWidth={2.25} aria-hidden />
@@ -229,7 +230,7 @@ export function HomeAgentHubSurface() {
                   title={t('chat:toolbar.switchModelTitle')}
                   aria-label={t('chat:toolbar.switchModelTitle')}
                 >
-                  <Cpu className="h-4 w-4 shrink-0 text-[#4760FE] dark:text-blue-400" strokeWidth={1.75} aria-hidden />
+                  <Cpu className="h-4 w-4 shrink-0 text-[#4760FE] dark:text-[hsl(var(--link))]" strokeWidth={1.75} aria-hidden />
                   <span className="min-w-0 flex-1 truncate font-medium">
                     {selectedModel?.displayName ?? t('chat:toolbar.currentModel')}
                   </span>
@@ -238,7 +239,7 @@ export function HomeAgentHubSurface() {
                       className={cn(
                         'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
                         selectedModel.isBuiltin
-                          ? 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-400'
+                          ? 'bg-link-muted text-link dark:bg-[hsl(231_35%_18%)] dark:text-[hsl(var(--link))]'
                           : 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
                       )}
                     >
@@ -272,7 +273,7 @@ export function HomeAgentHubSurface() {
                         className={cn(
                           'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
                           opt.isBuiltin
-                            ? 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-400'
+                            ? 'bg-link-muted text-link dark:bg-[hsl(231_35%_18%)] dark:text-[hsl(var(--link))]'
                             : 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
                         )}
                       >
@@ -310,7 +311,7 @@ export function HomeAgentHubSurface() {
                 type="button"
                 className={cn(
                   'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border bg-white text-[#4760FE] transition-colors',
-                  'hover:bg-[#F0F4FF] dark:bg-card dark:text-blue-300 dark:hover:bg-blue-950/30',
+                  'hover:bg-link-muted dark:bg-card dark:text-[hsl(var(--link))] dark:hover:bg-[hsl(231_35%_20%)]',
                   showThinking && 'border-[#FFC17A] bg-[#FFF5E6] dark:border-amber-800/50 dark:bg-amber-950/40',
                   BORDER_DEFAULT,
                 )}

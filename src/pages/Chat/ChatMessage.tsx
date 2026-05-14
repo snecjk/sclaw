@@ -83,7 +83,7 @@ export const ChatMessage = memo(function ChatMessage({
     >
       {/* Avatar */}
       {!isUser && (
-        <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-[linear-gradient(180deg,rgba(125,211,252,0.16),rgba(56,189,248,0.10))] text-primary shadow-[0_12px_24px_rgba(56,189,248,0.10)]">
+        <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,#FFF5E6,#FFE8CC)] text-primary shadow-[0_8px_20px_rgba(255,111,0,0.12)]">
           <Sparkles className="h-4 w-4" />
         </div>
       )}
@@ -154,7 +154,7 @@ export const ChatMessage = memo(function ChatMessage({
                 ) : (
                   <div
                     key={`local-${i}`}
-                    className="flex h-36 w-36 items-center justify-center rounded-2xl border border-primary/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(125,211,252,0.06))] text-muted-foreground"
+                    className="flex h-36 w-36 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(245,246,247,0.95))] text-muted-foreground"
                   >
                     <File className="h-8 w-8" />
                   </div>
@@ -219,7 +219,7 @@ export const ChatMessage = memo(function ChatMessage({
               }
               if (isImage && !file.preview) {
                 return (
-                  <div key={`local-${i}`} className="flex h-36 w-36 items-center justify-center rounded-2xl border border-primary/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(125,211,252,0.06))] text-muted-foreground">
+                  <div key={`local-${i}`} className="flex h-36 w-36 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(245,246,247,0.95))] text-muted-foreground">
                     <File className="h-8 w-8" />
                   </div>
                 );
@@ -293,8 +293,8 @@ function ToolStatusBar({
             key={tool.toolCallId || tool.id || tool.name}
             className={cn(
               'flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs transition-all duration-300',
-              isRunning && 'border-primary/20 bg-[linear-gradient(135deg,rgba(125,211,252,0.14),rgba(56,189,248,0.08))] text-foreground shadow-[0_10px_20px_rgba(56,189,248,0.08)]',
-              !isRunning && !isError && cn('border-primary/10 text-muted-foreground', assistantChatCardBg),
+              isRunning && 'border-[hsl(var(--primary)/0.35)] bg-[linear-gradient(135deg,rgba(255,245,230,0.95),rgba(255,232,204,0.75))] text-foreground shadow-[0_8px_18px_rgba(255,111,0,0.08)]',
+              !isRunning && !isError && cn('border-border text-muted-foreground', assistantChatCardBg),
               isError && 'border-destructive/30 bg-destructive/5 text-destructive',
             )}
           >
@@ -333,7 +333,7 @@ function AssistantHoverBar({ text, timestamp }: { text: string; timestamp?: numb
       <Button
         variant="ghost"
         size="icon"
-        className="h-7 w-7 rounded-full border border-primary/10 bg-primary/[0.04] hover:bg-primary/[0.08]"
+        className="h-7 w-7 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]"
         onClick={copyContent}
       >
         {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
@@ -371,20 +371,20 @@ function MessageBubble({
         isUser
           ? cn(
               'border text-foreground',
-              'border-primary/22 dark:border-primary/55',
+              'border-border dark:border-white/12',
               'bg-[linear-gradient(165deg,hsl(var(--primary)/0.26),hsl(var(--primary)/0.11))]',
               'dark:bg-[linear-gradient(165deg,hsl(var(--primary)/0.45),hsl(var(--primary)/0.22))]',
-              'shadow-[0_10px_26px_rgba(56,189,248,0.11),inset_0_1px_0_0_hsl(var(--glass-highlight)/0.45)]',
-              'dark:shadow-[0_8px_28px_rgba(56,189,248,0.28),inset_0_1px_0_0_hsl(var(--glass-highlight)/0.18)]',
+              'shadow-[0_10px_26px_rgba(255,111,0,0.12),inset_0_1px_0_0_hsl(var(--glass-highlight)/0.45)]',
+              'dark:shadow-[0_8px_28px_rgba(255,111,0,0.18),inset_0_1px_0_0_hsl(var(--glass-highlight)/0.18)]',
             )
           : showStreamingChrome
             ? cn(
-                'border border-primary/20 text-foreground shadow-[0_0_0_1px_rgba(56,189,248,0.06),0_18px_34px_rgba(15,23,42,0.10)]',
-                'dark:border-primary/25 dark:shadow-[0_0_0_1px_rgba(56,189,248,0.12),0_14px_32px_rgba(0,0,0,0.45)]',
+                'border border-border text-foreground shadow-[0_0_0_1px_rgba(15,23,42,0.04),0_18px_34px_rgba(15,23,42,0.08)]',
+                'dark:border-border dark:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_14px_32px_rgba(0,0,0,0.45)]',
                 assistantChatCardBgStreaming,
               )
             : cn(
-                'border border-primary/10 text-foreground shadow-[0_12px_28px_rgba(15,23,42,0.08)]',
+                'border border-border text-foreground shadow-[0_12px_28px_rgba(15,23,42,0.08)]',
                 'dark:border-border dark:shadow-[0_10px_28px_rgba(0,0,0,0.4)]',
                 assistantChatCardBg,
               ),
@@ -414,13 +414,13 @@ function MessageBubble({
                 const isInline = !match && !className;
                 if (isInline) {
                   return (
-                    <code className="rounded-md bg-background/55 px-1.5 py-0.5 text-sm font-mono break-all break-words text-primary" {...props}>
+                    <code className="rounded-md bg-background/55 px-1.5 py-0.5 text-sm font-mono break-all break-words text-foreground" {...props}>
                       {children}
                     </code>
                   );
                 }
                 return (
-                  <pre className="overflow-x-auto rounded-xl border border-primary/10 bg-background/55 p-4">
+                  <pre className="overflow-x-auto rounded-xl border border-border bg-background/55 p-4">
                     <code className={cn('text-sm font-mono', className)} {...props}>
                       {children}
                     </code>
@@ -448,14 +448,14 @@ function MessageBubble({
                         fileSize: 0,
                         preview: null,
                       })}
-                      className="inline bg-transparent border-0 p-0 text-primary hover:underline break-words break-all cursor-pointer font-inherit"
+                      className="inline bg-transparent border-0 p-0 text-link hover:underline break-words break-all cursor-pointer font-inherit"
                     >
                       {children}
                     </button>
                   );
                 }
                 return (
-                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-words break-all">
+                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-link hover:underline break-words break-all">
                     {children}
                   </a>
                 );
@@ -471,7 +471,7 @@ function MessageBubble({
       )}
 
       {showStreamingChrome && (
-        <div className="relative mt-3 flex items-center justify-between gap-3 border-t border-primary/10 pt-2 text-[11px] text-muted-foreground">
+        <div className="relative mt-3 flex items-center justify-between gap-3 border-t border-border pt-2 text-[11px] text-muted-foreground">
           <div className="flex items-center gap-2 min-w-0">
             <StreamingPulse />
             <span className="truncate font-medium tracking-[0.02em] text-foreground/80">
@@ -537,7 +537,7 @@ function preprocessTextForPreviewLinks(text: string): string {
 function StreamingCursor() {
   return (
     <motion.span
-      className="ml-1 inline-flex h-[0.95rem] w-6 rounded-full align-[-0.1em] bg-primary/45 shadow-[0_0_0_1px_rgba(59,130,246,0.12)]"
+      className="ml-1 inline-flex h-[0.95rem] w-6 rounded-full align-[-0.1em] bg-primary/45 shadow-[0_0_0_1px_rgba(255,111,0,0.18)]"
       animate={{
         opacity: [0.35, 1, 0.45],
         scaleX: [0.92, 1.08, 0.96],
@@ -576,7 +576,7 @@ function ThinkingBlock({ content }: { content: string }) {
   return (
     <div
       className={cn(
-        'w-full rounded-2xl border border-primary/10 text-[14px] shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
+        'w-full rounded-2xl border border-border text-[14px] shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
         assistantChatCardBg,
       )}
     >
@@ -630,9 +630,9 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
   return (
     <div 
       className={cn(
-        'flex max-w-[220px] items-center gap-3 rounded-2xl border border-primary/10 px-3 py-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
+        'flex max-w-[220px] items-center gap-3 rounded-2xl border border-border px-3 py-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
         assistantChatCardBg,
-        (file.filePath || onPreviewFile) && 'cursor-pointer transition-all hover:border-primary/20 hover:bg-white/[0.97] dark:hover:bg-white/[0.12]',
+        (file.filePath || onPreviewFile) && 'cursor-pointer transition-all hover:border-muted-foreground/35 hover:bg-white/[0.97] dark:hover:bg-white/[0.12]',
       )}
       onClick={handleOpen}
       title={isPreviewable ? '点击预览' : file.filePath ? '打开文件' : undefined}
@@ -645,7 +645,7 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
         </p>
       </div>
       {isPreviewable && onPreviewFile && (
-        <span className="ml-auto shrink-0 text-[10px] text-primary/70">预览</span>
+        <span className="ml-auto shrink-0 text-[10px] text-link/90">预览</span>
       )}
     </div>
   );
@@ -671,7 +671,7 @@ function ImageThumbnail({
   void filePath; void base64; void mimeType;
   return (
     <div
-      className="group/img relative h-36 w-36 cursor-zoom-in overflow-hidden rounded-2xl border border-primary/10 bg-white/30 shadow-[0_10px_24px_rgba(15,23,42,0.08)] dark:bg-white/[0.08]"
+      className="group/img relative h-36 w-36 cursor-zoom-in overflow-hidden rounded-2xl border border-border bg-white/30 shadow-[0_10px_24px_rgba(15,23,42,0.08)] dark:bg-white/[0.08]"
       onClick={onPreview}
     >
       <img src={src} alt={fileName} className="w-full h-full object-cover" />
@@ -703,7 +703,7 @@ function ImagePreviewCard({
   return (
     <div
       className={cn(
-        'group/img relative max-w-xs cursor-zoom-in overflow-hidden rounded-2xl border border-primary/10 shadow-[0_10px_24px_rgba(15,23,42,0.08)]',
+        'group/img relative max-w-xs cursor-zoom-in overflow-hidden rounded-2xl border border-border shadow-[0_10px_24px_rgba(15,23,42,0.08)]',
         assistantChatCardBg,
       )}
       onClick={onPreview}
@@ -802,7 +802,7 @@ function ToolCard({ name, input }: { name: string; input: unknown }) {
   return (
     <div
       className={cn(
-        'rounded-2xl border border-primary/10 text-[14px] shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
+        'rounded-2xl border border-border text-[14px] shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
         assistantChatCardBg,
       )}
     >

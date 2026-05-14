@@ -26,7 +26,7 @@ import { toast } from 'sonner';
 
 // ── shared pill style ────────────────────────────────────────────────────────
 const pillBase = cn(
-  'flex min-w-0 max-w-[min(100vw-11rem,260px)] flex-1 items-stretch rounded-full border border-primary/10',
+  'flex min-w-0 max-w-[min(100vw-11rem,260px)] flex-1 items-stretch rounded-full border border-border',
   'bg-[linear-gradient(180deg,rgba(255,255,255,0.10),transparent),rgba(255,255,255,0.24)]',
   'shadow-[0_8px_18px_rgba(15,23,42,0.06)]',
   'dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent),rgba(255,255,255,0.04)]',
@@ -210,7 +210,7 @@ export function ChatToolbar() {
                   <span className={cn(
                     'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
                     selectedModel.isBuiltin
-                      ? 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-400'
+                      ? 'bg-link-muted text-link dark:bg-[hsl(231_35%_18%)] dark:text-[hsl(var(--link))]'
                       : 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
                   )}>
                     {selectedModel.isBuiltin ? t('toolbar.modelTagBuiltin') : t('toolbar.modelTagCustom')}
@@ -240,7 +240,7 @@ export function ChatToolbar() {
                   <span className={cn(
                     'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
                     opt.isBuiltin
-                      ? 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-400'
+                      ? 'bg-link-muted text-link dark:bg-[hsl(231_35%_18%)] dark:text-[hsl(var(--link))]'
                       : 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
                   )}>
                     {opt.isBuiltin ? t('toolbar.modelTagBuiltin') : t('toolbar.modelTagCustom')}
@@ -257,7 +257,7 @@ export function ChatToolbar() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-full border border-primary/10 bg-primary/[0.04] hover:bg-primary/[0.08]"
+              className="h-8 w-8 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]"
               onClick={() => refresh()}
               disabled={loading}
             >
@@ -274,7 +274,7 @@ export function ChatToolbar() {
               variant="ghost"
               size="icon"
               className={cn(
-                'h-8 w-8 rounded-full border border-primary/10 bg-primary/[0.04] hover:bg-primary/[0.08]',
+                'h-8 w-8 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]',
                 showThinking && 'bg-primary/12 text-primary',
               )}
               onClick={toggleThinking}

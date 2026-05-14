@@ -157,7 +157,7 @@ function OpenExternalButton({ filePath }: { filePath: string }) {
   return (
     <button
       onClick={handleOpen}
-      className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-xs text-primary transition-colors hover:bg-primary/15"
+      className="inline-flex items-center gap-1.5 rounded-md bg-link-muted px-3 py-1.5 text-xs text-link transition-colors hover:bg-[#D8E1FF]"
     >
       <ExternalLink className="h-3.5 w-3.5" />
       在外部打开

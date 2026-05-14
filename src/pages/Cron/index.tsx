@@ -390,14 +390,14 @@ function CronJobCard({ job, onToggle, onEdit, onDelete, onTrigger }: CronJobCard
   return (
     <div
       className={cn(
-        'group relative flex cursor-pointer flex-col rounded-md border border-primary/12 p-4 transition-colors hover:border-primary/18 hover:shadow-md',
+        'group relative flex cursor-pointer flex-col rounded-md border border-border p-4 transition-colors hover:border-border hover:shadow-md',
         glassNestedCard,
       )}
       onClick={onEdit}
     >
       <div className="mb-4 flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/12 bg-primary/[0.06] text-foreground shadow-sm transition-transform group-hover:scale-[1.02]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-primary/[0.06] text-foreground shadow-sm transition-transform group-hover:scale-[1.02]">
             <Clock className={cn("h-5 w-5", job.enabled ? "text-foreground" : "text-muted-foreground")} />
           </div>
           <div className="flex flex-col min-w-0">
@@ -556,10 +556,10 @@ export function Cron() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
-      <header className="shrink-0 border-b border-primary/10 pb-6">
+      <header className="shrink-0 border-b border-border pb-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(56,189,248,0.12)]">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(255,111,0,0.10)]">
               <Timer className="h-5 w-5" strokeWidth={2} />
             </div>
             <div className="min-w-0">
@@ -617,7 +617,7 @@ export function Cron() {
           <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
             <div
               className={cn(
-                'flex min-h-[112px] flex-col justify-between rounded-lg border border-primary/10 p-4 transition-colors hover:border-primary/18 hover:shadow-md',
+                'flex min-h-[112px] flex-col justify-between rounded-lg border border-border p-4 transition-colors hover:border-border hover:shadow-md',
                 glassNestedCard,
               )}
             >
@@ -632,7 +632,7 @@ export function Cron() {
 
             <div
               className={cn(
-                'flex min-h-[112px] flex-col justify-between rounded-lg border border-primary/10 p-4 transition-colors hover:border-primary/18 hover:shadow-md',
+                'flex min-h-[112px] flex-col justify-between rounded-lg border border-border p-4 transition-colors hover:border-border hover:shadow-md',
                 glassNestedCard,
               )}
             >
@@ -647,7 +647,7 @@ export function Cron() {
 
             <div
               className={cn(
-                'flex min-h-[112px] flex-col justify-between rounded-lg border border-primary/10 p-4 transition-colors hover:border-primary/18 hover:shadow-md',
+                'flex min-h-[112px] flex-col justify-between rounded-lg border border-border p-4 transition-colors hover:border-border hover:shadow-md',
                 glassNestedCard,
               )}
             >
@@ -662,7 +662,7 @@ export function Cron() {
 
             <div
               className={cn(
-                'flex min-h-[112px] flex-col justify-between rounded-lg border border-primary/10 p-4 transition-colors hover:border-primary/18 hover:shadow-md',
+                'flex min-h-[112px] flex-col justify-between rounded-lg border border-border p-4 transition-colors hover:border-border hover:shadow-md',
                 glassNestedCard,
               )}
             >
@@ -679,7 +679,7 @@ export function Cron() {
           {safeJobs.length === 0 ? (
             <div
               className={cn(
-                'flex flex-col items-center justify-center rounded-md border border-dashed border-primary/18 py-16 text-muted-foreground',
+                'flex flex-col items-center justify-center rounded-md border border-dashed border-border py-16 text-muted-foreground',
                 glassNestedCard,
               )}
             >

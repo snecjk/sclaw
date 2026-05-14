@@ -497,7 +497,7 @@ export function ChatInput({
               <button
                 type="button"
                 onClick={() => setTargetAgentId(null)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-primary/6 px-3 py-1 text-[13px] font-medium text-foreground transition-colors hover:bg-primary/10"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-primary/6 px-3 py-1 text-[13px] font-medium text-foreground transition-colors hover:bg-primary/10"
                 title={t('composer.clearTarget')}
               >
                 <span>{t('composer.targetChip', { agent: selectedTarget.name })}</span>
@@ -588,7 +588,7 @@ export function ChatInput({
                 size="icon"
                 className={cn(
                   'h-9 w-9 shrink-0 rounded-full border transition-all',
-                  'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(59,130,246,0.22)]',
+                  'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(255,111,0,0.22)]',
                 )}
                 variant="ghost"
                 title={t('composer.send')}
@@ -605,7 +605,7 @@ export function ChatInput({
                   sending
                     ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-white/90'
                     : canSend
-                      ? 'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(59,130,246,0.22)]'
+                      ? 'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(255,111,0,0.22)]'
                       : 'border-black/8 bg-black/5 text-muted-foreground/55 dark:border-white/10 dark:bg-white/[0.06]'
                 )}
                 variant="ghost"

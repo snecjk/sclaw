@@ -67,7 +67,7 @@ const QueueItem = memo(function QueueItem({
 
       {/* Target agent badge */}
       {item.targetAgentId && (
-        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-primary/15 bg-primary/6 px-1.5 py-0.5 text-[11px] font-medium text-foreground/70">
+        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-border bg-primary/6 px-1.5 py-0.5 text-[11px] font-medium text-foreground/70">
           <AtSign className="h-2.5 w-2.5" />
           {item.targetAgentId}
         </span>
