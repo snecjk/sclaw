@@ -97,8 +97,8 @@ function collapsedEntryLabel(full: string): string {
   return `${first}…`;
 }
 
-const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation'; dot?: boolean }[] = [
-  { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation', dot: true },
+const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' }[] = [
+  { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation' },
 ];
 
 function SidebarTaskDateLinks({ taskId, entries }: { taskId: StoTaskId; entries: readonly string[] }) {
@@ -149,22 +149,28 @@ function SidebarTaskDateLinks({ taskId, entries }: { taskId: StoTaskId; entries:
 }
 
 /** 侧栏任务：有子项时为可折叠 + 药丸链接；无子项时为主项直达总览。 */
-function SidebarTaskGroup({
-  taskId,
-  label,
-  showDot,
-}: {
-  taskId: StoTaskId;
-  label: string;
-  showDot?: boolean;
-}) {
+function SidebarTaskGroup({ taskId, label }: { taskId: StoTaskId; label: string }) {
   const { pathname } = useLocation();
+  const { t: tTasks } = useTranslation('tasks');
   const rawEntryIds = useStoTaskSubitemsStore((s) => s.entriesByTask[taskId]);
+  const sessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
+  const isSubitemUnread = useStoTaskSubitemsStore((s) => s.isSubitemUnread);
   const ensureSubitem = useStoTaskSubitemsStore((s) => s.ensureSubitem);
+  const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const entries = useMemo(() => {
     const ids = rawEntryIds ?? [];
     return [...new Set(ids)].sort((a, b) => b.localeCompare(a));
   }, [rawEntryIds]);
+
+  const hasUnreadSubitem = useMemo(() => {
+    if (entries.length === 0) return false;
+    for (const entryId of entries) {
+      const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)] ?? '';
+      const activity = sk ? (sessionLastActivity[sk] ?? 0) : 0;
+      if (isSubitemUnread(taskId, entryId, activity)) return true;
+    }
+    return false;
+  }, [entries, taskId, sessionKeyBySubitem, sessionLastActivity, isSubitemUnread]);
 
   useLayoutEffect(() => {
     for (const entryId of entries) {
@@ -199,7 +205,12 @@ function SidebarTaskGroup({
         )}
       >
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{label}</span>
-        {showDot ? <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" aria-hidden /> : null}
+        {hasUnreadSubitem ? (
+          <span
+            className="h-2 w-2 shrink-0 rounded-full bg-[hsl(var(--destructive))]"
+            aria-label={tTasks('unreadBadge', { defaultValue: 'Unread' })}
+          />
+        ) : null}
       </NavLink>
     );
   }
@@ -219,13 +230,21 @@ function SidebarTaskGroup({
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 rounded-md px-0.5 py-0.5 text-left outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.06]"
+        className="group/sto-task-row flex w-full items-center justify-between gap-2 rounded-md px-0.5 py-0.5 text-left outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.06]"
       >
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{label}</span>
         <span className="flex shrink-0 items-center gap-1.5">
-          {showDot ? <span className="h-2 w-2 rounded-full bg-red-500" aria-hidden /> : null}
+          {hasUnreadSubitem ? (
+            <span
+              className="h-2 w-2 shrink-0 rounded-full bg-[hsl(var(--destructive))]"
+              aria-label={tTasks('unreadBadge', { defaultValue: 'Unread' })}
+            />
+          ) : null}
           <ChevronDown
-            className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open ? 'rotate-180' : '')}
+            className={cn(
+              'h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] group-hover/sto-task-row:opacity-100 group-focus-within/sto-task-row:opacity-100',
+              open ? 'rotate-180' : '',
+            )}
             aria-hidden
             strokeWidth={2}
           />
@@ -240,42 +259,39 @@ function SidebarTaskGroup({
   );
 }
 
-/** 任务列表 / 工作台：悬浮显示展开方向图标，点击整行收缩或展开下方内容（对齐钉钉录屏交互）。 */
+/** 任务列表 / 工作台：标题与展开/收缩图标并排；图标默认隐藏，hover / focus-within 行内按钮时显示。 */
 function SidebarCollapsibleSectionLabel({
-  group,
   open,
   onToggle,
   label,
   toggleAriaLabel,
 }: {
-  group: 'tasklist' | 'workspace';
   open: boolean;
   onToggle: () => void;
   label: string;
   toggleAriaLabel: string;
 }) {
-  const groupClass = group === 'tasklist' ? 'group/tasklist' : 'group/workspace';
-  const iconReveal =
-    group === 'tasklist'
-      ? 'opacity-0 transition-opacity group-hover/tasklist:opacity-100 group-focus-within/tasklist:opacity-100'
-      : 'opacity-0 transition-opacity group-hover/workspace:opacity-100 group-focus-within/workspace:opacity-100';
-
   return (
-    <div className={cn(groupClass, 'mt-4')}>
+    <div className="mt-4">
       <button
         type="button"
         aria-expanded={open}
         aria-label={toggleAriaLabel}
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.05]"
+        className="group/sto-sidebar-section-toggle flex w-full items-center rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.05]"
       >
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-        <span className={cn('flex shrink-0 text-muted-foreground/90', iconReveal)} aria-hidden>
-          {open ? (
-            <ChevronDown className="h-4 w-4" strokeWidth={2} />
-          ) : (
-            <ChevronRight className="h-4 w-4" strokeWidth={2} />
-          )}
+        <span className="inline-flex min-w-0 max-w-full items-center gap-1">
+          <span className="min-w-0 truncate">{label}</span>
+          <span
+            className="shrink-0 text-muted-foreground/90 opacity-0 transition-opacity group-hover/sto-sidebar-section-toggle:opacity-100 group-focus-within/sto-sidebar-section-toggle:opacity-100"
+            aria-hidden
+          >
+            {open ? (
+              <ChevronDown className="h-4 w-4" strokeWidth={2} />
+            ) : (
+              <ChevronRight className="h-4 w-4" strokeWidth={2} />
+            )}
+          </span>
         </span>
       </button>
     </div>
@@ -582,7 +598,6 @@ export function Sidebar() {
 
         {!sidebarCollapsed && crmWeekReportSurfaceAllowed ? (
           <SidebarCollapsibleSectionLabel
-            group="tasklist"
             open={taskListSectionOpen}
             onToggle={() => setTaskListSectionOpen((o) => !o)}
             label={t('common:sidebar.taskList')}
@@ -592,12 +607,7 @@ export function Sidebar() {
         {!sidebarCollapsed && crmWeekReportSurfaceAllowed && taskListSectionOpen ? (
           <div className="mt-1 flex flex-col gap-0.5">
             {STO_TASK_NAV.map((item) => (
-              <SidebarTaskGroup
-                key={item.id}
-                taskId={item.id}
-                label={t(`common:sidebar.${item.labelKey}`)}
-                showDot={item.dot}
-              />
+              <SidebarTaskGroup key={item.id} taskId={item.id} label={t(`common:sidebar.${item.labelKey}`)} />
             ))}
           </div>
         ) : null}
@@ -605,7 +615,6 @@ export function Sidebar() {
         {sidebarVis.workspace ? (
           !sidebarCollapsed ? (
             <SidebarCollapsibleSectionLabel
-              group="workspace"
               open={workspaceSectionOpen}
               onToggle={() => setWorkspaceSectionOpen((o) => !o)}
               label={t('common:sidebar.workspace')}
