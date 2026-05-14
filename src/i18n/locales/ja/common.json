@@ -26,11 +26,6 @@
         "expandHistoryPanel": "履歴パネルを開く",
         "collapseHistoryPanel": "履歴パネルを閉じる",
         "subscriptions": "サブスクリプション",
-        "taskList": "タスク一覧",
-        "taskHqReconciliation": "本社照合結果",
-        "taskAbnormalCustomers": "異常顧客フォロー",
-        "taskOutboundCost": "出港コストレポート",
-        "toggleTaskListSection": "タスク一覧を展開または折りたたむ",
         "toggleWorkspaceSection": "ワークスペースを展開または折りたたむ",
         "compactAccountMenu": "アカウントと設定"
     },

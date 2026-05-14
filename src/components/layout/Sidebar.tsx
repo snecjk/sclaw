@@ -1,7 +1,7 @@
 /**
  * Sidebar — 单列宽侧栏（248px / 72px），对齐 STO Claw 归档设计稿。
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import {
   Puzzle,
@@ -48,7 +48,6 @@ import { useTranslation } from 'react-i18next';
 import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
 import logoSvg from '@/assets/logo.svg';
 import packageJson from '../../../package.json';
-import { taskDetailPath, listTaskEntryIds, type StoTaskId } from '@/lib/sto-tasks';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
 
 type SessionBucketKey =
@@ -94,109 +93,23 @@ function collapsedEntryLabel(full: string): string {
   return `${first}…`;
 }
 
-const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' | 'taskAbnormalCustomers' | 'taskOutboundCost'; dot?: boolean }[] = [
-  { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation', dot: true },
-  { id: 'abnormal-customers', labelKey: 'taskAbnormalCustomers' },
-  { id: 'outbound-cost', labelKey: 'taskOutboundCost' },
-];
-
-/** 侧栏任务：主标题可折叠 + 日期药丸子项（对齐设计稿）。 */
-function SidebarTaskGroup({
-  taskId,
-  label,
-  showDot,
-}: {
-  taskId: StoTaskId;
-  label: string;
-  showDot?: boolean;
-}) {
-  const { pathname } = useLocation();
-  const { t } = useTranslation('tasks');
-  const entries = listTaskEntryIds(taskId);
-  const underTask = pathname.startsWith(`/tasks/${taskId}`);
-  const [open, setOpen] = useState(true);
-  const prevUnderTask = useRef<boolean | null>(null);
-
-  useEffect(() => {
-    if (prevUnderTask.current === false && underTask) setOpen(true);
-    prevUnderTask.current = underTask;
-  }, [underTask]);
-
-  const panelId = `sto-sidebar-task-${taskId}-entries`;
-
-  return (
-    <div
-      className={cn(
-        'rounded-lg px-2 py-1.5 transition-colors',
-        underTask ? 'bg-black/[0.04] dark:bg-white/[0.06]' : 'hover:bg-black/[0.02] dark:hover:bg-white/[0.04]',
-      )}
-    >
-      <button
-        type="button"
-        id={`sto-sidebar-task-${taskId}-toggle`}
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 rounded-md px-0.5 py-0.5 text-left outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.06]"
-      >
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{label}</span>
-        <span className="flex shrink-0 items-center gap-1.5">
-          {showDot ? <span className="h-2 w-2 rounded-full bg-red-500" aria-hidden /> : null}
-          <ChevronDown
-            className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open ? 'rotate-180' : '')}
-            aria-hidden
-            strokeWidth={2}
-          />
-        </span>
-      </button>
-      {open ? (
-        <div id={panelId} className="mt-1.5 flex flex-col items-start gap-1" role="region" aria-labelledby={`sto-sidebar-task-${taskId}-toggle`}>
-          {entries.map((entryId) => {
-            const to = taskDetailPath(taskId, entryId);
-            const active = pathname === to;
-            return (
-              <NavLink
-                key={entryId}
-                to={to}
-                className={cn(
-                  'relative z-[1] inline-flex w-full max-w-full justify-start rounded-full px-2.5 py-1 text-left text-xs font-medium transition-colors',
-                  active
-                    ? 'bg-[#ededed] text-foreground dark:bg-white/[0.12]'
-                    : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground dark:bg-white/[0.08]',
-                )}
-              >
-                {t(`sidebarEntry.${taskId}.${entryId}`)}
-              </NavLink>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/** 任务列表 / 工作台：悬浮显示展开方向图标，点击整行收缩或展开下方内容（对齐钉钉录屏交互）。 */
+/** 工作台：悬浮显示展开方向图标，点击整行收缩或展开下方内容（对齐钉钉录屏交互）。 */
 function SidebarCollapsibleSectionLabel({
-  group,
   open,
   onToggle,
   label,
   toggleAriaLabel,
 }: {
-  group: 'tasklist' | 'workspace';
   open: boolean;
   onToggle: () => void;
   label: string;
   toggleAriaLabel: string;
 }) {
-  const groupClass = group === 'tasklist' ? 'group/tasklist' : 'group/workspace';
   const iconReveal =
-    group === 'tasklist'
-      ? 'opacity-0 transition-opacity group-hover/tasklist:opacity-100 group-focus-within/tasklist:opacity-100'
-      : 'opacity-0 transition-opacity group-hover/workspace:opacity-100 group-focus-within/workspace:opacity-100';
+    'opacity-0 transition-opacity group-hover/workspace:opacity-100 group-focus-within/workspace:opacity-100';
 
   return (
-    <div className={cn(groupClass, 'mt-4')}>
+    <div className={cn('group/workspace', 'mt-4')}>
       <button
         type="button"
         aria-expanded={open}
@@ -289,7 +202,6 @@ export function Sidebar() {
 
   const authUser = useAuthStore((s) => s.user);
   const authLogout = useAuthStore((s) => s.logout);
-  const crmWeekReportSurfaceAllowed = useAuthStore((s) => s.crmWeekReportSurfaceAllowed);
 
   const language = useSettingsStore((s) => s.language);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
@@ -301,7 +213,6 @@ export function Sidebar() {
   const isOnChat = location.pathname.startsWith('/chat');
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [taskListSectionOpen, setTaskListSectionOpen] = useState(true);
   const [workspaceSectionOpen, setWorkspaceSectionOpen] = useState(true);
   const [bucketOpen, setBucketOpen] = useState<Record<SessionBucketKey, boolean>>({
     today: true,
@@ -510,32 +421,9 @@ export function Sidebar() {
           ))}
         </div>
 
-        {!sidebarCollapsed && crmWeekReportSurfaceAllowed ? (
-          <SidebarCollapsibleSectionLabel
-            group="tasklist"
-            open={taskListSectionOpen}
-            onToggle={() => setTaskListSectionOpen((o) => !o)}
-            label={t('common:sidebar.taskList')}
-            toggleAriaLabel={t('common:sidebar.toggleTaskListSection')}
-          />
-        ) : null}
-        {!sidebarCollapsed && crmWeekReportSurfaceAllowed && taskListSectionOpen ? (
-          <div className="mt-1 flex flex-col gap-0.5">
-            {STO_TASK_NAV.map((item) => (
-              <SidebarTaskGroup
-                key={item.id}
-                taskId={item.id}
-                label={t(`common:sidebar.${item.labelKey}`)}
-                showDot={item.dot}
-              />
-            ))}
-          </div>
-        ) : null}
-
         {sidebarVis.workspace ? (
           !sidebarCollapsed ? (
             <SidebarCollapsibleSectionLabel
-              group="workspace"
               open={workspaceSectionOpen}
               onToggle={() => setWorkspaceSectionOpen((o) => !o)}
               label={t('common:sidebar.workspace')}

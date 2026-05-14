@@ -15,16 +15,8 @@ import { logger } from '../../utils/logger';
 import { getStoModelSyncService } from '../../services/providers/sto-model-sync';
 import { runPendingInstallReport } from '../../services/client-update-platform';
 import { syncStoDynamicRoutePluginToOpenClaw, removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-auth';
-import { getStoPolicyReportApiHost } from '../../../shared/env-config';
-import { computeCrmWeekReportSurfaceAllowed } from '../../../shared/crm-week-report-policy';
-import { proxyAwareFetch } from '../../utils/proxy-fetch';
 
 const ssoLoginManager = new SsoLoginManager();
-
-const CRM_WEEK_REPORT_POLICY_PATH =
-  '/sto-policy/api/v1/base/getReportAuthUserIgnoreLogin?reportType=POLICY_CRM_WEEK_REPORT';
-
-const CRM_POLICY_FETCH_TIMEOUT_MS = 15_000;
 
 export async function handleAuthRoutes(
   req: IncomingMessage,
@@ -142,7 +134,7 @@ export async function handleAuthRoutes(
       );
 
       sendJson(res, 200, { success: true });
-    } catch (error) {
+    } catch {
       // Always clear local auth even if SSO signOut fails
       await clearAuthUser().catch(() => {});
       void removeSsoAuthFromOpenClaw();
@@ -168,49 +160,6 @@ export async function handleAuthRoutes(
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
-  // GET /api/auth/crm-week-report-policy — CRM 周报策略白名单（Main 代理，fail-closed）
-  if (url.pathname === '/api/auth/crm-week-report-policy' && req.method === 'GET') {
-    try {
-      const state = await getAuthState();
-      if (!state.isAuthenticated || !state.user?.userName?.trim()) {
-        sendJson(res, 200, { allowed: false });
-        return true;
-      }
-
-      const host = getStoPolicyReportApiHost();
-      const policyUrl = `https://${host}${CRM_WEEK_REPORT_POLICY_PATH}`;
-      const signal = AbortSignal.timeout(CRM_POLICY_FETCH_TIMEOUT_MS);
-
-      const response = await proxyAwareFetch(policyUrl, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        signal,
-      });
-
-      if (!response.ok) {
-        logger.warn(`CRM week report policy: HTTP ${response.status} (host ${host})`);
-        sendJson(res, 200, { allowed: false });
-        return true;
-      }
-
-      let json: unknown;
-      try {
-        json = await response.json() as unknown;
-      } catch {
-        logger.warn('CRM week report policy: response body is not valid JSON');
-        sendJson(res, 200, { allowed: false });
-        return true;
-      }
-
-      const allowed = computeCrmWeekReportSurfaceAllowed(state.user.userName, json);
-      sendJson(res, 200, { allowed });
-    } catch (error) {
-      logger.warn('CRM week report policy fetch failed:', error);
-      sendJson(res, 200, { allowed: false });
     }
     return true;
   }

@@ -17,7 +17,6 @@ import { Skills } from './pages/Skills';
 import { Subscriptions } from './pages/Subscriptions';
 import { Cron } from './pages/Cron';
 import { Home } from './pages/Home';
-import { TaskDetail } from './pages/TaskDetail';
 import { Settings } from './pages/Settings';
 import { Setup } from './pages/Setup';
 import { Login } from './pages/Login';
@@ -173,8 +172,6 @@ function App() {
       useAuthStore.setState({
         isAuthenticated: false,
         user: null,
-        crmWeekReportSurfaceAllowed: false,
-        crmWeekReportPolicyStatus: 'idle',
       });
     };
 
@@ -237,8 +234,6 @@ function App() {
           {/* Main application routes */}
           <Route element={<MainLayout />}>
             <Route path="/" element={<Home />} />
-            <Route path="/tasks/:taskId/:entryId" element={<TaskDetail />} />
-            <Route path="/tasks/:taskId" element={<TaskDetail />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/models" element={<Models />} />
             <Route path="/agents" element={<Agents />} />

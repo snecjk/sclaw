@@ -27,8 +27,6 @@ export interface SsoUserInfo {
   stoTokenExpiresAt?: string;
 }
 
-export type CrmWeekReportPolicyStatus = 'idle' | 'loading' | 'ok' | 'error';
-
 interface AuthState {
   isAuthenticated: boolean;
   /** True after init() has completed at least once. Used to prevent auth guard from firing before the main-process status check resolves. */
@@ -37,16 +35,12 @@ interface AuthState {
   ssoEnvironment: SsoEnvironment;
   isLoggingIn: boolean;
   error: string | null;
-  /** CRM 周报首页 /tasks 表面：仅在为 true 时展示（策略白名单命中）；未登录或 fail-closed 时为 false。 */
-  crmWeekReportSurfaceAllowed: boolean;
-  crmWeekReportPolicyStatus: CrmWeekReportPolicyStatus;
 
   // Actions
   init: () => Promise<void>;
   login: (environment?: SsoEnvironment) => Promise<void>;
   logout: () => Promise<void>;
   setSsoEnvironment: (env: SsoEnvironment) => Promise<void>;
-  refreshCrmWeekReportPolicy: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -58,32 +52,6 @@ export const useAuthStore = create<AuthState>()(
       ssoEnvironment: getCurrentEnvConfig().ssoEnvironment as SsoEnvironment,
       isLoggingIn: false,
       error: null,
-      crmWeekReportSurfaceAllowed: false,
-      crmWeekReportPolicyStatus: 'idle',
-
-      refreshCrmWeekReportPolicy: async () => {
-        const { isAuthenticated, user } = get();
-        if (!isAuthenticated || !user?.userName?.trim()) {
-          set({
-            crmWeekReportSurfaceAllowed: false,
-            crmWeekReportPolicyStatus: 'idle',
-          });
-          return;
-        }
-        set({ crmWeekReportPolicyStatus: 'loading' });
-        try {
-          const data = await hostApiFetch<{ allowed: boolean }>('/api/auth/crm-week-report-policy');
-          set({
-            crmWeekReportSurfaceAllowed: data.allowed === true,
-            crmWeekReportPolicyStatus: 'ok',
-          });
-        } catch {
-          set({
-            crmWeekReportSurfaceAllowed: false,
-            crmWeekReportPolicyStatus: 'error',
-          });
-        }
-      },
 
       init: async () => {
         // Always reset transient UI state on init
@@ -100,13 +68,7 @@ export const useAuthStore = create<AuthState>()(
             ssoEnvironment: data.ssoEnvironment,
             isInitialized: true,
           });
-          if (!data.isAuthenticated) {
-            set({
-              crmWeekReportSurfaceAllowed: false,
-              crmWeekReportPolicyStatus: 'idle',
-            });
-          } else {
-            void get().refreshCrmWeekReportPolicy();
+          if (data.isAuthenticated) {
             // If already authenticated on startup, ensure STO models are synced and
             // the renderer's provider list is up-to-date. The main process runs its
             // own startup sync (index.ts), but the renderer may have fetched providers
@@ -124,8 +86,6 @@ export const useAuthStore = create<AuthState>()(
           // Still mark as initialized so the auth guard can proceed.
           set({
             isInitialized: true,
-            crmWeekReportSurfaceAllowed: false,
-            crmWeekReportPolicyStatus: 'idle',
           });
         }
       },
@@ -159,8 +119,6 @@ export const useAuthStore = create<AuthState>()(
                 useProviderStore.getState().refreshProviderSnapshot(),
               )
               .catch(() => {});
-
-            void get().refreshCrmWeekReportPolicy();
           } else {
             set({
               isLoggingIn: false,
@@ -185,8 +143,6 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: false,
           user: null,
           error: null,
-          crmWeekReportSurfaceAllowed: false,
-          crmWeekReportPolicyStatus: 'idle',
         });
 
         // Refresh provider list to reflect STO model cleanup
