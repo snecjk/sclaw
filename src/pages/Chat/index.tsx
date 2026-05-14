@@ -4,7 +4,7 @@
  * via gateway:rpc IPC. Session selector, thinking toggle, and refresh
  * are in the toolbar; messages render with markdown + streaming.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowDown, Bot, Cpu, Loader2, Orbit, Sparkles, Workflow } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useChatStore, type RawMessage, type AttachedFileMeta } from '@/stores/chat';
@@ -58,6 +58,9 @@ export function Chat() {
   const [splitting, setSplitting] = useState(false);
   const [showPreviewPanel, setShowPreviewPanel] = useState(true);
   const [activePreviewFilePath, setActivePreviewFilePath] = useState<string | null>(null);
+  const [previewPanelWidth, setPreviewPanelWidth] = useState(480);
+  const [isResizing, setIsResizing] = useState(false);
+  const previewPanelRef = useRef<HTMLDivElement>(null);
   const minLoading = useMinLoading(loading && messages.length > 0);
   const { contentRef, scrollRef } = useStickToBottomInstant(currentSessionKey);
 
@@ -191,6 +194,65 @@ export function Chat() {
   ) => {
     useMessageQueueStore.getState().enqueue(text, attachments, targetAgentId);
   }, []);
+
+  // ── Resizable panel logic ──
+  // Use a full-screen overlay during drag so mouse events are never lost,
+  // even when moving quickly outside the resizer or the page container.
+  const startResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = previewPanelRef.current?.offsetWidth ?? previewPanelWidth;
+    let rafId: number | null = null;
+    let pendingWidth = startWidth;
+
+    setIsResizing(true);
+    document.body.style.userSelect = 'none';
+
+    // Full-screen overlay captures all mouse events during drag
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:col-resize;';
+    document.body.appendChild(overlay);
+
+    const applyWidth = () => {
+      rafId = null;
+      if (previewPanelRef.current) {
+        previewPanelRef.current.style.width = `${pendingWidth}px`;
+      }
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = startX - moveEvent.clientX;
+      pendingWidth = Math.max(320, Math.min(900, startWidth + delta));
+      if (rafId === null) {
+        rafId = requestAnimationFrame(applyWidth);
+      }
+    };
+
+    const cleanup = () => {
+      overlay.removeEventListener('mousemove', handleMouseMove);
+      overlay.removeEventListener('mouseup', handleMouseUp);
+      overlay.remove();
+      document.body.style.userSelect = '';
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      setPreviewPanelWidth(pendingWidth);
+      setIsResizing(false);
+    };
+
+    const handleMouseUp = () => {
+      cleanup();
+    };
+
+    overlay.addEventListener('mousemove', handleMouseMove);
+    overlay.addEventListener('mouseup', handleMouseUp);
+
+    // Safety: if component unmounts during drag, remove overlay
+    return () => {
+      cleanup();
+    };
+  }, [previewPanelWidth]);
 
   // Collect previewable files from messages and streaming message
   const allMessagesForPreview = useMemo(() => {
@@ -385,15 +447,29 @@ export function Chat() {
       )}
       </div>
 
+      {/* Resizer */}
+      {hasPreviewableFiles && showPreviewPanel && (
+        <div
+          onMouseDown={startResize}
+          className={cn(
+            'relative z-20 shrink-0 w-[3px] cursor-col-resize transition-colors',
+            isResizing ? 'bg-primary/60 w-[4px]' : 'bg-border/40 hover:bg-primary/30',
+          )}
+          style={{ cursor: isResizing ? 'col-resize' : undefined }}
+        />
+      )}
+
       {/* Right: Preview Panel */}
       <AnimatePresence>
         {hasPreviewableFiles && showPreviewPanel && (
           <motion.div
+            ref={previewPanelRef}
             initial={{ opacity: 0, x: 40 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 40 }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
-            className="shrink-0 overflow-hidden w-[40vw] min-w-[380px] max-w-[560px]"
+            className="shrink-0 overflow-hidden"
+            style={{ width: previewPanelWidth }}
           >
             <ChatPreviewPanel
               files={previewableFiles}

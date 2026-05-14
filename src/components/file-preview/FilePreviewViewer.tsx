@@ -3,8 +3,8 @@
  * A standalone file preview component that renders various file types
  * (HTML, PDF, Markdown, web links, Office docs) in an iframe or fallback UI.
  */
-import { useCallback, useEffect, useState } from 'react';
-import { ExternalLink, FileText, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ExternalLink, FileText, RefreshCw, Maximize, Minimize } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { hostApiFetch, getHostApiBase } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
@@ -30,6 +30,26 @@ export function FilePreviewViewer({
   const [mdContent, setMdContent] = useState<string>('');
   const [mdLoading, setMdLoading] = useState(false);
   const [mdError, setMdError] = useState<string>('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
 
   const loadMarkdown = useCallback(async () => {
     if (mdContent || mdLoading) return;
@@ -55,10 +75,12 @@ export function FilePreviewViewer({
     }
   }, [mimeType, loadMarkdown]);
 
+  const content = (() => {
   // Web URL preview (localhost and external)
   if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
     return (
       <iframe
+        key={filePath}
         src={filePath}
         title={fileName}
         className={cn('h-full w-full border-0', className)}
@@ -70,6 +92,7 @@ export function FilePreviewViewer({
   if (mimeType === 'application/pdf') {
     return (
       <iframe
+        key={filePath}
         src={toServeUrl(filePath)}
         title={fileName}
         className={cn('h-full w-full border-0', className)}
@@ -81,6 +104,7 @@ export function FilePreviewViewer({
   if (mimeType === 'text/html') {
     return (
       <iframe
+        key={filePath}
         src={toServeUrl(filePath)}
         title={fileName}
         className={cn('h-full w-full border-0', className)}
@@ -127,6 +151,7 @@ img{max-width:100%}
 
     return (
       <iframe
+        key={filePath}
         srcDoc={srcDoc}
         title={fileName}
         className={cn('h-full w-full border-0', className)}
@@ -141,6 +166,24 @@ img{max-width:100%}
       <FileText className="h-10 w-10 opacity-40" />
       <p>{fileName}</p>
       <OpenExternalButton filePath={filePath} />
+    </div>
+  );
+  })();
+
+  return (
+    <div ref={containerRef} className="relative h-full w-full">
+      {content}
+      {/* Fullscreen toggle button */}
+      <button
+        onClick={toggleFullscreen}
+        title={isFullscreen ? '退出全屏' : '全屏放映'}
+        className="absolute right-3 bottom-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-opacity hover:bg-black/70 opacity-0 hover:opacity-100 focus:opacity-100 group-hover:opacity-100"
+        style={{ opacity: isFullscreen ? 0.7 : undefined }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.9'; }}
+        onMouseLeave={(e) => { if (!isFullscreen) (e.currentTarget as HTMLButtonElement).style.opacity = '0'; }}
+      >
+        {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+      </button>
     </div>
   );
 }

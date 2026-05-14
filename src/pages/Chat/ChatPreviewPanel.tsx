@@ -16,6 +16,7 @@ import {
   ChevronDown,
   Presentation,
   Table2,
+  MonitorPlay,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -72,6 +73,17 @@ export function ChatPreviewPanel({
       invokeIpc('shell:openPath', activeFile.filePath);
     }
   }, [activeFile]);
+
+  const handleFullscreen = useCallback(() => {
+    const el = document.querySelector('[data-preview-viewer]') as HTMLElement | null;
+    if (el) {
+      if (!document.fullscreenElement) {
+        el.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+  }, []);
 
   const handleRefresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
@@ -138,6 +150,9 @@ export function ChatPreviewPanel({
         <div className="flex items-center gap-1">
           {activeTab === 'product' && (
             <>
+              <ActionButton onClick={handleFullscreen} title="全屏放映">
+                <MonitorPlay className="h-3.5 w-3.5" />
+              </ActionButton>
               <ActionButton onClick={handleRefresh} title="刷新">
                 <RefreshCw className="h-3.5 w-3.5" />
               </ActionButton>
@@ -216,7 +231,7 @@ export function ChatPreviewPanel({
       )}
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden" data-preview-viewer>
         {activeTab === 'product' && activeFile ? (
           <FilePreviewViewer
             key={`${activeFile.filePath}-${refreshKey}`}
