@@ -119,17 +119,20 @@ function SummaryCard(props: SummaryCardProps) {
 
   const openSubitem = useCallback(() => {
     if (!stoTaskTarget) return;
-    const entryId = formatLocalYmd(new Date());
-    ensureSubitem(stoTaskTarget, entryId);
-    try {
-      sessionStorage.setItem(
-        STO_TASK_PENDING_COMPOSE_KEY,
-        JSON.stringify({ taskId: stoTaskTarget, entryId, cardBase: base }),
-      );
-    } catch {
-      /* ignore quota */
+    const entryIdToday = formatLocalYmd(new Date());
+    ensureSubitem(stoTaskTarget, entryIdToday);
+    const latestEntryId = useStoTaskSubitemsStore.getState().listEntries(stoTaskTarget)[0] ?? entryIdToday;
+    if (latestEntryId === entryIdToday) {
+      try {
+        sessionStorage.setItem(
+          STO_TASK_PENDING_COMPOSE_KEY,
+          JSON.stringify({ taskId: stoTaskTarget, entryId: entryIdToday, cardBase: base }),
+        );
+      } catch {
+        /* ignore quota */
+      }
     }
-    navigate(taskDetailPath(stoTaskTarget, entryId));
+    navigate(taskDetailPath(stoTaskTarget, latestEntryId));
   }, [base, ensureSubitem, navigate, stoTaskTarget]);
 
   const p = `summary.${base}` as const;

@@ -41,7 +41,6 @@ import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAgentsStore } from '@/stores/agents';
 import { useAuthStore } from '@/stores/auth';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useTranslation } from 'react-i18next';
@@ -83,13 +82,6 @@ function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   return 'older';
 }
 
-function getAgentIdFromSessionKey(sessionKey: string): string {
-  if (!sessionKey.startsWith('agent:')) return 'main';
-  const [, agentId] = sessionKey.split(':');
-  return agentId || 'main';
-}
-
-/** 折叠侧栏会话/任务项：首字 + …（对齐设计稿） */
 function collapsedEntryLabel(full: string): string {
   const s = full.trim();
   if (!s) return '…';
@@ -128,10 +120,10 @@ function SidebarTaskDateLinks({ taskId, entries }: { taskId: StoTaskId; entries:
               if (a > 0) markSubitemReadFromActivity(taskId, entryId, a);
             }}
             className={cn(
-              'relative z-[1] inline-flex w-full max-w-full items-center justify-between gap-2 rounded-full px-2.5 py-1 text-left text-xs font-medium transition-colors',
+              'relative z-[1] inline-flex w-full max-w-full items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] text-left text-xs font-medium transition-colors',
               active
-                ? 'bg-[#ededed] text-foreground dark:bg-white/[0.12]'
-                : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground dark:bg-white/[0.08]',
+                ? 'bg-[#E5E6EB] text-foreground dark:bg-white/[0.12]'
+                : 'text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
             )}
           >
             <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -199,10 +191,7 @@ function SidebarTaskGroup({ taskId, label }: { taskId: StoTaskId; label: string 
     return (
       <NavLink
         to={overviewTo}
-        className={cn(
-          'flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left transition-colors',
-          underTask ? 'bg-black/[0.04] dark:bg-white/[0.06]' : 'hover:bg-black/[0.02] dark:hover:bg-white/[0.04]',
-        )}
+        className="flex items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] text-left transition-colors"
       >
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{label}</span>
         {hasUnreadSubitem ? (
@@ -218,19 +207,14 @@ function SidebarTaskGroup({ taskId, label }: { taskId: StoTaskId; label: string 
   const panelId = `sto-sidebar-task-${taskId}-entries`;
 
   return (
-    <div
-      className={cn(
-        'rounded-lg px-2 py-1.5 transition-colors',
-        underTask ? 'bg-black/[0.04] dark:bg-white/[0.06]' : 'hover:bg-black/[0.02] dark:hover:bg-white/[0.04]',
-      )}
-    >
+    <div className="rounded-lg">
       <button
         type="button"
         id={`sto-sidebar-task-${taskId}-toggle`}
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
-        className="group/sto-task-row flex w-full items-center justify-between gap-2 rounded-md px-0.5 py-0.5 text-left outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.06]"
+        className="group/sto-task-row flex w-full items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] text-left outline-none ring-offset-2 transition-colors hover:bg-[rgba(229,230,235,0.7)] focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.08]"
       >
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{label}</span>
         <span className="flex shrink-0 items-center gap-1.5">
@@ -278,7 +262,7 @@ function SidebarCollapsibleSectionLabel({
         aria-expanded={open}
         aria-label={toggleAriaLabel}
         onClick={onToggle}
-        className="group/sto-sidebar-section-toggle flex w-full items-center rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.05]"
+        className="group/sto-sidebar-section-toggle flex w-full items-center rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-[rgba(229,230,235,0.7)] hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.08]"
       >
         <span className="inline-flex min-w-0 max-w-full items-center gap-1">
           <span className="min-w-0 truncate">{label}</span>
@@ -316,7 +300,7 @@ function SidebarNavLink({
   const isActive = matchPath({ path: to, end: Boolean(end), caseSensitive: false }, pathname) != null;
 
   const linkClassName = cn(
-    'relative flex items-center font-medium leading-none transition-colors [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
+    'relative flex items-center font-medium leading-none transition-[color,background-color,border-radius,filter] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
     collapsed
       ? cn(
           'mx-auto box-border min-h-0 shrink-0 justify-center gap-0 rounded-full text-[13px]',
@@ -326,10 +310,10 @@ function SidebarNavLink({
             : 'text-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]',
         )
       : cn(
-          'h-[28.5px] min-h-[28.5px] shrink-0 gap-[10px] rounded-xl px-[10px] text-[13px]',
+          'shrink-0 gap-[10px] text-[13px]',
           isActive
-            ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]'
-            : 'text-[#86909c] [&_svg]:stroke-[#86909c] hover:bg-black/[0.04] hover:text-foreground hover:[&_svg]:stroke-foreground dark:text-muted-foreground dark:[&_svg]:stroke-[hsl(var(--muted-foreground))] dark:hover:bg-white/[0.06] dark:hover:text-foreground dark:hover:[&_svg]:stroke-foreground',
+            ? 'min-h-0 rounded-[8px] bg-[linear-gradient(138deg,#FF8F4A_-3%,#FF7A28_33%,#FF6700_71%,#E85A00_103%)] px-[10px] py-[5px] text-white shadow-sm hover:brightness-110 active:brightness-95 [&_svg]:stroke-white'
+            : 'h-[28.5px] min-h-[28.5px] rounded-xl px-[10px] text-[#86909c] [&_svg]:stroke-[#86909c] hover:rounded-[8px] hover:bg-black/[0.04] hover:text-foreground hover:[&_svg]:stroke-foreground dark:text-muted-foreground dark:[&_svg]:stroke-[hsl(var(--muted-foreground))] dark:hover:bg-white/[0.06] dark:hover:text-foreground dark:hover:[&_svg]:stroke-foreground',
         ),
   );
 
@@ -427,13 +411,6 @@ export function Sidebar() {
     };
   }, [isGatewayRunning, isOnChat, loadHistory, loadSessions, newSession]);
 
-  const agents = useAgentsStore((s) => s.agents);
-  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
-
-  useEffect(() => {
-    void fetchAgents();
-  }, [fetchAgents]);
-
   const getSessionLabel = useCallback(
     (key: string, displayName?: string, label?: string) => {
       const preview = sessionLabels[key];
@@ -459,11 +436,6 @@ export function Sidebar() {
     }, 60 * 1000);
     return () => window.clearInterval(timer);
   }, []);
-
-  const agentNameById = useMemo(
-    () => Object.fromEntries((agents ?? []).map((agent) => [agent.id, agent.name])),
-    [agents],
-  );
 
   const sessionBuckets: Array<{ key: SessionBucketKey; label: string; sessions: typeof sessions }> = [
     { key: 'today', label: t('chat:historyBuckets.today'), sessions: [] },
@@ -731,7 +703,7 @@ export function Sidebar() {
                   <button
                     type="button"
                     onClick={() => toggleBucket(bucket.key)}
-                    className="flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
+                    className="flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] dark:hover:bg-white/[0.08]"
                   >
                     <span className="truncate">{bucket.label}</span>
                     <ChevronDown
@@ -740,54 +712,46 @@ export function Sidebar() {
                     />
                   </button>
                   {bucketOpen[bucket.key] &&
-                    bucket.sessions.map((s) => {
-                      const agentId = getAgentIdFromSessionKey(s.key);
-                      const agentName = agentNameById[agentId] || agentId;
-                      return (
-                        <div key={s.key} className="group relative flex items-center">
+                    bucket.sessions.map((s) => (
+                      <div key={s.key} className="group relative flex items-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            switchSession(s.key);
+                            navigate('/chat');
+                          }}
+                          title={getSessionLabel(s.key, s.displayName, s.label)}
+                          className={cn(
+                            'w-full rounded-[8px] px-[10px] py-[6px] pr-9 text-left text-[13px] transition-colors',
+                            isOnChat && currentSessionKey === s.key
+                              ? 'bg-[#E5E6EB] font-medium text-foreground dark:bg-white/[0.12]'
+                              : 'text-foreground/80 hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
+                          )}
+                        >
+                          <span className="block min-w-0 truncate">{getSessionLabel(s.key, s.displayName, s.label)}</span>
+                        </button>
+                        {!sidebarCollapsed ? (
                           <button
                             type="button"
-                            onClick={() => {
-                              switchSession(s.key);
-                              navigate('/chat');
+                            aria-label={t('common:actions.delete')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSessionToDelete({
+                                key: s.key,
+                                label: getSessionLabel(s.key, s.displayName, s.label),
+                              });
                             }}
-                            title={getSessionLabel(s.key, s.displayName, s.label)}
                             className={cn(
-                              'w-full rounded-xl py-2 text-left text-[13px] transition-colors',
-                              'px-2.5 pr-8',
-                              isOnChat && currentSessionKey === s.key
-                                ? 'bg-[var(--sto-accent-soft)] font-medium text-[var(--sto-accent)] ring-1 ring-[rgba(255,140,0,0.35)] dark:bg-amber-950/35'
-                                : 'text-foreground/80 hover:bg-black/[0.04] dark:hover:bg-white/[0.05]',
+                              'absolute right-1 flex items-center justify-center rounded p-0.5 transition-opacity',
+                              'opacity-0 group-hover:opacity-100',
+                              'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
                             )}
                           >
-                            <div className="flex min-w-0 flex-col gap-0.5">
-                              <span className="truncate">{getSessionLabel(s.key, s.displayName, s.label)}</span>
-                              <span className="truncate text-[10px] text-muted-foreground/85">{agentName}</span>
-                            </div>
+                            <Trash2 className="h-3.5 w-3.5" />
                           </button>
-                          {!sidebarCollapsed ? (
-                            <button
-                              type="button"
-                              aria-label={t('common:actions.delete')}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSessionToDelete({
-                                  key: s.key,
-                                  label: getSessionLabel(s.key, s.displayName, s.label),
-                                });
-                              }}
-                              className={cn(
-                                'absolute right-1 flex items-center justify-center rounded p-0.5 transition-opacity',
-                                'opacity-0 group-hover:opacity-100',
-                                'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
-                              )}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          ) : null}
-                        </div>
-                      );
-                    })}
+                        ) : null}
+                      </div>
+                    ))}
                 </div>
               ) : null,
               )
