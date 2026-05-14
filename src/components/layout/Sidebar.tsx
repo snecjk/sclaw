@@ -786,18 +786,18 @@ export function Sidebar() {
       </nav>
 
       {authUser ? (
-        <div className="shrink-0 border-t border-[var(--sto-sidebar-border)] p-2">
+        <div className="shrink-0 bg-[var(--sto-sidebar-bg)] p-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
                 className={cn(
-                  'flex w-full rounded-xl border border-transparent bg-white/80 text-left transition-colors hover:border-[rgba(255,140,0,0.35)] hover:bg-white dark:bg-card/80 dark:hover:bg-card',
+                  'flex w-full text-left transition-colors',
                   sidebarVis.userProfileCard
                     ? sidebarCollapsed
                       ? 'flex-col items-center justify-center gap-0 p-2'
-                      : 'items-center gap-2 p-2'
-                    : 'items-center justify-center p-2',
+                      : 'items-center justify-between gap-3 rounded-[8px] bg-[#F5F6F7] p-3 hover:bg-[#E5E6EB] dark:bg-muted/25 dark:hover:bg-muted/50'
+                    : 'items-center justify-center rounded-[8px] p-2 hover:bg-[#F0F2F5] dark:hover:bg-muted/40',
                 )}
                 title={
                   sidebarVis.userProfileCard
@@ -811,31 +811,31 @@ export function Sidebar() {
                 {sidebarVis.userProfileCard ? (
                   <>
                     {sidebarCollapsed ? (
-                      <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[13px] font-semibold text-[var(--sto-brand-6)] dark:bg-card">
+                      <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-[8px] border border-[var(--sto-sidebar-border)] bg-white text-[13px] font-semibold text-[var(--sto-brand-6)] dark:bg-card">
                         {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
                       </span>
                     ) : (
                       <>
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-semibold text-foreground">
-                              {authUser.realName || authUser.userName}
-                            </span>
-                            <span className="shrink-0 rounded bg-[var(--sto-accent-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[#b45309] dark:bg-amber-950/50 dark:text-amber-200">
-                              {t('common:sidebar.enterpriseTag')}
-                            </span>
-                          </div>
-                          <span className="truncate text-[11px] text-muted-foreground">
-                            ID {authUser.id}
-                            {authUser.departmentName ? ` · ${authUser.departmentName}` : ''}
+                          <span className="truncate text-sm font-bold leading-tight text-[#1D2129] dark:text-foreground">
+                            {authUser.realName?.trim() || authUser.userName}
                           </span>
+                          {authUser.companyName?.trim() ? (
+                            <span className="truncate text-xs font-normal leading-snug text-[#86909C] dark:text-muted-foreground">
+                              {authUser.companyName.trim()}
+                            </span>
+                          ) : null}
                         </div>
-                        <SettingsIcon className="h-5 w-5 shrink-0 text-muted-foreground" strokeWidth={1.5} aria-hidden />
+                        <SettingsIcon
+                          className="h-5 w-5 shrink-0 text-[#86909C] dark:text-muted-foreground"
+                          strokeWidth={1.5}
+                          aria-hidden
+                        />
                       </>
                     )}
                   </>
                 ) : (
-                  <SettingsIcon className="h-5 w-5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden />
+                  <SettingsIcon className="h-5 w-5 shrink-0 text-[#86909C] dark:text-muted-foreground" strokeWidth={1.75} aria-hidden />
                 )}
               </button>
             </DropdownMenuTrigger>
