@@ -1,6 +1,6 @@
 ## Purpose
 
-定义 StoClaw 首切片 **CRM 周报策略白名单** 的规范性需求：策略 Host 与 `VITE_APP_ENV` 绑定、经 Main/host-api 拉取白名单、SSO `userName` 与 `userCode` 比对、`crmWeekReportSurfaceAllowed` 的 fail-closed 语义、首页与 `/tasks/*` 行为。实现 MUST 遵守 `openspec/changes/2026-05-14-user-page-access-control/design.md` 与 `proposal.md`。
+定义 StoClaw 首切片 **CRM 周报策略白名单** 的规范性需求：策略 Host 与 `VITE_APP_ENV` 绑定、经 Main/host-api 拉取白名单、SSO `userName` 与 `userCode` 比对、`crmWeekReportSurfaceAllowed` 的 fail-closed 语义、首页与 `/tasks/*` 行为。实现 MUST 遵守 `openspec/changes/archive/2026-05-14-user-page-access-control/design.md` 与 `proposal.md`。
 
 ## Requirements
 
