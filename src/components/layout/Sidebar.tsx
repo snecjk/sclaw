@@ -65,6 +65,10 @@ let didBootstrapFreshChat = false;
 
 const INITIAL_NOW_MS = Date.now();
 
+/** Collapsed rail: offset from narrow bar + opaque popover so glass tooltips do not show main content through them. */
+const SIDEBAR_COLLAPSED_TOOLTIP_SURFACE =
+  '!bg-popover text-popover-foreground shadow-md backdrop-blur-none border-border';
+
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   if (!activityMs || activityMs <= 0) return 'older';
 
@@ -303,7 +307,7 @@ function SidebarNavLink({
     'relative flex items-center font-medium leading-none transition-[color,background-color,border-radius,filter] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
     collapsed
       ? cn(
-          'mx-auto box-border min-h-0 shrink-0 justify-center gap-0 rounded-full text-[13px]',
+          'mx-auto box-border min-h-0 shrink-0 justify-center gap-0 rounded-[8px] text-[13px]',
           'h-[var(--sto-sidebar-collapsed-nav-item-h)] w-[var(--sto-sidebar-collapsed-nav-item-w)] max-w-[calc(100%-10px)] py-[var(--sto-sidebar-collapsed-nav-py)] px-[var(--sto-sidebar-collapsed-nav-px)]',
           isActive
             ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]'
@@ -328,7 +332,12 @@ function SidebarNavLink({
     return (
       <Tooltip delayDuration={200}>
         <TooltipTrigger asChild>{link}</TooltipTrigger>
-        <TooltipContent side="right" className="max-w-[14rem]">
+        <TooltipContent
+          side="right"
+          sideOffset={12}
+          collisionPadding={12}
+          className={cn('max-w-[14rem]', SIDEBAR_COLLAPSED_TOOLTIP_SURFACE)}
+        >
           {label}
         </TooltipContent>
       </Tooltip>
@@ -651,7 +660,14 @@ export function Sidebar() {
                   <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">{t('common:sidebar.newChat')}</TooltipContent>
+              <TooltipContent
+                side="right"
+                sideOffset={12}
+                collisionPadding={12}
+                className={SIDEBAR_COLLAPSED_TOOLTIP_SURFACE}
+              >
+                {t('common:sidebar.newChat')}
+              </TooltipContent>
             </Tooltip>
           )
         ) : null}
@@ -673,9 +689,8 @@ export function Sidebar() {
                           switchSession(s.key);
                           navigate('/chat');
                         }}
-                        title={full}
                         className={cn(
-                          'mx-auto flex min-h-0 min-w-0 items-center justify-center rounded-full font-medium leading-none transition-colors',
+                          'mx-auto flex min-h-0 min-w-0 items-center justify-center rounded-[8px] font-medium leading-none transition-colors',
                           'h-[var(--sto-sidebar-collapsed-nav-item-h)] w-[var(--sto-sidebar-collapsed-nav-item-w)] max-w-[calc(100%-10px)] py-[var(--sto-sidebar-collapsed-nav-py)] px-[var(--sto-sidebar-collapsed-nav-px)] text-[13px]',
                           active
                             ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] dark:bg-[var(--sto-brand-6)]'
@@ -685,7 +700,17 @@ export function Sidebar() {
                         <span className="truncate">{short}</span>
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side="right">{full}</TooltipContent>
+                    <TooltipContent
+                      side="right"
+                      sideOffset={12}
+                      collisionPadding={12}
+                      className={cn(
+                        SIDEBAR_COLLAPSED_TOOLTIP_SURFACE,
+                        'max-w-[min(24rem,calc(100vw-3rem))] whitespace-normal break-words px-3 py-2 text-left leading-snug',
+                      )}
+                    >
+                      {full}
+                    </TooltipContent>
                   </Tooltip>
                 );
               })}
