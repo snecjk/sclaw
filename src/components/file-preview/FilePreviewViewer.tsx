@@ -41,7 +41,7 @@ export function FilePreviewViewer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filePath, encoding: 'utf-8' }),
       });
-      setMdContent(res.content);
+      setMdContent(typeof res?.content === 'string' ? res.content : '');
     } catch {
       setMdError('读取失败');
     } finally {
@@ -122,7 +122,7 @@ th{background:#f8f8f8}
 img{max-width:100%}
 </style>
 </head>
-<body>${mdContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</body>
+<body>${(mdContent ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</body>
 </html>`;
 
     return (

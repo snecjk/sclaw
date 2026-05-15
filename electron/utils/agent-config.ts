@@ -1,9 +1,9 @@
-import { access, copyFile, mkdir, readdir, rm } from 'fs/promises';
+import { access, copyFile, mkdir, readdir, readFile, rm, writeFile } from 'fs/promises';
 import { constants } from 'fs';
 import { join, normalize } from 'path';
 import { deleteAgentChannelAccounts, listConfiguredChannels, readOpenClawConfig, writeOpenClawConfig } from './channel-config';
 import { withConfigLock } from './config-mutex';
-import { expandPath, getOpenClawConfigDir } from './paths';
+import { expandPath, getClawXConfigDir, getOpenClawConfigDir } from './paths';
 import * as logger from './logger';
 import { toUiChannelType } from './channel-alias';
 
@@ -96,6 +96,64 @@ export interface AgentsSnapshot {
   configuredChannelTypes: string[];
   channelOwners: Record<string, string>;
   channelAccountOwners: Record<string, string>;
+}
+
+// ── Agent Features (stored outside openclaw.json to avoid schema violations) ──
+
+interface AgentFeatures {
+  fileTransformByOSS?: Record<string, boolean>;
+}
+
+const AGENT_FEATURES_FILE = join(getClawXConfigDir(), 'agent-features.json');
+
+async function readAgentFeatures(): Promise<AgentFeatures> {
+  try {
+    const content = await readFile(AGENT_FEATURES_FILE, 'utf-8');
+    return JSON.parse(content) as AgentFeatures;
+  } catch {
+    return {};
+  }
+}
+
+async function writeAgentFeatures(features: AgentFeatures): Promise<void> {
+  await mkdir(getClawXConfigDir(), { recursive: true });
+  await writeFile(AGENT_FEATURES_FILE, JSON.stringify(features, null, 2), 'utf-8');
+}
+
+/**
+ * Migrate fileTransformByOSS out of openclaw.json agents.list entries.
+ * openclaw engine does not recognize this key and rejects the config.
+ */
+async function migrateFileTransformByOSSIfNeeded(config: AgentConfigDocument): Promise<AgentConfigDocument> {
+  const agentsConfig = (config.agents && typeof config.agents === 'object'
+    ? { ...(config.agents as AgentsConfig) }
+    : {}) as AgentsConfig;
+  const rawEntries = Array.isArray(agentsConfig.list)
+    ? agentsConfig.list.filter((entry): entry is AgentListEntry => (
+      Boolean(entry) && typeof entry === 'object' && typeof entry.id === 'string' && entry.id.trim().length > 0
+    ))
+    : [];
+
+  let needsMigration = false;
+  const features = await readAgentFeatures();
+
+  for (const entry of rawEntries) {
+    if ('fileTransformByOSS' in entry) {
+      features.fileTransformByOSS = features.fileTransformByOSS || {};
+      features.fileTransformByOSS[entry.id] = entry.fileTransformByOSS === true;
+      delete (entry as Record<string, unknown>).fileTransformByOSS;
+      needsMigration = true;
+    }
+  }
+
+  if (needsMigration) {
+    await writeAgentFeatures(features);
+    config.agents = { ...agentsConfig, list: rawEntries };
+    await writeOpenClawConfig(config);
+    logger.info('Migrated fileTransformByOSS from openclaw.json to agent-features.json');
+  }
+
+  return config;
 }
 
 function formatModelLabel(model: unknown): string | null {
@@ -490,6 +548,7 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
   }
 
   const defaultModelLabel = formatModelLabel((config.agents as AgentsConfig | undefined)?.defaults?.model);
+  const features = await readAgentFeatures();
   const agents: AgentSummary[] = entries.map((entry) => {
     const modelLabel = formatModelLabel(entry.model) || defaultModelLabel || 'Not configured';
     const inheritedModel = !formatModelLabel(entry.model) && Boolean(defaultModelLabel);
@@ -507,7 +566,7 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
       channelTypes: configuredChannels
         .filter((ct) => ownedChannels.has(ct))
         .map((channelType) => toUiChannelType(channelType)),
-      fileTransformByOSS: entry.fileTransformByOSS === true,
+      fileTransformByOSS: features.fileTransformByOSS?.[entry.id] === true || entry.fileTransformByOSS === true,
     };
   });
 
@@ -521,8 +580,11 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
 }
 
 export async function listAgentsSnapshot(): Promise<AgentsSnapshot> {
-  const config = await readOpenClawConfig() as AgentConfigDocument;
-  return buildSnapshotFromConfig(config);
+  return withConfigLock(async () => {
+    let config = await readOpenClawConfig() as AgentConfigDocument;
+    config = await migrateFileTransformByOSSIfNeeded(config);
+    return await buildSnapshotFromConfig(config);
+  });
 }
 
 /**
@@ -585,7 +647,7 @@ export async function createAgent(
     await provisionAgentFilesystem(config, newAgent, { inheritWorkspace: options?.inheritWorkspace });
     await writeOpenClawConfig(config);
     logger.info('Created agent config entry', { agentId: nextId, inheritWorkspace: !!options?.inheritWorkspace });
-    return buildSnapshotFromConfig(config);
+    return await buildSnapshotFromConfig(config);
   });
 }
 
@@ -619,7 +681,6 @@ export async function createAgentWithId(
       name: normalizedName,
       workspace: `~/.openclaw/workspace-${id}`,
       agentDir: getDefaultAgentDirPath(id),
-      fileTransformByOSS: options?.fileTransformByOSS === true,
     };
 
     if (!nextEntries.some((entry) => entry.id === MAIN_AGENT_ID) && syntheticMain) {
@@ -634,33 +695,34 @@ export async function createAgentWithId(
 
     await provisionAgentFilesystem(config, newAgent, { inheritWorkspace: options?.inheritWorkspace });
     await writeOpenClawConfig(config);
+
+    if (options?.fileTransformByOSS === true) {
+      const features = await readAgentFeatures();
+      features.fileTransformByOSS = features.fileTransformByOSS || {};
+      features.fileTransformByOSS[id] = true;
+      await writeAgentFeatures(features);
+    }
+
     logger.info('Created agent config entry (explicit ID)', { agentId: id, inheritWorkspace: !!options?.inheritWorkspace });
-    return buildSnapshotFromConfig(config);
+    return await buildSnapshotFromConfig(config);
   });
 }
 
 export async function setAgentFileTransformByOSS(agentId: string, enabled: boolean): Promise<AgentsSnapshot> {
   return withConfigLock(async () => {
     const config = await readOpenClawConfig() as AgentConfigDocument;
-    const { agentsConfig, entries } = normalizeAgentsConfig(config);
-    const index = entries.findIndex((entry) => entry.id === agentId);
-    if (index === -1) {
+    const { entries } = normalizeAgentsConfig(config);
+    if (!entries.some((entry) => entry.id === agentId)) {
       throw new Error(`Agent "${agentId}" not found`);
     }
 
-    entries[index] = {
-      ...entries[index],
-      fileTransformByOSS: enabled,
-    };
+    const features = await readAgentFeatures();
+    features.fileTransformByOSS = features.fileTransformByOSS || {};
+    features.fileTransformByOSS[agentId] = enabled;
+    await writeAgentFeatures(features);
 
-    config.agents = {
-      ...agentsConfig,
-      list: entries,
-    };
-
-    await writeOpenClawConfig(config);
     logger.info('Updated agent fileTransformByOSS', { agentId, enabled });
-    return buildSnapshotFromConfig(config);
+    return await buildSnapshotFromConfig(config);
   });
 }
 
@@ -686,7 +748,7 @@ export async function updateAgentName(agentId: string, name: string): Promise<Ag
 
     await writeOpenClawConfig(config);
     logger.info('Updated agent name', { agentId, name: normalizedName });
-    return buildSnapshotFromConfig(config);
+    return await buildSnapshotFromConfig(config);
   });
 }
 
@@ -711,7 +773,7 @@ export async function updateAgentModel(agentId: string, model: string): Promise<
 
     await writeOpenClawConfig(config);
     logger.info('Updated agent model', { agentId, model: model.trim() });
-    return buildSnapshotFromConfig(config);
+    return await buildSnapshotFromConfig(config);
   });
 }
 
@@ -783,7 +845,7 @@ export async function assignChannelToAgent(agentId: string, channelType: string)
     config.bindings = upsertBindingsForChannel(config.bindings, channelType, agentId, accountId);
     await writeOpenClawConfig(config);
     logger.info('Assigned channel to agent', { agentId, channelType, accountId });
-    return buildSnapshotFromConfig(config);
+    return await buildSnapshotFromConfig(config);
   });
 }
 
@@ -805,7 +867,7 @@ export async function assignChannelAccountToAgent(
     config.bindings = upsertBindingsForChannel(config.bindings, channelType, agentId, accountId.trim());
     await writeOpenClawConfig(config);
     logger.info('Assigned channel account to agent', { agentId, channelType, accountId: accountId.trim() });
-    return buildSnapshotFromConfig(config);
+    return await buildSnapshotFromConfig(config);
   });
 }
 
@@ -815,7 +877,7 @@ export async function clearChannelBinding(channelType: string, accountId?: strin
     config.bindings = upsertBindingsForChannel(config.bindings, channelType, null, accountId);
     await writeOpenClawConfig(config);
     logger.info('Cleared channel binding', { channelType, accountId });
-    return buildSnapshotFromConfig(config);
+    return await buildSnapshotFromConfig(config);
   });
 }
 
