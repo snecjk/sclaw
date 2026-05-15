@@ -45,10 +45,17 @@ export function TaskDetail() {
     const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
     const heading = t('subitemMaterialHeading', { date: dateLabel });
     return (
-      <div className="-mt-5 w-full pb-10">
+      <div
+        className={cn(
+          /* Pull into main bottom padding so gateway row sits closer to the window edge. */
+          '-mt-5 -mb-5 flex min-h-0 min-w-0 flex-col overflow-hidden',
+          /* TitleBar 2.5rem + main py-5 total 2.5rem vertical padding. */
+          'h-[calc(100dvh-5rem)]',
+        )}
+      >
         <div
           className={cn(
-            'sticky -top-5 z-20 w-full pb-4 pt-0',
+            'sticky -top-5 z-20 w-full shrink-0 pb-4 pt-0',
             stoTaskSubitemChatCanvasBg,
           )}
         >
@@ -69,7 +76,7 @@ export function TaskDetail() {
             </Link>
           </div>
         </div>
-        <div className="mx-auto w-full max-w-[var(--sto-main-inner-max)]">
+        <div className="mx-auto flex min-h-0 w-full max-w-[var(--sto-main-inner-max)] flex-1 flex-col overflow-hidden">
           <TaskSubitemChatSurface taskId={id} entryId={entryId} />
         </div>
       </div>

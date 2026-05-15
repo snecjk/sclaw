@@ -43,6 +43,8 @@ interface ChatInputProps {
   variant?: 'default' | 'embedded';
   /** One-time seed into the textarea (e.g. task subitem default prompt). */
   seedText?: string;
+  /** Merged onto the outer wrapper (after defaults); use to tune padding, e.g. task subitem bottom inset. */
+  className?: string;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -114,6 +116,7 @@ export function ChatInput({
   isEmpty: _isEmpty = false,
   variant = 'default',
   seedText,
+  className,
 }: ChatInputProps) {
   const { t } = useTranslation('chat');
   const [input, setInput] = useState('');
@@ -461,6 +464,7 @@ export function ChatInput({
       className={cn(
         'w-full transition-all duration-300',
         isEmbedded ? 'px-0 pb-0 pt-0' : 'mx-auto max-w-5xl px-6 pb-6 pt-2',
+        className,
       )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
