@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { isStoTaskId, isYmdEntryId, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { TaskSubitemChatSurface } from '@/pages/TaskDetail/TaskSubitemChatSurface';
+import { stoTaskSubitemChatCanvasBg } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
@@ -44,24 +45,33 @@ export function TaskDetail() {
     const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
     const heading = t('subitemMaterialHeading', { date: dateLabel });
     return (
-      <div className="-mt-5 mx-auto w-full max-w-[var(--sto-main-inner-max)] pb-10">
-        <div className="sticky top-0 z-20 border-b border-[var(--sto-sidebar-border)] bg-[var(--sto-page-bg)] pb-4 pt-0 dark:border-border dark:bg-background">
-          <Link
-            to="/"
-            className={cn(
-              'group flex min-w-0 max-w-full items-center gap-2.5 rounded-md text-foreground outline-none transition-colors',
-              'hover:text-[var(--sto-brand-6)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sto-page-bg)] dark:focus-visible:ring-offset-background',
-            )}
-          >
-            <ArrowLeft
-              className="h-5 w-5 shrink-0 text-muted-foreground transition-colors group-hover:text-[var(--sto-brand-6)]"
-              strokeWidth={2}
-              aria-hidden
-            />
-            <h1 className="min-w-0 flex-1 truncate text-lg font-semibold leading-snug tracking-tight md:text-xl">{heading}</h1>
-          </Link>
+      <div className="-mt-5 w-full pb-10">
+        <div
+          className={cn(
+            'sticky -top-5 z-20 w-full pb-4 pt-0',
+            stoTaskSubitemChatCanvasBg,
+          )}
+        >
+          <div className="mx-auto w-full max-w-[var(--sto-main-inner-max)] pt-[16px]">
+            <Link
+              to="/"
+              className={cn(
+                'group flex min-w-0 max-w-full items-center gap-2.5 rounded-md text-foreground outline-none transition-colors',
+                'hover:text-[var(--sto-brand-6)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sto-page-bg)] dark:focus-visible:ring-offset-background',
+              )}
+            >
+              <ArrowLeft
+                className="h-5 w-5 shrink-0 text-muted-foreground transition-colors group-hover:text-[var(--sto-brand-6)]"
+                strokeWidth={2}
+                aria-hidden
+              />
+              <h1 className="min-w-0 flex-1 truncate text-lg font-semibold leading-snug tracking-tight md:text-xl">{heading}</h1>
+            </Link>
+          </div>
         </div>
-        <TaskSubitemChatSurface taskId={id} entryId={entryId} />
+        <div className="mx-auto w-full max-w-[var(--sto-main-inner-max)]">
+          <TaskSubitemChatSurface taskId={id} entryId={entryId} />
+        </div>
       </div>
     );
   }

@@ -7,11 +7,13 @@ import { useGatewayStore } from '@/stores/gateway';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import { STO_TASK_PENDING_COMPOSE_KEY } from '@/lib/sto-task-compose-storage';
+import { cn } from '@/lib/utils';
 import type { StoTaskId } from '@/lib/sto-tasks';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
 import { extractText, extractThinking, extractToolUse, extractImages } from '@/pages/Chat/message-utils';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
+import { stoTaskSubitemChatCanvasBg } from '@/lib/surfaces';
 import { useStoTaskSubitemChatSend } from './use-sto-task-subitem-chat-send';
 
 /* sessionStorage one-shot + gateway-gated auto-send intentionally use setState in effects */
@@ -159,15 +161,20 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
 
   if (!sessionKey) {
     return (
-      <div className="mt-4 flex min-h-[min(70vh,520px)] flex-col items-center justify-center rounded-xl bg-[var(--sto-page-bg)] dark:bg-muted/20">
+      <div
+        className={cn(
+          'mt-4 flex min-h-[min(70vh,520px)] flex-col items-center justify-center rounded-xl',
+          stoTaskSubitemChatCanvasBg,
+        )}
+      >
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
       </div>
     );
   }
 
   return (
-    <div className="mt-4 flex min-h-[min(70vh,520px)] flex-col rounded-xl bg-[var(--sto-page-bg)] dark:bg-muted/20">
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+    <div className={cn('mt-4 flex min-h-[min(70vh,520px)] flex-col rounded-xl', stoTaskSubitemChatCanvasBg)}>
+      <div ref={scrollRef} className={cn('min-h-0 flex-1 overflow-y-auto px-4 py-4', stoTaskSubitemChatCanvasBg)}>
         <div ref={contentRef} className="mx-auto max-w-3xl space-y-4">
           {loading && messages.length === 0 ? (
             <div className="flex justify-center py-12 text-muted-foreground">
@@ -238,7 +245,12 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
         </div>
       ) : null}
 
-      <div className="shrink-0 border-t border-[var(--sto-sidebar-border)] bg-[var(--sto-page-bg)] p-3 dark:border-border dark:bg-background/80">
+      <div
+        className={cn(
+          'shrink-0 border-t border-[var(--sto-sidebar-border)] p-3 dark:border-border',
+          stoTaskSubitemChatCanvasBg,
+        )}
+      >
         <ChatInput
           variant="embedded"
           seedText={composeSeed}

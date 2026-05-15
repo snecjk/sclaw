@@ -21,6 +21,12 @@ export const assistantChatCardBgStreaming = cn(
   'dark:bg-[linear-gradient(180deg,hsl(var(--muted)),hsl(var(--card)))]',
 );
 
+/** 任务子项聊天：与设计壳层 MainLayout 中 `<main>` 一致（浅色 `--sto-page-bg`，深色 `background`），避免与主区两侧 / 滚动条带叠色出缝 */
+export const stoTaskSubitemChatCanvasBg = cn(
+  'bg-[var(--sto-page-bg)]',
+  'dark:bg-background',
+);
+
 /**
  * 铺在 {@link glassSectionSurface} 上的卡片/列表行（浅色）：冷白 + 内高光，避免多层 glass-bg 半透明叠出发灰发黄；
  * 深色：保持原有 glass 层次。
