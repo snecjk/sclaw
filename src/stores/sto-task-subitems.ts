@@ -31,6 +31,8 @@ interface StoTaskSubitemsState {
   listEntries: (taskId: StoTaskId) => string[];
   markSubitemReadFromActivity: (taskId: StoTaskId, entryId: string, activityMs: number) => void;
   isSubitemUnread: (taskId: StoTaskId, entryId: string, activityMs: number) => boolean;
+  /** Remove entry from the task list and drop its session-key mapping (after transcript delete). */
+  removeSubitem: (taskId: StoTaskId, entryId: string) => void;
 }
 
 export const useStoTaskSubitemsStore = create<StoTaskSubitemsState>()(
@@ -84,6 +86,24 @@ export const useStoTaskSubitemsStore = create<StoTaskSubitemsState>()(
         const k = stoTaskSubitemKey(taskId, entryId);
         const last = get().lastReadActivityMs[k] ?? 0;
         return activityMs > last;
+      },
+      removeSubitem: (taskId, entryId) => {
+        const k = stoTaskSubitemKey(taskId, entryId);
+        set((s) => {
+          const cur = s.entriesByTask[taskId] ?? [];
+          const nextIds = sortEntryIdsDesc(cur.filter((id) => id !== entryId));
+          const entriesByTask = { ...s.entriesByTask };
+          if (nextIds.length === 0) {
+            delete entriesByTask[taskId];
+          } else {
+            entriesByTask[taskId] = nextIds;
+          }
+          const sessionKeyBySubitem = { ...s.sessionKeyBySubitem };
+          delete sessionKeyBySubitem[k];
+          const lastReadActivityMs = { ...s.lastReadActivityMs };
+          delete lastReadActivityMs[k];
+          return { ...s, entriesByTask, sessionKeyBySubitem, lastReadActivityMs };
+        });
       },
     }),
     {

@@ -5,6 +5,7 @@
   "subitemChatEmpty": "まだメッセージがありません。送信して開始してください。",
   "overviewHint": "ホームの該当カードから開くと、当日の資料サブ項目を作成し会話を開始します。",
   "unreadBadge": "未読",
+  "deleteSubitemConfirm": "「{{label}}」を削除しますか？紐づくチャット履歴は履歴セッション削除と同様に一覧から外れます。",
   "detail": {
     "hq-reconciliation": {
       "pageTitle": "週次会議資料",

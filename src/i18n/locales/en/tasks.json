@@ -5,6 +5,7 @@
   "subitemChatEmpty": "No messages yet. Send a message to start.",
   "overviewHint": "Open the matching card on Home to create today’s material sub-item and start the chat session.",
   "unreadBadge": "Unread",
+  "deleteSubitemConfirm": "Delete \"{{label}}\"? The linked chat transcript will be removed from the list, same as deleting a history session.",
   "detail": {
     "hq-reconciliation": {
       "pageTitle": "Weekly meeting materials",
