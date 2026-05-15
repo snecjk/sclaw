@@ -1,12 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
-import { STO_TASK_PENDING_COMPOSE_KEY } from '@/lib/sto-task-compose-storage';
+import {
+  STO_TASK_PENDING_COMPOSE_KEY,
+  STO_TASK_SUBITEM_NAV_SCROLL_END,
+  type StoTaskSubitemLocationState,
+} from '@/lib/sto-task-compose-storage';
 import { cn } from '@/lib/utils';
 import type { StoTaskId } from '@/lib/sto-tasks';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
@@ -21,6 +26,8 @@ import { useStoTaskSubitemChatSend } from './use-sto-task-subitem-chat-send';
 
 export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId; entryId: string }) {
   const { t } = useTranslation(['home', 'chat', 'common']);
+  const location = useLocation();
+  const navigate = useNavigate();
   const storeSubKey = useMemo(() => stoTaskSubitemKey(taskId, entryId), [taskId, entryId]);
   const sessionKey = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem[storeSubKey] ?? '');
 
@@ -55,9 +62,20 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const [streamingTimestamp] = useState(() => Date.now());
   const [composeSeed, setComposeSeed] = useState<string | undefined>();
   const [pendingAutoSendText, setPendingAutoSendText] = useState<string | null>(null);
-  const composeBootRef = useRef(false);
+  /** True after we consumed sessionStorage one-shot compose for this subitem (skip generic post-load scroll). */
+  const hasOneShotComposeRef = useRef(false);
+  /** Generic scroll-to-bottom once per subitem mount (sidebar / deep link / home reused path). */
+  const genericScrollDoneRef = useRef(false);
 
   const { contentRef, scrollRef } = useStickToBottomInstant(sessionKey || storeSubKey);
+
+  const scrollToLatest = useCallback((behavior: ScrollBehavior = 'auto') => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  }, [scrollRef]);
+
+  const lastComposeRouteKeyRef = useRef('');
 
   useEffect(() => {
     void fetchAgents();
@@ -73,8 +91,17 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   }, [sessionKey, switchSession, switchToAgentMainSession]);
 
   useEffect(() => {
-    if (composeBootRef.current) return;
-    composeBootRef.current = true;
+    genericScrollDoneRef.current = false;
+  }, [storeSubKey]);
+
+  useLayoutEffect(() => {
+    const routeKey = `${taskId}:${entryId}`;
+    if (lastComposeRouteKeyRef.current !== routeKey) {
+      lastComposeRouteKeyRef.current = routeKey;
+      hasOneShotComposeRef.current = false;
+      setComposeSeed(undefined);
+      setPendingAutoSendText(null);
+    }
     try {
       const raw = sessionStorage.getItem(STO_TASK_PENDING_COMPOSE_KEY);
       if (!raw) return;
@@ -82,12 +109,38 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
       if (o.taskId !== taskId || o.entryId !== entryId || !o.cardBase) return;
       sessionStorage.removeItem(STO_TASK_PENDING_COMPOSE_KEY);
       const prompt = t(`home:summary.${o.cardBase}.defaultComposePrompt`);
+      hasOneShotComposeRef.current = true;
       setComposeSeed(prompt);
       setPendingAutoSendText(prompt);
     } catch {
       sessionStorage.removeItem(STO_TASK_PENDING_COMPOSE_KEY);
     }
   }, [taskId, entryId, t]);
+
+  useEffect(() => {
+    if (!sessionKey || currentSessionKey !== sessionKey || loading) return;
+    const st = location.state as StoTaskSubitemLocationState | null;
+    if (st?.[STO_TASK_SUBITEM_NAV_SCROLL_END]) {
+      scrollToLatest('auto');
+      navigate('.', { replace: true, state: {} });
+      genericScrollDoneRef.current = true;
+      return;
+    }
+    if (hasOneShotComposeRef.current) {
+      genericScrollDoneRef.current = true;
+      return;
+    }
+    if (genericScrollDoneRef.current) return;
+    genericScrollDoneRef.current = true;
+    scrollToLatest('auto');
+  }, [
+    sessionKey,
+    currentSessionKey,
+    loading,
+    location.state,
+    navigate,
+    scrollToLatest,
+  ]);
 
   useEffect(() => {
     if (pendingAutoSendText === null || !isGatewayRunning) return;
@@ -104,12 +157,6 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
       el?.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
     });
     return unsub;
-  }, [scrollRef]);
-
-  const scrollToLatest = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
   }, [scrollRef]);
 
   const streamMsgObj =

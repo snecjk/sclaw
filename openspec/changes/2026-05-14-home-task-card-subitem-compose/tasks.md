@@ -9,8 +9,8 @@
 
 ## 2. 首页卡片与子项引导
 
-- [ ] 2.1 已启用卡片点击：创建或复用当日子项、导航并写入一次性自动发送意图，满足 **Requirement: 首页概览卡与任务键对应并驱动子项创建**。
-- [ ] 2.2 为每张已启用卡片配置 i18n 默认 prompt，满足 **Requirement: 国际化与可维护性** 中默认 prompt 条款。
+- [ ] 2.1 已启用卡片点击：按本地日判断子项是否存在；**新建**时注册子项并 `navigate` 且携带 `entryBootstrap: 'created'` 与卡片 `autoSendPromptKey`（或等价）；**复用**时 `navigate` 且携带 `entryBootstrap: 'reused'` 与 `scrollToLatest: true`，满足 **Requirement: 首页概览卡与任务键对应并驱动子项创建**。
+- [ ] 2.2 为每张已启用卡片配置 i18n 默认 prompt（**仅新建路径发送**），满足 **Requirement: 国际化与可维护性** 中默认 prompt 条款。
 
 ## 3. 侧栏
 
@@ -18,8 +18,8 @@
 
 ## 4. 子项聊天面与网关
 
-- [ ] 4.1 子项页聊天主区、`switchSession` 至专用 `sessionKey`、就绪后自动发送与本轮完成判定，满足 **Requirement: 专用会话键与切换**、**Requirement: 网关就绪前不得发送、就绪后自动发送**、**Requirement: 任务子项详情页信息结构（聊天为主）**。
-- [ ] 4.2 自动发送意图一次性消费与防刷新重发，满足 **Requirement: 自动发送意图一次性消费**。
+- [ ] 4.1 子项页：解析 `location.state`（或等价）分支；`switchSession` → `loadHistory`；**created** 路径下网关就绪后自动发送一轮卡片 prompt；**reused** 路径下 **禁止** `sendMessage`、**须**滚底，满足 **Requirement: 专用会话键与切换**、**Requirement: 网关就绪前不得发送、就绪后按意图自动发送**、**Requirement: 复用当日子项时滚动至会话底部**、**Requirement: 任务子项详情页信息结构（聊天为主）**。
+- [ ] 4.2 一次性消费 `created` 路径的自动发送意图并防刷新重发；`reused` 路径不产生发送意图，满足 **Requirement: 自动发送意图一次性消费**。
 - [ ] 4.3 发送路径仅 host-api / 既有 Chat store，满足 **Requirement: 任务子项详情页信息结构（聊天为主）** 中发送条款。
 
 ## 5. 全局会话列表
@@ -28,6 +28,6 @@
 
 ## 6. 验证与文档
 
-- [ ] 6.1 必要单元/组件或 E2E 覆盖：同日复用、网关延迟发送、未读/已读、列表无并列项（按项目测试惯例选型）。
-- [ ] 6.2 审阅 `README.md`、`README.zh-CN.md`、`README.ja-JP.md` 是否需追加路由或行为一句说明。
-- [ ] 6.3 若本轮改动触及 comms 路径：运行 `pnpm run comms:replay` 与 `pnpm run comms:compare`。
+- [ ] 6.1 单元/组件或 E2E：新建 + 网关延迟自动发、同日复用无二次发送且滚底、未读/已读、列表无并列项。
+- [ ] 6.2 审阅 `README.md`、`README.zh-CN.md`、`README.ja-JP.md` 是否需一句行为说明（新建自动发 / 已存仅滚底）。
+- [ ] 6.3 若触碰 comms：运行 `pnpm run comms:replay` 与 `pnpm run comms:compare`。

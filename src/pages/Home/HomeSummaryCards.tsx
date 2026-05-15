@@ -5,7 +5,10 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
 import { formatLocalYmd } from '@/lib/sto-task-entry-label';
-import { STO_TASK_PENDING_COMPOSE_KEY } from '@/lib/sto-task-compose-storage';
+import {
+  STO_TASK_PENDING_COMPOSE_KEY,
+  STO_TASK_SUBITEM_NAV_SCROLL_END,
+} from '@/lib/sto-task-compose-storage';
 import { useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import avatar01 from '@/assets/avatars/avatar-01.png.png';
 import avatar02 from '@/assets/avatars/avatar-02.png.png';
@@ -120,9 +123,10 @@ function SummaryCard(props: SummaryCardProps) {
   const openSubitem = useCallback(() => {
     if (!stoTaskTarget) return;
     const entryIdToday = formatLocalYmd(new Date());
+    const hadToday = useStoTaskSubitemsStore.getState().listEntries(stoTaskTarget).includes(entryIdToday);
     ensureSubitem(stoTaskTarget, entryIdToday);
-    const latestEntryId = useStoTaskSubitemsStore.getState().listEntries(stoTaskTarget)[0] ?? entryIdToday;
-    if (latestEntryId === entryIdToday) {
+    const path = taskDetailPath(stoTaskTarget, entryIdToday);
+    if (!hadToday) {
       try {
         sessionStorage.setItem(
           STO_TASK_PENDING_COMPOSE_KEY,
@@ -131,8 +135,10 @@ function SummaryCard(props: SummaryCardProps) {
       } catch {
         /* ignore quota */
       }
+      navigate(path);
+    } else {
+      navigate(path, { state: { [STO_TASK_SUBITEM_NAV_SCROLL_END]: true } });
     }
-    navigate(taskDetailPath(stoTaskTarget, latestEntryId));
   }, [base, ensureSubitem, navigate, stoTaskTarget]);
 
   const p = `summary.${base}` as const;
