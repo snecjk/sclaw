@@ -41,7 +41,7 @@ export function FilePreviewViewer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filePath, encoding: 'utf-8' }),
       });
-      setMdContent(res.content);
+      setMdContent(res.content ?? '');
     } catch {
       setMdError('读取失败');
     } finally {
@@ -61,7 +61,7 @@ export function FilePreviewViewer({
       <iframe
         src={filePath}
         title={fileName}
-        className={cn('h-full w-full border-0', className)}
+        className={cn('h-full min-w-0 w-full border-0', className)}
       />
     );
   }
@@ -72,7 +72,7 @@ export function FilePreviewViewer({
       <iframe
         src={toServeUrl(filePath)}
         title={fileName}
-        className={cn('h-full w-full border-0', className)}
+        className={cn('h-full min-w-0 w-full border-0', className)}
       />
     );
   }
@@ -83,7 +83,7 @@ export function FilePreviewViewer({
       <iframe
         src={toServeUrl(filePath)}
         title={fileName}
-        className={cn('h-full w-full border-0', className)}
+        className={cn('h-full min-w-0 w-full border-0', className)}
       />
     );
   }
@@ -122,14 +122,14 @@ th{background:#f8f8f8}
 img{max-width:100%}
 </style>
 </head>
-<body>${mdContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</body>
+<body>${(mdContent ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</body>
 </html>`;
 
     return (
       <iframe
         srcDoc={srcDoc}
         title={fileName}
-        className={cn('h-full w-full border-0', className)}
+        className={cn('h-full min-w-0 w-full border-0', className)}
         sandbox="allow-scripts"
       />
     );

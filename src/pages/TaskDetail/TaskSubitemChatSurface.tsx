@@ -91,7 +91,9 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
     if (pendingAutoSendText === null || !isGatewayRunning) return;
     const text = pendingAutoSendText;
     setPendingAutoSendText(null);
-    void handleSend(text);
+    void handleSend(text).finally(() => {
+      setComposeSeed(undefined);
+    });
   }, [pendingAutoSendText, isGatewayRunning, handleSend]);
 
   useEffect(() => {
@@ -157,14 +159,14 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
 
   if (!sessionKey) {
     return (
-      <div className="mt-4 flex min-h-[min(70vh,520px)] flex-col items-center justify-center rounded-xl border border-[var(--sto-sidebar-border)] bg-[var(--sto-page-bg)] dark:border-border dark:bg-muted/20">
+      <div className="mt-4 flex min-h-[min(70vh,520px)] flex-col items-center justify-center rounded-xl bg-[var(--sto-page-bg)] dark:bg-muted/20">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
       </div>
     );
   }
 
   return (
-    <div className="mt-4 flex min-h-[min(70vh,520px)] flex-col rounded-xl border border-[var(--sto-sidebar-border)] bg-[var(--sto-page-bg)] dark:border-border dark:bg-muted/20">
+    <div className="mt-4 flex min-h-[min(70vh,520px)] flex-col rounded-xl bg-[var(--sto-page-bg)] dark:bg-muted/20">
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         <div ref={contentRef} className="mx-auto max-w-3xl space-y-4">
           {loading && messages.length === 0 ? (
@@ -236,7 +238,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
         </div>
       ) : null}
 
-      <div className="shrink-0 border-t border-[var(--sto-sidebar-border)] p-3 dark:border-border">
+      <div className="shrink-0 border-t border-[var(--sto-sidebar-border)] bg-[var(--sto-page-bg)] p-3 dark:border-border dark:bg-background/80">
         <ChatInput
           variant="embedded"
           seedText={composeSeed}

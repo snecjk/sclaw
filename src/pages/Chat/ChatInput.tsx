@@ -176,9 +176,19 @@ export function ChatInput({
   }, [disabled]);
 
   useEffect(() => {
-    if (!seedText?.trim() || seedAppliedRef.current) return;
-    seedAppliedRef.current = true;
-    setInput(seedText);
+    const trimmed = seedText?.trim();
+    if (trimmed) {
+      if (seedAppliedRef.current) return;
+      seedAppliedRef.current = true;
+      setInput(trimmed);
+      return;
+    }
+    // Parent cleared seed (e.g. after programmatic task auto-send) — drop stale composer text
+    if (seedAppliedRef.current) {
+      seedAppliedRef.current = false;
+      setInput('');
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    }
   }, [seedText]);
 
   useEffect(() => {
