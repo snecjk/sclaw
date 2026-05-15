@@ -103,9 +103,22 @@ const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' }[] = [
   { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation' },
 ];
 
-function SidebarTaskDateLinks({ taskId, entries }: { taskId: StoTaskId; entries: readonly string[] }) {
+function SidebarTaskDateLinks({
+  taskId,
+  entries,
+  onRequestDeleteSubitem,
+}: {
+  taskId: StoTaskId;
+  entries: readonly string[];
+  onRequestDeleteSubitem: (payload: {
+    taskId: StoTaskId;
+    entryId: string;
+    label: string;
+    sessionKey: string;
+  }) => void;
+}) {
   const { pathname } = useLocation();
-  const { t, i18n } = useTranslation('tasks');
+  const { t, i18n } = useTranslation(['tasks', 'common']);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const sessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
   const isSubitemUnread = useStoTaskSubitemsStore((s) => s.isSubitemUnread);
@@ -119,31 +132,50 @@ function SidebarTaskDateLinks({ taskId, entries }: { taskId: StoTaskId; entries:
         const activity = sk ? (sessionLastActivity[sk] ?? 0) : 0;
         const unread = isSubitemUnread(taskId, entryId, activity);
         const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
-        const label = t('sidebarMaterialTitle', { date: dateLabel });
+        const label = t('tasks:sidebarMaterialTitle', { date: dateLabel });
         return (
-          <NavLink
-            key={entryId}
-            to={to}
-            onClick={() => {
-              if (!sk) return;
-              const a = useChatStore.getState().sessionLastActivity[sk] ?? 0;
-              if (a > 0) markSubitemReadFromActivity(taskId, entryId, a);
-            }}
-            className={cn(
-              'relative z-[1] inline-flex w-full max-w-full items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] text-left text-xs font-medium transition-colors',
-              active
-                ? 'bg-[#E5E6EB] text-foreground dark:bg-white/[0.12]'
-                : 'text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
-            )}
-          >
-            <span className="min-w-0 flex-1 truncate">{label}</span>
-            {unread ? (
-              <span
-                className="h-2 w-2 shrink-0 rounded-full bg-[hsl(var(--destructive))]"
-                aria-label={t('unreadBadge', { defaultValue: 'Unread' })}
-              />
+          <div key={entryId} className="group relative flex w-full items-center">
+            <NavLink
+              to={to}
+              onClick={() => {
+                if (!sk) return;
+                const a = useChatStore.getState().sessionLastActivity[sk] ?? 0;
+                if (a > 0) markSubitemReadFromActivity(taskId, entryId, a);
+              }}
+              className={cn(
+                'relative z-[1] inline-flex w-full max-w-full items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] pr-9 text-left text-xs font-medium transition-colors',
+                active
+                  ? 'bg-[#E5E6EB] text-foreground dark:bg-white/[0.12]'
+                  : 'text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
+              )}
+            >
+              <span className="min-w-0 flex-1 truncate">{label}</span>
+              {unread ? (
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full bg-[hsl(var(--destructive))]"
+                  aria-label={t('tasks:unreadBadge', { defaultValue: 'Unread' })}
+                />
+              ) : null}
+            </NavLink>
+            {sk ? (
+              <button
+                type="button"
+                aria-label={t('common:actions.delete')}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onRequestDeleteSubitem({ taskId, entryId, label, sessionKey: sk });
+                }}
+                className={cn(
+                  'absolute right-1 z-[2] flex items-center justify-center rounded p-0.5 transition-opacity',
+                  'opacity-0 group-hover:opacity-100',
+                  'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
+                )}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
             ) : null}
-          </NavLink>
+          </div>
         );
       })}
     </>
@@ -151,7 +183,20 @@ function SidebarTaskDateLinks({ taskId, entries }: { taskId: StoTaskId; entries:
 }
 
 /** 侧栏任务：有子项时为可折叠 + 药丸链接；无子项时为主项直达总览。 */
-function SidebarTaskGroup({ taskId, label }: { taskId: StoTaskId; label: string }) {
+function SidebarTaskGroup({
+  taskId,
+  label,
+  onRequestDeleteSubitem,
+}: {
+  taskId: StoTaskId;
+  label: string;
+  onRequestDeleteSubitem: (payload: {
+    taskId: StoTaskId;
+    entryId: string;
+    label: string;
+    sessionKey: string;
+  }) => void;
+}) {
   const { pathname } = useLocation();
   const { t: tTasks } = useTranslation('tasks');
   const rawEntryIds = useStoTaskSubitemsStore((s) => s.entriesByTask[taskId]);
@@ -246,7 +291,11 @@ function SidebarTaskGroup({ taskId, label }: { taskId: StoTaskId; label: string 
       </button>
       {open ? (
         <div id={panelId} className="mt-1.5 flex flex-col items-start gap-1" role="region" aria-labelledby={`sto-sidebar-task-${taskId}-toggle`}>
-          <SidebarTaskDateLinks taskId={taskId} entries={entries} />
+          <SidebarTaskDateLinks
+            taskId={taskId}
+            entries={entries}
+            onRequestDeleteSubitem={onRequestDeleteSubitem}
+          />
         </div>
       ) : null}
     </div>
@@ -363,6 +412,7 @@ export function Sidebar() {
   const deleteSession = useChatStore((s) => s.deleteSession);
   const loadSessions = useChatStore((s) => s.loadSessions);
   const loadHistory = useChatStore((s) => s.loadHistory);
+  const removeSubitem = useStoTaskSubitemsStore((s) => s.removeSubitem);
 
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
@@ -392,7 +442,7 @@ export function Sidebar() {
     older: true,
   });
 
-  const { t } = useTranslation(['common', 'chat', 'auth']);
+  const { t } = useTranslation(['common', 'chat', 'auth', 'tasks']);
 
   const sidebarVis = useMemo(() => getSidebarVisibility(getSidebarLayoutVariant()), []);
 
@@ -442,6 +492,12 @@ export function Sidebar() {
   );
 
   const [sessionToDelete, setSessionToDelete] = useState<{ key: string; label: string } | null>(null);
+  const [subitemToDelete, setSubitemToDelete] = useState<{
+    taskId: StoTaskId;
+    entryId: string;
+    label: string;
+    sessionKey: string;
+  } | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
 
@@ -594,7 +650,12 @@ export function Sidebar() {
         {!sidebarCollapsed && crmWeekReportSurfaceAllowed && taskListSectionOpen ? (
           <div className="mt-1 flex flex-col gap-0.5">
             {STO_TASK_NAV.map((item) => (
-              <SidebarTaskGroup key={item.id} taskId={item.id} label={t(`common:sidebar.${item.labelKey}`)} />
+              <SidebarTaskGroup
+                key={item.id}
+                taskId={item.id}
+                label={t(`common:sidebar.${item.labelKey}`)}
+                onRequestDeleteSubitem={setSubitemToDelete}
+              />
             ))}
           </div>
         ) : null}
@@ -944,6 +1005,24 @@ export function Sidebar() {
           setSessionToDelete(null);
         }}
         onCancel={() => setSessionToDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={!!subitemToDelete}
+        title={t('common:actions.confirm')}
+        message={t('tasks:deleteSubitemConfirm', { label: subitemToDelete?.label })}
+        confirmLabel={t('common:actions.delete')}
+        cancelLabel={t('common:actions.cancel')}
+        variant="destructive"
+        onConfirm={async () => {
+          if (!subitemToDelete) return;
+          const { sessionKey, taskId, entryId } = subitemToDelete;
+          await deleteSession(sessionKey);
+          removeSubitem(taskId, entryId);
+          if (currentSessionKey === sessionKey) navigate('/chat');
+          setSubitemToDelete(null);
+        }}
+        onCancel={() => setSubitemToDelete(null)}
       />
 
       <ConfirmDialog

@@ -11,7 +11,6 @@ import { useChatStore, type RawMessage, type AttachedFileMeta } from '@/stores/c
 import { useGatewayStore } from '@/stores/gateway';
 import { useAgentsStore } from '@/stores/agents';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
-import { ParticleConstellation } from '@/components/common/ParticleConstellation';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatToolbar } from './ChatToolbar';
@@ -210,18 +209,15 @@ export function Chat() {
   }, [scrollToLatest]);
 
   return (
-    <div className={cn("relative flex -m-6 transition-colors duration-500")} style={{ height: 'calc(100vh - 2.5rem)' }}>
+    <div
+      className={cn('relative -m-6 flex min-h-0 min-w-0 overflow-x-hidden transition-colors duration-500')}
+      style={{ height: 'calc(100vh - 2.5rem)' }}
+    >
       {/* Left: Chat area */}
-      <div className="relative flex flex-1 flex-col min-w-0">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,140,0,0.06),_transparent_30%),radial-gradient(circle_at_80%_20%,_rgba(229,230,235,0.35),_transparent_26%)]" />
         <div className="absolute inset-0 neural-grid opacity-20" />
-        <ParticleConstellation
-          className="z-0 opacity-[0.88] dark:opacity-[0.74]"
-          particleCount={54}
-          connectionDistance={136}
-          speed={0.28}
-        />
         <div className="absolute left-8 top-10 h-40 w-40 rounded-full bg-cyan-400/10 blur-[90px]" />
         <div className="absolute right-8 top-20 h-48 w-48 rounded-full bg-[rgba(255,111,0,0.06)] blur-[110px]" />
       </div>
@@ -232,7 +228,10 @@ export function Chat() {
       </div>
 
       {/* Messages Area */}
-      <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto px-6 py-4">
+      <div
+        ref={scrollRef}
+        className="relative z-10 flex-1 overflow-y-auto overscroll-y-contain px-6 py-4 [scrollbar-gutter:stable]"
+      >
         <div ref={contentRef} className="max-w-5xl mx-auto space-y-4">
           {isEmpty ? (
             <WelcomeScreen />
@@ -389,11 +388,12 @@ export function Chat() {
       <AnimatePresence>
         {hasPreviewableFiles && showPreviewPanel && (
           <motion.div
+            layout={false}
             initial={{ opacity: 0, x: 40 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 40 }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
-            className="shrink-0 overflow-hidden w-[40vw] min-w-[380px] max-w-[560px]"
+            className="flex h-full min-h-0 w-[clamp(300px,38vw,560px)] shrink-0 flex-col overflow-hidden [contain:inline-size]"
           >
             <ChatPreviewPanel
               files={previewableFiles}

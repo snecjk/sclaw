@@ -28,7 +28,12 @@
 
 ### Requirement: 首页概览卡与任务键对应并驱动子项创建
 
-系统必须将首页每一张**已启用**的数据概览卡绑定到唯一 `taskId`（`hq-reconciliation`、`abnormal-customers`、`outbound-cost` 之一）；每张卡片 MUST 在 i18n（或等价集中配置）中绑定一句默认用户 prompt。用户点击某张**已启用**卡片时，系统 MUST 按「点击瞬间本地日历日」计算 `entryId`（`YYYY-MM-DD`）：若该 `(taskId, entryId)` 尚无子项，则 MUST 创建并注册；若已有，则 MUST 复用同一子项。随后浏览器 MUST 导航至 `/tasks/<taskId>/<entryId>`，并携带由 design 定义的一次性「自动发送」意图（见 `task-subitem-chat-compose-surface`）。**已禁用**的卡片 MUST NOT 触发子项创建或导航至未开放任务子项。
+系统必须将首页每一张**已启用**的数据概览卡绑定到唯一 `taskId`（`hq-reconciliation`、`abnormal-customers`、`outbound-cost` 之一）；每张卡片 MUST 在 i18n（或等价集中配置）中绑定一句默认用户 prompt（**仅**在「新建当日子项」路径下由子项页代发，见下）。用户点击某张**已启用**卡片时，系统 MUST 按「点击瞬间本地日历日」计算 `entryId`（`YYYY-MM-DD`）：
+
+- 若该 `(taskId, entryId)` **尚无**子项：MUST 创建并注册展示语义为「xxxx年XX月XX日的材料」的子项；随后 MUST `navigate` 至 `/tasks/<taskId>/<entryId>`，并携带由 `design.md` 定义的一次性导航状态，表明 **`entryBootstrap: 'created'`**（或等价）且包含该卡片用于自动发送的 **prompt 键或解析 token**（见 `task-subitem-chat-compose-surface`）。
+- 若该 `(taskId, entryId)` **已存在**：MUST **不**再创建第二条；随后 MUST `navigate` 至同一 `/tasks/<taskId>/<entryId>`，并携带导航状态表明 **`entryBootstrap: 'reused'`**（或等价）且 **MUST** 要求子项页**仅**将聊天区滚动至底部，**不得**携带或触发默认 prompt 自动发送。
+
+**已禁用**的卡片 MUST NOT 触发子项创建或导航至未开放任务子项。
 
 #### Scenario: 从已启用卡片进入当日子项
 
@@ -36,12 +41,14 @@
 - **THEN** 浏览器地址栏路径必须为 `/tasks/hq-reconciliation/<本地当日 YYYY-MM-DD>`（若当日已存在该子项则为同一 `entryId`）
 - **AND** 侧栏该主任务下 MUST 出现或可导航至该子项条目
 
-#### Scenario: 同日主任务下再次点击同一卡片
+#### Scenario: 同日主任务下再次点击同一卡片（复用路径）
 
-- **WHEN** 用户在同一本地日内第二次点击同一张已启用卡片
+- **WHEN** 用户在同一本地日内第二次点击同一张已启用卡片，且当日子项已在注册表中存在
 - **THEN** 系统 MUST NOT 创建第二条相同 `entryId` 的子项
 - **AND** 导航目标 MUST 仍为同一 `/tasks/<taskId>/<entryId>`
-- **AND** 系统 MUST 再次应用该卡片绑定之默认 prompt 与自动发送意图（由 `task-subitem-chat-compose-surface` 约束）
+- **AND** 导航状态 MUST 标识为复用路径（`entryBootstrap: 'reused'` 或等价）
+- **AND** 系统 MUST NOT 再次注入该卡片默认 prompt 或触发自动 `sendMessage`（由 `task-subitem-chat-compose-surface` 约束）
+- **AND** 子项页在加载完成后 MUST 将会话列表滚动至底部（或等价展示最新消息）
 
 #### Scenario: 已启用卡片与子项互不串台
 
@@ -82,17 +89,17 @@
 
 ### Requirement: 国际化与可维护性
 
-所有用户可见的任务名称、子项标题、详情主标题、卡片绑定默认 prompt、表头（若有）与占位正文必须可通过 `tasks`、`home` 或 `common` 命名空间下的 i18n 键在项目已支持的语种间切换；不得在组件内硬编码中文长句作为**唯一**文案源。
+所有用户可见的任务名称、子项标题、详情主标题、卡片绑定默认 prompt（**用于新建路径自动发送的文案**）、表头（若有）与占位正文必须可通过 `tasks`、`home` 或 `common` 命名空间下的 i18n 键在项目已支持的语种间切换；不得在组件内硬编码中文长句作为**唯一**文案源。
 
 #### Scenario: 语言切换后任务与子项标题更新
 
 - **WHEN** 用户在设置中切换显示语言后重新打开任务子项详情
 - **THEN** 任务主标题与子项展示标题必须随语言资源切换而更新
 
-#### Scenario: 默认 prompt 可本地化
+#### Scenario: 默认 prompt 可本地化（新建路径）
 
-- **WHEN** 用户切换语言后从首页点击某已启用卡片
-- **THEN** 注入输入区的默认用户 prompt MUST 来自该语种下的 i18n（或集中配置），不得仍为另一语种的硬编码残留
+- **WHEN** 用户切换语言后从首页点击某已启用卡片，且本次为**新建**当日子项
+- **THEN** 自动发送所使用之用户消息文案 MUST 来自该语种下 i18n（或集中配置），不得仍为另一语种的硬编码残留
 
 ---
 

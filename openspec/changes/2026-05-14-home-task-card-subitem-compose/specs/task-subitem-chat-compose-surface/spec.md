@@ -21,29 +21,48 @@
 - **THEN** 聊天存储中的当前会话键 MUST 对应该子项专用 `sessionKey`
 - **AND** 随后发送的消息 MUST 写入该会话 transcript
 
-### Requirement: 网关就绪前不得发送、就绪后自动发送
+### Requirement: 网关就绪前不得发送、就绪后按意图自动发送
 
-当存在未消费的「自动发送」意图且网关状态不为就绪（与首页助手判定一致，例如 `running`）时，系统 MUST NOT 调用 `sendMessage`（或等价发送）。网关首次变为就绪后，系统 MUST 自动发起**一轮**发送，使用意图中绑定的默认 prompt；该轮 MUST 使用与既有 Chat 相同的发送链路（含 `question:split` 等行为若仍适用）。发送与流式接收 MUST 不经由 renderer 直连 Gateway HTTP。
+当导航状态表明 **`entryBootstrap: 'created'`**（或等价）且存在未消费的自动发送意图（含该卡片绑定的 prompt 键）时：若网关状态不为就绪（与首页助手判定一致，例如非 `running`），系统 MUST NOT 调用 `sendMessage`；网关首次变为就绪后，系统 MUST 自动发起**一轮**发送，使用意图中绑定的卡片 prompt 文案；该轮 MUST 使用与既有 Chat 相同的发送链路。发送与流式接收 MUST 不经由 renderer 直连 Gateway HTTP。
 
-#### Scenario: 网关未就绪时等待
+当导航状态表明 **`entryBootstrap: 'reused'`**（或等价）时：系统 **MUST NOT** 因本次导航调用 `sendMessage` 进行自动代发，**无论**网关是否就绪。
 
-- **WHEN** 用户携带自动发送意图进入子项页且网关未就绪
-- **THEN** 系统 MUST NOT 丢弃该意图在未就绪瞬间静默不发
+#### Scenario: 新建路径 — 网关未就绪时等待
+
+- **WHEN** 用户携带 `entryBootstrap: 'created'` 与有效自动发送意图进入子项页且网关未就绪
+- **THEN** 系统 MUST NOT 在未就绪瞬间丢弃该意图并静默不发
 - **AND** 系统 MUST 在网关就绪后自动完成该轮发送
 
-#### Scenario: 网关就绪后完成一轮
+#### Scenario: 新建路径 — 网关就绪后完成一轮
 
-- **WHEN** 网关已就绪且自动发送意图仍有效
+- **WHEN** 网关已就绪且 `entryBootstrap: 'created'` 的自动发送意图仍有效
 - **THEN** 系统 MUST 发起发送并等待该轮运行至完成（`sending` 等与 run 结束相关的 store 状态满足 design 定义之「本轮完成」条件）
+
+#### Scenario: 复用路径 — 不得自动发送
+
+- **WHEN** 用户携带 `entryBootstrap: 'reused'` 进入子项页
+- **THEN** 系统 MUST NOT 调用 `sendMessage` 发送该卡片默认 prompt
+- **AND** 系统 MUST NOT 向输入区注入该默认 prompt 以模拟用户发送
+
+### Requirement: 复用当日子项时滚动至会话底部
+
+当导航状态为 **`entryBootstrap: 'reused'`**（或等价）时，子项页在 `switchSession` 且聊天历史加载完成后 **MUST** 将会话消息列表滚动至底部（或等价保证用户可见最后一条消息），除非消息列表为空（此时为 no-op）。**MUST NOT** 依赖用户手动滚动才能看到最新一条。
+
+#### Scenario: 复用路径滚底
+
+- **WHEN** 用户经首页卡片进入已存在的当日子项且路由状态为复用路径
+- **THEN** 在历史加载完成后聊天主区 MUST 展示列表底部附近内容（最新消息在视口内或可立即滚动到达）
 
 ### Requirement: 自动发送意图一次性消费
 
-自动发送意图（含默认 prompt 与来源卡片标识）MUST 在成功触发发送逻辑后**一次性消费**；用户刷新子项页 MUST NOT 在无新的用户操作（例如新的卡片点击）时无限重复自动发送。第二次及以后同日复用进入若由新的卡片点击触发，则 MUST 由新的意图实例驱动。
+**仅**在 **`entryBootstrap: 'created'`** 路径下：自动发送意图（含 prompt 键与来源卡片标识）MUST 在成功触发发送逻辑后**一次性消费**；用户刷新子项页 MUST NOT 在无新的首页卡片点击时重复自动发送同一 prompt。
 
-#### Scenario: 刷新不重复自动发送
+**`entryBootstrap: 'reused'`** 路径 **MUST NOT** 产生可消费的自动发送意图。
 
-- **WHEN** 用户已完成一次由意图触发的自动发送后刷新同一子项 URL
-- **THEN** 系统 MUST NOT 再次自动发送同一默认 prompt，除非用户再次从首页卡片触发意图
+#### Scenario: 刷新不重复自动发送（新建路径）
+
+- **WHEN** 用户已完成一次由 `created` 路径触发的自动发送后刷新同一子项 URL（且无新的导航状态）
+- **THEN** 系统 MUST NOT 再次自动发送同一默认 prompt
 
 ### Requirement: 子项未读与已读
 

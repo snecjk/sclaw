@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { isStoTaskId, isYmdEntryId, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { TaskSubitemChatSurface } from '@/pages/TaskDetail/TaskSubitemChatSurface';
+import { stoTaskSubitemChatCanvasBg } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
@@ -44,18 +45,40 @@ export function TaskDetail() {
     const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
     const heading = t('subitemMaterialHeading', { date: dateLabel });
     return (
-      <div className="mx-auto w-full max-w-[var(--sto-main-inner-max)] pb-10">
-        <div className="mb-6">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-[var(--sto-brand-6)]"
-          >
-            <ArrowLeft className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-            {t('backHome')}
-          </Link>
-          <h1 className={cn('mt-4 text-2xl font-bold tracking-tight text-foreground')}>{heading}</h1>
+      <div
+        className={cn(
+          /* Pull into main bottom padding so gateway row sits closer to the window edge. */
+          '-mt-5 -mb-5 flex min-h-0 min-w-0 flex-col overflow-hidden',
+          /* TitleBar 2.5rem + main py-5 total 2.5rem vertical padding. */
+          'h-[calc(100dvh-5rem)]',
+        )}
+      >
+        <div
+          className={cn(
+            'sticky -top-5 z-20 w-full shrink-0 pb-4 pt-0',
+            stoTaskSubitemChatCanvasBg,
+          )}
+        >
+          <div className="mx-auto w-full max-w-[var(--sto-main-inner-max)] pt-[16px]">
+            <Link
+              to="/"
+              className={cn(
+                'group flex min-w-0 max-w-full items-center gap-2.5 rounded-md text-foreground outline-none transition-colors',
+                'hover:text-[var(--sto-brand-6)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sto-page-bg)] dark:focus-visible:ring-offset-background',
+              )}
+            >
+              <ArrowLeft
+                className="h-5 w-5 shrink-0 text-muted-foreground transition-colors group-hover:text-[var(--sto-brand-6)]"
+                strokeWidth={2}
+                aria-hidden
+              />
+              <h1 className="min-w-0 flex-1 truncate text-lg font-semibold leading-snug tracking-tight md:text-xl">{heading}</h1>
+            </Link>
+          </div>
         </div>
-        <TaskSubitemChatSurface taskId={id} entryId={entryId} />
+        <div className="mx-auto flex min-h-0 w-full max-w-[var(--sto-main-inner-max)] flex-1 flex-col overflow-hidden">
+          <TaskSubitemChatSurface taskId={id} entryId={entryId} />
+        </div>
       </div>
     );
   }
@@ -65,12 +88,20 @@ export function TaskDetail() {
       <div className="mb-6">
         <Link
           to="/"
-          className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-[var(--sto-brand-6)]"
+          className={cn(
+            'group flex min-w-0 max-w-full items-center gap-2.5 rounded-md text-foreground outline-none transition-colors',
+            'hover:text-[var(--sto-brand-6)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sto-page-bg)] dark:focus-visible:ring-offset-background',
+          )}
         >
-          <ArrowLeft className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-          {t('backHome')}
+          <ArrowLeft
+            className="h-5 w-5 shrink-0 text-muted-foreground transition-colors group-hover:text-[var(--sto-brand-6)]"
+            strokeWidth={2}
+            aria-hidden
+          />
+          <h1 className="min-w-0 flex-1 truncate text-lg font-semibold leading-snug tracking-tight md:text-xl">
+            {t(`detail.${id}.pageTitle`)}
+          </h1>
         </Link>
-        <h1 className={cn('mt-4 text-2xl font-bold tracking-tight text-foreground')}>{t(`detail.${id}.pageTitle`)}</h1>
       </div>
       <TaskOverviewBody taskId={id} />
     </div>

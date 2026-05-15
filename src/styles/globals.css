@@ -156,6 +156,15 @@
     border-color: hsl(var(--glass-border));
     box-shadow: var(--glass-shadow), inset 0 1px 0 0 hsl(var(--glass-highlight));
   }
+
+  /** 顶栏等全宽壳层：与 .glass 同磨砂底，但不加外阴影与内高光边（避免与主区底色接茬出现灰/白条） */
+  .glass-chrome {
+    background: hsl(var(--glass-bg) / var(--glass-opacity));
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border-color: hsl(var(--glass-border));
+    box-shadow: none;
+  }
   .glass-panel {
     background:
       linear-gradient(180deg, hsl(var(--glass-highlight)) 0%, transparent 24%),

@@ -105,7 +105,7 @@ export function ChatPreviewPanel({
   return (
     <div
       className={cn(
-        'flex flex-col border-l border-border/40 bg-[var(--sto-page-bg)] dark:bg-background',
+        'flex min-h-0 min-w-0 flex-col border-l border-border/40 bg-[var(--sto-page-bg)] dark:bg-background',
         className,
       )}
     >
@@ -216,7 +216,7 @@ export function ChatPreviewPanel({
       )}
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {activeTab === 'product' && activeFile ? (
           <FilePreviewViewer
             key={`${activeFile.filePath}-${refreshKey}`}

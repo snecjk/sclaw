@@ -61,7 +61,7 @@ export function FilePreviewViewer({
       <iframe
         src={filePath}
         title={fileName}
-        className={cn('h-full w-full border-0', className)}
+        className={cn('h-full min-w-0 w-full border-0', className)}
       />
     );
   }
@@ -72,7 +72,7 @@ export function FilePreviewViewer({
       <iframe
         src={toServeUrl(filePath)}
         title={fileName}
-        className={cn('h-full w-full border-0', className)}
+        className={cn('h-full min-w-0 w-full border-0', className)}
       />
     );
   }
@@ -83,7 +83,7 @@ export function FilePreviewViewer({
       <iframe
         src={toServeUrl(filePath)}
         title={fileName}
-        className={cn('h-full w-full border-0', className)}
+        className={cn('h-full min-w-0 w-full border-0', className)}
       />
     );
   }
@@ -129,7 +129,7 @@ img{max-width:100%}
       <iframe
         srcDoc={srcDoc}
         title={fileName}
-        className={cn('h-full w-full border-0', className)}
+        className={cn('h-full min-w-0 w-full border-0', className)}
         sandbox="allow-scripts"
       />
     );
