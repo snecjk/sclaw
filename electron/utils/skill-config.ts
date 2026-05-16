@@ -6,10 +6,11 @@
  * All file I/O uses async fs/promises to avoid blocking the main thread.
  */
 import { readFile, writeFile, access, cp, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { constants } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { createHash } from 'node:crypto';
 import { getOpenClawDir, getResourcesDir } from './paths';
 import { logger } from './logger';
 import { withConfigLock } from './config-mutex';
@@ -34,6 +35,7 @@ interface PreinstalledSkillSpec {
     slug: string;
     version?: string;
     autoEnable?: boolean;
+    local?: boolean;
 }
 
 interface PreinstalledManifest {
@@ -260,10 +262,24 @@ function resolvePreinstalledSkillsSourceRoot(): string | null {
         join(getResourcesDir(), 'preinstalled-skills'),
         join(process.cwd(), 'build', 'preinstalled-skills'),
         join(__dirname, '../../build/preinstalled-skills'),
+        // Dev fallback: local skills live directly under resources/skills/
+        // when the bundle script hasn't generated build/preinstalled-skills yet.
+        join(process.cwd(), 'resources', 'skills'),
+        join(__dirname, '../../resources/skills'),
     ];
 
     const root = candidates.find((dir) => existsSync(dir));
     return root || null;
+}
+
+/** Compute a short SHA-256 hash of a file's contents (sync). */
+function hashFileSync(filePath: string): string {
+    try {
+        const content = readFileSync(filePath, 'utf-8');
+        return createHash('sha256').update(content).digest('hex').substring(0, 16);
+    } catch {
+        return 'unknown';
+    }
 }
 
 async function readPreinstalledLockVersions(sourceRoot: string): Promise<Map<string, string>> {
@@ -310,10 +326,11 @@ async function tryReadMarker(markerPath: string): Promise<PreinstalledMarker | n
  * deployed to ~/.openclaw/skills/<slug>/ as full directories.
  *
  * Policy:
- * - If skill is missing locally, install it.
- * - If local skill exists without our marker, treat as user-managed and never overwrite.
- * - If marker exists with same version, skip.
- * - If marker exists with a different version, skip by default to avoid overwriting edits.
+ * - Local built-in skills ("local": true) are ALWAYS copied over the local
+ *   copy so the app-shipped version takes precedence.  Their version is derived
+ *   from the sha256 hash of the bundled SKILL.md so edits are picked up.
+ * - Remote skills follow the conservative rules: never overwrite user-managed
+ *   skills, skip if the version already matches.
  */
 export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
     const skills = await readPreinstalledManifest();
@@ -343,21 +360,36 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
         const targetDir = join(targetRoot, spec.slug);
         const targetManifest = join(targetDir, 'SKILL.md');
         const markerPath = join(targetDir, PREINSTALLED_MARKER_NAME);
-        const desiredVersion = lockVersions.get(spec.slug)
-            || (spec.version || 'unknown').trim()
-            || 'unknown';
+
+        // Local built-in skills use a content hash so they upgrade automatically
+        // when the bundled SKILL.md changes, even without a lock file.
+        const desiredVersion = spec.local
+            ? hashFileSync(sourceManifest)
+            : lockVersions.get(spec.slug)
+                || (spec.version || 'unknown').trim()
+                || 'unknown';
         const marker = await tryReadMarker(markerPath);
 
         if (existsSync(targetManifest)) {
-            if (!marker) {
-                logger.info(`Skipping user-managed skill: ${spec.slug}`);
+            if (spec.local) {
+                // Built-in local skill: overwrite the user's copy so the app
+                // version is always authoritative.
+                if (marker && marker.version === desiredVersion) {
+                    continue; // already up to date
+                }
+                logger.info(`Replacing built-in local skill: ${spec.slug} (version ${desiredVersion})`);
+            } else {
+                // Remote skill: conservative, don't overwrite user-managed copies.
+                if (!marker) {
+                    logger.info(`Skipping user-managed skill: ${spec.slug}`);
+                    continue;
+                }
+                if (marker.version === desiredVersion) {
+                    continue;
+                }
+                logger.info(`Skipping preinstalled skill update for ${spec.slug} (local marker version=${marker.version}, desired=${desiredVersion})`);
                 continue;
             }
-            if (marker.version === desiredVersion) {
-                continue;
-            }
-            logger.info(`Skipping preinstalled skill update for ${spec.slug} (local marker version=${marker.version}, desired=${desiredVersion})`);
-            continue;
         }
 
         try {
