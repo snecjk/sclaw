@@ -56,7 +56,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
 
-const inputClasses = 'h-[44px] rounded-md font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-glass border-glass-border focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40';
+const inputClasses = 'h-[44px] rounded-md font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-glass border-glass-border focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-ring shadow-sm transition-all text-foreground placeholder:text-foreground/40';
 const labelClasses = 'text-[14px] text-foreground/80 font-bold';
 type ArkMode = 'apikey' | 'codeplan';
 
@@ -265,11 +265,11 @@ export function ProvidersSettings() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center rounded-md border border-dashed border-primary/18 bg-white/50 py-12 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">
+        <div className="flex items-center justify-center rounded-md border border-dashed border-border bg-white/50 py-12 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>
       ) : displayProviders.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-primary/18 bg-white/50 py-16 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">
+        <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-border bg-white/50 py-16 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">
           <Key className="mb-4 h-12 w-12 opacity-50" />
           <h3 className="mb-1 text-[15px] font-medium text-foreground">{t('aiProviders.empty.title')}</h3>
           <p className="mb-6 max-w-sm text-center text-[13px]">
@@ -368,7 +368,7 @@ function StoModelRow({
   return (
     <div
       className={cn(
-        'group relative flex flex-col overflow-hidden rounded-md border border-primary/12 p-4 transition-all hover:border-primary/18 hover:shadow-md',
+        'group relative flex flex-col overflow-hidden rounded-md border border-border p-4 transition-all hover:border-border hover:shadow-md',
         !isCurrentModel && glassNestedCard,
         !isCurrentModel && 'hover:bg-white/80 dark:hover:bg-[hsl(var(--glass-bg)/0.2)]',
         isCurrentModel && 'border-primary/20 bg-primary/[0.06]',
@@ -376,7 +376,7 @@ function StoModelRow({
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between md:gap-6">
         <div className="flex min-w-0 flex-1 items-start gap-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/12 bg-primary/[0.06] text-foreground shadow-sm transition-transform group-hover:scale-[1.02]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-primary/[0.06] text-foreground shadow-sm transition-transform group-hover:scale-[1.02]">
             {getProviderIconUrl(account.vendorId) ? (
               <img
                 src={getProviderIconUrl(account.vendorId)}
@@ -390,7 +390,7 @@ function StoModelRow({
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-[15px]">{modelId}</span>
-              <span className="inline-flex items-center rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-700 shadow-sm dark:border-sky-400/25 dark:bg-sky-400/14 dark:text-sky-200">
+              <span className="inline-flex items-center rounded-md border border-[hsl(var(--link)/0.35)] bg-link-muted px-2 py-0.5 text-[10px] font-semibold text-link shadow-sm dark:border-[hsl(var(--link)/0.25)] dark:bg-[hsl(var(--link-muted))] dark:text-[hsl(var(--link))]">
                 {t('aiProviders.card.builtin', '内置')}
               </span>
             </div>
@@ -604,7 +604,7 @@ function ProviderCard({
   };
 
   const currentInputClasses = isDefault
-    ? 'h-[40px] rounded-md font-mono text-[13px] bg-white/60 dark:bg-white/15 border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-blue-500/50 shadow-sm'
+    ? 'h-[40px] rounded-md font-mono text-[13px] bg-white/60 dark:bg-white/15 border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-ring/40 shadow-sm'
     : inputClasses;
 
   const currentLabelClasses = isDefault ? "text-[13px] text-muted-foreground" : labelClasses;
@@ -615,7 +615,7 @@ function ProviderCard({
   return (
     <div
       className={cn(
-        'group relative flex flex-col overflow-hidden rounded-md border border-primary/12 p-4 transition-all hover:border-primary/18 hover:shadow-md',
+        'group relative flex flex-col overflow-hidden rounded-md border border-border p-4 transition-all hover:border-border hover:shadow-md',
         !isDefault && glassNestedCard,
         !isDefault && 'hover:bg-white/80 dark:hover:bg-[hsl(var(--glass-bg)/0.2)]',
         isDefault && 'border-primary/20 bg-primary/[0.06]',
@@ -623,7 +623,7 @@ function ProviderCard({
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between md:gap-6">
         <div className="flex min-w-0 flex-1 items-start gap-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/12 bg-primary/[0.06] text-foreground shadow-sm transition-transform group-hover:scale-[1.02]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-primary/[0.06] text-foreground shadow-sm transition-transform group-hover:scale-[1.02]">
             {getProviderIconUrl(account.vendorId) ? (
               <img src={getProviderIconUrl(account.vendorId)} alt={typeInfo?.name || account.vendorId} className={cn('h-5 w-5', shouldInvertInDark(account.vendorId) && 'dark:invert')} />
             ) : (
@@ -634,7 +634,7 @@ function ProviderCard({
             <div className="flex flex-wrap items-center gap-2 min-w-0">
               <span className="font-semibold text-[15px]">{account.label}</span>
               {isStoManagedProvider && (
-                <span className="inline-flex shrink-0 items-center rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-700 shadow-sm dark:border-sky-400/25 dark:bg-sky-400/14 dark:text-sky-200">
+                <span className="inline-flex shrink-0 items-center rounded-md border border-[hsl(var(--link)/0.35)] bg-link-muted px-2 py-0.5 text-[10px] font-semibold text-link shadow-sm dark:border-[hsl(var(--link)/0.25)] dark:bg-[hsl(var(--link-muted))] dark:text-[hsl(var(--link))]">
                   {t('aiProviders.card.builtin', '内置')}
                 </span>
               )}
@@ -737,7 +737,7 @@ function ProviderCard({
                 href={effectiveDocsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[12px] text-blue-500 hover:text-blue-600 font-medium inline-flex items-center gap-1"
+                className="text-[12px] text-link hover:opacity-90 font-medium inline-flex items-center gap-1"
               >
                 {t('aiProviders.dialog.customDoc')}
                 <ExternalLink className="h-3 w-3" />
@@ -778,7 +778,7 @@ function ProviderCard({
                         href={typeInfo.codePlanDocsUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[12px] text-blue-500 hover:text-blue-600 font-medium inline-flex items-center gap-1"
+                        className="text-[12px] text-link hover:opacity-90 font-medium inline-flex items-center gap-1"
                       >
                         {t('aiProviders.dialog.codePlanDoc')}
                         <ExternalLink className="h-3 w-3" />
@@ -876,8 +876,8 @@ function ProviderCard({
                     onChange={(e) => setFallbackModelsText(e.target.value)}
                     placeholder={t('aiProviders.dialog.fallbackModelIdsPlaceholder')}
                     className={isDefault
-                      ? "min-h-24 w-full rounded-md border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/15 px-3 py-2 text-[13px] font-mono outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shadow-sm"
-                      : "min-h-24 w-full rounded-md border border-black/10 dark:border-white/10 bg-[hsl(var(--glass-bg)/0.5)] px-3 py-2 text-[13px] font-mono outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40"}
+                      ? "min-h-24 w-full rounded-md border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/15 px-3 py-2 text-[13px] font-mono outline-none focus-visible:ring-2 focus-visible:ring-ring/40 shadow-sm"
+                      : "min-h-24 w-full rounded-md border border-black/10 dark:border-white/10 bg-[hsl(var(--glass-bg)/0.5)] px-3 py-2 text-[13px] font-mono outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-ring shadow-sm transition-all text-foreground placeholder:text-foreground/40"}
                   />
                   <p className="text-[12px] text-muted-foreground">
                     {t('aiProviders.dialog.fallbackModelIdsHelp')}
@@ -895,9 +895,9 @@ function ProviderCard({
                             type="checkbox"
                             checked={fallbackProviderIds.includes(candidate.account.id)}
                             onChange={() => toggleFallbackProvider(candidate.account.id)}
-                            className="rounded border-black/20 dark:border-white/20 text-blue-500 focus:ring-blue-500/50"
+                            className="rounded border-black/20 dark:border-white/20 text-link focus:ring-ring/40"
                           />
-                          <span className="font-medium group-hover/label:text-blue-500 transition-colors">{candidate.account.label}</span>
+                          <span className="font-medium group-hover/label:text-link transition-colors">{candidate.account.label}</span>
                           <span className="text-[12px] text-muted-foreground">
                             {candidate.account.model || candidate.vendor?.name || candidate.account.vendorId}
                           </span>
@@ -932,7 +932,7 @@ function ProviderCard({
                   href={typeInfo.apiKeyUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[13px] text-blue-500 hover:text-blue-600 hover:underline flex items-center gap-1"
+                  className="text-[13px] text-link hover:opacity-90 hover:underline flex items-center gap-1"
                   tabIndex={-1}
                 >
                   {t('aiProviders.oauth.getApiKey')} <ExternalLink className="h-3 w-3" />
@@ -1401,7 +1401,7 @@ function AddProviderDialog({
                     setShowAdvancedConfig(false);
                     setArkMode('apikey');
                   }}
-                  className="text-[13px] text-blue-500 hover:text-blue-600 font-medium"
+                  className="text-[13px] text-link hover:opacity-90 font-medium"
                 >
                     {t('aiProviders.dialog.change')}
                   </button>
@@ -1412,7 +1412,7 @@ function AddProviderDialog({
                         href={effectiveDocsUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[13px] text-blue-500 hover:text-blue-600 font-medium inline-flex items-center gap-1"
+                        className="text-[13px] text-link hover:opacity-90 font-medium inline-flex items-center gap-1"
                       >
                         {t('aiProviders.dialog.customDoc')}
                         <ExternalLink className="h-3 w-3" />
@@ -1468,7 +1468,7 @@ function AddProviderDialog({
                           href={typeInfo.apiKeyUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[13px] text-blue-500 hover:text-blue-600 font-medium flex items-center gap-1"
+                          className="text-[13px] text-link hover:opacity-90 font-medium flex items-center gap-1"
                           tabIndex={-1}
                         >
                           {t('aiProviders.oauth.getApiKey')} <ExternalLink className="h-3 w-3" />
@@ -1541,7 +1541,7 @@ function AddProviderDialog({
                           href={typeInfo.codePlanDocsUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[13px] text-blue-500 hover:text-blue-600 font-medium inline-flex items-center gap-1"
+                          className="text-[13px] text-link hover:opacity-90 font-medium inline-flex items-center gap-1"
                           tabIndex={-1}
                         >
                           {t('aiProviders.dialog.codePlanDoc')}
@@ -1639,8 +1639,8 @@ function AddProviderDialog({
                 {/* Device OAuth Trigger — only shown when in OAuth mode */}
                 {useOAuthFlow && (
                   <div className="space-y-4 pt-2">
-                    <div className="rounded-md border border-blue-500/20 bg-blue-500/10 p-5 text-center">
-                      <p className="mb-4 block text-[13px] font-medium text-blue-600 dark:text-blue-400">
+                    <div className="rounded-md border border-[hsl(var(--link)/0.22)] bg-link-muted p-5 text-center">
+                      <p className="mb-4 block text-[13px] font-medium text-link dark:text-[hsl(var(--link))]">
                         {t('aiProviders.oauth.loginPrompt')}
                       </p>
                       <Button
@@ -1660,7 +1660,7 @@ function AddProviderDialog({
                     {oauthFlowing && (
                       <div className="relative mt-4 overflow-hidden rounded-md border border-glass-border bg-[hsl(var(--glass-bg)/0.5)] p-5 shadow-sm backdrop-blur-sm">
                         {/* Background pulse effect */}
-                        <div className="absolute inset-0 bg-blue-500/5 animate-pulse" />
+                        <div className="absolute inset-0 bg-[hsl(var(--link)/0.06)] animate-pulse" />
 
                         <div className="relative z-10 flex flex-col items-center justify-center text-center space-y-5">
                           {oauthError ? (
@@ -1674,7 +1674,7 @@ function AddProviderDialog({
                             </div>
                           ) : !oauthData ? (
                             <div className="space-y-4 py-6">
-                              <Loader2 className="h-10 w-10 animate-spin text-blue-500 mx-auto" />
+                              <Loader2 className="h-10 w-10 animate-spin text-link mx-auto" />
                               <p className="text-[13px] font-medium text-muted-foreground animate-pulse">{t('aiProviders.oauth.requestingCode')}</p>
                             </div>
                           ) : oauthData.mode === 'manual' ? (
@@ -1752,7 +1752,7 @@ function AddProviderDialog({
                               </Button>
 
                               <div className="flex items-center justify-center gap-2 text-[13px] font-medium text-muted-foreground pt-2">
-                                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                                <Loader2 className="h-4 w-4 animate-spin text-link" />
                                 <span>{t('aiProviders.oauth.waitingApproval')}</span>
                               </div>
 

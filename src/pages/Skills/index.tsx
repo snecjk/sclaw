@@ -265,7 +265,7 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall, onOp
             {!skill.isCore && (
               <div className="space-y-2">
                 <h3 className="text-[13px] font-bold flex items-center gap-2 text-foreground/80">
-                  <Key className="h-3.5 w-3.5 text-blue-500" />
+                  <Key className="h-3.5 w-3.5 text-link" />
                   {t('detail.apiKey')}
                 </h3>
                 <Input
@@ -273,7 +273,7 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall, onOp
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   type="password"
-                  className="h-[44px] font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40"
+                  className="h-[44px] font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 rounded-xl focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-ring shadow-sm transition-all text-foreground placeholder:text-foreground/40"
                 />
                 <p className="text-[12px] text-foreground/50 mt-2 font-medium">
                   {t('detail.apiKeyDesc', 'The primary API key for this skill. Leave blank if not required or configured elsewhere.')}
@@ -318,13 +318,13 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall, onOp
                       <Input
                         value={env.key}
                         onChange={(e) => handleUpdateEnv(index, 'key', e.target.value)}
-                        className="flex-1 h-[40px] font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500/50 shadow-sm text-foreground"
+                        className="flex-1 h-[40px] font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 rounded-xl focus-visible:ring-2 focus-visible:ring-ring/40 shadow-sm text-foreground"
                         placeholder={t('detail.keyPlaceholder', 'Key')}
                       />
                       <Input
                         value={env.value}
                         onChange={(e) => handleUpdateEnv(index, 'value', e.target.value)}
-                        className="flex-1 h-[40px] font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500/50 shadow-sm text-foreground"
+                        className="flex-1 h-[40px] font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 rounded-xl focus-visible:ring-2 focus-visible:ring-ring/40 shadow-sm text-foreground"
                         placeholder={t('detail.valuePlaceholder', 'Value')}
                       />
                       <Button
@@ -680,10 +680,10 @@ export function Skills() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
-      <header className="shrink-0 border-b border-primary/10 pb-6">
+      <header className="shrink-0 border-b border-border pb-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(56,189,248,0.12)]">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(255,111,0,0.10)]">
               <Puzzle className="h-5 w-5" strokeWidth={2} />
             </div>
             <div className="min-w-0">
@@ -723,7 +723,7 @@ export function Skills() {
 
         <section className={glassSectionSurface}>
         {/* Tab bar */}
-        <div className="-mx-6 -mt-6 mb-6 flex items-stretch border-b border-primary/10 px-2 pt-1">
+        <div className="-mx-6 -mt-6 mb-6 flex items-stretch border-b border-border px-2 pt-1">
           {([
             { key: 'all' as const, label: t('filter.all', { count: sourceStats.all }) },
             { key: 'built-in' as const, label: t('filter.builtIn', { count: sourceStats.builtIn }) },
@@ -774,9 +774,9 @@ export function Skills() {
             </button>
           </div>
         </div>
-        <div className="flex flex-col gap-4 border-b border-primary/10 pb-4 mb-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 border-b border-border pb-4 mb-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center flex-wrap gap-4 text-[14px]">
-            <div className="group relative mr-2 flex items-center rounded-md border border-transparent bg-black/5 px-3 py-1.5 transition-colors focus-within:border-primary/15 focus-within:bg-[hsl(var(--glass-bg)/0.25)] dark:bg-white/5 dark:focus-within:bg-white/10">
+            <div className="group relative mr-2 flex items-center rounded-md border border-transparent bg-black/5 px-3 py-1.5 transition-colors focus-within:border-border focus-within:bg-[hsl(var(--glass-bg)/0.25)] dark:bg-white/5 dark:focus-within:bg-white/10">
               <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
               <input
                 placeholder={t('search')}
@@ -946,7 +946,7 @@ export function Skills() {
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <h3 className="text-[14px] font-semibold text-foreground truncate">{skill.name}</h3>
                         {skill.isCore && <Lock className="h-3 w-3 text-muted-foreground shrink-0" />}
-                        {skill.isBundled && <Puzzle className="h-3 w-3 text-blue-500/70 shrink-0" />}
+                        {skill.isBundled && <Puzzle className="h-3 w-3 text-link/70 shrink-0" />}
                         {skill.slug && skill.slug !== skill.name && (
                           <span className="text-[11px] font-mono px-1.5 py-0 rounded border border-black/10 dark:border-white/10 text-muted-foreground inline-block">
                             {skill.slug}
@@ -993,7 +993,7 @@ export function Skills() {
                   <div
                     key={skill.id}
                     className={cn(
-                      'group flex flex-col cursor-pointer rounded-md border border-primary/10 p-4 transition-all duration-200 hover:border-primary/18 hover:shadow-md',
+                      'group flex flex-col cursor-pointer rounded-md border border-border p-4 transition-all duration-200 hover:border-border hover:shadow-md',
                       glassNestedCard,
                       isSelected && 'ring-2 ring-primary/50',
                     )}
@@ -1033,7 +1033,7 @@ export function Skills() {
                         <div className="flex items-center gap-1.5">
                           <h3 className="text-[15px] font-semibold text-foreground truncate">{skill.name}</h3>
                           {skill.isCore && <Lock className="h-3 w-3 text-muted-foreground shrink-0" />}
-                          {skill.isBundled && <Puzzle className="h-3 w-3 text-blue-500/70 shrink-0" />}
+                          {skill.isBundled && <Puzzle className="h-3 w-3 text-link/70 shrink-0" />}
                         </div>
                         {skill.slug && skill.slug !== skill.name && (
                           <span className="text-[11px] font-mono px-1.5 py-0.5 rounded border border-black/10 dark:border-white/10 text-muted-foreground mt-1 inline-block">

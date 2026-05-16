@@ -23,6 +23,7 @@ type HostApiProxyResponse = {
 
 type HostApiProxyData = {
   status?: number;
+  /** Mirrors Response.ok from the proxied HTTP response (false for 4xx/5xx). */
   ok?: boolean;
   json?: unknown;
   text?: string;
@@ -76,15 +77,30 @@ function parseUnifiedProxyResponse<T>(
   }
 
   const data: HostApiProxyData = response.data ?? {};
+  const httpStatus = typeof data.status === 'number' ? data.status : 200;
   trackUiEvent('hostapi.fetch', {
     path,
     method,
     source: 'ipc-proxy',
     durationMs: Date.now() - startedAt,
-    status: data.status ?? 200,
+    status: httpStatus,
   });
 
-  if (data.status === 204) return undefined as T;
+  if (httpStatus === 204) return undefined as T;
+  if (httpStatus >= 400 || data.ok === false) {
+    const json = data.json as Record<string, unknown> | undefined;
+    const message =
+      (json && typeof json.error === 'string' && json.error) ||
+      (json && typeof json.message === 'string' && json.message) ||
+      `HTTP ${httpStatus}`;
+    throw normalizeAppError(new Error(message), {
+      source: 'ipc-proxy',
+      path,
+      method,
+      status: httpStatus,
+    });
+  }
+
   if (data.json !== undefined) return data.json as T;
   return data.text as T;
 }

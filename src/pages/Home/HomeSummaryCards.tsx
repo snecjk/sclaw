@@ -1,9 +1,15 @@
-import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { taskLatestPath, type StoTaskId } from '@/lib/sto-tasks';
+import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
+import { formatLocalYmd } from '@/lib/sto-task-entry-label';
+import {
+  STO_TASK_PENDING_COMPOSE_KEY,
+  STO_TASK_SUBITEM_NAV_SCROLL_END,
+} from '@/lib/sto-task-compose-storage';
+import { useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import avatar01 from '@/assets/avatars/avatar-01.png.png';
 import avatar02 from '@/assets/avatars/avatar-02.png.png';
 import avatar03 from '@/assets/avatars/avatar-03.png.png';
@@ -87,20 +93,58 @@ const cardShell = cn(
   'dark:border-border dark:bg-card',
 );
 
-interface SummaryCardProps {
-  taskId: StoTaskId;
-  base: 'recon' | 'customer' | 'cost';
-  statusVariant: 'ok' | 'neutral';
-  columns: 2 | 3;
-  disabled?: boolean;
-}
+type SummaryCardBase = 'recon' | 'customer' | 'cost';
 
-function SummaryCard({ taskId, base, statusVariant, columns, disabled = false }: SummaryCardProps) {
+type SummaryCardProps =
+  | {
+      disabled: true;
+      avatarSeed: string;
+      base: SummaryCardBase;
+      statusVariant: 'ok' | 'neutral';
+      columns: 2 | 3;
+    }
+  | {
+      disabled?: false;
+      avatarSeed: string;
+      stoTaskTarget: StoTaskId;
+      base: SummaryCardBase;
+      statusVariant: 'ok' | 'neutral';
+      columns: 2 | 3;
+    };
+
+function SummaryCard(props: SummaryCardProps) {
+  const { avatarSeed, base, statusVariant, columns } = props;
+  const disabled = props.disabled === true;
   const { t } = useTranslation('home');
+  const navigate = useNavigate();
+  const ensureSubitem = useStoTaskSubitemsStore((s) => s.ensureSubitem);
+  const stoTaskTarget = !disabled ? (props as Extract<SummaryCardProps, { stoTaskTarget: StoTaskId }>).stoTaskTarget : null;
+
+  const openSubitem = useCallback(() => {
+    if (!stoTaskTarget) return;
+    const entryIdToday = formatLocalYmd(new Date());
+    const hadToday = useStoTaskSubitemsStore.getState().listEntries(stoTaskTarget).includes(entryIdToday);
+    ensureSubitem(stoTaskTarget, entryIdToday);
+    const path = taskDetailPath(stoTaskTarget, entryIdToday);
+    if (!hadToday) {
+      try {
+        sessionStorage.setItem(
+          STO_TASK_PENDING_COMPOSE_KEY,
+          JSON.stringify({ taskId: stoTaskTarget, entryId: entryIdToday, cardBase: base }),
+        );
+      } catch {
+        /* ignore quota */
+      }
+      navigate(path);
+    } else {
+      navigate(path, { state: { [STO_TASK_SUBITEM_NAV_SCROLL_END]: true } });
+    }
+  }, [base, ensureSubitem, navigate, stoTaskTarget]);
+
   const p = `summary.${base}` as const;
   const bodyCaption = t(`${p}.bodyCaption`, { defaultValue: '' }).trim();
   const showStackBody = Boolean(bodyCaption);
-  const avatarUrls = useMemo(() => pickThreeAvatars(`${taskId}:${base}`), [taskId, base]);
+  const avatarUrls = useMemo(() => pickThreeAvatars(avatarSeed), [avatarSeed]);
 
   const inner = (
     <>
@@ -174,12 +218,16 @@ function SummaryCard({ taskId, base, statusVariant, columns, disabled = false }:
   }
 
   return (
-    <Link
-      to={taskLatestPath(taskId)}
-      className={cn(cardShell, 'transition-shadow duration-200 hover:shadow-[0_8px_24px_rgba(29,33,41,0.1)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)]')}
+    <button
+      type="button"
+      onClick={openSubitem}
+      className={cn(
+        cardShell,
+        'w-full text-left transition-shadow duration-200 hover:shadow-[0_8px_24px_rgba(29,33,41,0.1)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)]',
+      )}
     >
       {inner}
-    </Link>
+    </button>
   );
 }
 
@@ -191,9 +239,15 @@ export function HomeSummaryCards({ className }: { className?: string }) {
         {t('summary.heading')}
       </h2>
       <div className="grid grid-cols-1 gap-5 md:grid-cols-3 md:gap-5">
-        <SummaryCard taskId="hq-reconciliation" base="recon" statusVariant="ok" columns={3} />
-        <SummaryCard taskId="abnormal-customers" base="customer" statusVariant="neutral" columns={2} disabled />
-        <SummaryCard taskId="outbound-cost" base="cost" statusVariant="ok" columns={2} disabled />
+        <SummaryCard
+          avatarSeed="hq-reconciliation:recon"
+          stoTaskTarget="hq-reconciliation"
+          base="recon"
+          statusVariant="ok"
+          columns={3}
+        />
+        <SummaryCard disabled avatarSeed="summary-customer" base="customer" statusVariant="neutral" columns={2} />
+        <SummaryCard disabled avatarSeed="summary-cost" base="cost" statusVariant="ok" columns={2} />
       </div>
     </section>
   );

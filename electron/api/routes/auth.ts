@@ -142,7 +142,7 @@ export async function handleAuthRoutes(
       );
 
       sendJson(res, 200, { success: true });
-    } catch (error) {
+    } catch {
       // Always clear local auth even if SSO signOut fails
       await clearAuthUser().catch(() => {});
       void removeSsoAuthFromOpenClaw();

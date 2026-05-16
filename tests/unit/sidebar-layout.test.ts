@@ -32,14 +32,14 @@ describe('getSidebarLayoutVariant', () => {
 });
 
 describe('getSidebarVisibility', () => {
-  it('hides chat, my data, workspace, conversation chrome, profile card for provincial', () => {
+  it('hides chat, my data, workspace, conversation chrome for provincial; keeps bottom user card', () => {
     const v = getSidebarVisibility('provincial');
     expect(v).toEqual({
       primaryChat: false,
       primaryMyData: false,
       workspace: false,
       conversationChrome: false,
-      userProfileCard: false,
+      userProfileCard: true,
     });
   });
 

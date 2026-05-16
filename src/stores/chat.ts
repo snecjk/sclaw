@@ -1345,14 +1345,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ── Load chat history ──
 
   loadHistory: async (quiet = false) => {
-    const { currentSessionKey } = get();
-    const existingLoad = _historyLoadInFlight.get(currentSessionKey);
+    const targetSessionKey = get().currentSessionKey;
+    const existingLoad = _historyLoadInFlight.get(targetSessionKey);
     if (existingLoad) {
       await existingLoad;
+      if (get().currentSessionKey !== targetSessionKey) {
+        return get().loadHistory(quiet);
+      }
       return;
     }
 
-    const lastLoadAt = _lastHistoryLoadAtBySession.get(currentSessionKey) || 0;
+    const lastLoadAt = _lastHistoryLoadAtBySession.get(targetSessionKey) || 0;
     if (quiet && Date.now() - lastLoadAt < HISTORY_LOAD_MIN_INTERVAL_MS) {
       return;
     }
@@ -1369,6 +1372,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const loadPromise = (async () => {
       const applyLoadedMessages = (rawMessages: RawMessage[], thinkingLevel: string | null) => {
+      if (get().currentSessionKey !== targetSessionKey) return;
+
       // Before filtering: attach images/files from tool_result messages to the next assistant message
       const messagesWithToolImages = enrichWithToolResultFiles(rawMessages);
       const filteredMessages = messagesWithToolImages.filter((msg) => !isToolResultRole(msg.role));
@@ -1396,12 +1401,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       }
 
+      if (get().currentSessionKey !== targetSessionKey) return;
+
       set({ messages: finalMessages, thinkingLevel, loading: false });
 
       // Extract first user message text as a session label for display in the toolbar.
       // Skip main sessions (key ends with ":main") — they rely on the Gateway-provided
       // displayName (e.g. the configured agent name "StoClaw") instead.
-      const isMainSession = currentSessionKey.endsWith(':main');
+      const isMainSession = targetSessionKey.endsWith(':main');
       if (!isMainSession) {
         const firstUserMsg = finalMessages.find((m) => m.role === 'user');
         if (firstUserMsg) {
@@ -1409,7 +1416,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           if (labelText) {
             const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
             set((s) => ({
-              sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated },
+              sessionLabels: { ...s.sessionLabels, [targetSessionKey]: truncated },
             }));
           }
         }
@@ -1420,12 +1427,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (lastMsg?.timestamp) {
         const lastAt = toMs(lastMsg.timestamp);
         set((s) => ({
-          sessionLastActivity: { ...s.sessionLastActivity, [currentSessionKey]: lastAt },
+          sessionLastActivity: { ...s.sessionLastActivity, [targetSessionKey]: lastAt },
         }));
       }
 
       // Async: load missing image previews from disk (updates in background)
       loadMissingPreviews(finalMessages).then((updated) => {
+        if (get().currentSessionKey !== targetSessionKey) return;
         if (updated) {
           // Create new object references so React.memo detects changes.
           // loadMissingPreviews mutates AttachedFileMeta in place, so we
@@ -1439,6 +1447,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           });
         }
       });
+      if (get().currentSessionKey !== targetSessionKey) return;
+
       const { pendingFinal, lastUserMessageAt, sending: isSendingNow } = get();
 
       // If we're sending but haven't received streaming events, check
@@ -1467,6 +1477,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return isAfterUserMsg(msg);
       });
 
+      if (get().currentSessionKey !== targetSessionKey) return;
+
       if (recentAssistant || currentRecentAssistant) {
         clearHistoryPoll();
         set({ sending: false, activeRunId: null, pendingFinal: false });
@@ -1478,36 +1490,42 @@ export const useChatStore = create<ChatState>((set, get) => ({
       try {
         const data = await useGatewayStore.getState().rpc<Record<string, unknown>>(
           'chat.history',
-          { sessionKey: currentSessionKey, limit: 200 },
+          { sessionKey: targetSessionKey, limit: 200 },
         );
+        if (get().currentSessionKey !== targetSessionKey) return;
+
         if (data) {
           let rawMessages = Array.isArray(data.messages) ? data.messages as RawMessage[] : [];
           const thinkingLevel = data.thinkingLevel ? String(data.thinkingLevel) : null;
-          if (rawMessages.length === 0 && isCronSessionKey(currentSessionKey)) {
-            rawMessages = await loadCronFallbackMessages(currentSessionKey, 200);
+          if (rawMessages.length === 0 && isCronSessionKey(targetSessionKey)) {
+            rawMessages = await loadCronFallbackMessages(targetSessionKey, 200);
           }
 
+          if (get().currentSessionKey !== targetSessionKey) return;
           applyLoadedMessages(rawMessages, thinkingLevel);
         } else {
-          const fallbackMessages = await loadCronFallbackMessages(currentSessionKey, 200);
+          const fallbackMessages = await loadCronFallbackMessages(targetSessionKey, 200);
+          if (get().currentSessionKey !== targetSessionKey) return;
           if (fallbackMessages.length > 0) {
             applyLoadedMessages(fallbackMessages, null);
-          } else {
+          } else if (get().currentSessionKey === targetSessionKey) {
             set({ messages: [], loading: false });
           }
         }
       } catch (err) {
         console.warn('Failed to load chat history:', err);
-        const fallbackMessages = await loadCronFallbackMessages(currentSessionKey, 200);
+        if (get().currentSessionKey !== targetSessionKey) return;
+        const fallbackMessages = await loadCronFallbackMessages(targetSessionKey, 200);
+        if (get().currentSessionKey !== targetSessionKey) return;
         if (fallbackMessages.length > 0) {
           applyLoadedMessages(fallbackMessages, null);
-        } else {
+        } else if (get().currentSessionKey === targetSessionKey) {
           set({ messages: [], loading: false });
         }
       }
     })();
 
-    _historyLoadInFlight.set(currentSessionKey, loadPromise);
+    _historyLoadInFlight.set(targetSessionKey, loadPromise);
     try {
       await loadPromise;
     } finally {
@@ -1515,12 +1533,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (loadingSafetyTimer) clearTimeout(loadingSafetyTimer);
       if (!loadingTimedOut) {
         // Only update load time if we actually didn't time out
-        _lastHistoryLoadAtBySession.set(currentSessionKey, Date.now());
+        _lastHistoryLoadAtBySession.set(targetSessionKey, Date.now());
       }
-      
-      const active = _historyLoadInFlight.get(currentSessionKey);
+
+      const active = _historyLoadInFlight.get(targetSessionKey);
       if (active === loadPromise) {
-        _historyLoadInFlight.delete(currentSessionKey);
+        _historyLoadInFlight.delete(targetSessionKey);
       }
     }
   },

@@ -49,8 +49,8 @@ export function Login() {
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 neural-grid opacity-40" />
         <div className="absolute -top-24 left-[12%] h-72 w-72 rounded-full bg-cyan-400/18 blur-[110px]" />
-        <div className="absolute right-[10%] top-[18%] h-80 w-80 rounded-full bg-sky-200/16 blur-[120px]" />
-        <div className="absolute bottom-[-10%] left-1/2 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-sky-300/10 blur-[120px]" />
+        <div className="absolute right-[10%] top-[18%] h-80 w-80 rounded-full bg-[rgba(255,140,0,0.08)] blur-[120px]" />
+        <div className="absolute bottom-[-10%] left-1/2 h-72 w-[42rem] -translate-x-1/2 rounded-full bg-[rgba(255,111,0,0.05)] blur-[120px]" />
         <ParticleConstellation particleCount={34} connectionDistance={140} speed={0.24} />
       </div>
 
@@ -148,7 +148,7 @@ export function Login() {
               </div>
               <div className="rounded-2xl border border-white/8 bg-white/5 px-3 py-3">
                 <div className="text-[11px] uppercase tracking-[0.22em] text-foreground/45">服务</div>
-                <div className="mt-1 text-sm font-medium text-sky-100">就绪</div>
+                <div className="mt-1 text-sm font-medium text-white/90">就绪</div>
               </div>
               <div className="rounded-2xl border border-white/8 bg-white/5 px-3 py-3">
                 <div className="text-[11px] uppercase tracking-[0.22em] text-foreground/45">登录</div>

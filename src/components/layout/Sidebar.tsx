@@ -1,7 +1,7 @@
 /**
  * Sidebar — 单列宽侧栏（248px / 72px），对齐 STO Claw 归档设计稿。
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import {
   Puzzle,
@@ -41,14 +41,16 @@ import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAgentsStore } from '@/stores/agents';
 import { useAuthStore } from '@/stores/auth';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useTranslation } from 'react-i18next';
 import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
 import logoSvg from '@/assets/logo.svg';
 import packageJson from '../../../package.json';
-import { taskDetailPath, listTaskEntryIds, type StoTaskId } from '@/lib/sto-tasks';
+import { taskDetailPath, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
+import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
+import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
+import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
 
 type SessionBucketKey =
@@ -62,6 +64,16 @@ type SessionBucketKey =
 let didBootstrapFreshChat = false;
 
 const INITIAL_NOW_MS = Date.now();
+
+/** Collapsed rail: offset from narrow bar + opaque popover so glass tooltips do not show main content through them. */
+const SIDEBAR_COLLAPSED_TOOLTIP_SURFACE =
+  '!bg-popover text-popover-foreground shadow-md backdrop-blur-none border-border';
+
+/** Footer account dropdown — panel and row hover (design spec). */
+const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS = 'w-48 rounded-[12px] border-0 shadow-lg';
+const SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS = 'rounded-[12px] border-0 shadow-lg';
+const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
+  'hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7]';
 
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   if (!activityMs || activityMs <= 0) return 'older';
@@ -80,13 +92,6 @@ function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   return 'older';
 }
 
-function getAgentIdFromSessionKey(sessionKey: string): string {
-  if (!sessionKey.startsWith('agent:')) return 'main';
-  const [, agentId] = sessionKey.split(':');
-  return agentId || 'main';
-}
-
-/** 折叠侧栏会话/任务项：首字 + …（对齐设计稿） */
 function collapsedEntryLabel(full: string): string {
   const s = full.trim();
   if (!s) return '…';
@@ -94,56 +99,191 @@ function collapsedEntryLabel(full: string): string {
   return `${first}…`;
 }
 
-const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' | 'taskAbnormalCustomers' | 'taskOutboundCost'; dot?: boolean }[] = [
-  { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation', dot: true },
-  { id: 'abnormal-customers', labelKey: 'taskAbnormalCustomers' },
-  { id: 'outbound-cost', labelKey: 'taskOutboundCost' },
+const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' }[] = [
+  { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation' },
 ];
 
-/** 侧栏任务：主标题可折叠 + 日期药丸子项（对齐设计稿）。 */
+function SidebarTaskDateLinks({
+  taskId,
+  entries,
+  onRequestDeleteSubitem,
+}: {
+  taskId: StoTaskId;
+  entries: readonly string[];
+  onRequestDeleteSubitem: (payload: {
+    taskId: StoTaskId;
+    entryId: string;
+    label: string;
+    sessionKey: string;
+  }) => void;
+}) {
+  const { pathname } = useLocation();
+  const { t, i18n } = useTranslation(['tasks', 'common']);
+  const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
+  const sessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
+  const isSubitemUnread = useStoTaskSubitemsStore((s) => s.isSubitemUnread);
+  const markSubitemReadFromActivity = useStoTaskSubitemsStore((s) => s.markSubitemReadFromActivity);
+  return (
+    <>
+      {entries.map((entryId) => {
+        const to = taskDetailPath(taskId, entryId);
+        const active = pathname === to;
+        const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)] ?? '';
+        const activity = sk ? (sessionLastActivity[sk] ?? 0) : 0;
+        const unread = isSubitemUnread(taskId, entryId, activity);
+        const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
+        const label = t('tasks:sidebarMaterialTitle', { date: dateLabel });
+        return (
+          <div key={entryId} className="group relative flex w-full items-center">
+            <NavLink
+              to={to}
+              onClick={() => {
+                if (!sk) return;
+                const a = useChatStore.getState().sessionLastActivity[sk] ?? 0;
+                if (a > 0) markSubitemReadFromActivity(taskId, entryId, a);
+              }}
+              className={cn(
+                'relative z-[1] inline-flex w-full max-w-full items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] pr-9 text-left text-xs font-medium transition-colors',
+                active
+                  ? 'bg-[#E5E6EB] text-foreground dark:bg-white/[0.12]'
+                  : 'text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
+              )}
+            >
+              <span className="min-w-0 flex-1 truncate">{label}</span>
+              {unread ? (
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full bg-[hsl(var(--destructive))]"
+                  aria-label={t('tasks:unreadBadge', { defaultValue: 'Unread' })}
+                />
+              ) : null}
+            </NavLink>
+            {sk ? (
+              <button
+                type="button"
+                aria-label={t('common:actions.delete')}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onRequestDeleteSubitem({ taskId, entryId, label, sessionKey: sk });
+                }}
+                className={cn(
+                  'absolute right-1 z-[2] flex items-center justify-center rounded p-0.5 transition-opacity',
+                  'opacity-0 group-hover:opacity-100',
+                  'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
+                )}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+/** 侧栏任务：有子项时为可折叠 + 药丸链接；无子项时为主项直达总览。 */
 function SidebarTaskGroup({
   taskId,
   label,
-  showDot,
+  onRequestDeleteSubitem,
 }: {
   taskId: StoTaskId;
   label: string;
-  showDot?: boolean;
+  onRequestDeleteSubitem: (payload: {
+    taskId: StoTaskId;
+    entryId: string;
+    label: string;
+    sessionKey: string;
+  }) => void;
 }) {
   const { pathname } = useLocation();
-  const { t } = useTranslation('tasks');
-  const entries = listTaskEntryIds(taskId);
-  const underTask = pathname.startsWith(`/tasks/${taskId}`);
+  const { t: tTasks } = useTranslation('tasks');
+  const rawEntryIds = useStoTaskSubitemsStore((s) => s.entriesByTask[taskId]);
+  const sessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
+  const isSubitemUnread = useStoTaskSubitemsStore((s) => s.isSubitemUnread);
+  const ensureSubitem = useStoTaskSubitemsStore((s) => s.ensureSubitem);
+  const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
+  const entries = useMemo(() => {
+    const ids = rawEntryIds ?? [];
+    return [...new Set(ids)].sort((a, b) => b.localeCompare(a));
+  }, [rawEntryIds]);
+
+  const hasUnreadSubitem = useMemo(() => {
+    if (entries.length === 0) return false;
+    for (const entryId of entries) {
+      const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)] ?? '';
+      const activity = sk ? (sessionLastActivity[sk] ?? 0) : 0;
+      if (isSubitemUnread(taskId, entryId, activity)) return true;
+    }
+    return false;
+  }, [entries, taskId, sessionKeyBySubitem, sessionLastActivity, isSubitemUnread]);
+
+  useLayoutEffect(() => {
+    for (const entryId of entries) {
+      ensureSubitem(taskId, entryId);
+    }
+  }, [entries, taskId, ensureSubitem]);
+  const overviewTo = taskOverviewPath(taskId);
+  const underTask =
+    entries.length > 0
+      ? pathname.startsWith(`/tasks/${taskId}`)
+      : pathname === overviewTo || pathname.startsWith(`${overviewTo}/`);
+
   const [open, setOpen] = useState(true);
   const prevUnderTask = useRef<boolean | null>(null);
 
   useEffect(() => {
-    if (prevUnderTask.current === false && underTask) setOpen(true);
+    if (prevUnderTask.current === false && underTask) {
+      queueMicrotask(() => {
+        setOpen(true);
+      });
+    }
     prevUnderTask.current = underTask;
   }, [underTask]);
+
+  if (entries.length === 0) {
+    return (
+      <NavLink
+        to={overviewTo}
+        className="flex items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] text-left transition-colors"
+      >
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{label}</span>
+        {hasUnreadSubitem ? (
+          <span
+            className="h-2 w-2 shrink-0 rounded-full bg-[hsl(var(--destructive))]"
+            aria-label={tTasks('unreadBadge', { defaultValue: 'Unread' })}
+          />
+        ) : null}
+      </NavLink>
+    );
+  }
 
   const panelId = `sto-sidebar-task-${taskId}-entries`;
 
   return (
-    <div
-      className={cn(
-        'rounded-lg px-2 py-1.5 transition-colors',
-        underTask ? 'bg-black/[0.04] dark:bg-white/[0.06]' : 'hover:bg-black/[0.02] dark:hover:bg-white/[0.04]',
-      )}
-    >
+    <div className="rounded-lg">
       <button
         type="button"
         id={`sto-sidebar-task-${taskId}-toggle`}
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 rounded-md px-0.5 py-0.5 text-left outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.06]"
+        className="group/sto-task-row flex w-full items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] text-left outline-none ring-offset-2 transition-colors hover:bg-[rgba(229,230,235,0.7)] focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.08]"
       >
         <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{label}</span>
         <span className="flex shrink-0 items-center gap-1.5">
-          {showDot ? <span className="h-2 w-2 rounded-full bg-red-500" aria-hidden /> : null}
+          {hasUnreadSubitem ? (
+            <span
+              className="h-2 w-2 shrink-0 rounded-full bg-[hsl(var(--destructive))]"
+              aria-label={tTasks('unreadBadge', { defaultValue: 'Unread' })}
+            />
+          ) : null}
           <ChevronDown
-            className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open ? 'rotate-180' : '')}
+            className={cn(
+              'h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] group-hover/sto-task-row:opacity-100 group-focus-within/sto-task-row:opacity-100',
+              open ? 'rotate-180' : '',
+            )}
             aria-hidden
             strokeWidth={2}
           />
@@ -151,66 +291,50 @@ function SidebarTaskGroup({
       </button>
       {open ? (
         <div id={panelId} className="mt-1.5 flex flex-col items-start gap-1" role="region" aria-labelledby={`sto-sidebar-task-${taskId}-toggle`}>
-          {entries.map((entryId) => {
-            const to = taskDetailPath(taskId, entryId);
-            const active = pathname === to;
-            return (
-              <NavLink
-                key={entryId}
-                to={to}
-                className={cn(
-                  'relative z-[1] inline-flex w-full max-w-full justify-start rounded-full px-2.5 py-1 text-left text-xs font-medium transition-colors',
-                  active
-                    ? 'bg-[#ededed] text-foreground dark:bg-white/[0.12]'
-                    : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground dark:bg-white/[0.08]',
-                )}
-              >
-                {t(`sidebarEntry.${taskId}.${entryId}`)}
-              </NavLink>
-            );
-          })}
+          <SidebarTaskDateLinks
+            taskId={taskId}
+            entries={entries}
+            onRequestDeleteSubitem={onRequestDeleteSubitem}
+          />
         </div>
       ) : null}
     </div>
   );
 }
 
-/** 任务列表 / 工作台：悬浮显示展开方向图标，点击整行收缩或展开下方内容（对齐钉钉录屏交互）。 */
+/** 任务列表 / 工作台：标题与展开/收缩图标并排；图标默认隐藏，hover / focus-within 行内按钮时显示。 */
 function SidebarCollapsibleSectionLabel({
-  group,
   open,
   onToggle,
   label,
   toggleAriaLabel,
 }: {
-  group: 'tasklist' | 'workspace';
   open: boolean;
   onToggle: () => void;
   label: string;
   toggleAriaLabel: string;
 }) {
-  const groupClass = group === 'tasklist' ? 'group/tasklist' : 'group/workspace';
-  const iconReveal =
-    group === 'tasklist'
-      ? 'opacity-0 transition-opacity group-hover/tasklist:opacity-100 group-focus-within/tasklist:opacity-100'
-      : 'opacity-0 transition-opacity group-hover/workspace:opacity-100 group-focus-within/workspace:opacity-100';
-
   return (
-    <div className={cn(groupClass, 'mt-4')}>
+    <div className="mt-4">
       <button
         type="button"
         aria-expanded={open}
         aria-label={toggleAriaLabel}
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.05]"
+        className="group/sto-sidebar-section-toggle flex w-full items-center rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-[rgba(229,230,235,0.7)] hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.08]"
       >
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-        <span className={cn('flex shrink-0 text-muted-foreground/90', iconReveal)} aria-hidden>
-          {open ? (
-            <ChevronDown className="h-4 w-4" strokeWidth={2} />
-          ) : (
-            <ChevronRight className="h-4 w-4" strokeWidth={2} />
-          )}
+        <span className="inline-flex min-w-0 max-w-full items-center gap-1">
+          <span className="min-w-0 truncate">{label}</span>
+          <span
+            className="shrink-0 text-muted-foreground/90 opacity-0 transition-opacity group-hover/sto-sidebar-section-toggle:opacity-100 group-focus-within/sto-sidebar-section-toggle:opacity-100"
+            aria-hidden
+          >
+            {open ? (
+              <ChevronDown className="h-4 w-4" strokeWidth={2} />
+            ) : (
+              <ChevronRight className="h-4 w-4" strokeWidth={2} />
+            )}
+          </span>
         </span>
       </button>
     </div>
@@ -235,20 +359,20 @@ function SidebarNavLink({
   const isActive = matchPath({ path: to, end: Boolean(end), caseSensitive: false }, pathname) != null;
 
   const linkClassName = cn(
-    'relative flex items-center font-medium leading-none transition-colors [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
+    'relative flex items-center font-medium leading-none transition-[color,background-color,border-radius,filter] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
     collapsed
       ? cn(
-          'mx-auto box-border min-h-0 shrink-0 justify-center gap-0 rounded-full text-[13px]',
+          'mx-auto box-border min-h-0 shrink-0 justify-center gap-0 rounded-[8px] text-[13px]',
           'h-[var(--sto-sidebar-collapsed-nav-item-h)] w-[var(--sto-sidebar-collapsed-nav-item-w)] max-w-[calc(100%-10px)] py-[var(--sto-sidebar-collapsed-nav-py)] px-[var(--sto-sidebar-collapsed-nav-px)]',
           isActive
             ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]'
             : 'text-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]',
         )
       : cn(
-          'h-[28.5px] min-h-[28.5px] shrink-0 gap-[10px] rounded-xl px-[10px] text-[13px]',
+          'shrink-0 gap-[10px] text-[13px]',
           isActive
-            ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]'
-            : 'text-[#86909c] [&_svg]:stroke-[#86909c] hover:bg-black/[0.04] hover:text-foreground hover:[&_svg]:stroke-foreground dark:text-muted-foreground dark:[&_svg]:stroke-[hsl(var(--muted-foreground))] dark:hover:bg-white/[0.06] dark:hover:text-foreground dark:hover:[&_svg]:stroke-foreground',
+            ? 'min-h-0 rounded-[8px] bg-[linear-gradient(138deg,#FF8F4A_-3%,#FF7A28_33%,#FF6700_71%,#E85A00_103%)] px-[10px] py-[5px] text-white shadow-sm hover:brightness-110 active:brightness-95 [&_svg]:stroke-white'
+            : 'h-[28.5px] min-h-[28.5px] rounded-xl px-[10px] text-[#86909c] [&_svg]:stroke-[#86909c] hover:rounded-[8px] hover:bg-black/[0.04] hover:text-foreground hover:[&_svg]:stroke-foreground dark:text-muted-foreground dark:[&_svg]:stroke-[hsl(var(--muted-foreground))] dark:hover:bg-white/[0.06] dark:hover:text-foreground dark:hover:[&_svg]:stroke-foreground',
         ),
   );
 
@@ -263,7 +387,12 @@ function SidebarNavLink({
     return (
       <Tooltip delayDuration={200}>
         <TooltipTrigger asChild>{link}</TooltipTrigger>
-        <TooltipContent side="right" className="max-w-[14rem]">
+        <TooltipContent
+          side="right"
+          sideOffset={12}
+          collisionPadding={12}
+          className={cn('max-w-[14rem]', SIDEBAR_COLLAPSED_TOOLTIP_SURFACE)}
+        >
           {label}
         </TooltipContent>
       </Tooltip>
@@ -283,6 +412,7 @@ export function Sidebar() {
   const deleteSession = useChatStore((s) => s.deleteSession);
   const loadSessions = useChatStore((s) => s.loadSessions);
   const loadHistory = useChatStore((s) => s.loadHistory);
+  const removeSubitem = useStoTaskSubitemsStore((s) => s.removeSubitem);
 
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
@@ -312,7 +442,7 @@ export function Sidebar() {
     older: true,
   });
 
-  const { t } = useTranslation(['common', 'chat', 'auth']);
+  const { t } = useTranslation(['common', 'chat', 'auth', 'tasks']);
 
   const sidebarVis = useMemo(() => getSidebarVisibility(getSidebarLayoutVariant()), []);
 
@@ -346,13 +476,6 @@ export function Sidebar() {
     };
   }, [isGatewayRunning, isOnChat, loadHistory, loadSessions, newSession]);
 
-  const agents = useAgentsStore((s) => s.agents);
-  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
-
-  useEffect(() => {
-    void fetchAgents();
-  }, [fetchAgents]);
-
   const getSessionLabel = useCallback(
     (key: string, displayName?: string, label?: string) => {
       const preview = sessionLabels[key];
@@ -369,6 +492,12 @@ export function Sidebar() {
   );
 
   const [sessionToDelete, setSessionToDelete] = useState<{ key: string; label: string } | null>(null);
+  const [subitemToDelete, setSubitemToDelete] = useState<{
+    taskId: StoTaskId;
+    entryId: string;
+    label: string;
+    sessionKey: string;
+  } | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
 
@@ -378,11 +507,6 @@ export function Sidebar() {
     }, 60 * 1000);
     return () => window.clearInterval(timer);
   }, []);
-
-  const agentNameById = useMemo(
-    () => Object.fromEntries((agents ?? []).map((agent) => [agent.id, agent.name])),
-    [agents],
-  );
 
   const sessionBuckets: Array<{ key: SessionBucketKey; label: string; sessions: typeof sessions }> = [
     { key: 'today', label: t('chat:historyBuckets.today'), sessions: [] },
@@ -397,6 +521,11 @@ export function Sidebar() {
     (typeof sessionBuckets)[number]
   >;
 
+  const visibleSessions = useMemo(
+    () => sessions.filter((session) => !isHiddenStoTaskSubitemChatSessionKey(session.key)),
+    [sessions],
+  );
+
   const getEffectiveActivityMs = (sessionKey: string): number => {
     const recorded = sessionLastActivity[sessionKey] ?? 0;
     if (recorded > 0) return recorded;
@@ -404,7 +533,7 @@ export function Sidebar() {
     return isFreshCurrentSession ? nowMs : 0;
   };
 
-  for (const session of [...sessions].sort((a, b) =>
+  for (const session of [...visibleSessions].sort((a, b) =>
     getEffectiveActivityMs(b.key) - getEffectiveActivityMs(a.key),
   )) {
     const bucketKey = getSessionBucket(getEffectiveActivityMs(session.key), nowMs);
@@ -512,7 +641,6 @@ export function Sidebar() {
 
         {!sidebarCollapsed && crmWeekReportSurfaceAllowed ? (
           <SidebarCollapsibleSectionLabel
-            group="tasklist"
             open={taskListSectionOpen}
             onToggle={() => setTaskListSectionOpen((o) => !o)}
             label={t('common:sidebar.taskList')}
@@ -526,7 +654,7 @@ export function Sidebar() {
                 key={item.id}
                 taskId={item.id}
                 label={t(`common:sidebar.${item.labelKey}`)}
-                showDot={item.dot}
+                onRequestDeleteSubitem={setSubitemToDelete}
               />
             ))}
           </div>
@@ -535,7 +663,6 @@ export function Sidebar() {
         {sidebarVis.workspace ? (
           !sidebarCollapsed ? (
             <SidebarCollapsibleSectionLabel
-              group="workspace"
               open={workspaceSectionOpen}
               onToggle={() => setWorkspaceSectionOpen((o) => !o)}
               label={t('common:sidebar.workspace')}
@@ -600,7 +727,14 @@ export function Sidebar() {
                   <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">{t('common:sidebar.newChat')}</TooltipContent>
+              <TooltipContent
+                side="right"
+                sideOffset={12}
+                collisionPadding={12}
+                className={SIDEBAR_COLLAPSED_TOOLTIP_SURFACE}
+              >
+                {t('common:sidebar.newChat')}
+              </TooltipContent>
             </Tooltip>
           )
         ) : null}
@@ -622,9 +756,8 @@ export function Sidebar() {
                           switchSession(s.key);
                           navigate('/chat');
                         }}
-                        title={full}
                         className={cn(
-                          'mx-auto flex min-h-0 min-w-0 items-center justify-center rounded-full font-medium leading-none transition-colors',
+                          'mx-auto flex min-h-0 min-w-0 items-center justify-center rounded-[8px] font-medium leading-none transition-colors',
                           'h-[var(--sto-sidebar-collapsed-nav-item-h)] w-[var(--sto-sidebar-collapsed-nav-item-w)] max-w-[calc(100%-10px)] py-[var(--sto-sidebar-collapsed-nav-py)] px-[var(--sto-sidebar-collapsed-nav-px)] text-[13px]',
                           active
                             ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] dark:bg-[var(--sto-brand-6)]'
@@ -634,14 +767,24 @@ export function Sidebar() {
                         <span className="truncate">{short}</span>
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side="right">{full}</TooltipContent>
+                    <TooltipContent
+                      side="right"
+                      sideOffset={12}
+                      collisionPadding={12}
+                      className={cn(
+                        SIDEBAR_COLLAPSED_TOOLTIP_SURFACE,
+                        'max-w-[min(24rem,calc(100vw-3rem))] whitespace-normal break-words px-3 py-2 text-left leading-snug',
+                      )}
+                    >
+                      {full}
+                    </TooltipContent>
                   </Tooltip>
                 );
               })}
             </div>
           ) : null}
           {!sidebarCollapsed &&
-            (sessions.length === 0 ? (
+            (visibleSessions.length === 0 ? (
               <p className="px-2 pt-2 text-center text-[12px] leading-relaxed text-muted-foreground/80">
                 {t('common:sidebar.emptyChatHistory')}
               </p>
@@ -652,7 +795,7 @@ export function Sidebar() {
                   <button
                     type="button"
                     onClick={() => toggleBucket(bucket.key)}
-                    className="flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
+                    className="flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] dark:hover:bg-white/[0.08]"
                   >
                     <span className="truncate">{bucket.label}</span>
                     <ChevronDown
@@ -661,54 +804,46 @@ export function Sidebar() {
                     />
                   </button>
                   {bucketOpen[bucket.key] &&
-                    bucket.sessions.map((s) => {
-                      const agentId = getAgentIdFromSessionKey(s.key);
-                      const agentName = agentNameById[agentId] || agentId;
-                      return (
-                        <div key={s.key} className="group relative flex items-center">
+                    bucket.sessions.map((s) => (
+                      <div key={s.key} className="group relative flex items-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            switchSession(s.key);
+                            navigate('/chat');
+                          }}
+                          title={getSessionLabel(s.key, s.displayName, s.label)}
+                          className={cn(
+                            'w-full rounded-[8px] px-[10px] py-[6px] pr-9 text-left text-[13px] transition-colors',
+                            isOnChat && currentSessionKey === s.key
+                              ? 'bg-[#E5E6EB] font-medium text-foreground dark:bg-white/[0.12]'
+                              : 'text-foreground/80 hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
+                          )}
+                        >
+                          <span className="block min-w-0 truncate">{getSessionLabel(s.key, s.displayName, s.label)}</span>
+                        </button>
+                        {!sidebarCollapsed ? (
                           <button
                             type="button"
-                            onClick={() => {
-                              switchSession(s.key);
-                              navigate('/chat');
+                            aria-label={t('common:actions.delete')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSessionToDelete({
+                                key: s.key,
+                                label: getSessionLabel(s.key, s.displayName, s.label),
+                              });
                             }}
-                            title={getSessionLabel(s.key, s.displayName, s.label)}
                             className={cn(
-                              'w-full rounded-xl py-2 text-left text-[13px] transition-colors',
-                              'px-2.5 pr-8',
-                              isOnChat && currentSessionKey === s.key
-                                ? 'bg-[var(--sto-accent-soft)] font-medium text-[var(--sto-accent)] ring-1 ring-[rgba(255,140,0,0.35)] dark:bg-amber-950/35'
-                                : 'text-foreground/80 hover:bg-black/[0.04] dark:hover:bg-white/[0.05]',
+                              'absolute right-1 flex items-center justify-center rounded p-0.5 transition-opacity',
+                              'opacity-0 group-hover:opacity-100',
+                              'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
                             )}
                           >
-                            <div className="flex min-w-0 flex-col gap-0.5">
-                              <span className="truncate">{getSessionLabel(s.key, s.displayName, s.label)}</span>
-                              <span className="truncate text-[10px] text-muted-foreground/85">{agentName}</span>
-                            </div>
+                            <Trash2 className="h-3.5 w-3.5" />
                           </button>
-                          {!sidebarCollapsed ? (
-                            <button
-                              type="button"
-                              aria-label={t('common:actions.delete')}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSessionToDelete({
-                                  key: s.key,
-                                  label: getSessionLabel(s.key, s.displayName, s.label),
-                                });
-                              }}
-                              className={cn(
-                                'absolute right-1 flex items-center justify-center rounded p-0.5 transition-opacity',
-                                'opacity-0 group-hover:opacity-100',
-                                'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
-                              )}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          ) : null}
-                        </div>
-                      );
-                    })}
+                        ) : null}
+                      </div>
+                    ))}
                 </div>
               ) : null,
               )
@@ -718,18 +853,18 @@ export function Sidebar() {
       </nav>
 
       {authUser ? (
-        <div className="shrink-0 border-t border-[var(--sto-sidebar-border)] p-2">
+        <div className="shrink-0 bg-[var(--sto-sidebar-bg)] p-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
                 className={cn(
-                  'flex w-full rounded-xl border border-transparent bg-white/80 text-left transition-colors hover:border-[rgba(255,140,0,0.35)] hover:bg-white dark:bg-card/80 dark:hover:bg-card',
+                  'flex w-full text-left transition-colors',
                   sidebarVis.userProfileCard
                     ? sidebarCollapsed
                       ? 'flex-col items-center justify-center gap-0 p-2'
-                      : 'items-center gap-2 p-2'
-                    : 'items-center justify-center p-2',
+                      : 'items-center justify-between gap-3 rounded-[8px] bg-[#F5F6F7] p-3 hover:bg-[#E5E6EB] dark:bg-muted/25 dark:hover:bg-muted/50'
+                    : 'items-center justify-center rounded-[8px] p-2 hover:bg-[#F0F2F5] dark:hover:bg-muted/40',
                 )}
                 title={
                   sidebarVis.userProfileCard
@@ -743,49 +878,61 @@ export function Sidebar() {
                 {sidebarVis.userProfileCard ? (
                   <>
                     {sidebarCollapsed ? (
-                      <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[13px] font-semibold text-[var(--sto-brand-6)] dark:bg-card">
+                      <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-[8px] border border-[var(--sto-sidebar-border)] bg-white text-[13px] font-semibold text-[var(--sto-brand-6)] dark:bg-card">
                         {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
                       </span>
                     ) : (
                       <>
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-semibold text-foreground">
-                              {authUser.realName || authUser.userName}
-                            </span>
-                            <span className="shrink-0 rounded bg-[var(--sto-accent-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[#b45309] dark:bg-amber-950/50 dark:text-amber-200">
-                              {t('common:sidebar.enterpriseTag')}
-                            </span>
-                          </div>
-                          <span className="truncate text-[11px] text-muted-foreground">
-                            ID {authUser.id}
-                            {authUser.departmentName ? ` · ${authUser.departmentName}` : ''}
+                          <span className="truncate text-sm font-bold leading-tight text-[#1D2129] dark:text-foreground">
+                            {authUser.realName?.trim() || authUser.userName}
                           </span>
+                          {authUser.companyName?.trim() ? (
+                            <span className="truncate text-xs font-normal leading-snug text-[#86909C] dark:text-muted-foreground">
+                              {authUser.companyName.trim()}
+                            </span>
+                          ) : null}
                         </div>
-                        <SettingsIcon className="h-5 w-5 shrink-0 text-muted-foreground" strokeWidth={1.5} aria-hidden />
+                        <SettingsIcon
+                          className="h-5 w-5 shrink-0 text-[#86909C] dark:text-muted-foreground"
+                          strokeWidth={1.5}
+                          aria-hidden
+                        />
                       </>
                     )}
                   </>
                 ) : (
-                  <SettingsIcon className="h-5 w-5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden />
+                  <SettingsIcon className="h-5 w-5 shrink-0 text-[#86909C] dark:text-muted-foreground" strokeWidth={1.75} aria-hidden />
                 )}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent side="right" align="end" sideOffset={8} className="w-48">
-              <DropdownMenuItem onClick={() => navigate('/settings')} className="gap-2">
+            <DropdownMenuContent
+              side="right"
+              align="end"
+              sideOffset={8}
+              className={SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS}
+            >
+              <DropdownMenuItem
+                onClick={() => navigate('/settings')}
+                className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+              >
                 <SettingsIcon className="h-4 w-4 shrink-0" strokeWidth={2} />
                 {t('common:sidebar.settings')}
               </DropdownMenuItem>
 
               <DropdownMenuSub>
-                <DropdownMenuSubTrigger className="gap-2">
+                <DropdownMenuSubTrigger className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}>
                   <Globe className="h-4 w-4 shrink-0" strokeWidth={2} />
                   <span className="flex-1">{t('settings:appearance.language')}</span>
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent sideOffset={4}>
+                <DropdownMenuSubContent sideOffset={4} className={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}>
                   {SUPPORTED_LANGUAGES.map((lang) => (
-                    <DropdownMenuItem key={lang.code} onClick={() => setLanguage(lang.code)} className="gap-2">
+                    <DropdownMenuItem
+                      key={lang.code}
+                      onClick={() => setLanguage(lang.code)}
+                      className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+                    >
                       {language === lang.code ? (
                         <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
                       ) : (
@@ -798,7 +945,7 @@ export function Sidebar() {
               </DropdownMenuSub>
 
               <DropdownMenuSub>
-                <DropdownMenuSubTrigger className="gap-2">
+                <DropdownMenuSubTrigger className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}>
                   {theme === 'light' ? (
                     <Sun className="h-4 w-4 shrink-0" strokeWidth={2} />
                   ) : theme === 'dark' ? (
@@ -809,9 +956,13 @@ export function Sidebar() {
                   <span className="flex-1">{t('settings:appearance.theme')}</span>
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent sideOffset={4}>
+                <DropdownMenuSubContent sideOffset={4} className={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}>
                   {(['light', 'dark', 'system'] as const).map((t_value) => (
-                    <DropdownMenuItem key={t_value} onClick={() => setTheme(t_value)} className="gap-2">
+                    <DropdownMenuItem
+                      key={t_value}
+                      onClick={() => setTheme(t_value)}
+                      className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+                    >
                       {theme === t_value ? (
                         <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
                       ) : (
@@ -827,7 +978,10 @@ export function Sidebar() {
 
               <DropdownMenuItem
                 onClick={() => setShowLogoutConfirm(true)}
-                className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                className={cn(
+                  'gap-2 text-destructive focus:text-destructive',
+                  SIDEBAR_ACCOUNT_MENU_ITEM_HOVER,
+                )}
               >
                 <LogOut className="h-4 w-4 shrink-0" strokeWidth={2} />
                 {t('auth:logout.button')}
@@ -851,6 +1005,24 @@ export function Sidebar() {
           setSessionToDelete(null);
         }}
         onCancel={() => setSessionToDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={!!subitemToDelete}
+        title={t('common:actions.confirm')}
+        message={t('tasks:deleteSubitemConfirm', { label: subitemToDelete?.label })}
+        confirmLabel={t('common:actions.delete')}
+        cancelLabel={t('common:actions.cancel')}
+        variant="destructive"
+        onConfirm={async () => {
+          if (!subitemToDelete) return;
+          const { sessionKey, taskId, entryId } = subitemToDelete;
+          await deleteSession(sessionKey);
+          removeSubitem(taskId, entryId);
+          if (currentSessionKey === sessionKey) navigate('/chat');
+          setSubitemToDelete(null);
+        }}
+        onCancel={() => setSubitemToDelete(null)}
       />
 
       <ConfirmDialog

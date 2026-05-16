@@ -1,92 +1,30 @@
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { isStoTaskId, isValidTaskEntry, taskLatestPath, type StoTaskId } from '@/lib/sto-tasks';
-import { HomeAssistant } from '@/pages/Home/HomeAssistant';
+import { isStoTaskId, isYmdEntryId, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
+import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
+import { TaskSubitemChatSurface } from '@/pages/TaskDetail/TaskSubitemChatSurface';
+import { stoTaskSubitemChatCanvasBg } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
+import { useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 
-function TaskTable({
-  title,
-  headers,
-  rows,
-}: {
-  title: string;
-  headers: string[];
-  rows: string[][];
-}) {
-  return (
-    <div className="mt-8">
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      <div className="mt-3 overflow-x-auto rounded-xl border border-[var(--sto-sidebar-border)] bg-white dark:border-border dark:bg-card">
-        <table className="w-full min-w-[480px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-[var(--sto-sidebar-border)] text-xs font-medium text-muted-foreground dark:border-border">
-              {headers.map((h) => (
-                <th key={h} className="px-4 py-3 font-medium">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((cells, i) => (
-              <tr key={i} className="border-b border-[var(--sto-sidebar-border)] last:border-0 dark:border-border">
-                {cells.map((c, j) => (
-                  <td key={j} className="px-4 py-3 tabular-nums text-foreground">
-                    {c}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function TaskDetailBody({ taskId }: { taskId: StoTaskId }) {
+function TaskOverviewBody({ taskId }: { taskId: StoTaskId }) {
   const { t } = useTranslation('tasks');
   const p = `detail.${taskId}` as const;
-
-  const summary = t(`${p}.summary`, { returnObjects: true }) as { headers: string[]; rows: string[][] };
-  const abnormal = t(`${p}.abnormal`, { returnObjects: true }) as { headers: string[]; rows: string[][] };
-
   return (
     <>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{t(`${p}.intro`)}</p>
-      <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-2 text-sm text-muted-foreground">
-        <div>
-          <dt className="inline text-muted-foreground">{t(`${p}.metaReconTime`)}</dt>
-          <dd className="ml-2 inline font-medium text-foreground">{t(`${p}.metaReconTimeValue`)}</dd>
-        </div>
-        <div>
-          <dt className="inline text-muted-foreground">{t(`${p}.metaGenerated`)}</dt>
-          <dd className="ml-2 inline font-medium text-foreground">{t(`${p}.metaGeneratedValue`)}</dd>
-        </div>
-      </dl>
-
-      <TaskTable title={t(`${p}.summaryTitle`)} headers={summary.headers} rows={summary.rows} />
-      <TaskTable title={t(`${p}.abnormalTitle`)} headers={abnormal.headers} rows={abnormal.rows} />
-
-      <div className="mt-10 space-y-3 rounded-xl border border-dashed border-[var(--sto-sidebar-border)] bg-[var(--sto-page-bg)] p-4 text-sm text-muted-foreground dark:border-border dark:bg-muted/30">
-        <p>{t(`${p}.threadLine1`)}</p>
-        <p>{t(`${p}.threadLine2`)}</p>
-      </div>
-
-      <HomeAssistant className="mt-10" />
+      <p className="mt-6 text-sm text-muted-foreground">{t('overviewHint')}</p>
     </>
   );
 }
 
-/**
- * 任务「最新一条」详情表面（占位数据 + 真实导航），对齐 OpenSpec home-task-list-surface。
- */
 export function TaskDetail() {
   const { taskId, entryId } = useParams<{ taskId: string; entryId?: string }>();
-  const { t } = useTranslation('tasks');
+  const { t, i18n } = useTranslation('tasks');
   const crmWeekReportSurfaceAllowed = useAuthStore((s) => s.crmWeekReportSurfaceAllowed);
+  const listEntries = useStoTaskSubitemsStore((s) => s.listEntries);
 
   if (!crmWeekReportSurfaceAllowed) {
     return <Navigate to="/" replace />;
@@ -97,13 +35,52 @@ export function TaskDetail() {
   }
 
   const id = taskId;
+  const entries = listEntries(id);
 
-  if (!entryId) {
-    return <Navigate to={taskLatestPath(id)} replace />;
-  }
-
-  if (!isValidTaskEntry(id, entryId)) {
-    return <Navigate to={taskLatestPath(id)} replace />;
+  if (entryId) {
+    if (!isYmdEntryId(entryId) || !entries.includes(entryId)) {
+      return <Navigate to={taskOverviewPath(id)} replace />;
+    }
+    useStoTaskSubitemsStore.getState().ensureSubitem(id, entryId);
+    const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
+    const heading = t('subitemMaterialHeading', { date: dateLabel });
+    return (
+      <div
+        className={cn(
+          /* Pull into main bottom padding so gateway row sits closer to the window edge. */
+          '-mt-5 -mb-5 flex min-h-0 min-w-0 flex-col overflow-hidden',
+          /* TitleBar 2.5rem + main py-5 total 2.5rem vertical padding. */
+          'h-[calc(100dvh-5rem)]',
+        )}
+      >
+        <div
+          className={cn(
+            'sticky -top-5 z-20 w-full shrink-0 pb-4 pt-0',
+            stoTaskSubitemChatCanvasBg,
+          )}
+        >
+          <div className="mx-auto w-full max-w-[var(--sto-main-inner-max)] pt-[16px]">
+            <Link
+              to="/"
+              className={cn(
+                'group flex min-w-0 max-w-full items-center gap-2.5 rounded-md text-foreground outline-none transition-colors',
+                'hover:text-[var(--sto-brand-6)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sto-page-bg)] dark:focus-visible:ring-offset-background',
+              )}
+            >
+              <ArrowLeft
+                className="h-5 w-5 shrink-0 text-muted-foreground transition-colors group-hover:text-[var(--sto-brand-6)]"
+                strokeWidth={2}
+                aria-hidden
+              />
+              <h1 className="min-w-0 flex-1 truncate text-lg font-semibold leading-snug tracking-tight md:text-xl">{heading}</h1>
+            </Link>
+          </div>
+        </div>
+        <div className="mx-auto flex min-h-0 w-full max-w-[var(--sto-main-inner-max)] flex-1 flex-col overflow-hidden">
+          <TaskSubitemChatSurface taskId={id} entryId={entryId} />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -111,15 +88,22 @@ export function TaskDetail() {
       <div className="mb-6">
         <Link
           to="/"
-          className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-[var(--sto-brand-6)]"
+          className={cn(
+            'group flex min-w-0 max-w-full items-center gap-2.5 rounded-md text-foreground outline-none transition-colors',
+            'hover:text-[var(--sto-brand-6)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sto-page-bg)] dark:focus-visible:ring-offset-background',
+          )}
         >
-          <ArrowLeft className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-          {t('backHome')}
+          <ArrowLeft
+            className="h-5 w-5 shrink-0 text-muted-foreground transition-colors group-hover:text-[var(--sto-brand-6)]"
+            strokeWidth={2}
+            aria-hidden
+          />
+          <h1 className="min-w-0 flex-1 truncate text-lg font-semibold leading-snug tracking-tight md:text-xl">
+            {t(`detail.${id}.pageTitle`)}
+          </h1>
         </Link>
-        <h1 className={cn('mt-4 text-2xl font-bold tracking-tight text-foreground')}>{t(`detail.${id}.pageTitle`)}</h1>
       </div>
-
-      <TaskDetailBody taskId={id} />
+      <TaskOverviewBody taskId={id} />
     </div>
   );
 }

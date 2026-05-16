@@ -51,29 +51,41 @@ export function FilePreviewViewer({
     }
   }, []);
 
-  const loadMarkdown = useCallback(async () => {
-    if (mdContent || mdLoading) return;
-    setMdLoading(true);
-    setMdError('');
-    try {
-      const res = await hostApiFetch<{ content: string; encoding: string }>('/api/files/read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath, encoding: 'utf-8' }),
-      });
-      setMdContent(res.content);
-    } catch {
-      setMdError('读取失败');
-    } finally {
-      setMdLoading(false);
-    }
-  }, [filePath, mdContent, mdLoading]);
-
   useEffect(() => {
-    if (mimeType === 'text/markdown') {
-      void loadMarkdown();
+    if (mimeType !== 'text/markdown') {
+      setMdContent('');
+      setMdError('');
+      setMdLoading(false);
+      return;
     }
-  }, [mimeType, loadMarkdown]);
+
+    let cancelled = false;
+    setMdContent('');
+    setMdError('');
+    setMdLoading(true);
+
+    void (async () => {
+      try {
+        const res = await hostApiFetch<{ content: string; encoding: string }>('/api/files/read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath, encoding: 'utf-8' }),
+        });
+        if (cancelled) return;
+        setMdContent(typeof res?.content === 'string' ? res.content : '');
+      } catch (e) {
+        if (!cancelled) {
+          setMdError(e instanceof Error ? e.message : '读取失败');
+        }
+      } finally {
+        if (!cancelled) setMdLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filePath, mimeType]);
 
   const content = (() => {
   // Web URL preview (localhost and external)
@@ -83,7 +95,7 @@ export function FilePreviewViewer({
         key={filePath}
         src={filePath}
         title={fileName}
-        className={cn('h-full w-full border-0', className)}
+        className={cn('h-full min-w-0 w-full border-0', className)}
       />
     );
   }
@@ -95,7 +107,7 @@ export function FilePreviewViewer({
         key={filePath}
         src={toServeUrl(filePath)}
         title={fileName}
-        className={cn('h-full w-full border-0', className)}
+        className={cn('h-full min-w-0 w-full border-0', className)}
       />
     );
   }
@@ -107,7 +119,7 @@ export function FilePreviewViewer({
         key={filePath}
         src={toServeUrl(filePath)}
         title={fileName}
-        className={cn('h-full w-full border-0', className)}
+        className={cn('h-full min-w-0 w-full border-0', className)}
       />
     );
   }
@@ -146,7 +158,7 @@ th{background:#f8f8f8}
 img{max-width:100%}
 </style>
 </head>
-<body>${mdContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</body>
+<body>${(mdContent ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</body>
 </html>`;
 
     return (
@@ -154,7 +166,7 @@ img{max-width:100%}
         key={filePath}
         srcDoc={srcDoc}
         title={fileName}
-        className={cn('h-full w-full border-0', className)}
+        className={cn('h-full min-w-0 w-full border-0', className)}
         sandbox="allow-scripts"
       />
     );
@@ -189,18 +201,18 @@ img{max-width:100%}
 }
 
 function OpenExternalButton({ filePath }: { filePath: string }) {
-  const handleOpen = useCallback(() => {
+  const handleOpen = () => {
     if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
       window.electron.openExternal(filePath);
     } else {
-      invokeIpc('shell:openPath', filePath);
+      void invokeIpc('shell:openPath', filePath);
     }
-  }, [filePath]);
+  };
 
   return (
     <button
       onClick={handleOpen}
-      className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-xs text-primary transition-colors hover:bg-primary/15"
+      className="inline-flex items-center gap-1.5 rounded-md bg-link-muted px-3 py-1.5 text-xs text-link transition-colors hover:bg-[#D8E1FF]"
     >
       <ExternalLink className="h-3.5 w-3.5" />
       在外部打开

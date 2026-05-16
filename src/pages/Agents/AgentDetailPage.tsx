@@ -31,7 +31,7 @@ import { toast } from 'sonner';
 import dingtalkIcon from '@/assets/channels/dingtalk.svg';
 
 // ── Shared ────────────────────────────────────────────────────────────────────
-const inputCls = 'h-[44px] rounded-md font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-glass border-glass-border focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40';
+const inputCls = 'h-[44px] rounded-md font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-glass border-glass-border focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-ring shadow-sm transition-all text-foreground placeholder:text-foreground/40';
 const labelCls = 'text-[14px] text-foreground/80 font-bold';
 
 const CONSTRAINT_FILES = ['SOUL.md', 'AGENTS.md', 'CLAUDE.md', 'SYSTEM.md', 'RULES.md'] as const;
@@ -337,11 +337,11 @@ function InfoTab({ agent }: { agent: AgentSummary }) {
           </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className={cn('space-y-1 rounded-xl border border-primary/10 p-4', glassNestedCard)}>
+          <div className={cn('space-y-1 rounded-xl border border-border p-4', glassNestedCard)}>
             <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/80 font-medium">{t('settingsDialog.agentIdLabel')}</p>
             <p className="font-mono text-[13px] text-foreground break-all">{agent.id}</p>
           </div>
-          <div className={cn('space-y-1 rounded-xl border border-primary/10 p-4', glassNestedCard)}>
+          <div className={cn('space-y-1 rounded-xl border border-border p-4', glassNestedCard)}>
             <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground/80 font-medium">{t('settingsDialog.modelLabel')}</p>
             <p className="text-[13.5px] text-foreground">
               {agent.modelDisplay}{agent.inheritedModel ? ` (${t('inherited')})` : ''}
@@ -372,7 +372,7 @@ function InfoTab({ agent }: { agent: AgentSummary }) {
                   'flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[13px] font-medium transition-colors',
                   activeFile === f
                     ? 'border-primary/30 bg-primary/10 text-primary'
-                    : 'border-primary/10 bg-transparent text-muted-foreground hover:bg-primary/5 hover:text-foreground',
+                    : 'border-border bg-transparent text-muted-foreground hover:bg-primary/5 hover:text-foreground',
                   glassNestedCard,
                 )}>
                 <FileText className="h-3.5 w-3.5" />
@@ -418,7 +418,7 @@ function InfoTab({ agent }: { agent: AgentSummary }) {
                 value={currentContent}
                 onChange={(e) => setFileContents((prev) => ({ ...prev, [activeFile]: e.target.value }))}
                 rows={16}
-                className="font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-glass-border focus-visible:ring-2 focus-visible:ring-blue-500/50 resize-y rounded-xl leading-relaxed"
+                className="font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-glass-border focus-visible:ring-2 focus-visible:ring-ring/40 resize-y rounded-xl leading-relaxed"
                 placeholder={`在此输入 ${activeFile} 的内容，保存后会同步到工作空间文件...`}
               />
             </>
@@ -552,7 +552,7 @@ function ModelTab({ agent }: { agent: AgentSummary }) {
     <div className="space-y-6">
       <div className={cn('rounded-2xl p-5 space-y-4', glassSectionSurface)}>
         <h3 className="text-base font-semibold text-foreground">{t('detail.currentModel')}</h3>
-        <div className={cn('flex items-center gap-3 rounded-xl border border-primary/10 p-4', glassNestedCard)}>
+        <div className={cn('flex items-center gap-3 rounded-xl border border-border p-4', glassNestedCard)}>
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
             <Cpu className="h-5 w-5" />
           </div>
@@ -568,7 +568,7 @@ function ModelTab({ agent }: { agent: AgentSummary }) {
       <div className={cn('rounded-2xl p-5 space-y-4', glassSectionSurface)}>
         <h3 className="text-base font-semibold text-foreground">{t('detail.selectModel')}</h3>
         {modelOptions.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-primary/15 p-8 text-center text-[14px] text-muted-foreground">
+          <div className="rounded-xl border border-dashed border-border p-8 text-center text-[14px] text-muted-foreground">
             <Cpu className="mx-auto mb-3 h-8 w-8 opacity-40" />
             <p>{t('detail.noModelsConfigured')}</p>
           </div>
@@ -584,11 +584,11 @@ function ModelTab({ agent }: { agent: AgentSummary }) {
                     'w-full flex items-center gap-3 rounded-xl border p-4 text-left transition-colors',
                     isSelected
                       ? 'border-primary/30 bg-primary/10'
-                      : 'border-primary/10 hover:bg-primary/5',
+                      : 'border-border hover:bg-primary/5',
                     glassNestedCard,
                   )}
                 >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/80 dark:bg-white/10 border border-primary/10">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/80 dark:bg-white/10 border border-border">
                     {opt.iconUrl ? (
                       <img
                         src={opt.iconUrl}
@@ -712,7 +712,7 @@ function SkillsTab({ agentId }: { agentId: string }) {
             <div className="space-y-2">
               <p className="text-[12px] text-muted-foreground/60 font-medium">已安装</p>
               {enterpriseSkills.map((skill) => (
-                <div key={skill.id} className={cn('flex items-center gap-3 rounded-xl border border-primary/10 p-3', glassNestedCard)}>
+                <div key={skill.id} className={cn('flex items-center gap-3 rounded-xl border border-border p-3', glassNestedCard)}>
                   <span className="text-xl leading-none shrink-0">{skill.icon || '🧩'}</span>
                   <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-medium text-foreground truncate">{skill.name}</p>
@@ -758,7 +758,7 @@ function SkillsTab({ agentId }: { agentId: string }) {
                 );
                 const installing = stoInstalling[s.slug];
                 return (
-                  <div key={s.slug} className={cn('flex items-center gap-3 rounded-xl border border-primary/10 p-3', glassNestedCard)}>
+                  <div key={s.slug} className={cn('flex items-center gap-3 rounded-xl border border-border p-3', glassNestedCard)}>
                     <span className="text-xl leading-none shrink-0">🧩</span>
                     <div className="min-w-0 flex-1">
                       <p className="text-[13px] font-medium text-foreground truncate">{s.name}</p>
@@ -798,7 +798,7 @@ function SkillsTab({ agentId }: { agentId: string }) {
             </div>
           ) : (
             externalInstalled.map((skill) => (
-              <div key={skill.id} className={cn('flex items-center gap-3 rounded-xl border border-primary/10 p-3', glassNestedCard)}>
+              <div key={skill.id} className={cn('flex items-center gap-3 rounded-xl border border-border p-3', glassNestedCard)}>
                 <span className="text-xl leading-none shrink-0">{skill.icon || '📦'}</span>
                 <div className="min-w-0 flex-1">
                   <p className="text-[14px] font-medium text-foreground truncate">{skill.name}</p>
@@ -857,12 +857,12 @@ function CronItem({ job, onToggle, onEdit, onDelete, onTrigger }: CronItemProps)
 
   return (
     <div
-      className={cn('group relative flex cursor-pointer flex-col rounded-md border border-primary/12 p-4 transition-colors hover:border-primary/18', glassNestedCard)}
+      className={cn('group relative flex cursor-pointer flex-col rounded-md border border-border p-4 transition-colors hover:border-border', glassNestedCard)}
       onClick={onEdit}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-primary/12 bg-primary/[0.06] text-foreground">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-primary/[0.06] text-foreground">
             <Clock className={cn('h-4 w-4', job.enabled ? 'text-foreground' : 'text-muted-foreground')} />
           </div>
           <div className="min-w-0">
@@ -953,7 +953,7 @@ function SimpleCronDialog({ job, onClose, onSave }: { job?: CronJob; onClose: ()
             {schedulePresets.map((p) => (
               <button key={p.value} onClick={() => setSchedule(p.value)}
                 className={cn('rounded-xl border px-3 py-2 text-[13px] font-medium text-left transition-colors',
-                  schedule === p.value ? 'border-primary/30 bg-primary/10 text-primary' : 'border-primary/10 text-muted-foreground hover:bg-primary/5', glassNestedCard)}>
+                  schedule === p.value ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-primary/5', glassNestedCard)}>
                 {p.label}
               </button>
             ))}
@@ -1028,7 +1028,7 @@ function TasksTab({ agentId }: { agentId: string }) {
       {loading ? (
         <div className="flex h-40 items-center justify-center"><LoadingSpinner /></div>
       ) : jobs.length === 0 ? (
-        <div className={cn('flex flex-col items-center justify-center rounded-md border border-dashed border-primary/18 py-16 text-muted-foreground', glassNestedCard)}>
+        <div className={cn('flex flex-col items-center justify-center rounded-md border border-dashed border-border py-16 text-muted-foreground', glassNestedCard)}>
           <Clock className="mb-3 h-8 w-8 opacity-40" />
           <p className="text-[14px]">暂无任务，点击右上角新建</p>
         </div>
@@ -1114,7 +1114,7 @@ function ChannelsTab({ agent }: { agent: AgentSummary }) {
         ) : (
           <div className="space-y-3">
             {/* DingTalk channel card */}
-            <div className={cn('flex items-center justify-between rounded-xl border border-primary/10 p-4', glassNestedCard)}>
+            <div className={cn('flex items-center justify-between rounded-xl border border-border p-4', glassNestedCard)}>
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 shrink-0 flex items-center justify-center rounded-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10">
                   <img src={dingtalkIcon} alt="DingTalk" className="w-5 h-5 dark:invert" />
@@ -1136,7 +1136,7 @@ function ChannelsTab({ agent }: { agent: AgentSummary }) {
               <div className="space-y-2 pl-2">
                 {agentAccounts.map((acc) => (
                   <div key={acc.accountId}
-                    className={cn('flex items-center justify-between rounded-xl border border-primary/10 p-3', glassNestedCard)}>
+                    className={cn('flex items-center justify-between rounded-xl border border-border p-3', glassNestedCard)}>
                     <div className="flex items-center gap-2">
                       <div className={cn('h-2 w-2 rounded-full shrink-0', statusColor(acc.status))} />
                       <p className="text-[13.5px] font-medium text-foreground">
@@ -1152,7 +1152,7 @@ function ChannelsTab({ agent }: { agent: AgentSummary }) {
             )}
 
             {agentAccounts.length === 0 && (
-              <div className="rounded-xl border border-dashed border-primary/15 p-6 text-center">
+              <div className="rounded-xl border border-dashed border-border p-6 text-center">
                 <MessagesSquare className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
                 <p className="text-[14px] text-muted-foreground">该智能体尚未绑定钉钉频道</p>
                 <p className="text-[13px] text-muted-foreground/70 mt-1">点击"配置"按钮，扫码完成钉钉对接</p>
@@ -1197,7 +1197,7 @@ export function AgentDetailPage({ agent, onBack }: AgentDetailPageProps) {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 pb-10">
       {/* Header */}
-      <header className="shrink-0 border-b border-primary/10 pb-6">
+      <header className="shrink-0 border-b border-border pb-6">
         <div className="flex items-start gap-4">
           <Button variant="ghost" size="icon"
             onClick={onBack}
@@ -1205,7 +1205,7 @@ export function AgentDetailPage({ agent, onBack }: AgentDetailPageProps) {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex min-w-0 flex-1 items-start gap-3">
-            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(56,189,248,0.12)]">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(255,111,0,0.10)]">
               <Bot className="h-5 w-5" strokeWidth={2} />
             </div>
             <div className="min-w-0">

@@ -7,6 +7,7 @@ import { getUvMirrorEnv } from '../utils/uv-env';
 import { isPythonReady, setupManagedPython } from '../utils/uv-setup';
 import { logger } from '../utils/logger';
 import { prependPathEntry } from '../utils/env-path';
+import { listAgentsSnapshot } from '../utils/agent-config';
 
 export function warmupManagedPythonReadiness(): void {
   void isPythonReady().then((pythonReady) => {
@@ -278,6 +279,14 @@ export async function findExistingGatewayProcess(options: {
 }
 
 export async function runOpenClawDoctorRepair(): Promise<boolean> {
+  // Pre-migrate custom agent fields that openclaw does not recognize.
+  // This prevents openclaw doctor --fix from discarding them.
+  try {
+    await listAgentsSnapshot();
+  } catch (err) {
+    logger.warn('Pre-doctor agent config migration failed, continuing with doctor repair:', err);
+  }
+
   const openclawDir = getOpenClawDir();
   const entryScript = getOpenClawEntryPath();
   if (!existsSync(entryScript)) {

@@ -56,7 +56,7 @@ const proxyFieldInputClassName = cn(
   'h-10 rounded-md font-mono text-[13px]',
   'bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-glass border-glass-border',
   'shadow-sm transition-all text-foreground placeholder:text-foreground/40',
-  'focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500',
+  'focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-ring',
 );
 
 /** 外观分段按钮：始终用 outline 保留边框；勿用 secondary，否则无 border 选中态在浅色下几乎消失 */
@@ -489,7 +489,7 @@ export function Settings() {
     cn(
       'flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all text-left w-full',
       active
-        ? 'bg-primary/[0.1] text-foreground border border-primary/15'
+        ? 'bg-primary/[0.1] text-foreground border border-border'
         : 'text-muted-foreground hover:bg-primary/[0.06] hover:text-foreground border border-transparent',
     );
 
@@ -580,9 +580,9 @@ export function Settings() {
         {activeSection === 'channels' && <Channels />}
         {activeSection === 'general' && (
     <div className="flex w-full max-w-3xl flex-col gap-8 pb-10">
-      <header className="shrink-0 border-b border-primary/10 pb-6">
+      <header className="shrink-0 border-b border-border pb-6">
         <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(56,189,248,0.12)]">
+          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(255,111,0,0.10)]">
             <Settings2 className="h-5 w-5" strokeWidth={2} />
           </div>
           <div className="min-w-0">
@@ -717,7 +717,7 @@ export function Settings() {
               </div>
 
               {showLogs && (
-                <div className="rounded-md border border-primary/12 bg-[hsl(var(--glass-bg)/0.15)] p-4 dark:bg-[hsl(var(--glass-bg)/0.08)]">
+                <div className="rounded-md border border-border bg-[hsl(var(--glass-bg)/0.15)] p-4 dark:bg-[hsl(var(--glass-bg)/0.08)]">
                   <div className="mb-3 flex items-center justify-between">
                     <p className="text-[14px] font-medium">{t('gateway.appLogs')}</p>
                     <div className="flex gap-2">
@@ -791,7 +791,7 @@ export function Settings() {
                   {t('developer.title')}
                 </h2>
                 <div className="space-y-8">
-                  <div className="border-b border-primary/10 pb-6 dark:border-white/10">
+                  <div className="border-b border-border pb-6 dark:border-white/10">
                     <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <h3 className="text-lg font-semibold tracking-tight text-foreground">
@@ -908,7 +908,7 @@ export function Settings() {
                       </div>
                     )}
                   </div>
-                  <div className="space-y-4 border-t border-primary/10 pt-6 dark:border-white/10">
+                  <div className="space-y-4 border-t border-border pt-6 dark:border-white/10">
                     <Label className="text-[14px] font-medium text-foreground/80">{t('developer.gatewayToken')}</Label>
                     <p className="text-[13px] text-muted-foreground">
                       {t('developer.gatewayTokenDesc')}
@@ -1230,7 +1230,7 @@ export function Settings() {
               <div className="flex gap-4 pt-3">
                 <Button
                   variant="link"
-                  className="h-auto p-0 text-[14px] text-blue-500 hover:text-blue-600 font-medium"
+                  className="h-auto p-0 text-[14px] text-link hover:opacity-90 font-medium"
                   onClick={() => window.electron.openExternal('https://www.sto.cn')}
                 >
                   {t('about.docs')}

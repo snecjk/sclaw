@@ -30,6 +30,14 @@ export async function handleTokenQuotaRoutes(
   _ctx: HostApiContext,
 ): Promise<boolean> {
   if (url.pathname === '/api/token-quota/check' && req.method === 'GET') {
+    // In development mode, bypass the remote quota check so local testing
+    // isn't blocked by backend token limits.
+    const isDev = (import.meta.env.VITE_APP_ENV as string) === 'development';
+    if (isDev) {
+      sendJson(res, 200, { success: true, data: { allowed: true } });
+      return true;
+    }
+
     try {
       const service = getStoTokenQuotaService();
       const result = await service.checkTokenQuota();

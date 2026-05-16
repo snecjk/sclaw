@@ -15,7 +15,7 @@ const DropdownMenuSubTrigger = React.forwardRef<
     ref={ref}
     className={cn(
       'relative flex cursor-pointer select-none items-center rounded-lg px-2.5 py-2 text-[13px] outline-none transition-colors',
-      'focus:bg-primary/10 focus:text-foreground data-[state=open]:bg-primary/10 data-[state=open]:text-foreground',
+      'focus:bg-muted focus:text-foreground data-[state=open]:bg-muted data-[state=open]:text-foreground',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className,
     )}
@@ -77,7 +77,7 @@ const DropdownMenuItem = React.forwardRef<
     ref={ref}
     className={cn(
       'relative flex cursor-pointer select-none items-center rounded-lg px-2.5 py-2 text-[13px] outline-none transition-colors',
-      'focus:bg-primary/10 focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'focus:bg-muted focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className,
     )}
     {...props}

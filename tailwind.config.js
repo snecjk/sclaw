@@ -48,6 +48,12 @@ module.exports = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        /* Link / Info Blue-6 — docs/sto-design.md §二（与主色 Brand 区分） */
+        link: {
+          DEFAULT: 'hsl(var(--link))',
+          foreground: 'hsl(var(--link-foreground))',
+          muted: 'hsl(var(--link-muted))',
+        },
         glass: {
           border: 'hsl(var(--glass-border))',
           highlight: 'hsl(var(--glass-highlight))',

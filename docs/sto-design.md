@@ -136,6 +136,7 @@ Token 按 **Foundation → Property → Modifier** 组织：
 
 ## 七、前端落地方式建议
 
+- **StoClaw 全局主题**（`src/styles/globals.css` + `tailwind.config.js`）：`--primary` / `--ring` 对齐 **Brand-6**（主按钮、强调图标）；`--link` / `--link-muted` 对齐 **Blue-6 / Blue-1**（外链、信息区、图表点等）；`--border`、`--muted` 等对齐 **Grey 阶梯**（卡片描边、表头底、分割线），避免再用偏青的系统蓝灰作为默认中性色。
 - **CSS 变量**：在全局或主题文件中定义 `--color-brand-6`、`--color-text`、`--color-border`、`--color-fill-light-hover` 等，组件只引用 Token，不直接写 hex。
 - **语义优先**：按钮用「主按钮 / Brand」Token，成功提示用 Success Token，错误用 Danger Token；不按「颜色看起来像」选，而按「场景」选。
 - **资产模块**：列表、详情、表单中的主操作（新建、保存、查询）使用 Brand；删除、错误提示使用 Danger；成功 toast 使用 Success；标签、状态等可按 Emphasis 做 bold/default 两种样式。

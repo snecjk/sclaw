@@ -41,6 +41,10 @@ interface ChatInputProps {
   isEmpty?: boolean;
   /** Full-width embed (e.g. home agent hub): no page gutters, hide gateway/quota footer row. */
   variant?: 'default' | 'embedded';
+  /** One-time seed into the textarea (e.g. task subitem default prompt). */
+  seedText?: string;
+  /** Merged onto the outer wrapper (after defaults); use to tune padding, e.g. task subitem bottom inset. */
+  className?: string;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -111,6 +115,8 @@ export function ChatInput({
   sending = false,
   isEmpty: _isEmpty = false,
   variant = 'default',
+  seedText,
+  className,
 }: ChatInputProps) {
   const { t } = useTranslation('chat');
   const [input, setInput] = useState('');
@@ -120,6 +126,7 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
+  const seedAppliedRef = useRef(false);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
@@ -170,6 +177,22 @@ export function ChatInput({
       textareaRef.current.focus();
     }
   }, [disabled]);
+
+  useEffect(() => {
+    const trimmed = seedText?.trim();
+    if (trimmed) {
+      if (seedAppliedRef.current) return;
+      seedAppliedRef.current = true;
+      setInput(trimmed);
+      return;
+    }
+    // Parent cleared seed (e.g. after programmatic task auto-send) — drop stale composer text
+    if (seedAppliedRef.current) {
+      seedAppliedRef.current = false;
+      setInput('');
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    }
+  }, [seedText]);
 
   useEffect(() => {
     if (!targetAgentId) return;
@@ -441,6 +464,7 @@ export function ChatInput({
       className={cn(
         'w-full transition-all duration-300',
         isEmbedded ? 'px-0 pb-0 pt-0' : 'mx-auto max-w-5xl px-6 pb-6 pt-2',
+        className,
       )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -487,7 +511,7 @@ export function ChatInput({
               <button
                 type="button"
                 onClick={() => setTargetAgentId(null)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-primary/6 px-3 py-1 text-[13px] font-medium text-foreground transition-colors hover:bg-primary/10"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-primary/6 px-3 py-1 text-[13px] font-medium text-foreground transition-colors hover:bg-primary/10"
                 title={t('composer.clearTarget')}
               >
                 <span>{t('composer.targetChip', { agent: selectedTarget.name })}</span>
@@ -578,7 +602,7 @@ export function ChatInput({
                 size="icon"
                 className={cn(
                   'h-9 w-9 shrink-0 rounded-full border transition-all',
-                  'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(59,130,246,0.22)]',
+                  'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(255,111,0,0.22)]',
                 )}
                 variant="ghost"
                 title={t('composer.send')}
@@ -595,7 +619,7 @@ export function ChatInput({
                   sending
                     ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-white/90'
                     : canSend
-                      ? 'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(59,130,246,0.22)]'
+                      ? 'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(255,111,0,0.22)]'
                       : 'border-black/8 bg-black/5 text-muted-foreground/55 dark:border-white/10 dark:bg-white/[0.06]'
                 )}
                 variant="ghost"

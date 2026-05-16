@@ -11,7 +11,6 @@ import { useChatStore, type RawMessage, type AttachedFileMeta } from '@/stores/c
 import { useGatewayStore } from '@/stores/gateway';
 import { useAgentsStore } from '@/stores/agents';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
-import { ParticleConstellation } from '@/components/common/ParticleConstellation';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatToolbar } from './ChatToolbar';
@@ -272,20 +271,17 @@ export function Chat() {
   }, [scrollToLatest]);
 
   return (
-    <div className={cn("relative flex -m-6 transition-colors duration-500")} style={{ height: 'calc(100vh - 2.5rem)' }}>
+    <div
+      className={cn('relative -m-6 flex min-h-0 min-w-0 overflow-x-hidden transition-colors duration-500')}
+      style={{ height: 'calc(100vh - 2.5rem)' }}
+    >
       {/* Left: Chat area */}
-      <div className="relative flex flex-1 flex-col min-w-0">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.10),_transparent_28%),radial-gradient(circle_at_80%_20%,_rgba(191,219,254,0.10),_transparent_24%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,140,0,0.06),_transparent_30%),radial-gradient(circle_at_80%_20%,_rgba(229,230,235,0.35),_transparent_26%)]" />
         <div className="absolute inset-0 neural-grid opacity-20" />
-        <ParticleConstellation
-          className="z-0 opacity-[0.88] dark:opacity-[0.74]"
-          particleCount={54}
-          connectionDistance={136}
-          speed={0.28}
-        />
         <div className="absolute left-8 top-10 h-40 w-40 rounded-full bg-cyan-400/10 blur-[90px]" />
-        <div className="absolute right-8 top-20 h-48 w-48 rounded-full bg-sky-100/10 blur-[110px]" />
+        <div className="absolute right-8 top-20 h-48 w-48 rounded-full bg-[rgba(255,111,0,0.06)] blur-[110px]" />
       </div>
 
       {/* Toolbar */}
@@ -294,7 +290,10 @@ export function Chat() {
       </div>
 
       {/* Messages Area */}
-      <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto px-6 py-4">
+      <div
+        ref={scrollRef}
+        className="relative z-10 flex-1 overflow-y-auto overscroll-y-contain px-6 py-4 [scrollbar-gutter:stable]"
+      >
         <div ref={contentRef} className="max-w-5xl mx-auto space-y-4">
           {isEmpty ? (
             <WelcomeScreen />
@@ -306,7 +305,6 @@ export function Chat() {
                   message={msg}
                   showThinking={showThinking}
                   onPreviewFile={(file) => {
-                    console.log('file', file);
                     if (file.filePath) {
                       setActivePreviewFilePath(file.filePath);
                       setShowPreviewPanel(true);
@@ -385,7 +383,7 @@ export function Chat() {
           <motion.button
             type="button"
             onClick={() => scrollToLatest('smooth')}
-            className="pointer-events-auto inline-flex h-7 items-center gap-1.5 rounded-full border border-primary/15 bg-white/45 px-2.5 text-[11px] font-medium leading-none text-foreground/90 shadow-none backdrop-blur-sm transition-colors hover:bg-white/60 dark:border-white/12 dark:bg-white/[0.08] dark:text-foreground/95 dark:hover:bg-white/[0.14] sm:h-8 sm:px-3 sm:text-xs"
+            className="pointer-events-auto inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-white/45 px-2.5 text-[11px] font-medium leading-none text-foreground/90 shadow-none backdrop-blur-sm transition-colors hover:bg-white/60 dark:border-white/12 dark:bg-white/[0.08] dark:text-foreground/95 dark:hover:bg-white/[0.14] sm:h-8 sm:px-3 sm:text-xs"
             initial={false}
             animate={{
               opacity: showJumpToLatest ? 1 : 0,
@@ -411,7 +409,7 @@ export function Chat() {
             transition={{ duration: 0.18, ease: 'easeOut' }}
             className="shrink-0 px-6"
           >
-            <div className="max-w-5xl mx-auto flex items-center gap-2 rounded-lg border border-primary/15 bg-white/50 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm dark:bg-white/[0.06]">
+            <div className="max-w-5xl mx-auto flex items-center gap-2 rounded-lg border border-border bg-white/50 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm dark:bg-white/[0.06]">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
               <span>{t('splitting')}</span>
             </div>
@@ -464,12 +462,14 @@ export function Chat() {
         {hasPreviewableFiles && showPreviewPanel && (
           <motion.div
             ref={previewPanelRef}
+            layout={false}
             initial={{ opacity: 0, x: 40 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 40 }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
-            className="shrink-0 overflow-hidden"
+            // className="shrink-0 overflow-hidden"
             style={{ width: previewPanelWidth }}
+            className="flex h-full min-h-0 w-[clamp(300px,38vw,560px)] shrink-0 flex-col overflow-hidden [contain:inline-size]"
           >
             <ChatPreviewPanel
               files={previewableFiles}
@@ -486,7 +486,7 @@ export function Chat() {
       {hasPreviewableFiles && !showPreviewPanel && (
         <button
           onClick={() => setShowPreviewPanel(true)}
-          className="absolute right-4 top-4 z-20 inline-flex h-8 items-center gap-1.5 rounded-full border border-primary/15 bg-white/60 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white/80 dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
+          className="absolute right-4 top-4 z-20 inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-white/60 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white/80 dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
         >
           <span>预览产物</span>
           <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] text-primary">
@@ -676,9 +676,9 @@ function AssistantActivityCard({
 
   return (
     <div className="flex gap-3">
-      <div className="relative mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/15 bg-white/[0.88] text-foreground shadow-sm dark:bg-white/[0.12]">
+      <div className="relative mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-white/[0.88] text-foreground shadow-sm dark:bg-white/[0.12]">
         <motion.span
-          className="absolute inset-0 rounded-full border border-primary/25"
+          className="absolute inset-0 rounded-full border border-border"
           animate={{ scale: [1, 1.18], opacity: [0.3, 0] }}
           transition={{ duration: 2, repeat: Infinity, ease: 'easeOut' }}
         />
@@ -693,7 +693,7 @@ function AssistantActivityCard({
         className={cn(
           'relative min-w-[280px] overflow-hidden rounded-2xl border px-4 py-3.5 text-foreground shadow-[0_10px_30px_rgba(15,23,42,0.08)]',
           assistantChatCardBgStreaming,
-          isProcessing ? 'border-primary/15' : 'border-primary/20',
+          isProcessing ? 'border-border' : 'border-border',
         )}
       >
         <motion.div

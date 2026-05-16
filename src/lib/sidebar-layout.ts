@@ -18,7 +18,8 @@ const PROVINCIAL_VISIBILITY: SidebarVisibility = {
   primaryMyData: false,
   workspace: false,
   conversationChrome: false,
-  userProfileCard: false,
+  /** Bottom identity strip (name / org + settings) stays on for SSO users; nav modules above stay minimal. */
+  userProfileCard: true,
 };
 
 const FULL_VISIBILITY: SidebarVisibility = {

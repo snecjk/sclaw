@@ -22,7 +22,8 @@
       "stat3Value": "29,810",
       "stat3Unit": "CNY",
       "footerTeam": "Settlement squad",
-      "footerHint": "4 exceptions — view"
+      "footerHint": "4 exceptions — view",
+      "defaultComposePrompt": "Query nationwide low-price parcel volume for May 2026, generate a daily report, and allow editing."
     },
     "customer": {
       "title": "Policy pricing estimate",
@@ -38,7 +39,8 @@
       "stat3Value": "",
       "stat3Unit": "",
       "footerTeam": "Policy service center",
-      "footerHint": "2 abnormal customers"
+      "footerHint": "2 abnormal customers",
+      "defaultComposePrompt": "Policy pricing scenario (placeholder)."
     },
     "cost": {
       "title": "Customer retention",
@@ -54,7 +56,8 @@
       "stat3Value": "",
       "stat3Unit": "",
       "footerTeam": "Policy service center",
-      "footerHint": "7 abnormal customers"
+      "footerHint": "7 abnormal customers",
+      "defaultComposePrompt": "Customer retention follow-up (placeholder)."
     }
   },
   "assistant": {

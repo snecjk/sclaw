@@ -27,9 +27,7 @@
         "collapseHistoryPanel": "Hide conversation history",
         "subscriptions": "Subscriptions",
         "taskList": "Task list",
-        "taskHqReconciliation": "HQ reconciliation",
-        "taskAbnormalCustomers": "Abnormal customer tracking",
-        "taskOutboundCost": "Outbound cost report",
+        "taskHqReconciliation": "Weekly meeting materials",
         "toggleTaskListSection": "Expand or collapse task list",
         "toggleWorkspaceSection": "Expand or collapse workspace",
         "compactAccountMenu": "Account and settings"
