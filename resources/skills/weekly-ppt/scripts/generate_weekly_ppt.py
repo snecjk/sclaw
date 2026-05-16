@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import subprocess
 import sys
@@ -666,10 +667,12 @@ def main():
 </html>'''
     
     # 写入文件
-    output_file = f"/Users/wangboshi/.openclaw/workspace/weekly_ppt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+    workspace_dir = os.path.join(os.path.expanduser("~"), ".openclaw", "workspace")
+    os.makedirs(workspace_dir, exist_ok=True)
+    output_file = os.path.join(workspace_dir, f"weekly_ppt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html")
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(html)
-    
+
     print(output_file)
 
 if __name__ == '__main__':
