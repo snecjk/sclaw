@@ -114,7 +114,10 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
     void fetchAgents();
   }, [fetchAgents]);
 
-  useEffect(() => {
+  /** Avoid painting another session's messages before the store switches (useEffect runs too late). */
+  const sessionSynced = Boolean(sessionKey) && currentSessionKey === sessionKey;
+
+  useLayoutEffect(() => {
     if (sessionKey) {
       switchSession(sessionKey);
     }
@@ -208,13 +211,16 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const hasStreamToolStatus = streamingTools.length > 0;
   const hasAnyStreamContent =
     hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasStreamToolStatus;
-  const shouldRenderStreaming = Boolean(sending && (hasAnyStreamContent || streamMsgObj));
+  const shouldRenderStreaming = Boolean(
+    sessionSynced && sending && (hasAnyStreamContent || streamMsgObj),
+  );
 
   useEffect(() => {
     updateJumpToLatestVisibility();
   }, [messages.length, shouldRenderStreaming, pendingFinal, updateJumpToLatestVisibility]);
 
-  const isEmpty = !loading && messages.length === 0 && !shouldRenderStreaming;
+  const displayMessages = sessionSynced ? messages : [];
+  const isEmpty = sessionSynced && !loading && displayMessages.length === 0 && !shouldRenderStreaming;
 
   useEffect(() => {
     if (currentSessionKey !== sessionKey) return;
@@ -271,7 +277,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
         )}
       >
         <div ref={contentRef} className="mx-auto max-w-5xl space-y-4">
-          {loading && messages.length === 0 ? (
+          {!sessionSynced || (loading && displayMessages.length === 0) ? (
             <div className="flex justify-center py-12 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
             </div>
@@ -282,7 +288,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
             </p>
           ) : (
             <>
-              {messages.map((msg, idx) => (
+              {displayMessages.map((msg, idx) => (
                 <ChatMessage
                   key={msg.id || `msg-${idx}`}
                   message={msg}
@@ -312,13 +318,13 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
                   onPreviewFile={() => {}}
                 />
               )}
-              {sending && pendingFinal && !shouldRenderStreaming ? (
+              {sessionSynced && sending && pendingFinal && !shouldRenderStreaming ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
                   <span>{t('chat:streaming.processingTitle')}</span>
                 </div>
               ) : null}
-              {sending && !pendingFinal && !hasAnyStreamContent ? (
+              {sessionSynced && sending && !pendingFinal && !hasAnyStreamContent ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
                   <span>{t('chat:streaming.thinkingTitle')}</span>
