@@ -60,6 +60,11 @@
       "slug": "table-css-gen",
       "local": true,
       "autoEnable": true
+    },
+    {
+      "slug": "weekly-ppt",
+      "local": true,
+      "autoEnable": true
     }
   ]
 }
