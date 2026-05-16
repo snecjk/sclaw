@@ -152,6 +152,10 @@ export async function syncSsoAuthToOpenClaw(user: SsoUserInfo): Promise<void> {
 
 /**
  * Write SSO token to ~/.sai/sso-auth.json so SAI CLI can share the login session.
+ *
+ * Uses the exact format SAI CLI expects (stoToken / expiresAt / userInfo)
+ * rather than a generic OAuth envelope so `sai whoami` and dynamic commands
+ * work immediately without requiring an interactive `sai login` flow.
  */
 export async function syncSsoAuthToSaiCli(user: SsoUserInfo): Promise<void> {
   try {
@@ -163,10 +167,20 @@ export async function syncSsoAuthToSaiCli(user: SsoUserInfo): Promise<void> {
       filePath,
       JSON.stringify(
         {
-          access_token: user.stoToken,
-          token_type: 'Bearer',
-          expires_at: user.stoTokenExpiresAt,
-          user_id: user.id,
+          stoToken: user.stoToken,
+          expiresAt: user.stoTokenExpiresAt,
+          userId: user.id,
+          userInfo: {
+            Id: user.id,
+            UserName: user.userName,
+            RealName: user.realName,
+            NickName: user.realName,
+            Code: user.userName,
+            CompanyName: user.companyName,
+            DepartmentName: user.departmentName,
+            OpenId: user.openId,
+            Signature: user.signature,
+          },
         },
         null,
         2,

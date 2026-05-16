@@ -78,6 +78,15 @@ export async function handleAuthRoutes(
 
       const user = await ssoLoginManager.startLogin(env, ctx.mainWindow);
       await setAuthUser(user);
+
+      // Ensure SAI CLI is installed so the synced token can be used by commands
+      try {
+        const { autoInstallSaiCliIfNeeded } = await import('../../utils/sai-cli');
+        await autoInstallSaiCliIfNeeded();
+      } catch (err) {
+        logger.warn('SAI CLI auto-install on login failed:', err);
+      }
+
       void syncSsoAuthToOpenClaw(user);
       void syncStoDynamicRoutePluginToOpenClaw().catch((err) =>
         logger.warn('Post-login STO dynamic route plugin config failed:', err),

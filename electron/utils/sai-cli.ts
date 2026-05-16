@@ -5,8 +5,8 @@
  * can discover and execute dynamic commands through the existing
  * IPC / unified-request layer.
  */
-import { spawn } from 'node:child_process';
-import { existsSync, copyFileSync, mkdirSync, chmodSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, copyFileSync, mkdirSync, chmodSync, readFileSync, appendFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { app } from 'electron';
@@ -165,35 +165,28 @@ export async function saiCheckInstalled(): Promise<{
 function getBundledSaiPath(): string | null {
   const platform = process.platform;
   const arch = process.arch;
-  const binName = platform === 'win32' ? 'sai.exe' : 'sai';
+  const bundledBinName = platform === 'win32' ? 'sai-cli.exe' : 'sai-cli';
 
-  // 1. Packaged mode: electron-builder puts binaries in resources/bin/
+  // 1. Packaged mode: electron-builder copies SAI/ to resources/SAI/
   if (app.isPackaged) {
-    const bundled = join(process.resourcesPath, 'bin', binName);
-    if (existsSync(bundled)) return bundled;
-
-    const altBundled = join(process.resourcesPath, 'bin', `${platform}-${arch}`, binName);
-    if (existsSync(altBundled)) return altBundled;
+    const packaged = join(process.resourcesPath, 'SAI', `${platform}-${arch}`, bundledBinName);
+    if (existsSync(packaged)) return packaged;
   }
 
-  // 2. Development mode: look in project resources/bin/<platform>/
-  const devBundled = join(__dirname, '../../resources/bin', `${platform}-${arch}`, binName);
-  if (existsSync(devBundled)) return devBundled;
+  // 2. Development mode: look in project SAI/ directory at project root
+  const devPath = join(__dirname, '../..', 'SAI', `${platform}-${arch}`, bundledBinName);
+  if (existsSync(devPath)) return devPath;
 
-  // 3. Fallback: look in SAI/ directory at project root
-  const sourceMapping: Record<string, string> = {
-    'darwin-arm64': 'SAI/mac-arm64/sai-cli',
-    'darwin-x64': 'SAI/mac-amd64/sai-cli',
-    'linux-arm64': 'SAI/linux-arm64/sai-cli',
-    'linux-x64': 'SAI/linux-amd64/sai-cli',
-    'win32-arm64': 'SAI/win-arm64/sai-cli.exe',
-    'win32-x64': 'SAI/win-amd64/sai-cli.exe',
-  };
-  const platformArch = `${platform}-${arch}`;
-  if (sourceMapping[platformArch]) {
-    const sourceBin = join(__dirname, '../..', sourceMapping[platformArch]);
-    if (existsSync(sourceBin)) return sourceBin;
+  // 3. Legacy fallback: look in resources/bin/ (older builds or local dev setups)
+  const legacyBinName = platform === 'win32' ? 'sai.exe' : 'sai';
+  if (app.isPackaged) {
+    const legacy = join(process.resourcesPath, 'bin', legacyBinName);
+    if (existsSync(legacy)) return legacy;
+    const legacyArch = join(process.resourcesPath, 'bin', `${platform}-${arch}`, legacyBinName);
+    if (existsSync(legacyArch)) return legacyArch;
   }
+  const devLegacy = join(__dirname, '../../resources/bin', `${platform}-${arch}`, legacyBinName);
+  if (existsSync(devLegacy)) return devLegacy;
 
   return null;
 }
@@ -201,6 +194,104 @@ function getBundledSaiPath(): string | null {
 function getSaiInstallTarget(): string {
   const binName = process.platform === 'win32' ? 'sai.exe' : 'sai';
   return join(homedir(), '.sai', 'bin', binName);
+}
+
+const SAI_BIN_DIR = join(homedir(), '.sai', 'bin');
+
+/**
+ * Ensure ~/.sai/bin is in the system PATH so `sai` can be invoked from
+ * any shell / terminal window (including Gateway bash agents).
+ *
+ * - Windows: persists to the user registry PATH and broadcasts the change.
+ * - macOS/Linux: appends an export line to detected shell RC files.
+ */
+function ensureSaiBinInPath(): void {
+  const platform = process.platform;
+  const pathSep = platform === 'win32' ? ';' : ':';
+  const currentPath = process.env.PATH || '';
+
+  // 1. Update the current Electron process PATH immediately so subsequent
+  //    spawn() calls (including Gateway child processes) can resolve `sai`.
+  const pathEntries = currentPath.split(pathSep);
+  if (!pathEntries.includes(SAI_BIN_DIR)) {
+    process.env.PATH = `${SAI_BIN_DIR}${pathSep}${currentPath}`;
+    logger.info(`Added ${SAI_BIN_DIR} to current process PATH`);
+  }
+
+  // 2. Persist to the OS so new terminal windows also see the PATH.
+  if (platform === 'win32') {
+    ensureSaiBinInWindowsPath();
+  } else {
+    ensureSaiBinInUnixPath();
+  }
+}
+
+function ensureSaiBinInWindowsPath(): void {
+  try {
+    const query = spawnSync('reg', [
+      'query', 'HKEY_CURRENT_USER\\Environment', '/v', 'PATH',
+    ], { encoding: 'utf-8' });
+
+    let userPath = '';
+    if (query.status === 0) {
+      const match = query.stdout.match(/PATH\s+REG_\w+\s+(.+)/);
+      if (match) userPath = match[1].trim();
+    }
+
+    if (userPath.includes(SAI_BIN_DIR)) return;
+
+    const newPath = userPath ? `${userPath};${SAI_BIN_DIR}` : SAI_BIN_DIR;
+    const add = spawnSync('reg', [
+      'add', 'HKEY_CURRENT_USER\\Environment', '/v', 'PATH',
+      '/t', 'REG_EXPAND_SZ', '/d', newPath, '/f',
+    ], { encoding: 'utf-8' });
+
+    if (add.status === 0) {
+      logger.info(`Added ${SAI_BIN_DIR} to Windows user PATH`);
+      broadcastWindowsEnvChange();
+    } else {
+      logger.warn('Failed to update Windows PATH:', add.stderr || add.stdout);
+    }
+  } catch (err) {
+    logger.warn('Failed to update Windows PATH:', err);
+  }
+}
+
+function broadcastWindowsEnvChange(): void {
+  try {
+    // Broadcast WM_SETTINGCHANGE so Explorer and other processes pick up
+    // the new PATH without a reboot.
+    spawnSync('powershell.exe', [
+      '-NoProfile', '-Command',
+      'Add-Type -MemberDefinition \'[DllImport("user32.dll",SetLastError=true,CharSet=CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr hWnd,uint Msg,UIntPtr wParam,string lParam,uint fuFlags,uint uTimeout,out UIntPtr lpdwResult);\' -Name NativeMethods -Namespace Win32; $r = [UIntPtr]::Zero; [void][Win32.NativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x1a, [UIntPtr]::Zero, "Environment", 2, 5000, [ref]$r)',
+    ], { encoding: 'utf-8', windowsHide: true });
+  } catch {
+    // Best-effort broadcast — ignore failures.
+  }
+}
+
+function ensureSaiBinInUnixPath(): void {
+  const rcFiles = [
+    join(homedir(), '.zshrc'),
+    join(homedir(), '.bashrc'),
+    join(homedir(), '.bash_profile'),
+    join(homedir(), '.profile'),
+  ];
+
+  const exportLine = `export PATH="${SAI_BIN_DIR}:\$PATH"`;
+
+  for (const rcFile of rcFiles) {
+    try {
+      if (!existsSync(rcFile)) continue;
+      const content = readFileSync(rcFile, 'utf-8');
+      if (content.includes(SAI_BIN_DIR)) continue;
+
+      appendFileSync(rcFile, `\n# Added by STO Claw\n${exportLine}\n`);
+      logger.info(`Added ${SAI_BIN_DIR} to ${rcFile}`);
+    } catch (err) {
+      logger.warn(`Failed to update ${rcFile}:`, err);
+    }
+  }
 }
 
 /**
@@ -212,9 +303,10 @@ export async function autoInstallSaiCliIfNeeded(
 ): Promise<{ success: boolean; path?: string; error?: string }> {
   const target = getSaiInstallTarget();
 
-  // Already installed — nothing to do
+  // Already installed — just make sure PATH is up to date
   if (existsSync(target)) {
     logger.debug('SAI CLI already installed at', target);
+    ensureSaiBinInPath();
     return { success: true, path: target };
   }
 
@@ -232,6 +324,8 @@ export async function autoInstallSaiCliIfNeeded(
     if (process.platform !== 'win32') {
       chmodSync(target, 0o755);
     }
+
+    ensureSaiBinInPath();
 
     logger.info(`SAI CLI auto-installed: ${target} (from ${bundled})`);
     notify?.(target);
