@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowDown, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAgentsStore } from '@/stores/agents';
-import { useChatStore, type RawMessage } from '@/stores/chat';
+import { useChatStore, type AttachedFileMeta, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { createAutoSendWatcher, useMessageQueueStore } from '@/stores/message-queue';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
@@ -13,6 +13,7 @@ import {
   STO_TASK_SUBITEM_NAV_SCROLL_END,
   type StoTaskSubitemLocationState,
 } from '@/lib/sto-task-compose-storage';
+import { invokeIpc } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import type { StoTaskId } from '@/lib/sto-tasks';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
@@ -249,6 +250,16 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
     [handleSend, scrollToLatest],
   );
 
+  const handlePreviewFile = useCallback((file: AttachedFileMeta) => {
+    const p = file.filePath;
+    if (!p) return;
+    if (p.startsWith('http://') || p.startsWith('https://')) {
+      window.electron.openExternal(p);
+    } else {
+      void invokeIpc('shell:openPath', p);
+    }
+  }, []);
+
   if (!sessionKey) {
     return (
       <div
@@ -293,7 +304,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
                   key={msg.id || `msg-${idx}`}
                   message={msg}
                   showThinking={showThinking}
-                  onPreviewFile={() => {}}
+                  onPreviewFile={handlePreviewFile}
                 />
               ))}
               {shouldRenderStreaming && (
@@ -315,7 +326,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
                   showThinking={showThinking}
                   isStreaming
                   streamingTools={streamingTools}
-                  onPreviewFile={() => {}}
+                  onPreviewFile={handlePreviewFile}
                 />
               )}
               {sessionSynced && sending && pendingFinal && !shouldRenderStreaming ? (

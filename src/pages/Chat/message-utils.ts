@@ -3,6 +3,7 @@
  * Ported from OpenClaw's message-extract.ts to handle the various
  * message content formats returned by the Gateway.
  */
+import { useMemo } from 'react';
 import type { RawMessage, ContentBlock } from '@/stores/chat';
 
 /**
@@ -285,49 +286,51 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
  * Includes both _attachedFiles and references found in message text.
  */
 export function usePreviewableFiles(messages: Array<unknown & { _attachedFiles?: Array<{ mimeType: string; filePath?: string; fileName: string }>; content?: unknown }>) {
-  const seen = new Set<string>();
-  const result: Array<{ mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }> = [];
+  return useMemo(() => {
+    const seen = new Set<string>();
+    const result: Array<{ mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }> = [];
 
-  function addItem(item: { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }) {
-    if (seen.has(item.filePath)) return;
-    seen.add(item.filePath);
-    result.push(item);
-  }
+    function addItem(item: { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }) {
+      if (seen.has(item.filePath)) return;
+      seen.add(item.filePath);
+      result.push(item);
+    }
 
-  for (const msg of messages) {
-    // Path 1: explicit attached files
-    if (msg._attachedFiles) {
-      for (const file of msg._attachedFiles) {
-        if (!isPreviewableFile(file)) continue;
-        const fp = file.filePath || file.fileName;
-        if (!fp) continue;
-        addItem({
-          mimeType: file.mimeType,
-          filePath: fp,
-          fileName: file.fileName,
-          fileSize: (file as { fileSize?: number }).fileSize ?? 0,
-          preview: (file as { preview?: string | null }).preview ?? null,
-        });
+    for (const msg of messages) {
+      // Path 1: explicit attached files
+      if (msg._attachedFiles) {
+        for (const file of msg._attachedFiles) {
+          if (!isPreviewableFile(file)) continue;
+          const fp = file.filePath || file.fileName;
+          if (!fp) continue;
+          addItem({
+            mimeType: file.mimeType,
+            filePath: fp,
+            fileName: file.fileName,
+            fileSize: (file as { fileSize?: number }).fileSize ?? 0,
+            preview: (file as { preview?: string | null }).preview ?? null,
+          });
+        }
+      }
+
+      // Path 2: references in message text
+      const text = extractText(msg);
+      if (text) {
+        const refs = extractPreviewableRefs(text);
+        for (const ref of refs) {
+          addItem({
+            mimeType: ref.mimeType,
+            filePath: ref.filePath,
+            fileName: ref.fileName,
+            fileSize: 0,
+            preview: null,
+          });
+        }
       }
     }
 
-    // Path 2: references in message text
-    const text = extractText(msg);
-    if (text) {
-      const refs = extractPreviewableRefs(text);
-      for (const ref of refs) {
-        addItem({
-          mimeType: ref.mimeType,
-          filePath: ref.filePath,
-          fileName: ref.fileName,
-          fileSize: 0,
-          preview: null,
-        });
-      }
-    }
-  }
-
-  return result;
+    return result;
+  }, [messages]);
 }
 
 /**

@@ -243,7 +243,6 @@ export function Chat() {
                   message={msg}
                   showThinking={showThinking}
                   onPreviewFile={(file) => {
-                    console.log('file', file);
                     if (file.filePath) {
                       setActivePreviewFilePath(file.filePath);
                       setShowPreviewPanel(true);
