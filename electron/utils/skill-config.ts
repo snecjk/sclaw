@@ -6,12 +6,12 @@
  * All file I/O uses async fs/promises to avoid blocking the main thread.
  */
 import { readFile, writeFile, access, cp, mkdir } from 'fs/promises';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, cpSync, rmSync } from 'fs';
 import { constants } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { createHash } from 'node:crypto';
-import { getOpenClawDir, getResourcesDir } from './paths';
+import { getOpenClawDir, getResourcesDir, ensureDir } from './paths';
 import { logger } from './logger';
 import { withConfigLock } from './config-mutex';
 
@@ -406,6 +406,19 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
                 toEnable.push(spec.slug);
             }
             logger.info(`Installed preinstalled skill: ${spec.slug} -> ${targetDir}`);
+
+            // Also sync local built-in skills into OpenClaw's bundled skills directory
+            // so the Gateway marks them as bundled (shows in the "Built-in" tab).
+            if (spec.local) {
+                const openclawSkillsDir = join(getOpenClawDir(), 'skills');
+                ensureDir(openclawSkillsDir);
+                const bundledTarget = join(openclawSkillsDir, spec.slug);
+                if (existsSync(bundledTarget)) {
+                    rmSync(bundledTarget, { recursive: true, force: true });
+                }
+                cpSync(sourceDir, bundledTarget, { recursive: true, dereference: true });
+                logger.info(`Synced built-in skill to OpenClaw bundled dir: ${bundledTarget}`);
+            }
         } catch (error) {
             logger.warn(`Failed to install preinstalled skill ${spec.slug}:`, error);
         }
