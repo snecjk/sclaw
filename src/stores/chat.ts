@@ -1164,7 +1164,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   const lastMsg = msgs[msgs.length - 1];
                   set((s) => {
                     const next: Partial<typeof s> = {};
-                    if (firstUser) {
+                    if (firstUser && !s.sessionLabels[session.key]) {
                       const labelText = getMessageText(firstUser.content).trim();
                       if (labelText) {
                         const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
@@ -1406,10 +1406,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ messages: finalMessages, thinkingLevel, loading: false });
 
       // Extract first user message text as a session label for display in the toolbar.
+      // Only set when there is no existing label so manual renames are preserved.
       // Skip main sessions (key ends with ":main") — they rely on the Gateway-provided
       // displayName (e.g. the configured agent name "StoClaw") instead.
       const isMainSession = targetSessionKey.endsWith(':main');
-      if (!isMainSession) {
+      if (!isMainSession && !get().sessionLabels[targetSessionKey]) {
         const firstUserMsg = finalMessages.find((m) => m.role === 'user');
         if (firstUserMsg) {
           const labelText = getMessageText(firstUserMsg.content).trim();
@@ -2111,4 +2112,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  renameSession: (key: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    set((s) => ({
+      sessionLabels: { ...s.sessionLabels, [key]: trimmed },
+    }));
+  },
 }));

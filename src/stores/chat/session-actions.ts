@@ -136,7 +136,7 @@ export function createSessionActions(
                   const lastMsg = msgs[msgs.length - 1];
                   set((s) => {
                     const next: Partial<typeof s> = {};
-                    if (firstUser) {
+                    if (firstUser && !s.sessionLabels[session.key]) {
                       const labelText = getMessageText(firstUser.content).trim();
                       if (labelText) {
                         const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;

@@ -23,7 +23,7 @@
       "stat3Unit": "元",
       "footerTeam": "政策服务中心",
       "footerHint": "待核对2个模版",
-      "defaultComposePrompt": "查询全国 2026 年 5 月的低价件量数据，生成日报，并支持编辑"
+      "defaultComposePrompt": "生成周报PPT"
     },
     "customer": {
       "title": "政策定价测算",

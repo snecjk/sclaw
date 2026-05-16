@@ -24,6 +24,7 @@ import {
   Bot,
   Radio,
   ChevronDown,
+  Pencil,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -410,6 +411,7 @@ export function Sidebar() {
   const switchSession = useChatStore((s) => s.switchSession);
   const newSession = useChatStore((s) => s.newSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
+  const renameSession = useChatStore((s) => s.renameSession);
   const loadSessions = useChatStore((s) => s.loadSessions);
   const loadHistory = useChatStore((s) => s.loadHistory);
   const removeSubitem = useStoTaskSubitemsStore((s) => s.removeSubitem);
@@ -492,6 +494,8 @@ export function Sidebar() {
   );
 
   const [sessionToDelete, setSessionToDelete] = useState<{ key: string; label: string } | null>(null);
+  const [editingSessionKey, setEditingSessionKey] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState('');
   const [subitemToDelete, setSubitemToDelete] = useState<{
     taskId: StoTaskId;
     entryId: string;
@@ -804,46 +808,93 @@ export function Sidebar() {
                     />
                   </button>
                   {bucketOpen[bucket.key] &&
-                    bucket.sessions.map((s) => (
-                      <div key={s.key} className="group relative flex items-center">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            switchSession(s.key);
-                            navigate('/chat');
-                          }}
-                          title={getSessionLabel(s.key, s.displayName, s.label)}
-                          className={cn(
-                            'w-full rounded-[8px] px-[10px] py-[6px] pr-9 text-left text-[13px] transition-colors',
-                            isOnChat && currentSessionKey === s.key
-                              ? 'bg-[#E5E6EB] font-medium text-foreground dark:bg-white/[0.12]'
-                              : 'text-foreground/80 hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
+                    bucket.sessions.map((s) => {
+                      const isEditing = editingSessionKey === s.key;
+                      const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
+                      return (
+                        <div key={s.key} className="group relative flex items-center">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              autoFocus
+                              value={editingValue}
+                              onChange={(e) => setEditingValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  renameSession(s.key, editingValue);
+                                  setEditingSessionKey(null);
+                                } else if (e.key === 'Escape') {
+                                  setEditingSessionKey(null);
+                                }
+                              }}
+                              onBlur={() => {
+                                renameSession(s.key, editingValue);
+                                setEditingSessionKey(null);
+                              }}
+                              className={cn(
+                                'w-full rounded-[8px] px-[10px] py-[6px] pr-16 text-left text-[13px] transition-colors outline-none',
+                                'bg-white border border-[var(--sto-brand-6)] text-foreground dark:bg-card',
+                              )}
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                switchSession(s.key);
+                                navigate('/chat');
+                              }}
+                              title={sessionLabel}
+                              className={cn(
+                                'w-full rounded-[8px] px-[10px] py-[6px] pr-9 text-left text-[13px] transition-colors',
+                                isOnChat && currentSessionKey === s.key
+                                  ? 'bg-[#E5E6EB] font-medium text-foreground dark:bg-white/[0.12]'
+                                  : 'text-foreground/80 hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
+                              )}
+                            >
+                              <span className="block min-w-0 truncate">{sessionLabel}</span>
+                            </button>
                           )}
-                        >
-                          <span className="block min-w-0 truncate">{getSessionLabel(s.key, s.displayName, s.label)}</span>
-                        </button>
-                        {!sidebarCollapsed ? (
-                          <button
-                            type="button"
-                            aria-label={t('common:actions.delete')}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSessionToDelete({
-                                key: s.key,
-                                label: getSessionLabel(s.key, s.displayName, s.label),
-                              });
-                            }}
-                            className={cn(
-                              'absolute right-1 flex items-center justify-center rounded p-0.5 transition-opacity',
-                              'opacity-0 group-hover:opacity-100',
-                              'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
-                            )}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        ) : null}
-                      </div>
-                    ))}
+                          {!sidebarCollapsed && !isEditing ? (
+                            <>
+                              <button
+                                type="button"
+                                aria-label={t('common:actions.edit')}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingSessionKey(s.key);
+                                  setEditingValue(sessionLabel);
+                                }}
+                                className={cn(
+                                  'absolute right-6 flex items-center justify-center rounded p-0.5 transition-opacity',
+                                  'opacity-0 group-hover:opacity-100',
+                                  'text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground',
+                                )}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={t('common:actions.delete')}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSessionToDelete({
+                                    key: s.key,
+                                    label: sessionLabel,
+                                  });
+                                }}
+                                className={cn(
+                                  'absolute right-1 flex items-center justify-center rounded p-0.5 transition-opacity',
+                                  'opacity-0 group-hover:opacity-100',
+                                  'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
+                                )}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                 </div>
               ) : null,
               )
