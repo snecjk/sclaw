@@ -13,6 +13,7 @@ import { getCurrentEnvConfig } from '../../shared/env-config';
 export type SsoEnvironment =
   | 'daily-external'
   | 'production-external'
+  | 'production-internal'
   | 'pre-release'
   | 'local';
 
@@ -88,8 +89,9 @@ export async function clearAuthUser(): Promise<void> {
 }
 
 export async function getSsoEnvironment(): Promise<SsoEnvironment> {
-  const store = await getAuthStore();
-  return store.get('ssoEnvironment', getCurrentEnvConfig().ssoEnvironment as SsoEnvironment);
+  // 始终以编译时环境为准，避免旧 auth store 中存储的 ssoEnvironment
+  // 导致测试包打到生产服务器（auth store 跨安装共享）
+  return getCurrentEnvConfig().ssoEnvironment as SsoEnvironment;
 }
 
 export async function setSsoEnvironment(env: SsoEnvironment): Promise<void> {

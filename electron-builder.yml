@@ -61,7 +61,7 @@ npmRebuild: false
 # Fallback: GitHub Releases (backup, used when OSS is unavailable)
 publish:
   - provider: generic
-    url: https://ali-sto-wisdom-star.aliyuncs.com/latest
+    url: https://ali-sto-wisdom-star.oss-cn-shanghai.aliyuncs.com/stoclaw/releases/latest
     useMultipleRangeRequest: false
   - provider: github
     owner: ValueCell-ai

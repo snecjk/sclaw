@@ -130,12 +130,16 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   },
 
   checkForUpdates: async () => {
+    const { status } = get();
+    // 防重入：已在检查中时不再触发
+    if (status === 'checking') return;
+
     set({ status: 'checking', error: null, policyBlocked: false });
     
     try {
       const result = await Promise.race([
         invokeIpc('update:check'),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Update check timed out')), 30000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('检查更新超时，请检查网络后重试')), 60000))
       ]) as {
         success: boolean;
         error?: string;
@@ -171,8 +175,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
       const currentStatus = get().status;
       if (currentStatus === 'checking' || currentStatus === 'idle') {
         set({
-          status: 'error',
-          error: 'Update check completed without a result. This usually means the app is running in dev mode.',
+          status: 'not-available',
           policyBlocked: false,
         });
       }
