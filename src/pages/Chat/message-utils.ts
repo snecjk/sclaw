@@ -207,17 +207,6 @@ export function extractToolUse(message: RawMessage | unknown): Array<{ id: strin
  */
 const PREVIEWABLE_MIME_PREFIXES = [
   'text/html',
-  'application/pdf',
-  'text/markdown',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-  'text/plain',
-  'text/csv',
-  'application/json',
 ];
 
 export function isPreviewableFile(file: { mimeType: string; filePath?: string }): boolean {
@@ -269,8 +258,8 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
     addIfNotImage(url, fileName, ext);
   }
 
-  // Absolute file paths (Unix / Windows)
-  const pathRegex = /(\/(?:[\w.-]+\/)*[\w.-]+\.\w{2,})/g;
+  // Absolute file paths (Unix / Windows) — only HTML files (tied to PPT/report generation preview)
+  const pathRegex = /(\/(?:[\w.-]+\/)*[\w.-]+\.html?)/g;
   while ((match = pathRegex.exec(text)) !== null) {
     const path = match[1];
     const fileName = path.split('/').pop() || '';

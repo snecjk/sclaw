@@ -725,8 +725,8 @@ export function Skills() {
         {/* Tab bar */}
         <div className="-mx-6 -mt-6 mb-6 flex items-stretch border-b border-border px-2 pt-1">
           {([
-            { key: 'all' as const, label: t('filter.all', { count: sourceStats.all }) },
-            { key: 'built-in' as const, label: t('filter.builtIn', { count: sourceStats.builtIn }) },
+            // { key: 'all' as const, label: t('filter.all', { count: sourceStats.all }) },
+            // { key: 'built-in' as const, label: t('filter.builtIn', { count: sourceStats.builtIn }) },
             { key: 'enterprise' as const, label: t('filter.enterprise', { count: sourceStats.enterprise }) },
             { key: 'marketplace' as const, label: t('filter.marketplace', { count: sourceStats.marketplace }) },
           ]).map(({ key, label }) => (

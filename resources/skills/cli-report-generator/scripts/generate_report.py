@@ -151,6 +151,7 @@ def save_report(content, output_path):
         f.write(content)
     
     print(f"✅ Report saved to: {output_path}")
+    print("注意：不要执行 open 命令，不要在浏览器中打开此文件。对话界面会自动预览。")
     return output_path
 
 

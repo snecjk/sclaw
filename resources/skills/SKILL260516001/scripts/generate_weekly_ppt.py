@@ -1,3 +1,4 @@
+import argparse
 import json
 import re
 import subprocess
@@ -13,6 +14,7 @@ SLIDE_CONFIG = [
         "id": 1,
         "title": "关键指标趋势",
         "num": "01",
+        "data_keys": ["market", "volume", "shop"],
         "data_queries": [
             "policyWeekPpt industryTdtMarketShare query --params '{}'",
             "policyWeekPpt keyMetricTrendVolume query --params '{}'",
@@ -23,11 +25,20 @@ SLIDE_CONFIG = [
         "id": 2,
         "title": "过程目标达成",
         "num": "02",
+        "data_keys": ["process"],
         "data_queries": [
             "policyWeekPpt processTarget query --params '{}'"
         ]
     }
 ]
+
+# 数据文件映射
+DATA_FILE_MAP = {
+    "market": "market.json",
+    "volume": "volume.json",
+    "shop": "shop.json",
+    "process": "process.json"
+}
 
 # ========== 通用样式 ==========
 
@@ -117,45 +128,130 @@ td { padding: 1px 2px; text-align: center; border: 1px solid #e0e0e0; font-size:
 [contenteditable="true"] td:hover, [contenteditable="true"] .info-box:hover, [contenteditable="true"] .chart-column:hover { background: #fff9f5; cursor: text; }
 """
 
-# ========== 数据查询 ==========
+# ========== 数据管理 ==========
 
-def run_query(cmd):
-    """执行CLI查询命令"""
-    full_cmd = f"~/.sai/bin/sai {cmd} 2>&1"
-    try:
-        result = subprocess.run(full_cmd, shell=True, capture_output=True, text=True, timeout=60)
-        output = result.stdout + result.stderr
-        # 提取JSON
-        lines = output.strip().split('\n')
-        for line in lines:
-            line = line.strip()
-            if line.startswith('{"ok"'):
+class DataManager:
+    """管理数据加载、缓存和按需查询"""
+    
+    def __init__(self, data_dir: Path | None = None):
+        self.data_dir = data_dir
+        self._cache: dict[str, list] = {}
+        self._loaded_from_dir: set[str] = set()
+        
+        # 优先从 data_dir 加载已有数据
+        if data_dir:
+            self._load_from_dir()
+    
+    def _load_from_dir(self):
+        """从 data_dir 加载已有 JSON 数据"""
+        for key, filename in DATA_FILE_MAP.items():
+            filepath = self.data_dir / filename
+            if filepath.exists():
                 try:
-                    return json.loads(line)
-                except:
-                    continue
-        return None
-    except Exception as e:
-        print(f"Query error: {e}", file=sys.stderr)
-        return None
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        if isinstance(data, list):
+                            self._cache[key] = data
+                            self._loaded_from_dir.add(key)
+                            print(f"从缓存加载 {key}: {len(data)} 条", file=sys.stderr)
+                except Exception as e:
+                    print(f"加载缓存失败 {key}: {e}", file=sys.stderr)
+    
+    def _save_to_dir(self, key: str, data: list):
+        """保存数据到 data_dir"""
+        if not self.data_dir:
+            return
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        filepath = self.data_dir / DATA_FILE_MAP[key]
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"保存缓存失败 {key}: {e}", file=sys.stderr)
+    
+    def get(self, key: str) -> list:
+        """获取数据，优先从缓存返回"""
+        return self._cache.get(key, [])
+    
+    def has(self, key: str) -> bool:
+        """检查是否有数据"""
+        return key in self._cache and len(self._cache[key]) > 0
+    
+    def query(self, key: str, force: bool = False) -> list:
+        """通过 CLI 查询数据，支持缓存"""
+        if not force and self.has(key):
+            return self._cache[key]
+        
+        # 找到对应的 CLI 命令
+        cmd = None
+        for config in SLIDE_CONFIG:
+            for i, dk in enumerate(config["data_keys"]):
+                if dk == key:
+                    cmd = config["data_queries"][i]
+                    break
+            if cmd:
+                break
+        
+        if not cmd:
+            print(f"未知数据 key: {key}", file=sys.stderr)
+            return []
+        
+        print(f"查询 {key}...", file=sys.stderr)
+        result = self._run_cli(cmd)
+        data = self._extract_list(result)
+        self._cache[key] = data
+        self._save_to_dir(key, data)
+        print(f"  {key}: {len(data)} 条", file=sys.stderr)
+        return data
+    
+    def query_for_slides(self, slide_ids: list[int]):
+        """根据页面 ID 列表，按需查询所需数据"""
+        required_keys = set()
+        for config in SLIDE_CONFIG:
+            if config["id"] in slide_ids:
+                required_keys.update(config["data_keys"])
+        
+        for key in required_keys:
+            self.query(key)
+    
+    def available_slides(self) -> list[int]:
+        """返回当前已有数据能生成的页面列表"""
+        available = []
+        for config in SLIDE_CONFIG:
+            if all(self.has(k) for k in config["data_keys"]):
+                available.append(config["id"])
+        return available
+    
+    @staticmethod
+    def _run_cli(cmd: str) -> dict | None:
+        """执行 CLI 查询命令"""
+        full_cmd = f"~/.sai/bin/sai {cmd} 2>&1"
+        try:
+            result = subprocess.run(full_cmd, shell=True, capture_output=True, text=True, timeout=60)
+            output = result.stdout + result.stderr
+            lines = output.strip().split('\n')
+            for line in lines:
+                line = line.strip()
+                if line.startswith('{"ok"'):
+                    try:
+                        return json.loads(line)
+                    except:
+                        continue
+            return None
+        except Exception as e:
+            print(f"Query error: {e}", file=sys.stderr)
+            return None
+    
+    @staticmethod
+    def _extract_list(data) -> list:
+        """从返回数据中提取 list"""
+        if not data or not data.get('ok'):
+            return []
+        try:
+            return data['data']['result']['body']['data']['list']
+        except:
+            return []
 
-def extract_list(data):
-    """从返回数据中提取list"""
-    if not data or not data.get('ok'):
-        return []
-    try:
-        return data['data']['result']['body']['data']['list']
-    except:
-        return []
-
-def extract_state_date(data):
-    """从返回数据中提取stateDate"""
-    if not data or not data.get('ok'):
-        return ''
-    try:
-        return data['data']['result']['body']['data'].get('stateDate', '')
-    except:
-        return ''
 
 # ========== 格式化函数 ==========
 
@@ -174,7 +270,7 @@ def fmt_gap(v):
     if v is None or v == '':
         return '-'
     try:
-        f = float(v) / 10000  # 除以1万
+        f = float(v) / 10000
         if f > 0:
             return f'+{f:.1f}万'
         else:
@@ -226,15 +322,14 @@ def fmt_int(v):
         return "-"
     return f"{int(v):,}"
 
-# ========== SVG图表生成 ==========
+# ========== SVG 图表生成 ==========
 
 def draw_line_chart(data_list, fields, colors, y_formatter, width=280, height=280):
-    """绘制折线图 SVG - width 用于 viewBox 计算，实际宽度由 CSS 控制"""
+    """绘制折线图 SVG"""
     left, right, top, bottom = 40, 10, 15, 50
     chart_w = width - left - right
     chart_h = height - top - bottom
     
-    # 收集所有有效值
     all_values = []
     for d in data_list:
         for f in fields:
@@ -255,19 +350,16 @@ def draw_line_chart(data_list, fields, colors, y_formatter, width=280, height=28
     
     svg_parts = [f'<svg width="100%" height="{height}" viewBox="0 0 {width} {height}" preserveAspectRatio="none">']
     
-    # 网格线
     for i in range(6):
         y = top + chart_h * i / 5
         svg_parts.append(f'<line x1="{left}" y1="{y}" x2="{width-right}" y2="{y}" stroke="#e0e0e0" stroke-dasharray="3,3"/>')
     
-    # Y轴标签
     for i in range(6):
         y = top + chart_h * i / 5
         val = max_v - (max_v - min_v) * i / 5
         label = y_formatter(val)
         svg_parts.append(f'<text x="{left-5}" y="{y+4}" text-anchor="end" font-size="10" fill="#999">{label}</text>')
     
-    # X轴标签
     n = len(data_list)
     step = max(1, n // 8)
     for i in range(0, n, step):
@@ -276,7 +368,6 @@ def draw_line_chart(data_list, fields, colors, y_formatter, width=280, height=28
         x = left + (i / (n-1)) * chart_w if n > 1 else left + chart_w/2
         svg_parts.append(f'<text x="{x}" y="{height-bottom+20}" text-anchor="middle" font-size="10" fill="#999">{label}</text>')
     
-    # 绘制每条线
     for field, color in zip(fields, colors):
         points = []
         for i, d in enumerate(data_list):
@@ -289,7 +380,6 @@ def draw_line_chart(data_list, fields, colors, y_formatter, width=280, height=28
         if len(points) < 2:
             continue
         
-        # 分段绘制
         segments = []
         current_seg = [points[0]]
         for p in points[1:]:
@@ -316,7 +406,6 @@ def draw_line_chart(data_list, fields, colors, y_formatter, width=280, height=28
 def generate_slide_1(market_data, volume_data, shop_data):
     """生成第1页：关键指标趋势"""
     
-    # 计算底部信息
     latest_market = market_data[-1] if market_data else {}
     latest_sto_ms = latest_market.get('stoMarketShare')
     latest_tdt_ms = latest_market.get('tdtMarketShare')
@@ -338,7 +427,6 @@ def generate_slide_1(market_data, volume_data, shop_data):
     shop_chain = ((shop_latest - shop_prev) / shop_prev * 100) if shop_prev and shop_prev > 0 else 0
     shop_change = abs(shop_latest - shop_prev)
     
-    # 生成图表
     market_svg = draw_line_chart(market_data, ['stoMarketShare', 'tdtMarketShare', 'tdtYoyMarketShare'],
                                 ['#ff6600', '#00aa00', '#999999'], fmt_percent)
     volume_svg = draw_line_chart(volume_data, ['stoBizNum', 'ydBizNum', 'ytoBizNum'],
@@ -389,35 +477,31 @@ def generate_slide_1(market_data, volume_data, shop_data):
             </div>
         </div>
     </div>
-    <div class="footer">生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M')} | 数据来源：政策周报PPT | 第 1 / 2 页</div>
+    <div class="footer">生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M')} | 数据来源：政策周报PPT | 第 1 / {{total_pages}} 页</div>
 </div>'''
 
 def generate_slide_2(process_data):
     """生成第 2 页：过程目标达成"""
     
-    # 过滤数据 - 排除总部、西藏、海南、未知政策省，但保留全国
     exclude = {'总部', '西藏', '海南', '未知政策省'}
     filtered = [d for d in process_data if d.get('policyProvName') not in exclude]
     
-    # 提取"全国"数据单独处理
     national_data = [d for d in filtered if d.get('policyProvName') == '全国']
     provincial_data = [d for d in filtered if d.get('policyProvName') != '全国']
     
-    # 战区排序
     war_order = ['一战区', '二战区', '三战区']
     def war_sort_key(item):
         w = item.get('warName', '')
         return war_order.index(w) if w in war_order else 99
     provincial_data.sort(key=war_sort_key)
     
-    # 按战区分组
     war_groups = OrderedDict()
     for d in provincial_data:
         w = d.get('warName', '')
         if w not in war_groups:
             war_groups[w] = []
         war_groups[w].append(d)
-    # 生成趋势图 SVG
+    
     def make_trend_svg(d):
         vals = [d.get(f'policyGotNum{i}', 0) for i in [4, 3, 2, 1]]
         valid_vals = [v for v in vals if v]
@@ -447,19 +531,13 @@ def generate_slide_2(process_data):
         
         return f'<svg width="50" height="16" viewBox="0 0 50 16">{ "".join(lines) }{ "".join(dots) }</svg>'
     
-    # 生成表格行 - 计算总行数用于均匀分布
-    total_rows = sum(len(provinces) for provinces in war_groups.values())
-    row_height_pct = 100.0 / total_rows if total_rows > 0 else 0
-    
-    # 生成表格行 - 计算总行数用于均匀分布
     total_rows = sum(len(provinces) for provinces in war_groups.values())
     if national_data:
-        total_rows += 1  # 全国行单独占一行
+        total_rows += 1
     row_height_pct = 100.0 / total_rows if total_rows > 0 else 0
     
     table_rows = []
     
-    # 添加全国行到最前面
     for d in national_data:
         prov = d.get('policyProvName', '')
         y_rate = fmt_rate(d.get('yAchievementRate'))
@@ -546,41 +624,82 @@ def generate_slide_2(process_data):
             </div>
         </div>
     </div>
-    <div class="footer">生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M')} | 数据来源：政策周报PPT | 第 2 / 2 页</div>
+    <div class="footer">生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M')} | 数据来源：政策周报PPT | 第 2 / {{total_pages}} 页</div>
 </div>'''
 
 # ========== 主函数 ==========
 
 def main():
-    print("正在查询数据...", file=sys.stderr)
+    parser = argparse.ArgumentParser(description='生成周会 PPT HTML 报告')
+    parser.add_argument('--slides', type=str, default=None, help='指定要生成的页面 ID 列表，如 "[1]" 或 "[1,2]"')
+    parser.add_argument('--data-dir', type=str, default=None, help='数据缓存目录，优先加载已有 JSON 数据')
+    parser.add_argument('--output', type=str, default=None, help='输出文件路径')
+    args = parser.parse_args()
     
-    # 并行查询所有数据
-    market_result = run_query("policyWeekPpt industryTdtMarketShare query --params '{}'")
-    volume_result = run_query("policyWeekPpt keyMetricTrendVolume query --params '{}'")
-    shop_result = run_query("policyWeekPpt keyMetricTrendShopCount query --params '{}'")
-    process_result = run_query("policyWeekPpt processTarget query --params '{}'")
+    # 解析 slides 参数
+    target_slides = [config["id"] for config in SLIDE_CONFIG]
+    if args.slides:
+        try:
+            target_slides = json.loads(args.slides)
+            if not isinstance(target_slides, list):
+                target_slides = [target_slides]
+            print(f"指定生成页面：{target_slides}", file=sys.stderr)
+        except Exception as e:
+            print(f"警告：无法解析 --slides 参数 '{args.slides}'，将生成所有页面。错误：{e}", file=sys.stderr)
     
-    # 提取数据
-    market_data = extract_list(market_result)
-    volume_data = extract_list(volume_result)
-    shop_data = extract_list(shop_result)
-    process_data = extract_list(process_result)
+    # 初始化数据管理器
+    data_dir = Path(args.data_dir) if args.data_dir else None
+    data_mgr = DataManager(data_dir=data_dir)
     
-    print(f"市占数据: {len(market_data)} 条", file=sys.stderr)
-    print(f"单量数据: {len(volume_data)} 条", file=sys.stderr)
-    print(f"客户数数据: {len(shop_data)} 条", file=sys.stderr)
-    print(f"过程目标数据: {len(process_data)} 条", file=sys.stderr)
+    # 按需查询数据
+    print("正在准备数据...", file=sys.stderr)
+    data_mgr.query_for_slides(target_slides)
+    
+    # 检查数据可用性
+    available = data_mgr.available_slides()
+    for sid in target_slides:
+        if sid not in available:
+            config = next((c for c in SLIDE_CONFIG if c["id"] == sid), None)
+            if config:
+                missing = [k for k in config["data_keys"] if not data_mgr.has(k)]
+                print(f"❌ 第 {sid} 页缺少数据: {missing}", file=sys.stderr)
+            else:
+                print(f"❌ 未知页面 ID: {sid}", file=sys.stderr)
+    
+    # 过滤掉无法生成的页面
+    target_slides = [sid for sid in target_slides if sid in available]
+    if not target_slides:
+        print("❌ 没有可用数据生成任何页面", file=sys.stderr)
+        sys.exit(1)
+    
+    print(f"将生成页面：{target_slides}", file=sys.stderr)
     
     # 生成各页面
-    slide1 = generate_slide_1(market_data, volume_data, shop_data)
-    slide2 = generate_slide_2(process_data)
+    slides_html = {}
+    if 1 in target_slides:
+        slides_html[1] = generate_slide_1(
+            data_mgr.get("market"),
+            data_mgr.get("volume"),
+            data_mgr.get("shop")
+        )
+    if 2 in target_slides:
+        slides_html[2] = generate_slide_2(data_mgr.get("process"))
     
-    # 生成导航项
+    # 生成导航项（只包含实际生成的页面）
     nav_items = []
     for config in SLIDE_CONFIG:
-        nav_items.append(f'<div class="nav-page-item" data-target="slide-{config["id"]}">{config["num"]} {config["title"]}</div>')
+        if config["id"] in target_slides:
+            nav_items.append(f'<div class="nav-page-item" data-target="slide-{config["id"]}">{config["num"]} {config["title"]}</div>')
+    
+    total_pages = len(target_slides)
+    
+    # 替换页脚中的 total_pages 占位符
+    for sid in slides_html:
+        slides_html[sid] = slides_html[sid].replace("{{total_pages}}", str(total_pages))
     
     # 生成完整HTML
+    slides_content = "\n".join(slides_html[sid] for sid in sorted(slides_html))
+    
     html = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -593,8 +712,7 @@ def main():
 </head>
 <body>
     <div class="ppt-container" contenteditable="true">
-        {slide1}
-        {slide2}
+        {slides_content}
     </div>
     
     <div class="nav-panel" id="navPanel">
@@ -604,7 +722,7 @@ def main():
             {''.join(nav_items)}
         </div>
         <div class="nav-info">
-            第 <span id="current-page">1</span> / <span id="total-pages">{len(SLIDE_CONFIG)}</span> 页
+            第 <span id="current-page">1</span> / <span id="total-pages">{total_pages}</span> 页
         </div>
     </div>
     
@@ -615,7 +733,6 @@ def main():
         const navPanel = document.getElementById('navPanel');
         const navToggle = document.getElementById('navToggle');
         
-        // 导航折叠/展开 - 点击按钮切换
         navToggle.addEventListener('click', function(e) {{
             e.stopPropagation();
             navPanel.classList.toggle('collapsed');
@@ -624,7 +741,6 @@ def main():
             navToggle.title = isCollapsed ? '展开' : '收起';
         }});
         
-        // 鼠标悬停自动展开
         navPanel.addEventListener('mouseenter', function() {{
             if (navPanel.classList.contains('collapsed')) {{
                 navPanel.classList.remove('collapsed');
@@ -666,14 +782,20 @@ def main():
 </body>
 </html>'''
     
-    # 写入文件 - 使用用户工作区路径（适配不同客户端）
+    # 写入文件
     workspace_dir = Path.home() / ".openclaw" / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
-    output_file = workspace_dir / f"weekly_ppt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+    
+    if args.output:
+        output_file = Path(args.output)
+    else:
+        output_file = workspace_dir / f"weekly_ppt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+    
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(html)
     
-    print(output_file)
+    print(f"报告已生成: {output_file}")
+    print("注意：不要执行 open 命令，不要在浏览器中打开此文件。对话界面会自动预览。")
 
 if __name__ == '__main__':
     main()

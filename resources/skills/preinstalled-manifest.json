@@ -31,40 +31,6 @@
       "ref": "main",
       "version": "main",
       "autoEnable": true
-    },
-    {
-      "slug": "find-skills-skill",
-      "repo": "openclaw/skills",
-      "repoPath": "skills/fangkelvin/find-skills-skill",
-      "ref": "main",
-      "version": "main",
-      "autoEnable": true
-    },
-    {
-      "slug": "browser-automation",
-      "repo": "openclaw/skills",
-      "repoPath": "skills/peytoncasper/browser-automation",
-      "ref": "main",
-      "version": "main",
-      "autoEnable": true
-    },
-    {
-      "slug": "data-visualization",
-      "repo": "openclaw/skills",
-      "repoPath": "skills/okaris/data-visualization-2",
-      "ref": "main",
-      "version": "main",
-      "autoEnable": true
-    },
-    {
-      "slug": "table-css-gen",
-      "local": true,
-      "autoEnable": true
-    },
-    {
-      "slug": "weekly-ppt",
-      "local": true,
-      "autoEnable": true
     }
   ]
 }

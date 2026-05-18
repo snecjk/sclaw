@@ -63,16 +63,19 @@ export const ChatMessage = memo(function ChatMessage({
   const attachedFiles = message._attachedFiles || [];
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
 
-  // Extract previewable refs from message text (local paths / localhost URLs)
-  const extractedRefs = extractPreviewableRefs(text).filter(
-    (ref) => !attachedFiles.some((f) => f.filePath === ref.filePath),
-  );
+  // Extract previewable refs from message text (only HTML files — tied to PPT/report generation)
+  const extractedRefs = extractPreviewableRefs(text)
+    .filter((ref) => !attachedFiles.some((f) => f.filePath === ref.filePath))
+    .filter((ref) => ref.mimeType === 'text/html');
+
+  // Only images and HTML files render as cards; other attachments are hidden
+  const hasRenderableFiles = attachedFiles.some((f) => f.mimeType.startsWith('image/') || f.mimeType === 'text/html');
 
   // Never render tool result messages in chat UI
   if (isToolResult) return null;
 
   const hasStreamingToolStatus = isStreaming && streamingTools.length > 0;
-  if (!hasText && !visibleThinking && images.length === 0 && visibleTools.length === 0 && attachedFiles.length === 0 && extractedRefs.length === 0 && !hasStreamingToolStatus) return null;
+  if (!hasText && !visibleThinking && images.length === 0 && visibleTools.length === 0 && !hasRenderableFiles && extractedRefs.length === 0 && !hasStreamingToolStatus) return null;
 
   return (
     <div
@@ -135,10 +138,11 @@ export const ChatMessage = memo(function ChatMessage({
         )}
 
         {/* File attachments — images above text for user, file cards below */}
-        {isUser && attachedFiles.length > 0 && (
+        {isUser && hasRenderableFiles && (
           <div className="flex flex-wrap gap-2">
             {attachedFiles.map((file, i) => {
               const isImage = file.mimeType.startsWith('image/');
+              const isHtml = file.mimeType === 'text/html';
               // Skip image attachments if we already have images from content blocks
               if (isImage && images.length > 0) return null;
               if (isImage) {
@@ -160,7 +164,8 @@ export const ChatMessage = memo(function ChatMessage({
                   </div>
                 );
               }
-              // Non-image files → file card
+              // Only HTML files (PPT/report generation output) render as FileCard
+              if (!isHtml) return null;
               return <FileCard key={`local-${i}`} file={file} onPreviewFile={onPreviewFile} />;
             })}
           </div>
@@ -200,10 +205,11 @@ export const ChatMessage = memo(function ChatMessage({
         )}
 
         {/* File attachments — assistant messages (below text) */}
-        {!isUser && (attachedFiles.length > 0 || extractedRefs.length > 0) && (
+        {!isUser && (attachedFiles.some((f) => f.mimeType.startsWith('image/') || f.mimeType === 'text/html') || extractedRefs.length > 0) && (
           <div className="flex flex-wrap gap-2">
             {attachedFiles.map((file, i) => {
               const isImage = file.mimeType.startsWith('image/');
+              const isHtml = file.mimeType === 'text/html';
               if (isImage && images.length > 0) return null;
               if (isImage && file.preview) {
                 return (
@@ -224,6 +230,8 @@ export const ChatMessage = memo(function ChatMessage({
                   </div>
                 );
               }
+              // Only HTML files (PPT/report generation output) render as FileCard
+              if (!isHtml) return null;
               return <FileCard key={`local-${i}`} file={file} onPreviewFile={onPreviewFile} />;
             })}
             {extractedRefs.map((ref, i) => (
@@ -519,9 +527,9 @@ function preprocessTextForPreviewLinks(text: string): string {
     '[$1](preview://$1)',
   );
 
-  // Replace absolute file paths
+  // Replace absolute file paths (only HTML files — tied to PPT/report generation)
   text = text.replace(
-    /(\/(?:[\w.-]+\/)*[\w.-]+\.\w{2,})/g,
+    /(\/(?:[\w.-]+\/)*[\w.-]+\.html?)/g,
     '[$1](preview://$1)',
   );
 
@@ -625,7 +633,7 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
     }
   }, [file, onPreviewFile]);
 
-  const isPreviewable = ['text/html', 'text/markdown', 'application/pdf'].some((t) => file.mimeType === t) || file.mimeType.startsWith('image/');
+  const isPreviewable = file.mimeType === 'text/html' || (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://'));
 
   return (
     <div 

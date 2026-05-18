@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowDown, Loader2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore, type AttachedFileMeta, type RawMessage } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
@@ -13,10 +13,12 @@ import {
   STO_TASK_SUBITEM_NAV_SCROLL_END,
   type StoTaskSubitemLocationState,
 } from '@/lib/sto-task-compose-storage';
-import { invokeIpc } from '@/lib/api-client';
+// invokeIpc removed – file preview now opens in side panel instead of externally
 import { cn } from '@/lib/utils';
 import type { StoTaskId } from '@/lib/sto-tasks';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
+import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
+import { usePreviewableFiles } from '@/pages/Chat/message-utils';
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
 import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
 import { extractText, extractThinking, extractToolUse, extractImages } from '@/pages/Chat/message-utils';
@@ -71,6 +73,8 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [composeSeed, setComposeSeed] = useState<string | undefined>();
   const [pendingAutoSendText, setPendingAutoSendText] = useState<string | null>(null);
+  const [showPreviewPanel, setShowPreviewPanel] = useState(true);
+  const [activePreviewFilePath, setActivePreviewFilePath] = useState<string | null>(null);
   /** True after we consumed sessionStorage one-shot compose for this subitem (skip generic post-load scroll). */
   const hasOneShotComposeRef = useRef(false);
   /** Generic scroll-to-bottom once per subitem mount (sidebar / deep link / home reused path). */
@@ -223,6 +227,35 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const displayMessages = sessionSynced ? messages : [];
   const isEmpty = sessionSynced && !loading && displayMessages.length === 0 && !shouldRenderStreaming;
 
+  // Collect previewable files from messages and streaming message
+  const allMessagesForPreview = useMemo(() => {
+    const arr = [...messages] as Array<{ _attachedFiles?: AttachedFileMeta[] }>;
+    if (streamMsgObj) {
+      arr.push(streamMsgObj as unknown as { _attachedFiles?: AttachedFileMeta[] });
+    }
+    return arr;
+  }, [messages, streamMsgObj]);
+  const previewableFiles = usePreviewableFiles(allMessagesForPreview);
+  const hasPreviewableFiles = previewableFiles.length > 0;
+
+  // Auto-open newly-generated files in the preview panel
+  const prevPreviewableFilesRef = useRef(previewableFiles);
+  useEffect(() => {
+    const prev = prevPreviewableFilesRef.current;
+    const prevPaths = new Set(prev.map((f) => f.filePath));
+    const newFiles = previewableFiles.filter((f) => !prevPaths.has(f.filePath));
+
+    if (newFiles.length > 0) {
+      const latestFile = newFiles[newFiles.length - 1];
+      if (latestFile.filePath) {
+        setActivePreviewFilePath(latestFile.filePath);
+        setShowPreviewPanel(true);
+      }
+    }
+
+    prevPreviewableFilesRef.current = previewableFiles;
+  }, [previewableFiles]);
+
   useEffect(() => {
     if (currentSessionKey !== sessionKey) return;
     if (sending || shouldRenderStreaming) return;
@@ -251,12 +284,9 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   );
 
   const handlePreviewFile = useCallback((file: AttachedFileMeta) => {
-    const p = file.filePath;
-    if (!p) return;
-    if (p.startsWith('http://') || p.startsWith('https://')) {
-      window.electron.openExternal(p);
-    } else {
-      void invokeIpc('shell:openPath', p);
+    if (file.filePath) {
+      setActivePreviewFilePath(file.filePath);
+      setShowPreviewPanel(true);
     }
   }, []);
 
@@ -276,137 +306,174 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   return (
     <div
       className={cn(
-        'mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl',
+        'relative mt-4 flex min-h-0 flex-1 flex-row overflow-hidden rounded-xl',
         stoTaskSubitemChatCanvasBg,
       )}
     >
-      <div
-        ref={scrollRef}
-        className={cn(
-          'relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-6 py-4 [scrollbar-gutter:stable]',
-          stoTaskSubitemChatCanvasBg,
-        )}
-      >
-        <div ref={contentRef} className="mx-auto max-w-5xl space-y-4">
-          {!sessionSynced || (loading && displayMessages.length === 0) ? (
-            <div className="flex justify-center py-12 text-muted-foreground">
-              <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
-            </div>
-          ) : null}
-          {isEmpty ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              {t('tasks:subitemChatEmpty', { defaultValue: 'No messages yet. Send a message to start.' })}
-            </p>
-          ) : (
-            <>
-              {displayMessages.map((msg, idx) => (
-                <ChatMessage
-                  key={msg.id || `msg-${idx}`}
-                  message={msg}
-                  showThinking={showThinking}
-                  onPreviewFile={handlePreviewFile}
-                />
-              ))}
-              {shouldRenderStreaming && (
-                <ChatMessage
-                  message={
-                    (streamMsgObj
-                      ? {
-                          ...(streamMsgObj as unknown as Record<string, unknown>),
-                          role: (typeof streamMsgObj.role === 'string' ? streamMsgObj.role : 'assistant') as RawMessage['role'],
-                          content: (streamMsgObj as { content?: unknown }).content ?? rawStreamText,
-                          timestamp: streamMsgObj.timestamp ?? streamingTimestamp,
-                        }
-                      : {
-                          role: 'assistant',
-                          content: rawStreamText,
-                          timestamp: streamingTimestamp,
-                        }) as RawMessage
-                  }
-                  showThinking={showThinking}
-                  isStreaming
-                  streamingTools={streamingTools}
-                  onPreviewFile={handlePreviewFile}
-                />
-              )}
-              {sessionSynced && sending && pendingFinal && !shouldRenderStreaming ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                  <span>{t('chat:streaming.processingTitle')}</span>
-                </div>
-              ) : null}
-              {sessionSynced && sending && !pendingFinal && !hasAnyStreamContent ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                  <span>{t('chat:streaming.thinkingTitle')}</span>
-                </div>
-              ) : null}
-            </>
+      {/* Left: Chat area */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div
+          ref={scrollRef}
+          className={cn(
+            'relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-6 py-4 [scrollbar-gutter:stable]',
+            stoTaskSubitemChatCanvasBg,
           )}
-        </div>
-      </div>
-
-      {error ? (
-        <div className="shrink-0 border-t border-destructive/20 bg-destructive/10 px-6 py-2">
-          <div className="mx-auto flex max-w-5xl items-center justify-between">
-            <p className="flex items-center gap-2 text-sm text-destructive">
-              <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
-              {error}
-            </p>
-            <button
-              type="button"
-              onClick={() => void clearError()}
-              className="text-xs text-destructive/60 underline hover:text-destructive"
-            >
-              {t('common:actions.dismiss')}
-            </button>
+        >
+          <div ref={contentRef} className="mx-auto max-w-5xl space-y-4">
+            {!sessionSynced || (loading && displayMessages.length === 0) ? (
+              <div className="flex justify-center py-12 text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
+              </div>
+            ) : null}
+            {isEmpty ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                {t('tasks:subitemChatEmpty', { defaultValue: 'No messages yet. Send a message to start.' })}
+              </p>
+            ) : (
+              <>
+                {displayMessages.map((msg, idx) => (
+                  <ChatMessage
+                    key={msg.id || `msg-${idx}`}
+                    message={msg}
+                    showThinking={showThinking}
+                    onPreviewFile={handlePreviewFile}
+                  />
+                ))}
+                {shouldRenderStreaming && (
+                  <ChatMessage
+                    message={
+                      (streamMsgObj
+                        ? {
+                            ...(streamMsgObj as unknown as Record<string, unknown>),
+                            role: (typeof streamMsgObj.role === 'string' ? streamMsgObj.role : 'assistant') as RawMessage['role'],
+                            content: (streamMsgObj as { content?: unknown }).content ?? rawStreamText,
+                            timestamp: streamMsgObj.timestamp ?? streamingTimestamp,
+                          }
+                        : {
+                            role: 'assistant',
+                            content: rawStreamText,
+                            timestamp: streamingTimestamp,
+                          }) as RawMessage
+                    }
+                    showThinking={showThinking}
+                    isStreaming
+                    streamingTools={streamingTools}
+                    onPreviewFile={handlePreviewFile}
+                  />
+                )}
+                {sessionSynced && sending && pendingFinal && !shouldRenderStreaming ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                    <span>{t('chat:streaming.processingTitle')}</span>
+                  </div>
+                ) : null}
+                {sessionSynced && sending && !pendingFinal && !hasAnyStreamContent ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                    <span>{t('chat:streaming.thinkingTitle')}</span>
+                  </div>
+                ) : null}
+              </>
+            )}
           </div>
         </div>
-      ) : null}
 
-      <div
-        className={cn(
-          'pointer-events-none shrink-0 overflow-hidden px-6',
-          showJumpToLatest ? 'py-0.5' : 'h-0 py-0',
-        )}
-      >
-        <div className="mx-auto flex max-w-5xl justify-center">
-          <motion.button
-            type="button"
-            onClick={() => scrollToLatest('smooth')}
-            className="pointer-events-auto inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-white/45 px-2.5 text-[11px] font-medium leading-none text-foreground/90 shadow-none backdrop-blur-sm transition-colors hover:bg-white/60 dark:border-white/12 dark:bg-white/[0.08] dark:text-foreground/95 dark:hover:bg-white/[0.14] sm:h-8 sm:px-3 sm:text-xs"
-            initial={false}
-            animate={{
-              opacity: showJumpToLatest ? 1 : 0,
-              y: showJumpToLatest ? 0 : 6,
-              scale: showJumpToLatest ? 1 : 0.96,
-              pointerEvents: showJumpToLatest ? 'auto' : 'none',
-            }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-          >
-            <ArrowDown className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" aria-hidden />
-            <span>{t('chat:streaming.jumpToLatest')}</span>
-          </motion.button>
+        {error ? (
+          <div className="shrink-0 border-t border-destructive/20 bg-destructive/10 px-6 py-2">
+            <div className="mx-auto flex max-w-5xl items-center justify-between">
+              <p className="flex items-center gap-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
+                {error}
+              </p>
+              <button
+                type="button"
+                onClick={() => void clearError()}
+                className="text-xs text-destructive/60 underline hover:text-destructive"
+              >
+                {t('common:actions.dismiss')}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <div
+          className={cn(
+            'pointer-events-none shrink-0 overflow-hidden px-6',
+            showJumpToLatest ? 'py-0.5' : 'h-0 py-0',
+          )}
+        >
+          <div className="mx-auto flex max-w-5xl justify-center">
+            <motion.button
+              type="button"
+              onClick={() => scrollToLatest('smooth')}
+              className="pointer-events-auto inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-white/45 px-2.5 text-[11px] font-medium leading-none text-foreground/90 shadow-none backdrop-blur-sm transition-colors hover:bg-white/60 dark:border-white/12 dark:bg-white/[0.08] dark:text-foreground/95 dark:hover:bg-white/[0.14] sm:h-8 sm:px-3 sm:text-xs"
+              initial={false}
+              animate={{
+                opacity: showJumpToLatest ? 1 : 0,
+                y: showJumpToLatest ? 0 : 6,
+                scale: showJumpToLatest ? 1 : 0.96,
+                pointerEvents: showJumpToLatest ? 'auto' : 'none',
+              }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+            >
+              <ArrowDown className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" aria-hidden />
+              <span>{t('chat:streaming.jumpToLatest')}</span>
+            </motion.button>
+          </div>
         </div>
+
+        <PendingQueuePanel
+          queue={queue}
+          onRemove={queueRemove}
+          onMoveUp={queueMoveUp}
+          onMoveDown={queueMoveDown}
+        />
+
+        <ChatInput
+          className="pb-0"
+          seedText={composeSeed}
+          onSend={onSend}
+          onStop={() => void abortRun()}
+          onQueue={handleQueue}
+          disabled={!isGatewayRunning}
+          sending={sending}
+          isEmpty={isEmpty}
+        />
       </div>
 
-      <PendingQueuePanel
-        queue={queue}
-        onRemove={queueRemove}
-        onMoveUp={queueMoveUp}
-        onMoveDown={queueMoveDown}
-      />
+      {/* Right: Preview Panel */}
+      <AnimatePresence>
+        {hasPreviewableFiles && showPreviewPanel && (
+          <motion.div
+            initial={{ opacity: 0, x: 40 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 40 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="flex h-full min-h-0 w-[clamp(300px,38vw,560px)] shrink-0 flex-col overflow-hidden"
+          >
+            <ChatPreviewPanel
+              files={previewableFiles}
+              activeFilePath={activePreviewFilePath}
+              onSelectFile={setActivePreviewFilePath}
+              onClose={() => setShowPreviewPanel(false)}
+              className="h-full w-full"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <ChatInput
-        className="pb-0"
-        seedText={composeSeed}
-        onSend={onSend}
-        onStop={() => void abortRun()}
-        onQueue={handleQueue}
-        disabled={!isGatewayRunning}
-        sending={sending}
-        isEmpty={isEmpty}
-      />
+      {/* Floating toggle button when panel is hidden but files exist */}
+      {hasPreviewableFiles && !showPreviewPanel && (
+        <button
+          onClick={() => setShowPreviewPanel(true)}
+          className="absolute right-4 top-4 z-20 inline-flex h-8 items-center gap-1.5 rounded-full border border-primary/15 bg-white/60 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white/80 dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
+        >
+          <span>预览产物</span>
+          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] text-primary">
+            {previewableFiles.length}
+          </span>
+        </button>
+      )}
     </div>
   );
 }

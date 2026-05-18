@@ -76,7 +76,7 @@ export function TaskDetail() {
             </Link>
           </div>
         </div>
-        <div className="mx-auto flex min-h-0 w-full max-w-[var(--sto-main-inner-max)] flex-1 flex-col overflow-hidden">
+        <div className="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-hidden">
           <TaskSubitemChatSurface taskId={id} entryId={entryId} />
         </div>
       </div>
