@@ -7,21 +7,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowDown, Bot, Cpu, Loader2, Orbit, Sparkles, Workflow } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useChatStore, type RawMessage, type AttachedFileMeta } from '@/stores/chat';
+import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAgentsStore } from '@/stores/agents';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ChatMessage } from './ChatMessage';
+import { AssistantTurnMessage } from './AssistantTurnMessage';
+import { useChatDisplay } from './use-chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatToolbar } from './ChatToolbar';
 import { PendingQueuePanel } from './PendingQueuePanel';
 import { ChatPreviewPanel } from './ChatPreviewPanel';
-import { extractImages, extractText, extractThinking, extractToolUse, usePreviewableFiles } from './message-utils';
+import { extractText, usePreviewableFiles } from './message-utils';
 import { useMessageQueueStore, createAutoSendWatcher } from '@/stores/message-queue';
 import { invokeApi } from '@/lib/api-client';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import { assistantChatCardBgStreaming } from '@/lib/surfaces';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 
@@ -93,19 +94,19 @@ export function Chat() {
   // Gateway not running block has been completely removed so the UI always renders.
 
   const streamMsg = streamingMessage && typeof streamingMessage === 'object'
-    ? streamingMessage as unknown as { role?: string; content?: unknown; timestamp?: number }
+    ? streamingMessage as unknown as { role?: string; content?: unknown; timestamp?: number; id?: string }
     : null;
   const streamText = streamMsg ? extractText(streamMsg) : (typeof streamingMessage === 'string' ? streamingMessage : '');
-  const hasStreamText = streamText.trim().length > 0;
-  const streamThinking = streamMsg ? extractThinking(streamMsg) : null;
-  const hasStreamThinking = showThinking && !!streamThinking && streamThinking.trim().length > 0;
-  const streamTools = streamMsg ? extractToolUse(streamMsg) : [];
-  const hasStreamTools = streamTools.length > 0;
-  const streamImages = streamMsg ? extractImages(streamMsg) : [];
-  const hasStreamImages = streamImages.length > 0;
-  const hasStreamToolStatus = streamingTools.length > 0;
-  const shouldRenderStreaming = sending && (hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasStreamToolStatus);
-  const hasAnyStreamContent = hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasStreamToolStatus;
+
+  const { staticItems, activeTurn, shouldRenderStreaming } = useChatDisplay({
+    messages,
+    sending,
+    pendingFinal,
+    showThinking,
+    streamMsg,
+    streamText,
+    streamingTools,
+  });
 
   const isEmpty = messages.length === 0 && !sending;
 
@@ -318,11 +319,39 @@ export function Chat() {
             <WelcomeScreen />
           ) : (
             <>
-              {messages.map((msg, idx) => (
-                <ChatMessage
-                  key={msg.id || `msg-${idx}`}
-                  message={msg}
+              {staticItems.map((item) => {
+                const onPreviewFile = (file: AttachedFileMeta) => {
+                  if (file.filePath) {
+                    setActivePreviewFilePath(file.filePath);
+                    setShowPreviewPanel(true);
+                  }
+                };
+                if (item.type === 'assistant-turn') {
+                  return (
+                    <AssistantTurnMessage
+                      key={item.key}
+                      turnMessages={item.messages}
+                      showThinking={showThinking}
+                      onPreviewFile={onPreviewFile}
+                    />
+                  );
+                }
+                return (
+                  <ChatMessage
+                    key={item.key}
+                    message={item.message}
+                    showThinking={showThinking}
+                    onPreviewFile={onPreviewFile}
+                  />
+                );
+              })}
+
+              {activeTurn ? (
+                <AssistantTurnMessage
+                  key="active-turn"
+                  turnMessages={activeTurn.turnMessages}
                   showThinking={showThinking}
+                  activeStream={activeTurn.activeStream}
                   onPreviewFile={(file) => {
                     if (file.filePath) {
                       setActivePreviewFilePath(file.filePath);
@@ -330,44 +359,7 @@ export function Chat() {
                     }
                   }}
                 />
-              ))}
-
-              {/* Streaming message */}
-              {shouldRenderStreaming && (
-                <ChatMessage
-                  message={(streamMsg
-                    ? {
-                        ...(streamMsg as Record<string, unknown>),
-                        role: (typeof streamMsg.role === 'string' ? streamMsg.role : 'assistant') as RawMessage['role'],
-                        content: streamMsg.content ?? streamText,
-                        timestamp: streamMsg.timestamp ?? streamingTimestamp,
-                      }
-                    : {
-                        role: 'assistant',
-                        content: streamText,
-                        timestamp: streamingTimestamp,
-                      }) as RawMessage}
-                  showThinking={showThinking}
-                  isStreaming
-                  streamingTools={streamingTools}
-                  onPreviewFile={(file) => {
-                    if (file.filePath) {
-                      setActivePreviewFilePath(file.filePath);
-                      setShowPreviewPanel(true);
-                    }
-                  }}
-                />
-              )}
-
-              {/* Activity indicator: waiting for next AI turn after tool execution */}
-              {sending && pendingFinal && !shouldRenderStreaming && (
-                <ActivityIndicator phase="tool_processing" />
-              )}
-
-              {/* Typing indicator when sending but no stream content yet */}
-              {sending && !pendingFinal && !hasAnyStreamContent && (
-                <TypingIndicator />
-              )}
+              ) : null}
             </>
           )}
         </div>
@@ -644,126 +636,6 @@ function WelcomeScreen() {
             </div>
           ))}
         </motion.div>
-      </div>
-    </div>
-  );
-}
-
-// ── Typing Indicator ────────────────────────────────────────────
-
-function TypingIndicator() {
-  const { t } = useTranslation('chat');
-
-  return (
-    <AssistantActivityCard
-      badge={t('streaming.thinkingBadge')}
-      title={t('streaming.thinkingTitle')}
-      description={t('streaming.thinkingDescription')}
-      tone="thinking"
-    />
-  );
-}
-
-// ── Activity Indicator (shown between tool cycles) ─────────────
-
-function ActivityIndicator({ phase }: { phase: 'tool_processing' }) {
-  void phase;
-  const { t } = useTranslation('chat');
-
-  return (
-    <AssistantActivityCard
-      badge={t('streaming.processingBadge')}
-      title={t('streaming.processingTitle')}
-      description={t('streaming.processingDescription')}
-      tone="processing"
-    />
-  );
-}
-
-function AssistantActivityCard({
-  badge,
-  title,
-  description,
-  tone,
-}: {
-  badge: string;
-  title: string;
-  description: string;
-  tone: 'thinking' | 'processing';
-}) {
-  const isProcessing = tone === 'processing';
-
-  return (
-    <div className="flex gap-3">
-      <div className="relative mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-white/[0.88] text-foreground shadow-sm dark:bg-white/[0.12]">
-        <motion.span
-          className="absolute inset-0 rounded-full border border-border"
-          animate={{ scale: [1, 1.18], opacity: [0.3, 0] }}
-          transition={{ duration: 2, repeat: Infinity, ease: 'easeOut' }}
-        />
-        {isProcessing ? (
-          <Loader2 className="h-4 w-4 animate-spin text-primary" />
-        ) : (
-          <Sparkles className="h-4 w-4 text-primary" />
-        )}
-      </div>
-
-      <div
-        className={cn(
-          'relative min-w-[280px] overflow-hidden rounded-2xl border px-4 py-3.5 text-foreground shadow-[0_10px_30px_rgba(15,23,42,0.08)]',
-          assistantChatCardBgStreaming,
-          isProcessing ? 'border-border' : 'border-border',
-        )}
-      >
-        <motion.div
-          className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-primary/10 to-transparent"
-          initial={{ x: '-120%' }}
-          animate={{ x: '120%' }}
-          transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-        />
-
-        <div className="relative flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.22em] text-primary/80">
-          <motion.span
-            className="h-2.5 w-8 rounded-full bg-primary/25"
-            animate={{
-              opacity: [0.45, 1, 0.55],
-              scaleX: [0.94, 1.04, 0.97],
-            }}
-            transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-          />
-          <span>{badge}</span>
-        </div>
-
-        <div className="relative mt-2">
-          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-            {isProcessing ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-            ) : (
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-            )}
-            <span>{title}</span>
-          </div>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            {description}
-          </p>
-
-          <div className="mt-3 flex gap-2">
-            {[72, 56, 44].map((width, index) => (
-              <motion.span
-                key={`${tone}-${width}`}
-                className="h-1.5 rounded-full bg-primary/20"
-                style={{ width }}
-                animate={{ opacity: [0.3, 0.85, 0.35] }}
-                transition={{
-                  duration: 1.8,
-                  repeat: Infinity,
-                  ease: 'easeInOut',
-                  delay: index * 0.16,
-                }}
-              />
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );

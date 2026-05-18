@@ -37,6 +37,11 @@
         "retryFailedAttachments": "Retry failed attachments"
     },
     "streaming": {
+        "connectingModel": "Connecting to model...",
+        "thinkingProcessTitle": "Thinking process",
+        "toolCallLabel": "Tool call {{index}}",
+        "processMessageLabel": "Process messages {{count}}",
+        "generatingWithTool": "Generating with {{tool}}...",
         "respondingBadge": "AI responding",
         "thinkingBadge": "AI thinking",
         "thinkingTitle": "Preparing the answer",

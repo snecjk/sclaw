@@ -90,6 +90,62 @@ export function extractThinking(message: RawMessage | unknown): string | null {
   return combined.length > 0 ? combined : null;
 }
 
+export type ThinkingTimelineItem =
+  | { type: 'thinking'; content: string }
+  | { type: 'tool'; index: number; id: string; name: string; input: unknown };
+
+/**
+ * Ordered thinking + tool_use segments from message content (preserves block order).
+ */
+export function extractThinkingTimeline(message: RawMessage | unknown): ThinkingTimelineItem[] {
+  if (!message || typeof message !== 'object') return [];
+  const msg = message as Record<string, unknown>;
+  const content = msg.content;
+
+  const items: ThinkingTimelineItem[] = [];
+  let toolIndex = 0;
+
+  if (Array.isArray(content)) {
+    for (const block of content as ContentBlock[]) {
+      if (block.type === 'thinking' && block.thinking) {
+        const cleaned = block.thinking.trim();
+        if (cleaned) {
+          items.push({ type: 'thinking', content: cleaned });
+        }
+      } else if ((block.type === 'tool_use' || block.type === 'toolCall') && block.name) {
+        toolIndex += 1;
+        items.push({
+          type: 'tool',
+          index: toolIndex,
+          id: block.id || `tool-${toolIndex}`,
+          name: block.name,
+          input: block.input ?? block.arguments,
+        });
+      }
+    }
+  }
+
+  if (items.length === 0) {
+    const thinking = extractThinking(message);
+    if (thinking) {
+      items.push({ type: 'thinking', content: thinking });
+    }
+    const tools = extractToolUse(message);
+    for (const tool of tools) {
+      toolIndex += 1;
+      items.push({
+        type: 'tool',
+        index: toolIndex,
+        id: tool.id || `tool-${toolIndex}`,
+        name: tool.name,
+        input: tool.input,
+      });
+    }
+  }
+
+  return items;
+}
+
 /**
  * Extract media file references from Gateway-formatted user message text.
  * Returns array of { filePath, mimeType } from [media attached: path (mime) | path] patterns.
