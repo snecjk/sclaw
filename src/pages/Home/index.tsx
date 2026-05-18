@@ -5,14 +5,14 @@ import { HomeAssistant } from './HomeAssistant';
 import { useAuthStore } from '@/stores/auth';
 
 /**
- * 首页：有 CRM 周报权限时为 Hero + 任务卡片 + 底部助手；无权限时为智能助手工作台概览（sto-design 色板）。
+ * 首页：有 CRM 周报权限时为 Hero + 任务卡片 + 底部助手；无权限时为 Hero + 能力卡片 + 底部输入。
  */
 export function Home() {
   const crmWeekReportSurfaceAllowed = useAuthStore((s) => s.crmWeekReportSurfaceAllowed);
 
   if (!crmWeekReportSurfaceAllowed) {
     return (
-      <div className="mx-auto flex w-full max-w-[1200px] min-h-[calc(100svh-5rem)] flex-col px-1 pb-4 pt-2 sm:px-2">
+      <div className="mx-auto flex h-full max-h-full min-h-0 w-full max-w-[1200px] flex-1 flex-col overflow-hidden px-1 pt-2 sm:px-2">
         <HomeAgentHubSurface />
       </div>
     );
