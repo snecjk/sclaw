@@ -307,7 +307,12 @@ function SidebarTaskGroup({
         </span>
       </button>
       {open ? (
-        <div id={panelId} className="mt-1.5 flex flex-col items-start gap-1" role="region" aria-labelledby={`sto-sidebar-task-${taskId}-toggle`}>
+        <div
+          id={panelId}
+          className="mt-1.5 flex w-full flex-col gap-1 pl-5"
+          role="region"
+          aria-labelledby={`sto-sidebar-task-${taskId}-toggle`}
+        >
           <SidebarTaskDateLinks
             taskId={taskId}
             entries={entries}
