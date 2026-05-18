@@ -21,9 +21,9 @@ export interface SaiCliResult {
 
 function resolveSaiBinary(): string | null {
   const platform = process.platform;
-  const binaryName = platform === 'win32' ? 'sai.exe' : 'sai';
+  const binaryName = platform === 'win32' ? 'sai-cli.exe' : 'sai-cli';
 
-  // 1. ~/.sai/bin/sai (SAI CLI standard install path)
+  // 1. ~/.sai/bin/sai-cli (SAI CLI standard install path)
   const userBin = join(homedir(), '.sai', 'bin', binaryName);
   if (existsSync(userBin)) return userBin;
 
@@ -167,17 +167,42 @@ function getBundledSaiPath(): string | null {
   const arch = process.arch;
   const bundledBinName = platform === 'win32' ? 'sai-cli.exe' : 'sai-cli';
 
-  // 1. Packaged mode: electron-builder copies SAI/ to resources/SAI/
+  // ── 1. New: unified resources/cli/ (platform-agnostic naming) ─────────────
   if (app.isPackaged) {
+    const cliPath = join(process.resourcesPath, 'cli', bundledBinName);
+    if (existsSync(cliPath)) return cliPath;
+  }
+  const devCliPath = join(__dirname, '../..', 'resources', 'cli', bundledBinName);
+  if (existsSync(devCliPath)) return devCliPath;
+
+  // ── 2. SAI/ directory with platform-arch subdirs ──────────────────────────
+  const saiDirMap: Record<string, string> = {
+    'darwin-x64': 'mac-amd64',
+    'darwin-arm64': 'mac-arm64',
+    'win32-x64': 'win-amd64',
+    'win32-arm64': 'win-arm64',
+    'linux-x64': 'linux-amd64',
+    'linux-arm64': 'linux-arm64',
+  };
+  const saiDir = saiDirMap[`${platform}-${arch}`];
+
+  if (app.isPackaged) {
+    if (saiDir) {
+      const packaged = join(process.resourcesPath, 'SAI', saiDir, bundledBinName);
+      if (existsSync(packaged)) return packaged;
+    }
     const packaged = join(process.resourcesPath, 'SAI', `${platform}-${arch}`, bundledBinName);
     if (existsSync(packaged)) return packaged;
   }
 
-  // 2. Development mode: look in project SAI/ directory at project root
+  if (saiDir) {
+    const devPath = join(__dirname, '../..', 'SAI', saiDir, bundledBinName);
+    if (existsSync(devPath)) return devPath;
+  }
   const devPath = join(__dirname, '../..', 'SAI', `${platform}-${arch}`, bundledBinName);
   if (existsSync(devPath)) return devPath;
 
-  // 3. Legacy fallback: look in resources/bin/ (older builds or local dev setups)
+  // ── 3. Legacy fallback: resources/bin/ ────────────────────────────────────
   const legacyBinName = platform === 'win32' ? 'sai.exe' : 'sai';
   if (app.isPackaged) {
     const legacy = join(process.resourcesPath, 'bin', legacyBinName);
@@ -192,7 +217,7 @@ function getBundledSaiPath(): string | null {
 }
 
 function getSaiInstallTarget(): string {
-  const binName = process.platform === 'win32' ? 'sai.exe' : 'sai';
+  const binName = process.platform === 'win32' ? 'sai-cli.exe' : 'sai-cli';
   return join(homedir(), '.sai', 'bin', binName);
 }
 

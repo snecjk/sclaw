@@ -189,6 +189,7 @@ const electronAPI = {
         'oauth:success',
         'oauth:error',
         'openclaw:cli-installed',
+        'sai:cli-install-failed',
         'startup-progress',
         'auth:token-expired',
       ];

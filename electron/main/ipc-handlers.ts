@@ -674,6 +674,14 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             data = await import('../utils/sai-cli').then((m) => m.saiCheckInstalled());
             break;
           }
+          if (request.action === 'install') {
+            data = await import('../utils/sai-cli').then((m) =>
+              m.autoInstallSaiCliIfNeeded((path) => {
+                BrowserWindow.getAllWindows()[0]?.webContents.send('sai:cli-installed', path);
+              }),
+            );
+            break;
+          }
           if (request.action === 'version') {
             data = await import('../utils/sai-cli').then((m) => m.saiVersion());
             break;

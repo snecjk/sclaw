@@ -537,7 +537,9 @@ async function initialize(): Promise<void> {
     await autoInstallSaiCliIfNeeded((installedPath) => {
       mainWindow?.webContents.send('sai:cli-installed', installedPath);
     }).catch((error) => {
-      logger.warn('SAI CLI auto-install failed:', error);
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn('SAI CLI auto-install failed:', message);
+      mainWindow?.webContents.send('sai:cli-install-failed', message);
     });
   });
 

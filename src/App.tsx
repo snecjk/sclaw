@@ -5,7 +5,7 @@
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Component, useEffect } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 import i18n from './i18n';
 import { MainLayout } from './components/layout/MainLayout';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -179,6 +179,36 @@ function App() {
     };
 
     const unsubscribe = window.electron.ipcRenderer.on('auth:token-expired', handleTokenExpired);
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  // Listen for SAI CLI install failure and prompt user to retry
+  useEffect(() => {
+    const handleSaiCliInstallFailed = (...args: unknown[]) => {
+      const errorMsg = typeof args[0] === 'string' ? args[0] : 'SAI CLI 安装失败';
+      toast.error('SAI CLI 安装失败', {
+        description: errorMsg,
+        duration: 0,
+        action: {
+          label: '一键安装',
+          onClick: async () => {
+            const result = await invokeIpc('sai.install') as { success?: boolean; path?: string; error?: string } | undefined;
+            if (result?.success) {
+              toast.success('SAI CLI 安装成功', { description: result.path });
+            } else {
+              toast.error('SAI CLI 安装失败', { description: result?.error || '未知错误' });
+            }
+          },
+        },
+      });
+    };
+
+    const unsubscribe = window.electron.ipcRenderer.on('sai:cli-install-failed', handleSaiCliInstallFailed);
 
     return () => {
       if (typeof unsubscribe === 'function') {
