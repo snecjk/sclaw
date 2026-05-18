@@ -124,6 +124,16 @@ function SidebarTaskDateLinks({
   const sessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
   const isSubitemUnread = useStoTaskSubitemsStore((s) => s.isSubitemUnread);
   const markSubitemReadFromActivity = useStoTaskSubitemsStore((s) => s.markSubitemReadFromActivity);
+
+  useEffect(() => {
+    const activeEntry = entries.find((entryId) => pathname === taskDetailPath(taskId, entryId));
+    if (!activeEntry) return;
+    const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, activeEntry)] ?? '';
+    if (!sk) return;
+    const a = sessionLastActivity[sk] ?? 0;
+    if (a > 0) markSubitemReadFromActivity(taskId, activeEntry, a);
+  }, [entries, pathname, taskId, sessionKeyBySubitem, sessionLastActivity, markSubitemReadFromActivity]);
+
   return (
     <>
       {entries.map((entryId) => {
@@ -131,7 +141,7 @@ function SidebarTaskDateLinks({
         const active = pathname === to;
         const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)] ?? '';
         const activity = sk ? (sessionLastActivity[sk] ?? 0) : 0;
-        const unread = isSubitemUnread(taskId, entryId, activity);
+        const unread = !active && isSubitemUnread(taskId, entryId, activity);
         const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
         const label = t('tasks:sidebarMaterialTitle', { date: dateLabel });
         return (
@@ -210,15 +220,21 @@ function SidebarTaskGroup({
     return [...new Set(ids)].sort((a, b) => b.localeCompare(a));
   }, [rawEntryIds]);
 
+  const activeEntryId = useMemo(() => {
+    const m = matchPath({ path: '/tasks/:taskId/:entryId', end: true }, pathname);
+    return m?.params.taskId === taskId && m.params.entryId ? m.params.entryId : null;
+  }, [pathname, taskId]);
+
   const hasUnreadSubitem = useMemo(() => {
     if (entries.length === 0) return false;
     for (const entryId of entries) {
+      if (entryId === activeEntryId) continue;
       const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)] ?? '';
       const activity = sk ? (sessionLastActivity[sk] ?? 0) : 0;
       if (isSubitemUnread(taskId, entryId, activity)) return true;
     }
     return false;
-  }, [entries, taskId, sessionKeyBySubitem, sessionLastActivity, isSubitemUnread]);
+  }, [entries, taskId, activeEntryId, sessionKeyBySubitem, sessionLastActivity, isSubitemUnread]);
 
   useLayoutEffect(() => {
     for (const entryId of entries) {

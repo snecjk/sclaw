@@ -225,21 +225,11 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
 
   useEffect(() => {
     if (currentSessionKey !== sessionKey) return;
-    if (sending || shouldRenderStreaming) return;
     if (activityForSession <= 0) return;
     if (activityForSession <= lastMarkedActivityRef.current) return;
     lastMarkedActivityRef.current = activityForSession;
     markSubitemReadFromActivity(taskId, entryId, activityForSession);
-  }, [
-    currentSessionKey,
-    sessionKey,
-    activityForSession,
-    sending,
-    shouldRenderStreaming,
-    taskId,
-    entryId,
-    markSubitemReadFromActivity,
-  ]);
+  }, [currentSessionKey, sessionKey, activityForSession, taskId, entryId, markSubitemReadFromActivity]);
 
   const onSend = useCallback(
     async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
