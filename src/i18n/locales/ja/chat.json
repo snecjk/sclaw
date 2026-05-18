@@ -37,6 +37,11 @@
         "retryFailedAttachments": "失敗した添付を再試行"
     },
     "streaming": {
+        "connectingModel": "モデルに接続中...",
+        "thinkingProcessTitle": "思考過程",
+        "toolCallLabel": "ツール呼び出し {{index}}",
+        "processMessageLabel": "過程メッセージ {{count}}",
+        "generatingWithTool": "{{tool}} で応答を生成中...",
         "respondingBadge": "AI 応答中",
         "thinkingBadge": "AI 思考中",
         "thinkingTitle": "回答を組み立てています",

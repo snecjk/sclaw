@@ -15,7 +15,8 @@ import { cn } from '@/lib/utils';
 import { assistantChatCardBg, assistantChatCardBgStreaming } from '@/lib/surfaces';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
-import { extractText, extractThinking, extractImages, extractToolUse, formatTimestamp, extractPreviewableRefs } from './message-utils';
+import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs } from './message-utils';
+import { ThinkingProcessPanel } from './ThinkingProcessPanel';
 
 interface ChatMessageProps {
   message: RawMessage;
@@ -30,6 +31,9 @@ interface ChatMessageProps {
     summary?: string;
   }>;
   onPreviewFile?: (file: AttachedFileMeta) => void;
+  /** Used when rendered inside AssistantTurnMessage */
+  hideAvatar?: boolean;
+  hideThinkingPanel?: boolean;
 }
 
 interface ExtractedImage { url?: string; data?: string; mimeType: string; }
@@ -47,6 +51,8 @@ export const ChatMessage = memo(function ChatMessage({
   isStreaming = false,
   streamingTools = [],
   onPreviewFile,
+  hideAvatar = false,
+  hideThinkingPanel = false,
 }: ChatMessageProps) {
   const { t } = useTranslation('chat');
   const isUser = message.role === 'user';
@@ -54,11 +60,14 @@ export const ChatMessage = memo(function ChatMessage({
   const isToolResult = role === 'toolresult' || role === 'tool_result';
   const text = extractText(message);
   const hasText = text.trim().length > 0;
-  const thinking = extractThinking(message);
   const images = extractImages(message);
   const tools = extractToolUse(message);
-  const visibleThinking = showThinking ? thinking : null;
-  const visibleTools = tools;
+  const thinkingTimeline = showThinking ? extractThinkingTimeline(message) : [];
+  const showThinkingPanel =
+    !hideThinkingPanel &&
+    showThinking &&
+    (thinkingTimeline.length > 0 || (isStreaming && streamingTools.length > 0));
+  const visibleTools = showThinking ? [] : tools;
 
   const attachedFiles = message._attachedFiles || [];
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
@@ -75,17 +84,21 @@ export const ChatMessage = memo(function ChatMessage({
   if (isToolResult) return null;
 
   const hasStreamingToolStatus = isStreaming && streamingTools.length > 0;
-  if (!hasText && !visibleThinking && images.length === 0 && visibleTools.length === 0 && !hasRenderableFiles && extractedRefs.length === 0 && !hasStreamingToolStatus) return null;
+  if (!hasText && !showThinkingPanel && images.length === 0 && visibleTools.length === 0 && !hasRenderableFiles && extractedRefs.length === 0 && !hasStreamingToolStatus) return null;
+
+  const isEmbeddedAssistant = hideAvatar && !isUser;
 
   return (
     <div
+      data-chat-message-role={isUser ? 'user' : 'assistant'}
+      data-chat-message-id={message.id ?? undefined}
       className={cn(
-        'flex gap-3 group',
-        isUser ? 'flex-row-reverse' : 'flex-row',
+        isEmbeddedAssistant ? 'w-full' : 'flex gap-3 group',
+        !isEmbeddedAssistant && (isUser ? 'flex-row-reverse' : 'flex-row'),
       )}
     >
       {/* Avatar */}
-      {!isUser && (
+      {!isUser && !hideAvatar && (
         <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,#FFF5E6,#FFE8CC)] text-primary shadow-[0_8px_20px_rgba(255,111,0,0.12)]">
           <Sparkles className="h-4 w-4" />
         </div>
@@ -94,17 +107,21 @@ export const ChatMessage = memo(function ChatMessage({
       {/* Content */}
       <div
         className={cn(
-          'flex flex-col w-full min-w-0 max-w-[80%] space-y-2',
+          'flex flex-col w-full min-w-0 space-y-2',
+          !isEmbeddedAssistant && 'max-w-[80%]',
           isUser ? 'items-end' : 'items-start',
         )}
       >
-        {isStreaming && !isUser && streamingTools.length > 0 && (
+        {isStreaming && !isUser && streamingTools.length > 0 && !showThinking && (
           <ToolStatusBar tools={streamingTools} />
         )}
 
-        {/* Thinking section */}
-        {visibleThinking && (
-          <ThinkingBlock content={visibleThinking} />
+        {showThinkingPanel && (
+          <ThinkingProcessPanel
+            timeline={thinkingTimeline}
+            isStreaming={isStreaming && !isUser}
+            streamingTools={isStreaming ? streamingTools : []}
+          />
         )}
 
         {/* Tool use cards */}
@@ -572,36 +589,6 @@ function StreamingPulse() {
         animate={{ scale: [0.92, 1.15, 0.92] }}
         transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
       />
-    </div>
-  );
-}
-
-// ── Thinking Block ──────────────────────────────────────────────
-
-function ThinkingBlock({ content }: { content: string }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div
-      className={cn(
-        'w-full rounded-2xl border border-border text-[14px] shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
-        assistantChatCardBg,
-      )}
-    >
-      <button
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-muted-foreground transition-colors hover:text-foreground"
-        onClick={() => setExpanded(!expanded)}
-      >
-        {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        <span className="font-medium">思考过程</span>
-      </button>
-      {expanded && (
-        <div className="px-3 pb-3 text-muted-foreground">
-          <div className="prose prose-sm dark:prose-invert max-w-none opacity-75">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

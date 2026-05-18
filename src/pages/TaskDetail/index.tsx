@@ -55,7 +55,7 @@ export function TaskDetail() {
       >
         <div
           className={cn(
-            'sticky -top-5 z-20 w-full shrink-0 pb-4 pt-0',
+            'sticky -top-5 z-20 w-full shrink-0 pt-0',
             stoTaskSubitemChatCanvasBg,
           )}
         >

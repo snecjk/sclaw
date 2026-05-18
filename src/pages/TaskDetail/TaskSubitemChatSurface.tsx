@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowDown, Loader2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentsStore } from '@/stores/agents';
-import { useChatStore, type AttachedFileMeta, type RawMessage } from '@/stores/chat';
+import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { createAutoSendWatcher, useMessageQueueStore } from '@/stores/message-queue';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
@@ -17,11 +17,14 @@ import {
 import { cn } from '@/lib/utils';
 import type { StoTaskId } from '@/lib/sto-tasks';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
+import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
+import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
 import { usePreviewableFiles } from '@/pages/Chat/message-utils';
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
 import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
-import { extractText, extractThinking, extractToolUse, extractImages } from '@/pages/Chat/message-utils';
+import { extractText } from '@/pages/Chat/message-utils';
+import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { stoTaskSubitemChatCanvasBg } from '@/lib/surfaces';
 import { useStoTaskSubitemChatSend } from './use-sto-task-subitem-chat-send';
@@ -37,7 +40,6 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const sessionKey = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem[storeSubKey] ?? '');
 
   const switchSession = useChatStore((s) => s.switchSession);
-  const switchToAgentMainSession = useChatStore((s) => s.switchToAgentMainSession);
   const messages = useChatStore((s) => s.messages);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const loading = useChatStore((s) => s.loading);
@@ -47,6 +49,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
+  const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
   const streamingText = useChatStore((s) => s.streamingText);
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
@@ -69,7 +72,6 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const queueMoveUp = useMessageQueueStore((s) => s.moveUp);
   const queueMoveDown = useMessageQueueStore((s) => s.moveDown);
 
-  const [streamingTimestamp] = useState(() => Date.now());
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [composeSeed, setComposeSeed] = useState<string | undefined>();
   const [pendingAutoSendText, setPendingAutoSendText] = useState<string | null>(null);
@@ -80,13 +82,9 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   /** Generic scroll-to-bottom once per subitem mount (sidebar / deep link / home reused path). */
   const genericScrollDoneRef = useRef(false);
 
-  const { contentRef, scrollRef } = useStickToBottomInstant(sessionKey || storeSubKey);
-
-  const scrollToLatest = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
-  }, [scrollRef]);
+  const { contentRef, scrollRef, scrollToBottom, stopScroll } = useStickToBottomInstant(
+    sessionKey || storeSubKey,
+  );
 
   const updateJumpToLatestVisibility = useCallback(() => {
     const scrollElement = scrollRef.current;
@@ -122,14 +120,61 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   /** Avoid painting another session's messages before the store switches (useEffect runs too late). */
   const sessionSynced = Boolean(sessionKey) && currentSessionKey === sessionKey;
 
+  const streamMsgObj =
+    streamingMessage && typeof streamingMessage === 'object'
+      ? (streamingMessage as unknown as { role?: string; content?: unknown; timestamp?: number; id?: string })
+      : null;
+  const rawStreamText = typeof streamingText === 'string' ? streamingText : '';
+  const streamTextResolved = streamMsgObj ? extractText(streamMsgObj) : rawStreamText;
+
+  const { staticItems, activeTurn, shouldRenderStreaming, hasAnyStreamContent } = useChatDisplay({
+    messages: sessionSynced ? messages : [],
+    sending: sessionSynced && sending,
+    pendingFinal,
+    showThinking,
+    streamMsg: streamMsgObj,
+    streamText: streamTextResolved,
+    streamingTools,
+  });
+
+  const streamContentKey = useMemo(
+    () =>
+      [
+        messages.length,
+        staticItems.length,
+        activeTurn ? 1 : 0,
+        streamTextResolved.length,
+        streamingTools.length,
+        pendingFinal ? 1 : 0,
+        shouldRenderStreaming ? 1 : 0,
+      ].join(':'),
+    [
+      messages.length,
+      staticItems.length,
+      activeTurn,
+      streamTextResolved.length,
+      streamingTools.length,
+      pendingFinal,
+      shouldRenderStreaming,
+    ],
+  );
+
+  const { beginSendScroll, scrollToLatest } = useChatScrollFollow({
+    scrollRef,
+    contentRef,
+    scrollToBottom,
+    stopScroll,
+    sending: sessionSynced && sending,
+    lastUserMessageAt,
+    hasStreamContent: hasAnyStreamContent || !!activeTurn,
+    streamContentKey,
+  });
+
   useLayoutEffect(() => {
     if (sessionKey) {
       switchSession(sessionKey);
     }
-    return () => {
-      switchToAgentMainSession('main');
-    };
-  }, [sessionKey, switchSession, switchToAgentMainSession]);
+  }, [sessionKey, switchSession]);
 
   useEffect(() => {
     genericScrollDoneRef.current = false;
@@ -187,45 +232,24 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
     if (pendingAutoSendText === null || !isGatewayRunning) return;
     const text = pendingAutoSendText;
     setPendingAutoSendText(null);
+    beginSendScroll();
     void handleSend(text).finally(() => {
       setComposeSeed(undefined);
     });
-  }, [pendingAutoSendText, isGatewayRunning, handleSend]);
+  }, [pendingAutoSendText, isGatewayRunning, handleSend, beginSendScroll]);
 
   useEffect(() => {
-    const unsub = createAutoSendWatcher(() => {
-      const el = scrollRef.current;
-      el?.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
-    });
+    const unsub = createAutoSendWatcher(() => scrollToLatest('auto'));
     return unsub;
-  }, [scrollRef]);
-
-  const streamMsgObj =
-    streamingMessage && typeof streamingMessage === 'object'
-      ? (streamingMessage as unknown as { role?: string; content?: unknown; timestamp?: number })
-      : null;
-  const rawStreamText = typeof streamingText === 'string' ? streamingText : '';
-  const streamTextResolved = streamMsgObj ? extractText(streamMsgObj) : rawStreamText;
-  const hasStreamText = streamTextResolved.trim().length > 0;
-  const streamThinking = streamMsgObj ? extractThinking(streamMsgObj) : null;
-  const hasStreamThinking = showThinking && !!streamThinking && streamThinking.trim().length > 0;
-  const streamTools = streamMsgObj ? extractToolUse(streamMsgObj) : [];
-  const hasStreamTools = streamTools.length > 0;
-  const streamImages = streamMsgObj ? extractImages(streamMsgObj) : [];
-  const hasStreamImages = streamImages.length > 0;
-  const hasStreamToolStatus = streamingTools.length > 0;
-  const hasAnyStreamContent =
-    hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasStreamToolStatus;
-  const shouldRenderStreaming = Boolean(
-    sessionSynced && sending && (hasAnyStreamContent || streamMsgObj),
-  );
+  }, [scrollToLatest]);
 
   useEffect(() => {
     updateJumpToLatestVisibility();
   }, [messages.length, shouldRenderStreaming, pendingFinal, updateJumpToLatestVisibility]);
 
   const displayMessages = sessionSynced ? messages : [];
-  const isEmpty = sessionSynced && !loading && displayMessages.length === 0 && !shouldRenderStreaming;
+  const isEmpty =
+    sessionSynced && !loading && displayMessages.length === 0 && !shouldRenderStreaming && !activeTurn;
 
   // Collect previewable files from messages and streaming message
   const allMessagesForPreview = useMemo(() => {
@@ -266,11 +290,10 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
 
   const onSend = useCallback(
     async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
-      scrollToLatest('auto');
+      beginSendScroll();
       await handleSend(text, attachments, targetAgentId);
-      requestAnimationFrame(() => requestAnimationFrame(() => scrollToLatest('smooth')));
     },
-    [handleSend, scrollToLatest],
+    [beginSendScroll, handleSend],
   );
 
   const handlePreviewFile = useCallback((file: AttachedFileMeta) => {
@@ -321,47 +344,34 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
               </p>
             ) : (
               <>
-                {displayMessages.map((msg, idx) => (
-                  <ChatMessage
-                    key={msg.id || `msg-${idx}`}
-                    message={msg}
+                {staticItems.map((item) => {
+                  if (item.type === 'assistant-turn') {
+                    return (
+                      <AssistantTurnMessage
+                        key={item.key}
+                        turnMessages={item.messages}
+                        showThinking={showThinking}
+                        onPreviewFile={handlePreviewFile}
+                      />
+                    );
+                  }
+                  return (
+                    <ChatMessage
+                      key={item.key}
+                      message={item.message}
+                      showThinking={showThinking}
+                      onPreviewFile={handlePreviewFile}
+                    />
+                  );
+                })}
+                {activeTurn ? (
+                  <AssistantTurnMessage
+                    key="active-turn"
+                    turnMessages={activeTurn.turnMessages}
                     showThinking={showThinking}
+                    activeStream={activeTurn.activeStream}
                     onPreviewFile={handlePreviewFile}
                   />
-                ))}
-                {shouldRenderStreaming && (
-                  <ChatMessage
-                    message={
-                      (streamMsgObj
-                        ? {
-                            ...(streamMsgObj as unknown as Record<string, unknown>),
-                            role: (typeof streamMsgObj.role === 'string' ? streamMsgObj.role : 'assistant') as RawMessage['role'],
-                            content: (streamMsgObj as { content?: unknown }).content ?? rawStreamText,
-                            timestamp: streamMsgObj.timestamp ?? streamingTimestamp,
-                          }
-                        : {
-                            role: 'assistant',
-                            content: rawStreamText,
-                            timestamp: streamingTimestamp,
-                          }) as RawMessage
-                    }
-                    showThinking={showThinking}
-                    isStreaming
-                    streamingTools={streamingTools}
-                    onPreviewFile={handlePreviewFile}
-                  />
-                )}
-                {sessionSynced && sending && pendingFinal && !shouldRenderStreaming ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                    <span>{t('chat:streaming.processingTitle')}</span>
-                  </div>
-                ) : null}
-                {sessionSynced && sending && !pendingFinal && !hasAnyStreamContent ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                    <span>{t('chat:streaming.thinkingTitle')}</span>
-                  </div>
                 ) : null}
               </>
             )}
