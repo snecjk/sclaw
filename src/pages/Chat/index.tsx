@@ -264,6 +264,25 @@ export function Chat() {
   const previewableFiles = usePreviewableFiles(allMessagesForPreview);
   const hasPreviewableFiles = previewableFiles.length > 0;
 
+  // Auto-open newly-generated files in the preview panel
+  const prevPreviewableFilesRef = useRef(previewableFiles);
+  useEffect(() => {
+    const prev = prevPreviewableFilesRef.current;
+    const prevPaths = new Set(prev.map((f) => f.filePath));
+    const newFiles = previewableFiles.filter((f) => !prevPaths.has(f.filePath));
+
+    if (newFiles.length > 0) {
+      // Auto-select the most recently added file (last in array)
+      const latestFile = newFiles[newFiles.length - 1];
+      if (latestFile.filePath) {
+        setActivePreviewFilePath(latestFile.filePath);
+        setShowPreviewPanel(true);
+      }
+    }
+
+    prevPreviewableFilesRef.current = previewableFiles;
+  }, [previewableFiles]);
+
   // Auto-send watcher: sends queued messages one-by-one when AI finishes responding
   useEffect(() => {
     const unsub = createAutoSendWatcher(() => scrollToLatest('auto'));

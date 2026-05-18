@@ -1,0 +1,180 @@
+/**
+ * claw-base.css
+ * Claw 页面基础样式标准 v1.0
+ * 包含：变量系统、基础排版、表格、响应式、打印、主题
+ */
+
+/* ── 变量系统 ── */
+:root,
+[data-theme="light"] {
+  --claw-primary: #0ea5e9;
+  --claw-primary-light: #e0f2fe;
+  --claw-text: #1e293b;
+  --claw-text-secondary: #64748b;
+  --claw-bg: #ffffff;
+  --claw-bg-secondary: #f8fafc;
+  --claw-border: #e2e8f0;
+  --claw-border-strong: #cbd5e1;
+  --claw-success: #22c55e;
+  --claw-danger: #ef4444;
+  --claw-warning: #f59e0b;
+  --claw-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --claw-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --claw-radius: 8px;
+  --claw-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] {
+  --claw-primary: #38bdf8;
+  --claw-primary-light: rgba(56, 189, 248, 0.15);
+  --claw-text: #f1f5f9;
+  --claw-text-secondary: #94a3b8;
+  --claw-bg: #0f172a;
+  --claw-bg-secondary: #1e293b;
+  --claw-border: #334155;
+  --claw-border-strong: #475569;
+  --claw-success: #4ade80;
+  --claw-danger: #f87171;
+  --claw-warning: #fbbf24;
+}
+
+/* ── 基础重置 ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--claw-text);
+  background: var(--claw-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  font-family: var(--claw-font-sans);
+}
+
+/* ── 页面容器 ── */
+.claw-page {
+  min-height: 100vh;
+  padding: 24px 16px;
+}
+
+.claw-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px;
+  background: var(--claw-bg);
+  border-radius: var(--claw-radius);
+  box-shadow: var(--claw-shadow);
+}
+
+@media (max-width: 768px) {
+  .claw-page {
+    padding: 12px;
+  }
+  .claw-container {
+    padding: 16px;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+/* ── 排版 ── */
+h1, h2, h3, h4, h5, h6 {
+  margin: 1.5em 0 0.5em;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--claw-text);
+}
+
+h1 { font-size: 1.75rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.25rem; }
+h4 { font-size: 1.125rem; }
+
+p {
+  margin: 0.75em 0;
+}
+
+a {
+  color: var(--claw-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* ── 表格 ── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 0.875rem;
+}
+
+th, td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--claw-border);
+}
+
+th {
+  font-weight: 600;
+  background: var(--claw-bg-secondary);
+  color: var(--claw-text-secondary);
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+tr:hover {
+  background: var(--claw-bg-secondary);
+}
+
+/* ── 代码 ── */
+code {
+  font-family: var(--claw-font-mono);
+  font-size: 0.875em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--claw-bg-secondary);
+}
+
+pre {
+  background: var(--claw-bg-secondary);
+  padding: 16px;
+  border-radius: var(--claw-radius);
+  overflow-x: auto;
+  font-size: 0.875rem;
+}
+
+pre code {
+  padding: 0;
+  background: transparent;
+}
+
+/* ── 辅助 ── */
+.text-success { color: var(--claw-success); }
+.text-danger { color: var(--claw-danger); }
+.text-warning { color: var(--claw-warning); }
+.text-secondary { color: var(--claw-text-secondary); }
+
+.bg-secondary { background: var(--claw-bg-secondary); }
+
+/* ── 打印 ── */
+@media print {
+  .claw-page {
+    padding: 0;
+    background: #fff;
+  }
+  .claw-container {
+    max-width: none;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 20px;
+  }
+}

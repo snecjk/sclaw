@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{report_title}}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .title span {
+            color: #f97316;
+        }
+        
+        .slogan {
+            color: #f97316;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        
+        .subtitle {
+            background: #fef3c7;
+            padding: 12px 16px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border-left: 4px solid #f97316;
+        }
+        
+        .subtitle strong {
+            color: #dc2626;
+        }
+        
+        .subtitle span {
+            color: #dc2626;
+            font-weight: bold;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        th, td {
+            border: 1px solid #e5e7eb;
+            padding: 10px 12px;
+            text-align: center;
+            font-size: 13px;
+        }
+        
+        th {
+            background: #f97316;
+            color: white;
+            font-weight: bold;
+        }
+        
+        th.light {
+            background: #fef3c7;
+            color: #333;
+        }
+        
+        .zone-header {
+            background: #fafafa;
+            font-weight: bold;
+        }
+        
+        .total-row {
+            background: #f3f4f6;
+            font-weight: bold;
+        }
+        
+        .negative {
+            color: #dc2626;
+        }
+        
+        .positive {
+            color: #059669;
+        }
+        
+        [contenteditable="true"] {
+            cursor: text;
+            transition: background 0.2s;
+        }
+        
+        [contenteditable="true"]:hover {
+            background: #fef3c7;
+        }
+        
+        [contenteditable="true"]:focus {
+            outline: 2px solid #f97316;
+            background: white;
+        }
+        
+        .note {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .controls {
+            margin-top: 20px;
+            padding: 16px;
+            background: #f9fafb;
+            border-radius: 4px;
+        }
+        
+        .controls h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .controls button {
+            background: #f97316;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            font-size: 14px;
+        }
+        
+        .controls button:hover {
+            background: #ea580c;
+        }
+        
+        .controls button.secondary {
+            background: #6b7280;
+        }
+        
+        .controls button.secondary:hover {
+            background: #4b5563;
+        }
+        
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            background: #d1fae5;
+            border-radius: 4px;
+            color: #065f46;
+            display: none;
+        }
+        
+        .status.show {
+            display: block;
+        }
+        
+        .generated-info {
+            font-size: 12px;
+            color: #9ca3af;
+            margin-top: 20px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title"><span>{{period}}</span> {{report_title}}</div>
+            <div class="slogan" contenteditable="true">{{slogan}}</div>
+        </div>
+        
+        <div class="subtitle">
+            <strong>■</strong> 还原费改后，损益向差且未达成目标省区：<span contenteditable="true">{{underperforming_regions}}</span>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>战区</th>
+                    <th>省份</th>
+                    <th>负责人</th>
+                    <th>件量变化</th>
+                    <th>Mtd{{period}} VS 3 月</th>
+                    <th class="light">返利</th>
+                    <th class="light">中转</th>
+                    <th class="light">派费</th>
+                    <th class="light">进港利润</th>
+                    <th>4 月完成率</th>
+                    <th>KPI 得分</th>
+                    <th>Q2 完成率</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{#each regions}}
+                <tr class="{{row_class}}">
+                    <td>{{zone}}</td>
+                    <td contenteditable="true">{{province}}</td>
+                    <td contenteditable="true">{{manager}}</td>
+                    <td contenteditable="true" class="{{volume_class}}">{{volume_change}}</td>
+                    <td contenteditable="true">{{mtd_comparison}}</td>
+                    <td contenteditable="true">{{rebate}}</td>
+                    <td contenteditable="true">{{transfer}}</td>
+                    <td contenteditable="true">{{delivery_fee}}</td>
+                    <td contenteditable="true">{{profit}}</td>
+                    <td contenteditable="true">{{completion_rate}}</td>
+                    <td contenteditable="true">{{kpi_score}}</td>
+                    <td contenteditable="true">{{q2_completion}}</td>
+                </tr>
+                {{/each}}
+            </tbody>
+        </table>
+        
+        <div class="note">
+            备注：<span contenteditable="true">{{notes}}</span>
+        </div>
+        
+        <div class="controls">
+            <h3>操作说明</h3>
+            <p style="margin-bottom: 10px; color: #666; font-size: 13px;">
+                点击任意单元格即可编辑内容。编辑完成后可以使用下方按钮保存。
+            </p>
+            <button onclick="exportHTML()">💾 保存为 HTML 文件</button>
+            <button onclick="printPage()">🖨️ 打印页面</button>
+            <button class="secondary" onclick="resetData()">🔄 重置数据</button>
+            <div id="status" class="status">✅ 已保存！</div>
+        </div>
+        
+        <div class="generated-info">
+            生成时间：{{timestamp}} | 数据来源：{{data_source}}
+        </div>
+    </div>
+    
+    <script>
+        const originalData = document.body.innerHTML;
+        
+        function exportHTML() {
+            const html = '<!DOCTYPE html>\n<html lang="zh-CN">\n' + document.documentElement.innerHTML;
+            const blob = new Blob([html], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '{{report_title}}-{{date}}.html';
+            a.click();
+            URL.revokeObjectURL(url);
+            showStatus();
+        }
+        
+        function printPage() {
+            window.print();
+        }
+        
+        function resetData() {
+            if (confirm('确定要重置所有数据吗？未保存的修改将丢失。')) {
+                document.body.innerHTML = originalData;
+                document.querySelectorAll('[contenteditable="true"]').forEach(cell => {
+                    cell.addEventListener('keydown', handleKeyDown);
+                });
+            }
+        }
+        
+        function showStatus() {
+            const status = document.getElementById('status');
+            status.classList.add('show');
+            setTimeout(() => {
+                status.classList.remove('show');
+            }, 2000);
+        }
+        
+        function handleKeyDown(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                e.target.blur();
+            }
+        }
+        
+        document.querySelectorAll('[contenteditable="true"]').forEach(cell => {
+            cell.addEventListener('keydown', handleKeyDown);
+        });
+    </script>
+</body>
+</html>
