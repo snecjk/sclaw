@@ -88,7 +88,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
   if (replyHasText && replyMessage) {
     return (
-      <div className="group flex flex-row gap-3">
+      <div className="group flex flex-row gap-3" data-chat-message-role="assistant">
         {avatar}
         <div className="flex w-full min-w-0 max-w-[80%] flex-col items-start space-y-2">
           {showThinkingPanel ? (
@@ -117,7 +117,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   if (!showThinkingPanel) return null;
 
   return (
-    <div className="group flex flex-row gap-3">
+    <div className="group flex flex-row gap-3" data-chat-message-role="assistant">
       {avatar}
       <div className="flex w-full min-w-0 max-w-[80%] flex-col">
         <ThinkingProcessPanel

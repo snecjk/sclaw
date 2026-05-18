@@ -59,3 +59,5 @@ export function useStickToBottomInstant(resetKey?: string) {
 
   return result;
 }
+
+export type { StickToBottomInstance } from "use-stick-to-bottom";

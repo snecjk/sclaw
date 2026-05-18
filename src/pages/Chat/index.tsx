@@ -23,6 +23,7 @@ import { useMessageQueueStore, createAutoSendWatcher } from '@/stores/message-qu
 import { invokeApi } from '@/lib/api-client';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 
@@ -40,6 +41,7 @@ export function Chat() {
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
+  const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
@@ -62,7 +64,7 @@ export function Chat() {
   const [isResizing, setIsResizing] = useState(false);
   const previewPanelRef = useRef<HTMLDivElement>(null);
   const minLoading = useMinLoading(loading && messages.length > 0);
-  const { contentRef, scrollRef } = useStickToBottomInstant(currentSessionKey);
+  const { contentRef, scrollRef, scrollToBottom, stopScroll } = useStickToBottomInstant(currentSessionKey);
 
   // Load data when gateway is running.
   // When the store already holds messages for this session (i.e. the user
@@ -98,7 +100,7 @@ export function Chat() {
     : null;
   const streamText = streamMsg ? extractText(streamMsg) : (typeof streamingMessage === 'string' ? streamingMessage : '');
 
-  const { staticItems, activeTurn, shouldRenderStreaming } = useChatDisplay({
+  const { staticItems, activeTurn, shouldRenderStreaming, hasAnyStreamContent } = useChatDisplay({
     messages,
     sending,
     pendingFinal,
@@ -108,16 +110,40 @@ export function Chat() {
     streamingTools,
   });
 
-  const isEmpty = messages.length === 0 && !sending;
+  const streamContentKey = useMemo(
+    () =>
+      [
+        messages.length,
+        staticItems.length,
+        activeTurn ? 1 : 0,
+        streamText.length,
+        streamingTools.length,
+        pendingFinal ? 1 : 0,
+        shouldRenderStreaming ? 1 : 0,
+      ].join(':'),
+    [
+      messages.length,
+      staticItems.length,
+      activeTurn,
+      streamText.length,
+      streamingTools.length,
+      pendingFinal,
+      shouldRenderStreaming,
+    ],
+  );
 
-  const scrollToLatest = useCallback((behavior: ScrollBehavior = 'smooth') => {
-    const scrollElement = scrollRef.current;
-    if (!scrollElement) return;
-    scrollElement.scrollTo({
-      top: scrollElement.scrollHeight,
-      behavior,
-    });
-  }, [scrollRef]);
+  const { beginSendScroll, scrollToLatest } = useChatScrollFollow({
+    scrollRef,
+    contentRef,
+    scrollToBottom,
+    stopScroll,
+    sending,
+    lastUserMessageAt,
+    hasStreamContent: hasAnyStreamContent || !!activeTurn,
+    streamContentKey,
+  });
+
+  const isEmpty = messages.length === 0 && !sending;
 
   const updateJumpToLatestVisibility = useCallback(() => {
     const scrollElement = scrollRef.current;
@@ -153,7 +179,7 @@ export function Chat() {
     attachments?: Parameters<typeof sendMessage>[1],
     targetAgentId?: Parameters<typeof sendMessage>[2],
   ) => {
-    scrollToLatest('auto');
+    beginSendScroll();
 
     // Call question-split API (silent fallback on failure)
     setSplitting(true);
@@ -179,13 +205,7 @@ export function Chat() {
     } else {
       sendMessage(text, attachments, targetAgentId);
     }
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        scrollToLatest('smooth');
-      });
-    });
-  }, [scrollToLatest, sendMessage]);
+  }, [beginSendScroll, sendMessage]);
 
   const handleQueue = useCallback((
     text: string,

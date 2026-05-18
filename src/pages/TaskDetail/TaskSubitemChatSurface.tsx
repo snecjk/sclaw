@@ -24,6 +24,7 @@ import { usePreviewableFiles } from '@/pages/Chat/message-utils';
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
 import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
 import { extractText } from '@/pages/Chat/message-utils';
+import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { stoTaskSubitemChatCanvasBg } from '@/lib/surfaces';
 import { useStoTaskSubitemChatSend } from './use-sto-task-subitem-chat-send';
@@ -48,6 +49,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
+  const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
   const streamingText = useChatStore((s) => s.streamingText);
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
@@ -80,13 +82,9 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   /** Generic scroll-to-bottom once per subitem mount (sidebar / deep link / home reused path). */
   const genericScrollDoneRef = useRef(false);
 
-  const { contentRef, scrollRef } = useStickToBottomInstant(sessionKey || storeSubKey);
-
-  const scrollToLatest = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
-  }, [scrollRef]);
+  const { contentRef, scrollRef, scrollToBottom, stopScroll } = useStickToBottomInstant(
+    sessionKey || storeSubKey,
+  );
 
   const updateJumpToLatestVisibility = useCallback(() => {
     const scrollElement = scrollRef.current;
@@ -121,6 +119,56 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
 
   /** Avoid painting another session's messages before the store switches (useEffect runs too late). */
   const sessionSynced = Boolean(sessionKey) && currentSessionKey === sessionKey;
+
+  const streamMsgObj =
+    streamingMessage && typeof streamingMessage === 'object'
+      ? (streamingMessage as unknown as { role?: string; content?: unknown; timestamp?: number; id?: string })
+      : null;
+  const rawStreamText = typeof streamingText === 'string' ? streamingText : '';
+  const streamTextResolved = streamMsgObj ? extractText(streamMsgObj) : rawStreamText;
+
+  const { staticItems, activeTurn, shouldRenderStreaming, hasAnyStreamContent } = useChatDisplay({
+    messages: sessionSynced ? messages : [],
+    sending: sessionSynced && sending,
+    pendingFinal,
+    showThinking,
+    streamMsg: streamMsgObj,
+    streamText: streamTextResolved,
+    streamingTools,
+  });
+
+  const streamContentKey = useMemo(
+    () =>
+      [
+        messages.length,
+        staticItems.length,
+        activeTurn ? 1 : 0,
+        streamTextResolved.length,
+        streamingTools.length,
+        pendingFinal ? 1 : 0,
+        shouldRenderStreaming ? 1 : 0,
+      ].join(':'),
+    [
+      messages.length,
+      staticItems.length,
+      activeTurn,
+      streamTextResolved.length,
+      streamingTools.length,
+      pendingFinal,
+      shouldRenderStreaming,
+    ],
+  );
+
+  const { beginSendScroll, scrollToLatest } = useChatScrollFollow({
+    scrollRef,
+    contentRef,
+    scrollToBottom,
+    stopScroll,
+    sending: sessionSynced && sending,
+    lastUserMessageAt,
+    hasStreamContent: hasAnyStreamContent || !!activeTurn,
+    streamContentKey,
+  });
 
   useLayoutEffect(() => {
     if (sessionKey) {
@@ -184,35 +232,16 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
     if (pendingAutoSendText === null || !isGatewayRunning) return;
     const text = pendingAutoSendText;
     setPendingAutoSendText(null);
+    beginSendScroll();
     void handleSend(text).finally(() => {
       setComposeSeed(undefined);
     });
-  }, [pendingAutoSendText, isGatewayRunning, handleSend]);
+  }, [pendingAutoSendText, isGatewayRunning, handleSend, beginSendScroll]);
 
   useEffect(() => {
-    const unsub = createAutoSendWatcher(() => {
-      const el = scrollRef.current;
-      el?.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
-    });
+    const unsub = createAutoSendWatcher(() => scrollToLatest('auto'));
     return unsub;
-  }, [scrollRef]);
-
-  const streamMsgObj =
-    streamingMessage && typeof streamingMessage === 'object'
-      ? (streamingMessage as unknown as { role?: string; content?: unknown; timestamp?: number; id?: string })
-      : null;
-  const rawStreamText = typeof streamingText === 'string' ? streamingText : '';
-  const streamTextResolved = streamMsgObj ? extractText(streamMsgObj) : rawStreamText;
-
-  const { staticItems, activeTurn, shouldRenderStreaming } = useChatDisplay({
-    messages: sessionSynced ? messages : [],
-    sending: sessionSynced && sending,
-    pendingFinal,
-    showThinking,
-    streamMsg: streamMsgObj,
-    streamText: streamTextResolved,
-    streamingTools,
-  });
+  }, [scrollToLatest]);
 
   useEffect(() => {
     updateJumpToLatestVisibility();
@@ -261,11 +290,10 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
 
   const onSend = useCallback(
     async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
-      scrollToLatest('auto');
+      beginSendScroll();
       await handleSend(text, attachments, targetAgentId);
-      requestAnimationFrame(() => requestAnimationFrame(() => scrollToLatest('smooth')));
     },
-    [handleSend, scrollToLatest],
+    [beginSendScroll, handleSend],
   );
 
   const handlePreviewFile = useCallback((file: AttachedFileMeta) => {

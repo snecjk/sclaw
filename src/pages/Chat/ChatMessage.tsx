@@ -90,6 +90,8 @@ export const ChatMessage = memo(function ChatMessage({
 
   return (
     <div
+      data-chat-message-role={isUser ? 'user' : 'assistant'}
+      data-chat-message-id={message.id ?? undefined}
       className={cn(
         isEmbeddedAssistant ? 'w-full' : 'flex gap-3 group',
         !isEmbeddedAssistant && (isUser ? 'flex-row-reverse' : 'flex-row'),
