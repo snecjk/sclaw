@@ -37,7 +37,6 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const sessionKey = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem[storeSubKey] ?? '');
 
   const switchSession = useChatStore((s) => s.switchSession);
-  const switchToAgentMainSession = useChatStore((s) => s.switchToAgentMainSession);
   const messages = useChatStore((s) => s.messages);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const loading = useChatStore((s) => s.loading);
@@ -126,10 +125,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
     if (sessionKey) {
       switchSession(sessionKey);
     }
-    return () => {
-      switchToAgentMainSession('main');
-    };
-  }, [sessionKey, switchSession, switchToAgentMainSession]);
+  }, [sessionKey, switchSession]);
 
   useEffect(() => {
     genericScrollDoneRef.current = false;

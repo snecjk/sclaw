@@ -2,11 +2,23 @@
  * Main Layout Component
  * TitleBar at top, then sidebar + content below.
  */
-import { Outlet } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
+import { shouldRestoreMainSessionLeavingTaskSubitem } from '@/lib/sto-task-session';
+import { useChatStore } from '@/stores/chat';
 import { Sidebar } from './Sidebar';
 import { TitleBar } from './TitleBar';
 
 export function MainLayout() {
+  const { pathname } = useLocation();
+  const switchToAgentMainSession = useChatStore((s) => s.switchToAgentMainSession);
+
+  useEffect(() => {
+    const { currentSessionKey } = useChatStore.getState();
+    if (!shouldRestoreMainSessionLeavingTaskSubitem(pathname, currentSessionKey)) return;
+    switchToAgentMainSession('main');
+  }, [pathname, switchToAgentMainSession]);
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--sto-page-bg)] dark:bg-background">
       {/* Title bar: drag region on macOS, icon + controls on Windows */}
