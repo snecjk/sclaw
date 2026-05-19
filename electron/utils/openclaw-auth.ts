@@ -1114,6 +1114,27 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
       }
     }
 
+    // ── heartbeat section ──────────────────────────────────────────
+    // Disable heartbeat by default for new installations to avoid
+    // periodic automatic agent turns and API token consumption.
+    const agents = (
+      config.agents && typeof config.agents === 'object'
+        ? { ...(config.agents as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    const defaults = (
+      agents.defaults && typeof agents.defaults === 'object'
+        ? { ...(agents.defaults as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    if (!defaults.heartbeat) {
+      defaults.heartbeat = { every: '0m' };
+      agents.defaults = defaults;
+      config.agents = agents;
+      modified = true;
+      console.log('[sanitize] Disabling heartbeat by default (agents.defaults.heartbeat.every = 0m)');
+    }
+
     // ── commands section ───────────────────────────────────────────
     // Required for SIGUSR1 in-process reload authorization.
     const commands = (
