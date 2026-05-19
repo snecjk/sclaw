@@ -56,6 +56,11 @@
       "slug": "claw-archiver",
       "local": true,
       "autoEnable": true
+    },
+    {
+      "slug": "sai-cli",
+      "local": true,
+      "autoEnable": true
     }
   ]
 }
