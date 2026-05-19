@@ -315,9 +315,9 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
   }
 
   // Absolute file paths (Unix / Windows) — only HTML files (tied to PPT/report generation preview)
-  const pathRegex = /(\/(?:[\w.-]+\/)*[\w.-]+\.html?)/g;
+  const pathRegex = /(\/(?:[\w.-]+\/)*[\w.-]+\.html?|[A-Za-z]:[\\\/](?:[\w.-]+[\\\/])*[\w.-]+\.html?)/g;
   while ((match = pathRegex.exec(text)) !== null) {
-    const path = match[1];
+    const path = match[1].replace(/\\/g, '/');
     const fileName = path.split('/').pop() || '';
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     addIfNotImage(path, fileName, ext);
