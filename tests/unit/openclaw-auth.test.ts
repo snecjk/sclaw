@@ -31,13 +31,13 @@ vi.mock('electron', () => ({
 }));
 
 async function writeOpenClawJson(config: unknown): Promise<void> {
-  const openclawDir = join(testHome, '.openclaw');
+  const openclawDir = join(testHome, '.stoclaw', 'openclaw');
   await mkdir(openclawDir, { recursive: true });
   await writeFile(join(openclawDir, 'openclaw.json'), JSON.stringify(config, null, 2), 'utf8');
 }
 
 async function readAuthProfiles(agentId: string): Promise<Record<string, unknown>> {
-  const content = await readFile(join(testHome, '.openclaw', 'agents', agentId, 'agent', 'auth-profiles.json'), 'utf8');
+  const content = await readFile(join(testHome, '.stoclaw', 'openclaw', 'agents', agentId, 'agent', 'auth-profiles.json'), 'utf8');
   return JSON.parse(content) as Record<string, unknown>;
 }
 
@@ -57,22 +57,22 @@ describe('saveProviderKeyToOpenClaw', () => {
             id: 'main',
             name: 'Main',
             default: true,
-            workspace: '~/.openclaw/workspace',
-            agentDir: '~/.openclaw/agents/main/agent',
+            workspace: '~/.stoclaw/openclaw/workspace',
+            agentDir: '~/.stoclaw/openclaw/agents/main/agent',
           },
           {
             id: 'test3',
             name: 'test3',
-            workspace: '~/.openclaw/workspace-test3',
-            agentDir: '~/.openclaw/agents/test3/agent',
+            workspace: '~/.stoclaw/openclaw/workspace-test3',
+            agentDir: '~/.stoclaw/openclaw/agents/test3/agent',
           },
         ],
       },
     });
 
-    await mkdir(join(testHome, '.openclaw', 'agents', 'test2', 'agent'), { recursive: true });
+    await mkdir(join(testHome, '.stoclaw', 'openclaw', 'agents', 'test2', 'agent'), { recursive: true });
     await writeFile(
-      join(testHome, '.openclaw', 'agents', 'test2', 'agent', 'auth-profiles.json'),
+      join(testHome, '.stoclaw', 'openclaw', 'agents', 'test2', 'agent', 'auth-profiles.json'),
       JSON.stringify({
         version: 1,
         profiles: {
@@ -131,8 +131,8 @@ describe('setOpenClawDefaultModelWithOverride main agent model ref', () => {
             id: 'main',
             name: 'Main',
             default: true,
-            workspace: '~/.openclaw/workspace',
-            agentDir: '~/.openclaw/agents/main/agent',
+            workspace: '~/.stoclaw/openclaw/workspace',
+            agentDir: '~/.stoclaw/openclaw/agents/main/agent',
             model: 'qwen3.5-plus',
           },
         ],
@@ -153,7 +153,7 @@ describe('setOpenClawDefaultModelWithOverride main agent model ref', () => {
       [],
     );
 
-    const raw = await readFile(join(testHome, '.openclaw', 'openclaw.json'), 'utf8');
+    const raw = await readFile(join(testHome, '.stoclaw', 'openclaw', 'openclaw.json'), 'utf8');
     const parsed = JSON.parse(raw) as { agents: { list: Array<{ id: string; model?: string }> } };
     const main = parsed.agents.list.find((e) => e.id === 'main');
     expect(main?.model).toBe('sto/qwen3.5-plus');
@@ -170,8 +170,8 @@ describe('setOpenClawDefaultModelWithOverride main agent model ref', () => {
             id: 'main',
             name: 'Main',
             default: true,
-            workspace: '~/.openclaw/workspace',
-            agentDir: '~/.openclaw/agents/main/agent',
+            workspace: '~/.stoclaw/openclaw/workspace',
+            agentDir: '~/.stoclaw/openclaw/agents/main/agent',
             model: 'qwen/turbo',
           },
         ],
@@ -192,7 +192,7 @@ describe('setOpenClawDefaultModelWithOverride main agent model ref', () => {
       [],
     );
 
-    const raw = await readFile(join(testHome, '.openclaw', 'openclaw.json'), 'utf8');
+    const raw = await readFile(join(testHome, '.stoclaw', 'openclaw', 'openclaw.json'), 'utf8');
     const parsed = JSON.parse(raw) as { agents: { list: Array<{ id: string; model?: string }> } };
     const main = parsed.agents.list.find((e) => e.id === 'main');
     expect(main?.model).toBe('qwen/turbo');

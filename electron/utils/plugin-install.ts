@@ -12,6 +12,7 @@ import { cp as cpAsync, mkdir as mkdirAsync, rm as rmAsync } from 'node:fs/promi
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { logger } from './logger';
+import { getOpenClawConfigDir } from './paths';
 
 function normalizeFsPathForWindows(filePath: string): string {
   if (process.platform !== 'win32') return filePath;
@@ -59,7 +60,7 @@ const MANIFEST_ID_FIXES: Record<string, string> = {
 };
 
 /**
- * After a plugin has been copied to ~/.openclaw/extensions/<dir>, fix any
+ * After a plugin has been copied to ~/.stoclaw/openclaw/extensions/<dir>, fix any
  * known manifest-ID mismatches so the Gateway can load the plugin.
  * Also patches package.json fields that the Gateway uses as "entry hints".
  */
@@ -308,7 +309,7 @@ export function ensurePluginInstalled(
   candidateSources: string[],
   pluginLabel: string,
 ): { installed: boolean; warning?: string } {
-  const targetDir = join(homedir(), '.openclaw', 'extensions', pluginDirName);
+  const targetDir = join(getOpenClawConfigDir(), 'extensions', pluginDirName);
   const targetManifest = join(targetDir, 'openclaw.plugin.json');
   const targetPkgJson = join(targetDir, 'package.json');
 
@@ -330,7 +331,7 @@ export function ensurePluginInstalled(
 
   // Fresh install or upgrade — try bundled/build sources first
   if (sourceDir) {
-    const extensionsRoot = join(homedir(), '.openclaw', 'extensions');
+    const extensionsRoot = join(getOpenClawConfigDir(), 'extensions');
     const attempts: Array<{ attempt: number; code?: string; name?: string; message: string }> = [];
     const maxAttempts = process.platform === 'win32' ? 2 : 1;
 
@@ -387,7 +388,7 @@ export function ensurePluginInstalled(
             `${installedVersion ? `: ${installedVersion} → ${sourceVersion}` : `: ${sourceVersion}`} (dev/node_modules)`,
           );
           try {
-            mkdirSync(fsPath(join(homedir(), '.openclaw', 'extensions')), { recursive: true });
+            mkdirSync(fsPath(join(getOpenClawConfigDir(), 'extensions')), { recursive: true });
             copyPluginFromNodeModules(npmPkgPath, targetDir, npmName);
             fixupPluginManifest(targetDir);
             if (existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) {
@@ -426,7 +427,7 @@ export function ensurePluginInstalled(
             `${installedVersion ? `${installedVersion} → ${sourceVersion}` : sourceVersion} (dev/sto-plugin)`,
           );
           try {
-            mkdirSync(fsPath(join(homedir(), '.openclaw', 'extensions')), { recursive: true });
+            mkdirSync(fsPath(join(getOpenClawConfigDir(), 'extensions')), { recursive: true });
             rmSync(fsPath(targetDir), { recursive: true, force: true });
             cpSync(fsPath(localSourceDir), fsPath(targetDir), {
               recursive: true,
@@ -520,7 +521,7 @@ async function ensurePluginInstalledAsync(
   candidateSources: string[],
   pluginLabel: string,
 ): Promise<{ installed: boolean; warning?: string }> {
-  const targetDir = join(homedir(), '.openclaw', 'extensions', pluginDirName);
+  const targetDir = join(getOpenClawConfigDir(), 'extensions', pluginDirName);
   const targetManifest = join(targetDir, 'openclaw.plugin.json');
   const targetPkgJson = join(targetDir, 'package.json');
   const sourceDir = candidateSources.find((dir) => existsSync(fsPath(join(dir, 'openclaw.plugin.json'))));
@@ -550,7 +551,7 @@ async function ensurePluginInstalledAsync(
     };
   }
 
-  const extensionsRoot = join(homedir(), '.openclaw', 'extensions');
+  const extensionsRoot = join(getOpenClawConfigDir(), 'extensions');
   const attempts: Array<{ attempt: number; code?: string; name?: string; message: string }> = [];
   const maxAttempts = process.platform === 'win32' ? 2 : 1;
 
@@ -595,7 +596,7 @@ async function ensurePluginInstalledAsync(
 
 /**
  * Ensure all bundled OpenClaw plugins are installed/upgraded in
- * `~/.openclaw/extensions/`.  Designed to be called once at app startup
+ * `~/.stoclaw/openclaw/extensions/`.  Designed to be called once at app startup
  * as a fire-and-forget task — errors are logged but never thrown.
  */
 export async function ensureAllBundledPluginsInstalled(): Promise<void> {

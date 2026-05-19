@@ -137,7 +137,7 @@ export async function getStoToken(): Promise<string | null> {
 }
 
 /**
- * Write SSO user info as a flat JSON file to ~/.openclaw/sso-auth.json
+ * Write SSO user info as a flat JSON file to ~/.stoclaw/openclaw/sso-auth.json
  * so the sto-dynamic-agent-route plugin can read it for header injection.
  */
 export async function syncSsoAuthToOpenClaw(user: SsoUserInfo): Promise<void> {
@@ -148,7 +148,7 @@ export async function syncSsoAuthToOpenClaw(user: SsoUserInfo): Promise<void> {
     logger.info("Sync sso auth to OpenClaw", filePath);
     await writeFile(filePath, JSON.stringify({ ...user }, null, 2), 'utf-8');
   } catch (err) {
-    logger.warn('Failed to sync SSO auth to ~/.openclaw/sso-auth.json:', err);
+    logger.warn('Failed to sync SSO auth to ~/.stoclaw/openclaw/sso-auth.json:', err);
   }
 }
 
@@ -209,7 +209,7 @@ export async function removeSsoAuthFromSaiCli(): Promise<void> {
 }
 
 /**
- * Remove ~/.openclaw/sso-auth.json on logout or token expiry.
+ * Remove ~/.stoclaw/openclaw/sso-auth.json on logout or token expiry.
  */
 export async function removeSsoAuthFromOpenClaw(): Promise<void> {
   try {
@@ -218,6 +218,6 @@ export async function removeSsoAuthFromOpenClaw(): Promise<void> {
     await unlink(filePath);
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') return;
-    logger.warn('Failed to remove ~/.openclaw/sso-auth.json:', err);
+    logger.warn('Failed to remove ~/.stoclaw/openclaw/sso-auth.json:', err);
   }
 }

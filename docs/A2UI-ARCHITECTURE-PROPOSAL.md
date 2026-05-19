@@ -299,7 +299,7 @@ A2UI 描述
 
 **需要持久化的是：**
 
-1. **用户编排的 HTML 页面**：存储在 `~/.openclaw/studio-html-pages/`，用户可随时打开继续编辑
+1. **用户编排的 HTML 页面**：存储在 `~/.stoclaw/openclaw/studio-html-pages/`，用户可随时打开继续编辑
 2. **Studio 会话历史**：复用现有 chat history，消息中包含 A2UI 描述和 HTML 内容
 3. **数据源配置**：Skill 的数据源连接信息，存入 Agent 配置
 

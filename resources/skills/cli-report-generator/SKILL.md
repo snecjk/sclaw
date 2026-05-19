@@ -23,7 +23,7 @@ uv run python scripts/generate_report.py \
 
 ```bash
 # Add to crontab (runs at 9 AM daily)
-0 9 * * * cd /Users/sto/.openclaw/skills/cli-report-generator && uv run python scripts/generate_report.py --config config.json
+0 9 * * * cd /Users/sto/.stoclaw/openclaw/skills/cli-report-generator && uv run python scripts/generate_report.py --config config.json
 ```
 
 ## 输出约束
@@ -219,7 +219,7 @@ For fully automated execution:
 crontab -e
 
 # Add job
-0 9 * * * cd /Users/sto/.openclaw/skills/cli-report-generator && uv run python scripts/generate_report.py --config configs/network-report.json >> logs/cron.log 2>&1
+0 9 * * * cd /Users/sto/.stoclaw/openclaw/skills/cli-report-generator && uv run python scripts/generate_report.py --config configs/network-report.json >> logs/cron.log 2>&1
 ```
 
 ## References

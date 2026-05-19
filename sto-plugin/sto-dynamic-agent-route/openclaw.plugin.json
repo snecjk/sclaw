@@ -44,7 +44,7 @@
     },
     "ssoAuthPath": {
       "label": "SSO Auth 文件路径",
-      "help": "SSO 认证信息文件路径，默认 ~/.openclaw/sso-auth.json，其中 userName 和 stoToken 会作为 HTTP headers 注入到模型请求中"
+      "help": "SSO 认证信息文件路径，默认 ~/.stoclaw/openclaw/sso-auth.json，其中 userName 和 stoToken 会作为 HTTP headers 注入到模型请求中"
     }
   }
 }

@@ -6,7 +6,7 @@ import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
 const PROVIDER_ID = "sto-dynamic-agent-route";
 const DEFAULT_MODEL_ID = "sto-route-model";
 const DEFAULT_TIMEOUT_MS = 10000;
-const DEFAULT_SSO_AUTH_PATH = "~/.openclaw/sso-auth.json";
+const DEFAULT_SSO_AUTH_PATH = "~/.stoclaw/openclaw/sso-auth.json";
 const TAG = "sto-dynamic-agent-route";
 
 type StoDynamicRouteConfig = {

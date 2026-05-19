@@ -38,7 +38,7 @@
    b) API Key -> 双重存储（见第四节）
       |
 8. 同步到 OpenClaw 运行时：
-   a) 写入 ~/.openclaw/openclaw.json（提供商配置）
+   a) 写入 ~/.stoclaw/openclaw/openclaw.json（提供商配置）
    b) 写入 auth-profiles.json（密钥同步）
    c) 必要时重启 Gateway
       |
@@ -76,7 +76,7 @@
 
 ### 3.5 运行时同步
 
-- `syncSavedProviderToRuntime()` 将提供商配置写入 `~/.openclaw/openclaw.json`
+- `syncSavedProviderToRuntime()` 将提供商配置写入 `~/.stoclaw/openclaw/openclaw.json`
 - API Key 同步到 `auth-profiles.json`（通过 `electron/utils/openclaw-auth.ts` 的 `saveProviderKeyToOpenClaw()`）
 - 必要时以8秒去抖重启 Gateway
 
