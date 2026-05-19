@@ -640,7 +640,7 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
         </p>
       </div>
       {isPreviewable && onPreviewFile && (
-        <span className="ml-auto shrink-0 text-[10px] text-link/90">预览</span>
+        <span className="ml-auto shrink-0 text-[10px] text-primary">预览</span>
       )}
     </div>
   );
