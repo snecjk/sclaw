@@ -540,9 +540,9 @@ function preprocessTextForPreviewLinks(text: string): string {
     '[$1](preview://$1)',
   );
 
-  // Replace absolute file paths (only HTML files — tied to PPT/report generation)
+  // Replace absolute file paths (Unix / Windows — only HTML files, tied to PPT/report generation)
   text = text.replace(
-    /(\/(?:[\w.-]+\/)*[\w.-]+\.html?)/g,
+    /(\/(?:[\w.-]+\/)*[\w.-]+\.html?|[A-Za-z]:[\\\/](?:[\w.-]+[\\\/])*[\w.-]+\.html?)/g,
     '[$1](preview://$1)',
   );
 
