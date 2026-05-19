@@ -77,8 +77,8 @@ export const ChatMessage = memo(function ChatMessage({
     .filter((ref) => !attachedFiles.some((f) => f.filePath === ref.filePath))
     .filter((ref) => ref.mimeType === 'text/html');
 
-  // Only images and HTML files render as cards; other attachments are hidden
-  const hasRenderableFiles = attachedFiles.some((f) => f.mimeType.startsWith('image/') || f.mimeType === 'text/html');
+  // All attached files should render as cards (images as thumbnails, everything else as FileCard)
+  const hasRenderableFiles = attachedFiles.length > 0;
 
   // Never render tool result messages in chat UI
   if (isToolResult) return null;
@@ -159,7 +159,6 @@ export const ChatMessage = memo(function ChatMessage({
           <div className="flex flex-wrap gap-2">
             {attachedFiles.map((file, i) => {
               const isImage = file.mimeType.startsWith('image/');
-              const isHtml = file.mimeType === 'text/html';
               // Skip image attachments if we already have images from content blocks
               if (isImage && images.length > 0) return null;
               if (isImage) {
@@ -181,8 +180,7 @@ export const ChatMessage = memo(function ChatMessage({
                   </div>
                 );
               }
-              // Only HTML files (PPT/report generation output) render as FileCard
-              if (!isHtml) return null;
+              // All non-image attachments render as FileCard
               return <FileCard key={`local-${i}`} file={file} onPreviewFile={onPreviewFile} />;
             })}
           </div>
@@ -222,11 +220,10 @@ export const ChatMessage = memo(function ChatMessage({
         )}
 
         {/* File attachments — assistant messages (below text) */}
-        {!isUser && (attachedFiles.some((f) => f.mimeType.startsWith('image/') || f.mimeType === 'text/html') || extractedRefs.length > 0) && (
+        {!isUser && (attachedFiles.length > 0 || extractedRefs.length > 0) && (
           <div className="flex flex-wrap gap-2">
             {attachedFiles.map((file, i) => {
               const isImage = file.mimeType.startsWith('image/');
-              const isHtml = file.mimeType === 'text/html';
               if (isImage && images.length > 0) return null;
               if (isImage && file.preview) {
                 return (
@@ -247,8 +244,7 @@ export const ChatMessage = memo(function ChatMessage({
                   </div>
                 );
               }
-              // Only HTML files (PPT/report generation output) render as FileCard
-              if (!isHtml) return null;
+              // All non-image attachments render as FileCard
               return <FileCard key={`local-${i}`} file={file} onPreviewFile={onPreviewFile} />;
             })}
             {extractedRefs.map((ref, i) => (
