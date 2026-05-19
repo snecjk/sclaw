@@ -63,12 +63,10 @@ export interface UpdaterEvents {
 }
 
 /**
- * Detect the update channel from a semver version string.
- * e.g. "0.1.8-alpha.0" → "alpha", "1.0.0-beta.1" → "beta", "1.0.0" → "latest"
+ * 固定返回 latest，所有客户端统一走 latest channel，不根据版本号后缀区分。
  */
-function detectChannel(version: string): string {
-  const match = version.match(/-([a-zA-Z]+)/);
-  return match ? match[1] : 'latest';
+function detectChannel(_version: string): string {
+  return 'latest';
 }
 
 function builtInFeedForVersion(version: string): { url: string; channel: string } {
@@ -239,7 +237,7 @@ export class AppUpdater extends EventEmitter {
     }
 
     const base = (data.feed_base_url || '').trim().replace(/\/$/, '');
-    const ch = (data.electron_channel || '').trim() || detectChannel(version);
+    const ch = 'latest'; // 固定 latest，忽略服务端返回的 channel
 
     if (base) {
       autoUpdater.channel = ch;
