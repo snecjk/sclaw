@@ -32,10 +32,12 @@ export function registerHostApiProxyHandlers(): void {
         }
       }
 
+      const isLongRunningAuth = path === '/api/auth/login';
       const response = await proxyAwareFetch(`http://127.0.0.1:${PORTS.CLAWX_HOST_API}${path}`, {
         method,
         headers,
         body,
+        timeoutMs: isLongRunningAuth ? 300_000 : undefined,
       });
 
       const data: { status: number; ok: boolean; json?: unknown; text?: string } = {
