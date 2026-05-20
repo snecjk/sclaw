@@ -114,7 +114,7 @@ export class StoSkillService {
    * Download & install a skill from STO by slug.
    * Steps:
    *   1. Download ZIP via GET /agent/v1/skills/slug/{slug}/download
-   *   2. Extract to ~/.openclaw/skills/{slug}/
+   *   2. Extract to ~/.stoclaw/openclaw/skills/{slug}/
    *   3. Update lock.json
    */
   async install(params: StoSkillInstallParams): Promise<void> {

@@ -1,7 +1,7 @@
 ; StoClaw Custom NSIS Installer/Uninstaller Script
 ;
-; Install: enables long paths, adds resources\cli to user PATH for openclaw CLI.
-; Uninstall: removes the PATH entry and optionally deletes user data.
+; Install: enables long paths, clears stale auth data.
+; Uninstall: optionally deletes user data.
 
 ; ── Compression Settings ─────────────────────────────────────────────────────
 ; Disable solid compression for faster installation.
@@ -91,43 +91,10 @@ SetCompressor zlib
   RMDir /r "$APPDATA\stoclaw\Local Storage"
   RMDir /r "$APPDATA\stoclaw\Session Storage"
 
-  ; Use PowerShell to update the current user's PATH.
-  ; This avoids NSIS string-buffer limits and preserves long PATH values.
-  InitPluginsDir
-  ClearErrors
-  File "/oname=$PLUGINSDIR\update-user-path.ps1" "${PROJECT_DIR}\resources\cli\win32\update-user-path.ps1"
-  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\update-user-path.ps1" -Action add -CliDir "$INSTDIR\resources\cli"'
-  Pop $0
-  Pop $1
-  StrCmp $0 "error" 0 +2
-    DetailPrint "Warning: Failed to launch PowerShell while updating PATH."
-  StrCmp $0 "timeout" 0 +2
-    DetailPrint "Warning: PowerShell PATH update timed out."
-  StrCmp $0 "0" 0 +2
-    Goto _ci_done
-  DetailPrint "Warning: PowerShell PATH update exited with code $0."
-
   _ci_done:
 !macroend
 
 !macro customUnInstall
-  ; Remove resources\cli from user PATH via PowerShell so long PATH values are handled safely
-  InitPluginsDir
-  ClearErrors
-  File "/oname=$PLUGINSDIR\update-user-path.ps1" "${PROJECT_DIR}\resources\cli\win32\update-user-path.ps1"
-  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\update-user-path.ps1" -Action remove -CliDir "$INSTDIR\resources\cli"'
-  Pop $0
-  Pop $1
-  StrCmp $0 "error" 0 +2
-    DetailPrint "Warning: Failed to launch PowerShell while removing PATH entry."
-  StrCmp $0 "timeout" 0 +2
-    DetailPrint "Warning: PowerShell PATH removal timed out."
-  StrCmp $0 "0" 0 +2
-    Goto _cu_pathDone
-  DetailPrint "Warning: PowerShell PATH removal exited with code $0."
-
-  _cu_pathDone:
-
   ; Ask user if they want to completely remove all user data
   MessageBox MB_YESNO|MB_ICONQUESTION \
     "Do you want to completely remove all StoClaw user data?$\r$\n$\r$\nThis will delete:$\r$\n  • .openclaw folder (configuration & skills)$\r$\n  • AppData\Local\stoclaw (local app data)$\r$\n  • AppData\Roaming\stoclaw (roaming app data)$\r$\n$\r$\nSelect 'No' to keep your data for future reinstallation." \

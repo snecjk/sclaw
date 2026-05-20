@@ -31,13 +31,13 @@ vi.mock('electron', () => ({
 }));
 
 async function writeOpenClawJson(config: unknown): Promise<void> {
-  const openclawDir = join(testHome, '.openclaw');
+  const openclawDir = join(testHome, '.stoclaw', 'openclaw');
   await mkdir(openclawDir, { recursive: true });
   await writeFile(join(openclawDir, 'openclaw.json'), JSON.stringify(config, null, 2), 'utf8');
 }
 
 async function readOpenClawJson(): Promise<Record<string, unknown>> {
-  const content = await readFile(join(testHome, '.openclaw', 'openclaw.json'), 'utf8');
+  const content = await readFile(join(testHome, '.stoclaw', 'openclaw', 'openclaw.json'), 'utf8');
   return JSON.parse(content) as Record<string, unknown>;
 }
 
@@ -116,20 +116,20 @@ describe('agent config lifecycle', () => {
             id: 'main',
             name: 'Main',
             default: true,
-            workspace: '~/.openclaw/workspace',
-            agentDir: '~/.openclaw/agents/main/agent',
+            workspace: '~/.stoclaw/openclaw/workspace',
+            agentDir: '~/.stoclaw/openclaw/agents/main/agent',
           },
           {
             id: 'test2',
             name: 'test2',
-            workspace: '~/.openclaw/workspace-test2',
-            agentDir: '~/.openclaw/agents/test2/agent',
+            workspace: '~/.stoclaw/openclaw/workspace-test2',
+            agentDir: '~/.stoclaw/openclaw/agents/test2/agent',
           },
           {
             id: 'test3',
             name: 'test3',
-            workspace: '~/.openclaw/workspace-test3',
-            agentDir: '~/.openclaw/agents/test3/agent',
+            workspace: '~/.stoclaw/openclaw/workspace-test3',
+            agentDir: '~/.stoclaw/openclaw/agents/test3/agent',
           },
         ],
       },
@@ -148,8 +148,8 @@ describe('agent config lifecycle', () => {
       ],
     });
 
-    const test2RuntimeDir = join(testHome, '.openclaw', 'agents', 'test2');
-    const test2WorkspaceDir = join(testHome, '.openclaw', 'workspace-test2');
+    const test2RuntimeDir = join(testHome, '.stoclaw', 'openclaw', 'agents', 'test2');
+    const test2WorkspaceDir = join(testHome, '.stoclaw', 'openclaw', 'workspace-test2');
     await mkdir(join(test2RuntimeDir, 'agent'), { recursive: true });
     await mkdir(join(test2RuntimeDir, 'sessions'), { recursive: true });
     await mkdir(join(test2WorkspaceDir, '.openclaw'), { recursive: true });
@@ -192,20 +192,20 @@ describe('agent config lifecycle', () => {
             id: 'main',
             name: 'Main',
             default: true,
-            workspace: '~/.openclaw/workspace',
-            agentDir: '~/.openclaw/agents/main/agent',
+            workspace: '~/.stoclaw/openclaw/workspace',
+            agentDir: '~/.stoclaw/openclaw/agents/main/agent',
           },
           {
             id: 'test2',
             name: 'test2',
             workspace: customWorkspaceDir,
-            agentDir: '~/.openclaw/agents/test2/agent',
+            agentDir: '~/.stoclaw/openclaw/agents/test2/agent',
           },
         ],
       },
     });
 
-    await mkdir(join(testHome, '.openclaw', 'agents', 'test2', 'agent'), { recursive: true });
+    await mkdir(join(testHome, '.stoclaw', 'openclaw', 'agents', 'test2', 'agent'), { recursive: true });
     await mkdir(customWorkspaceDir, { recursive: true });
     await writeFile(join(customWorkspaceDir, 'AGENTS.md'), '# custom', 'utf8');
 

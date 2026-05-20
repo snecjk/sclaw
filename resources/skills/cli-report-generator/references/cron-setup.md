@@ -46,7 +46,7 @@ Best for fully automated execution without user interaction.
 
 ```bash
 #!/bin/bash
-cd /Users/sto/.openclaw/skills/cli-report-generator
+cd /Users/sto/.stoclaw/openclaw/skills/cli-report-generator
 uv run python scripts/generate_report.py --config configs/network-report.json
 echo "Report generated at $(date)" >> logs/cron.log
 ```
@@ -67,7 +67,7 @@ crontab -e
 
 ```bash
 # Daily network report at 9 AM
-0 9 * * * cd /Users/sto/.openclaw/skills/cli-report-generator && ./scripts/run_daily_report.sh >> logs/cron.log 2>&1
+0 9 * * * cd /Users/sto/.stoclaw/openclaw/skills/cli-report-generator && ./scripts/run_daily_report.sh >> logs/cron.log 2>&1
 ```
 
 ## Option 3: macOS launchd
@@ -87,7 +87,7 @@ For macOS-native scheduling.
     <string>com.sto.cli-report</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/sto/.openclaw/skills/cli-report-generator/scripts/run_daily_report.sh</string>
+        <string>/Users/sto/.stoclaw/openclaw/skills/cli-report-generator/scripts/run_daily_report.sh</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>
@@ -97,11 +97,11 @@ For macOS-native scheduling.
         <integer>0</integer>
     </dict>
     <key>WorkingDirectory</key>
-    <string>/Users/sto/.openclaw/skills/cli-report-generator</string>
+    <string>/Users/sto/.stoclaw/openclaw/skills/cli-report-generator</string>
     <key>StandardOutPath</key>
-    <string>/Users/sto/.openclaw/skills/cli-report-generator/logs/launchd.log</string>
+    <string>/Users/sto/.stoclaw/openclaw/skills/cli-report-generator/logs/launchd.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/sto/.openclaw/skills/cli-report-generator/logs/launchd.err</string>
+    <string>/Users/sto/.stoclaw/openclaw/skills/cli-report-generator/logs/launchd.err</string>
 </dict>
 </plist>
 ```

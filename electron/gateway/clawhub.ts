@@ -48,7 +48,7 @@ export class ClawHubService {
     private ansiRegex: RegExp;
 
     constructor() {
-        // Use the user's OpenClaw config directory (~/.openclaw) for skill management
+        // Use the user's OpenClaw config directory (~/.stoclaw/openclaw) for skill management
         // This avoids installing skills into the project's openclaw submodule
         this.workDir = getOpenClawConfigDir();
         ensureDir(this.workDir);

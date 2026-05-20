@@ -9,7 +9,7 @@ import { constants } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { logger } from './logger';
-import { getResourcesDir } from './paths';
+import { getResourcesDir, getOpenClawConfigDir } from './paths';
 
 const CLAWX_BEGIN = '<!-- stoclaw:begin -->';
 const CLAWX_END = '<!-- stoclaw:end -->';
@@ -48,10 +48,10 @@ export function mergeClawXSection(existing: string, section: string): string {
 /**
  * Collect all unique workspace directories from the openclaw config:
  * the defaults workspace, each agent's workspace, and any workspace-*
- * directories that already exist under ~/.openclaw/.
+ * directories that already exist under ~/.stoclaw/openclaw/.
  */
 async function resolveAllWorkspaceDirs(): Promise<string[]> {
-  const openclawDir = join(homedir(), '.openclaw');
+  const openclawDir = getOpenClawConfigDir();
   const dirs = new Set<string>();
 
   const configPath = join(openclawDir, 'openclaw.json');
@@ -78,7 +78,7 @@ async function resolveAllWorkspaceDirs(): Promise<string[]> {
     // ignore config parse errors
   }
 
-  // We intentionally do NOT scan ~/.openclaw/ for any directory starting
+  // We intentionally do NOT scan ~/.stoclaw/openclaw/ for any directory starting
   // with 'workspace'. Doing so causes a race condition where a recently deleted
   // agent's workspace (e.g., workspace-code23) is found and resuscitated by
   // the context merge routine before its deletion finishes. Only workspaces

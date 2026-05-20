@@ -1,6 +1,6 @@
 /**
  * Skill Config Utilities
- * Direct read/write access to skill configuration in ~/.openclaw/openclaw.json
+ * Direct read/write access to skill configuration in ~/.stoclaw/openclaw/openclaw.json
  * This bypasses the Gateway RPC for faster and more reliable config updates.
  *
  * All file I/O uses async fs/promises to avoid blocking the main thread.
@@ -11,11 +11,11 @@ import { constants } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { createHash } from 'node:crypto';
-import { getOpenClawDir, getResourcesDir, ensureDir } from './paths';
+import { getOpenClawDir, getResourcesDir, getOpenClawConfigDir, ensureDir } from './paths';
 import { logger } from './logger';
 import { withConfigLock } from './config-mutex';
 
-const OPENCLAW_CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw.json');
+const OPENCLAW_CONFIG_PATH = join(getOpenClawConfigDir(), 'openclaw.json');
 
 interface SkillEntry {
     enabled?: boolean;
@@ -190,19 +190,19 @@ export async function getAllSkillConfigs(): Promise<Record<string, SkillEntry>> 
 
 /**
  * Built-in skills bundled with StoClaw that should be pre-deployed to
- * ~/.openclaw/skills/ on first launch.  These come from the openclaw package's
+ * ~/.stoclaw/openclaw/skills/ on first launch.  These come from the openclaw package's
  * extensions directory and are available in both dev and packaged builds.
  */
 const BUILTIN_SKILLS = [] as const;
 
 /**
- * Ensure built-in skills are deployed to ~/.openclaw/skills/<slug>/.
+ * Ensure built-in skills are deployed to ~/.stoclaw/openclaw/skills/<slug>/.
  * Skips any skill that already has a SKILL.md present (idempotent).
  * Runs at app startup; all errors are logged and swallowed so they never
  * block the normal startup flow.
  */
 export async function ensureBuiltinSkillsInstalled(): Promise<void> {
-    const skillsRoot = join(homedir(), '.openclaw', 'skills');
+    const skillsRoot = join(getOpenClawConfigDir(), 'skills');
 
     for (const { slug, sourceExtension } of BUILTIN_SKILLS) {
         const targetDir = join(skillsRoot, slug);
@@ -323,7 +323,7 @@ async function tryReadMarker(markerPath: string): Promise<PreinstalledMarker | n
 
 /**
  * Ensure third-party preinstalled skills (bundled in app resources) are
- * deployed to ~/.openclaw/skills/<slug>/ as full directories.
+ * deployed to ~/.stoclaw/openclaw/skills/<slug>/ as full directories.
  *
  * Policy:
  * - Local built-in skills ("local": true) are ALWAYS copied over the local
@@ -345,7 +345,7 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
     }
     const lockVersions = await readPreinstalledLockVersions(sourceRoot);
 
-    const targetRoot = join(homedir(), '.openclaw', 'skills');
+    const targetRoot = join(getOpenClawConfigDir(), 'skills');
     await mkdir(targetRoot, { recursive: true });
     const toEnable: string[] = [];
 

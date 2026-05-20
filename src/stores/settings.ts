@@ -66,7 +66,7 @@ interface SettingsState {
 }
 
 const defaultSettings = {
-  theme: 'dark' as Theme,
+  theme: 'light' as Theme,
   language: resolveSupportedLanguage(typeof navigator !== 'undefined' ? navigator.language : undefined),
   startMinimized: false,
   launchAtStartup: false,

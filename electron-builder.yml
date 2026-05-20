@@ -72,8 +72,6 @@ mac:
   extraResources:
     - from: resources/bin/darwin-${arch}
       to: bin
-    - from: resources/cli/posix/
-      to: cli/
   category: public.app-category.productivity
   icon: resources/icons/icon.icns
   target:
@@ -119,8 +117,6 @@ win:
   extraResources:
     - from: resources/bin/win32-${arch}
       to: bin
-    - from: resources/cli/win32/
-      to: cli/
   icon: resources/icons/icon.ico
   target:
     - target: nsis
@@ -149,8 +145,6 @@ linux:
   extraResources:
     - from: resources/bin/linux-${arch}
       to: bin
-    - from: resources/cli/posix/
-      to: cli/
   icon: resources/icons
   target:
     - target: AppImage

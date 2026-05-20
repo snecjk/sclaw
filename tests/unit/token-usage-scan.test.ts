@@ -39,7 +39,7 @@ describe('token usage session scan', () => {
   });
 
   it('includes transcripts from agent directories that exist on disk but are not configured', async () => {
-    const openclawDir = join(testHome, '.openclaw');
+    const openclawDir = join(testHome, '.stoclaw', 'openclaw');
     await mkdir(openclawDir, { recursive: true });
     await writeFile(join(openclawDir, 'openclaw.json'), JSON.stringify({
       agents: {

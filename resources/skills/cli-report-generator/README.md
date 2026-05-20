@@ -26,7 +26,7 @@ cp configs/network-report.json.example configs/network-report.json
 ### 2. 测试生成
 
 ```bash
-cd /Users/sto/.openclaw/skills/cli-report-generator
+cd /Users/sto/.stoclaw/openclaw/skills/cli-report-generator
 uv run python scripts/generate_report.py --config configs/network-report.json
 ```
 

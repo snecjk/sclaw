@@ -76,7 +76,7 @@ function getSystemLocale(): string {
 function createDefaultSettings(): AppSettings {
   return {
     // General
-    theme: 'dark',
+    theme: 'light',
     language: resolveSupportedLanguage(getSystemLocale()),
     startMinimized: false,
     launchAtStartup: false,

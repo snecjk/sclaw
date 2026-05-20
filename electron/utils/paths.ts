@@ -28,9 +28,10 @@ export function expandPath(path: string): string {
 
 /**
  * Get OpenClaw config directory
+ * Isolated under ~/.stoclaw/openclaw to avoid colliding with other OpenClaw installations.
  */
 export function getOpenClawConfigDir(): string {
-  return join(homedir(), '.openclaw');
+  return join(homedir(), '.stoclaw', 'openclaw');
 }
 
 /**
@@ -43,7 +44,7 @@ export function getOpenClawSkillsDir(): string {
 /**
  * Get agent-scoped skills directory
  * Used when a skill is installed from an Agent detail page,
- * scoping it to ~/.openclaw/agents/{agentId}/agent/skills/
+ * scoping it to ~/.stoclaw/openclaw/agents/{agentId}/agent/skills/
  */
 export function getOpenClawAgentSkillsDir(agentId: string): string {
   return join(getOpenClawConfigDir(), 'agents', agentId, 'agent', 'skills');

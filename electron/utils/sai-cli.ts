@@ -167,7 +167,13 @@ function getBundledSaiPath(): string | null {
   const arch = process.arch;
   const bundledBinName = platform === 'win32' ? 'sai-cli.exe' : 'sai-cli';
 
-  // ── 1. New: unified resources/cli/ (platform-agnostic naming) ─────────────
+  // ── 1. Production: resources/prod-cli/ (pro cli) ──────────────────────────
+  if (app.isPackaged) {
+    const prodCliPath = join(process.resourcesPath, 'prod-cli', bundledBinName);
+    if (existsSync(prodCliPath)) return prodCliPath;
+  }
+
+  // ── 2. Development / fallback: resources/cli/ (platform-agnostic naming) ──
   if (app.isPackaged) {
     const cliPath = join(process.resourcesPath, 'cli', bundledBinName);
     if (existsSync(cliPath)) return cliPath;

@@ -614,7 +614,7 @@ export function Skills() {
     }
   }, [t]);
 
-  const [skillsDirPath, setSkillsDirPath] = useState('~/.openclaw/skills');
+  const [skillsDirPath, setSkillsDirPath] = useState('~/.stoclaw/openclaw/skills');
 
   useEffect(() => {
     invokeIpc<string>('openclaw:getSkillsDir')

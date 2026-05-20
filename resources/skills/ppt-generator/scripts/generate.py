@@ -514,6 +514,35 @@ class PageRenderer:
         return re.sub(r'\{\{(\w+)\}\}', replacer, text)
 
 
+# ========== 版本化路径解析 ==========
+
+def resolve_versioned_path(base_path: Path) -> Path:
+    """如果路径已存在，自动递增版本号 v1, v2..."""
+    if not base_path.exists():
+        return base_path
+
+    stem = base_path.stem
+    suffix = base_path.suffix
+    parent = base_path.parent
+
+    import re
+    base_stem = re.sub(r'_v\d+$', '', stem)
+
+    max_ver = 0
+    # 检查基础文件（无版本后缀）是否存在，存在则算作 v0
+    if (parent / f"{base_stem}{suffix}").exists():
+        max_ver = 0
+
+    # 查找所有带版本号的同基础名文件
+    for f in parent.glob(f"{base_stem}_v*{suffix}"):
+        match = re.search(r'_v(\d+)' + re.escape(suffix) + '$', f.name)
+        if match:
+            max_ver = max(max_ver, int(match.group(1)))
+
+    new_ver = max_ver + 1
+    return parent / f"{base_stem}_v{new_ver}{suffix}"
+
+
 # ========== 主函数 ==========
 
 def main():
@@ -669,7 +698,7 @@ def main():
     workspace_dir.mkdir(parents=True, exist_ok=True)
     
     if args.output:
-        output_file = Path(args.output)
+        output_file = resolve_versioned_path(Path(args.output))
     else:
         output_file = workspace_dir / f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
     

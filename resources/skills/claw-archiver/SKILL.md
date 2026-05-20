@@ -48,7 +48,7 @@ tags: [platform, archive, save, standard]
 
 | 变量 | 示例值 | 说明 |
 |---|---|---|
-| `{workspace}` | `~/.openclaw/workspace` | 工作空间根目录 |
+| `{workspace}` | `~/.stoclaw/openclaw/workspace` | 工作空间根目录 |
 | `{date}` | `2026-05-13` | 当前日期 `YYYY-MM-DD` |
 | `{time}` | `143022` | 当前时间 `HHMMSS` |
 | `{filename}` | `daily-report` | 原文件名（不含扩展名） |
@@ -96,7 +96,7 @@ Content-Type: application/json
 
 {
   "content": "<!DOCTYPE html>...",
-  "originalPath": "/Users/sto/.openclaw/workspace/daily-report.html",
+  "originalPath": "/Users/sto/.stoclaw/openclaw/workspace/daily-report.html",
   "encoding": "utf-8"
 }
 ```
@@ -105,6 +105,6 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "savedPath": "/Users/sto/.openclaw/workspace/2026-05-13/daily-report_v2.html"
+  "savedPath": "/Users/sto/.stoclaw/openclaw/workspace/2026-05-13/daily-report_v2.html"
 }
 ```
