@@ -370,6 +370,7 @@ function SidebarNavLink({
   label,
   collapsed,
   onClick,
+  isActiveOverride,
 }: {
   to: string;
   end?: boolean;
@@ -377,10 +378,13 @@ function SidebarNavLink({
   label: string;
   collapsed: boolean;
   onClick?: () => void;
+  isActiveOverride?: boolean;
 }) {
   const { pathname } = useLocation();
   // 使用路径匹配生成 className（字符串），避免 TooltipTrigger asChild 与 NavLink 的函数 className 合并时被破坏，导致选中态（橙底白图标）不生效。
-  const isActive = matchPath({ path: to, end: Boolean(end), caseSensitive: false }, pathname) != null;
+  const isActive = isActiveOverride !== undefined
+    ? isActiveOverride
+    : matchPath({ path: to, end: Boolean(end), caseSensitive: false }, pathname) != null;
 
   const linkClassName = cn(
     'relative flex items-center font-medium leading-none transition-[color,background-color,border-radius,filter] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
@@ -658,12 +662,15 @@ export function Sidebar() {
         <div className="relative z-10 flex shrink-0 flex-col gap-1">
         <div className={cn('flex flex-col gap-1', sidebarCollapsed && 'mt-2')}>
 {primaryNav.map((item) => {
+  // 当有选中非默认会话时，首页不高亮，避免与会话列表项同时高亮
+  const shouldDimHome = isOnHome && currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY;
+  const homeIsActiveOverride = item.to === '/' && shouldDimHome ? false : undefined;
+  
   // 点击首页时，切换到默认会话并清空消息，让首页显示初始内容
   const handleHomeClick = item.to === '/'
     ? () => {
-        const { messages, currentSessionKey } = useChatStore.getState();
-        // 只有在有消息或选中非默认会话时才需要重置
-        if (messages.length > 0 || currentSessionKey !== DEFAULT_SESSION_KEY) {
+        const { messages, currentSessionKey: currKey } = useChatStore.getState();
+        if (messages.length > 0 || currKey !== DEFAULT_SESSION_KEY) {
           useChatStore.setState({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: 'main',
@@ -689,7 +696,8 @@ export function Sidebar() {
       icon={item.icon}
       label={item.label}
       collapsed={sidebarCollapsed}
-      onClick={handleHomeClick}
+      onClick={item.to === '/' ? handleHomeClick : undefined}
+      isActiveOverride={homeIsActiveOverride}
     />
   );
 })}
