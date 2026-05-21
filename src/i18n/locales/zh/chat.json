@@ -75,7 +75,12 @@
         "moveUp": "上移",
         "moveDown": "下移",
         "fileCount": "{{count}} 个文件",
-        "queueFull": "队列已满（最多 {{max}} 条）"
-    },
-    "splitting": "正在分析问题..."
+    "queueFull": "队列已满（最多 {{max}} 条）"
+  },
+    "splitting": "正在分析问题...",
+    "systemNotice": {
+        "label": "系统提示",
+        "expand": "展开",
+        "collapse": "收起"
+    }
 }
