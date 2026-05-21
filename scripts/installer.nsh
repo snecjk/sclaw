@@ -34,13 +34,21 @@ SetCompressor zlib
     doStopProcess:
     DetailPrint `Closing running "${PRODUCT_NAME}"...`
 
-    # Silently kill the process using nsProcess instead of taskkill / cmd.exe
+    # Electron apps spawn multiple processes (main, renderer, GPU, utility).
+    # nsProcess::KillProcess may only terminate one instance.
+    # Use taskkill /F /IM /T to force-close the entire process tree.
     ${nsProcess::KillProcess} "${APP_EXECUTABLE_FILENAME}" $R0
-    
-    # to ensure that files are not "in-use"
-    Sleep 300
+    !ifdef NSIS_CHAR_SIZE
+      nsExec::ExecToStack `taskkill /F /IM "$APP_EXECUTABLE_FILENAME" /T`
+    !else
+      nsExec::ExecToStack `taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T`
+    !endif
+    Pop $R0
 
-    # Retry counter
+    # Wait longer for the entire process tree to terminate
+    Sleep 2000
+
+    # Retry counter (up to 5 attempts)
     StrCpy $R1 0
 
     loop:
@@ -48,14 +56,20 @@ SetCompressor zlib
 
       ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
       ${if} $R0 == 0
-        # wait to give a chance to exit gracefully
-        Sleep 1000
+        # Process still running — try again
+        DetailPrint `Retry closing "${PRODUCT_NAME}" (attempt $R1)...`
         ${nsProcess::KillProcess} "${APP_EXECUTABLE_FILENAME}" $R0
-        
+        !ifdef NSIS_CHAR_SIZE
+          nsExec::ExecToStack `taskkill /F /IM "$APP_EXECUTABLE_FILENAME" /T`
+        !else
+          nsExec::ExecToStack `taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T`
+        !endif
+        Pop $R0
+
         ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
         ${If} $R0 == 0
-          DetailPrint `Waiting for "${PRODUCT_NAME}" to close.`
-          Sleep 2000
+          DetailPrint `Waiting for "${PRODUCT_NAME}" to close...`
+          Sleep 3000
         ${else}
           Goto not_running
         ${endIf}
@@ -63,9 +77,8 @@ SetCompressor zlib
         Goto not_running
       ${endIf}
 
-      # App likely running with elevated permissions.
-      # Ask user to close it manually
-      ${if} $R1 > 1
+      # After 5 attempts, ask user to close manually
+      ${if} $R1 > 4
         MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY loop
         Quit
       ${else}
