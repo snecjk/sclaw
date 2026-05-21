@@ -49,6 +49,7 @@ import logoSvg from '@/assets/logo.svg';
 import packageJson from '../../../package.json';
 import { taskDetailPath, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
@@ -368,16 +369,22 @@ function SidebarNavLink({
   icon,
   label,
   collapsed,
+  isActiveOverride,
+  onClick,
 }: {
   to: string;
   end?: boolean;
   icon: ReactNode;
   label: string;
   collapsed: boolean;
+  isActiveOverride?: boolean;
+  onClick?: () => void;
 }) {
   const { pathname } = useLocation();
   // 使用路径匹配生成 className（字符串），避免 TooltipTrigger asChild 与 NavLink 的函数 className 合并时被破坏，导致选中态（橙底白图标）不生效。
-  const isActive = matchPath({ path: to, end: Boolean(end), caseSensitive: false }, pathname) != null;
+  const isActive = isActiveOverride !== undefined
+    ? isActiveOverride
+    : matchPath({ path: to, end: Boolean(end), caseSensitive: false }, pathname) != null;
 
   const linkClassName = cn(
     'relative flex items-center font-medium leading-none transition-[color,background-color,border-radius,filter] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
@@ -398,7 +405,7 @@ function SidebarNavLink({
   );
 
   const link = (
-    <NavLink to={to} end={end} className={linkClassName}>
+    <NavLink to={to} end={end} className={linkClassName} onClick={onClick}>
       <span className="flex shrink-0 items-center justify-center">{icon}</span>
       {!collapsed ? <span className="min-w-0 flex-1 truncate">{label}</span> : null}
     </NavLink>
@@ -634,16 +641,34 @@ export function Sidebar() {
         {/* 固定区：避免下方 flex-1 会话占位在滚动叠层时盖住任务子链（如第二条日期药丸） */}
         <div className="relative z-10 flex shrink-0 flex-col gap-1">
         <div className={cn('flex flex-col gap-1', sidebarCollapsed && 'mt-2')}>
-          {primaryNav.map((item) => (
-            <SidebarNavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              icon={item.icon}
-              label={item.label}
-              collapsed={sidebarCollapsed}
-            />
-          ))}
+{primaryNav.map((item) => {
+  // 当在首页且有选中非默认会话时，首页导航项不高亮，避免双重高亮
+  // DEFAULT_SESSION_KEY 是首页默认会话，不应阻断首页高亮
+  const hasSpecificSessionOnHome = isOnHome && currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY;
+  const isActiveOverride = item.to === '/' && hasSpecificSessionOnHome
+    ? false
+    : undefined;
+  
+  // 点击首页时，如果有选中的非默认会话，需要切换到默认会话
+  const handleClick = item.to === '/' && hasSpecificSessionOnHome
+    ? () => {
+        switchSession(DEFAULT_SESSION_KEY);
+      }
+    : undefined;
+  
+  return (
+    <SidebarNavLink
+      key={item.to}
+      to={item.to}
+      end={item.end}
+      icon={item.icon}
+      label={item.label}
+      collapsed={sidebarCollapsed}
+      isActiveOverride={isActiveOverride}
+      onClick={handleClick}
+    />
+  );
+})}
         </div>
 
         {!sidebarCollapsed && crmWeekReportSurfaceAllowed ? (
