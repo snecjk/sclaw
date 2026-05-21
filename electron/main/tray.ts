@@ -10,7 +10,7 @@ const envConfig = getCurrentEnvConfig();
 const envSuffix = envConfig.displaySuffix ? ` ${envConfig.displaySuffix}` : '';
 
 let tray: Tray | null = null;
-let floatIconVisible = true; // Track float icon visibility state
+let floatIconVisible = false; // Track float icon visibility state
 let mainWindowRef: BrowserWindow | null = null;
 let onToggleFloatIconCallback: (() => void) | undefined;
 

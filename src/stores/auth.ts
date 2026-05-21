@@ -49,6 +49,38 @@ interface AuthState {
   refreshCrmWeekReportPolicy: () => Promise<void>;
 }
 
+async function syncStoModelsAndRefreshProviders(context: 'init' | 'login'): Promise<void> {
+  const maxAttempts = context === 'login' ? 2 : 1;
+
+  try {
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        await hostApiFetch('/api/sto-model-sync', { method: 'POST' });
+        break;
+      } catch (error) {
+        const isFinalAttempt = attempt === maxAttempts;
+        console.warn(
+          isFinalAttempt
+            ? `[auth] STO model sync failed during ${context}; refreshing provider snapshot as fallback`
+            : `[auth] STO model sync attempt ${attempt} failed during ${context}; retrying once`,
+          error,
+        );
+      }
+    }
+  } finally {
+    try {
+      const { useProviderStore } = await import('@/stores/providers');
+      await useProviderStore.getState().refreshProviderSnapshot();
+    } catch (error) {
+      console.warn(
+        `[auth] Provider snapshot refresh failed after ${context} STO sync attempt`,
+        error,
+      );
+    }
+  }
+
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -112,12 +144,7 @@ export const useAuthStore = create<AuthState>()(
             // own startup sync (index.ts), but the renderer may have fetched providers
             // before that sync completed. This call deduplicates safely against any
             // in-progress main-process sync.
-            void hostApiFetch('/api/sto-model-sync', { method: 'POST' })
-              .then(() => import('@/stores/providers'))
-              .then(({ useProviderStore }) =>
-                useProviderStore.getState().refreshProviderSnapshot(),
-              )
-              .catch(() => {});
+            void syncStoModelsAndRefreshProviders('init');
           }
         } catch {
           // Main-process unreachable — trust the renderer-persisted state as fallback.
@@ -153,12 +180,7 @@ export const useAuthStore = create<AuthState>()(
             });
 
             // Trigger STO model sync and refresh provider list in UI
-            void hostApiFetch('/api/sto-model-sync', { method: 'POST' })
-              .then(() => import('@/stores/providers'))
-              .then(({ useProviderStore }) =>
-                useProviderStore.getState().refreshProviderSnapshot(),
-              )
-              .catch(() => {});
+            void syncStoModelsAndRefreshProviders('login');
 
             void get().refreshCrmWeekReportPolicy();
           } else {
