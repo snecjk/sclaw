@@ -6,6 +6,7 @@ import {
   normalizeAppError,
 } from './error-model';
 export { AppError } from './error-model';
+import { getBlockedRpcErrorMessage } from '../../shared/gateway-security';
 
 export type TransportKind = 'ipc' | 'ws' | 'http';
 export type GatewayTransportPreference = 'ws-first';
@@ -897,6 +898,11 @@ export function createGatewayWsTransportInvoker(options: GatewayWsTransportOptio
 }
 
 function validateGatewayRpcParams(method: string, params: unknown): void {
+  const blockedMsg = getBlockedRpcErrorMessage(method);
+  if (blockedMsg) {
+    throw new Error(blockedMsg);
+  }
+
   if (method !== 'config.patch') return;
   if (!params || typeof params !== 'object' || Array.isArray(params)) {
     throw new Error('gateway:rpc config.patch requires object params');

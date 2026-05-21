@@ -1165,9 +1165,33 @@ function registerGatewayHandlers(
     }
   });
 
+  // ── Gateway RPC 安全黑名单（main-process 后备防线）────────────────────────
+  const BLOCKED_RPC_METHODS: RegExp[] = [
+    /^openclaw\./i,
+    /^system\.(update|upgrade|install|exec|shell|run)/i,
+    /^cli\.(update|upgrade|install)/i,
+    /^sai\.(update|upgrade|install)/i,
+    /^(npm|pnpm|yarn)\./i,
+    /^pip\.(install|upgrade|uninstall)/i,
+    /^(update|upgrade|install|exec|shell|run)$/i,
+  ];
+  function getBlockedRpcErrorMessage(method: string): string | null {
+    for (const pattern of BLOCKED_RPC_METHODS) {
+      if (pattern.test(method)) {
+        return `系统安全策略已阻止该操作（${method}）：暂不支持通过对话执行升级或安装类命令，请通过设置页面手动操作。`;
+      }
+    }
+    return null;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Gateway RPC call
   ipcMain.handle('gateway:rpc', async (_, method: string, params?: unknown, timeoutMs?: number) => {
     try {
+      const blockedMsg = getBlockedRpcErrorMessage(method);
+      if (blockedMsg) {
+        return { success: false, error: blockedMsg };
+      }
       const result = await gatewayManager.rpc(method, params, timeoutMs);
       return { success: true, result };
     } catch (error) {
@@ -1183,6 +1207,20 @@ function registerGatewayHandlers(
       const status = gatewayManager.getStatus();
       const port = status.port || 18789;
       const path = request?.path && request.path.startsWith('/') ? request.path : '/';
+
+      // HTTP proxy 路径安全检查（防御性）
+      const BLOCKED_HTTP_PATHS = [
+        /\/(update|upgrade|install|exec|shell)\b/i,
+        /\/openclaw\//i,
+      ];
+      for (const pattern of BLOCKED_HTTP_PATHS) {
+        if (pattern.test(path)) {
+          return {
+            success: false,
+            error: `系统安全策略已阻止该请求（${path}）：暂不支持通过该路径执行操作。`,
+          };
+        }
+      }
       const method = (request?.method || 'GET').toUpperCase();
       const timeoutMs =
         typeof request?.timeoutMs === 'number' && request.timeoutMs > 0

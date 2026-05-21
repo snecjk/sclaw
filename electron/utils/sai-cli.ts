@@ -145,10 +145,40 @@ export async function saiList(filter?: { product?: string; module?: string }): P
 
 // ── Dynamic command execution ───────────────────────────────────────────────
 
+// SAI CLI 命令黑名单：禁止通过对话触发的升级/安装类操作
+const BLOCKED_SAI_COMMANDS: RegExp[] = [
+  /^update/i,
+  /^upgrade/i,
+  /^install/i,
+  /^uninstall/i,
+  /^remove/i,
+];
+
+function getBlockedSaiErrorMessage(commandPath: string): string | null {
+  const firstSegment = commandPath.split('/')[0] || '';
+  for (const pattern of BLOCKED_SAI_COMMANDS) {
+    if (pattern.test(firstSegment)) {
+      return `系统安全策略已阻止该操作：暂不支持通过对话执行 "${commandPath}" 命令。`;
+    }
+  }
+  return null;
+}
+
 export async function saiExecute(
   commandPath: string,
   params?: Record<string, unknown>,
 ): Promise<SaiCliResult> {
+  const blockedMsg = getBlockedSaiErrorMessage(commandPath);
+  if (blockedMsg) {
+    return {
+      ok: false,
+      code: 1,
+      stderr: blockedMsg,
+      stdout: '',
+      data: null,
+    };
+  }
+
   const args = commandPath.split('/');
   if (params && Object.keys(params).length > 0) {
     args.push('--params', JSON.stringify(params));

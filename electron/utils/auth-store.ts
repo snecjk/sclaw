@@ -209,7 +209,7 @@ function shouldRemoveSaiCliSsoAuth(existing: JsonObject, user: SsoUserInfo | nul
 
   const storedToken = typeof existing.stoToken === 'string' ? existing.stoToken : null;
   if (storedToken && user.stoToken) {
-    return storedToken === user.stoToken;
+    return storedToken === user.stoToken; 
   }
 
   const storedUserId = typeof existing.userId === 'string' ? existing.userId : null;
