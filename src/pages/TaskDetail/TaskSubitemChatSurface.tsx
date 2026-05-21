@@ -77,6 +77,9 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const [pendingAutoSendText, setPendingAutoSendText] = useState<string | null>(null);
   const [showPreviewPanel, setShowPreviewPanel] = useState(true);
   const [activePreviewFilePath, setActivePreviewFilePath] = useState<string | null>(null);
+  const [previewPanelWidth, setPreviewPanelWidth] = useState(480);
+  const [isResizing, setIsResizing] = useState(false);
+  const previewPanelRef = useRef<HTMLDivElement>(null);
   /** True after we consumed sessionStorage one-shot compose for this subitem (skip generic post-load scroll). */
   const hasOneShotComposeRef = useRef(false);
   /** Generic scroll-to-bottom once per subitem mount (sidebar / deep link / home reused path). */
@@ -303,6 +306,61 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
     }
   }, []);
 
+  // ── Resizable panel logic ──
+  const startResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = previewPanelRef.current?.offsetWidth ?? previewPanelWidth;
+    let rafId: number | null = null;
+    let pendingWidth = startWidth;
+
+    setIsResizing(true);
+    document.body.style.userSelect = 'none';
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:col-resize;';
+    document.body.appendChild(overlay);
+
+    const applyWidth = () => {
+      rafId = null;
+      if (previewPanelRef.current) {
+        previewPanelRef.current.style.width = `${pendingWidth}px`;
+      }
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = startX - moveEvent.clientX;
+      pendingWidth = Math.max(320, Math.min(900, startWidth + delta));
+      if (rafId === null) {
+        rafId = requestAnimationFrame(applyWidth);
+      }
+    };
+
+    const cleanup = () => {
+      overlay.removeEventListener('mousemove', handleMouseMove);
+      overlay.removeEventListener('mouseup', handleMouseUp);
+      overlay.remove();
+      document.body.style.userSelect = '';
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      setPreviewPanelWidth(pendingWidth);
+      setIsResizing(false);
+    };
+
+    const handleMouseUp = () => {
+      cleanup();
+    };
+
+    overlay.addEventListener('mousemove', handleMouseMove);
+    overlay.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      cleanup();
+    };
+  }, [previewPanelWidth]);
+
   if (!sessionKey) {
     return (
       <div
@@ -441,15 +499,31 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
         />
       </div>
 
+      {/* Resizer */}
+      {hasPreviewableFiles && showPreviewPanel && (
+        <div
+          onMouseDown={startResize}
+          className={cn(
+            'relative z-20 flex h-full shrink-0 cursor-col-resize items-center justify-center transition-colors',
+            isResizing ? 'bg-primary/50 w-[5px]' : 'bg-border/50 w-[5px] hover:bg-primary/40',
+          )}
+          style={{ cursor: isResizing ? 'col-resize' : undefined }}
+        >
+          <div className={cn('h-8 w-[2px] rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
+        </div>
+      )}
+
       {/* Right: Preview Panel */}
       <AnimatePresence>
         {hasPreviewableFiles && showPreviewPanel && (
           <motion.div
+            ref={previewPanelRef}
             initial={{ opacity: 0, x: 40 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 40 }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
-            className="flex h-full min-h-0 w-[clamp(300px,38vw,560px)] shrink-0 flex-col overflow-hidden"
+            style={{ width: previewPanelWidth }}
+            className="flex h-full min-h-0 shrink-0 flex-col overflow-hidden"
           >
             <ChatPreviewPanel
               files={previewableFiles}

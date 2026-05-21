@@ -4,12 +4,12 @@
 
 | 目录 | 操作系统 | CPU 架构 | 适用场景 |
 | --- | --- | --- | --- |
-| `win-amd64/sai.exe` | Windows | x86_64 (AMD64) | 大多数 Windows 台式机、笔记本、服务器 |
-| `win-arm64/sai.exe` | Windows | ARM64 | 搭载高通骁龙处理器的 Windows 设备（如 Surface Pro X） |
-| `linux-amd64/sai` | Linux | x86_64 (AMD64) | 大多数 Linux 服务器、虚拟机、容器、WSL |
-| `linux-arm64/sai` | Linux | ARM64 | ARM 架构的 Linux 服务器（如华为鲲鹏、AWS Graviton） |
-| `mac-amd64/sai` | macOS | x86_64 (AMD64) | 2020 年及之前的 Intel 芯片 Mac |
-| `mac-arm64/sai` | macOS | ARM64 (Apple Silicon) | 搭载 M1/M2/M3/M4 芯片的 Mac |
+| `win-amd64/sai-cli.exe` | Windows | x86_64 (AMD64) | 大多数 Windows 台式机、笔记本、服务器 |
+| `win-arm64/sai-cli.exe` | Windows | ARM64 | 搭载高通骁龙处理器的 Windows 设备（如 Surface Pro X） |
+| `linux-amd64/sai-cli` | Linux | x86_64 (AMD64) | 大多数 Linux 服务器、虚拟机、容器、WSL |
+| `linux-arm64/sai-cli` | Linux | ARM64 | ARM 架构的 Linux 服务器（如华为鲲鹏、AWS Graviton） |
+| `mac-amd64/sai-cli` | macOS | x86_64 (AMD64) | 2020 年及之前的 Intel 芯片 Mac |
+| `mac-arm64/sai-cli` | macOS | ARM64 (Apple Silicon) | 搭载 M1/M2/M3/M4 芯片的 Mac |
 
 ## 如何确认自己的平台
 
@@ -57,19 +57,19 @@ uname -m
 
 下载对应平台的二进制文件后：
 
-**Windows**：将 `sai.exe` 放到系统 PATH 目录中（如 `C:\Windows\System32` 或自定义目录），即可在命令行中直接使用 `sai` 命令。
+**Windows**：将 `sai-cli.exe` 放到系统 PATH 目录中（如 `C:\Windows\System32` 或自定义目录），即可在命令行中直接使用 `sai-cli` 命令。
 
 **Linux / macOS**：
 
 ```bash
 # 添加执行权限
-chmod +x sai
+chmod +x sai-cli
 
 # 移动到 PATH 目录
-sudo mv sai /usr/local/bin/
+sudo mv sai-cli /usr/local/bin/
 
 # 验证安装
-sai version
+sai-cli version
 ```
 
 ## 常见问题
@@ -79,7 +79,7 @@ sai version
 执行以下命令移除隔离属性：
 
 ```bash
-xattr -d com.apple.quarantine sai
+xattr -d com.apple.quarantine sai-cli
 ```
 
 **Q: Linux 下执行提示"Permission denied"怎么办？**
@@ -87,7 +87,7 @@ xattr -d com.apple.quarantine sai
 需要先添加执行权限：
 
 ```bash
-chmod +x sai
+chmod +x sai-cli
 ```
 
 **Q: 选错了平台版本会怎样？**

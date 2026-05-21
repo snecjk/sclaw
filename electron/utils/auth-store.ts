@@ -3,7 +3,7 @@
  * Separate electron-store instance for auth data, isolated from AppSettings.
  */
 
-import { writeFile, unlink } from 'fs/promises';
+import { readFile, writeFile, unlink } from 'fs/promises';
 import { join } from 'path';
 import { homedir } from 'node:os';
 import { getOpenClawConfigDir, ensureDir } from './paths';
@@ -36,6 +36,8 @@ export interface AuthState {
   user: SsoUserInfo | null;
   systemCode: string;
 }
+
+type JsonObject = Record<string, unknown>;
 
 const SYSTEM_CODE = 'sto_claw';
 
@@ -81,11 +83,12 @@ export async function setAuthUser(user: SsoUserInfo): Promise<void> {
 }
 
 export async function clearAuthUser(): Promise<void> {
-  logger.info("Clear auth user...")
   const store = await getAuthStore();
+  const previousUser = store.get('user', null) as SsoUserInfo | null;
+  logger.info('Clear auth user...');
   store.set('isAuthenticated', false);
   store.set('user', null);
-  await removeSsoAuthFromSaiCli();
+  await removeSsoAuthFromSaiCli(previousUser);
 }
 
 export async function getSsoEnvironment(): Promise<SsoEnvironment> {
@@ -145,11 +148,77 @@ export async function syncSsoAuthToOpenClaw(user: SsoUserInfo): Promise<void> {
     const dir = getOpenClawConfigDir();
     ensureDir(dir);
     const filePath = join(dir, 'sso-auth.json');
-    logger.info("Sync sso auth to OpenClaw", filePath);
+    logger.info('Sync sso auth to OpenClaw', filePath);
     await writeFile(filePath, JSON.stringify({ ...user }, null, 2), 'utf-8');
   } catch (err) {
     logger.warn('Failed to sync SSO auth to ~/.stoclaw/openclaw/sso-auth.json:', err);
   }
+}
+
+function isPlainObject(value: unknown): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+async function readSaiCliSsoAuthFile(filePath: string): Promise<JsonObject | null> {
+  try {
+    const raw = await readFile(filePath, 'utf-8');
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isPlainObject(parsed)) {
+      logger.warn('Existing ~/.sai/sso-auth.json is not a JSON object, it will be replaced');
+      return null;
+    }
+    return parsed;
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null;
+    }
+    logger.warn('Failed to read existing ~/.sai/sso-auth.json, it will be replaced:', err);
+    return null;
+  }
+}
+
+function buildSaiCliSsoAuthPayload(user: SsoUserInfo, existing: JsonObject | null): JsonObject {
+  const existingUserInfo = isPlainObject(existing?.userInfo) ? existing.userInfo : {};
+
+  return {
+    ...(existing ?? {}),
+    stoToken: user.stoToken,
+    expiresAt: user.stoTokenExpiresAt,
+    userId: user.id,
+    userInfo: {
+      ...existingUserInfo,
+      Id: user.id,
+      UserName: user.userName,
+      RealName: user.realName,
+      NickName: user.realName,
+      Code: user.userName,
+      CompanyName: user.companyName,
+      DepartmentName: user.departmentName,
+      OpenId: user.openId,
+      Signature: user.signature,
+    },
+  };
+}
+
+function normalizeJsonFileContent(value: JsonObject): string {
+  return JSON.stringify(value, null, 2);
+}
+
+function shouldRemoveSaiCliSsoAuth(existing: JsonObject, user: SsoUserInfo | null): boolean {
+  if (!user) return false;
+
+  const storedToken = typeof existing.stoToken === 'string' ? existing.stoToken : null;
+  if (storedToken && user.stoToken) {
+    return storedToken === user.stoToken; 
+  }
+
+  const storedUserId = typeof existing.userId === 'string' ? existing.userId : null;
+  const storedUserName =
+    isPlainObject(existing.userInfo) && typeof existing.userInfo.UserName === 'string'
+      ? existing.userInfo.UserName
+      : null;
+
+  return storedUserId === user.id || storedUserName === user.userName;
 }
 
 /**
@@ -164,31 +233,17 @@ export async function syncSsoAuthToSaiCli(user: SsoUserInfo): Promise<void> {
     const dir = join(homedir(), '.sai');
     ensureDir(dir);
     const filePath = join(dir, 'sso-auth.json');
+    const existing = await readSaiCliSsoAuthFile(filePath);
+    const nextPayload = buildSaiCliSsoAuthPayload(user, existing);
+    const nextContent = normalizeJsonFileContent(nextPayload);
+
+    if (existing && normalizeJsonFileContent(existing) === nextContent) {
+      logger.info('SAI CLI auth file already up to date', filePath);
+      return;
+    }
+
     logger.info('Sync SSO auth to SAI CLI', filePath);
-    await writeFile(
-      filePath,
-      JSON.stringify(
-        {
-          stoToken: user.stoToken,
-          expiresAt: user.stoTokenExpiresAt,
-          userId: user.id,
-          userInfo: {
-            Id: user.id,
-            UserName: user.userName,
-            RealName: user.realName,
-            NickName: user.realName,
-            Code: user.userName,
-            CompanyName: user.companyName,
-            DepartmentName: user.departmentName,
-            OpenId: user.openId,
-            Signature: user.signature,
-          },
-        },
-        null,
-        2,
-      ),
-      'utf-8',
-    );
+    await writeFile(filePath, nextContent, 'utf-8');
   } catch (err) {
     logger.warn('Failed to sync SSO auth to ~/.sai/sso-auth.json:', err);
   }
@@ -197,9 +252,15 @@ export async function syncSsoAuthToSaiCli(user: SsoUserInfo): Promise<void> {
 /**
  * Remove ~/.sai/sso-auth.json on logout or token expiry.
  */
-export async function removeSsoAuthFromSaiCli(): Promise<void> {
+export async function removeSsoAuthFromSaiCli(user: SsoUserInfo | null = null): Promise<void> {
   try {
     const filePath = join(homedir(), '.sai', 'sso-auth.json');
+    const existing = await readSaiCliSsoAuthFile(filePath);
+    if (!existing) return;
+    if (!shouldRemoveSaiCliSsoAuth(existing, user)) {
+      logger.info('Preserve ~/.sai/sso-auth.json because it does not match the current StoClaw auth session');
+      return;
+    }
     logger.info('Remove SSO auth from SAI CLI', filePath);
     await unlink(filePath);
   } catch (err: unknown) {
@@ -214,7 +275,7 @@ export async function removeSsoAuthFromSaiCli(): Promise<void> {
 export async function removeSsoAuthFromOpenClaw(): Promise<void> {
   try {
     const filePath = join(getOpenClawConfigDir(), 'sso-auth.json');
-    logger.info("Remove sso auth from openclaw", filePath)
+    logger.info('Remove sso auth from openclaw', filePath);
     await unlink(filePath);
   } catch (err: unknown) {
     if (err && typeof err === 'object' && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') return;

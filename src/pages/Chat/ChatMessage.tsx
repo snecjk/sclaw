@@ -534,15 +534,15 @@ function preprocessTextForPreviewLinks(text: string): string {
     return `__INLINE_CODE_${inlineCodes.length - 1}__`;
   });
 
-  // Replace web URLs
+  // Replace localhost URLs (previewable in side panel)
   text = text.replace(
-    /(https?:\/\/[^\s)\]"',;<>]+)/g,
+    /(https?:\/\/localhost:[^\s)\]"',;<>]+)/g,
     '[$1](preview://$1)',
   );
 
   // Replace absolute file paths (Unix / Windows — only HTML files, tied to PPT/report generation)
   text = text.replace(
-    /(\/(?:[\w.-]+\/)*[\w.-]+\.html?|[A-Za-z]:[\\\/](?:[\w.-]+[\\\/])*[\w.-]+\.html?)/g,
+    /(\/(?:[^/\s]+\/)*[^/\s]+\.html?|[A-Za-z]:[\\/](?:[^/\s]+[\\/])*[^/\s]+\.html?)/g,
     '[$1](preview://$1)',
   );
 
@@ -609,17 +609,20 @@ function FileIcon({ mimeType, className }: { mimeType: string; className?: strin
 
 function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFile?: (file: AttachedFileMeta) => void }) {
   const handleOpen = useCallback(() => {
-    if (onPreviewFile) {
+    if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
+      // Web URLs always open in external browser due to anti-hotlink / iframe blocking
+      window.electron.openExternal(file.filePath);
+    } else if (onPreviewFile) {
       onPreviewFile(file);
     } else if (file.filePath) {
       invokeIpc('shell:openPath', file.filePath);
     }
   }, [file, onPreviewFile]);
 
-  const isPreviewable = file.mimeType === 'text/html' || (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://'));
+  const isPreviewable = file.mimeType === 'text/html';
 
   return (
-    <div 
+    <div
       className={cn(
         'flex max-w-[220px] items-center gap-3 rounded-2xl border border-border px-3 py-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
         assistantChatCardBg,

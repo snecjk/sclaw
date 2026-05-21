@@ -118,7 +118,7 @@ async function setupTarget(id) {
       archivePath = path.join(ROOT_DIR, target.filename);
       needsCleanup = true;
       echo`⬇️ Downloading: ${downloadUrl}`;
-      const response = await fetch(downloadUrl);
+      const response = await fetch(downloadUrl, { signal: AbortSignal.timeout(120_000) });
       if (!response.ok) throw new Error(`Failed to download: ${response.statusText}`);
       const buffer = await response.arrayBuffer();
       await fs.writeFile(archivePath, Buffer.from(buffer));

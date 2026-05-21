@@ -270,7 +270,9 @@ function createWindow(): BrowserWindow {
 
   // Handle external links
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    shell.openExternal(url).catch((err) => {
+      console.error('Failed to open external URL:', url, err);
+    });
     return { action: 'deny' };
   });
 
