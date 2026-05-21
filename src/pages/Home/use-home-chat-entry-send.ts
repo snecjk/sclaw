@@ -5,11 +5,12 @@ import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useMessageQueueStore } from '@/stores/message-queue';
 import { invokeApi } from '@/lib/api-client';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 
 /**
- * 首页入口（省区工作台 / Agent Hub）与聊天页一致的发送路径：
- * 先 newSession（新对话），再 question:split，再 sendMessage；支持附件与队列。
+ * 首页入口（省区工作台 / Agent Hub）与聊天页保持一致：
+ * 在首页默认主会话首次发送时创建一个真实会话，之后追问都复用当前会话。
  */
 export function useHomeChatEntrySend() {
   const { t } = useTranslation('home');
@@ -31,7 +32,10 @@ export function useHomeChatEntrySend() {
         toast.error(t('assistant.gatewayRequired'));
         return;
       }
-      newSession();
+      const { currentSessionKey } = useChatStore.getState();
+      if (currentSessionKey === DEFAULT_SESSION_KEY) {
+        newSession();
+      }
 
       let parts: Array<{ type: string; context: string }> | null = null;
       try {
