@@ -1,5 +1,4 @@
 import { useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
@@ -14,7 +13,6 @@ import type { FileAttachment } from '@/pages/Chat/ChatInput';
  */
 export function useHomeChatEntrySend() {
   const { t } = useTranslation('home');
-  const navigate = useNavigate();
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
   const sendMessage = useChatStore((s) => s.sendMessage);
@@ -65,10 +63,8 @@ export function useHomeChatEntrySend() {
           return;
         }
       }
-
-      navigate('/chat');
     },
-    [isGatewayRunning, navigate, newSession, sendMessage, t],
+    [isGatewayRunning, newSession, sendMessage, t],
   );
 
   return {

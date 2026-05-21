@@ -10,7 +10,6 @@ import {
   Plus,
   Trash2,
   LogOut,
-  MessageSquare,
   ChevronLeft,
   ChevronRight,
   Globe,
@@ -49,7 +48,8 @@ import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
 import logoSvg from '@/assets/logo.svg';
 import packageJson from '../../../package.json';
 import { taskDetailPath, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
-import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
+import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
+import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
@@ -62,7 +62,6 @@ type SessionBucketKey =
   | 'withinMonth'
   | 'older';
 
-let didBootstrapFreshChat = false;
 
 const INITIAL_NOW_MS = Date.now();
 
@@ -451,7 +450,7 @@ export function Sidebar() {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const isOnChat = location.pathname.startsWith('/chat');
+  const isOnHome = location.pathname === '/';
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [taskListSectionOpen, setTaskListSectionOpen] = useState(true);
@@ -476,28 +475,13 @@ export function Sidebar() {
       await loadSessions();
       if (cancelled) return;
 
-      if (!isOnChat) {
-        const hasExistingMessages = useChatStore.getState().messages.length > 0;
-        await loadHistory(hasExistingMessages);
-        return;
-      }
-
-      if (!didBootstrapFreshChat) {
-        didBootstrapFreshChat = true;
-        if (useChatStore.getState().sessions.length === 0) {
-          newSession();
-        }
-        await loadHistory(false);
-        return;
-      }
-
       const hasExistingMessages = useChatStore.getState().messages.length > 0;
       await loadHistory(hasExistingMessages);
     })();
     return () => {
       cancelled = true;
     };
-  }, [isGatewayRunning, isOnChat, loadHistory, loadSessions, newSession]);
+  }, [isGatewayRunning, loadHistory, loadSessions]);
 
   const getSessionLabel = useCallback(
     (key: string, displayName?: string, label?: string) => {
@@ -547,7 +531,7 @@ export function Sidebar() {
   >;
 
   const visibleSessions = useMemo(
-    () => sessions.filter((session) => !isHiddenStoTaskSubitemChatSessionKey(session.key)),
+    () => sessions.filter((session) => !isSidebarHiddenChatSessionKey(session.key)),
     [sessions],
   );
 
@@ -581,17 +565,15 @@ export function Sidebar() {
       label: string;
     }> = [
       { to: '/', end: true, icon: <Home className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.home') },
-      { to: '/chat', end: true, icon: <MessageSquare className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.chat') },
       { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
       { to: '/skills', icon: <Puzzle className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
     ];
     return all.filter((item) => {
-      if (item.to === '/chat' && !sidebarVis.primaryChat) return false;
       if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
       return true;
     });
-  }, [sidebarVis.primaryChat, sidebarVis.primaryMyData, t]);
+  }, [sidebarVis.primaryMyData, t]);
 
   const workspaceNav = [
     { to: '/agents', icon: <Bot className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.agents') },
@@ -728,7 +710,7 @@ export function Sidebar() {
               onClick={() => {
                 const { messages } = useChatStore.getState();
                 if (messages.length > 0) newSession();
-                navigate('/chat');
+                navigateToMainChatHome(navigate, location.pathname);
               }}
               className="mx-1 mt-1 flex items-center gap-2 rounded-xl border border-[rgba(255,140,0,0.35)] bg-[var(--sto-accent-soft)] px-3 py-2.5 text-left text-[13px] font-semibold text-[var(--sto-accent)] shadow-sm transition-colors hover:opacity-95 dark:bg-amber-950/35"
             >
@@ -745,7 +727,7 @@ export function Sidebar() {
                   onClick={() => {
                     const { messages } = useChatStore.getState();
                     if (messages.length > 0) newSession();
-                    navigate('/chat');
+                    navigateToMainChatHome(navigate, location.pathname);
                   }}
                   className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card"
                 >
@@ -771,7 +753,7 @@ export function Sidebar() {
               {sessionsOrderedForCollapse.map((s) => {
                 const full = getSessionLabel(s.key, s.displayName, s.label);
                 const short = collapsedEntryLabel(full);
-                const active = isOnChat && currentSessionKey === s.key;
+                const active = isOnHome && currentSessionKey === s.key;
                 return (
                   <Tooltip key={s.key} delayDuration={200}>
                     <TooltipTrigger asChild>
@@ -779,7 +761,7 @@ export function Sidebar() {
                         type="button"
                         onClick={() => {
                           switchSession(s.key);
-                          navigate('/chat');
+                          navigateToMainChatHome(navigate, location.pathname);
                         }}
                         className={cn(
                           'mx-auto flex min-h-0 min-w-0 items-center justify-center rounded-[8px] font-medium leading-none transition-colors',
@@ -862,12 +844,12 @@ export function Sidebar() {
                               type="button"
                               onClick={() => {
                                 switchSession(s.key);
-                                navigate('/chat');
+                                navigateToMainChatHome(navigate, location.pathname);
                               }}
                               title={sessionLabel}
                               className={cn(
                                 'w-full rounded-[8px] px-[10px] py-[6px] pr-9 text-left text-[13px] transition-colors',
-                                isOnChat && currentSessionKey === s.key
+                                isOnHome && currentSessionKey === s.key
                                   ? 'bg-[#E5E6EB] font-medium text-foreground dark:bg-white/[0.12]'
                                   : 'text-foreground/80 hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
                               )}
@@ -1073,7 +1055,7 @@ export function Sidebar() {
         onConfirm={async () => {
           if (!sessionToDelete) return;
           await deleteSession(sessionToDelete.key);
-          if (currentSessionKey === sessionToDelete.key) navigate('/chat');
+          if (currentSessionKey === sessionToDelete.key) navigateToMainChatHome(navigate, location.pathname);
           setSessionToDelete(null);
         }}
         onCancel={() => setSessionToDelete(null)}
@@ -1091,7 +1073,7 @@ export function Sidebar() {
           const { sessionKey, taskId, entryId } = subitemToDelete;
           await deleteSession(sessionKey);
           removeSubitem(taskId, entryId);
-          if (currentSessionKey === sessionKey) navigate('/chat');
+          if (currentSessionKey === sessionKey) navigateToMainChatHome(navigate, location.pathname);
           setSubitemToDelete(null);
         }}
         onCancel={() => setSubitemToDelete(null)}
