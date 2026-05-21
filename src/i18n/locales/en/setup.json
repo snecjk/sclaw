@@ -111,6 +111,7 @@
         "title": "Setup Complete!",
         "subtitle": "StoClaw is configured and ready to use. You can now start chatting with your AI assistant.",
         "components": "Components",
+        "envReady": "Environment ready",
         "gateway": "Gateway",
         "running": "Running",
         "footer": "You can customize skills and connect channels in Settings"
@@ -122,26 +123,5 @@
         "skipSetup": "Skip Setup",
         "getStarted": "Get Started"
     },
-    "defaultSkills": {
-        "opencode": {
-            "name": "OpenCode",
-            "description": "AI coding assistant backend"
-        },
-        "python-env": {
-            "name": "Python Environment",
-            "description": "Python runtime for skills"
-        },
-        "code-assist": {
-            "name": "Code Assist",
-            "description": "Code analysis and suggestions"
-        },
-        "file-tools": {
-            "name": "File Tools",
-            "description": "File operations and management"
-        },
-        "terminal": {
-            "name": "Terminal",
-            "description": "Shell command execution"
-        }
-    }
+    "defaultSkills": {}
 }

@@ -111,6 +111,7 @@
         "title": "设置完成！",
         "subtitle": "StoClaw 已配置并准备就绪。您现在可以开始与您的 AI 助手聊天了。",
         "components": "组件",
+        "envReady": "环境已就绪",
         "gateway": "网关",
         "running": "运行中",
         "footer": "您可以在设置中自定义技能并连接渠道"
@@ -122,26 +123,5 @@
         "skipSetup": "跳过设置",
         "getStarted": "开始使用"
     },
-    "defaultSkills": {
-        "opencode": {
-            "name": "OpenCode",
-            "description": "AI 编程助手后端"
-        },
-        "python-env": {
-            "name": "Python 环境",
-            "description": "技能所需的 Python 运行时"
-        },
-        "code-assist": {
-            "name": "代码辅助",
-            "description": "代码分析与建议"
-        },
-        "file-tools": {
-            "name": "文件工具",
-            "description": "文件操作与管理"
-        },
-        "terminal": {
-            "name": "终端",
-            "description": "Shell 命令执行"
-        }
-    }
+    "defaultSkills": {}
 }

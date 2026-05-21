@@ -88,15 +88,16 @@ export function FilePreviewViewer({
   }, [filePath, mimeType]);
 
   const content = (() => {
-  // Web URL preview (localhost and external)
+  // Web URLs (http/https) are no longer routed through the built-in preview viewer
+  // because many sites have anti-hotlink / X-Frame-Options / CSP blocking.
+  // They are opened directly in the external browser instead.
   if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
     return (
-      <iframe
-        key={filePath}
-        src={filePath}
-        title={fileName}
-        className={cn('h-full min-w-0 w-full border-0', className)}
-      />
+      <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm text-muted-foreground', className)}>
+        <FileText className="h-10 w-10 opacity-40" />
+        <p>{fileName}</p>
+        <OpenExternalButton filePath={filePath} />
+      </div>
     );
   }
 

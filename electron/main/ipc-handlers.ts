@@ -2068,7 +2068,12 @@ function registerProviderHandlers(gatewayManager: GatewayManager): void {
 function registerShellHandlers(): void {
   // Open external URL
   ipcMain.handle('shell:openExternal', async (_, url: string) => {
-    await shell.openExternal(url);
+    try {
+      await shell.openExternal(url);
+    } catch (err) {
+      console.error('Failed to open external URL via IPC:', url, err);
+      throw err;
+    }
   });
 
   // Open path in file explorer
