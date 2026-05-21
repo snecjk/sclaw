@@ -267,6 +267,9 @@ const PREVIEWABLE_MIME_PREFIXES = [
 
 export function isPreviewableFile(file: { mimeType: string; filePath?: string }): boolean {
   if (!file.filePath) return false;
+  // Web URLs (http/https) are excluded from built-in preview because they may have
+  // anti-hotlink / X-Frame-Options / CSP blocking, and should open in external browser.
+  if (file.filePath.startsWith('http://') || file.filePath.startsWith('https://')) return false;
   return PREVIEWABLE_MIME_PREFIXES.some((prefix) =>
     prefix.endsWith('/') ? file.mimeType.startsWith(prefix) : file.mimeType === prefix,
   );
@@ -304,8 +307,8 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
     results.push({ filePath, fileName, mimeType });
   }
 
-  // Web URLs (localhost and external)
-  const urlRegex = /(https?:\/\/[^\s)\]"',;<>]+)/g;
+  // Localhost URLs only (previewable in side panel)
+  const urlRegex = /(https?:\/\/localhost:[^\s)\]"',;<>]+)/g;
   let match;
   while ((match = urlRegex.exec(text)) !== null) {
     const url = match[1];
@@ -315,7 +318,7 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
   }
 
   // Absolute file paths (Unix / Windows) — only HTML files (tied to PPT/report generation preview)
-  const pathRegex = /(\/(?:[\w.-]+\/)*[\w.-]+\.html?|[A-Za-z]:[\\\/](?:[\w.-]+[\\\/])*[\w.-]+\.html?)/g;
+  const pathRegex = /(\/(?:[^/\s]+\/)*[^/\s]+\.html?|[A-Za-z]:[\\/](?:[^/\s]+[\\/])*[^/\s]+\.html?)/g;
   while ((match = pathRegex.exec(text)) !== null) {
     const path = match[1].replace(/\\/g, '/');
     const fileName = path.split('/').pop() || '';

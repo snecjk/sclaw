@@ -1,1 +1,0 @@
-19cad1c1159a3e6fb0030d6bd06edeb92c7a63c8aa8b162a3e4abfb8c7266e62  sai-cli.exe

@@ -71,13 +71,7 @@ interface DefaultSkill {
   description: string;
 }
 
-const getDefaultSkills = (t: TFunction): DefaultSkill[] => [
-  { id: 'opencode', name: t('defaultSkills.opencode.name'), description: t('defaultSkills.opencode.description') },
-  { id: 'python-env', name: t('defaultSkills.python-env.name'), description: t('defaultSkills.python-env.description') },
-  { id: 'code-assist', name: t('defaultSkills.code-assist.name'), description: t('defaultSkills.code-assist.description') },
-  { id: 'file-tools', name: t('defaultSkills.file-tools.name'), description: t('defaultSkills.file-tools.description') },
-  { id: 'terminal', name: t('defaultSkills.terminal.name'), description: t('defaultSkills.terminal.description') },
-];
+const getDefaultSkills = (_t: TFunction): DefaultSkill[] => [];
 
 import clawxIcon from '@/assets/logo.svg';
 
@@ -642,16 +636,6 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
 
 // NOTE: SkillsContent component removed - auto-install essential skills
 
-// Installation status for each skill
-type InstallStatus = 'pending' | 'installing' | 'completed' | 'failed';
-
-interface SkillInstallState {
-  id: string;
-  name: string;
-  description: string;
-  status: InstallStatus;
-}
-
 interface InstallingContentProps {
   skills: DefaultSkill[];
   onComplete: (installedSkills: string[]) => void;
@@ -660,9 +644,6 @@ interface InstallingContentProps {
 
 function InstallingContent({ skills, onComplete, onSkip }: InstallingContentProps) {
   const { t } = useTranslation('setup');
-  const [skillStates, setSkillStates] = useState<SkillInstallState[]>(
-    skills.map((s) => ({ ...s, status: 'pending' as InstallStatus }))
-  );
   const [overallProgress, setOverallProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const installStarted = useRef(false);
@@ -674,29 +655,24 @@ function InstallingContent({ skills, onComplete, onSkip }: InstallingContentProp
 
     const runRealInstall = async () => {
       try {
-        // Step 1: Initialize all skills to 'installing' state for UI
-        setSkillStates(prev => prev.map(s => ({ ...s, status: 'installing' })));
         setOverallProgress(10);
 
-        // Step 2: Call the backend to install uv and setup Python
+        // Call the backend to install uv and setup Python
         const result = await invokeIpc('uv:install-all') as {
           success: boolean;
           error?: string
         };
 
         if (result.success) {
-          setSkillStates(prev => prev.map(s => ({ ...s, status: 'completed' })));
           setOverallProgress(100);
 
           await new Promise((resolve) => setTimeout(resolve, 800));
           onComplete(skills.map(s => s.id));
         } else {
-          setSkillStates(prev => prev.map(s => ({ ...s, status: 'failed' })));
           setErrorMessage(result.error || 'Unknown error during installation');
           toast.error('Environment setup failed');
         }
       } catch (err) {
-        setSkillStates(prev => prev.map(s => ({ ...s, status: 'failed' })));
         setErrorMessage(String(err));
         toast.error('Installation error');
       }
@@ -704,32 +680,6 @@ function InstallingContent({ skills, onComplete, onSkip }: InstallingContentProp
 
     runRealInstall();
   }, [skills, onComplete]);
-
-  const getStatusIcon = (status: InstallStatus) => {
-    switch (status) {
-      case 'pending':
-        return <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/40" />;
-      case 'installing':
-        return <Loader2 className="h-5 w-5 text-primary animate-spin" />;
-      case 'completed':
-        return <CheckCircle2 className="h-5 w-5 text-green-500 dark:text-green-400" />;
-      case 'failed':
-        return <XCircle className="h-5 w-5 text-red-500 dark:text-red-400" />;
-    }
-  };
-
-  const getStatusText = (skill: SkillInstallState) => {
-    switch (skill.status) {
-      case 'pending':
-        return <span className="text-muted-foreground">{t('installing.status.pending')}</span>;
-      case 'installing':
-        return <span className="text-primary">{t('installing.status.installing')}</span>;
-      case 'completed':
-        return <span className="text-green-500 dark:text-green-400">{t('installing.status.installed')}</span>;
-      case 'failed':
-        return <span className="text-red-500 dark:text-red-400">{t('installing.status.failed')}</span>;
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -755,30 +705,6 @@ function InstallingContent({ skills, onComplete, onSkip }: InstallingContentProp
             transition={{ duration: 0.3 }}
           />
         </div>
-      </div>
-
-      {/* Skill list */}
-      <div className="space-y-2 max-h-48 overflow-y-auto">
-        {skillStates.map((skill) => (
-          <motion.div
-            key={skill.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={cn(
-              'flex items-center justify-between p-3 rounded-lg glass-subtle border border-glass-border',
-              skill.status === 'installing' && 'ring-1 ring-primary/20'
-            )}
-          >
-            <div className="flex items-center gap-3">
-              {getStatusIcon(skill.status)}
-              <div>
-                <p className="font-medium">{skill.name}</p>
-                <p className="text-xs text-muted-foreground">{skill.description}</p>
-              </div>
-            </div>
-            {getStatusText(skill)}
-          </motion.div>
-        ))}
       </div>
 
       {/* Error Message Display */}
@@ -849,7 +775,7 @@ function CompleteContent({ installedSkills }: CompleteContentProps) {
         <div className="flex items-center justify-between p-3 rounded-lg glass-subtle border border-glass-border">
           <span>{t('complete.components')}</span>
           <span className="text-green-500 dark:text-green-400">
-            {installedSkillNames || `${installedSkills.length} ${t('installing.status.installed')}`}
+            {installedSkillNames || t('complete.envReady')}
           </span>
         </div>
         <div className="flex items-center justify-between p-3 rounded-lg glass-subtle border border-glass-border">

@@ -1,6 +1,6 @@
 ---
 name: ppt-generator
-description: 通用 PPT HTML 报告生成器。根据模板配置和数据源，生成可上下滑动查看的多页面 PPT 风格 HTML 报告。支持折线图、柱状图、表格等多种图表类型，支持多列布局和侧边栏布局。
+description: 通用 PPT HTML 报告生成器。根据模板配置和数据源，生成可上下滑动查看的多页面 PPT 风格 HTML 报告。支持折线图、柱状图、表格等多种图表类型，支持多列布局和侧边栏布局。生成后禁止主动打开浏览器或系统程序查看 HTML 文件，sto-claw 内置预览会自动处理。
 version: 1.0.0
 trigger: 被其他 skill 调用，或用户涉及 ppt-generator 生成报告的任何场景（包括首次生成、调整、修改、更新内容）
 title: 通用 PPT 生成器
@@ -22,6 +22,22 @@ title: 通用 PPT 生成器
 3. 根据模板渲染成 HTML PPT 报告
 
 它是纯"表现层" skill，需要由编排 skill 调用。
+
+---
+
+## ⚠️ 强制性约束（高优先级）
+
+### 绝对禁止主动打开 HTML 文件
+
+**Agent 在调用本 skill 生成 HTML 报告后，禁止以任何方式主动打开浏览器或系统默认程序来查看该文件。**
+
+ sto-claw 会自动识别消息中的 HTML 文件路径并提供内置预览。Agent 只需在回复中输出文件路径，**绝不调用任何打开操作**。
+
+具体禁止的行为：
+- ❌ 禁止调用 `browser` 工具（`action="open"`）打开本地 `file://` 路径
+- ❌ 禁止调用 `exec` 执行 `open`、`xdg-open`、`start` 等系统命令打开 HTML 文件
+- ❌ 禁止调用 `shell:openExternal` 或 `shell:openPath` 打开生成的 HTML 文件
+- ❌ 禁止在回复中引导用户去外部浏览器查看（如"已在浏览器中打开"）
 
 ---
 
@@ -178,6 +194,11 @@ uv run python scripts/generate.py \
 - ❌ **禁止使用 `write`、`edit`、`apply_patch` 等文件工具直接修改已生成的 HTML 报告。**
 - ❌ 禁止覆盖已有的 `.html` 报告文件。
 - ❌ 禁止以"只改一点"为理由直接编辑旧文件。
+- ❌ **禁止主动打开浏览器或系统默认程序来查看生成的 HTML 文件。** 具体包括：
+  - 禁止调用 `browser` 工具（`action="open"`）打开本地 `file://` 路径
+  - 禁止调用 `exec` 执行 `open`、`xdg-open`、`start` 等系统命令打开 HTML 文件
+  - 禁止调用 `shell:openExternal` 或 `shell:openPath` 打开生成的 HTML 文件
+  - **sto-claw 会自动识别消息中的 HTML 文件路径并提供内置预览，Agent 无需、也不应主动打开。**
 
 ### 唯一正确做法
 
@@ -215,5 +236,5 @@ uv run python scripts/generate.py \
 1. **本 skill 不查询数据**，只负责渲染。数据必须由调用方提供。
 2. 模板配置错误时，脚本会输出具体错误信息到 stderr。
 3. 如果数据文件中缺少模板要求的字段，对应位置显示 "-" 或 "暂无数据"。
-4. 生成的 HTML 文件不自开浏览器，只输出文件路径。
+4. **生成的 HTML 文件不自开浏览器，只输出文件路径。** sto-claw 内置预览会自动处理，Agent 禁止调用任何工具（browser/exec/openExternal 等）主动打开。
 5. **禁止覆盖已有文件**：无论通过 `--output` 指定还是使用默认路径，脚本都会确保写入的是新文件。若需迭代调整，请在 `--output` 中使用 `_v{N}` 批次命名，或让脚本自动递增版本号。

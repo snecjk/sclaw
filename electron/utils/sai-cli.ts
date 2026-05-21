@@ -4,19 +4,45 @@
  * Provides a thin wrapper around the SAI CLI binary so the renderer
  * can discover and execute dynamic commands through the existing
  * IPC / unified-request layer.
+ *
+ * SAI CLI is managed via online update API (/api/v1/cli/update).
+ * No bundled binary is shipped with the app anymore.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, copyFileSync, mkdirSync, chmodSync, readFileSync, appendFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  existsSync,
+  mkdirSync,
+  chmodSync,
+  readFileSync,
+  appendFileSync,
+  renameSync,
+  unlinkSync,
+  createWriteStream,
+} from 'node:fs';
+import { readFile, unlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { app } from 'electron';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { logger } from './logger';
+import { resolveStoBaseUrl } from './sto-domain';
+import { proxyAwareFetch } from './proxy-fetch';
 
 export interface SaiCliResult {
   ok: boolean;
   data?: unknown;
   error?: string;
   exitCode: number;
+}
+
+interface SaiCliUpdateInfo {
+  latestVersion: string;
+  downloadUrl: string;
+  releaseNotes?: string;
+  sha256?: string;
+  forceUpdate?: boolean;
+  publishedAt?: string;
 }
 
 function resolveSaiBinary(): string | null {
@@ -27,11 +53,7 @@ function resolveSaiBinary(): string | null {
   const userBin = join(homedir(), '.sai', 'bin', binaryName);
   if (existsSync(userBin)) return userBin;
 
-  // 2. Bundled binary (packaged or development mode)
-  const bundled = getBundledSaiPath();
-  if (bundled) return bundled;
-
-  // 3. Let shell resolve via PATH
+  // 2. Let shell resolve via PATH
   return binaryName;
 }
 
@@ -123,10 +145,40 @@ export async function saiList(filter?: { product?: string; module?: string }): P
 
 // ── Dynamic command execution ───────────────────────────────────────────────
 
+// SAI CLI 命令黑名单：禁止通过对话触发的升级/安装类操作
+const BLOCKED_SAI_COMMANDS: RegExp[] = [
+  /^update/i,
+  /^upgrade/i,
+  /^install/i,
+  /^uninstall/i,
+  /^remove/i,
+];
+
+function getBlockedSaiErrorMessage(commandPath: string): string | null {
+  const firstSegment = commandPath.split('/')[0] || '';
+  for (const pattern of BLOCKED_SAI_COMMANDS) {
+    if (pattern.test(firstSegment)) {
+      return `系统安全策略已阻止该操作：暂不支持通过对话执行 "${commandPath}" 命令。`;
+    }
+  }
+  return null;
+}
+
 export async function saiExecute(
   commandPath: string,
   params?: Record<string, unknown>,
 ): Promise<SaiCliResult> {
+  const blockedMsg = getBlockedSaiErrorMessage(commandPath);
+  if (blockedMsg) {
+    return {
+      ok: false,
+      code: 1,
+      stderr: blockedMsg,
+      stdout: '',
+      data: null,
+    };
+  }
+
   const args = commandPath.split('/');
   if (params && Object.keys(params).length > 0) {
     args.push('--params', JSON.stringify(params));
@@ -160,72 +212,175 @@ export async function saiCheckInstalled(): Promise<{
   };
 }
 
-// ── Auto-install from bundled resources ─────────────────────────────────────
-
-function getBundledSaiPath(): string | null {
-  const platform = process.platform;
-  const arch = process.arch;
-  const bundledBinName = platform === 'win32' ? 'sai-cli.exe' : 'sai-cli';
-
-  // ── 1. Production: resources/prod-cli/ (pro cli) ──────────────────────────
-  if (app.isPackaged) {
-    const prodCliPath = join(process.resourcesPath, 'prod-cli', bundledBinName);
-    if (existsSync(prodCliPath)) return prodCliPath;
-  }
-
-  // ── 2. Development / fallback: resources/cli/ (platform-agnostic naming) ──
-  if (app.isPackaged) {
-    const cliPath = join(process.resourcesPath, 'cli', bundledBinName);
-    if (existsSync(cliPath)) return cliPath;
-  }
-  const devCliPath = join(__dirname, '../..', 'resources', 'cli', bundledBinName);
-  if (existsSync(devCliPath)) return devCliPath;
-
-  // ── 2. SAI/ directory with platform-arch subdirs ──────────────────────────
-  const saiDirMap: Record<string, string> = {
-    'darwin-x64': 'mac-amd64',
-    'darwin-arm64': 'mac-arm64',
-    'win32-x64': 'win-amd64',
-    'win32-arm64': 'win-arm64',
-    'linux-x64': 'linux-amd64',
-    'linux-arm64': 'linux-arm64',
-  };
-  const saiDir = saiDirMap[`${platform}-${arch}`];
-
-  if (app.isPackaged) {
-    if (saiDir) {
-      const packaged = join(process.resourcesPath, 'SAI', saiDir, bundledBinName);
-      if (existsSync(packaged)) return packaged;
-    }
-    const packaged = join(process.resourcesPath, 'SAI', `${platform}-${arch}`, bundledBinName);
-    if (existsSync(packaged)) return packaged;
-  }
-
-  if (saiDir) {
-    const devPath = join(__dirname, '../..', 'SAI', saiDir, bundledBinName);
-    if (existsSync(devPath)) return devPath;
-  }
-  const devPath = join(__dirname, '../..', 'SAI', `${platform}-${arch}`, bundledBinName);
-  if (existsSync(devPath)) return devPath;
-
-  // ── 3. Legacy fallback: resources/bin/ ────────────────────────────────────
-  const legacyBinName = platform === 'win32' ? 'sai.exe' : 'sai';
-  if (app.isPackaged) {
-    const legacy = join(process.resourcesPath, 'bin', legacyBinName);
-    if (existsSync(legacy)) return legacy;
-    const legacyArch = join(process.resourcesPath, 'bin', `${platform}-${arch}`, legacyBinName);
-    if (existsSync(legacyArch)) return legacyArch;
-  }
-  const devLegacy = join(__dirname, '../../resources/bin', `${platform}-${arch}`, legacyBinName);
-  if (existsSync(devLegacy)) return devLegacy;
-
-  return null;
-}
+// ── Online update via API ───────────────────────────────────────────────────
 
 function getSaiInstallTarget(): string {
   const binName = process.platform === 'win32' ? 'sai-cli.exe' : 'sai-cli';
   return join(homedir(), '.sai', 'bin', binName);
 }
+
+async function getSaiCliUpdateBaseUrl(): Promise<string> {
+  return resolveStoBaseUrl();
+}
+
+async function fetchLatestSaiCliInfo(currentVersion: string): Promise<SaiCliUpdateInfo | null> {
+  const baseUrl = await getSaiCliUpdateBaseUrl();
+  const platform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'darwin' : 'linux';
+  const arch = process.arch === 'arm64' ? 'arm64' : 'amd64';
+  const url = `${baseUrl}/api/v1/cli/update?os=${platform}&arch=${arch}&currentVersion=${encodeURIComponent(currentVersion)}`;
+
+  const response = await proxyAwareFetch(url, { timeoutMs: 15_000 });
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      logger.info('No sai-cli update available for', platform, arch);
+      return null;
+    }
+    throw new Error(`sai-cli update API returned HTTP ${response.status}`);
+  }
+
+  return (await response.json()) as SaiCliUpdateInfo;
+}
+
+async function downloadFile(url: string, targetPath: string, expectedSha256?: string): Promise<void> {
+  const response = await proxyAwareFetch(url, { timeoutMs: 120_000 });
+
+  if (!response.ok) {
+    throw new Error(`Download failed: HTTP ${response.status}`);
+  }
+
+  const tmpPath = `${targetPath}.download-${Date.now()}`;
+  try {
+    await pipeline(
+      Readable.fromWeb(response.body as any),
+      createWriteStream(tmpPath),
+    );
+
+    if (expectedSha256) {
+      const hash = createHash('sha256');
+      hash.update(await readFile(tmpPath));
+      const actualSha256 = hash.digest('hex');
+      if (actualSha256 !== expectedSha256) {
+        throw new Error(`SHA256 mismatch: expected ${expectedSha256}, got ${actualSha256}`);
+      }
+    }
+
+    renameSync(tmpPath, targetPath);
+  } catch (error) {
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      // ignore
+    }
+    throw error;
+  }
+}
+
+async function getLocalSaiCliVersionInfo(): Promise<{ version?: string; path?: string }> {
+  const binary = resolveSaiBinary();
+  if (!binary || binary === 'sai-cli' || binary === 'sai-cli.exe') {
+    return {};
+  }
+
+  const result = await saiVersion();
+  if (!result.ok) return {};
+
+  const versionStr =
+    typeof result.data === 'object' && result.data !== null
+      ? (result.data as Record<string, unknown>).version
+      : undefined;
+
+  return {
+    version: typeof versionStr === 'string' ? versionStr : undefined,
+    path: binary,
+  };
+}
+
+export async function checkSaiCliUpdate(): Promise<{
+  hasUpdate: boolean;
+  currentVersion?: string;
+  latestVersion?: string;
+  releaseNotes?: string;
+  forceUpdate?: boolean;
+}> {
+  const localInfo = await getLocalSaiCliVersionInfo();
+  if (!localInfo.version) {
+    return { hasUpdate: true };
+  }
+
+  const remoteInfo = await fetchLatestSaiCliInfo(localInfo.version);
+  if (!remoteInfo) {
+    return { hasUpdate: false, currentVersion: localInfo.version };
+  }
+
+  const hasUpdate = remoteInfo.latestVersion !== localInfo.version;
+  return {
+    hasUpdate,
+    currentVersion: localInfo.version,
+    latestVersion: remoteInfo.latestVersion,
+    releaseNotes: remoteInfo.releaseNotes,
+    forceUpdate: remoteInfo.forceUpdate,
+  };
+}
+
+export async function installOrUpdateSaiCli(
+  notify?: (path: string) => void,
+): Promise<{ success: boolean; path?: string; version?: string; updated?: boolean; error?: string }> {
+  const target = getSaiInstallTarget();
+  const localInfo = await getLocalSaiCliVersionInfo();
+
+  let remoteInfo: SaiCliUpdateInfo | null;
+  try {
+    remoteInfo = await fetchLatestSaiCliInfo(localInfo.version || '0.0.0');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error('Failed to fetch sai-cli update info:', msg);
+    return { success: false, error: msg };
+  }
+
+  if (!remoteInfo) {
+    return { success: false, error: 'No sai-cli release available for this platform.' };
+  }
+
+  if (localInfo.version === remoteInfo.latestVersion) {
+    ensureSaiBinInPath();
+    return { success: true, path: target, version: localInfo.version, updated: false };
+  }
+
+  try {
+    mkdirSync(dirname(target), { recursive: true });
+
+    if (process.platform === 'win32' && existsSync(target)) {
+      const backupPath = `${target}.old-${Date.now()}`;
+      renameSync(target, backupPath);
+      try {
+        unlinkSync(backupPath);
+      } catch {
+        // ignore
+      }
+    }
+
+    await downloadFile(remoteInfo.downloadUrl, target, remoteInfo.sha256);
+
+    if (process.platform !== 'win32') {
+      chmodSync(target, 0o755);
+    }
+
+    ensureSaiBinInPath();
+
+    logger.info(
+      `SAI CLI ${localInfo.version ? 'updated' : 'installed'}: ${target} -> ${remoteInfo.latestVersion}`,
+    );
+    notify?.(target);
+    return { success: true, path: target, version: remoteInfo.latestVersion, updated: true };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to ${localInfo.version ? 'update' : 'install'} SAI CLI:`, msg);
+    return { success: false, error: msg };
+  }
+}
+
+// ── PATH management ─────────────────────────────────────────────────────────
 
 const SAI_BIN_DIR = join(homedir(), '.sai', 'bin');
 
@@ -325,45 +480,19 @@ function ensureSaiBinInUnixPath(): void {
   }
 }
 
+// ── Public entry ────────────────────────────────────────────────────────────
+
 /**
- * Auto-install SAI CLI from bundled app resources to ~/.sai/bin/
+ * Auto-install or update SAI CLI from the online update API.
  * Called during startup so users don't need to manually install.
  */
 export async function autoInstallSaiCliIfNeeded(
   notify?: (path: string) => void,
 ): Promise<{ success: boolean; path?: string; error?: string }> {
-  const target = getSaiInstallTarget();
-
-  // Already installed — just make sure PATH is up to date
-  if (existsSync(target)) {
-    logger.debug('SAI CLI already installed at', target);
-    ensureSaiBinInPath();
-    return { success: true, path: target };
-  }
-
-  const bundled = getBundledSaiPath();
-  if (!bundled) {
-    const msg = 'Bundled SAI CLI not found in app resources.';
-    logger.warn(msg);
-    return { success: false, error: msg };
-  }
-
-  try {
-    mkdirSync(dirname(target), { recursive: true });
-    copyFileSync(bundled, target);
-
-    if (process.platform !== 'win32') {
-      chmodSync(target, 0o755);
-    }
-
-    ensureSaiBinInPath();
-
-    logger.info(`SAI CLI auto-installed: ${target} (from ${bundled})`);
-    notify?.(target);
-    return { success: true, path: target };
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    logger.error('Failed to auto-install SAI CLI:', msg);
-    return { success: false, error: msg };
-  }
+  const result = await installOrUpdateSaiCli(notify);
+  return {
+    success: result.success,
+    path: result.path,
+    error: result.error,
+  };
 }

@@ -481,11 +481,13 @@ export function Chat() {
         <div
           onMouseDown={startResize}
           className={cn(
-            'relative z-20 shrink-0 w-[3px] cursor-col-resize transition-colors',
-            isResizing ? 'bg-primary/60 w-[4px]' : 'bg-border/40 hover:bg-primary/30',
+            'relative z-20 flex h-full shrink-0 cursor-col-resize items-center justify-center transition-colors',
+            isResizing ? 'bg-primary/50 w-[5px]' : 'bg-border/50 w-[5px] hover:bg-primary/40',
           )}
           style={{ cursor: isResizing ? 'col-resize' : undefined }}
-        />
+        >
+          <div className={cn('h-8 w-[2px] rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
+        </div>
       )}
 
       {/* Right: Preview Panel */}
@@ -500,7 +502,7 @@ export function Chat() {
             transition={{ duration: 0.25, ease: 'easeInOut' }}
             // className="shrink-0 overflow-hidden"
             style={{ width: previewPanelWidth }}
-            className="flex h-full min-h-0 w-[clamp(300px,38vw,560px)] shrink-0 flex-col overflow-hidden [contain:inline-size]"
+            className="flex h-full min-h-0 shrink-0 flex-col overflow-hidden [contain:inline-size]"
           >
             <ChatPreviewPanel
               files={previewableFiles}
