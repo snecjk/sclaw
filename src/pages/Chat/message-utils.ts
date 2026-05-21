@@ -263,6 +263,9 @@ export function extractToolUse(message: RawMessage | unknown): Array<{ id: strin
  */
 const PREVIEWABLE_MIME_PREFIXES = [
   'text/html',
+  'text/plain',
+  'application/json',
+  'text/csv',
 ];
 
 export function isPreviewableFile(file: { mimeType: string; filePath?: string }): boolean {
@@ -287,6 +290,22 @@ function extToMimeType(ext: string): string {
     pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     xls: 'application/vnd.ms-excel',
     xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    // Code files
+    sql: 'text/plain', py: 'text/plain', js: 'text/plain', ts: 'text/plain',
+    jsx: 'text/plain', tsx: 'text/plain', java: 'text/plain', go: 'text/plain',
+    rs: 'text/plain', cpp: 'text/plain', c: 'text/plain', h: 'text/plain',
+    cs: 'text/plain', rb: 'text/plain', php: 'text/plain', swift: 'text/plain',
+    kt: 'text/plain', scala: 'text/plain', r: 'text/plain', m: 'text/plain', mm: 'text/plain',
+    // Config files
+    yaml: 'text/plain', yml: 'text/plain', xml: 'text/plain', toml: 'text/plain',
+    ini: 'text/plain', conf: 'text/plain', properties: 'text/plain', env: 'text/plain',
+    // Data/Log files
+    log: 'text/plain', tsv: 'text/plain',
+    // Web files
+    css: 'text/plain', scss: 'text/plain', less: 'text/plain',
+    // Shell scripts
+    sh: 'text/plain', bash: 'text/plain', zsh: 'text/plain', fish: 'text/plain',
+    ps1: 'text/plain', bat: 'text/plain', cmd: 'text/plain',
   };
   return map[ext] || 'application/octet-stream';
 }
@@ -317,8 +336,8 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
     addIfNotImage(url, fileName, ext);
   }
 
-  // Absolute file paths (Unix / Windows) — only HTML files (tied to PPT/report generation preview)
-  const pathRegex = /(\/(?:[^/\s]+\/)*[^/\s]+\.html?|[A-Za-z]:[\\/](?:[^/\s]+[\\/])*[^/\s]+\.html?)/g;
+  // Absolute file paths (Unix / Windows) — support code, config, doc, and web files
+  const pathRegex = /(\/(?:[^/\s]+\/)*[^/\s]+\.(?:html?|sql|py|js|ts|jsx|tsx|java|go|rs|cpp|c|h|cs|rb|php|swift|kt|scala|r|m|mm|json|yaml|yml|xml|toml|ini|conf|properties|env|md|txt|csv|tsv|log|css|scss|less|sh|bash|zsh|fish|ps1|bat|cmd)|[A-Za-z]:[\\/](?:[^/\s]+[\\/])*[^/\s]+\.(?:html?|sql|py|js|ts|jsx|tsx|java|go|rs|cpp|c|h|cs|rb|php|swift|kt|scala|r|m|mm|json|yaml|yml|xml|toml|ini|conf|properties|env|md|txt|csv|tsv|log|css|scss|less|sh|bash|zsh|fish|ps1|bat|cmd))/gi;
   while ((match = pathRegex.exec(text)) !== null) {
     const path = match[1].replace(/\\/g, '/');
     const fileName = path.split('/').pop() || '';

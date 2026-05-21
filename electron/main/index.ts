@@ -397,6 +397,7 @@ async function initialize(): Promise<void> {
     { autoInstallCliIfNeeded, generateCompletionCache, installCompletionToProfile },
     { autoInstallSaiCliIfNeeded },
     { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled },
+    { ensureLongOutputConstraint, getAgentWorkspacePath },
     { ensureAllBundledPluginsInstalledAsync },
     { startHostApiServer },
     stoSkillMod,
@@ -418,6 +419,7 @@ async function initialize(): Promise<void> {
     import('../utils/openclaw-cli'),
     import('../utils/sai-cli'),
     import('../utils/skill-config'),
+    import('../utils/agent-config'),
     import('../utils/plugin-install'),
     import('../api/server'),
     import('../services/sto-skill-service'),
@@ -522,6 +524,17 @@ async function initialize(): Promise<void> {
     await ensurePreinstalledSkillsInstalled().catch((error) => {
       logger.warn('Failed to install preinstalled skills:', error);
     });
+
+    // Ensure Main Agent's AGENTS.md includes the long-output constraint
+    try {
+      const mainWorkspace = await getAgentWorkspacePath('main');
+      if (mainWorkspace) {
+        await ensureLongOutputConstraint(mainWorkspace);
+        logger.info('Ensured long-output constraint in Main Agent AGENTS.md');
+      }
+    } catch (error) {
+      logger.warn('Failed to ensure long-output constraint for Main Agent:', error);
+    }
 
     await ensureAllBundledPluginsInstalledAsync().catch((error) => {
       logger.warn('Failed to install/upgrade bundled plugins:', error);

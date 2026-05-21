@@ -61,6 +61,11 @@
       "slug": "sai-cli",
       "local": true,
       "autoEnable": true
+    },
+    {
+      "slug": "long-output-saver",
+      "local": true,
+      "autoEnable": true
     }
   ]
 }

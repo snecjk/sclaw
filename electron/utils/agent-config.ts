@@ -25,6 +25,39 @@ const AGENT_RUNTIME_FILES = [
   'models.json',
 ];
 
+const LONG_OUTPUT_CONSTRAINT = [
+  '',
+  '## 📄 Long Output Rule (STO Claw)',
+  '',
+  'When generating content for the user, **ALWAYS use the `write` tool to save long outputs to a file** instead of dumping the full content into the chat message.',
+  '',
+  '### Trigger thresholds',
+  '',
+  '| Content type | Threshold |',
+  '|---|---|',
+  '| SQL queries | ≥ 20 lines or ≥ 800 chars |',
+  '| Code scripts (Python/JS/TS/Java/Go/etc.) | ≥ 30 lines or ≥ 1500 chars |',
+  '| Config files (JSON/YAML/XML/etc.) | ≥ 50 lines or ≥ 2000 chars |',
+  '| Shell/Batch scripts | ≥ 20 lines or ≥ 800 chars |',
+  '| Markdown / plain-text docs | ≥ 50 lines or ≥ 3000 chars |',
+  '| CSV / TSV / Logs | ≥ 30 lines or ≥ 1500 chars |',
+  '',
+  '### Output rules',
+  '',
+  '1. Save the file under the current workspace **`./.claw-output/`** directory.',
+  '2. Use a meaningful filename (e.g. `daily_report.sql`). If the file already exists, append a number suffix (`_1`, `_2`).',
+  '3. In your reply, provide:',
+  '   - The relative file path (e.g. `./.claw-output/daily_report.sql`)',
+  '   - A brief summary (≤ 5 bullet points)',
+  '   - A friendly prompt telling the user they can click the path to preview the full content',
+  '4. Even if the user says "send it directly to me" or "show it in chat", still write the file and include a short preview (first 5–10 lines) in your reply.',
+  '',
+  '### Why?',
+  '',
+  'Chat history has a hard character limit. Files survive sessions, support syntax highlighting, and can be previewed or opened externally.',
+  '',
+].join('\n');
+
 interface AgentModelConfig {
   primary?: string;
   [key: string]: unknown;
@@ -446,6 +479,27 @@ async function copyRuntimeFiles(sourceAgentDir: string, targetAgentDir: string):
   }
 }
 
+export async function ensureLongOutputConstraint(workspacePath: string): Promise<void> {
+  const agentsMdPath = join(workspacePath, 'AGENTS.md');
+  const marker = '## 📄 Long Output Rule (STO Claw)';
+
+  try {
+    let content = '';
+    if (await fileExists(agentsMdPath)) {
+      content = await readFile(agentsMdPath, 'utf-8');
+      if (content.includes(marker)) return; // Already appended
+      content += LONG_OUTPUT_CONSTRAINT;
+    } else {
+      // Create a minimal AGENTS.md with the constraint so OpenClaw Gateway
+      // won't overwrite it (Gateway seeds only missing files).
+      content = `# AGENTS.md - Your Workspace\n\nThis folder is home. Treat it that way.\n${LONG_OUTPUT_CONSTRAINT}`;
+    }
+    await writeFile(agentsMdPath, content, 'utf-8');
+  } catch {
+    // Best-effort: if writing fails, OpenClaw's default AGENTS.md will still work.
+  }
+}
+
 async function provisionAgentFilesystem(
   config: AgentConfigDocument,
   agent: AgentListEntry,
@@ -473,6 +527,9 @@ async function provisionAgentFilesystem(
   if (targetAgentDir !== sourceAgentDir) {
     await copyRuntimeFiles(sourceAgentDir, targetAgentDir);
   }
+
+  // Inject long-output constraint into AGENTS.md
+  await ensureLongOutputConstraint(targetWorkspace);
 }
 
 export function resolveAccountIdForAgent(agentId: string): string {

@@ -30,6 +30,9 @@ export function FilePreviewViewer({
   const [mdContent, setMdContent] = useState<string>('');
   const [mdLoading, setMdLoading] = useState(false);
   const [mdError, setMdError] = useState<string>('');
+  const [textContent, setTextContent] = useState<string>('');
+  const [textLoading, setTextLoading] = useState(false);
+  const [textError, setTextError] = useState<string>('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -79,6 +82,44 @@ export function FilePreviewViewer({
         }
       } finally {
         if (!cancelled) setMdLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filePath, mimeType]);
+
+  // Load plain text / code / json files
+  useEffect(() => {
+    const isTextFile = mimeType === 'text/plain' || mimeType === 'application/json' || mimeType === 'text/csv';
+    if (!isTextFile) {
+      setTextContent('');
+      setTextError('');
+      setTextLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setTextContent('');
+    setTextError('');
+    setTextLoading(true);
+
+    void (async () => {
+      try {
+        const res = await hostApiFetch<{ content: string; encoding: string }>('/api/files/read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath, encoding: 'utf-8' }),
+        });
+        if (cancelled) return;
+        setTextContent(typeof res?.content === 'string' ? res.content : '');
+      } catch (e) {
+        if (!cancelled) {
+          setTextError(e instanceof Error ? e.message : '读取失败');
+        }
+      } finally {
+        if (!cancelled) setTextLoading(false);
       }
     })();
 
@@ -173,7 +214,32 @@ img{max-width:100%}
     );
   }
 
-  // Fallback for other previewable types (Office docs, txt, csv, json, etc.)
+  // Plain text / code / json / csv preview
+  if (mimeType === 'text/plain' || mimeType === 'application/json' || mimeType === 'text/csv') {
+    if (textLoading) {
+      return (
+        <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
+          <RefreshCw className="h-5 w-5 animate-spin" />
+          正在加载文件…
+        </div>
+      );
+    }
+    if (textError) {
+      return (
+        <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm', className)}>
+          <p className="text-destructive">{textError}</p>
+          <OpenExternalButton filePath={filePath} />
+        </div>
+      );
+    }
+    return (
+      <div className={cn('h-full overflow-auto bg-[#1e1e1e] text-[#d4d4d4] p-4', className)}>
+        <pre className="text-sm font-mono whitespace-pre">{textContent}</pre>
+      </div>
+    );
+  }
+
+  // Fallback for other previewable types (Office docs, etc.)
   return (
     <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm text-muted-foreground', className)}>
       <FileText className="h-10 w-10 opacity-40" />
