@@ -1,9 +1,10 @@
 ---
 name: sai-cli
 description: >-
-  sai-cli Agent CLI 命令行工具使用指南。sai-cli 是面向申通业务系统的通用封装，
-  用于操作财务、网络、经营、政策、运营、运单、客户等业务域。当用户询问
-  "sai命令"、"如何使用sai"、"sai怎么用"、"sai-cli login"、"sai-cli help"、
+  【高优先级 / 核心取数工具】sai-cli Agent CLI 命令行工具使用指南。sai-cli 是面向申通业务系统的通用封装，
+  用于操作财务、网络、经营、政策、运营、运单、客户等业务域。
+  当用户需要查询或操作申通业务系统（包括但不限于财务、网络、经营、政策、运营、运单、客户等业务域）时，必须使用 sai-cli，优先级高于其他通用查询方式。
+  当用户询问 "sai命令"、"如何使用sai"、"sai怎么用"、"sai-cli login"、"sai-cli help"、
   "sai-cli discover"、"sai-cli 登录"、"sai-cli 查询"、"sai-cli CLI"、
   "sai-cli version"、"sai-cli refresh-cache"、命令行工具使用方法，或遇到
   AUTH_REQUIRED、AUTH_TOKEN_EXPIRED、COMMAND_NOT_FOUND、EXECUTION_FAILED、

@@ -227,6 +227,8 @@ function mimeFromExtension(filePath: string): string {
     'md': 'text/markdown',
     'rtf': 'application/rtf',
     'epub': 'application/epub+zip',
+    'html': 'text/html',
+    'htm': 'text/html',
     // Archives
     'zip': 'application/zip',
     'tar': 'application/x-tar',
@@ -251,12 +253,21 @@ function mimeFromExtension(filePath: string): string {
   return map[ext] || 'application/octet-stream';
 }
 
+/** Remove fenced code blocks and inline code from text so paths inside them are not matched. */
+function stripCodeBlocks(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`[^`]*`/g, '');
+}
+
 /**
  * Extract raw file paths from message text.
  * Detects absolute paths (Unix: / or ~/, Windows: C:\ etc.) ending with common file extensions.
  * Handles both image and non-image files, consistent with channel push message behavior.
+ * Code blocks are stripped before matching to avoid false positives.
  */
 function extractRawFilePaths(text: string): Array<{ filePath: string; mimeType: string }> {
+  const cleanText = stripCodeBlocks(text);
   const refs: Array<{ filePath: string; mimeType: string }> = [];
   const seen = new Set<string>();
   const exts = 'png|jpe?g|gif|webp|bmp|avif|svg|pdf|docx?|xlsx?|pptx?|txt|csv|md|rtf|epub|zip|tar|gz|rar|7z|mp3|wav|ogg|aac|flac|m4a|mp4|mov|avi|mkv|webm|m4v|html?';
@@ -267,7 +278,7 @@ function extractRawFilePaths(text: string): Array<{ filePath: string; mimeType: 
   const winRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\\\[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
   for (const regex of [unixRegex, winRegex]) {
     let match;
-    while ((match = regex.exec(text)) !== null) {
+    while ((match = regex.exec(cleanText)) !== null) {
       const p = match[1];
       if (p && !seen.has(p)) {
         seen.add(p);

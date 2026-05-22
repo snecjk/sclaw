@@ -280,7 +280,8 @@ export function isPreviewableFile(file: { mimeType: string; filePath?: string })
 
 function extToMimeType(ext: string): string {
   const map: Record<string, string> = {
-    html: 'text/html', htm: 'text/html',
+    html: 'text/html',
+    htm: 'text/html',
     pdf: 'application/pdf',
     md: 'text/markdown', txt: 'text/plain',
     json: 'application/json', csv: 'text/csv',
@@ -314,11 +315,20 @@ function extToMimeType(ext: string): string {
 export const PREVIEWABLE_FILE_EXTS =
   'html?|sql|py|js|ts|jsx|tsx|java|go|rs|cpp|c|h|cs|rb|php|swift|kt|scala|r|m|mm|json|yaml|yml|xml|toml|ini|conf|properties|env|md|txt|csv|tsv|log|css|scss|less|sh|bash|zsh|fish|ps1|bat|cmd|pdf';
 
+/** Remove fenced code blocks and inline code from text so paths inside them are not matched. */
+function stripCodeBlocks(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`[^`]*`/g, '');
+}
+
 /**
  * Extract previewable local file paths and localhost URLs from plain text.
  * Matches absolute paths like /Users/.../file.html and localhost URLs like http://localhost:8080/path.
+ * Code blocks are stripped before matching to avoid false positives.
  */
 export function extractPreviewableRefs(text: string): Array<{ filePath: string; fileName: string; mimeType: string }> {
+  const cleanText = stripCodeBlocks(text);
   const results: Array<{ filePath: string; fileName: string; mimeType: string }> = [];
   const seen = new Set<string>();
 
@@ -333,7 +343,7 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
   // Localhost URLs only (previewable in side panel)
   const urlRegex = /(https?:\/\/localhost:[^\s)\]"',;<>]+)/g;
   let match;
-  while ((match = urlRegex.exec(text)) !== null) {
+  while ((match = urlRegex.exec(cleanText)) !== null) {
     const url = match[1];
     const fileName = url.split('/').pop() || 'index.html';
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
@@ -345,7 +355,7 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
     `(\\./(?:[^/\\s]+\\/)*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\s]+\\/)*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\s]+[\\\\/])*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`,
     'gi',
   );
-  while ((match = pathRegex.exec(text)) !== null) {
+  while ((match = pathRegex.exec(cleanText)) !== null) {
     const path = match[1].replace(/\\/g, '/');
     const fileName = path.split('/').pop() || '';
     const ext = fileName.split('.').pop()?.toLowerCase() || '';

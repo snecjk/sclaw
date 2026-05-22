@@ -153,15 +153,20 @@ export function FilePreviewViewer({
       />
     );
   }
-
   // Local HTML file preview — serve through Host API to bypass browser restrictions
-  if (mimeType === 'text/html') {
+  // Fallback to extension check when mimeType is mis-detected as application/octet-stream
+  const isHtmlFile = mimeType === 'text/html' || (() => {
+    const ext = filePath.split('.').pop()?.toLowerCase();
+    return ext === 'html' || ext === 'htm';
+  })();
+  if (isHtmlFile) {
     return (
       <iframe
         key={filePath}
         src={toServeUrl(filePath)}
         title={fileName}
         className={cn('h-full min-w-0 w-full border-0', className)}
+        sandbox="allow-scripts allow-same-origin"
       />
     );
   }

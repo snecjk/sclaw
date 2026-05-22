@@ -7,6 +7,10 @@ import * as path from 'path';
 const ROOT = path.resolve(__dirname, '..');
 const RELEASE_BASE = path.join(ROOT, 'release');
 
+// Check if this is a test build
+const isTest = process.argv.includes('--test') || process.env.BUILD_ENV === 'test';
+const BUILD_SUFFIX = isTest ? '.test' : '';
+
 async function ensureDir(dir) {
   await mkdir(dir, { recursive: true });
 }
@@ -32,15 +36,15 @@ async function getNextBatchDir() {
   for (const entry of entries) {
     const entryPath = path.join(RELEASE_BASE, entry);
     const st = await fsStat(entryPath).catch(() => null);
-    if (st?.isDirectory() && new RegExp(`^${yyyymmdd}\\d{3}$`).test(entry)) {
-      const batchNum = parseInt(entry.slice(8), 10);
+    if (st?.isDirectory() && new RegExp(`^${yyyymmdd}\\d{3}(${BUILD_SUFFIX.replace('.', '\\.')})?$`).test(entry)) {
+      const batchNum = parseInt(entry.slice(8, 11), 10);
       maxBatch = Math.max(maxBatch, batchNum);
     }
   }
 
   const batch = String(maxBatch + 1).padStart(3, '0');
-  const dirName = `${yyyymmdd}${batch}`;
-  const dateBatch = `${yyyymmdd}.${batch}`;
+  const dirName = `${yyyymmdd}${batch}${BUILD_SUFFIX}`;
+  const dateBatch = `${yyyymmdd}.${batch}${BUILD_SUFFIX}`;
   const targetDir = path.join(RELEASE_BASE, dirName);
   await ensureDir(targetDir);
 
@@ -60,7 +64,8 @@ async function main() {
 
   // 2. Build frontend & bundles (once)
   echo(chalk.blue('\n🏗️  Building frontend & bundles...'));
-  await $`pnpm run package`;
+  const packageScript = isTest ? 'package:test' : 'package';
+  await $`pnpm run ${packageScript}`;
 
   // 3. Create dynamic builder config
   const dynamicConfigPath = path.join(ROOT, 'electron-builder.package-all.js');

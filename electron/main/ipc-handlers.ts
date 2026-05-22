@@ -2468,6 +2468,7 @@ const EXT_MIME_MAP: Record<string, string> = {
   '.txt': 'text/plain',
   '.md': 'text/markdown',
   '.html': 'text/html',
+  '.htm': 'text/html',
   '.css': 'text/css',
   '.js': 'text/javascript',
   '.ts': 'text/typescript',
