@@ -48,7 +48,7 @@ export function TaskDetail() {
       <div
         className={cn(
           /* Pull into main bottom padding so gateway row sits closer to the window edge. */
-          '-mt-5 -mb-5 flex min-h-0 min-w-0 flex-col overflow-hidden',
+          '-mb-5 flex min-h-0 min-w-0 flex-col overflow-hidden',
           /* TitleBar 2.5rem + main py-5 total 2.5rem vertical padding. */
           'h-[calc(100dvh-5rem)]',
         )}
