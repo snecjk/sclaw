@@ -9,7 +9,9 @@ import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
 import { ChatInput } from '@/pages/Chat/ChatInput';
 import { HomeHero } from './HomeHero';
+import { HomeMainConversation } from './HomeMainConversation';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
+import { useHomeConversationActive } from './use-home-conversation-active';
 
 /** sto-design Grey-10 主标题 / 默认正文 */
 const TEXT_PRIMARY = 'text-[#1D2129] dark:text-foreground';
@@ -30,6 +32,7 @@ const DOT_BRAND = 'bg-[#FF6F00] dark:bg-[#FF8D2A]';
 
 export function HomeAgentHubSurface() {
   const { t } = useTranslation('home');
+  const showConversation = useHomeConversationActive();
 
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
@@ -53,8 +56,11 @@ export function HomeAgentHubSurface() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain px-4 sm:px-6">
-        <div className="mx-auto flex min-h-full w-full max-w-[960px] flex-col justify-center gap-10 py-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6">
+        {showConversation ? (
+          <HomeMainConversation className="min-h-0 flex-1" />
+        ) : (
+        <div className="mx-auto flex min-h-full w-full max-w-[960px] flex-col justify-center gap-10 overflow-y-auto overscroll-y-contain py-6">
         <HomeHero />
 
         <div className="grid w-full gap-4 sm:grid-cols-3">
@@ -122,6 +128,7 @@ export function HomeAgentHubSurface() {
           ))}
         </div>
         </div>
+        )}
       </div>
 
       <div className="shrink-0 bg-[var(--sto-page-bg)] px-4 pb-4 pt-4 sm:px-6 dark:bg-background">

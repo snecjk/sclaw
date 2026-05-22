@@ -57,9 +57,11 @@ export const ChatMessage = memo(function ChatMessage({
   const { t } = useTranslation('chat');
   const isUser = message.role === 'user';
   const role = typeof message.role === 'string' ? message.role.toLowerCase() : '';
+  const isSystem = role === 'system';
   const isToolResult = role === 'toolresult' || role === 'tool_result';
   const text = extractText(message);
   const hasText = text.trim().length > 0;
+  const [systemExpanded, setSystemExpanded] = useState(false);
   const images = extractImages(message);
   const tools = extractToolUse(message);
   const thinkingTimeline = showThinking ? extractThinkingTimeline(message) : [];
@@ -85,6 +87,57 @@ export const ChatMessage = memo(function ChatMessage({
 
   const hasStreamingToolStatus = isStreaming && streamingTools.length > 0;
   if (!hasText && !showThinkingPanel && images.length === 0 && visibleTools.length === 0 && !hasRenderableFiles && extractedRefs.length === 0 && !hasStreamingToolStatus) return null;
+
+  if (isSystem) {
+    const compactText = text.replace(/\s+/g, ' ').trim();
+    const firstLine = text.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || compactText;
+    const summary = firstLine.length > 88 ? `${firstLine.slice(0, 88)}…` : firstLine;
+    const showToggle = compactText.length > summary.length || text.includes('\n');
+    return (
+      <div
+        data-chat-message-role="system"
+        data-chat-message-id={message.id ?? undefined}
+        className="mx-auto w-full max-w-4xl"
+      >
+        <div className="rounded-xl border border-amber-200/55 bg-amber-50/72 px-3 py-2 text-[13px] text-amber-900/90 shadow-[0_4px_14px_rgba(245,158,11,0.06)] dark:border-amber-500/15 dark:bg-amber-950/12 dark:text-amber-100/80">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-600/80 dark:text-amber-300/70" />
+            <span className="shrink-0 text-[11px] font-medium text-amber-700/85 dark:text-amber-200/75">
+              {t('systemNotice.label')}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[12px] text-amber-900/75 dark:text-amber-100/70">
+              {summary}
+            </span>
+            {message.timestamp ? (
+              <span className="shrink-0 text-[11px] text-amber-700/60 dark:text-amber-200/55">
+                {formatTimestamp(message.timestamp)}
+              </span>
+            ) : null}
+            {showToggle ? (
+              <button
+                type="button"
+                onClick={() => setSystemExpanded((value) => !value)}
+                className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-amber-700/80 transition-colors hover:bg-amber-100/70 hover:text-amber-900 dark:text-amber-200/75 dark:hover:bg-amber-900/25 dark:hover:text-amber-100"
+                aria-expanded={systemExpanded}
+              >
+                {systemExpanded ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+                <span>{systemExpanded ? t('systemNotice.collapse') : t('systemNotice.expand')}</span>
+              </button>
+            ) : null}
+          </div>
+          {systemExpanded && hasText ? (
+            <div className="mt-2 border-t border-amber-200/45 pt-2 dark:border-amber-500/10">
+              <p className="whitespace-pre-wrap break-words break-all leading-6">{text}</p>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   const isEmbeddedAssistant = hideAvatar && !isUser;
 

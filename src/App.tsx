@@ -2,7 +2,7 @@
  * Root Application Component
  * Handles routing and global providers
  */
-import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Component, useEffect } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { Toaster, toast } from 'sonner';
@@ -10,7 +10,6 @@ import i18n from './i18n';
 import { MainLayout } from './components/layout/MainLayout';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Models } from './pages/Models';
-import { Chat } from './pages/Chat';
 import { Agents } from './pages/Agents';
 import { Channels } from './pages/Channels';
 import { Skills } from './pages/Skills';
@@ -269,7 +268,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/tasks/:taskId/:entryId" element={<TaskDetail />} />
             <Route path="/tasks/:taskId" element={<TaskDetail />} />
-            <Route path="/chat" element={<Chat />} />
+            <Route path="/chat" element={<Navigate to="/" replace />} />
             <Route path="/models" element={<Models />} />
             <Route path="/agents" element={<Agents />} />
             <Route path="/channels" element={<Channels />} />

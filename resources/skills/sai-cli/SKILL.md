@@ -8,7 +8,7 @@ description: >-
   "sai-cli version"、"sai-cli refresh-cache"、命令行工具使用方法，或遇到
   AUTH_REQUIRED、AUTH_TOKEN_EXPIRED、COMMAND_NOT_FOUND、EXECUTION_FAILED、
   CONFIG_INVALID、COMMAND_DISABLED 等 sai-cli 错误码时触发。
-version: 0.3.0
+version: 0.4.0
 ---
 
 # sai-cli Agent CLI 使用指南
@@ -110,14 +110,16 @@ sai-cli help <product> <module> <action>        # 查看操作详情（参数、
 
 help 无需登录，输出中 `agentHints` 字段提供下一步操作建议。
 
+查询帮助信息时，不要使用 `-f md` 或其他 Markdown 格式化参数；优先使用默认结构化输出，便于继续解析 `agentHints`、参数定义和 `outputFields` 等字段。
+
 ### 语义搜索
 
 ```powershell
 sai-cli discover "查询出港滞留"
-sai-cli discover "出港滞留" --limit 3
+sai-cli discover "出港滞留" --limit 20
 ```
 
-用自然语言描述需求，返回匹配的候选命令列表。支持不加引号的多段查询（多个词会自动拼接）。`--limit` 控制返回数量，默认 5。
+用自然语言描述需求，返回匹配的候选命令列表。支持不加引号的多段查询（多个词会自动拼接）。`--limit` 控制返回数量，默认 20。
 
 每个候选命令包含以下字段：
 - `path` — 命令路径（如 `kunlun.timeliness.query`）
@@ -127,7 +129,15 @@ sai-cli discover "出港滞留" --limit 3
 - `nextHelp` — 查看详情的命令（如 `sai-cli help kunlun timeliness query`）
 - `runTemplate` — 执行模板（如 `sai-cli kunlun timeliness query --params JSON`）
 
-Agent 应根据 `score` 选择最佳候选，通过 `nextHelp` 获取完整 schema，收集 `requiredFlags` 中无法推断的参数后再执行。
+如果只有一个候选明显匹配用户意图，Agent 可直接采用，并通过 `nextHelp` 获取完整 schema，收集 `requiredFlags` 中无法推断的参数后再执行。
+
+如果存在多个与用户问题相关性都很强的候选命令，Agent 不能自行拍板，必须把候选项整理给用户选择。至少展示：
+- 命令路径 `path`
+- 命令摘要 `summary`
+- 匹配分数 `score`
+- 关键必填参数 `requiredFlags`
+
+只有在用户明确选定后，才能继续执行对应命令的 help 和 run 流程。
 
 ### 缓存刷新
 
@@ -198,6 +208,18 @@ CLI 会根据命令 schema 中定义的参数类型自动做类型强制转换�
 
 登录流程的进度信息通过 stderr 输出 `[login]` 前缀的行，不污染 JSON 标准输出。
 
+## 返回值字段说明
+
+在向用户解释某个业务命令的返回字段时，Agent 必须优先参考 `sai-cli help <product> <module> <action>` 输出中的 `outputFields` 定义。
+
+优先级规则如下：
+
+1. 若 help 返回了 `outputFields`，必须以该字段中的名称、类型、说明为准
+2. 只有在 help 未提供 `outputFields`，或该字段明显不完整时，才允许结合示例响应和字段命名做谨慎推断
+3. 如果返回值字段来自推断而非 help 明示，必须明确告知用户“以下为推断说明”
+
+不要在已有 `outputFields` 的情况下，用执行结果样例自行重写一套字段定义。
+
 ## 错误处理
 
 | 错误码 | 含义 | 解决方法 |
@@ -230,9 +252,9 @@ CLI 环境档位（test/prod）在构建时固定，运行时不可切换。配�
 2. 执行 `sai-cli whoami` 检查登录状态；若返回 `AUTH_REQUIRED` 则先执行 `sai-cli login`
 3. 执行 `sai-cli help` 获取可用产品列表，根据 `agentHints` 逐级浏览
 4. 或执行 `sai-cli discover "<自然语言描述>"` 直接搜索目标命令
-5. 从候选列表中根据 `score` 选择最佳匹配
-6. 通过 `sai-cli help <product> <module> <action>` 获取命令参数定义
+5. 若只有一个明显最佳候选则继续；若有多个高相关候选，先让用户选择
+6. 通过 `sai-cli help <product> <module> <action>` 获取命令参数定义和 `outputFields`
 7. 收集 `requiredFlags` 中用户未提供的必填参数（向用户询问）
-8. 拼装参数执行命令，解析返回的 JSON 结果
+8. 拼装参数执行命令，解析返回的 JSON 结果，并优先基于 `outputFields` 解释返回字段
 9. 若遇到错误，根据 `error.code` 和 `hint` 自动修复后重试
 10. 若发现命令找不到，尝试 `sai-cli refresh-cache` 刷新缓存后重试

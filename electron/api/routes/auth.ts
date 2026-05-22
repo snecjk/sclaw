@@ -100,7 +100,7 @@ export async function handleAuthRoutes(
         stoSync.setGatewayManager(ctx.gatewayManager);
       }
       void stoSync.syncModels().catch((err) =>
-        logger.warn('Post-login STO model sync failed:', err),
+        logger.error('Post-login STO model sync failed:', err),
       );
       stoSync.startPeriodicSync();
 

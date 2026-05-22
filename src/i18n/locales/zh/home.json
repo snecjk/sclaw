@@ -98,9 +98,9 @@
     "toolsLabel": "工具",
     "toolsValue": "可调用",
     "inputPlaceholder": "给 Main Agent 发送消息",
-    "gatewayLineConnected": "gateway 已连接 | port: {{port}} | pid: {{pid}}",
-    "gatewayLineConnecting": "gateway 连接中 | port: {{port}}",
-    "gatewayLineDisconnected": "gateway 未连接 | port: {{port}}",
+    "gatewayLineConnected": "网关已连接 | 端口：{{port}} | 进程：{{pid}}",
+    "gatewayLineConnecting": "网关连接中 | 端口：{{port}}",
+    "gatewayLineDisconnected": "网关未连接 | 端口：{{port}}",
     "usageHint": "用量请在对话与设置中查看"
   }
 }

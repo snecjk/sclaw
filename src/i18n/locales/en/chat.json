@@ -70,7 +70,12 @@
         "moveUp": "Move up",
         "moveDown": "Move down",
         "fileCount": "{{count}} file(s)",
-        "queueFull": "Queue is full (max {{max}})"
-    },
-    "splitting": "Analyzing question..."
+    "queueFull": "Queue is full (max {{max}})"
+  },
+    "splitting": "Analyzing question...",
+    "systemNotice": {
+        "label": "System notice",
+        "expand": "Expand",
+        "collapse": "Collapse"
+    }
 }

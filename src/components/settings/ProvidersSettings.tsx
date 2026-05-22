@@ -18,6 +18,8 @@ import {
   Copy,
   XCircle,
   ChevronDown,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,6 +55,7 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { invokeIpc } from '@/lib/api-client';
 import { useSettingsStore } from '@/stores/settings';
+import { useAuthStore } from '@/stores/auth';
 import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
 
@@ -162,6 +165,7 @@ function getAuthModeLabel(
 export function ProvidersSettings() {
   const { t } = useTranslation('settings');
   const devModeUnlocked = useSettingsStore((state) => state.devModeUnlocked);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const {
     statuses,
     accounts,
@@ -175,6 +179,19 @@ export function ProvidersSettings() {
     setDefaultAccount,
     validateAccountApiKey,
   } = useProviderStore();
+
+  const hasStoProvider = accounts.some((a) => a.vendorId === 'sto');
+
+  const handleRetryStoSync = async () => {
+    try {
+      await hostApiFetch('/api/sto-model-sync', { method: 'POST' });
+      await refreshProviderSnapshot();
+      toast.success('STO 模型同步成功');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error('同步失败', { description: message });
+    }
+  };
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingProvider, setEditingProvider] = useState<string | null>(null);
@@ -263,6 +280,32 @@ export function ProvidersSettings() {
           {t('aiProviders.add')}
         </Button>
       </div>
+
+      {/* STO 模型同步失败提示 */}
+      {!loading && isAuthenticated && !hasStoProvider && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                获取 STO 模型失败
+              </p>
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                远程模型列表为空，可能是网络波动或服务端异常。您可以稍后自动重试，或点击下方按钮手动同步。
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 h-8 border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-900/50"
+                onClick={handleRetryStoSync}
+              >
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                重新同步 STO 模型
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center rounded-md border border-dashed border-border bg-white/50 py-12 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">

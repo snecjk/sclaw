@@ -120,12 +120,13 @@ export function ChatToolbar() {
 
   const handleModelSwitch = async (modelId: string) => {
     if (!currentAgentId || modelId === selectedModelId) return;
+    const opt = modelOptions.find((o) => o.modelId === modelId);
     setSelectedModelId(modelId); // optimistic
     setModelSaving(true);
     try {
       await hostApiFetch(`/api/agents/${encodeURIComponent(currentAgentId)}/model`, {
         method: 'PUT',
-        body: JSON.stringify({ model: modelId }),
+        body: JSON.stringify({ model: modelId, accountId: opt?.accountId }),
       });
       // Refresh agents store so other pages (e.g. Agent detail model tab) reflect the change
       void fetchAgents();

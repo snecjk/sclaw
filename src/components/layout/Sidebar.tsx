@@ -10,7 +10,6 @@ import {
   Plus,
   Trash2,
   LogOut,
-  MessageSquare,
   ChevronLeft,
   ChevronRight,
   Globe,
@@ -49,7 +48,9 @@ import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
 import logoSvg from '@/assets/logo.svg';
 import packageJson from '../../../package.json';
 import { taskDetailPath, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
-import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
+import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
+import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
@@ -62,7 +63,6 @@ type SessionBucketKey =
   | 'withinMonth'
   | 'older';
 
-let didBootstrapFreshChat = false;
 
 const INITIAL_NOW_MS = Date.now();
 
@@ -369,16 +369,22 @@ function SidebarNavLink({
   icon,
   label,
   collapsed,
+  onClick,
+  isActiveOverride,
 }: {
   to: string;
   end?: boolean;
   icon: ReactNode;
   label: string;
   collapsed: boolean;
+  onClick?: () => void;
+  isActiveOverride?: boolean;
 }) {
   const { pathname } = useLocation();
   // 使用路径匹配生成 className（字符串），避免 TooltipTrigger asChild 与 NavLink 的函数 className 合并时被破坏，导致选中态（橙底白图标）不生效。
-  const isActive = matchPath({ path: to, end: Boolean(end), caseSensitive: false }, pathname) != null;
+  const isActive = isActiveOverride !== undefined
+    ? isActiveOverride
+    : matchPath({ path: to, end: Boolean(end), caseSensitive: false }, pathname) != null;
 
   const linkClassName = cn(
     'relative flex items-center font-medium leading-none transition-[color,background-color,border-radius,filter] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
@@ -399,7 +405,7 @@ function SidebarNavLink({
   );
 
   const link = (
-    <NavLink to={to} end={end} className={linkClassName}>
+    <NavLink to={to} end={end} className={linkClassName} onClick={onClick}>
       <span className="flex shrink-0 items-center justify-center">{icon}</span>
       {!collapsed ? <span className="min-w-0 flex-1 truncate">{label}</span> : null}
     </NavLink>
@@ -451,7 +457,7 @@ export function Sidebar() {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const isOnChat = location.pathname.startsWith('/chat');
+  const isOnHome = location.pathname === '/';
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [taskListSectionOpen, setTaskListSectionOpen] = useState(true);
@@ -476,28 +482,33 @@ export function Sidebar() {
       await loadSessions();
       if (cancelled) return;
 
-      if (!isOnChat) {
-        const hasExistingMessages = useChatStore.getState().messages.length > 0;
-        await loadHistory(hasExistingMessages);
-        return;
-      }
-
-      if (!didBootstrapFreshChat) {
-        didBootstrapFreshChat = true;
-        if (useChatStore.getState().sessions.length === 0) {
-          newSession();
-        }
-        await loadHistory(false);
-        return;
-      }
-
       const hasExistingMessages = useChatStore.getState().messages.length > 0;
       await loadHistory(hasExistingMessages);
+
+      // 刷新后如果在首页路由，重置到首页初始状态，避免同时高亮首页和会话项
+      if (window.location.pathname === '/') {
+        const state = useChatStore.getState();
+        if (state.currentSessionKey !== DEFAULT_SESSION_KEY || state.messages.length > 0) {
+          useChatStore.setState({
+            currentSessionKey: DEFAULT_SESSION_KEY,
+            currentAgentId: 'main',
+            messages: [],
+            streamingText: '',
+            streamingMessage: null,
+            streamingTools: [],
+            activeRunId: null,
+            error: null,
+            pendingFinal: false,
+            lastUserMessageAt: null,
+            pendingToolImages: [],
+          });
+        }
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [isGatewayRunning, isOnChat, loadHistory, loadSessions, newSession]);
+  }, [isGatewayRunning, loadHistory, loadSessions]);
 
   const getSessionLabel = useCallback(
     (key: string, displayName?: string, label?: string) => {
@@ -547,7 +558,7 @@ export function Sidebar() {
   >;
 
   const visibleSessions = useMemo(
-    () => sessions.filter((session) => !isHiddenStoTaskSubitemChatSessionKey(session.key)),
+    () => sessions.filter((session) => !isSidebarHiddenChatSessionKey(session.key)),
     [sessions],
   );
 
@@ -581,17 +592,15 @@ export function Sidebar() {
       label: string;
     }> = [
       { to: '/', end: true, icon: <Home className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.home') },
-      { to: '/chat', end: true, icon: <MessageSquare className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.chat') },
       { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
       { to: '/skills', icon: <Puzzle className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
     ];
     return all.filter((item) => {
-      if (item.to === '/chat' && !sidebarVis.primaryChat) return false;
       if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
       return true;
     });
-  }, [sidebarVis.primaryChat, sidebarVis.primaryMyData, t]);
+  }, [sidebarVis.primaryMyData, t]);
 
   const workspaceNav = [
     { to: '/agents', icon: <Bot className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.agents') },
@@ -652,16 +661,46 @@ export function Sidebar() {
         {/* 固定区：避免下方 flex-1 会话占位在滚动叠层时盖住任务子链（如第二条日期药丸） */}
         <div className="relative z-10 flex shrink-0 flex-col gap-1">
         <div className={cn('flex flex-col gap-1', sidebarCollapsed && 'mt-2')}>
-          {primaryNav.map((item) => (
-            <SidebarNavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              icon={item.icon}
-              label={item.label}
-              collapsed={sidebarCollapsed}
-            />
-          ))}
+{primaryNav.map((item) => {
+  // 当有选中非默认会话时，首页不高亮，避免与会话列表项同时高亮
+  const shouldDimHome = isOnHome && currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY;
+  const homeIsActiveOverride = item.to === '/' && shouldDimHome ? false : undefined;
+  
+  // 点击首页时，切换到默认会话并清空消息，让首页显示初始内容
+  const handleHomeClick = item.to === '/'
+    ? () => {
+        const { messages, currentSessionKey: currKey } = useChatStore.getState();
+        if (messages.length > 0 || currKey !== DEFAULT_SESSION_KEY) {
+          useChatStore.setState({
+            currentSessionKey: DEFAULT_SESSION_KEY,
+            currentAgentId: 'main',
+            messages: [],
+            streamingText: '',
+            streamingMessage: null,
+            streamingTools: [],
+            activeRunId: null,
+            error: null,
+            pendingFinal: false,
+            lastUserMessageAt: null,
+            pendingToolImages: [],
+          });
+        }
+      }
+    : undefined;
+  
+  return (
+    <SidebarNavLink
+      key={item.to}
+      to={item.to}
+      end={item.end}
+      icon={item.icon}
+      label={item.label}
+      collapsed={sidebarCollapsed}
+      onClick={item.to === '/' ? handleHomeClick : undefined}
+      isActiveOverride={homeIsActiveOverride}
+    />
+  );
+})}
         </div>
 
         {!sidebarCollapsed && crmWeekReportSurfaceAllowed ? (
@@ -728,7 +767,7 @@ export function Sidebar() {
               onClick={() => {
                 const { messages } = useChatStore.getState();
                 if (messages.length > 0) newSession();
-                navigate('/chat');
+                navigateToMainChatHome(navigate, location.pathname);
               }}
               className="mx-1 mt-1 flex items-center gap-2 rounded-xl border border-[rgba(255,140,0,0.35)] bg-[var(--sto-accent-soft)] px-3 py-2.5 text-left text-[13px] font-semibold text-[var(--sto-accent)] shadow-sm transition-colors hover:opacity-95 dark:bg-amber-950/35"
             >
@@ -745,7 +784,7 @@ export function Sidebar() {
                   onClick={() => {
                     const { messages } = useChatStore.getState();
                     if (messages.length > 0) newSession();
-                    navigate('/chat');
+                    navigateToMainChatHome(navigate, location.pathname);
                   }}
                   className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card"
                 >
@@ -771,7 +810,7 @@ export function Sidebar() {
               {sessionsOrderedForCollapse.map((s) => {
                 const full = getSessionLabel(s.key, s.displayName, s.label);
                 const short = collapsedEntryLabel(full);
-                const active = isOnChat && currentSessionKey === s.key;
+                const active = isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
                 return (
                   <Tooltip key={s.key} delayDuration={200}>
                     <TooltipTrigger asChild>
@@ -779,7 +818,7 @@ export function Sidebar() {
                         type="button"
                         onClick={() => {
                           switchSession(s.key);
-                          navigate('/chat');
+                          navigateToMainChatHome(navigate, location.pathname);
                         }}
                         className={cn(
                           'mx-auto flex min-h-0 min-w-0 items-center justify-center rounded-[8px] font-medium leading-none transition-colors',
@@ -862,12 +901,12 @@ export function Sidebar() {
                               type="button"
                               onClick={() => {
                                 switchSession(s.key);
-                                navigate('/chat');
+                                navigateToMainChatHome(navigate, location.pathname);
                               }}
                               title={sessionLabel}
                               className={cn(
                                 'w-full rounded-[8px] px-[10px] py-[6px] pr-9 text-left text-[13px] transition-colors',
-                                isOnChat && currentSessionKey === s.key
+isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY
                                   ? 'bg-[#E5E6EB] font-medium text-foreground dark:bg-white/[0.12]'
                                   : 'text-foreground/80 hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
                               )}
@@ -1073,7 +1112,7 @@ export function Sidebar() {
         onConfirm={async () => {
           if (!sessionToDelete) return;
           await deleteSession(sessionToDelete.key);
-          if (currentSessionKey === sessionToDelete.key) navigate('/chat');
+          if (currentSessionKey === sessionToDelete.key) navigateToMainChatHome(navigate, location.pathname);
           setSessionToDelete(null);
         }}
         onCancel={() => setSessionToDelete(null)}
@@ -1091,7 +1130,7 @@ export function Sidebar() {
           const { sessionKey, taskId, entryId } = subitemToDelete;
           await deleteSession(sessionKey);
           removeSubitem(taskId, entryId);
-          if (currentSessionKey === sessionKey) navigate('/chat');
+          if (currentSessionKey === sessionKey) navigateToMainChatHome(navigate, location.pathname);
           setSubitemToDelete(null);
         }}
         onCancel={() => setSubitemToDelete(null)}

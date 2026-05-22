@@ -459,7 +459,7 @@ async function initialize(): Promise<void> {
   // Create sprite window (hidden by default, toggled via tray)
   spriteWindowMod.createSpriteWindow();
 
-  // Create float icon window (visible by default, acts as sprite launcher)
+  // Create float icon window (hidden by default, toggled via tray)
   floatIconMod.createFloatIconWindow();
 
   // Create system tray (with sprite and float icon toggle support)

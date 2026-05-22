@@ -21,6 +21,8 @@ const ALLOWED_WORKSPACE_FILES = new Set([
 ]);
 import { deleteChannelAccountConfig } from '../../utils/channel-config';
 import { syncAllProviderAuthToRuntime } from '../../services/providers/provider-runtime-sync';
+import { getOpenClawProviderKey } from '../../services/providers/provider-runtime-sync';
+import { getProviderAccount } from '../../services/providers/provider-store';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -311,13 +313,27 @@ export async function handleAgentRoutes(
     if (parts.length === 2 && parts[1] === 'model') {
       const agentId = decodeURIComponent(parts[0]);
       try {
-        const body = await parseJsonBody<{ model: string }>(req);
-        const model = (body.model ?? '').trim();
-        if (!model) {
+        const body = await parseJsonBody<{ model: string; accountId?: string }>(req);
+        const rawModel = (body.model ?? '').trim();
+        if (!rawModel) {
           sendJson(res, 400, { success: false, error: 'model is required' });
           return true;
         }
-        const snapshot = await updateAgentModel(agentId, model);
+
+        // Normalize to qualified ref (e.g. "sto/qwen3.5-plus") so OpenClaw Gateway
+        // resolves the model to the correct provider instead of guessing.
+        let qualifiedModel = rawModel;
+        if (body.accountId) {
+          const account = await getProviderAccount(body.accountId);
+          if (account) {
+            const providerKey = getOpenClawProviderKey(account.vendorId, account.id);
+            if (!rawModel.startsWith(`${providerKey}/`)) {
+              qualifiedModel = `${providerKey}/${rawModel}`;
+            }
+          }
+        }
+
+        const snapshot = await updateAgentModel(agentId, qualifiedModel);
         sendJson(res, 200, { success: true, snapshot });
       } catch (err) {
         sendJson(res, 500, { success: false, error: String(err) });

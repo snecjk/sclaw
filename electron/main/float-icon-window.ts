@@ -26,7 +26,7 @@ async function getStore() {
     floatIconStore = new Store<{ floatIconState: FloatIconState }>({
       name: 'float-icon-state',
       defaults: {
-        floatIconState: { visible: true },
+        floatIconState: { visible: false },
       },
     });
   }

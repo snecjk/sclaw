@@ -20,6 +20,16 @@ export function isHiddenStoTaskSubitemChatSessionKey(sessionKey: string): boolea
   return isStoTaskSessionKey(sessionKey) || sessionKey.startsWith('agent:main:session-sto-');
 }
 
+/** Per-agent main session (`agent:<id>:main`) — used internally, not listed in the chat sidebar. */
+export function isMainAgentChatSessionKey(sessionKey: string): boolean {
+  return sessionKey.endsWith(':main');
+}
+
+/** Sessions that must not appear as rows in the chat sidebar session list. */
+export function isSidebarHiddenChatSessionKey(sessionKey: string): boolean {
+  return isHiddenStoTaskSubitemChatSessionKey(sessionKey) || isMainAgentChatSessionKey(sessionKey);
+}
+
 /** True when user left a task subitem route but the store still points at its hidden session. */
 export function shouldRestoreMainSessionLeavingTaskSubitem(
   pathname: string,

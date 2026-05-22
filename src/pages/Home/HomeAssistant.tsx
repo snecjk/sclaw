@@ -9,7 +9,7 @@ import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 
 /**
  * 省区首页底部助手：与聊天页相同的 ChatInput（上传、粘贴图片、拖放、排队、停止），
- * 发送前 newSession，行为与 HomeAgentHubSurface 一致。
+ * 首次从首页默认态发言会创建会话，后续追问续写当前会话，行为与 HomeAgentHubSurface 一致。
  */
 export function HomeAssistant({ className }: { className?: string }) {
   const { t } = useTranslation('home');
