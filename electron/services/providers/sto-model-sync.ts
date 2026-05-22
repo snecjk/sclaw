@@ -176,7 +176,8 @@ export class StoModelSyncService {
     const remoteModelIds = remoteModels.map((m) => m.id);
 
     if (remoteModelIds.length === 0) {
-      logger.info('[sto-sync] Remote model list is empty, skipping sync');
+      logger.warn('[sto-sync] Remote model list is empty');
+      result.error = 'empty-model-list';
       return result;
     }
 
