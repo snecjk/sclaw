@@ -2,7 +2,9 @@
 name: long-output-saver
 description: 强制将长代码、SQL、配置文件等输出写入本地文件，避免聊天消息因长度限制被截断。
 metadata:
-  { "openclaw": { "emoji": "📄", "autoEnable": true } }
+  openclaw:
+    emoji: "📄"
+    autoEnable: true
 ---
 
 # Long Output Saver

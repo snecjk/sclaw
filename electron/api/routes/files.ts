@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { dialog, nativeImage } from 'electron';
 import crypto from 'node:crypto';
 import { extname, join } from 'node:path';
-import { getOpenClawConfigDir } from '../../utils/paths';
+import { getOpenClawConfigDir, expandPath } from '../../utils/paths';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -54,6 +54,14 @@ function mimeToExt(mimeType: string): string {
 }
 
 const OUTBOUND_DIR = join(getOpenClawConfigDir(), 'media', 'outbound');
+
+/** Resolve a relative path starting with ./ to the main agent workspace. */
+function resolveWorkspaceFilePath(filePath: string): string {
+  if (filePath.startsWith('./')) {
+    return expandPath(join(getOpenClawConfigDir(), 'workspace', filePath));
+  }
+  return filePath;
+}
 
 async function generateImagePreview(filePath: string, mimeType: string): Promise<string | null> {
   try {
@@ -162,12 +170,13 @@ export async function handleFileRoutes(
     try {
       const body = await parseJsonBody<{ filePath: string; encoding?: 'utf-8' | 'base64' }>(req);
       const fsP = await import('node:fs/promises');
+      const filePath = resolveWorkspaceFilePath(body.filePath);
       const encoding = body.encoding || 'utf-8';
       if (encoding === 'base64') {
-        const buf = await fsP.readFile(body.filePath);
+        const buf = await fsP.readFile(filePath);
         sendJson(res, 200, { content: buf.toString('base64'), encoding: 'base64' });
       } else {
-        const content = await fsP.readFile(body.filePath, 'utf-8');
+        const content = await fsP.readFile(filePath, 'utf-8');
         sendJson(res, 200, { content, encoding: 'utf-8' });
       }
     } catch (error) {
@@ -178,11 +187,12 @@ export async function handleFileRoutes(
 
   if (url.pathname === '/api/files/serve' && req.method === 'GET') {
     try {
-      const filePath = url.searchParams.get('path');
-      if (!filePath) {
+      const rawPath = url.searchParams.get('path');
+      if (!rawPath) {
         sendJson(res, 400, { success: false, error: 'Missing path parameter' });
         return true;
       }
+      const filePath = resolveWorkspaceFilePath(rawPath);
       const fsP = await import('node:fs/promises');
       const buf = await fsP.readFile(filePath);
       const ext = extname(filePath).toLowerCase();

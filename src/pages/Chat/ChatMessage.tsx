@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { assistantChatCardBg, assistantChatCardBgStreaming } from '@/lib/surfaces';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
-import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs } from './message-utils';
+import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS } from './message-utils';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
 
 interface ChatMessageProps {
@@ -74,10 +74,10 @@ export const ChatMessage = memo(function ChatMessage({
   const attachedFiles = message._attachedFiles || [];
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
 
-  // Extract previewable refs from message text (only HTML files — tied to PPT/report generation)
+  // Extract previewable refs from message text
   const extractedRefs = extractPreviewableRefs(text)
     .filter((ref) => !attachedFiles.some((f) => f.filePath === ref.filePath))
-    .filter((ref) => ref.mimeType === 'text/html');
+    .filter((ref) => isPreviewableFile(ref));
 
   // All attached files should render as cards (images as thumbnails, everything else as FileCard)
   const hasRenderableFiles = attachedFiles.length > 0;
@@ -512,6 +512,17 @@ function MessageBubble({
                     png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
                     gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp',
                     md: 'text/markdown',
+                    sql: 'text/plain', py: 'text/plain', js: 'text/plain', ts: 'text/plain',
+                    jsx: 'text/plain', tsx: 'text/plain', java: 'text/plain', go: 'text/plain',
+                    rs: 'text/plain', cpp: 'text/plain', c: 'text/plain', h: 'text/plain',
+                    cs: 'text/plain', rb: 'text/plain', php: 'text/plain', swift: 'text/plain',
+                    kt: 'text/plain', scala: 'text/plain', r: 'text/plain', m: 'text/plain', mm: 'text/plain',
+                    json: 'application/json', yaml: 'text/plain', yml: 'text/plain', xml: 'text/plain',
+                    toml: 'text/plain', ini: 'text/plain', conf: 'text/plain', properties: 'text/plain',
+                    env: 'text/plain', txt: 'text/plain', csv: 'text/csv', tsv: 'text/plain',
+                    log: 'text/plain', css: 'text/plain', scss: 'text/plain', less: 'text/plain',
+                    sh: 'text/plain', bash: 'text/plain', zsh: 'text/plain', fish: 'text/plain',
+                    ps1: 'text/plain', bat: 'text/plain', cmd: 'text/plain',
                   };
                   return (
                     <button
@@ -593,9 +604,9 @@ function preprocessTextForPreviewLinks(text: string): string {
     '[$1](preview://$1)',
   );
 
-  // Replace absolute file paths (Unix / Windows — only HTML files, tied to PPT/report generation)
+  // Replace file paths (relative ./, absolute /, and Windows C:\)
   text = text.replace(
-    /(\/(?:[^/\s]+\/)*[^/\s]+\.html?|[A-Za-z]:[\\/](?:[^/\s]+[\\/])*[^/\s]+\.html?)/g,
+    new RegExp(`(\\./(?:[^/\\s]+\\/)*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\s]+\\/)*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\s]+[\\\\/])*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`, 'g'),
     '[$1](preview://$1)',
   );
 
@@ -672,7 +683,7 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
     }
   }, [file, onPreviewFile]);
 
-  const isPreviewable = file.mimeType === 'text/html';
+  const isPreviewable = isPreviewableFile(file);
 
   return (
     <div

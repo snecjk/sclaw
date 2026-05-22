@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowDown, Loader2 } from 'lucide-react';
+import { AlertCircle, ArrowDown, Loader2, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
@@ -13,6 +13,8 @@ import { ChatToolbar } from '@/pages/Chat/ChatToolbar';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { cn } from '@/lib/utils';
+import { FilePreviewViewer } from '@/components/file-preview/FilePreviewViewer';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 
 /**
  * Main-agent conversation thread on the home route (replaces the old `/chat` welcome + messages UI).
@@ -96,8 +98,10 @@ export function HomeMainConversation({ className }: { className?: string }) {
     [scrollToBottom],
   );
 
-  const handlePreviewFile = useCallback((_file: AttachedFileMeta) => {
-    // Preview side panel is not mounted on home; attachments remain inline in messages.
+  const [previewFile, setPreviewFile] = useState<AttachedFileMeta | null>(null);
+
+  const handlePreviewFile = useCallback((file: AttachedFileMeta) => {
+    setPreviewFile(file);
   }, []);
 
   const showLoadingPlaceholder = useMemo(
@@ -203,6 +207,32 @@ export function HomeMainConversation({ className }: { className?: string }) {
       {minLoading && !sending ? (
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-white/10 backdrop-blur-[2px] dark:bg-black/10" />
       ) : null}
+
+      {/* File Preview Sheet */}
+      <Sheet open={!!previewFile} onOpenChange={(open) => { if (!open) setPreviewFile(null); }}>
+        <SheetContent side="right" className="w-[600px] sm:max-w-[600px] p-0 flex flex-col">
+          <div className="flex shrink-0 items-center justify-between border-b border-border/40 px-4 py-3">
+            <span className="text-sm font-medium truncate">{previewFile?.fileName}</span>
+            <button
+              type="button"
+              onClick={() => setPreviewFile(null)}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          {previewFile && (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden" data-preview-viewer>
+              <FilePreviewViewer
+                filePath={previewFile.filePath!}
+                fileName={previewFile.fileName}
+                mimeType={previewFile.mimeType}
+                className="h-full w-full"
+              />
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

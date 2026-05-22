@@ -310,6 +310,10 @@ function extToMimeType(ext: string): string {
   return map[ext] || 'application/octet-stream';
 }
 
+/** Shared extension list for previewable local file paths (used by extractPreviewableRefs and preprocessTextForPreviewLinks). */
+export const PREVIEWABLE_FILE_EXTS =
+  'html?|sql|py|js|ts|jsx|tsx|java|go|rs|cpp|c|h|cs|rb|php|swift|kt|scala|r|m|mm|json|yaml|yml|xml|toml|ini|conf|properties|env|md|txt|csv|tsv|log|css|scss|less|sh|bash|zsh|fish|ps1|bat|cmd|pdf';
+
 /**
  * Extract previewable local file paths and localhost URLs from plain text.
  * Matches absolute paths like /Users/.../file.html and localhost URLs like http://localhost:8080/path.
@@ -336,8 +340,11 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
     addIfNotImage(url, fileName, ext);
   }
 
-  // Absolute file paths (Unix / Windows) — support code, config, doc, and web files
-  const pathRegex = /(\/(?:[^/\s]+\/)*[^/\s]+\.(?:html?|sql|py|js|ts|jsx|tsx|java|go|rs|cpp|c|h|cs|rb|php|swift|kt|scala|r|m|mm|json|yaml|yml|xml|toml|ini|conf|properties|env|md|txt|csv|tsv|log|css|scss|less|sh|bash|zsh|fish|ps1|bat|cmd)|[A-Za-z]:[\\/](?:[^/\s]+[\\/])*[^/\s]+\.(?:html?|sql|py|js|ts|jsx|tsx|java|go|rs|cpp|c|h|cs|rb|php|swift|kt|scala|r|m|mm|json|yaml|yml|xml|toml|ini|conf|properties|env|md|txt|csv|tsv|log|css|scss|less|sh|bash|zsh|fish|ps1|bat|cmd))/gi;
+  // File paths (relative ./, absolute /, and Windows C:\) — support code, config, doc, and web files
+  const pathRegex = new RegExp(
+    `(\\./(?:[^/\\s]+\\/)*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\s]+\\/)*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\s]+[\\\\/])*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`,
+    'gi',
+  );
   while ((match = pathRegex.exec(text)) !== null) {
     const path = match[1].replace(/\\/g, '/');
     const fileName = path.split('/').pop() || '';
