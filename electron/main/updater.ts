@@ -628,6 +628,11 @@ export class AppUpdater extends EventEmitter {
   }
 
   async downloadUpdate(): Promise<void> {
+    // 同步 generation：downloadUpdate() 可能在 checkForUpdates() 超时后被单独调用，
+    // 此时 _checkGeneration 已被递增，若不同步 _activeGeneration，
+    // 后续 download-progress / update-downloaded / error 事件会被误判为 stale 而忽略。
+    this._activeGeneration = this._checkGeneration;
+
     const tv = (this.status.info as UpdateInfo | undefined)?.version;
     if (!this._downloadStartReported) {
       void getSsoEnvironment().then((env) => {
