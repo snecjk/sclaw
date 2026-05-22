@@ -110,7 +110,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
   );
 
   return (
-    <div className={cn('relative flex min-h-0 flex-1 flex-col', className)}>
+    <div className={cn('-mt-4 relative flex min-h-0 flex-1 flex-col', className)}>
       {/* Toolbar */}
       <div className="relative z-10 flex shrink-0 items-center justify-between px-4 py-2 sm:px-6">
         <ChatToolbar />

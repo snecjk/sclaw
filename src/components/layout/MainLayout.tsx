@@ -27,7 +27,7 @@ export function MainLayout() {
       {/* Below the title bar: sidebar + main（主区画布对齐归档设计稿） */}
       <div className="flex min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-hidden">
         <Sidebar />
-        <main className="min-h-0 min-w-0 flex-1 overflow-auto bg-[var(--sto-page-bg)] px-[var(--sto-content-pad-x)] dark:bg-background">
+        <main className="min-h-0 min-w-0 flex-1 overflow-auto bg-[var(--sto-page-bg)] px-[var(--sto-content-pad-x)] py-5 dark:bg-background">
           <Outlet />
         </main>
       </div>
