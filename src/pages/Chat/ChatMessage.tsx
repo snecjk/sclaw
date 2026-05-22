@@ -501,7 +501,8 @@ function MessageBubble({
                   </pre>
                 );
               },
-              a({ href, children }) {
+              a({ href: url, children }) {
+                const href: any = url || children;
                 if (href?.startsWith('preview://') && onPreviewFile) {
                   const target = href.slice('preview://'.length);
                   const fileName = target.split('/').pop() || '';
@@ -539,6 +540,7 @@ function MessageBubble({
                     </button>
                   );
                 }
+                console.log('href222', url, children);
                 return (
                   <a href={href} target="_blank" rel="noopener noreferrer" className="text-link hover:underline break-words break-all">
                     {children}
@@ -597,6 +599,10 @@ function preprocessTextForPreviewLinks(text: string): string {
     inlineCodes.push(match);
     return `__INLINE_CODE_${inlineCodes.length - 1}__`;
   });
+
+  // Remove [media attached: ...] blocks so their inner paths don't get mangled
+  // and the raw metadata isn't shown in the message bubble.
+  text = text.replace(/\s*\[media attached:[^\]]*\]/g, '');
 
   // Replace localhost URLs (previewable in side panel)
   text = text.replace(
