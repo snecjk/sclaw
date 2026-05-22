@@ -9,6 +9,7 @@ import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
+import { ChatToolbar } from '@/pages/Chat/ChatToolbar';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { cn } from '@/lib/utils';
@@ -106,6 +107,10 @@ export function HomeMainConversation({ className }: { className?: string }) {
 
   return (
     <div className={cn('relative flex min-h-0 flex-1 flex-col', className)}>
+      {/* Toolbar */}
+      <div className="relative z-10 flex shrink-0 items-center justify-between px-4 py-2 sm:px-6">
+        <ChatToolbar />
+      </div>
       <div
         ref={scrollRef}
         className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-4 sm:px-6 [scrollbar-gutter:stable]"
