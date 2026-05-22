@@ -1,19 +1,20 @@
 ---
 name: sai-cli
 description: >-
-  sai-cli Agent CLI 命令行工具使用指南。sai-cli 是面向申通业务系统的通用封装，
-  用于操作财务、网络、经营、政策、运营、运单、客户等业务域。当用户询问
-  "sai命令"、"如何使用sai"、"sai怎么用"、"sai-cli login"、"sai-cli help"、
-  "sai-cli discover"、"sai-cli 登录"、"sai-cli 查询"、"sai-cli CLI"、
-  "sai-cli version"、"sai-cli refresh-cache"、命令行工具使用方法，或遇到
-  AUTH_REQUIRED、AUTH_TOKEN_EXPIRED、COMMAND_NOT_FOUND、EXECUTION_FAILED、
-  CONFIG_INVALID、COMMAND_DISABLED 等 sai-cli 错误码时触发。
+  用于查询处理申通各业务系统数据与能力的企业技能入口，覆盖财务、网络、经营、
+  政策、运营、运单、客户等业务域，支持数据查询、数据操作与命令发现。
 version: 0.4.0
 ---
 
-# sai-cli Agent CLI 使用指南
+# 通用业务数据查询、操作
 
-sai-cli 是面向申通业务系统的通用封装，用来操作申通业务系统中的财务、网络、经营、政策、运营、运单、客户等业务域能力。它同时面向 agent 和人工终端使用，并通过远程注册中心提供动态业务命令的发现与执行能力。所有响应均为结构化 JSON 输出。
+这个技能的核心用途不是讲解 CLI 本身，而是作为 Agent 访问申通各业务系统数据与操作能力的统一入口。它覆盖财务、网络、经营、政策、运营、运单、客户等业务域，通过远程注册中心动态发现并执行对应命令，所有响应均为结构化 JSON 输出。
+
+底层执行载体是 `sai-cli`，因此本文档同时说明 Agent 应如何完成登录、发现命令、补齐参数并执行业务操作。
+
+## 技能定位
+
+当用户想查询申通业务数据、调用申通内部业务能力、定位某个业务系统里的信息，或以自然语言描述一个申通业务诉求时，应优先使用本技能，而不是把它理解为单纯的命令行帮助文档。
 
 ## 可执行文件位置
 
