@@ -475,7 +475,6 @@ export function Chat() {
         </div>
       )}
       </div>
-
       {/* Resizer */}
       {hasPreviewableFiles && showPreviewPanel && (
         <div

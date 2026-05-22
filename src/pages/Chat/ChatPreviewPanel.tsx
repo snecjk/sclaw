@@ -17,6 +17,7 @@ import {
   Presentation,
   Table2,
   MonitorPlay,
+  Eye,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -61,7 +62,7 @@ export function ChatPreviewPanel({
   const [refreshKey, setRefreshKey] = useState(0);
 
   const activeFile = useMemo(
-    () => files.find((f) => f.filePath === activeFilePath) || files[0] || null,
+    () => files.find((f) => f.filePath === activeFilePath) || null,
     [files, activeFilePath],
   );
 
@@ -240,6 +241,12 @@ export function ChatPreviewPanel({
             mimeType={activeFile.mimeType}
             className="h-full w-full"
           />
+        ) : activeTab === 'product' ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
+            <Eye className="h-8 w-8 opacity-30" />
+            <p>点击消息中的文件链接进行预览</p>
+            <p className="text-xs opacity-50">或从上方下拉菜单选择文件</p>
+          </div>
         ) : (
           <WorkflowPlaceholder />
         )}
