@@ -1009,9 +1009,49 @@ export class AppUpdater extends EventEmitter {
   }
 
   /**
-   * 启动时调用：检测是否有上一次安装遗留的 .app.old-* 备份。
-   * 若有，且当前进程的版本号匹配 marker 记录的 installedVersion（说明新版本启动成功），
-   * 则延迟 BACKUP_CLEANUP_DELAY_MS 后清理备份。
+   * 扫描 /Applications/ 下所有匹配 "<AppName>.app.old-<timestamp>" 模式的目录，
+   * 立刻清理掉**孤立**的（即不在当前 marker 记录范围内的）。
+   *
+   * 场景：连续多次更新、上次清理被中断、跨机器拷贝等，可能在 /Applications/ 留下
+   * 多个 .app.old-* 残留。marker 只记录最近一次的备份，其他需要主动扫描清理。
+   *
+   * 当前 marker 记录的那一个**不在这里删**，由 cleanupPendingBackup 走 60s 延迟流程。
+   */
+  private async cleanupOrphanedBackups(protectedPath: string | null): Promise<void> {
+    try {
+      // 推导出当前 app 所在目录和 basename："/Applications" + "STO Claw"
+      const currentAppPath = path.dirname(path.dirname(path.dirname(process.execPath)));
+      if (!currentAppPath.endsWith('.app')) {
+        logger.warn(`[Updater] cleanupOrphanedBackups: unexpected app path ${currentAppPath}`);
+        return;
+      }
+      const appDir = path.dirname(currentAppPath);
+      const appBaseName = path.basename(currentAppPath, '.app');
+      const escapedName = appBaseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp(`^${escapedName}\\.app\\.old-\\d+$`);
+
+      const entries = await fsp.readdir(appDir);
+      for (const entry of entries) {
+        if (!pattern.test(entry)) continue;
+        const fullPath = path.join(appDir, entry);
+        if (protectedPath && fullPath === protectedPath) {
+          // 这一个是 marker 记录的"刚装好的备份"，留给 60s 延迟清理流程处理
+          continue;
+        }
+        logger.info(`[Updater] cleanupOrphanedBackups: removing orphan backup ${fullPath}`);
+        await fsp.rm(fullPath, { recursive: true, force: true }).catch((e) => {
+          logger.warn(`[Updater] cleanupOrphanedBackups: failed to remove ${fullPath}:`, e);
+        });
+      }
+    } catch (e) {
+      logger.warn('[Updater] cleanupOrphanedBackups: scan failed', e);
+    }
+  }
+
+  /**
+   * 启动时调用：
+   *  1) 扫描并立刻清理 /Applications/ 下**所有孤立**的 .app.old-* 残留
+   *  2) 对 marker 记录的"刚安装的备份"，延迟 BACKUP_CLEANUP_DELAY_MS 清理（给新版本试运行窗口）
    *
    * 如果用户已经手动 rename 备份回原位置（回滚），则 app.getVersion() 会变回旧版本，
    * marker 校验会失败，备份不会被清理，但 marker 会被删除（避免反复检查）。
@@ -1019,6 +1059,10 @@ export class AppUpdater extends EventEmitter {
   async cleanupPendingBackup(): Promise<void> {
     if (process.platform !== 'darwin') return;
     const marker = await this.readBackupMarker();
+
+    // 先把孤立备份立刻清掉（marker 记录的那个会被保护，不会误删）
+    await this.cleanupOrphanedBackups(marker?.backupPath ?? null);
+
     if (!marker) return;
 
     const currentVersion = app.getVersion();
