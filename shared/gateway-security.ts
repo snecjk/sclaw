@@ -11,6 +11,9 @@ export const BLOCKED_RPC_METHODS: RegExp[] = [
   /^openclaw\./i,
   // 系统级危险操作
   /^system\.(update|upgrade|install|exec|shell|run)/i,
+  // Shell / 进程执行类（可被用于间接执行升级命令）
+  /^shell\./i,
+  /^process\.(spawn|exec|run)/i,
   // CLI 工具升级
   /^cli\.(update|upgrade|install)/i,
   /^sai\.(update|upgrade|install)/i,

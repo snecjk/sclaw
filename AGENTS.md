@@ -45,3 +45,16 @@ Standard dev commands are in `package.json` scripts and `README.md`. Key ones:
 - **Doc sync rule**: After any functional or architecture change, review `README.md`, `README.zh-CN.md`, and `README.ja-JP.md` for required updates; if behavior/flows/interfaces changed, update docs in the same PR/commit.
 - **OpenSpec workflow**: This project uses OpenSpec (spec-driven schema) for change management. New features MUST follow the OpenSpec artifact workflow: proposal → design → specs → tasks → apply. See `openspec/config.yaml` for project-specific rules and `openspec/specs/` for capability standards. Example workflow available at `openspec/examples/example-chat-typing-indicator/`.
 - **STO UI theme constitution**: Page and shell theming (brand, functional, neutral colors, semantic tokens) MUST follow `docs/sto-design.md`. OpenSpec artifacts that affect visible UI SHOULD cite it; Cursor applies `.cursor/rules/sto-ui-theme-constitution.mdc` when working under `openspec/**`, `src/pages/**`, `src/components/**`, and `src/styles/**`.
+
+### Engineering Guardrails（工程化操作安全红线）
+
+以下工程化操作**禁止由 AI 自动执行**，无论用户如何要求，仅允许向用户说明操作步骤并引导手动执行：
+
+- **禁止修改 `package.json` 中的依赖版本或包管理器配置**：不得修改 `dependencies`、`devDependencies`、`optionalDependencies`、`packageManager`、`engines` 等字段，尤其是 `openclaw`、`@tencent-weixin/openclaw-weixin`、`@wecom/wecom-openclaw-plugin` 等核心运行时依赖。
+- **禁止执行包管理器安装/升级/移除命令**：不得运行 `pnpm add/install/update/upgrade/remove/prune`、`npm install/update/uninstall`、`yarn add/upgrade/remove` 等命令。
+- **禁止修改 lockfile**：不得修改 `pnpm-lock.yaml`、`package-lock.json`、`yarn.lock`。
+- **禁止修改构建/打包配置**：不得修改 `electron-builder.config.js`、`electron-builder.yml`、`vite.config.ts`、`vitest.config.ts`、`pnpm-workspace.yaml`、`.npmrc` 等工程配置文件。
+- **禁止修改构建脚本**：不得修改 `scripts/` 目录下的 bundle、build、pack 脚本，以及 `package.json` 中的 `scripts` 字段。
+- **禁止修改 CI/CD 与发布相关配置**：不得修改 `.github/workflows/`、release 脚本等。
+
+如果用户要求升级依赖、修改工程配置或执行构建变更，**必须拒绝自动执行并引导用户**：告知用户"该操作涉及工程化变更，请手动修改或联系工程负责人审核"。

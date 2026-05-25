@@ -262,7 +262,8 @@ function stripCodeBlocks(text: string): string {
 
 /**
  * Extract raw file paths from message text.
- * Detects absolute paths (Unix: / or ~/, Windows: C:\ etc.) ending with common file extensions.
+ * Detects absolute paths (Unix: / or ~/, Windows: C:\ etc.), file:// URLs,
+ * and localhost URLs ending with common file extensions.
  * Handles both image and non-image files, consistent with channel push message behavior.
  * Code blocks are stripped before matching to avoid false positives.
  */
@@ -271,13 +272,31 @@ function extractRawFilePaths(text: string): Array<{ filePath: string; mimeType: 
   const refs: Array<{ filePath: string; mimeType: string }> = [];
   const seen = new Set<string>();
   const exts = 'png|jpe?g|gif|webp|bmp|avif|svg|pdf|docx?|xlsx?|pptx?|txt|csv|md|rtf|epub|zip|tar|gz|rar|7z|mp3|wav|ogg|aac|flac|m4a|mp4|mov|avi|mkv|webm|m4v|html?';
+
+  // file:// URLs — strip the scheme and use the underlying local path
+  // Regex consumes file:// (2 slashes), capture group gets the 3rd slash + path.
+  // For Windows: /C:/Users/... → strip leading / → C:/Users/...
+  // For Unix: /Users/... → keep as-is → /Users/...
+  const fileUrlRegex = /file:\/\/(\/[A-Za-z]:[\\/][^\s)\]"',;<>]+|\/[^\s)\]"',;<>]+)/g;
+  let match;
+  while ((match = fileUrlRegex.exec(cleanText)) !== null) {
+    const captured = match[1];
+    // Strip leading / for Windows paths (/C:/ → C:/), keep for Unix (/Users/ → /Users/)
+    const p = captured.match(/^\/[A-Za-z]:/) ? captured.slice(1) : captured;
+    if (p && !seen.has(p)) {
+      seen.add(p);
+      refs.push({ filePath: p, mimeType: mimeFromExtension(p) });
+    }
+  }
+
   // Unix absolute paths (/... or ~/...) — lookbehind rejects mid-token slashes
   // (e.g. "path/to/file.mp4", "https://example.com/file.mp4")
   const unixRegex = new RegExp(`(?<![\\w./:])((?:\\/|~\\/)[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
-  // Windows absolute paths (C:\... D:\...) — lookbehind rejects drive letter glued to a word
-  const winRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\\\[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
-  for (const regex of [unixRegex, winRegex]) {
-    let match;
+  // Windows absolute paths with backslash (C:\... D:\...) — lookbehind rejects drive letter glued to a word
+  const winBackslashRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\\\[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
+  // Windows absolute paths with forward slash (C:/... D:/...) — lookbehind rejects drive letter glued to a word
+  const winForwardRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\/[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
+  for (const regex of [unixRegex, winBackslashRegex, winForwardRegex]) {
     while ((match = regex.exec(cleanText)) !== null) {
       const p = match[1];
       if (p && !seen.has(p)) {
