@@ -3,7 +3,7 @@
  * Displays update status and allows manual update checking/installation
  */
 import { useEffect, useCallback } from 'react';
-import { Download, RefreshCw, Loader2, Rocket, XCircle } from 'lucide-react';
+import { CheckCircle2, Download, RefreshCw, Loader2, Rocket, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useUpdateStore } from '@/stores/update';
@@ -28,10 +28,13 @@ export function UpdateSettings() {
     policyBlocked,
     isInitialized,
     autoInstallCountdown,
+    restartCountdown,
     init,
     checkForUpdates,
     downloadUpdate,
     installUpdate,
+    restartApp,
+    cancelRestartCountdown,
     cancelAutoInstall,
     clearError,
   } = useUpdateStore();
@@ -50,11 +53,14 @@ export function UpdateSettings() {
     switch (status) {
       case 'checking':
       case 'downloading':
+      case 'installing':
         return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
       case 'available':
         return <Download className="h-4 w-4 text-primary" />;
       case 'downloaded':
         return <Rocket className="h-4 w-4 text-primary" />;
+      case 'installed':
+        return <CheckCircle2 className="h-4 w-4 text-primary" />;
       case 'error':
         return <RefreshCw className="h-4 w-4 text-destructive" />;
       default:
@@ -66,6 +72,9 @@ export function UpdateSettings() {
     if (status === 'downloaded' && autoInstallCountdown != null && autoInstallCountdown >= 0) {
       return t('updates.status.autoInstalling', { seconds: autoInstallCountdown });
     }
+    if (status === 'installed' && restartCountdown != null && restartCountdown >= 0) {
+      return t('updates.status.restartingIn', { seconds: restartCountdown });
+    }
     switch (status) {
       case 'checking':
         return t('updates.status.checking');
@@ -75,6 +84,10 @@ export function UpdateSettings() {
         return t('updates.status.available', { version: updateInfo?.version });
       case 'downloaded':
         return t('updates.status.downloaded', { version: updateInfo?.version });
+      case 'installing':
+        return t('updates.status.installing');
+      case 'installed':
+        return t('updates.status.installed', { version: updateInfo?.version });
       case 'error':
         return error || t('updates.status.failed');
       case 'not-available':
@@ -111,17 +124,52 @@ export function UpdateSettings() {
         );
       case 'downloaded':
         if (autoInstallCountdown != null && autoInstallCountdown >= 0) {
+          // 倒计时期间同时给出"取消"和"立即安装"，无人值守和急性子都满足
           return (
-            <Button onClick={cancelAutoInstall} size="sm" variant="outline">
-              <XCircle className="h-4 w-4 mr-2" />
-              {t('updates.action.cancelAutoInstall')}
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={cancelAutoInstall} size="sm" variant="outline">
+                <XCircle className="h-4 w-4 mr-2" />
+                {t('updates.action.cancelAutoInstall')}
+              </Button>
+              <Button onClick={installUpdate} size="sm" variant="default">
+                <Rocket className="h-4 w-4 mr-2" />
+                {t('updates.action.install')}
+              </Button>
+            </div>
           );
         }
         return (
           <Button onClick={installUpdate} size="sm" variant="default">
             <Rocket className="h-4 w-4 mr-2" />
             {t('updates.action.install')}
+          </Button>
+        );
+      case 'installing':
+        return (
+          <Button disabled variant="outline" size="sm">
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            {t('updates.action.installing')}
+          </Button>
+        );
+      case 'installed':
+        if (restartCountdown != null && restartCountdown >= 0) {
+          return (
+            <div className="flex gap-2">
+              <Button onClick={cancelRestartCountdown} size="sm" variant="outline">
+                <XCircle className="h-4 w-4 mr-2" />
+                {t('updates.action.cancelRestart')}
+              </Button>
+              <Button onClick={restartApp} size="sm" variant="default">
+                <Rocket className="h-4 w-4 mr-2" />
+                {t('updates.action.restartNow')}
+              </Button>
+            </div>
+          );
+        }
+        return (
+          <Button onClick={restartApp} size="sm" variant="default">
+            <Rocket className="h-4 w-4 mr-2" />
+            {t('updates.action.restart')}
           </Button>
         );
       case 'error':

@@ -13,6 +13,14 @@ import { EventEmitter } from 'events';
 import { setQuitting } from './app-state';
 import { getSsoEnvironment, getStoToken } from '../utils/auth-store';
 import { getSetting } from '../utils/store';
+import { execFile as execFileCb } from 'node:child_process';
+import { promisify } from 'node:util';
+import { existsSync } from 'node:fs';
+import * as fsp from 'node:fs/promises';
+import * as path from 'node:path';
+import * as os from 'node:os';
+
+const execFile = promisify(execFileCb);
 import {
   resolveUpdatePolicy,
   sendClientUpdateEventsFireAndForget,
@@ -42,7 +50,16 @@ function clampCheckIntervalSec(sec: number | undefined | null): number {
 }
 
 export interface UpdateStatus {
-  status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
+  status:
+    | 'idle'
+    | 'checking'
+    | 'available'
+    | 'not-available'
+    | 'downloading'
+    | 'downloaded'
+    | 'installing'
+    | 'installed'
+    | 'error';
   info?: UpdateInfo;
   progress?: ProgressInfo;
   error?: string;
@@ -94,6 +111,26 @@ export class AppUpdater extends EventEmitter {
   /** Whether a checkForUpdates call is already in-flight (prevents re-entry). */
   private _checking = false;
 
+  /** Whether a download is currently in progress (regardless of who started it:
+   *  UI-triggered downloadUpdate() or electron-updater's internal autoDownload).
+   *  Used to suppress concurrent checks and to bypass stale-event filtering
+   *  for in-flight downloads. */
+  private _downloading = false;
+
+  /** Timestamp (ms) of the most recent download-progress event; used by idle watchdog. */
+  private _lastProgressAt = 0;
+
+  /** Idle watchdog timer that runs while _downloading is true. */
+  private _idleWatchdogTimer: NodeJS.Timeout | null = null;
+
+  /** Rejector for the awaitable idle promise (only used when UI manually awaits downloadUpdate()). */
+  private _idleRejecter: ((err: Error) => void) | null = null;
+
+  /** Idle threshold (ms) — no download-progress for this long triggers an idle error. */
+  private static readonly DOWNLOAD_IDLE_TIMEOUT_MS = 60_000;
+  /** How often the idle watchdog checks (ms). */
+  private static readonly DOWNLOAD_IDLE_TICK_MS = 5_000;
+
   /** 递增的检查代数，用于过滤上一轮超时后到来的 stale 事件。 */
   private _checkGeneration = 0;
 
@@ -113,6 +150,20 @@ export class AppUpdater extends EventEmitter {
   /** Delay (in seconds) before auto-installing a downloaded update. */
   private static readonly AUTO_INSTALL_DELAY_SECONDS = 5;
 
+  /** Local path of the downloaded update file (zip/dmg), provided by electron-updater. */
+  private _downloadedFilePath: string | null = null;
+
+  /** Backup path of the old .app while a manual install is in progress (for rollback). */
+  private _backupAppPath: string | null = null;
+
+  /** Delay (ms) after the new version starts before purging the install backup. */
+  private static readonly BACKUP_CLEANUP_DELAY_MS = 60_000;
+
+  /** Restart-after-install countdown timer (replaces old auto-install timer for installed state). */
+  private _restartCountdownTimer: NodeJS.Timeout | null = null;
+  private _restartCountdown = 0;
+  private static readonly RESTART_COUNTDOWN_SECONDS = 5;
+
   constructor() {
     super();
 
@@ -121,7 +172,10 @@ export class AppUpdater extends EventEmitter {
     });
 
     autoUpdater.autoDownload = false;
-    autoUpdater.autoInstallOnAppQuit = true;
+    // 禁用 electron-updater 内置的"app quit 时自动安装"机制，
+    // 因为它走的是 Squirrel.Mac 路径，会触发代码签名校验失败。
+    // manualInstall() 是我们唯一的安装入口（绕开 Squirrel）。
+    autoUpdater.autoInstallOnAppQuit = false;
 
     autoUpdater.logger = {
       info: (msg: string) => logger.info('[Updater]', msg),
@@ -278,6 +332,65 @@ export class AppUpdater extends EventEmitter {
     return this.status;
   }
 
+  /**
+   * Enter "download protection" mode. Idempotent — calling multiple times is safe.
+   * Must be invoked at the start of any download path:
+   *   1. UI-triggered downloadUpdate() (manual)
+   *   2. electron-updater's autoDownload path (auto, fires after update-available)
+   *
+   * What it does:
+   *   - Sync generation counters so stale-event filter doesn't eat our events
+   *   - Stop periodic update check to avoid contention with autoUpdater singleton
+   *   - Start idle watchdog so download stalls surface as errors quickly
+   */
+  private beginDownloadProtection(): void {
+    if (this._downloading) {
+      logger.info('[Updater] beginDownloadProtection: already protecting an in-flight download');
+      return;
+    }
+    this._activeGeneration = this._checkGeneration;
+    this.clearPeriodicCheckTimer();
+    this._downloading = true;
+    this._lastProgressAt = Date.now();
+
+    this._idleWatchdogTimer = setInterval(() => {
+      const idleFor = Date.now() - this._lastProgressAt;
+      if (idleFor <= AppUpdater.DOWNLOAD_IDLE_TIMEOUT_MS) return;
+
+      logger.warn(`[Updater] Download idle for ${Math.round(idleFor / 1000)}s, aborting`);
+      const err = new Error(
+        `下载停滞超过 ${Math.round(AppUpdater.DOWNLOAD_IDLE_TIMEOUT_MS / 1000)} 秒，连接可能已中断，请检查网络后重试`,
+      );
+
+      // 1. 如果 UI 在 await downloadUpdate()，通过 reject 让外层 try/catch 抛错
+      if (this._idleRejecter) {
+        const r = this._idleRejecter;
+        this._idleRejecter = null;
+        r(err);
+      }
+
+      // 2. autoDownload 路径下没有外层 await：直接把错误状态推给 UI
+      this.updateStatus({ status: 'error', error: err.message, policyBlocked: false });
+      this.endDownloadProtection();
+    }, AppUpdater.DOWNLOAD_IDLE_TICK_MS);
+
+    logger.info('[Updater] beginDownloadProtection: protection armed (idle watchdog active)');
+  }
+
+  private endDownloadProtection(): void {
+    if (!this._downloading) return;
+
+    if (this._idleWatchdogTimer) {
+      clearInterval(this._idleWatchdogTimer);
+      this._idleWatchdogTimer = null;
+    }
+    this._idleRejecter = null;
+    this._downloading = false;
+    void this.reschedulePeriodicCheckIfEnabled();
+
+    logger.info('[Updater] endDownloadProtection: protection released');
+  }
+
   private setupListeners(): void {
     autoUpdater.on('checking-for-update', () => {
       // 如果上一轮超时了，忽略这个 stale 事件
@@ -307,6 +420,9 @@ export class AppUpdater extends EventEmitter {
             },
           ]);
         });
+        // autoDownload 路径下 electron-updater 会绕过 AppUpdater.downloadUpdate() 直接开下，
+        // 必须在这里手动 arm 下载保护，否则周期 check 干扰 + idle 看门狗都不会生效。
+        this.beginDownloadProtection();
       }
       this.updateStatus({ status: 'available', info, policyBlocked: false });
       this.emit('update-available', info);
@@ -322,16 +438,27 @@ export class AppUpdater extends EventEmitter {
     });
 
     autoUpdater.on('download-progress', (progress: ProgressInfo) => {
-      if (this._checkGeneration !== this._activeGeneration) return;
+      // 下载期间不应用代数过滤：一旦 downloadUpdate() 开始，所有 progress
+      // 事件都必须送达 UI，否则会出现"进度卡在某个百分比"的现象。
+      if (!this._downloading && this._checkGeneration !== this._activeGeneration) return;
+      this._lastProgressAt = Date.now();
       this.updateStatus({ status: 'downloading', progress });
       this.emit('download-progress', progress);
     });
 
     autoUpdater.on('update-downloaded', (event: UpdateDownloadedEvent) => {
-      if (this._checkGeneration !== this._activeGeneration) {
+      // 同 download-progress：下载完成事件必须送达，避免下载已成功但 UI 永远停在 downloading。
+      if (!this._downloading && this._checkGeneration !== this._activeGeneration) {
         logger.warn('[Updater] Ignoring stale update-downloaded event (previous check timed out)');
         return;
       }
+      // 下载完成，关闭保护（清 idle 看门狗、恢复周期 check）
+      this.endDownloadProtection();
+
+      // 保存下载好的本地文件路径，manualInstall() 会用它解压并替换 .app
+      this._downloadedFilePath = event.downloadedFile || null;
+      logger.info(`[Updater] Downloaded file path: ${this._downloadedFilePath ?? '(missing)'}`);
+
       void getSsoEnvironment().then((env) => {
         sendClientUpdateEventsFireAndForget(env, [
           {
@@ -346,6 +473,8 @@ export class AppUpdater extends EventEmitter {
       this.updateStatus({ status: 'downloaded', info: event });
       this.emit('update-downloaded', event);
 
+      // 仅当用户在 settings 里开启了 "自动更新" 时，才下载完后自动启动 5 秒安装倒计时。
+      // 关闭时停在 downloaded 状态，必须用户主动点 "立即安装"。
       if (autoUpdater.autoDownload) {
         this.startAutoInstallCountdown();
       }
@@ -353,9 +482,18 @@ export class AppUpdater extends EventEmitter {
 
     autoUpdater.on('error', (error: Error) => {
       // 如果是超时后的 stale error，不更新 UI 状态
-      if (this._checkGeneration !== this._activeGeneration) {
+      if (!this._downloading && this._checkGeneration !== this._activeGeneration) {
         logger.warn('[Updater] Ignoring stale autoUpdater error after timeout:', error.message);
         return;
+      }
+      // 下载过程中出错：关闭保护，让外层 await 走 reject 路径
+      if (this._downloading) {
+        if (this._idleRejecter) {
+          const r = this._idleRejecter;
+          this._idleRejecter = null;
+          r(error);
+        }
+        this.endDownloadProtection();
       }
       // 将 electron-updater 英文错误转成用户友好的中文提示
       const raw = error.message || '';
@@ -458,6 +596,12 @@ export class AppUpdater extends EventEmitter {
     // 防重入：如果已在检查中，直接返回
     if (this._checking) {
       logger.info('[Updater] checkForUpdates already in progress, skipping');
+      return null;
+    }
+    // 下载进行中时跳过 check：autoUpdater 是全局单例，并发 check 会污染监听器状态
+    // 并可能因 check 超时导致下载事件被代数过滤误伤。
+    if (this._downloading) {
+      logger.info('[Updater] checkForUpdates skipped because a download is in progress');
       return null;
     }
     this._checking = true;
@@ -565,8 +709,12 @@ export class AppUpdater extends EventEmitter {
         new Promise<null>((resolve) =>
           setTimeout(() => {
             logger.warn(`[Updater] autoUpdater.checkForUpdates() timed out after ${CHECK_UPDATER_TIMEOUT_MS / 1000}s`);
-            // 递增代数，后续所有事件都会因为代数不匹配被忽略
-            this._checkGeneration++;
+            // 递增代数，后续所有事件都会因为代数不匹配被忽略。
+            // 但下载进行中时不要动代数，避免误伤 download-progress / update-downloaded 事件
+            // （这些事件在下载期间已通过 _downloading 标志绕过代数过滤，但仍保留此判断作为双保险）。
+            if (!this._downloading) {
+              this._checkGeneration++;
+            }
             resolve(null);
           }, CHECK_UPDATER_TIMEOUT_MS),
         ),
@@ -628,6 +776,11 @@ export class AppUpdater extends EventEmitter {
   }
 
   async downloadUpdate(): Promise<void> {
+    if (this._downloading) {
+      logger.info('[Updater] downloadUpdate already in progress, skipping duplicate call');
+      return;
+    }
+
     const tv = (this.status.info as UpdateInfo | undefined)?.version;
     if (!this._downloadStartReported) {
       void getSsoEnvironment().then((env) => {
@@ -643,21 +796,24 @@ export class AppUpdater extends EventEmitter {
       });
       this._downloadStartReported = true;
     }
+
+    // beginDownloadProtection 会：同步 generation、暂停周期 check、armed idle 看门狗。
+    // idle 超时时会通过 _idleRejecter（如果设置了）reject 当前 await，让外层 IPC 看到错误。
+    this.beginDownloadProtection();
+    const idlePromise = new Promise<never>((_resolve, reject) => {
+      this._idleRejecter = reject;
+    });
+
     try {
-      // autoUpdater.downloadUpdate() 可能在网络异常时挂起，加超时保护 (10 分钟)
-      const DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000;
       await Promise.race([
         autoUpdater.downloadUpdate(),
-        new Promise<never>((_resolve, reject) =>
-          setTimeout(
-            () => reject(new Error('下载超时，请检查网络后重试')),
-            DOWNLOAD_TIMEOUT_MS,
-          ),
-        ),
+        idlePromise,
       ]);
     } catch (error) {
       logger.error('[Updater] Download update failed:', error);
       throw error;
+    } finally {
+      this.endDownloadProtection();
     }
   }
 
@@ -678,6 +834,321 @@ export class AppUpdater extends EventEmitter {
     autoUpdater.quitAndInstall();
   }
 
+  /**
+   * 手动安装：解压下载好的 zip，把当前 .app 改名备份，把新 .app 放到 /Applications，
+   * 移除 com.apple.quarantine（绕开 Gatekeeper），然后切到 'installed' 状态。
+   *
+   * 完全不调用 Squirrel.Mac，因此不受其代码签名校验影响。
+   * 失败时自动回滚（恢复备份）。
+   *
+   * Windows / Linux 仍走 electron-updater 内置 quitAndInstall。
+   */
+  async manualInstall(): Promise<void> {
+    // 防重入：已经在安装中（用户在倒计时内手动点 + 倒计时归零并发）直接返回
+    if (this.status.status === 'installing' || this.status.status === 'installed') {
+      logger.info(`[Updater] manualInstall skipped, current status = ${this.status.status}`);
+      return;
+    }
+
+    // 入口先把"5 秒自动安装倒计时"清掉，避免倒计时归零后又触发一次
+    this.clearAutoInstallTimer();
+    this.sendToRenderer('update:auto-install-countdown', { seconds: -1, cancelled: true });
+
+    // 仅 macOS 走自定义流程；其他平台沿用原 Squirrel/NSIS 路径
+    if (process.platform !== 'darwin') {
+      this.quitAndInstall();
+      return;
+    }
+
+    if (!this._downloadedFilePath || !existsSync(this._downloadedFilePath)) {
+      const msg = '未找到已下载的更新文件，请重试';
+      logger.error(`[Updater] manualInstall: ${msg} (path=${this._downloadedFilePath ?? 'null'})`);
+      this.updateStatus({ status: 'error', error: msg });
+      throw new Error(msg);
+    }
+
+    this.updateStatus({ status: 'installing' });
+    logger.info(`[Updater] manualInstall: starting (file=${this._downloadedFilePath})`);
+
+    const zipPath = this._downloadedFilePath;
+    const currentAppPath = app.getAppPath().replace(/\/Contents\/Resources\/app\.asar.*$/, '');
+    // 兜底：若上面替换没拿到 .app 路径，尝试用 process.execPath 推导
+    const appPath = currentAppPath.endsWith('.app')
+      ? currentAppPath
+      : path.dirname(path.dirname(path.dirname(process.execPath)));
+    logger.info(`[Updater] manualInstall: target app path = ${appPath}`);
+
+    const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'stoclaw-install-'));
+    let extractedAppPath: string | null = null;
+
+    try {
+      // 1. 解压 zip 到临时目录
+      logger.info(`[Updater] manualInstall: extracting zip to ${tmpDir}`);
+      await execFile('unzip', ['-q', zipPath, '-d', tmpDir]);
+
+      const entries = await fsp.readdir(tmpDir);
+      const appEntry = entries.find((n) => n.endsWith('.app'));
+      if (!appEntry) {
+        throw new Error('解压后未在压缩包中找到 .app');
+      }
+      extractedAppPath = path.join(tmpDir, appEntry);
+      logger.info(`[Updater] manualInstall: extracted app = ${extractedAppPath}`);
+
+      // 2. 备份旧 app（同设备 rename 是原子操作，运行中的进程仍可继续）
+      const backupPath = `${appPath}.old-${Date.now()}`;
+      if (existsSync(appPath)) {
+        await fsp.rename(appPath, backupPath);
+        this._backupAppPath = backupPath;
+        logger.info(`[Updater] manualInstall: backed up old app to ${backupPath}`);
+      }
+
+      // 3. 把新 app 放到原位置（跨设备时 rename 会失败，fallback 到 cp -R）
+      try {
+        await fsp.rename(extractedAppPath, appPath);
+      } catch (e) {
+        logger.warn('[Updater] manualInstall: rename failed, falling back to cp -R', e);
+        await execFile('cp', ['-R', extractedAppPath, appPath]);
+      }
+
+      // 4. 移除 quarantine 扩展属性（绕开 Gatekeeper）
+      try {
+        await execFile('xattr', ['-rd', 'com.apple.quarantine', appPath]);
+        logger.info('[Updater] manualInstall: quarantine attribute removed');
+      } catch (e) {
+        // 没有 quarantine 属性时 xattr 也会 exit 非零，不算致命错误
+        logger.warn('[Updater] manualInstall: xattr remove returned non-zero (may be normal)', e);
+      }
+
+      // 5. 不立即删备份，写一个 marker 到 userData，新版本启动后 60s 再清理。
+      //    这样万一新版本启动崩溃，用户可以手动把 .app.old-* rename 回去恢复。
+      if (this._backupAppPath) {
+        const installedVersion = this.status.info?.version ?? null;
+        await this.writeBackupMarker({
+          backupPath: this._backupAppPath,
+          installedVersion,
+          createdAt: Date.now(),
+        });
+        logger.info(
+          `[Updater] manualInstall: backup retained at ${this._backupAppPath}, ` +
+          `marker written (will clean up after new version runs for ` +
+          `${AppUpdater.BACKUP_CLEANUP_DELAY_MS / 1000}s)`,
+        );
+        this._backupAppPath = null;
+      }
+      await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+
+      logger.info('[Updater] manualInstall: success, switching to installed state');
+      this.updateStatus({ status: 'installed' });
+      this.startRestartCountdown();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.error(`[Updater] manualInstall failed: ${msg}`);
+
+      // 回滚：恢复备份的旧 app
+      if (this._backupAppPath && existsSync(this._backupAppPath)) {
+        try {
+          if (existsSync(appPath)) {
+            await fsp.rm(appPath, { recursive: true, force: true });
+          }
+          await fsp.rename(this._backupAppPath, appPath);
+          logger.info(`[Updater] manualInstall: rolled back to backup ${this._backupAppPath}`);
+        } catch (rollbackErr) {
+          logger.error('[Updater] manualInstall: rollback failed', rollbackErr);
+        }
+        this._backupAppPath = null;
+      }
+
+      // 清理临时目录
+      await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+
+      this.updateStatus({ status: 'error', error: `安装失败: ${msg}` });
+      throw error;
+    }
+  }
+
+  /** Marker 文件路径：记录待清理的旧版本备份。 */
+  private getBackupMarkerPath(): string {
+    return path.join(app.getPath('userData'), 'pending-backup-cleanup.json');
+  }
+
+  private async writeBackupMarker(marker: {
+    backupPath: string;
+    installedVersion: string | null;
+    createdAt: number;
+  }): Promise<void> {
+    try {
+      await fsp.writeFile(
+        this.getBackupMarkerPath(),
+        JSON.stringify(marker, null, 2),
+        'utf-8',
+      );
+    } catch (e) {
+      logger.warn('[Updater] writeBackupMarker failed:', e);
+    }
+  }
+
+  private async readBackupMarker(): Promise<
+    | { backupPath: string; installedVersion: string | null; createdAt: number }
+    | null
+  > {
+    const markerPath = this.getBackupMarkerPath();
+    if (!existsSync(markerPath)) return null;
+    try {
+      const raw = await fsp.readFile(markerPath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (typeof parsed?.backupPath !== 'string') return null;
+      return parsed;
+    } catch (e) {
+      logger.warn('[Updater] readBackupMarker parse failed:', e);
+      return null;
+    }
+  }
+
+  private async deleteBackupMarker(): Promise<void> {
+    await fsp.rm(this.getBackupMarkerPath(), { force: true }).catch(() => {});
+  }
+
+  /**
+   * 扫描 /Applications/ 下所有匹配 "<AppName>.app.old-<timestamp>" 模式的目录，
+   * 立刻清理掉**孤立**的（即不在当前 marker 记录范围内的）。
+   *
+   * 场景：连续多次更新、上次清理被中断、跨机器拷贝等，可能在 /Applications/ 留下
+   * 多个 .app.old-* 残留。marker 只记录最近一次的备份，其他需要主动扫描清理。
+   *
+   * 当前 marker 记录的那一个**不在这里删**，由 cleanupPendingBackup 走 60s 延迟流程。
+   */
+  private async cleanupOrphanedBackups(protectedPath: string | null): Promise<void> {
+    try {
+      // 推导出当前 app 所在目录和 basename："/Applications" + "STO Claw"
+      const currentAppPath = path.dirname(path.dirname(path.dirname(process.execPath)));
+      if (!currentAppPath.endsWith('.app')) {
+        logger.warn(`[Updater] cleanupOrphanedBackups: unexpected app path ${currentAppPath}`);
+        return;
+      }
+      const appDir = path.dirname(currentAppPath);
+      const appBaseName = path.basename(currentAppPath, '.app');
+      const escapedName = appBaseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp(`^${escapedName}\\.app\\.old-\\d+$`);
+
+      const entries = await fsp.readdir(appDir);
+      for (const entry of entries) {
+        if (!pattern.test(entry)) continue;
+        const fullPath = path.join(appDir, entry);
+        if (protectedPath && fullPath === protectedPath) {
+          // 这一个是 marker 记录的"刚装好的备份"，留给 60s 延迟清理流程处理
+          continue;
+        }
+        logger.info(`[Updater] cleanupOrphanedBackups: removing orphan backup ${fullPath}`);
+        await fsp.rm(fullPath, { recursive: true, force: true }).catch((e) => {
+          logger.warn(`[Updater] cleanupOrphanedBackups: failed to remove ${fullPath}:`, e);
+        });
+      }
+    } catch (e) {
+      logger.warn('[Updater] cleanupOrphanedBackups: scan failed', e);
+    }
+  }
+
+  /**
+   * 启动时调用：
+   *  1) 扫描并立刻清理 /Applications/ 下**所有孤立**的 .app.old-* 残留
+   *  2) 对 marker 记录的"刚安装的备份"，延迟 BACKUP_CLEANUP_DELAY_MS 清理（给新版本试运行窗口）
+   *
+   * 如果用户已经手动 rename 备份回原位置（回滚），则 app.getVersion() 会变回旧版本，
+   * marker 校验会失败，备份不会被清理，但 marker 会被删除（避免反复检查）。
+   */
+  async cleanupPendingBackup(): Promise<void> {
+    if (process.platform !== 'darwin') return;
+    const marker = await this.readBackupMarker();
+
+    // 先把孤立备份立刻清掉（marker 记录的那个会被保护，不会误删）
+    await this.cleanupOrphanedBackups(marker?.backupPath ?? null);
+
+    if (!marker) return;
+
+    const currentVersion = app.getVersion();
+    const expected = marker.installedVersion;
+
+    if (expected && expected !== currentVersion) {
+      logger.warn(
+        `[Updater] cleanupPendingBackup: version mismatch ` +
+        `(expected=${expected}, current=${currentVersion}), ` +
+        `备份可能被手动回滚，保留备份但删除 marker`,
+      );
+      await this.deleteBackupMarker();
+      return;
+    }
+
+    if (!existsSync(marker.backupPath)) {
+      logger.info('[Updater] cleanupPendingBackup: backup already gone, removing marker');
+      await this.deleteBackupMarker();
+      return;
+    }
+
+    logger.info(
+      `[Updater] cleanupPendingBackup: will purge ${marker.backupPath} ` +
+      `in ${AppUpdater.BACKUP_CLEANUP_DELAY_MS / 1000}s`,
+    );
+
+    // 延迟清理：给新版本 60 秒"试运行"窗口，确保没崩
+    setTimeout(() => {
+      void (async () => {
+        try {
+          if (existsSync(marker.backupPath)) {
+            await fsp.rm(marker.backupPath, { recursive: true, force: true });
+            logger.info(`[Updater] cleanupPendingBackup: removed backup ${marker.backupPath}`);
+          }
+          await this.deleteBackupMarker();
+        } catch (e) {
+          logger.warn('[Updater] cleanupPendingBackup: cleanup failed:', e);
+        }
+      })();
+    }, AppUpdater.BACKUP_CLEANUP_DELAY_MS).unref();
+  }
+
+  /** 开始重启倒计时，结束后自动调用 restartApp()。 */
+  private startRestartCountdown(): void {
+    this.clearRestartCountdownTimer();
+    this._restartCountdown = AppUpdater.RESTART_COUNTDOWN_SECONDS;
+    this.sendToRenderer('update:restart-countdown', { seconds: this._restartCountdown });
+
+    this._restartCountdownTimer = setInterval(() => {
+      this._restartCountdown--;
+      this.sendToRenderer('update:restart-countdown', { seconds: this._restartCountdown });
+
+      if (this._restartCountdown <= 0) {
+        this.clearRestartCountdownTimer();
+        this.restartApp();
+      }
+    }, 1000);
+  }
+
+  cancelRestartCountdown(): void {
+    this.clearRestartCountdownTimer();
+    this.sendToRenderer('update:restart-countdown', { seconds: -1, cancelled: true });
+  }
+
+  private clearRestartCountdownTimer(): void {
+    if (this._restartCountdownTimer) {
+      clearInterval(this._restartCountdownTimer);
+      this._restartCountdownTimer = null;
+    }
+  }
+
+  /**
+   * 重启当前应用。配合 manualInstall() 使用 —— manualInstall 已经把新 .app 放到原位置，
+   * relaunch() 会启动新进程读取新版本，quit() 关掉当前旧进程。
+   */
+  restartApp(): void {
+    logger.info('[Updater] restartApp called');
+    setQuitting();
+    this.clearRestartCountdownTimer();
+    // 留一点时间让 IPC / 日志 flush
+    setTimeout(() => {
+      app.relaunch();
+      app.quit();
+    }, 100);
+  }
+
   private startAutoInstallCountdown(): void {
     this.clearAutoInstallTimer();
     this.autoInstallCountdown = AppUpdater.AUTO_INSTALL_DELAY_SECONDS;
@@ -689,7 +1160,10 @@ export class AppUpdater extends EventEmitter {
 
       if (this.autoInstallCountdown <= 0) {
         this.clearAutoInstallTimer();
-        this.quitAndInstall();
+        // 走 manualInstall（绕开 Squirrel.Mac 签名校验），失败时进入 error 状态
+        void this.manualInstall().catch((err) => {
+          logger.error('[Updater] auto-install (manualInstall) failed:', err);
+        });
       }
     }, 1000);
   }
@@ -751,8 +1225,31 @@ export function registerUpdateHandlers(
     }
   });
 
-  ipcMain.handle('update:install', () => {
+  // 'update:install' 默认走 manualInstall（绕过 Squirrel.Mac 的签名校验），
+  // 安装完成后切到 'installed' 状态并启动 5 秒重启倒计时。
+  ipcMain.handle('update:install', async () => {
+    try {
+      await updater.manualInstall();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // 'update:installViaSquirrel' 保留原 Squirrel.Mac 路径作为备选，
+  // 在你们走 Apple Developer ID 签名后可以一键切回。
+  ipcMain.handle('update:installViaSquirrel', () => {
     updater.quitAndInstall();
+    return { success: true };
+  });
+
+  ipcMain.handle('update:restart', () => {
+    updater.restartApp();
+    return { success: true };
+  });
+
+  ipcMain.handle('update:cancelRestartCountdown', () => {
+    updater.cancelRestartCountdown();
     return { success: true };
   });
 
@@ -772,6 +1269,9 @@ export function registerUpdateHandlers(
   });
 
   void updater.syncPeriodicCheckFromSettings();
+
+  // 清理上一次 manualInstall 遗留的旧版本 .app 备份（延迟 60s，等新版本确认稳定）
+  void updater.cleanupPendingBackup();
 }
 
 export const appUpdater = new AppUpdater();
