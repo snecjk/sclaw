@@ -38,7 +38,7 @@ export function HomeAssistant({ className }: { className?: string }) {
         />
         {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
       </section>
-      <p className="mt-3 text-center text-xs leading-relaxed text-[#86909C] dark:text-muted-foreground">
+      <p className="mt-3 text-right text-xs leading-relaxed text-[#86909C] dark:text-muted-foreground">
         {t('assistant.footerDisclaimer')}
       </p>
     </div>

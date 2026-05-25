@@ -604,6 +604,38 @@ function preprocessTextForPreviewLinks(text: string): string {
   // and the raw metadata isn't shown in the message bubble.
   text = text.replace(/\s*\[media attached:[^\]]*\]/g, '');
 
+  // Protect existing markdown links [text](url) — extract them so inner paths/URLs
+  // are not mangled by the subsequent replacements.
+  // For local file targets, rewrite to preview://; for external URLs, leave intact.
+  const mdLinks: string[] = [];
+  text = text.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (match, linkText, href) => {
+    // If the href is a local file path (not http/https), convert to preview:// link
+    if (!href.startsWith('http://') && !href.startsWith('https://')) {
+      mdLinks.push(`[${linkText}](preview://${href})`);
+    } else {
+      mdLinks.push(match);
+    }
+    return `__MD_LINK_${mdLinks.length - 1}__`;
+  });
+
+  // Replace file:// URLs — strip the scheme and wrap the underlying local path
+  // file:///C:/... → C:/... ; file:///Users/... → /Users/...
+  // Regex consumes file:// (2 slashes), capture group gets the 3rd slash + path.
+  // For Windows: /C:/Users/... → strip leading / → C:/Users/...
+  // For Unix: /Users/... → keep as-is → /Users/...
+  // The result is placed in a __FILE_URL__ placeholder to prevent the path regex
+  // from double-wrapping the extracted path.
+  const fileUrlPlaceholders: string[] = [];
+  text = text.replace(
+    /file:\/\/(\/[A-Za-z]:[\\/][^\s)\]"',;<>]+|\/[^\s)\]"',;<>]+)/g,
+    (_match, captured) => {
+      // Strip leading / for Windows paths (/C:/ → C:/), keep for Unix (/Users/ → /Users/)
+      const filePath = captured.match(/^\/[A-Za-z]:/) ? captured.slice(1) : captured;
+      fileUrlPlaceholders.push(`[${filePath}](preview://${filePath})`);
+      return `__FILE_URL_${fileUrlPlaceholders.length - 1}__`;
+    },
+  );
+
   // Replace localhost URLs (previewable in side panel)
   text = text.replace(
     /(https?:\/\/localhost:[^\s)\]"',;<>]+)/g,
@@ -611,10 +643,18 @@ function preprocessTextForPreviewLinks(text: string): string {
   );
 
   // Replace file paths (relative ./, absolute /, and Windows C:\)
+  // Lookbehind (?<![\\w./:]) rejects matches that are part of a URL path component
+  // (e.g. "/report.html" inside "https://example.com/report.html").
   text = text.replace(
-    new RegExp(`(\\./(?:[^/\\s]+\\/)*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\s]+\\/)*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\s]+[\\\\/])*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`, 'g'),
+    new RegExp(`(?<![\\w./:])(\\./(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\n\\r]+[\\\\/])*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`, 'g'),
     '[$1](preview://$1)',
   );
+
+  // Restore file URL placeholders (before other restores so markdown links don't interfere)
+  text = text.replace(/__FILE_URL_(\d+)__/g, (_, i) => fileUrlPlaceholders[Number(i)]);
+
+  // Restore markdown links
+  text = text.replace(/__MD_LINK_(\d+)__/g, (_, i) => mdLinks[Number(i)]);
 
   // Restore inline code
   text = text.replace(/__INLINE_CODE_(\d+)__/g, (_, i) => inlineCodes[Number(i)]);

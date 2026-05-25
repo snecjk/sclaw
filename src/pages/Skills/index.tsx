@@ -432,6 +432,7 @@ export function Skills() {
   const [activeInstallTab, setActiveInstallTab] = useState<'sto' | 'clawhub'>('sto');
   const [stoSearchQuery, setStoSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [refreshing, setRefreshing] = useState(false);
 
   const isGatewayRunning = gatewayStatus.state === 'running';
   const [showGatewayWarning, setShowGatewayWarning] = useState(false);
@@ -668,6 +669,63 @@ export function Skills() {
     }
   }, [uninstallSkill, uninstallStoSkill, t]);
 
+  const handleRefresh = useCallback(async () => {
+    if (!isGatewayRunning || refreshing) {
+      return;
+    }
+
+    setRefreshing(true);
+    try {
+      await fetchSkills();
+      const latestError = useSkillsStore.getState().error;
+      if (latestError) {
+        toast.error(
+          ['fetchTimeoutError', 'fetchRateLimitError', 'timeoutError', 'rateLimitError'].includes(latestError)
+            ? t(`toast.${latestError}`, { path: skillsDirPath })
+            : latestError,
+        );
+        return;
+      }
+      toast.success(t('toast.refreshed'));
+    } catch (err) {
+      toast.error(t('toast.failedRefresh') + ': ' + String(err));
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchSkills, isGatewayRunning, refreshing, skillsDirPath, t]);
+
+  const handleRefreshStoMarketplace = useCallback(async () => {
+    if (stoSearching) {
+      return;
+    }
+
+    await searchStoSkills(stoSearchQuery);
+    const latestError = useSkillsStore.getState().stoSearchError;
+    if (latestError) {
+      toast.error(t('marketplace.installTabs.stoSearchError'));
+      return;
+    }
+    toast.success(t('marketplace.refreshedSto'));
+  }, [searchStoSkills, stoSearchQuery, stoSearching, t]);
+
+  const handleRefreshClawHubMarketplace = useCallback(async () => {
+    if (searching) {
+      return;
+    }
+
+    await searchSkills(installQuery.trim());
+    const latestError = useSkillsStore.getState().searchError;
+    if (latestError) {
+      toast.error(
+        ['searchTimeoutError', 'searchRateLimitError', 'timeoutError', 'rateLimitError'].includes(latestError.replace('Error: ', ''))
+          ? t(`toast.${latestError.replace('Error: ', '')}`, { path: skillsDirPath })
+          : t('marketplace.searchError'),
+      );
+      return;
+    }
+    toast.success(t('marketplace.refreshedClawHub'));
+  }, [installQuery, searchSkills, searching, skillsDirPath, t]);
+
   if (loading) {
     return (
       <div className="mx-auto flex w-full max-w-5xl flex-col pb-10">
@@ -820,12 +878,12 @@ export function Skills() {
             <Button
               variant="outline"
               size="icon"
-              onClick={fetchSkills}
-              disabled={!isGatewayRunning}
+              onClick={() => void handleRefresh()}
+              disabled={!isGatewayRunning || refreshing}
               className="ml-1 h-8 w-8 rounded-md border-glass-border bg-transparent text-muted-foreground shadow-none hover:bg-[hsl(var(--glass-bg)/0.35)] hover:text-foreground"
               title={t('refresh')}
             >
-              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+              <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
             </Button>
           </div>
         </div>
@@ -1125,23 +1183,35 @@ export function Skills() {
               {/* === STO Tab === */}
               <TabsContent value="sto" className="flex-1 flex flex-col overflow-hidden mt-0 data-[state=inactive]:hidden">
                 <div className="px-8 py-4 border-b border-black/5 dark:border-white/5">
-                  <div className="relative flex items-center glass rounded-xl px-3 py-2 border">
-                    <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <Input
-                      placeholder={t('marketplace.installTabs.stoSearchPlaceholder')}
-                      value={stoSearchQuery}
-                      onChange={(e) => setStoSearchQuery(e.target.value)}
-                      className="ml-2 h-auto border-0 bg-transparent p-0 shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 text-[13px]"
-                    />
-                    {stoSearchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setStoSearchQuery('')}
-                        className="text-foreground/50 hover:text-foreground shrink-0 ml-1"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
+                  <div className="flex flex-col md:flex-row gap-2">
+                    <div className="relative flex items-center glass rounded-xl px-3 py-2 border flex-1">
+                      <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <Input
+                        placeholder={t('marketplace.installTabs.stoSearchPlaceholder')}
+                        value={stoSearchQuery}
+                        onChange={(e) => setStoSearchQuery(e.target.value)}
+                        className="ml-2 h-auto border-0 bg-transparent p-0 shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 text-[13px]"
+                      />
+                      {stoSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setStoSearchQuery('')}
+                          className="text-foreground/50 hover:text-foreground shrink-0 ml-1"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => void handleRefreshStoMarketplace()}
+                      disabled={stoSearching}
+                      className="h-10 w-10 rounded-xl border-black/10 dark:border-white/10 bg-transparent text-muted-foreground shadow-none hover:bg-[hsl(var(--glass-bg)/0.35)] hover:text-foreground"
+                      title={t('refresh')}
+                    >
+                      <RefreshCw className={cn('h-4 w-4', stoSearching && 'animate-spin')} />
+                    </Button>
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto px-8 py-6">
@@ -1261,6 +1331,16 @@ export function Skills() {
                         </button>
                       )}
                     </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => void handleRefreshClawHubMarketplace()}
+                      disabled={searching}
+                      className="h-10 w-10 rounded-xl border-black/10 dark:border-white/10 bg-transparent text-muted-foreground shadow-none hover:bg-[hsl(var(--glass-bg)/0.35)] hover:text-foreground"
+                      title={t('refresh')}
+                    >
+                      <RefreshCw className={cn('h-4 w-4', searching && 'animate-spin')} />
+                    </Button>
                     <Button
                       variant="outline"
                       disabled

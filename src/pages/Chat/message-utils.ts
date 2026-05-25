@@ -315,17 +315,19 @@ function extToMimeType(ext: string): string {
 export const PREVIEWABLE_FILE_EXTS =
   'html?|sql|py|js|ts|jsx|tsx|java|go|rs|cpp|c|h|cs|rb|php|swift|kt|scala|r|m|mm|json|yaml|yml|xml|toml|ini|conf|properties|env|md|txt|csv|tsv|log|css|scss|less|sh|bash|zsh|fish|ps1|bat|cmd|pdf';
 
-/** Remove fenced code blocks and inline code from text so paths inside them are not matched. */
+/** Remove fenced code blocks from text so paths inside them are not matched.
+ *  Inline code (`path`) is preserved — it often contains actual file paths the user/AI wants to preview.
+ */
 function stripCodeBlocks(text: string): string {
-  return text
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/`[^`]*`/g, '');
+  return text.replace(/```[\s\S]*?```/g, '');
 }
 
 /**
- * Extract previewable local file paths and localhost URLs from plain text.
- * Matches absolute paths like /Users/.../file.html and localhost URLs like http://localhost:8080/path.
+ * Extract previewable local file paths, file:// URLs, and localhost URLs from plain text.
+ * Matches absolute paths like /Users/.../file.html, file:///Users/.../file.html,
+ * and localhost URLs like http://localhost:8080/path.
  * Code blocks are stripped before matching to avoid false positives.
+ * Lookbehind rejects URL path components (e.g. /report.html inside https://example.com/report.html).
  */
 export function extractPreviewableRefs(text: string): Array<{ filePath: string; fileName: string; mimeType: string }> {
   const cleanText = stripCodeBlocks(text);
@@ -340,9 +342,23 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
     results.push({ filePath, fileName, mimeType });
   }
 
+  // file:// URLs — strip the scheme and use the underlying local path
+  // Regex consumes file:// (2 slashes), capture group gets the 3rd slash + path.
+  // For Windows: /C:/Users/... → strip leading / → C:/Users/...
+  // For Unix: /Users/... → keep as-is → /Users/...
+  const fileUrlRegex = /file:\/\/(\/[A-Za-z]:[\\/][^\s)\]"',;<>]+|\/[^\s)\]"',;<>]+)/g;
+  let match;
+  while ((match = fileUrlRegex.exec(cleanText)) !== null) {
+    const captured = match[1];
+    // Strip leading / for Windows paths (/C:/ → C:/), keep for Unix (/Users/ → /Users/)
+    const filePath = captured.match(/^\/[A-Za-z]:/) ? captured.slice(1) : captured;
+    const fileName = filePath.split('/').pop() || '';
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    addIfNotImage(filePath, fileName, ext);
+  }
+
   // Localhost URLs only (previewable in side panel)
   const urlRegex = /(https?:\/\/localhost:[^\s)\]"',;<>]+)/g;
-  let match;
   while ((match = urlRegex.exec(cleanText)) !== null) {
     const url = match[1];
     const fileName = url.split('/').pop() || 'index.html';
@@ -351,8 +367,9 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
   }
 
   // File paths (relative ./, absolute /, and Windows C:\) — support code, config, doc, and web files
+  // Lookbehind (?<![\\w./:]) rejects matches that are part of a URL path component
   const pathRegex = new RegExp(
-    `(\\./(?:[^/\\s]+\\/)*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\s]+\\/)*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\s]+[\\\\/])*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`,
+    `(?<![\\w./:])(\\./(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\n\\r]+[\\\\/])*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`,
     'gi',
   );
   while ((match = pathRegex.exec(cleanText)) !== null) {

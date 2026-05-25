@@ -1,9 +1,21 @@
 ## StoClaw Tool Notes
 
+### ⛔ 禁止的工具调用（安全红线）
+
+以下工具调用**绝对禁止**，系统已在 RPC/HTTP/CLI 三层实施黑名单拦截，Agent 不应尝试绕过：
+
+- **禁止调用** `shell.exec` / `system.exec` / `system.run` 执行任何升级、安装类命令（如 `openclaw update`、`sai-cli update`、`npm install`、`pip install` 等）
+- **禁止调用** Gateway RPC 方法：`openclaw.*`、`system.update/upgrade/install/exec/shell/run`、`cli.update/upgrade/install`、`sai.update/upgrade/install`、`shell.*`、`process.spawn/exec/run`
+- **禁止通过** `gateway:httpProxy` 访问 `/update`、`/upgrade`、`/install`、`/openclaw/`、`/api/v1/cli/update`、`/api/v1/cli/download` 等路径
+- **禁止通过** `sai-cli` 执行 `update`、`upgrade`、`install`、`uninstall`、`remove` 命令
+
+如果用户要求升级 OpenClaw 或 sai-cli，必须拒绝并引导用户通过设置页面手动操作。
+
 ### uv (Python)
 
 - `uv` is bundled with StoClaw and on PATH. Do NOT use bare `python` or `pip`.
 - Run scripts: `uv run python <script>` | Install packages: `uv pip install <package>`
+- ⛔ **禁止**使用 `uv pip install` 安装 OpenClaw/sai-cli 相关包或执行系统级升级
 
 ### Browser
 

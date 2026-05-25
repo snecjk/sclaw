@@ -1169,6 +1169,8 @@ function registerGatewayHandlers(
   const BLOCKED_RPC_METHODS: RegExp[] = [
     /^openclaw\./i,
     /^system\.(update|upgrade|install|exec|shell|run)/i,
+    /^shell\./i,
+    /^process\.(spawn|exec|run)/i,
     /^cli\.(update|upgrade|install)/i,
     /^sai\.(update|upgrade|install)/i,
     /^(npm|pnpm|yarn)\./i,
@@ -1212,6 +1214,7 @@ function registerGatewayHandlers(
       const BLOCKED_HTTP_PATHS = [
         /\/(update|upgrade|install|exec|shell)\b/i,
         /\/openclaw\//i,
+        /\/api\/v1\/cli\/(update|download)/i,
       ];
       for (const pattern of BLOCKED_HTTP_PATHS) {
         if (pattern.test(path)) {
