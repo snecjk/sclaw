@@ -117,6 +117,8 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
     // Only show loading state if we have no skills yet (initial load)
     if (get().skills.length === 0) {
       set({ loading: true, error: null });
+    } else {
+      set({ error: null });
     }
     try {
       // 1. Fetch from Gateway (running skills)
@@ -255,7 +257,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
         // STO list is best-effort, don't block on failure
       }
 
-      set({ skills: combinedSkills, loading: false });
+      set({ skills: combinedSkills, loading: false, error: null });
     } catch (error) {
       console.error('Failed to fetch skills:', error);
       const appError = normalizeAppError(error, { module: 'skills', operation: 'fetch' });

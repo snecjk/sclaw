@@ -144,13 +144,13 @@ export function HomeAgentHubSurface() {
             />
             {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
           </section>
-          <p className={cn('mt-3 text-center text-xs leading-relaxed', TEXT_SECONDARY)}>{t('assistant.footerDisclaimer')}</p>
-          <div className={cn('mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-4 text-xs', BORDER_DEFAULT, TEXT_SECONDARY)}>
+          <div className={cn('mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-t pt-4 text-xs', BORDER_DEFAULT, TEXT_SECONDARY)}>
             <span className="flex items-center gap-2">
               <span className={cn('h-2 w-2 shrink-0 rounded-full', isGatewayRunning ? DOT_SUCCESS : 'bg-[#FAAD14]')} aria-hidden />
               {gatewayLine}
             </span>
-            <span className="tabular-nums text-[#4E5969] dark:text-muted-foreground">{t('agentHub.usageHint')}</span>
+            <span className="text-center">{t('assistant.footerDisclaimer')}</span>
+            <span className="justify-self-end tabular-nums text-right text-[#4E5969] dark:text-muted-foreground">{t('agentHub.usageHint')}</span>
           </div>
         </div>
       </div>

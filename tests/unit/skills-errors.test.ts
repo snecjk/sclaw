@@ -31,6 +31,26 @@ describe('skills store error mapping', () => {
     expect(useSkillsStore.getState().error).toBe('fetchRateLimitError');
   });
 
+  it('clears fetchSkills error after a later successful refresh', async () => {
+    rpcMock.mockResolvedValueOnce({ skills: [] });
+    hostApiFetchMock.mockRejectedValueOnce(new Error('request timeout'));
+
+    const { useSkillsStore } = await import('@/stores/skills');
+    await useSkillsStore.getState().fetchSkills();
+
+    expect(useSkillsStore.getState().error).toBe('fetchTimeoutError');
+
+    rpcMock.mockResolvedValueOnce({ skills: [] });
+    hostApiFetchMock
+      .mockResolvedValueOnce({ success: true, results: [] })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ success: true, results: [] });
+
+    await useSkillsStore.getState().fetchSkills();
+
+    expect(useSkillsStore.getState().error).toBeNull();
+  });
+
   it('maps searchSkills timeout error by AppError code', async () => {
     hostApiFetchMock.mockRejectedValueOnce(new Error('request timeout'));
 
