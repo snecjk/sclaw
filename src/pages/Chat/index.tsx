@@ -58,7 +58,7 @@ export function Chat() {
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [splitting, setSplitting] = useState(false);
-  const [showPreviewPanel, setShowPreviewPanel] = useState(true);
+  const [showPreviewPanel, setShowPreviewPanel] = useState(false);
   const [activePreviewFilePath, setActivePreviewFilePath] = useState<string | null>(null);
   const [previewPanelWidth, setPreviewPanelWidth] = useState(480);
   const [isResizing, setIsResizing] = useState(false);
@@ -276,33 +276,16 @@ export function Chat() {
 
   // Collect previewable files from messages and streaming message
   const allMessagesForPreview = useMemo(() => {
-    const arr = [...messages] as Array<{ _attachedFiles?: AttachedFileMeta[] }>;
+    const arr = [...messages] as Array<{ _attachedFiles?: AttachedFileMeta[]; role?: string }>;
     if (streamMsg) {
-      arr.push(streamMsg as unknown as { _attachedFiles?: AttachedFileMeta[] });
+      arr.push(streamMsg as unknown as { _attachedFiles?: AttachedFileMeta[]; role?: string });
     }
     return arr;
   }, [messages, streamMsg]);
   const previewableFiles = usePreviewableFiles(allMessagesForPreview);
   const hasPreviewableFiles = previewableFiles.length > 0;
 
-  // Auto-open newly-generated files in the preview panel
-  const prevPreviewableFilesRef = useRef(previewableFiles);
-  useEffect(() => {
-    const prev = prevPreviewableFilesRef.current;
-    const prevPaths = new Set(prev.map((f) => f.filePath));
-    const newFiles = previewableFiles.filter((f) => !prevPaths.has(f.filePath));
 
-    if (newFiles.length > 0) {
-      // Auto-select the most recently added file (last in array)
-      const latestFile = newFiles[newFiles.length - 1];
-      if (latestFile.filePath) {
-        setActivePreviewFilePath(latestFile.filePath);
-        setShowPreviewPanel(true);
-      }
-    }
-
-    prevPreviewableFilesRef.current = previewableFiles;
-  }, [previewableFiles]);
 
   // Auto-send watcher: sends queued messages one-by-one when AI finishes responding
   useEffect(() => {

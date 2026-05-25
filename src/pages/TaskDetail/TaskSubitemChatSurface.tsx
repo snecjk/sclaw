@@ -377,7 +377,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   return (
     <div
       className={cn(
-        'relative mt-4 flex min-h-0 flex-1 flex-row overflow-hidden rounded-xl',
+        'relative flex min-h-0 flex-1 flex-row overflow-hidden rounded-xl',
         stoTaskSubitemChatCanvasBg,
       )}
     >

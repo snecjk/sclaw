@@ -105,9 +105,9 @@ export function HomeMainConversation({ className }: { className?: string }) {
   const previewPanelRef = useRef<HTMLDivElement>(null);
 
   const allMessagesForPreview = useMemo(() => {
-    const arr = [...messages] as Array<{ _attachedFiles?: AttachedFileMeta[] }>;
+    const arr = [...messages] as Array<{ _attachedFiles?: AttachedFileMeta[]; role?: string }>;
     if (streamMsg) {
-      arr.push(streamMsg as unknown as { _attachedFiles?: AttachedFileMeta[] });
+      arr.push(streamMsg as unknown as { _attachedFiles?: AttachedFileMeta[]; role?: string });
     }
     return arr;
   }, [messages, streamMsg]);

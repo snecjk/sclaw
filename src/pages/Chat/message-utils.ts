@@ -369,7 +369,7 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
  * Extract previewable files from an array of messages.
  * Includes both _attachedFiles and references found in message text.
  */
-export function usePreviewableFiles(messages: Array<unknown & { _attachedFiles?: Array<{ mimeType: string; filePath?: string; fileName: string }>; content?: unknown }>) {
+export function usePreviewableFiles(messages: Array<unknown & { _attachedFiles?: Array<{ mimeType: string; filePath?: string; fileName: string }>; content?: unknown; role?: string }>) {
   return useMemo(() => {
     const seen = new Set<string>();
     const result: Array<{ mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }> = [];
@@ -382,7 +382,8 @@ export function usePreviewableFiles(messages: Array<unknown & { _attachedFiles?:
 
     for (const msg of messages) {
       // Path 1: explicit attached files
-      if (msg._attachedFiles) {
+      // Skip user-uploaded attachments (role === 'user'); only show AI-generated outputs
+      if (msg._attachedFiles && msg.role !== 'user') {
         for (const file of msg._attachedFiles) {
           if (!isPreviewableFile(file)) continue;
           const fp = file.filePath || file.fileName;
@@ -397,7 +398,7 @@ export function usePreviewableFiles(messages: Array<unknown & { _attachedFiles?:
         }
       }
 
-      // Path 2: references in message text
+      // Path 2: references in message text (from assistant/tool outputs)
       const text = extractText(msg);
       if (text) {
         const refs = extractPreviewableRefs(text);

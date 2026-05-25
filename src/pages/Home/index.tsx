@@ -26,14 +26,14 @@ export function Home() {
 
   if (!crmWeekReportSurfaceAllowed) {
     return (
-      <div className="mx-auto flex h-full max-h-full min-h-0 w-full max-w-[1200px] flex-1 flex-col overflow-hidden px-1 pt-2 sm:px-2">
+      <div className="mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-2 sm:px-2">
         <HomeAgentHubSurface />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-[1200px] flex-1 flex-col">
+    <div className="mx-auto flex h-full min-h-0 w-full flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {showConversation ? (
           <HomeMainConversation className="min-h-0 flex-1" />
