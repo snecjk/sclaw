@@ -315,11 +315,11 @@ function extToMimeType(ext: string): string {
 export const PREVIEWABLE_FILE_EXTS =
   'html?|sql|py|js|ts|jsx|tsx|java|go|rs|cpp|c|h|cs|rb|php|swift|kt|scala|r|m|mm|json|yaml|yml|xml|toml|ini|conf|properties|env|md|txt|csv|tsv|log|css|scss|less|sh|bash|zsh|fish|ps1|bat|cmd|pdf';
 
-/** Remove fenced code blocks and inline code from text so paths inside them are not matched. */
+/** Remove fenced code blocks from text so paths inside them are not matched.
+ *  Inline code (`path`) is preserved — it often contains actual file paths the user/AI wants to preview.
+ */
 function stripCodeBlocks(text: string): string {
-  return text
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/`[^`]*`/g, '');
+  return text.replace(/```[\s\S]*?```/g, '');
 }
 
 /**
@@ -369,7 +369,7 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
   // File paths (relative ./, absolute /, and Windows C:\) — support code, config, doc, and web files
   // Lookbehind (?<![\\w./:]) rejects matches that are part of a URL path component
   const pathRegex = new RegExp(
-    `(?<![\\w./:])(\\./(?:[^/\\s]+\\/)*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\s]+\\/)*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\s]+[\\\\/])*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`,
+    `(?<![\\w./:])(\\./(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\n\\r]+[\\\\/])*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`,
     'gi',
   );
   while ((match = pathRegex.exec(cleanText)) !== null) {

@@ -646,7 +646,7 @@ function preprocessTextForPreviewLinks(text: string): string {
   // Lookbehind (?<![\\w./:]) rejects matches that are part of a URL path component
   // (e.g. "/report.html" inside "https://example.com/report.html").
   text = text.replace(
-    new RegExp(`(?<![\\w./:])(\\./(?:[^/\\s]+\\/)*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\s]+\\/)*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\s]+[\\\\/])*[^/\\s]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`, 'g'),
+    new RegExp(`(?<![\\w./:])(\\./(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\n\\r]+[\\\\/])*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`, 'g'),
     '[$1](preview://$1)',
   );
 

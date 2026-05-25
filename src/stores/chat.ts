@@ -253,11 +253,11 @@ function mimeFromExtension(filePath: string): string {
   return map[ext] || 'application/octet-stream';
 }
 
-/** Remove fenced code blocks and inline code from text so paths inside them are not matched. */
+/** Remove fenced code blocks from text so paths inside them are not matched.
+ *  Inline code (`path`) is preserved — it often contains actual file paths the user/AI wants to preview.
+ */
 function stripCodeBlocks(text: string): string {
-  return text
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/`[^`]*`/g, '');
+  return text.replace(/```[\s\S]*?```/g, '');
 }
 
 /**
@@ -291,11 +291,11 @@ function extractRawFilePaths(text: string): Array<{ filePath: string; mimeType: 
 
   // Unix absolute paths (/... or ~/...) — lookbehind rejects mid-token slashes
   // (e.g. "path/to/file.mp4", "https://example.com/file.mp4")
-  const unixRegex = new RegExp(`(?<![\\w./:])((?:\\/|~\\/)[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
+  const unixRegex = new RegExp(`(?<![\\w./:])((?:\\/|~\\/)[^\\n\\r"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
   // Windows absolute paths with backslash (C:\... D:\...) — lookbehind rejects drive letter glued to a word
-  const winBackslashRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\\\[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
+  const winBackslashRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\\\[^\\n\\r"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
   // Windows absolute paths with forward slash (C:/... D:/...) — lookbehind rejects drive letter glued to a word
-  const winForwardRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\/[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
+  const winForwardRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\/[^\\n\\r"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
   for (const regex of [unixRegex, winBackslashRegex, winForwardRegex]) {
     while ((match = regex.exec(cleanText)) !== null) {
       const p = match[1];
