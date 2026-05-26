@@ -333,7 +333,18 @@ function createMainWindow(): BrowserWindow {
     }
     if (!isQuitting()) {
       event.preventDefault();
-      win.hide();
+      // macOS 全屏下直接 hide() 会导致空间切换动画异常而黑屏，
+      // 需先退出全屏再隐藏。
+      if (process.platform === 'darwin' && win.isFullScreen()) {
+        win.once('leave-full-screen', () => {
+          if (!win.isDestroyed()) {
+            win.hide();
+          }
+        });
+        win.setFullScreen(false);
+      } else {
+        win.hide();
+      }
     }
   });
 
