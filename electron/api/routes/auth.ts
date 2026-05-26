@@ -21,6 +21,7 @@ import { proxyAwareFetch } from '../../utils/proxy-fetch';
 
 const ssoLoginManager = new SsoLoginManager();
 
+// TODO：暂时的省区权限名单接口，后面上权限管理之后会去掉
 const CRM_WEEK_REPORT_POLICY_PATH =
   '/sto-policy/api/v1/base/getReportAuthUserIgnoreLogin?reportType=POLICY_CRM_WEEK_REPORT';
 

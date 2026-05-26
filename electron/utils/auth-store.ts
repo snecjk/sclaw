@@ -21,6 +21,8 @@ export interface SsoUserInfo {
   id: string;
   userName: string;
   realName: string;
+  code: string; // 梧桐工号（基础资料）（老系统的工号）
+  empCode: string; // 工号（轩辕系统的）（新系统的工号）（新入职员工这两个工号都一样）
   companyName: string;
   departmentName: string;
   openId: string;

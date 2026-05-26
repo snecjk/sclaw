@@ -113,6 +113,8 @@ export async function exchangeCodeForUser(
     id: u.Id ?? '',
     userName: u.UserName ?? '',
     realName: u.RealName ?? '',
+    code: u.Code ?? '',
+    empCode: u.EmpCode ?? '',
     companyName: u.CompanyName ?? '',
     departmentName: u.DepartmentName ?? '',
     openId: u.OpenId ?? '',
