@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## Build / Packaging
+
+- **Always build from the source project**: `/Users/zzj/Desktop/workspace/sto/backend-project/sto-claw/`
+- **Never build from Kilo worktree snapshots** (e.g., `.kilo/worktrees/*`) — those are stale copies.
+- When told to "build" or "package", ignore the current working directory if it's a worktree and build from the source project above.
+
 ## Cursor Cloud specific instructions
 
 ### Overview
