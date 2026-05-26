@@ -160,8 +160,31 @@ function normalizeAgentsDefaultsCompactionMode(config: Record<string, unknown>):
   }
 }
 
+function sanitizeModelsProviders(config: Record<string, unknown>): void {
+  const models = (
+    config.models && typeof config.models === 'object'
+      ? (config.models as Record<string, unknown>)
+      : null
+  );
+  if (!models) return;
+
+  const providers = (
+    models.providers && typeof models.providers === 'object'
+      ? (models.providers as Record<string, unknown>)
+      : null
+  );
+  if (!providers) return;
+
+  for (const entry of Object.values(providers)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const provider = entry as Record<string, unknown>;
+    delete provider.request;
+  }
+}
+
 async function writeOpenClawJson(config: Record<string, unknown>): Promise<void> {
   normalizeAgentsDefaultsCompactionMode(config);
+  sanitizeModelsProviders(config);
 
   // Ensure SIGUSR1 graceful reload is authorized by OpenClaw config.
   const commands = (
