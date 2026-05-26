@@ -186,7 +186,8 @@ export async function handleAuthRoutes(
   if (url.pathname === '/api/auth/crm-week-report-policy' && req.method === 'GET') {
     try {
       const state = await getAuthState();
-      if (!state.isAuthenticated || !state.user?.userName?.trim()) {
+      const hasCodeOrUserName = state.user?.code?.trim() || state.user?.userName?.trim();
+      if (!state.isAuthenticated || !hasCodeOrUserName) {
         sendJson(res, 200, { allowed: false });
         return true;
       }
@@ -216,7 +217,7 @@ export async function handleAuthRoutes(
         return true;
       }
 
-      const allowed = computeCrmWeekReportSurfaceAllowed(state.user.userName, json);
+      const allowed = computeCrmWeekReportSurfaceAllowed(state.user.code, state.user.userName, json);
       sendJson(res, 200, { allowed });
     } catch (error) {
       logger.warn('CRM week report policy fetch failed:', error);
