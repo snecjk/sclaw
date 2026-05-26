@@ -14,9 +14,9 @@ export const BLOCKED_RPC_METHODS: RegExp[] = [
   // Shell / 进程执行类（可被用于间接执行升级命令）
   /^shell\./i,
   /^process\.(spawn|exec|run)/i,
-  // CLI 工具升级
-  /^cli\.(update|upgrade|install)/i,
-  /^sai\.(update|upgrade|install)/i,
+  // CLI 工具升级（sai-cli update 已放行；install 仍禁止）
+  /^cli\.(upgrade|install)/i,
+  /^sai\.(upgrade|install)/i,
   // 包管理器直接调用
   /^(npm|pnpm|yarn)\./i,
   /^pip\.(install|upgrade|uninstall)/i,

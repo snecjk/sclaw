@@ -202,6 +202,16 @@ export function isFloatIconVisible(): boolean {
 }
 
 /**
+ * Reset float icon visibility to false on app quit.
+ * Ensures the float icon does not auto-show on next launch.
+ */
+export async function resetFloatIconVisibilityOnQuit(): Promise<void> {
+  const store = await getStore();
+  const current: FloatIconState = store.get('floatIconState');
+  store.set('floatIconState', { ...current, visible: false });
+}
+
+/**
  * Toggle the sprite window, positioning it near the float icon.
  * Called when the user clicks the floating icon.
  */

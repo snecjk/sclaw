@@ -323,11 +323,14 @@ function stripCodeBlocks(text: string): string {
 }
 
 /**
- * Extract previewable local file paths, file:// URLs, and localhost URLs from plain text.
- * Matches absolute paths like /Users/.../file.html, file:///Users/.../file.html,
- * and localhost URLs like http://localhost:8080/path.
+ * Extract previewable file references from structured markers in message text.
+ * Recognizes:
+ *   - [file-preview: path] — explicit file output marker
+ *   - file:///Users/.../file.html — explicit file:// URLs
+ *   - http://localhost:8080/path — localhost preview URLs
  * Code blocks are stripped before matching to avoid false positives.
- * Lookbehind rejects URL path components (e.g. /report.html inside https://example.com/report.html).
+ * Raw bare paths (e.g. /Users/.../file.html typed in plain text) are NOT extracted
+ * to avoid false positives and duplicate previews.
  */
 export function extractPreviewableRefs(text: string): Array<{ filePath: string; fileName: string; mimeType: string }> {
   const cleanText = stripCodeBlocks(text);
@@ -357,6 +360,16 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
     addIfNotImage(filePath, fileName, ext);
   }
 
+
+  // [file-preview: path] — explicit structured file output marker
+  const filePreviewRegex = /\[file-preview:\s*([^\]\n\r]+?)\s*\]/g;
+  while ((match = filePreviewRegex.exec(cleanText)) !== null) {
+    const filePath = match[1].trim();
+    const fileName = filePath.split('/').pop() || '';
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    addIfNotImage(filePath, fileName, ext);
+  }
+
   // Localhost URLs only (previewable in side panel)
   const urlRegex = /(https?:\/\/localhost:[^\s)\]"',;<>]+)/g;
   while ((match = urlRegex.exec(cleanText)) !== null) {
@@ -366,18 +379,6 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
     addIfNotImage(url, fileName, ext);
   }
 
-  // File paths (relative ./, absolute /, and Windows C:\) — support code, config, doc, and web files
-  // Lookbehind (?<![\\w./:]) rejects matches that are part of a URL path component
-  const pathRegex = new RegExp(
-    `(?<![\\w./:])(\\./(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\n\\r]+[\\\\/])*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`,
-    'gi',
-  );
-  while ((match = pathRegex.exec(cleanText)) !== null) {
-    const path = match[1].replace(/\\/g, '/');
-    const fileName = path.split('/').pop() || '';
-    const ext = fileName.split('.').pop()?.toLowerCase() || '';
-    addIfNotImage(path, fileName, ext);
-  }
 
   return results;
 }

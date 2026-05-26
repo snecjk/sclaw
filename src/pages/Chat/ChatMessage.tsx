@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { assistantChatCardBg, assistantChatCardBgStreaming } from '@/lib/surfaces';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
-import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS } from './message-utils';
+import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile } from './message-utils';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
 
 interface ChatMessageProps {
@@ -604,6 +604,11 @@ function preprocessTextForPreviewLinks(text: string): string {
   // and the raw metadata isn't shown in the message bubble.
   text = text.replace(/\s*\[media attached:[^\]]*\]/g, '');
 
+  // Remove [file-preview: ...] blocks — these are structured markers consumed
+  // by the store layer to populate _attachedFiles; they should not be visible
+  // in the rendered message bubble.
+  text = text.replace(/\s*\[file-preview:[^\]]*\]/g, '');
+
   // Protect existing markdown links [text](url) — extract them so inner paths/URLs
   // are not mangled by the subsequent replacements.
   // For local file targets, rewrite to preview://; for external URLs, leave intact.
@@ -642,13 +647,6 @@ function preprocessTextForPreviewLinks(text: string): string {
     '[$1](preview://$1)',
   );
 
-  // Replace file paths (relative ./, absolute /, and Windows C:\)
-  // Lookbehind (?<![\\w./:]) rejects matches that are part of a URL path component
-  // (e.g. "/report.html" inside "https://example.com/report.html").
-  text = text.replace(
-    new RegExp(`(?<![\\w./:])(\\./(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\n\\r]+[\\\\/])*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`, 'g'),
-    '[$1](preview://$1)',
-  );
 
   // Restore file URL placeholders (before other restores so markdown links don't interfere)
   text = text.replace(/__FILE_URL_(\d+)__/g, (_, i) => fileUrlPlaceholders[Number(i)]);

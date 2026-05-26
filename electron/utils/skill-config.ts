@@ -326,11 +326,9 @@ async function tryReadMarker(markerPath: string): Promise<PreinstalledMarker | n
  * deployed to ~/.stoclaw/openclaw/skills/<slug>/ as full directories.
  *
  * Policy:
- * - Local built-in skills ("local": true) are ALWAYS copied over the local
- *   copy so the app-shipped version takes precedence.  Their version is derived
- *   from the sha256 hash of the bundled SKILL.md so edits are picked up.
- * - Remote skills follow the conservative rules: never overwrite user-managed
- *   skills, skip if the version already matches.
+ * - All preinstalled skills (both local and remote) follow conservative rules:
+ *   never overwrite existing skills.  Only install when the target directory
+ *   does not yet exist.  This respects the user policy of "no skill auto-update".
  */
 export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
     const skills = await readPreinstalledManifest();
@@ -371,25 +369,20 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
         const marker = await tryReadMarker(markerPath);
 
         if (existsSync(targetManifest)) {
+            // 禁止自动更新 skill：已存在的 skill 不再覆盖，无论 local 还是 remote。
             if (spec.local) {
-                // Built-in local skill: overwrite the user's copy so the app
-                // version is always authoritative.
                 if (marker && marker.version === desiredVersion) {
                     continue; // already up to date
                 }
-                logger.info(`Replacing built-in local skill: ${spec.slug} (version ${desiredVersion})`);
+                logger.info(`Skipping built-in local skill update: ${spec.slug} (user policy: no skill auto-update)`);
             } else {
-                // Remote skill: conservative, don't overwrite user-managed copies.
                 if (!marker) {
                     logger.info(`Skipping user-managed skill: ${spec.slug}`);
-                    continue;
+                } else if (marker.version !== desiredVersion) {
+                    logger.info(`Skipping preinstalled skill update for ${spec.slug} (local marker version=${marker.version}, desired=${desiredVersion})`);
                 }
-                if (marker.version === desiredVersion) {
-                    continue;
-                }
-                logger.info(`Skipping preinstalled skill update for ${spec.slug} (local marker version=${marker.version}, desired=${desiredVersion})`);
-                continue;
             }
+            continue;
         }
 
         try {

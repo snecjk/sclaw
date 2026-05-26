@@ -129,32 +129,21 @@ export function FilePreviewViewer({
   }, [filePath, mimeType]);
 
   const content = (() => {
-  // Web URLs (http/https) are no longer routed through the built-in preview viewer
-  // because many sites have anti-hotlink / X-Frame-Options / CSP blocking.
-  // They are opened directly in the external browser instead.
-  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-    return (
-      <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm text-muted-foreground', className)}>
-        <FileText className="h-10 w-10 opacity-40" />
-        <p>{fileName}</p>
-        <OpenExternalButton filePath={filePath} />
-      </div>
-    );
-  }
+  const isHttpUrl = filePath.startsWith('http://') || filePath.startsWith('https://');
 
   // PDF preview
   if (mimeType === 'application/pdf') {
     return (
       <iframe
         key={filePath}
-        src={toServeUrl(filePath)}
+        src={isHttpUrl ? filePath : toServeUrl(filePath)}
         title={fileName}
         className={cn('h-full min-w-0 w-full border-0', className)}
       />
     );
   }
-  // Local HTML file preview — serve through Host API to bypass browser restrictions
-  // Fallback to extension check when mimeType is mis-detected as application/octet-stream
+
+  // HTML preview — local files served through Host API; http URLs loaded directly
   const isHtmlFile = mimeType === 'text/html' || (() => {
     const ext = filePath.split('.').pop()?.toLowerCase();
     return ext === 'html' || ext === 'htm';
@@ -163,11 +152,22 @@ export function FilePreviewViewer({
     return (
       <iframe
         key={filePath}
-        src={toServeUrl(filePath)}
+        src={isHttpUrl ? filePath : toServeUrl(filePath)}
         title={fileName}
         className={cn('h-full min-w-0 w-full border-0', className)}
-        sandbox="allow-scripts allow-same-origin"
+        sandbox={isHttpUrl ? 'allow-scripts allow-popups allow-forms' : 'allow-scripts allow-same-origin'}
       />
+    );
+  }
+
+  // For http/https URLs that are not HTML/PDF, show fallback with open-external button
+  if (isHttpUrl) {
+    return (
+      <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm text-muted-foreground', className)}>
+        <FileText className="h-10 w-10 opacity-40" />
+        <p>{fileName}</p>
+        <OpenExternalButton filePath={filePath} />
+      </div>
     );
   }
 

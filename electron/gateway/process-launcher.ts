@@ -9,8 +9,9 @@ import { appendNodeRequireToNodeOptions } from '../utils/paths';
 const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
 (function () {
   // ── Security: block upgrade/install commands inside Gateway process ──
-  // Prevents AI agent from executing openclaw/sai-cli upgrade or package
+  // Prevents AI agent from executing openclaw upgrade or package
   // manager install commands that would break the Gateway installation.
+  // sai-cli update/upgrade is allowed (standalone binary).
 
   var BLOCKED_FETCH_URL_PATTERNS = [
     /\\/api\\/v1\\/cli\\/update/i,
@@ -36,6 +37,10 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
   function isBlockedCommand(cmd, argsList) {
     var c = typeof cmd === 'string' ? cmd.trim() : '';
     var a = Array.isArray(argsList) ? argsList.join(' ') : '';
+    // Allow sai-cli update/upgrade (standalone binary); block install/uninstall/remove only
+    if (/^sai-cli$/i.test(c) || /^sai\.exe$/i.test(c)) {
+      return /\binstall\b/i.test(a) || /\buninstall\b/i.test(a) || /\bremove\b/i.test(a);
+    }
     if (BLOCKED_BINARIES.test(c)) {
       for (var i = 0; i < UPGRADE_ARG_PATTERNS.length; i++) {
         if (UPGRADE_ARG_PATTERNS[i].test(a)) return true;

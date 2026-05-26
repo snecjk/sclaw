@@ -201,6 +201,21 @@ function extractMediaRefs(text: string): Array<{ filePath: string; mimeType: str
   return refs;
 }
 
+/** Extract file-preview refs from [file-preview: <path>] patterns */
+function extractFilePreviewRefs(text: string): Array<{ filePath: string; mimeType: string }> {
+  const cleanText = stripCodeBlocks(text);
+  const refs: Array<{ filePath: string; mimeType: string }> = [];
+  const regex = /\[file-preview:\s*([^\]\n\r]+?)\s*\]/g;
+  let match;
+  while ((match = regex.exec(cleanText)) !== null) {
+    const path = match[1].trim();
+    if (path) {
+      refs.push({ filePath: path, mimeType: mimeFromExtension(path) });
+    }
+  }
+  return refs;
+}
+
 /** Map common file extensions to MIME types */
 function mimeFromExtension(filePath: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() || '';
@@ -260,53 +275,6 @@ function stripCodeBlocks(text: string): string {
   return text.replace(/```[\s\S]*?```/g, '');
 }
 
-/**
- * Extract raw file paths from message text.
- * Detects absolute paths (Unix: / or ~/, Windows: C:\ etc.), file:// URLs,
- * and localhost URLs ending with common file extensions.
- * Handles both image and non-image files, consistent with channel push message behavior.
- * Code blocks are stripped before matching to avoid false positives.
- */
-function extractRawFilePaths(text: string): Array<{ filePath: string; mimeType: string }> {
-  const cleanText = stripCodeBlocks(text);
-  const refs: Array<{ filePath: string; mimeType: string }> = [];
-  const seen = new Set<string>();
-  const exts = 'png|jpe?g|gif|webp|bmp|avif|svg|pdf|docx?|xlsx?|pptx?|txt|csv|md|rtf|epub|zip|tar|gz|rar|7z|mp3|wav|ogg|aac|flac|m4a|mp4|mov|avi|mkv|webm|m4v|html?';
-
-  // file:// URLs — strip the scheme and use the underlying local path
-  // Regex consumes file:// (2 slashes), capture group gets the 3rd slash + path.
-  // For Windows: /C:/Users/... → strip leading / → C:/Users/...
-  // For Unix: /Users/... → keep as-is → /Users/...
-  const fileUrlRegex = /file:\/\/(\/[A-Za-z]:[\\/][^\s)\]"',;<>]+|\/[^\s)\]"',;<>]+)/g;
-  let match;
-  while ((match = fileUrlRegex.exec(cleanText)) !== null) {
-    const captured = match[1];
-    // Strip leading / for Windows paths (/C:/ → C:/), keep for Unix (/Users/ → /Users/)
-    const p = captured.match(/^\/[A-Za-z]:/) ? captured.slice(1) : captured;
-    if (p && !seen.has(p)) {
-      seen.add(p);
-      refs.push({ filePath: p, mimeType: mimeFromExtension(p) });
-    }
-  }
-
-  // Unix absolute paths (/... or ~/...) — lookbehind rejects mid-token slashes
-  // (e.g. "path/to/file.mp4", "https://example.com/file.mp4")
-  const unixRegex = new RegExp(`(?<![\\w./:])((?:\\/|~\\/)[^\\n\\r"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
-  // Windows absolute paths with backslash (C:\... D:\...) — lookbehind rejects drive letter glued to a word
-  const winBackslashRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\\\[^\\n\\r"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
-  // Windows absolute paths with forward slash (C:/... D:/...) — lookbehind rejects drive letter glued to a word
-  const winForwardRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\/[^\\n\\r"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
-  for (const regex of [unixRegex, winBackslashRegex, winForwardRegex]) {
-    while ((match = regex.exec(cleanText)) !== null) {
-      const p = match[1];
-      if (p && !seen.has(p)) {
-        seen.add(p);
-        refs.push({ filePath: p, mimeType: mimeFromExtension(p) });
-      }
-    }
-  }
-  return refs;
-}
 
 /**
  * Extract images from a content array (including nested tool_result content).
@@ -452,7 +420,7 @@ function collectToolCallPaths(msg: RawMessage, paths: Map<string, string>): void
  * Handles:
  *   - Image content blocks (base64 / url)
  *   - [media attached: path (mime) | path] text patterns in tool result output
- *   - Raw file paths in tool result text
+ *   - [file-preview: path] text patterns in tool result output
  */
 function enrichWithToolResultFiles(messages: RawMessage[]): RawMessage[] {
   const pending: AttachedFileMeta[] = [];
@@ -488,8 +456,8 @@ function enrichWithToolResultFiles(messages: RawMessage[]): RawMessage[] {
         for (const ref of mediaRefs) {
           pending.push(makeAttachedFile(ref));
         }
-        // 3. Raw file paths in tool result text (documents, audio, video, etc.)
-        for (const ref of extractRawFilePaths(text)) {
+        // 3. [file-preview: ...] patterns in tool result text
+        for (const ref of extractFilePreviewRefs(text)) {
           if (!mediaRefPaths.has(ref.filePath)) {
             pending.push(makeAttachedFile(ref));
           }
@@ -521,11 +489,11 @@ function enrichWithToolResultFiles(messages: RawMessage[]): RawMessage[] {
  * Restore _attachedFiles for messages loaded from history.
  * Handles:
  *   1. [media attached: path (mime) | path] patterns (attachment-button flow)
- *   2. Raw image file paths typed in message text (e.g. /Users/.../image.png)
+ *   2. [file-preview: path] patterns in assistant message text
  * Uses local cache for previews when available; missing previews are loaded async.
  */
 function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
-  return messages.map((msg, idx) => {
+  return messages.map((msg) => {
     // Only process user and assistant messages; skip if already enriched
     if ((msg.role !== 'user' && msg.role !== 'assistant') || msg._attachedFiles) return msg;
     const text = getMessageText(msg.content);
@@ -534,33 +502,14 @@ function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
     const mediaRefs = extractMediaRefs(text);
     const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
 
-    // Path 2: Raw file paths.
-    // For assistant messages: scan own text AND the nearest preceding user message text,
-    // but only for non-tool-only assistant messages (i.e. the final answer turn).
-    // Tool-only messages (thinking + tool calls) should not show file previews — those
-    // belong to the final answer message that comes after the tool results.
-    // User messages never get raw-path previews so the image is not shown twice.
+    // Path 2: [file-preview: ...] patterns.
+    // For assistant messages: scan own text only, and only for non-tool-only
+    // assistant messages (i.e. the final answer turn).
+    // Tool-only messages (thinking + tool calls) should not show file previews —
+    // those belong to the final answer message that comes after the tool results.
     let rawRefs: Array<{ filePath: string; mimeType: string }> = [];
     if (msg.role === 'assistant' && !isToolOnlyMessage(msg)) {
-      // Own text
-      rawRefs = extractRawFilePaths(text).filter(r => !mediaRefPaths.has(r.filePath));
-
-      // Nearest preceding user message text (look back up to 5 messages)
-      const seenPaths = new Set(rawRefs.map(r => r.filePath));
-      for (let i = idx - 1; i >= Math.max(0, idx - 5); i--) {
-        const prev = messages[i];
-        if (!prev) break;
-        if (prev.role === 'user') {
-          const prevText = getMessageText(prev.content);
-          for (const ref of extractRawFilePaths(prevText)) {
-            if (!mediaRefPaths.has(ref.filePath) && !seenPaths.has(ref.filePath)) {
-              seenPaths.add(ref.filePath);
-              rawRefs.push(ref);
-            }
-          }
-          break; // only use the nearest user message
-        }
-      }
+      rawRefs = extractFilePreviewRefs(text).filter(r => !mediaRefPaths.has(r.filePath));
     }
 
     const allRefs = [...mediaRefs, ...rawRefs];
@@ -1896,7 +1845,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               const mediaRefs = extractMediaRefs(text);
               const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
               for (const ref of mediaRefs) toolFiles.push(makeAttachedFile(ref));
-              for (const ref of extractRawFilePaths(text)) {
+              for (const ref of extractFilePreviewRefs(text)) {
                 if (!mediaRefPaths.has(ref.filePath)) toolFiles.push(makeAttachedFile(ref));
               }
             }

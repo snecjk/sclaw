@@ -42,6 +42,7 @@ import { createSignalQuitHandler } from './signal-quit';
 import { acquireProcessInstanceFileLock } from './process-instance-lock';
 import { getSetting } from '../utils/store';
 import { getCurrentEnvConfig } from '../../shared/env-config';
+import { log } from 'node:console';
 
 _ts('static imports loaded');
 
@@ -559,7 +560,7 @@ async function initialize(): Promise<void> {
     }).catch((error) => {
       logger.warn('CLI auto-install failed:', error);
     });
-
+    logger.warn('autoInstallSaiCliIfNeeded start');
     await autoInstallSaiCliIfNeeded((installedPath) => {
       mainWindow?.webContents.send('sai:cli-installed', installedPath);
     }).catch((error) => {
@@ -769,6 +770,15 @@ if (gotTheLock) {
 
   app.on('before-quit', (event) => {
     setQuitting();
+
+    // Reset sprite and float icon visibility so they don't auto-show on next launch
+    void import('./sprite-window').then(({ resetSpriteVisibilityOnQuit }) =>
+      resetSpriteVisibilityOnQuit().catch(() => { /* ignore */ }),
+    );
+    void import('./float-icon-window').then(({ resetFloatIconVisibilityOnQuit }) =>
+      resetFloatIconVisibilityOnQuit().catch(() => { /* ignore */ }),
+    );
+
     const action = requestQuitLifecycleAction(quitLifecycleState);
 
     if (action === 'allow-quit') {

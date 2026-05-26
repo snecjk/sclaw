@@ -145,10 +145,9 @@ export async function saiList(filter?: { product?: string; module?: string }): P
 
 // ── Dynamic command execution ───────────────────────────────────────────────
 
-// SAI CLI 命令黑名单：禁止通过对话触发的升级/安装类操作
+// SAI CLI 命令黑名单：禁止通过对话触发的安装/卸载类操作
+// update/upgrade 已放行：sai-cli 是独立二进制，更新不会影响 Gateway
 const BLOCKED_SAI_COMMANDS: RegExp[] = [
-  /^update/i,
-  /^upgrade/i,
   /^install/i,
   /^uninstall/i,
   /^remove/i,
