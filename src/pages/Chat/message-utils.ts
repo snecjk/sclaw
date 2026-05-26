@@ -399,24 +399,9 @@ export function usePreviewableFiles(messages: Array<unknown & { _attachedFiles?:
     }
 
     for (const msg of messages) {
-      // Path 1: explicit attached files
-      // Skip user-uploaded attachments (role === 'user'); only show AI-generated outputs
-      if (msg._attachedFiles && msg.role !== 'user') {
-        for (const file of msg._attachedFiles) {
-          if (!isPreviewableFile(file)) continue;
-          const fp = file.filePath || file.fileName;
-          if (!fp) continue;
-          addItem({
-            mimeType: file.mimeType,
-            filePath: fp,
-            fileName: file.fileName,
-            fileSize: (file as { fileSize?: number }).fileSize ?? 0,
-            preview: (file as { preview?: string | null }).preview ?? null,
-          });
-        }
-      }
-
-      // Path 2: references in message text (from assistant/tool outputs)
+      // Only extract from [file-preview: ...] markers in message text.
+      // _attachedFiles (tool results, media attachments) are NOT included here
+      // to avoid showing files that were never explicitly declared by the AI.
       const text = extractText(msg);
       if (text) {
         const refs = extractPreviewableRefs(text);
