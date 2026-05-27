@@ -4,6 +4,7 @@
     "newTask": "新規タスク",
     "refresh": "更新",
     "gatewayWarning": "ゲートウェイが稼働していません。アクティブなゲートウェイがないと定期タスクを管理できません。",
+    "cloudSyncWarning": "クラウドタスクの同期に失敗しました。キャッシュデータを表示中です。",
     "stats": {
         "total": "タスク合計",
         "active": "有効",
@@ -17,6 +18,7 @@
     },
     "card": {
         "runNow": "今すぐ実行",
+        "session": "セッション",
         "deleteConfirm": "このタスクを削除してもよろしいですか？",
         "last": "前回",
         "next": "次回"
@@ -40,7 +42,9 @@
         "discordChannelIdDesc": "Discordチャンネルを右クリック → チャンネルIDをコピー",
         "enableImmediately": "すぐに有効化",
         "enableImmediatelyDesc": "作成後すぐにこのタスクを実行開始",
-        "saveChanges": "変更を保存"
+        "saveChanges": "変更を保存",
+        "cloudAgent": "クラウドエージェント",
+        "noCloudAgents": "利用可能なクラウドエージェントがありません。先にクラウドエージェントを作成してください。"
     },
     "presets": {
         "everyMinute": "毎分",
@@ -66,7 +70,8 @@
         "messageRequired": "メッセージを入力してください",
         "channelRequired": "チャンネルを選択してください",
         "discordIdRequired": "DiscordチャンネルIDを入力してください",
-        "scheduleRequired": "スケジュールを選択または入力してください"
+        "scheduleRequired": "スケジュールを選択または入力してください",
+        "agentRequired": "クラウドエージェントを選択してください"
     },
     "schedule": {
         "everySeconds": "{{count}}秒ごと",

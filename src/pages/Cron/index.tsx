@@ -2,7 +2,7 @@
  * Cron Page
  * Manage scheduled tasks
  */
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Plus,
   Clock,
@@ -19,6 +19,7 @@ import {
   Timer,
   History,
   Pause,
+  MessageCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,10 +34,11 @@ import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import { glassNestedCard, glassSectionSurface } from '@/lib/surfaces';
 import { toast } from 'sonner';
-import type { CronJob, CronJobCreateInput, ScheduleType } from '@/types/cron';
+import type { CronJob, CronJobCreateInput, ScheduleType, CloudAgentRef } from '@/types/cron';
 import { CHANNEL_ICONS, type ChannelType } from '@/types/channel';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
+import { useChatStore } from '@/stores/chat';
 
 // Common cron schedule presets
 const schedulePresets: { key: string; value: string; type: ScheduleType }[] = [
@@ -174,11 +176,12 @@ function estimateNextRun(scheduleExpr: string): string | null {
 // Create/Edit Task Dialog
 interface TaskDialogProps {
   job?: CronJob;
+  cloudAgents: CloudAgentRef[];
   onClose: () => void;
-  onSave: (input: CronJobCreateInput) => Promise<void>;
+  onSave: (input: CronJobCreateInput & { agentId?: string }) => Promise<void>;
 }
 
-function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
+function TaskDialog({ job, cloudAgents, onClose, onSave }: TaskDialogProps) {
   const { t } = useTranslation('cron');
   const [saving, setSaving] = useState(false);
 
@@ -198,6 +201,7 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
   const [customSchedule, setCustomSchedule] = useState('');
   const [useCustom, setUseCustom] = useState(false);
   const [enabled, setEnabled] = useState(job?.enabled ?? true);
+  const [agentId, setAgentId] = useState('');
   const schedulePreview = estimateNextRun(useCustom ? customSchedule : schedule);
 
   const handleSubmit = async () => {
@@ -216,6 +220,12 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
       return;
     }
 
+    // For new cloud jobs, require agent selection
+    if (!job && !agentId) {
+      toast.error(t('toast.agentRequired') || 'Please select a cloud agent');
+      return;
+    }
+
     setSaving(true);
     try {
       await onSave({
@@ -223,6 +233,7 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
         message: message.trim(),
         schedule: finalSchedule,
         enabled,
+        ...(agentId ? { agentId } : {}),
       });
       onClose();
       toast.success(job ? t('toast.updated') : t('toast.created'));
@@ -319,6 +330,45 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
             </div>
           </div>
 
+          {/* Cloud Agent Selector (only for new jobs) */}
+          {!job && (
+            <div className="space-y-2.5">
+              <Label className="text-[14px] text-foreground/80 font-bold">{t('dialog.cloudAgent') || 'Cloud Agent'}</Label>
+              {cloudAgents.length === 0 ? (
+                <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-3 text-[13px] text-yellow-800 dark:text-yellow-300">
+                  {t('dialog.noCloudAgents') || 'No cloud agents available. Please create a cloud agent first.'}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2">
+                  {cloudAgents.map((agent) => (
+                    <Button
+                      key={agent.id}
+                      type="button"
+                      variant={agentId === agent.id ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setAgentId(agent.id)}
+                      className={cn(
+                        "justify-start h-10 rounded-xl font-medium text-[13px] transition-all",
+                        agentId === agent.id
+                          ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm border-transparent"
+                          : "bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80 hover:text-foreground"
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={cn(
+                          "w-2 h-2 rounded-full",
+                          agent.status === 'online' ? "bg-green-500" : "bg-red-500"
+                        )} />
+                        <span>{agent.name}</span>
+                        <span className="text-muted-foreground text-[11px]">({agent.model})</span>
+                      </div>
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Enabled */}
           <div className="flex items-center justify-between rounded-2xl border border-glass-border bg-white/75 p-4 shadow-sm dark:bg-[hsl(var(--glass-bg)/0.5)]">
             <div>
@@ -358,13 +408,15 @@ function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
 // Job Card Component
 interface CronJobCardProps {
   job: CronJob;
-  onToggle: (enabled: boolean) => void;
+  isCloud?: boolean;
+  onToggle: () => Promise<void>;
   onEdit: () => void;
   onDelete: () => void;
   onTrigger: () => Promise<void>;
+  onOpenSession?: () => void;
 }
 
-function CronJobCard({ job, onToggle, onEdit, onDelete, onTrigger }: CronJobCardProps) {
+function CronJobCard({ job, isCloud, onToggle, onEdit, onDelete, onTrigger, onOpenSession }: CronJobCardProps) {
   const { t } = useTranslation('cron');
   const [triggering, setTriggering] = useState(false);
 
@@ -419,6 +471,11 @@ function CronJobCard({ job, onToggle, onEdit, onDelete, onTrigger }: CronJobCard
         </div>
 
         <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+          {isCloud && (
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 font-medium">
+              ☁️ Cloud
+            </span>
+          )}
           <Switch
             checked={job.enabled}
             onCheckedChange={onToggle}
@@ -473,6 +530,20 @@ function CronJobCard({ job, onToggle, onEdit, onDelete, onTrigger }: CronJobCard
 
         {/* Actions */}
         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity mt-auto">
+          {isCloud && onOpenSession && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenSession();
+              }}
+              className="h-8 px-3 text-foreground/70 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5 rounded-lg text-[13px] font-medium transition-colors"
+            >
+              <MessageCircle className="h-3.5 w-3.5 mr-1.5" />
+              {t('card.session', '会话')}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -504,43 +575,173 @@ function CronJobCard({ job, onToggle, onEdit, onDelete, onTrigger }: CronJobCard
 
 export function Cron() {
   const { t } = useTranslation('cron');
-  const { jobs, loading, error, fetchJobs, createJob, updateJob, toggleJob, deleteJob, triggerJob } = useCronStore();
+  const {
+    jobs,
+    cloudJobs,
+    cloudAgents,
+    loading,
+    error,
+    cloudError,
+    fetchJobs,
+    fetchCloudAgents,
+    createCloudJob,
+    updateCloudJob,
+    toggleCloudJob,
+    deleteCloudJob,
+    triggerCloudJob,
+    syncCloudResults,
+    createJob,
+    updateJob,
+    toggleJob,
+    deleteJob,
+    triggerJob,
+  } = useCronStore();
   const gatewayStatus = useGatewayStore((state) => state.status);
+  const switchSession = useChatStore((state) => state.switchSession);
+  const cloudJobsRef = useRef(cloudJobs);
+  const switchSessionRef = useRef(switchSession);
+  useEffect(() => {
+    cloudJobsRef.current = cloudJobs;
+    switchSessionRef.current = switchSession;
+  });
   const [showDialog, setShowDialog] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJob | undefined>();
-  const [jobToDelete, setJobToDelete] = useState<{ id: string } | null>(null);
+  const [jobToDelete, setJobToDelete] = useState<{ id: string; isCloud?: boolean } | null>(null);
 
   const isGatewayRunning = gatewayStatus.state === 'running';
 
-  // Fetch jobs on mount
+  const handleOpenSession = useCallback((job: CronJob) => {
+    const cloudJob = cloudJobs.find((cj) => cj.id === job.id);
+    if (!cloudJob) return;
+    const agentId = cloudJob.agentId;
+    const sessionKey = `agent:${agentId}:cron:${job.id}`;
+    switchSession(sessionKey);
+    window.location.hash = '/chat';
+  }, [cloudJobs, switchSession]);
+
+  // Merge local and cloud jobs for unified display
+  const allJobs = [
+    ...(Array.isArray(jobs) ? jobs : []),
+    ...(Array.isArray(cloudJobs) ? cloudJobs : []),
+  ];
+  const safeJobs = allJobs.sort((a, b) => {
+    const aNext = a.nextRun ? new Date(a.nextRun).getTime() : Infinity;
+    const bNext = b.nextRun ? new Date(b.nextRun).getTime() : Infinity;
+    return aNext - bNext;
+  });
+
+  // Fetch jobs and cloud agents on mount
   useEffect(() => {
-    if (isGatewayRunning) {
-      fetchJobs();
-    }
-  }, [fetchJobs, isGatewayRunning]);
+    fetchJobs();
+    fetchCloudAgents();
+  }, [fetchJobs, fetchCloudAgents]);
+
+  // Foreground polling: sync cloud results every 30s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      syncCloudResults()
+        .then((results) => {
+          if (results.length > 0) {
+            // Show toast notifications for new results
+            for (const result of results) {
+              const taskName = safeJobs.find((j) => j.id === result.taskId)?.name || result.taskId;
+              if (result.status === 'success') {
+                toast.success(`☁️ ${taskName} executed successfully`, {
+                  action: {
+                    label: 'View',
+                    onClick: () => {
+                      const cj = cloudJobsRef.current.find((c) => c.id === result.taskId);
+                      if (cj) {
+                        switchSessionRef.current(`agent:${cj.agentId}:cron:${result.taskId}`);
+                      }
+                      window.location.hash = '/chat';
+                    },
+                  },
+                });
+              } else if (result.status === 'failure') {
+                toast.error(`☁️ ${taskName} failed: ${result.error?.message || 'Unknown error'}`, {
+                  action: {
+                    label: 'Details',
+                    onClick: () => {
+                      const cj = cloudJobsRef.current.find((c) => c.id === result.taskId);
+                      if (cj) {
+                        switchSessionRef.current(`agent:${cj.agentId}:cron:${result.taskId}`);
+                      }
+                      window.location.hash = '/chat';
+                    },
+                  },
+                });
+              }
+            }
+          }
+        })
+        .catch((err) => console.error('Cloud result sync failed:', err));
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [syncCloudResults, safeJobs]);
 
   // Statistics
-  const safeJobs = Array.isArray(jobs) ? jobs : [];
   const activeJobs = safeJobs.filter((j) => j.enabled);
   const pausedJobs = safeJobs.filter((j) => !j.enabled);
   const failedJobs = safeJobs.filter((j) => j.lastRun && !j.lastRun.success);
 
-  const handleSave = useCallback(async (input: CronJobCreateInput) => {
+  const handleSave = useCallback(async (input: CronJobCreateInput & { agentId?: string }) => {
     if (editingJob) {
-      await updateJob(editingJob.id, input);
+      // Check if editing a cloud job (cloud jobs have schedule as string, local may have object)
+      const isCloudJob = cloudJobs.some((cj) => cj.id === editingJob.id);
+      if (isCloudJob) {
+        await updateCloudJob(editingJob.id, input);
+      } else {
+        await updateJob(editingJob.id, input);
+      }
     } else {
-      await createJob(input);
+      // Default to cloud execution for new jobs
+      if (input.agentId) {
+        await createCloudJob({
+          name: input.name,
+          message: input.message,
+          schedule: input.schedule,
+          agentId: input.agentId,
+          enabled: input.enabled ?? true,
+        });
+      } else {
+        // Fallback to local if no agent selected (should not happen with new UI)
+        await createJob(input);
+      }
     }
-  }, [editingJob, createJob, updateJob]);
+  }, [editingJob, createJob, updateJob, createCloudJob, updateCloudJob, cloudJobs]);
 
-  const handleToggle = useCallback(async (id: string, enabled: boolean) => {
+  const handleToggle = useCallback(async (job: CronJob) => {
+    const isCloudJob = cloudJobs.some((cj) => cj.id === job.id);
     try {
-      await toggleJob(id, enabled);
-      toast.success(enabled ? t('toast.enabled') : t('toast.paused'));
+      if (isCloudJob) {
+        await toggleCloudJob(job.id, !job.enabled);
+      } else {
+        await toggleJob(job.id, !job.enabled);
+      }
+      toast.success(!job.enabled ? t('toast.enabled') : t('toast.paused'));
     } catch {
       toast.error(t('toast.failedUpdate'));
     }
-  }, [toggleJob, t]);
+  }, [toggleJob, toggleCloudJob, t, cloudJobs]);
+
+  const handleDelete = useCallback(async (job: CronJob) => {
+    const isCloudJob = cloudJobs.some((cj) => cj.id === job.id);
+    if (isCloudJob) {
+      await deleteCloudJob(job.id);
+    } else {
+      await deleteJob(job.id);
+    }
+  }, [deleteJob, deleteCloudJob, cloudJobs]);
+
+  const handleTrigger = useCallback(async (job: CronJob) => {
+    const isCloudJob = cloudJobs.some((cj) => cj.id === job.id);
+    if (isCloudJob) {
+      await triggerCloudJob(job.id);
+    } else {
+      await triggerJob(job.id);
+    }
+  }, [triggerJob, triggerCloudJob, cloudJobs]);
 
 
 
@@ -597,11 +798,11 @@ export function Cron() {
       </header>
 
       <div className="flex flex-col gap-6">
-        {!isGatewayRunning && (
-          <div className="flex items-center gap-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-4">
-            <AlertCircle className="h-5 w-5 shrink-0 text-yellow-600 dark:text-yellow-400" />
-            <span className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
-              {t('gatewayWarning')}
+        {cloudError && (
+          <div className="flex items-center gap-3 rounded-md border border-blue-500/40 bg-blue-500/10 p-4">
+            <AlertCircle className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
+            <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
+              {t('cloudSyncWarning') || 'Cloud task sync failed. Showing cached data.'}
             </span>
           </div>
         )}
@@ -706,13 +907,15 @@ export function Cron() {
                 <CronJobCard
                   key={job.id}
                   job={job}
-                  onToggle={(enabled) => handleToggle(job.id, enabled)}
+                  isCloud={cloudJobs.some((cj) => cj.id === job.id)}
+                  onToggle={() => handleToggle(job)}
                   onEdit={() => {
                     setEditingJob(job);
                     setShowDialog(true);
                   }}
-                  onDelete={() => setJobToDelete({ id: job.id })}
-                  onTrigger={() => triggerJob(job.id)}
+                  onDelete={() => setJobToDelete({ id: job.id, isCloud: cloudJobs.some((cj) => cj.id === job.id) })}
+                  onTrigger={() => handleTrigger(job)}
+                  onOpenSession={() => handleOpenSession(job)}
                 />
               ))}
             </div>
@@ -724,6 +927,7 @@ export function Cron() {
       {showDialog && (
         <TaskDialog
           job={editingJob}
+          cloudAgents={cloudAgents}
           onClose={() => {
             setShowDialog(false);
             setEditingJob(undefined);
@@ -741,7 +945,10 @@ export function Cron() {
         variant="destructive"
         onConfirm={async () => {
           if (jobToDelete) {
-            await deleteJob(jobToDelete.id);
+            const targetJob = safeJobs.find((j) => j.id === jobToDelete.id);
+            if (targetJob) {
+              await handleDelete(targetJob);
+            }
             setJobToDelete(null);
             toast.success(t('toast.deleted'));
           }
