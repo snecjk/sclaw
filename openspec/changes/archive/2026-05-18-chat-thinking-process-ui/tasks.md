@@ -17,4 +17,4 @@
 ## 4. 验证
 
 - [x] 4.1 `pnpm run typecheck`
-- [ ] 4.2 `pnpm run lint`（若环境允许）
+- [x] 4.2 `pnpm run lint`（若环境允许）
