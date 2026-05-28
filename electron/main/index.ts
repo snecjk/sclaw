@@ -409,7 +409,7 @@ async function initialize(): Promise<void> {
     { autoInstallCliIfNeeded, generateCompletionCache, installCompletionToProfile },
     { autoInstallSaiCliIfNeeded },
     { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled },
-    { ensureLongOutputConstraint, getAgentWorkspacePath },
+    { ensureLongOutputConstraint, ensureChineseThinkingConstraint, getAgentWorkspacePath },
     { ensureAllBundledPluginsInstalledAsync },
     { startHostApiServer },
     stoSkillMod,
@@ -542,7 +542,8 @@ async function initialize(): Promise<void> {
       const mainWorkspace = await getAgentWorkspacePath('main');
       if (mainWorkspace) {
         await ensureLongOutputConstraint(mainWorkspace);
-        logger.info('Ensured long-output constraint in Main Agent AGENTS.md');
+        await ensureChineseThinkingConstraint(mainWorkspace);
+        logger.info('Ensured long-output and chinese-thinking constraints in Main Agent AGENTS.md');
       }
     } catch (error) {
       logger.warn('Failed to ensure long-output constraint for Main Agent:', error);

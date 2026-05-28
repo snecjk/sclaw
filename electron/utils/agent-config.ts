@@ -58,6 +58,15 @@ const LONG_OUTPUT_CONSTRAINT = [
   '',
 ].join('\n');
 
+const CHINESE_THINKING_CONSTRAINT = [
+  '',
+  '## 🧠 Thinking Language Rule (STO Claw)',
+  '',
+  '**All your internal reasoning and thinking processes MUST be written in Chinese (中文).**',
+  'Even when analyzing English content or code, your step-by-step thoughts, plans, and reflections should be expressed in Chinese.',
+  '',
+].join('\n');
+
 interface AgentModelConfig {
   primary?: string;
   [key: string]: unknown;
@@ -500,6 +509,27 @@ export async function ensureLongOutputConstraint(workspacePath: string): Promise
   }
 }
 
+export async function ensureChineseThinkingConstraint(workspacePath: string): Promise<void> {
+  const agentsMdPath = join(workspacePath, 'AGENTS.md');
+  const marker = '## 🧠 Thinking Language Rule (STO Claw)';
+
+  try {
+    let content = '';
+    if (await fileExists(agentsMdPath)) {
+      content = await readFile(agentsMdPath, 'utf-8');
+      if (content.includes(marker)) return; // Already appended
+      content += CHINESE_THINKING_CONSTRAINT;
+    } else {
+      // Create a minimal AGENTS.md with the constraint so OpenClaw Gateway
+      // won't overwrite it (Gateway seeds only missing files).
+      content = `# AGENTS.md - Your Workspace\n\nThis folder is home. Treat it that way.\n${CHINESE_THINKING_CONSTRAINT}`;
+    }
+    await writeFile(agentsMdPath, content, 'utf-8');
+  } catch {
+    // Best-effort: if writing fails, OpenClaw's default AGENTS.md will still work.
+  }
+}
+
 async function provisionAgentFilesystem(
   config: AgentConfigDocument,
   agent: AgentListEntry,
@@ -528,8 +558,9 @@ async function provisionAgentFilesystem(
     await copyRuntimeFiles(sourceAgentDir, targetAgentDir);
   }
 
-  // Inject long-output constraint into AGENTS.md
+  // Inject constraints into AGENTS.md
   await ensureLongOutputConstraint(targetWorkspace);
+  await ensureChineseThinkingConstraint(targetWorkspace);
 }
 
 export function resolveAccountIdForAgent(agentId: string): string {
