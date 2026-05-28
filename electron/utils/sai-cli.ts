@@ -72,6 +72,7 @@ function runSai(args: string[], timeoutMs = 30000): Promise<SaiCliResult> {
       env: { ...process.env, SAI_OUTPUT: 'json' },
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: timeoutMs,
+      windowsHide: true,
     });
 
     let stdout = '';
@@ -415,7 +416,7 @@ function ensureSaiBinInWindowsPath(): void {
   try {
     const query = spawnSync('reg', [
       'query', 'HKEY_CURRENT_USER\\Environment', '/v', 'PATH',
-    ], { encoding: 'utf-8' });
+    ], { encoding: 'utf-8', windowsHide: true });
 
     let userPath = '';
     if (query.status === 0) {
@@ -429,7 +430,7 @@ function ensureSaiBinInWindowsPath(): void {
     const add = spawnSync('reg', [
       'add', 'HKEY_CURRENT_USER\\Environment', '/v', 'PATH',
       '/t', 'REG_EXPAND_SZ', '/d', newPath, '/f',
-    ], { encoding: 'utf-8' });
+    ], { encoding: 'utf-8', windowsHide: true });
 
     if (add.status === 0) {
       logger.info(`Added ${SAI_BIN_DIR} to Windows user PATH`);
