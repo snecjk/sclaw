@@ -34,9 +34,24 @@ SetCompressor zlib
     doStopProcess:
     DetailPrint `Closing running "${PRODUCT_NAME}"...`
 
-    # Electron apps spawn multiple processes (main, renderer, GPU, utility).
-    # nsProcess::KillProcess may only terminate one instance.
-    # Use taskkill /F /IM /T to force-close the entire process tree.
+    # Step 1: Try graceful shutdown first (sends WM_CLOSE, allows before-quit/Gateway cleanup).
+    # StoClaw's before-quit handler may take up to 5s to stop the Gateway process.
+    !ifdef NSIS_CHAR_SIZE
+      nsExec::ExecToStack `taskkill /IM "$APP_EXECUTABLE_FILENAME" /T`
+    !else
+      nsExec::ExecToStack `taskkill /IM "${APP_EXECUTABLE_FILENAME}" /T`
+    !endif
+    Pop $R0
+    DetailPrint `Graceful shutdown exit code: $R0`
+    Sleep 6000
+
+    ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
+    ${if} $R0 != 0
+      Goto not_running
+    ${endIf}
+
+    # Step 2: Force kill the entire process tree.
+    DetailPrint `Force-closing "${PRODUCT_NAME}"...`
     ${nsProcess::KillProcess} "${APP_EXECUTABLE_FILENAME}" $R0
     !ifdef NSIS_CHAR_SIZE
       nsExec::ExecToStack `taskkill /F /IM "$APP_EXECUTABLE_FILENAME" /T`
@@ -44,11 +59,10 @@ SetCompressor zlib
       nsExec::ExecToStack `taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T`
     !endif
     Pop $R0
+    DetailPrint `Force kill exit code: $R0`
+    Sleep 3000
 
-    # Wait longer for the entire process tree to terminate
-    Sleep 2000
-
-    # Retry counter (up to 5 attempts)
+    # Retry counter (up to 10 attempts with longer waits)
     StrCpy $R1 0
 
     loop:
@@ -65,20 +79,20 @@ SetCompressor zlib
           nsExec::ExecToStack `taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T`
         !endif
         Pop $R0
+        DetailPrint `Force kill exit code (attempt $R1): $R0`
+
+        Sleep 5000
 
         ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
-        ${If} $R0 == 0
-          DetailPrint `Waiting for "${PRODUCT_NAME}" to close...`
-          Sleep 3000
-        ${else}
+        ${if} $R0 != 0
           Goto not_running
         ${endIf}
       ${else}
         Goto not_running
       ${endIf}
 
-      # After 5 attempts, ask user to close manually
-      ${if} $R1 > 4
+      # After 10 attempts, ask user to close manually
+      ${if} $R1 > 9
         MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY loop
         Quit
       ${else}

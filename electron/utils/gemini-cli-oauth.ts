@@ -223,7 +223,7 @@ async function installViaNpm(onProgress?: (msg: string) => void): Promise<boolea
     const child = execFile(
       npmBin,
       ['install', '--prefix', LOCAL_GEMINI_DIR, '@google/gemini-cli'],
-      { timeout: 120_000, shell: useShell, env: { ...process.env, NODE_ENV: '' } },
+      { timeout: 120_000, shell: useShell, env: { ...process.env, NODE_ENV: '' }, windowsHide: true },
       (err) => {
         if (err) {
           onProgress?.(`Gemini helper install failed, falling back to direct download...`);

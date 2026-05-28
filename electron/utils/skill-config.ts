@@ -399,21 +399,40 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
                 toEnable.push(spec.slug);
             }
             logger.info(`Installed preinstalled skill: ${spec.slug} -> ${targetDir}`);
+        } catch (error) {
+            logger.warn(`Failed to install preinstalled skill ${spec.slug}:`, error);
+            continue;
+        }
 
-            // Also sync local built-in skills into OpenClaw's bundled skills directory
-            // so the Gateway marks them as bundled (shows in the "Built-in" tab).
-            if (spec.local) {
+        // Also sync local built-in skills into OpenClaw's bundled skills directory
+        // so the Gateway marks them as bundled (shows in the "Built-in" tab).
+        if (spec.local) {
+            try {
                 const openclawSkillsDir = join(getOpenClawDir(), 'skills');
                 ensureDir(openclawSkillsDir);
                 const bundledTarget = join(openclawSkillsDir, spec.slug);
+                const bundledManifest = join(bundledTarget, 'SKILL.md');
+                const sourceManifest = join(sourceDir, 'SKILL.md');
+
+                // Skip sync if OpenClaw already bundles an identical skill to avoid
+                // Windows EPERM from cpSync on pre-existing bundled directories.
+                if (existsSync(bundledManifest) && existsSync(sourceManifest)) {
+                    const bundledHash = hashFileSync(bundledManifest);
+                    const sourceHash = hashFileSync(sourceManifest);
+                    if (bundledHash === sourceHash) {
+                        logger.info(`OpenClaw already bundles skill ${spec.slug} (identical), skipping sync`);
+                        continue;
+                    }
+                }
+
                 if (existsSync(bundledTarget)) {
                     rmSync(bundledTarget, { recursive: true, force: true });
                 }
                 cpSync(sourceDir, bundledTarget, { recursive: true, dereference: true });
                 logger.info(`Synced built-in skill to OpenClaw bundled dir: ${bundledTarget}`);
+            } catch (syncError) {
+                logger.warn(`Failed to sync built-in skill to OpenClaw bundled dir: ${spec.slug}`, syncError);
             }
-        } catch (error) {
-            logger.warn(`Failed to install preinstalled skill ${spec.slug}:`, error);
         }
     }
 

@@ -139,7 +139,7 @@ async function setupTarget(id) {
       if (os.platform() === 'win32') {
         const { execFileSync } = await import('child_process');
         const psCommand = `Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('${archivePath.replace(/'/g, "''")}', '${tempDir.replace(/'/g, "''")}')`;
-        execFileSync('powershell.exe', ['-NoProfile', '-Command', psCommand], { stdio: 'inherit' });
+        execFileSync('powershell.exe', ['-NoProfile', '-Command', psCommand], { stdio: 'inherit', windowsHide: true });
       } else {
         await $`unzip -q -o ${archivePath} -d ${tempDir}`;
       }

@@ -229,6 +229,7 @@ export class StoSkillService {
     if (isWin) {
       await execAsync(
         `powershell -NoProfile -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${targetDir}' -Force"`,
+        { windowsHide: true },
       );
     } else {
       await execAsync(`unzip -o "${zipPath}" -d "${targetDir}"`);
