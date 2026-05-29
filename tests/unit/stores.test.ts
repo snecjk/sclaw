@@ -119,9 +119,9 @@ describe('Gateway Store', () => {
     const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
     invoke.mockResolvedValueOnce({ success: true, result: { ok: true } });
 
-    const result = await useGatewayStore.getState().rpc<{ ok: boolean }>('chat.history', { limit: 10 }, 5000);
+    const result = await useGatewayStore.getState().rpc<{ ok: boolean }>('chat.history', { limit: 1e3 }, 5000);
 
     expect(result.ok).toBe(true);
-    expect(invoke).toHaveBeenCalledWith('gateway:rpc', 'chat.history', { limit: 10 }, 5000);
+    expect(invoke).toHaveBeenCalledWith('gateway:rpc', 'chat.history', { limit: 1e3 }, 5000);
   });
 });

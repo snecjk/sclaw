@@ -1,4 +1,5 @@
 import { invokeIpc } from '@/lib/api-client';
+import { CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
 import {
   getCanonicalPrefixFromSessions,
   getMessageText,
@@ -128,7 +129,7 @@ export function createSessionActions(
                   const r = await invokeIpc(
                     'gateway:rpc',
                     'chat.history',
-                    { sessionKey: session.key, limit: 1000 },
+                    { sessionKey: session.key, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
                   ) as { success: boolean; result?: Record<string, unknown> };
                   if (!r.success || !r.result) return;
                   const msgs = Array.isArray(r.result.messages) ? r.result.messages as RawMessage[] : [];

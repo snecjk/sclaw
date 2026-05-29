@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { join } from 'node:path';
+import { CHAT_HISTORY_LIMIT } from '../../../shared/chat-config';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { getOpenClawConfigDir } from '../../utils/paths';
@@ -324,10 +325,10 @@ export async function handleCronRoutes(
       return true;
     }
 
-    const rawLimit = Number(url.searchParams.get('limit') || '200');
+    const rawLimit = Number(url.searchParams.get('limit') || String(CHAT_HISTORY_LIMIT));
     const limit = Number.isFinite(rawLimit)
-      ? Math.min(Math.max(Math.floor(rawLimit), 1), 200)
-      : 200;
+      ? Math.min(Math.max(Math.floor(rawLimit), 1), CHAT_HISTORY_LIMIT)
+      : CHAT_HISTORY_LIMIT;
 
     try {
       const [jobsResult, runs, sessionEntry] = await Promise.all([

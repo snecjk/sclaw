@@ -132,7 +132,7 @@ describe('chat target routing', () => {
     const historyCall = invokeIpcMock.mock.calls.find(
       ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.history',
     );
-    expect(historyCall?.[2]).toEqual({ sessionKey: 'agent:research:desk', limit: 200 });
+    expect(historyCall?.[2]).toEqual({ sessionKey: 'agent:research:desk', limit: 1000 });
 
     const sendCall = invokeIpcMock.mock.calls.find(
       ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.send',

@@ -1,3 +1,5 @@
+import { CHAT_HISTORY_LIMIT } from '../../../shared/chat-config';
+
 export interface CronSessionKeyParts {
   agentId: string;
   jobId: string;
@@ -28,7 +30,7 @@ export function isCronSessionKey(sessionKey: string): boolean {
   return parseCronSessionKey(sessionKey) != null;
 }
 
-export function buildCronSessionHistoryPath(sessionKey: string, limit = 200): string {
+export function buildCronSessionHistoryPath(sessionKey: string, limit = CHAT_HISTORY_LIMIT): string {
   const params = new URLSearchParams({ sessionKey });
   if (Number.isFinite(limit) && limit > 0) {
     params.set('limit', String(Math.floor(limit)));

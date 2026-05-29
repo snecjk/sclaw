@@ -4,9 +4,11 @@
  * Communicates with OpenClaw Gateway via renderer WebSocket RPC.
  */
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
+import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
 import { buildCronSessionHistoryPath, isCronSessionKey } from './chat/cron-session-utils';
 import { sanitizeSessionDisplayField } from './chat/helpers';
@@ -650,7 +652,7 @@ function parseSessionUpdatedAtMs(value: unknown): number | undefined {
   return undefined;
 }
 
-async function loadCronFallbackMessages(sessionKey: string, limit = 200): Promise<RawMessage[]> {
+async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
   if (!isCronSessionKey(sessionKey)) return [];
   try {
     const response = await hostApiFetch<{ messages?: RawMessage[] }>(
@@ -1136,7 +1138,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 try {
                   const r = await useGatewayStore.getState().rpc<Record<string, unknown>>(
                     'chat.history',
-                    { sessionKey: session.key, limit: 1000 },
+                    { sessionKey: session.key, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
                   );
                   const msgs = Array.isArray(r.messages) ? r.messages as RawMessage[] : [];
                   const firstUser = msgs.find((m) => m.role === 'user');
@@ -1468,34 +1470,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
 
       try {
+        // Gateway chat.history does not support offset; load up to the hard max in one call.
+        let thinkingLevel: string | null = null;
         const data = await useGatewayStore.getState().rpc<Record<string, unknown>>(
           'chat.history',
-          { sessionKey: targetSessionKey, limit: 200 },
+          { sessionKey: targetSessionKey, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
         );
         if (get().currentSessionKey !== targetSessionKey) return;
 
-        if (data) {
-          let rawMessages = Array.isArray(data.messages) ? data.messages as RawMessage[] : [];
-          const thinkingLevel = data.thinkingLevel ? String(data.thinkingLevel) : null;
-          if (rawMessages.length === 0 && isCronSessionKey(targetSessionKey)) {
-            rawMessages = await loadCronFallbackMessages(targetSessionKey, 200);
-          }
-
-          if (get().currentSessionKey !== targetSessionKey) return;
-          applyLoadedMessages(rawMessages, thinkingLevel);
-        } else {
-          const fallbackMessages = await loadCronFallbackMessages(targetSessionKey, 200);
-          if (get().currentSessionKey !== targetSessionKey) return;
-          if (fallbackMessages.length > 0) {
-            applyLoadedMessages(fallbackMessages, null);
-          } else if (get().currentSessionKey === targetSessionKey) {
-            set({ messages: [], loading: false });
-          }
+        const allMessages: RawMessage[] = Array.isArray(data.messages)
+          ? data.messages as RawMessage[]
+          : [];
+        if (data.thinkingLevel) {
+          thinkingLevel = String(data.thinkingLevel);
         }
+
+        if (allMessages.length >= CHAT_HISTORY_LENGTH_MAX_LIMIT) {
+          toast.info('会话消息已达上限', {
+            description: '当前会话历史记录较多，建议开启新会话以获得更好的体验。',
+            duration: 5000,
+          });
+        }
+
+        let rawMessages = allMessages;
+        if (rawMessages.length === 0 && isCronSessionKey(targetSessionKey)) {
+          rawMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
+        }
+
+        if (get().currentSessionKey !== targetSessionKey) return;
+        applyLoadedMessages(rawMessages, thinkingLevel);
       } catch (err) {
         console.warn('Failed to load chat history:', err);
         if (get().currentSessionKey !== targetSessionKey) return;
-        const fallbackMessages = await loadCronFallbackMessages(targetSessionKey, 200);
+        const fallbackMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
         if (get().currentSessionKey !== targetSessionKey) return;
         if (fallbackMessages.length > 0) {
           applyLoadedMessages(fallbackMessages, null);

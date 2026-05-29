@@ -105,7 +105,7 @@ describe('chat history actions', () => {
     await actions.loadHistory();
 
     expect(hostApiFetchMock).toHaveBeenCalledWith(
-      '/api/cron/session-history?sessionKey=agent%3Amain%3Acron%3Ajob-1&limit=200',
+      '/api/cron/session-history?sessionKey=agent%3Amain%3Acron%3Ajob-1&limit=50',
     );
     expect(h.read().messages.map((message) => message.content)).toEqual([
       'Scheduled task: Drink water',
