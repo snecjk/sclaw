@@ -29,10 +29,12 @@
 - **Rationale**: 现有 `StoSkillService.search()` 返回扁平搜索结果，没有分类、安装状态、使用统计等广场所需字段。聚合层在服务端完成数据组装，前端仅做展示。
 - **Alternative considered**: 在前端 store 层做四方合并（沿用现有 `fetchSkills` 模式）。拒绝，因为分类管理是后端职责，且前端已有的四方合并逻辑复杂且脆弱（依赖 Gateway RPC + 三种 host-api 调用）。
 
-### 3. 分类管理方案：配置文件 + 服务端映射
-- **Decision**: 后端维护一份 `skill-categories.json` 配置文件（位于 Electron 资源目录或用户配置目录），定义分类列表与每个技能 slug → category 的映射。`SkillPlazaService` 在返回广场列表时根据映射填充 `category` 字段。未分类技能归入"全部"。
-- **Rationale**: 分类是业务运营驱动的，不适合硬编码在前端组件中；配置文件格式简单可维护，且可在后续迭代中升级为远程 API。
-- **Alternative considered**: 由 STO AI Memory Center 后端提供分类 API。拒绝，当前 STO 后端无此能力，且分类变更频率低，本地配置足够。
+### 3. 分类管理方案：`skills` 表双字段存储
+- **Decision**: 分类信息通过 `skills` 表的 `category_code`（英文 slug，用于过滤/计数）+ `category`（中文 label，用于展示）双字段存储。后端 `GET /api/skill-plaza/categories` 从 `skills` 表 `SELECT DISTINCT` 去重获取分类列表，并以内置默认分类常量兜底。分类顺序由前端按业务约定固定渲染，不依赖后端 `order` 字段。
+- **Rationale**: 本期分类数量固定（6 个）、名称不变、无需动态排序，独立分类表或配置文件会增加不必要的表/JOIN/IO 开销；双字段方案查询简单，无 JOIN，符合最小化改造原则。
+- **Alternative considered**: 
+  - **独立分类表 `skill_categories`**：需要 JOIN 查询，增加表维护成本。拒绝，本期分类维度简单，无需独立实体。
+  - **配置文件 `skill-categories.json`**：需要文件 IO 和映射逻辑。拒绝，表内存储更直观，且与现有数据同生命周期。
 
 ### 4. 状态管理：新建 `useSkillPlazaStore` 而非扩展现有 `useSkillsStore`
 - **Decision**: 新建 `src/stores/skill-plaza.ts`（Zustand），管理广场专属状态（activeTab、activeCategory、searchQuery、sortMode、viewMode、plazaSkills、mySkills、categories）。保留现有 `useSkillsStore` 用于非广场场景（如高级设置页面将来使用）。

@@ -4,8 +4,8 @@
 
 ## 1. Backend: SkillPlazaService + Host-API Routes
 
-- [ ] 1.1 新建 `skill-categories.json` 分类配置文件（Electron 资源目录），包含分类列表与技能 slug→category 映射。满足 **Requirement: 后端分类定义与管理** + **Requirement: 分类数据本地配置持久化**。
-- [ ] 1.2 新建 `electron/services/skill-plaza-service.ts`：`SkillPlazaService` 类，实现 `getCategories()`、`getPlazaSkills()`、`getMySkills()`、`getSkillDetail(slug)`、`installSkill(slug)`、`uninstallSkill(slug)` 方法；内部聚合 `StoSkillService`、本地 `skills/` 扫描、`lock.json`、`openclaw.json`、分类配置。满足 **Requirement: 分类数据本地配置持久化** + **Requirement: 技能归属分类** + **Requirement: 分类计数**。
+- [ ] 1.1 扩展 `skills` 表：新增 `category_code` varchar(50) + `use_count` int + `points` int + `default_prompt` text。满足 **Requirement: 技能归属分类** + **Decision 13** + **Decision 14**。
+- [ ] 1.2 新建 `electron/services/skill-plaza-service.ts`：`SkillPlazaService` 类，实现 `getCategories()`、`getPlazaSkills()`、`getMySkills()`、`getSkillDetail(slug)`、`installSkill(slug)`、`uninstallSkill(slug)` 方法；内部聚合 `StoSkillService`、本地 `skills/` 扫描、`lock.json`、`openclaw.json`。满足 **Requirement: 技能归属分类** + **Requirement: 分类计数**。
 - [ ] 1.3 新建 `electron/api/routes/skill-plaza.ts`：注册 `GET /api/skill-plaza/categories`、`GET /api/skill-plaza/list`、`GET /api/skill-plaza/mine`、`GET /api/skill-plaza/skill/:slug`、`POST /api/skill-plaza/install`、`POST /api/skill-plaza/uninstall` 路由；在 `electron/api/server.ts` 中注册路由模块。接口契约详见 `skills-plaza-api` spec。满足 **Requirement: 分类导航** + **Requirement: 广场数据通过 host-api 获取** + **Requirement: 详情弹窗数据来自后端 API**。
 - [ ] 1.4 扩展 `electron/api/context.ts`：在 `HostApiContext` 中添加 `skillPlazaService` 实例初始化。
 - [ ] 1.5 实现完整分页逻辑：`getPlazaSkills()` 和 `getMySkills()` 支持 `page`（默认1）、`pageSize`（默认20，最大50）、`sort`（默认`hot`）参数；返回 `skills`、`hasMore`、`page`、`pageSize`、`total`。满足 **Requirement: 分页展示**。

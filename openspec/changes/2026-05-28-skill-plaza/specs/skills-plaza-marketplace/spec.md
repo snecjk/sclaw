@@ -34,7 +34,7 @@
 
 ### Requirement: 分类导航
 
-页面 MUST 在工具栏下方展示水平分类导航，包含以下分类：全部、经营管理、财务管理、异常监控、外部市场、办公。分类列表数据 MUST 由后端 API 提供。分类切换 MUST 过滤当前列表。
+页面 MUST 在工具栏下方展示水平分类导航，包含以下分类：全部、经营管理、财务管理、异常监控、外部市场、办公。分类列表数据 MUST 由后端 API 提供，顺序由前端按业务约定固定渲染。分类切换 MUST 过滤当前列表。
 
 #### Scenario: 分类导航渲染
 - **WHEN** 技能广场页面加载完成
@@ -44,14 +44,14 @@
 
 #### Scenario: 切换分类过滤
 - **WHEN** 用户点击某个分类（如"财务管理"）
-- **THEN** 技能列表 MUST 仅展示 `category` 匹配该分类的技能
+- **THEN** 技能列表 MUST 仅展示 `categoryCode` 匹配该分类 slug 的技能
 - **AND** 该分类项 MUST 成为激活态
 - **AND** 其他分类计数 MUST 更新为对应分类下的匹配数量
 
 #### Scenario: 分类数据来自后端
 - **WHEN** 前端调用 `GET /api/skill-plaza/categories`
-- **THEN** 后端 MUST 返回完整分类列表，每项包含 `id`、`label`（i18n 友好名称）、`slug`
-- **AND** 前端 MUST NOT 硬编码分类列表
+- **THEN** 后端 MUST 返回完整分类列表，每项包含 `label`（中文展示名称）、`slug`（英文编码）
+- **AND** 分类顺序由前端按约定固定渲染，不依赖后端排序
 
 ### Requirement: 搜索功能
 

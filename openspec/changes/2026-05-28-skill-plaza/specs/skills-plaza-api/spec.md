@@ -34,8 +34,9 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 | `slug`         | string       | 是        | 技能唯一标识（kebab-case）                                        |
 | `title`        | string       | 是        | 展示名称                                                      |
 | `description`  | string       | 是        | 简短描述（最多 80 字符）                                            |
-| `category`     | string       | null     | 是                                                         |
-| `source`       | `"official"` | `"mine"` | 是                                                         |
+| `category`     | string \| null | 是       | 分类中文展示名称（label），未分类为 `null`                             |
+| `categoryCode` | string \| null | 是       | 分类英文编码（slug），用于过滤和 `categoryCounts` 计数，未分类为 `null`      |
+| `source`       | `"official"` \| `"mine"` | 是 | 来源：官方 / 自建，**由后端根据 `author_id` 推导，不持久化存储** |
 | `installed`    | boolean      | 是        | 本地是否已安装                                                   |
 | `enabled`      | boolean      | 否        | 是否启用（仅已安装技能有效）                                            |
 | `installCount` | number       | 否        | 安装次数（用于热门排序）                                              |
@@ -116,23 +117,25 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
   "success": true,
   "data": {
     "categories": [
-      { "id": "cat_all", "slug": "all", "label": "全部", "order": 0 },
-      { "id": "cat_ops", "slug": "operations", "label": "经营管理", "order": 1 },
-      { "id": "cat_fin", "slug": "finance", "label": "财务管理", "order": 2 },
-      { "id": "cat_mon", "slug": "monitor", "label": "异常监控", "order": 3 },
-      { "id": "cat_mkt", "slug": "market", "label": "外部市场", "order": 4 },
-      { "id": "cat_off", "slug": "office", "label": "办公", "order": 5 }
+      { "slug": "all", "label": "全部" },
+      { "slug": "operations", "label": "经营管理" },
+      { "slug": "finance", "label": "财务管理" },
+      { "slug": "monitor", "label": "异常监控" },
+      { "slug": "market", "label": "外部市场" },
+      { "slug": "office", "label": "办公" }
     ]
   }
 }
 ```
+
+> **Note**: 分类顺序由前端按业务约定固定渲染（全部 → 经营管理 → 财务管理 → 异常监控 → 外部市场 → 办公），不依赖后端 `order` 字段。
 
 **错误码**:
 
 
 | Code                     | 说明         |
 | ------------------------ | ---------- |
-| `CATEGORIES_LOAD_FAILED` | 分类配置文件读取失败 |
+| `CATEGORIES_LOAD_FAILED` | 分类数据读取失败 |
 
 
 ---
@@ -147,14 +150,14 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 | 参数         | 类型           | 必填         | 说明                                   |
 | ---------- | ------------ | ---------- | ------------------------------------ |
 | `q`        | string       | 否          | 搜索关键词（匹配 title / description），不区分大小写 |
-| `category` | string       | 否          | 分类 slug 过滤                           |
+| `category` | string       | 否          | 分类 code（slug）过滤，对应 `skills.category_code` |
 | `source`   | `"official"` | `"mine"`   | 否                                    |
 | `sort`     | `"hot"`      | `"recent"` | 否                                    |
 | `page`     | number       | 否          | 页码，从 1 开始，默认 1                       |
 | `pageSize` | number       | 否          | 每页条数，默认 20，最大 50                     |
 
 
-**注**: 搜索、分类过滤、排序均由后端执行。`categoryCounts` 必须根据当前 `q` + `category` + `source` 条件在后端计算后返回，确保与列表数据严格对齐。
+**注**: 搜索、分类过滤、排序均由后端执行。`categoryCounts` 必须根据当前 `q` + `categoryCode` + `source` 条件在后端计算后返回，key 为 `categoryCode`（英文 slug），确保与列表数据严格对齐。
 
 **响应** (`200 OK`):
 
@@ -271,7 +274,8 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
       "slug": "总部往来对账单汇总",
       "title": "总部往来对账单汇总",
       "description": "按账期汇总总部与各网点往来发生额、余额及对账状态，生成合并视图。",
-      "category": "finance",
+      "category": "财务管理",
+      "categoryCode": "finance",
       "source": "official",
       "installed": false,
       "installCount": 310,
