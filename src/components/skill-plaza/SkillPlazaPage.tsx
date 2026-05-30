@@ -44,8 +44,8 @@ export function SkillPlazaPage() {
   }, [activeTab, fetchMySkills]);
 
   const skills = activeTab === 'all' ? plazaSkills : mySkills;
-
-  // handleUse is defined inside SkillCard/SkillCardList components via store getState
+  const isMine = activeTab === 'mine';
+  const isGrid = viewMode === 'grid';
 
   const handleUninstall = useCallback(async (slug: string) => {
     try {
@@ -57,11 +57,6 @@ export function SkillPlazaPage() {
       });
     }
   }, [uninstallSkill, t]);
-
-  // useSkill and installSkill are consumed inside child components via store getState()
-
-  const isGrid = viewMode === 'grid';
-  const isMine = activeTab === 'mine';
 
   return (
     <div className="h-full flex flex-col p-6 overflow-hidden">
@@ -81,31 +76,33 @@ export function SkillPlazaPage() {
             <Package className="h-10 w-10 mb-4 opacity-50" />
             <p>{t('plaza.noSkills', { defaultValue: '暂无可用技能' })}</p>
           </div>
+        ) : isMine && !isGrid ? (
+          /* List view for mine tab */
+          <div className="flex flex-col border border-black/[0.08] rounded-[14px] bg-background overflow-hidden">
+            {skills.map((skill) => (
+              <SkillCardList
+                key={skill.slug}
+                skill={skill}
+                onDelete={setDeleteTarget}
+              />
+            ))}
+          </div>
         ) : (
+          /* Grid view (default for plaza tab, grid for mine tab) */
           <div
             className={cn(
-              isGrid
-                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'
-                : 'flex flex-col gap-3',
+              'grid gap-4',
+              'grid-cols-1 md:grid-cols-2 lg:grid-cols-3',
             )}
           >
-            {skills.map((skill) =>
-              isGrid || !isMine ? (
-                <SkillCard
-                  key={skill.slug}
-                  skill={skill}
-                  onOpenDetail={setSelectedSkill}
-                  onDelete={isMine ? setDeleteTarget : undefined}
-                  isMineTab={isMine}
-                />
-              ) : (
-                <SkillCardList
-                  key={skill.slug}
-                  skill={skill}
-                  onDelete={setDeleteTarget}
-                />
-              ),
-            )}
+            {skills.map((skill) => (
+              <SkillCard
+                key={skill.slug}
+                skill={skill}
+                onOpenDetail={setSelectedSkill}
+                isMineTab={isMine}
+              />
+            ))}
           </div>
         )}
       </div>

@@ -1,43 +1,38 @@
-import { useSkillPlazaStore } from '@/stores/skill-plaza';
+import { FolderOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { cn } from '@/lib/utils';
 
 export function SkillPlazaHeader() {
   const { t } = useTranslation('skills');
-  const { activeTab, setActiveTab } = useSkillPlazaStore();
+
+  const handleOpenFolder = async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { ipcRenderer } = window.electron as any;
+      await ipcRenderer.invoke('open-skill-folder');
+    } catch {
+      // fallback: do nothing
+    }
+  };
 
   return (
-    <div className="mb-6">
-      <div className="mb-4">
-        <h1 className="text-2xl font-semibold text-foreground">
+    <div className="flex flex-wrap items-start gap-4 mb-2">
+      <div className="flex-1 min-w-0">
+        <h1 className="text-[clamp(24px,2.8vw,30px)] font-bold text-foreground m-0">
           {t('plaza.title', { defaultValue: '技能广场' })}
         </h1>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-sm text-muted-foreground mt-2 max-w-[560px]">
           {t('plaza.subtitle', { defaultValue: '管理你可以安装的技能，快速查看与使用' })}
         </p>
       </div>
-
-      <div className="inline-flex rounded-lg border border-border bg-muted/40 p-1">
-        {(
-          [
-            { key: 'all' as const, label: t('plaza.tab.all', { defaultValue: '技能广场' }) },
-            { key: 'mine' as const, label: t('plaza.tab.mine', { defaultValue: '我的技能' }) },
-          ] as const
-        ).map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            aria-selected={activeTab === tab.key}
-            className={cn(
-              'px-4 py-1.5 text-sm font-medium rounded-md transition-all',
-              activeTab === tab.key
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <button
+          type="button"
+          onClick={handleOpenFolder}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-sm font-medium text-foreground hover:bg-muted transition-colors"
+        >
+          <FolderOpen className="h-4 w-4 flex-shrink-0" />
+          {t('openFolder', { defaultValue: '打开技能文件夹' })}
+        </button>
       </div>
     </div>
   );

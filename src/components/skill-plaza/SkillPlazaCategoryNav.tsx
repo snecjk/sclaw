@@ -6,7 +6,6 @@ export function SkillPlazaCategoryNav() {
   const { t } = useTranslation('skills');
   const { categories, categoryCounts, activeCategory, setActiveCategory } = useSkillPlazaStore();
 
-  // Fixed category order from spec
   const fixedOrder = [
     { slug: '', label: t('plaza.category.all', { defaultValue: '全部' }) },
     { slug: 'jishu', label: t('plaza.category.jishu', { defaultValue: '技术' }) },
@@ -24,7 +23,6 @@ export function SkillPlazaCategoryNav() {
     { slug: 'qita', label: t('plaza.category.qita', { defaultValue: '其他' }) },
   ];
 
-  // Merge backend categories with fixed order (backend may return subset)
   const displayCategories = fixedOrder.map((fixed) => {
     const backendCat = categories.find((c) => c.slug === fixed.slug);
     return {
@@ -35,32 +33,29 @@ export function SkillPlazaCategoryNav() {
   });
 
   return (
-    <div className="flex items-center gap-1 mb-5 overflow-x-auto pb-1 scrollbar-hide">
+    <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 my-2.5 mx-0 p-0" aria-label="技能分类">
       {displayCategories.map((cat) => (
         <button
           key={cat.slug}
           onClick={() => setActiveCategory(cat.slug)}
-          aria-selected={activeCategory === cat.slug}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-all',
+            'inline-flex items-center gap-0.5 px-3 py-1.5 border-none rounded-lg bg-transparent text-sm font-medium whitespace-nowrap cursor-pointer transition-colors',
             activeCategory === cat.slug
-              ? 'bg-[#FF6F00]/10 text-[#FF6F00] font-medium'
-              : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+              ? 'bg-[#e5e7eb] text-[#111827] font-semibold'
+              : 'text-[#9ca3af] hover:text-[#6b7280]',
           )}
         >
           <span>{cat.label}</span>
           <span
             className={cn(
-              'text-xs px-1.5 py-0.5 rounded-full',
-              activeCategory === cat.slug
-                ? 'bg-[#FF6F00]/15 text-[#FF6F00]'
-                : 'bg-muted text-muted-foreground',
+              'text-sm font-medium tabular-nums',
+              activeCategory === cat.slug ? 'text-[#6b7280]' : 'text-[#b0b7c3]',
             )}
           >
             {cat.count}
           </span>
         </button>
       ))}
-    </div>
+    </nav>
   );
 }
