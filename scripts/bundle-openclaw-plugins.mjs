@@ -93,6 +93,7 @@ function normWin(p) {
 const PLUGINS = [
   // { type: 'npm', npmName: '@soimy/dingtalk', pluginId: 'dingtalk' },
   { type: 'local', localDir: 'sto-dynamic-agent-route', pluginId: 'sto-dynamic-agent-route' },
+  { type: 'local', localDir: 'sto-agent-telemetry', pluginId: 'sto-agent-telemetry' },
 ];
 
 // Filter for excluding test files and unnecessary dirs when copying local plugins.

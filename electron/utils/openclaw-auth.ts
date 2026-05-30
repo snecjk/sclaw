@@ -1349,6 +1349,51 @@ export async function syncStoDynamicRoutePluginToOpenClaw(): Promise<void> {
 }
 
 /**
+ * Configure the sto-agent-telemetry plugin in openclaw.json after SSO login.
+ * Writes ingest URL and SSO auth path into plugins.entries.
+ */
+export async function syncStoAgentTelemetryPluginToOpenClaw(): Promise<void> {
+  return withConfigLock(async () => {
+    const stoBaseUrl = await resolveStoBaseUrl();
+    const config = await readOpenClawJson();
+
+    const plugins = (config.plugins || {}) as Record<string, unknown>;
+    plugins.enabled = true;
+
+    const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
+    if (!allow.includes('sto-agent-telemetry')) {
+      allow.push('sto-agent-telemetry');
+    }
+    plugins.allow = allow;
+
+    const entries = (plugins.entries || {}) as Record<string, unknown>;
+    entries['sto-agent-telemetry'] = {
+      enabled: true,
+      config: {
+        enabled: true,
+        ingestUrl: `${stoBaseUrl}/agent/v1/agent-telemetry/events`,
+        timeoutMs: 5000,
+        ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
+        conversationSyncEnabled: true,
+        hooks: {
+          // beforeToolCall：仅本地 runId/命令缓存，不上报 ingest
+          beforeToolCall: true,
+          afterToolCall: true,
+          modelCallStarted: true,
+          modelCallEnded: true,
+          agentEnd: true,
+        },
+      },
+    };
+    plugins.entries = entries;
+    config.plugins = plugins;
+
+    await writeOpenClawJson(config);
+    console.log(`Configured sto-agent-telemetry plugin (ingestUrl=${stoBaseUrl}/agent/v1/agent-telemetry/events)`);
+  });
+}
+
+/**
  * Disable the sto-dynamic-agent-route plugin in openclaw.json on logout or token expiry.
  * Sets enabled=false and removes the provider entry, but preserves plugin config for re-login.
  */
@@ -1376,6 +1421,28 @@ export async function removeStoDynamicRoutePluginFromOpenClaw(): Promise<void> {
     if (modified) {
       await writeOpenClawJson(config);
       console.log('Disabled sto-dynamic-agent-route plugin config');
+    }
+  });
+}
+
+/**
+ * Disable the sto-agent-telemetry plugin in openclaw.json on logout or token expiry.
+ */
+export async function removeStoAgentTelemetryPluginFromOpenClaw(): Promise<void> {
+  return withConfigLock(async () => {
+    const config = await readOpenClawJson();
+    let modified = false;
+
+    const plugins = config.plugins as Record<string, unknown> | undefined;
+    const entries = (plugins?.entries ?? {}) as Record<string, Record<string, unknown>>;
+    if (entries['sto-agent-telemetry']) {
+      entries['sto-agent-telemetry'].enabled = false;
+      modified = true;
+    }
+
+    if (modified) {
+      await writeOpenClawJson(config);
+      console.log('Disabled sto-agent-telemetry plugin config');
     }
   });
 }

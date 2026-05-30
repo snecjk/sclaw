@@ -180,6 +180,7 @@ const PLUGIN_NPM_NAMES: Record<string, string> = {
 
 const LOCAL_PLUGIN_DIRS: Record<string, string> = {
   'sto-dynamic-agent-route': 'sto-dynamic-agent-route',
+  'sto-agent-telemetry': 'sto-agent-telemetry',
 };
 
 // ── Version helper ───────────────────────────────────────────────────────────
@@ -503,6 +504,14 @@ export function ensureStoDynamicRoutePluginInstalled(): { installed: boolean; wa
   );
 }
 
+export function ensureStoAgentTelemetryPluginInstalled(): { installed: boolean; warning?: string } {
+  return ensurePluginInstalled(
+    'sto-agent-telemetry',
+    buildCandidateSources('sto-agent-telemetry'),
+    'STO Agent Telemetry',
+  );
+}
+
 // ── Bulk startup installer ───────────────────────────────────────────────────
 
 /**
@@ -514,6 +523,7 @@ const ALL_BUNDLED_PLUGINS = [
   { fn: ensureQQBotPluginInstalled, label: 'QQ Bot' },
   { fn: ensureWeChatPluginInstalled, label: 'WeChat' },
   { fn: ensureStoDynamicRoutePluginInstalled, label: 'STO Dynamic Route' },
+  { fn: ensureStoAgentTelemetryPluginInstalled, label: 'STO Agent Telemetry' },
 ] as const;
 
 async function ensurePluginInstalledAsync(
@@ -623,6 +633,7 @@ export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
     { dirName: 'qqbot', label: 'QQ Bot' },
     { dirName: 'openclaw-weixin', label: 'WeChat' },
     { dirName: 'sto-dynamic-agent-route', label: 'STO Dynamic Route' },
+    { dirName: 'sto-agent-telemetry', label: 'STO Agent Telemetry' },
   ] as const;
 
   for (const { dirName, label } of pluginSpecs) {

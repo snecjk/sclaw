@@ -10,7 +10,6 @@ import {
   removeAgentWorkspaceDirectory,
   resolveAccountIdForAgent,
   updateAgentName,
-  updateAgentModel,
   getAgentWorkspacePath,
 } from '../../utils/agent-config';
 
@@ -21,8 +20,7 @@ const ALLOWED_WORKSPACE_FILES = new Set([
 ]);
 import { deleteChannelAccountConfig } from '../../utils/channel-config';
 import { syncAllProviderAuthToRuntime } from '../../services/providers/provider-runtime-sync';
-import { getOpenClawProviderKey } from '../../services/providers/provider-runtime-sync';
-import { getProviderAccount } from '../../services/providers/provider-store';
+import { applyAgentDefaultModel, qualifyChatModelRef } from '../../utils/openclaw-model';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -320,20 +318,8 @@ export async function handleAgentRoutes(
           return true;
         }
 
-        // Normalize to qualified ref (e.g. "sto/qwen3.5-plus") so OpenClaw Gateway
-        // resolves the model to the correct provider instead of guessing.
-        let qualifiedModel = rawModel;
-        if (body.accountId) {
-          const account = await getProviderAccount(body.accountId);
-          if (account) {
-            const providerKey = getOpenClawProviderKey(account.vendorId, account.id);
-            if (!rawModel.startsWith(`${providerKey}/`)) {
-              qualifiedModel = `${providerKey}/${rawModel}`;
-            }
-          }
-        }
-
-        const snapshot = await updateAgentModel(agentId, qualifiedModel);
+        const qualifiedModel = await qualifyChatModelRef(rawModel, body.accountId);
+        const snapshot = await applyAgentDefaultModel(ctx, agentId, qualifiedModel);
         sendJson(res, 200, { success: true, snapshot });
       } catch (err) {
         sendJson(res, 500, { success: false, error: String(err) });

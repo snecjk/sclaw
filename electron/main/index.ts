@@ -692,6 +692,14 @@ async function initialize(): Promise<void> {
         void bizAgentSync.syncAgents().catch((err) =>
           logger.warn('Startup STO biz-agent sync failed:', err),
         );
+
+        const { syncStoDynamicRoutePluginToOpenClaw, syncStoAgentTelemetryPluginToOpenClaw } = await import('../utils/openclaw-auth');
+        void syncStoDynamicRoutePluginToOpenClaw().catch((err) =>
+          logger.warn('Startup STO dynamic route plugin config failed:', err),
+        );
+        void syncStoAgentTelemetryPluginToOpenClaw().catch((err) =>
+          logger.warn('Startup STO agent telemetry plugin config failed:', err),
+        );
       }
     } catch (err) {
       logger.warn('STO model sync startup check failed:', err);

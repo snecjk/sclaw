@@ -323,14 +323,11 @@ function stripCodeBlocks(text: string): string {
 }
 
 /**
- * Extract previewable file references from structured markers in message text.
- * Recognizes:
- *   - [file-preview: path] — explicit file output marker
- *   - file:///Users/.../file.html — explicit file:// URLs
- *   - http://localhost:8080/path — localhost preview URLs
+ * Extract previewable local file paths, file:// URLs, and localhost URLs from plain text.
+ * Matches absolute paths like /Users/.../file.html, file:///Users/.../file.html,
+ * and localhost URLs like http://localhost:8080/path.
  * Code blocks are stripped before matching to avoid false positives.
- * Raw bare paths (e.g. /Users/.../file.html typed in plain text) are NOT extracted
- * to avoid false positives and duplicate previews.
+ * Lookbehind rejects URL path components (e.g. /report.html inside https://example.com/report.html).
  */
 export function extractPreviewableRefs(text: string): Array<{ filePath: string; fileName: string; mimeType: string }> {
   const cleanText = stripCodeBlocks(text);
@@ -360,16 +357,6 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
     addIfNotImage(filePath, fileName, ext);
   }
 
-
-  // [file-preview: path] — explicit structured file output marker
-  const filePreviewRegex = /\[file-preview:\s*([^\]\n\r]+?)\s*\]/g;
-  while ((match = filePreviewRegex.exec(cleanText)) !== null) {
-    const filePath = match[1].trim();
-    const fileName = filePath.split('/').pop() || '';
-    const ext = fileName.split('.').pop()?.toLowerCase() || '';
-    addIfNotImage(filePath, fileName, ext);
-  }
-
   // Localhost URLs only (previewable in side panel)
   const urlRegex = /(https?:\/\/localhost:[^\s)\]"',;<>]+)/g;
   while ((match = urlRegex.exec(cleanText)) !== null) {
@@ -379,6 +366,18 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
     addIfNotImage(url, fileName, ext);
   }
 
+  // File paths (relative ./, absolute /, and Windows C:\) — support code, config, doc, and web files
+  // Lookbehind (?<![\\w./:]) rejects matches that are part of a URL path component
+  const pathRegex = new RegExp(
+    `(?<![\\w./:])(\\./(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\n\\r]+[\\\\/])*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`,
+    'gi',
+  );
+  while ((match = pathRegex.exec(cleanText)) !== null) {
+    const path = match[1].replace(/\\/g, '/');
+    const fileName = path.split('/').pop() || '';
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    addIfNotImage(path, fileName, ext);
+  }
 
   return results;
 }
@@ -399,9 +398,24 @@ export function usePreviewableFiles(messages: Array<unknown & { _attachedFiles?:
     }
 
     for (const msg of messages) {
-      // Only extract from [file-preview: ...] markers in message text.
-      // _attachedFiles (tool results, media attachments) are NOT included here
-      // to avoid showing files that were never explicitly declared by the AI.
+      // Path 1: explicit attached files
+      // Skip user-uploaded attachments (role === 'user'); only show AI-generated outputs
+      if (msg._attachedFiles && msg.role !== 'user') {
+        for (const file of msg._attachedFiles) {
+          if (!isPreviewableFile(file)) continue;
+          const fp = file.filePath || file.fileName;
+          if (!fp) continue;
+          addItem({
+            mimeType: file.mimeType,
+            filePath: fp,
+            fileName: file.fileName,
+            fileSize: (file as { fileSize?: number }).fileSize ?? 0,
+            preview: (file as { preview?: string | null }).preview ?? null,
+          });
+        }
+      }
+
+      // Path 2: references in message text (from assistant/tool outputs)
       const text = extractText(msg);
       if (text) {
         const refs = extractPreviewableRefs(text);

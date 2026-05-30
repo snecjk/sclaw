@@ -1,0 +1,95 @@
+{
+  "id": "sto-agent-telemetry",
+  "name": "申通 Agent 全链路遥测",
+  "description": "上报 Agent 工具/模型事件至 memory-center，用于全链路监控与分析",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "是否启用遥测上报"
+      },
+      "ingestUrl": {
+        "type": "string",
+        "description": "memory-center ingest 地址，如 https://host/agent/v1/agent-telemetry/events"
+      },
+      "conversationBatchUrl": {
+        "type": "string",
+        "description": "对话记录 batch ingest；留空则从 ingestUrl 推导为 /agent-conversation/messages/batch"
+      },
+      "conversationSyncEnabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "agent_end 后从 transcript JSONL 同步一问一答"
+      },
+      "timeoutMs": {
+        "type": "number",
+        "minimum": 500,
+        "maximum": 30000,
+        "default": 5000,
+        "description": "上报 HTTP 超时（毫秒），失败不阻塞 Agent"
+      },
+      "ssoAuthPath": {
+        "type": "string",
+        "default": "~/.stoclaw/openclaw/sso-auth.json",
+        "description": "SSO 凭据文件路径（X-Sto-Token / X-Sto-User-Name）"
+      },
+      "hooks": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "beforeToolCall": {
+            "type": "boolean",
+            "default": true
+          },
+          "afterToolCall": {
+            "type": "boolean",
+            "default": true
+          },
+          "modelCallStarted": {
+            "type": "boolean",
+            "default": true
+          },
+          "modelCallEnded": {
+            "type": "boolean",
+            "default": true
+          },
+          "agentEnd": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "sanitization": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "maxDepth": { "type": "integer", "minimum": 1, "maximum": 32, "default": 8 },
+          "maxStringLength": { "type": "integer", "minimum": 64, "default": 4096 },
+          "maxArrayLength": { "type": "integer", "minimum": 1, "default": 64 },
+          "redactKeys": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  },
+  "uiHints": {
+    "ingestUrl": {
+      "label": "遥测 Ingest URL",
+      "help": "POST sto.agent.telemetry/v1 envelope"
+    },
+    "timeoutMs": {
+      "label": "上报超时(ms)"
+    },
+    "ssoAuthPath": {
+      "label": "SSO Auth 文件路径"
+    }
+  }
+}

@@ -14,7 +14,7 @@ import { parseJsonBody, sendJson } from '../route-utils';
 import { logger } from '../../utils/logger';
 import { getStoModelSyncService } from '../../services/providers/sto-model-sync';
 import { runPendingInstallReport } from '../../services/client-update-platform';
-import { syncStoDynamicRoutePluginToOpenClaw, removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-auth';
+import { syncStoDynamicRoutePluginToOpenClaw, removeStoDynamicRoutePluginFromOpenClaw, syncStoAgentTelemetryPluginToOpenClaw, removeStoAgentTelemetryPluginFromOpenClaw } from '../../utils/openclaw-auth';
 import { getStoPolicyReportApiHost } from '../../../shared/env-config';
 import { computeCrmWeekReportSurfaceAllowed } from '../../../shared/crm-week-report-policy';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
@@ -46,6 +46,7 @@ export async function handleAuthRoutes(
           await clearAuthUser();
           void removeSsoAuthFromOpenClaw();
           void removeStoDynamicRoutePluginFromOpenClaw();
+          void removeStoAgentTelemetryPluginFromOpenClaw();
           logger.info('Auth status: stoToken expired or missing, clearing auth state to force re-login');
           sendJson(res, 200, {
             isAuthenticated: false,
@@ -91,6 +92,9 @@ export async function handleAuthRoutes(
       void syncSsoAuthToOpenClaw(user);
       void syncStoDynamicRoutePluginToOpenClaw().catch((err) =>
         logger.warn('Post-login STO dynamic route plugin config failed:', err),
+      );
+      void syncStoAgentTelemetryPluginToOpenClaw().catch((err) =>
+        logger.warn('Post-login STO agent telemetry plugin config failed:', err),
       );
 
       void runPendingInstallReport(app.getVersion(), process.platform);
@@ -144,6 +148,9 @@ export async function handleAuthRoutes(
       void removeStoDynamicRoutePluginFromOpenClaw().catch((err) =>
         logger.warn('STO dynamic route plugin cleanup on logout failed:', err),
       );
+      void removeStoAgentTelemetryPluginFromOpenClaw().catch((err) =>
+        logger.warn('STO agent telemetry plugin cleanup on logout failed:', err),
+      );
 
       // Cleanup STO models and stop periodic sync (fire-and-forget)
       const stoSyncLogout = getStoModelSyncService();
@@ -157,6 +164,7 @@ export async function handleAuthRoutes(
       await clearAuthUser().catch(() => {});
       void removeSsoAuthFromOpenClaw();
       void removeStoDynamicRoutePluginFromOpenClaw().catch(() => {});
+      void removeStoAgentTelemetryPluginFromOpenClaw().catch(() => {});
 
       // Best-effort STO cleanup on error path too
       void getStoModelSyncService().cleanupOnLogout().catch(() => {});
