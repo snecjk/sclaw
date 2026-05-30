@@ -32,7 +32,7 @@
 - [ ] 4.3 创建 `SkillPlazaCategoryNav.tsx`（分类导航条，含计数标签，支持点击切换）。满足 **Requirement: 分类导航**。
 - [ ] 4.4 创建 `SkillCard.tsx`（卡片组件：图标 + 标题 + 描述 + 标签 + meta + 快捷操作，支持 hover 淡入，grid 模式下卡片布局）。满足 **Requirement: 技能卡片渲染**。
 - [ ] 4.5 创建 `SkillCardList.tsx`（条目视图下的单行组件：图标 + 名称 + 描述 + 开关 + 删除按钮）。满足 **Requirement: 切换到条目视图**。
-- [ ] 4.6 创建 `SkillDetailModal.tsx`（右侧滑出详情面板：hero + intro + steps + schedule + overview + CTA，支持 Esc / 遮罩关闭）。满足 **Requirement: 技能详情弹窗** + **Requirement: 详情弹窗关闭** + **Requirement: 详情弹窗"立即使用"CTA** + **Requirement: 详情弹窗无障碍**。
+- [ ] 4.6 创建 `SkillDetailModal.tsx`（右侧滑出详情面板：hero + intro + CTA，支持 Esc / 遮罩关闭）。满足 **Requirement: 技能详情弹窗** + **Requirement: 详情弹窗关闭** + **Requirement: 详情弹窗"立即使用"CTA** + **Requirement: 详情弹窗无障碍**。
 - [ ] 4.7 创建 `DeleteConfirmModal.tsx`（确认弹窗：提示文案 + 取消/删除按钮，Danger Red-6 删除按钮）。满足 **Requirement: 删除技能**。
 - [ ] 4.8 创建 `SkillPlazaToast.tsx`（底部居中 Toast，2.2s 自动消失，Grey-10 80% 透明背景）。满足 **Requirement: Toast 通知**。
 

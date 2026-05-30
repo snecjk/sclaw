@@ -31,7 +31,7 @@
 
 ### 3. 分类管理方案：`skills` 表双字段存储
 - **Decision**: 分类信息通过 `skills` 表的 `category_code`（英文 slug，用于过滤/计数）+ `category`（中文 label，用于展示）双字段存储。后端 `GET /api/skill-plaza/categories` 从 `skills` 表 `SELECT DISTINCT` 去重获取分类列表，并以内置默认分类常量兜底。分类顺序由前端按业务约定固定渲染，不依赖后端 `order` 字段。
-- **Rationale**: 本期分类数量固定（6 个）、名称不变、无需动态排序，独立分类表或配置文件会增加不必要的表/JOIN/IO 开销；双字段方案查询简单，无 JOIN，符合最小化改造原则。
+- **Rationale**: 本期分类数量固定（14 个）、名称不变、无需动态排序，独立分类表或配置文件会增加不必要的表/JOIN/IO 开销；双字段方案查询简单，无 JOIN，符合最小化改造原则。
 - **Alternative considered**: 
   - **独立分类表 `skill_categories`**：需要 JOIN 查询，增加表维护成本。拒绝，本期分类维度简单，无需独立实体。
   - **配置文件 `skill-categories.json`**：需要文件 IO 和映射逻辑。拒绝，表内存储更直观，且与现有数据同生命周期。
@@ -58,10 +58,10 @@
 - **Rationale**: 复用已验证的安装 / 卸载流程（ZIP 下载、解压、frontmatter 补丁、lock.json 更新），不重复造轮子。
 - **Alternative considered**: 前端直接调用现有 `installStoSkill` store action。拒绝，广场走新的 host-api 路由保持架构一致。
 
-### 7. 详情弹窗数据结构：从技能元数据 + data-attributes 构建
-- **Decision**: `SkillPlazaService` 在每个技能数据中包含 `detail` 对象（`intro`、`steps[]`、`schedule`、`output`、`overview`），详情弹窗消费该数据结构。对于工作流类型技能（`kind === 'workflow'`），展示全部 sections；普通技能仅展示 intro + 使用入口。
-- **Rationale**: 详情数据由后端管理，保持一致性，避免前端硬编码各技能的步骤和输出描述。
-- **Alternative considered**: 类似设计稿的 `data-skill-*` 属性方式，在前端维护详情映射表。拒绝，不利于扩展和维护。
+### 7. 详情弹窗数据结构：仅保留 intro
+- **Decision**: `SkillPlazaService` 在每个技能数据中仅包含 `detail.intro` 字段，详情弹窗统一展示技能介绍，不区分技能类型。
+- **Rationale**: 本期所有技能均为普通技能，不存在工作流类型；统一只展示 intro 可大幅简化详情弹窗 UI 逻辑和数据模型。
+- **Alternative considered**: 保留 `detail.steps`、`detail.schedule`、`detail.output`、`detail.overview` 作为扩展预留。拒绝，本期无工作流需求，预留字段增加理解成本；未来确有工作流需求时作为独立 change 重新设计。
 
 ### 8. 视图切换与排序：视图纯前端，排序与搜索走后端参数
 - **Decision**: 视图切换（card / list）是纯前端 UI 状态；排序（hot / recent）和搜索关键词通过后端查询参数传递，由服务端在分页前完成全量过滤与排序。前端根据返回顺序直接渲染，不再本地重排。
@@ -127,7 +127,7 @@
 | Gateway 未就绪时广场列表缺少 enabled 状态 | "我的技能" Tab 从 `openclaw.json` 直接读取 enabled 状态，不强依赖 Gateway RPC；广场 Tab 的列表中已安装技能的安装状态从 `lock.json` 读取 |
 | STO 远端市场不可达时广场列表为空 | 后端降级策略：远端不可达时仅返回本地已安装技能 + 分类配置中的推荐技能，前端展示降级提示 |
 | 分类映射不完整导致部分技能出现在"全部"但无分类标签 | `SkillPlazaService` 对未映射技能标记 `category: null`，前端在"全部" Tab 展示但不显示分类标签 |
-| 分类映射文件随技能增长难以维护 | `skill-categories.json` 当前为手动维护；当技能数量超过 200 或分类调整频率提高时，需升级为远程分类 API 或工具化生成映射 |
+| 分类字段维护成本 | `category_code` + `category` 双字段当前为手动维护；当分类数量超过 20 个或调整频率提高时，需升级为独立分类表或远程分类 API |
 | 安装后 Gateway 重启耗时 ~10-30s 期间状态不一致 | 安装操作设置 `installing` loading 状态，完成后刷新列表；Toast 提示"安装成功，正在生效" |
 
 ## UI Tokens（docs/sto-design.md）

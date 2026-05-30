@@ -9,12 +9,12 @@
 #### Scenario: 获取分类列表
 - **WHEN** 前端调用 `GET /api/skill-plaza/categories`
 - **THEN** 后端 MUST 从 `skills` 表中 `SELECT DISTINCT category_code, category` 去重获取有效分类
-- **AND** MUST 补充内置默认分类（全部 / 经营管理 / 财务管理 / 异常监控 / 外部市场 / 办公），确保即使某分类下暂无可展示技能时分类项仍然存在
+- **AND** MUST 补充内置默认分类（全部 / 技术 / 产品 / 设计 / 行政 / 财务 / HR / 通用 / 模板 / 网络 / 政策 / 运营 / 客服 / 其他），确保即使某分类下暂无可展示技能时分类项仍然存在
 - **AND** 返回的每项 MUST 包含 `slug`（对应 `category_code`）和 `label`（对应 `category`）
 
 #### Scenario: 分类顺序
 - **WHEN** 前端渲染分类导航
-- **THEN** 分类项 MUST 按前端内置的业务约定顺序渲染：全部 → 经营管理 → 财务管理 → 异常监控 → 外部市场 → 办公
+- **THEN** 分类项 MUST 按前端内置的业务约定顺序渲染：全部 → 技术 → 产品 → 设计 → 行政 → 财务 → HR → 通用 → 模板 → 网络 → 政策 → 运营 → 客服 → 其他
 - **AND** "全部"分类 MUST 始终在第一位
 
 ### Requirement: 技能归属分类
@@ -51,5 +51,5 @@
 
 #### Scenario: 分类数据缺失时兜底
 - **WHEN** `skills` 表中所有记录的 `category_code` 均为空
-- **THEN** 系统 MUST 返回内置默认分类列表（全部 / 经营管理 / 财务管理 / 异常监控 / 外部市场 / 办公）
+- **THEN** 系统 MUST 返回内置默认分类列表（全部 / 技术 / 产品 / 设计 / 行政 / 财务 / HR / 通用 / 模板 / 网络 / 政策 / 运营 / 客服 / 其他）
 - **AND** 所有技能的 `category` / `categoryCode` MUST 默认为 `null`

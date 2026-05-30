@@ -2,7 +2,7 @@
 
 ## 概览
 
-本 capability 定义技能广场全部 6 个 host-api 端点的请求/响应契约、错误码规范、以及数据模型。前端 MUST 通过 `src/lib/host-api.ts` 的 `hostApiFetch()` 调用这些接口，MUST NOT 直接调用 Gateway HTTP 端点或使用 `window.electron.ipcRenderer.invoke()`。
+本 capability 定义技能广场全部 7 个 host-api 端点的请求/响应契约、错误码规范、以及数据模型。前端 MUST 通过 `src/lib/host-api.ts` 的 `hostApiFetch()` 调用这些接口，MUST NOT 直接调用 Gateway HTTP 端点或使用 `window.electron.ipcRenderer.invoke()`。
 
 ## 通用响应格式
 
@@ -41,7 +41,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 | `enabled`      | boolean      | 否        | 是否启用（仅已安装技能有效），**从 `openclaw.json` 实时读取，不持久化存储**    |
 | `installCount` | number       | 否        | 安装次数（用于热门排序）                                              |
 | `useCount`     | number       | 否        | 使用次数                                                      |
-| `points`       | number       | null     | 是                                                         |
+| `points`       | number \| null | 是     | 预计积分消耗，本期固定返回 `8`                                |
 | `icon`         | string       | 否        | 图标完整 SVG 字符串，前端直接渲染                                |
 | `defaultPrompt`| string       | 是        | 技能默认使用的初始 prompt，前端据此拼接为 `/conversation?q=<encodedPrompt>` 跳转 |
 | `updatedAt`    | string       | 否        | 最近更新时间（ISO 8601）                                          |
@@ -98,17 +98,9 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 
 获取技能分类列表。
 
-**请求参数（Query）**:
+**请求参数**: 无
 
-
-| 参数         | 类型      | 必填         | 说明                            |
-| ---------- | ------- | ---------- | ----------------------------- |
-| `q`        | string  | 否          | 搜索关键词（匹配 title / description） |
-| `category` | string  | 否          | 分类 slug 过滤                    |
-| `sort`     | `"hot"` | `"recent"` | 否                             |
-| `page`     | number  | 否          | 页码，从 1 开始，默认 1                |
-| `pageSize` | number  | 否          | 每页条数，默认 20，最大 50              |
-
+分类列表为固定字典数据，不需要搜索、过滤、排序或分页参数。
 
 **响应** (`200 OK`):
 
@@ -117,18 +109,26 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
   "success": true,
   "data": {
     "categories": [
-      { "slug": "all", "label": "全部" },
-      { "slug": "operations", "label": "经营管理" },
-      { "slug": "finance", "label": "财务管理" },
-      { "slug": "monitor", "label": "异常监控" },
-      { "slug": "market", "label": "外部市场" },
-      { "slug": "office", "label": "办公" }
+      { "slug": "", "label": "全部" },
+      { "slug": "jishu", "label": "技术" },
+      { "slug": "chanpin", "label": "产品" },
+      { "slug": "sheji", "label": "设计" },
+      { "slug": "xingzheng", "label": "行政" },
+      { "slug": "caiwu", "label": "财务" },
+      { "slug": "hr", "label": "HR" },
+      { "slug": "tongyong", "label": "通用" },
+      { "slug": "moban", "label": "模板" },
+      { "slug": "wangluo", "label": "网络" },
+      { "slug": "zhengce", "label": "政策" },
+      { "slug": "yunying", "label": "运营" },
+      { "slug": "kefu", "label": "客服" },
+      { "slug": "qita", "label": "其他" }
     ]
   }
 }
 ```
 
-> **Note**: 分类顺序由前端按业务约定固定渲染（全部 → 经营管理 → 财务管理 → 异常监控 → 外部市场 → 办公），不依赖后端 `order` 字段。
+> **Note**: 分类顺序由前端按业务约定固定渲染（全部 → 技术 → 产品 → 设计 → 行政 → 财务 → HR → 通用 → 模板 → 网络 → 政策 → 运营 → 客服 → 其他），不依赖后端 `order` 字段。
 
 **错误码**:
 
@@ -167,12 +167,20 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
   "data": {
     "skills": [ SkillSummary, ... ],
     "categoryCounts": {
-      "all": 42,
-      "operations": 12,
-      "finance": 8,
-      "monitor": 6,
-      "market": 5,
-      "office": 4
+      "": 42,
+      "jishu": 8,
+      "chanpin": 5,
+      "sheji": 4,
+      "xingzheng": 3,
+      "caiwu": 3,
+      "hr": 2,
+      "tongyong": 4,
+      "moban": 2,
+      "wangluo": 2,
+      "zhengce": 2,
+      "yunying": 3,
+      "kefu": 2,
+      "qita": 2
     },
     "hasMore": false,
     "threshold": 50
@@ -218,12 +226,20 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
   "data": {
     "skills": [ SkillSummary, ... ],
     "categoryCounts": {
-      "all": 8,
-      "operations": 3,
-      "finance": 2,
-      "monitor": 1,
-      "market": 1,
-      "office": 1
+      "": 8,
+      "jishu": 2,
+      "chanpin": 1,
+      "sheji": 1,
+      "xingzheng": 0,
+      "caiwu": 1,
+      "hr": 0,
+      "tongyong": 1,
+      "moban": 0,
+      "wangluo": 0,
+      "zhengce": 0,
+      "yunying": 1,
+      "kefu": 0,
+      "qita": 1
     },
     "hasMore": false,
     "threshold": 50
@@ -274,7 +290,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
       "slug": "总部往来对账单汇总",
       "title": "总部往来对账单汇总",
       "description": "按账期汇总总部与各网点往来发生额、余额及对账状态，生成合并视图。",
-      "category": "财务管理",
+      "category": "财务",
       "categoryCode": "finance",
       "source": "official",
       "installed": false,
@@ -441,7 +457,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 
 当 `GET /api/skill-plaza/list` 调用时 STO 远端市场不可达：
 
-1. 后端 MUST 降级为仅返回本地已安装技能 + `skill-categories.json` 中配置的推荐技能
+1. 后端 MUST 降级为仅返回本地已安装技能 + 内置默认分类常量中配置的推荐技能
 2. 响应中 `success` 仍为 `true`
 3. 前端 NOT 展示降级提示（可后续迭代增加）
 
