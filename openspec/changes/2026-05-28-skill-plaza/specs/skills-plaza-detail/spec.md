@@ -57,12 +57,13 @@
 
 ### Requirement: 详情弹窗数据来自后端 API
 
-弹窗数据 MUST 由 `GET /api/skill-plaza/skill/:slug` 接口提供，包含 `intro`、`steps`、`schedule`、`output`、`overview` 等字段。
+弹窗数据 MUST 由 `GET /api/skill-plaza/skill/:slug` 接口提供，完整响应结构参见 `skills-plaza-api` capability 的接口契约。
 
 #### Scenario: 请求详情数据
 - **WHEN** 用户打开详情弹窗
 - **THEN** 系统 MUST 调用 `GET /api/skill-plaza/skill/:slug` 获取该技能的详情数据
 - **AND** 若数据已在本地缓存则 MUST NOT 重复请求
+- **AND** 响应中的 `detail` 对象 MUST 包含 `intro`、`steps`（可选）、`schedule`（可选）、`output`（可选）、`overview` 等字段
 
 ### Requirement: 详情弹窗无障碍
 

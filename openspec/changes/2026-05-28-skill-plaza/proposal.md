@@ -25,6 +25,7 @@
 
 ### New Capabilities
 
+- `skills-plaza-api`：技能广场全部 host-api 端点的接口契约（请求/响应结构、错误码、分页策略、数据模型）
 - `skills-plaza-marketplace`：技能广场主页面——Tab 切换、分类导航、搜索、排序、视图切换、卡片渲染、安装 / 使用 / 删除交互，以及驱动上述交互的 host-api 与 Zustand store
 - `skills-plaza-detail`：技能详情弹窗——工作流介绍、步骤、调度与输出、数据概览、立即使用 CTA
 - `skills-plaza-category`：后端完全管理的技能分类体系（分类定义、技能归属、分类计数）

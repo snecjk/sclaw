@@ -33,11 +33,11 @@
 
 ### Requirement: 分类计数
 
-分类导航中每个分类项右侧 MUST 展示当前 Tab + 搜索条件下的技能数量。计数 MUST 由后端在返回列表时计算并提供。
+分类导航中每个分类项右侧 MUST 展示当前 Tab + 搜索条件下的技能数量。计数 MUST 由后端在返回列表时计算并提供，通过响应中的 `categoryCounts` 字段返回。详见 `skills-plaza-api` capability 的接口契约。
 
 #### Scenario: 分类计数更新
 - **WHEN** 用户切换 Tab 或输入搜索关键词
-- **THEN** 系统 MUST 重新计算各分类下的匹配数量
+- **THEN** 系统 MUST 调用对应列表接口获取最新的 `categoryCounts`
 - **AND** 分类导航中各分类项右侧的计数 MUST 实时更新
 
 ### Requirement: 分类数据本地配置持久化

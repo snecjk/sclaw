@@ -130,6 +130,15 @@
 - **WHEN** 用户将鼠标悬停在卡片上
 - **THEN** 快捷操作区域 MUST 从透明变为可见（`opacity: 0 → 1` 过渡）
 
+### Requirement: 预计积分展示（本期固定值）
+
+技能卡片 meta 行 MUST 展示"预计 X 积分"文本。本期 `points` 字段**不进行动态计算**，固定展示"预计8积分"。详见 `skills-plaza-api` capability 的 points 字段说明。
+
+#### Scenario: 积分固定值展示
+- **WHEN** 卡片渲染技能 meta 信息
+- **THEN** "预计积分"文本 MUST 固定为"预计8积分"
+- **AND** MUST NOT 根据技能类型、步骤数或其他因素动态计算
+
 ### Requirement: 安装技能
 
 用户点击"安装"按钮 MUST 触发安装流程。安装 MUST 通过 host-api 调用后端 `StoSkillService`，完成后刷新列表并展示 Toast 反馈。
@@ -194,7 +203,7 @@
 
 ### Requirement: 广场数据通过 host-api 获取
 
-页面所有数据请求 MUST 通过 `src/lib/host-api.ts` 发起，MUST NOT 直接调用 Gateway HTTP 端点或使用 `window.electron.ipcRenderer.invoke()`。
+页面所有数据请求 MUST 通过 `src/lib/host-api.ts` 发起，MUST NOT 直接调用 Gateway HTTP 端点或使用 `window.electron.ipcRenderer.invoke()`。接口契约详见 `skills-plaza-api` capability。
 
 #### Scenario: 加载广场列表
 - **WHEN** 技能广场页面挂载
@@ -204,6 +213,21 @@
 #### Scenario: 加载我的技能列表
 - **WHEN** 用户切换至"我的技能" Tab
 - **THEN** 系统 MUST 调用 `hostApiFetch('/api/skill-plaza/mine')` 获取已安装技能列表
+
+### Requirement: 分页阈值展示
+
+当技能总数超过分页阈值（本期固定为 50）时，前端 MUST 展示分页控件。详见 `skills-plaza-api`capability 的分页策略说明。
+
+#### Scenario: 技能数量未超过阈值
+- **WHEN** 列表接口返回 `hasMore: false`
+- **THEN** 页面 MUST NOT 展示分页控件
+- **AND** 所有技能以当前视图模式完整展示
+
+#### Scenario: 技能数量超过阈值
+- **WHEN** 列表接口返回 `hasMore: true`
+- **THEN** 页面 MUST 展示分页控件（页码或"加载更多"）
+- **AND** 用户翻页时 MUST 请求下一页数据
+- **AND** 下期迭代将支持 `page` 和 `pageSize` 查询参数
 
 ### Requirement: 列表 loading 与 error 状态
 
