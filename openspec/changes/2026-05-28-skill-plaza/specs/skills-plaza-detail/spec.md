@@ -4,23 +4,16 @@
 
 ### Requirement: 技能详情弹窗
 
-用户点击技能卡片（非快捷操作区域）MUST 打开详情弹窗。弹窗 MUST 展示技能的详细信息，包括标题、标签、统计数据、工作流介绍、流程步骤、调度与输出、数据概览以及"立即使用"CTA 按钮。
+用户点击技能卡片（非快捷操作区域）MUST 打开详情弹窗。弹窗 MUST 展示技能的详细信息，包括标题、标签、统计数据、技能介绍以及"立即使用"CTA 按钮。
 
 #### Scenario: 点击卡片打开详情弹窗
 - **WHEN** 用户点击技能卡片的标题 / 描述 / 图标区域（排除"使用"、"安装"、"删除"、开关等快捷操作）
 - **THEN** 系统 MUST 打开右侧滑出的详情弹窗
 - **AND** 弹窗 MUST 包含标题、标签、统计数据行
 
-#### Scenario: 工作流类技能展示全部 sections
-- **WHEN** 详情弹窗打开且技能类型为工作流（`kind === 'workflow'`）
-- **THEN** 弹窗 MUST 展示以下 sections：工作流介绍、流程步骤、调度与输出、数据概览
-- **AND** 流程步骤 MUST 以有序编号列表渲染
-- **AND** 调度与输出区块 MUST 以 label-value 卡片形式展示
-
-#### Scenario: 普通技能展示基础信息
-- **WHEN** 详情弹窗打开且技能类型非工作流
-- **THEN** 弹窗 MUST 展示技能介绍
-- **AND** 流程步骤、调度与输出 sections MUST NOT 展示（或展示默认描述）
+#### Scenario: 详情弹窗展示技能介绍
+- **WHEN** 详情弹窗打开
+- **THEN** 弹窗 MUST 展示技能介绍（`detail.intro`）
 
 ### Requirement: 详情弹窗关闭
 
@@ -46,7 +39,8 @@
 #### Scenario: 已安装技能的立即使用
 - **WHEN** 弹窗中的技能已在本地安装
 - **THEN** "立即使用"按钮 MUST 可点击
-- **AND** 点击后 MUST 跳转至对话页面并预填充技能的默认 prompt
+- **AND** 点击后 MUST 调用 `POST /api/skill-plaza/use` 记录一次使用（异步，不阻塞）
+- **AND** 系统 MUST 跳转至对话路由 `/conversation?q=<encodedPrompt>`，其中 `q` 参数为 `encodeURIComponent(skill.defaultPrompt)`
 - **AND** 弹窗 MUST 关闭
 
 #### Scenario: 未安装技能的立即使用
@@ -63,7 +57,7 @@
 - **WHEN** 用户打开详情弹窗
 - **THEN** 系统 MUST 调用 `GET /api/skill-plaza/skill/:slug` 获取该技能的详情数据
 - **AND** 若数据已在本地缓存则 MUST NOT 重复请求
-- **AND** 响应中的 `detail` 对象 MUST 包含 `intro`、`steps`（可选）、`schedule`（可选）、`output`（可选）、`overview` 等字段
+- **AND** 响应中的 `detail` 对象 MUST 包含 `intro` 字段
 
 #### Scenario: 详情数据缓存
 - **WHEN** 用户打开详情弹窗

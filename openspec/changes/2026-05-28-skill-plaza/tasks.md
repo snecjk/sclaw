@@ -11,6 +11,7 @@
 - [ ] 1.5 实现完整分页逻辑：`getPlazaSkills()` 和 `getMySkills()` 支持 `page`（默认1）、`pageSize`（默认20，最大50）、`sort`（默认`hot`）参数；返回 `skills`、`hasMore`、`page`、`pageSize`、`total`。满足 **Requirement: 分页展示**。
 - [ ] 1.6 实现 `categoryCounts` 计算：列表接口返回时根据当前搜索/过滤条件计算各分类下的技能数量。满足 **Requirement: 分类计数**。
 - [ ] 1.7 实现 `points` 固定值：本期所有技能的 `points` 字段统一返回 `8`。满足 **Requirement: 预计积分展示（本期固定值）**。
+- [ ] 1.8 实现使用统计接口 `POST /api/skill-plaza/use`：`SkillPlazaService` 接收 slug，对 `skills.use_count` 执行 +1 操作；接口为异步设计，失败不影响前端跳转。满足 **Decision 13: `useCount`（使用数）：前端点击统计，异步埋点**。
 
 ## 2. Frontend Store: useSkillPlazaStore
 
@@ -22,7 +23,7 @@
 
 ## 3. Frontend API Client
 
-- [ ] 3.1 在 `src/lib/host-api.ts` 中新增广场 API 方法：`fetchSkillPlazaCategories()`、`fetchSkillPlazaList()`、`fetchMySkills()`、`fetchSkillDetail(slug)`、`installPlazaSkill(slug)`、`uninstallPlazaSkill(slug)`。所有方法调用 `hostApiFetch()`，响应类型对齐 `skills-plaza-api` spec 中定义的接口契约。满足 **Requirement: 广场数据通过 host-api 获取**。
+- [ ] 3.1 在 `src/lib/host-api.ts` 中新增广场 API 方法：`fetchSkillPlazaCategories()`、`fetchSkillPlazaList()`、`fetchMySkills()`、`fetchSkillDetail(slug)`、`installPlazaSkill(slug)`、`uninstallPlazaSkill(slug)`、`recordSkillUse(slug)`。所有方法调用 `hostApiFetch()`，响应类型对齐 `skills-plaza-api` spec 中定义的接口契约。满足 **Requirement: 广场数据通过 host-api 获取**。
 
 ## 4. Frontend UI Components
 
@@ -41,7 +42,7 @@
 - [ ] 5.2 实现 Tab 切换逻辑：`activeTab === 'all'` → 展示 plazaSkills + 隐藏视图切换；`activeTab === 'mine'` → 展示 mySkills + 显示视图切换 + fetchMySkills。满足 **Requirement: 默认展示技能广场 Tab** + **Requirement: 切换到我的技能 Tab** + **Requirement: 技能广场 Tab 隐藏视图切换**。
 - [ ] 5.3 实现搜索 + 分类联合过滤：当用户输入搜索词或切换分类时，调用列表接口并传入 `q` + `category` 参数，将返回结果直接赋值给列表状态；分类计数从接口返回的 `categoryCounts` 读取。满足 **Requirement: 搜索与分类联合** + **Requirement: 分类计数更新**。
 - [ ] 5.4 实现排序逻辑：切换排序时调用列表接口并传入 `sort` 参数（`hot` / `recent`），后端返回已排序数据，前端直接渲染。满足 **Requirement: 默认排序** + **Requirement: 切换排序**。
-- [ ] 5.5 实现卡片点击打开详情弹窗（非快捷操作区域）+ 卡片"使用"跳转 + 卡片"安装"触发安装流程。满足 **Requirement: 使用技能** + **Requirement: 安装技能**。
+- [ ] 5.5 实现卡片点击打开详情弹窗（非快捷操作区域）+ 卡片"使用"跳转（点击时异步调用 `recordSkillUse(slug)` 后再跳转）+ 卡片"安装"触发安装流程。满足 **Requirement: 使用技能** + **Requirement: 安装技能**。
 - [ ] 5.6 实现"我的技能"条目视图下的开关控件（toggle install/uninstall）和删除按钮 + 确认弹窗。满足 **Requirement: 删除技能**。
 - [ ] 5.7 实现卡片 meta 行"预计积分"展示，本期固定显示"预计8积分"。满足 **Requirement: 预计积分展示（本期固定值）**。
 

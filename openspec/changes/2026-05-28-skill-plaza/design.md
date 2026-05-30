@@ -72,6 +72,37 @@
 - **Rationale**: 积分计算引擎需要额外工作量，且对 MVP 功能非必需；固定值可满足首期展示需求。
 - **Alternative considered**: 本期即实现动态积分计算。拒绝，需要设计积分计算规则和引擎，增加首期交付风险。
 
+### 11. `source` 字段：不持久化存储，由 `author_id` 实时推导
+- **Decision**: 数据模型中的 `source` 字段（`"official"` / `"mine"`）不在 `skills` 表中持久化存储。后端在查询时根据 `skills.author_id` 与当前登录用户对比实时推导：`author_id == 当前用户` → `mine`（自建），否则 → `official`（官方）。`source` 查询参数过滤在后端转换为 `author_id` 条件执行。
+- **Rationale**: 官方技能与自建技能的本质区别仅在于创建者是否当前用户，无需额外字段；减少数据冗余，避免规则变化时的大面积迁移。前端标签显示（官方 / 已安装 / 自建）由 `source` + `installed` 联合判断。
+- **Alternative considered**: 在 `skills` 表中新增 `source` 字段并持久化存储。拒绝，因为判断规则简单且唯一，加字段只会增加维护负担和同步风险。
+
+### 12. `kind` 字段与 `detail` 子字段：本期不区分工作流，仅保留 `intro`
+- **Decision**: 去掉 `kind`（`"normal"` / `"workflow"`）字段，详情弹窗不再区分工作流与普通技能，统一仅展示 `detail.intro` 技能介绍。连带去掉 `detail.steps`、`detail.schedule`、`detail.output`、`detail.overview` 四个子字段。
+- **Rationale**: 技能广场本期所有技能均为普通技能，不存在工作流类型；去掉 `kind` 和冗余 `detail` 子字段可大幅简化数据模型和详情弹窗 UI 逻辑，减少前后端维护成本。
+- **Alternative considered**: 保留 `kind` 和全部 `detail` 子字段作为扩展预留。拒绝，因为本期无工作流需求，预留字段只会增加数据模型的理解成本和表结构复杂度；未来确有工作流需求时可作为独立 change 重新设计。
+
+### 13. `useCount`（使用数）：前端点击统计，异步埋点
+- **Decision**: `useCount` 采用**方案 A — 前端点击统计**。用户点击"使用"按钮时，前端异步调用 `POST /api/skill-plaza/use`，后端将 `skills.use_count` +1。统计口径为"点击使用按钮并成功跳转对话页面的次数"，不追踪 Gateway 实际执行情况。
+- **Rationale**: 
+  - 实现成本最低，无需 Gateway 层改造或 transcript 文件解析
+  - 和设计意图对齐："使用数"是热度指标，反映用户兴趣，点击次数已足够
+  - 和 `installCount`（安装数）口径一致，都是用户行为计数
+  - 异步埋点不阻塞跳转流程，失败不影响用户体验
+- **Alternative considered**: 
+  - **方案 B（对话页面埋点）**：需要对话页知道当前技能上下文，增加耦合
+  - **方案 C（Gateway 运行时统计）**：最准确但实现成本高，需要 Gateway 暴露执行统计或跨 session 聚合 transcript
+  - **方案 D（本期放弃）**：设计稿有三件套（安装数/使用数/积分），放弃使用数会降低卡片信息密度。拒绝 D，选择成本最低的 A
+
+### 14. 跳转路径：后端存 `defaultPrompt`，前端拼接路由
+- **Decision**: 数据模型用 `defaultPrompt`（string）替代 `href`。后端存储技能的默认初始 prompt，前端在点击"使用"时通过 `encodeURIComponent(defaultPrompt)` 拼接为 `/conversation?q=<encodedPrompt>` 完成跳转。
+- **Rationale**: 
+  - 后端只需存储纯文本 prompt，无需关心前端路由结构和 URL 编码规则
+  - 前端统一控制跳转目标（对话页），如果未来对话路由变更，不需要改后端数据
+  - `defaultPrompt` 语义更清晰，直接表达业务含义
+- **Alternative considered**: 
+  - **方案 A（后端存完整 `href`）**：后端直接返回 `/conversation?q=...`。拒绝，因为 URL 编码、路由格式属于前端职责，后端不应硬编码前端路由路径；且同一 prompt 在不同环境（Web/桌面）可能有不同路由
+
 ## Risks / Trade-offs
 
 | Risk | Mitigation |

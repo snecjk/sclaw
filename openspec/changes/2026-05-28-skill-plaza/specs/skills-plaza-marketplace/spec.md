@@ -116,7 +116,7 @@
 #### Scenario: 已安装技能卡片渲染
 - **WHEN** 技能在本地已安装（`lock.json` 中存在或 `skills/` 目录中存在）
 - **THEN** 卡片 MUST 展示绿色"已安装"标签（Success Green-1 底色 + Green-7 文本）
-- **AND** 快捷操作区域 MUST 展示"使用"按钮（链接至 `href`）
+- **AND** 快捷操作区域 MUST 展示"使用"按钮（点击后跳转至对话页并预填充 `defaultPrompt`）
 - **AND** "使用"按钮颜色 MUST 为 Brand-6 `#FF6F00`
 
 #### Scenario: 未安装官方技能卡片渲染
@@ -165,8 +165,9 @@
 
 #### Scenario: 点击使用按钮
 - **WHEN** 用户点击已安装技能的"使用"按钮
-- **THEN** 系统 MUST 通过 React Router 导航至应用内对话路由 `/conversation?q=<encodedPrompt>`
-- **AND** URL 中的 `q` 参数 MUST 为该技能配置的默认使用 prompt
+- **THEN** 系统 MUST 调用 `POST /api/skill-plaza/use` 记录一次使用（异步，不阻塞）
+- **AND** 系统 MUST 通过 React Router 导航至应用内对话路由 `/conversation?q=<encodedPrompt>`
+- **AND** URL 中的 `q` 参数 MUST 为 `encodeURIComponent(skill.defaultPrompt)`
 - **AND** 路由跳转 MUST 使用 `useNavigate`，NOT 使用 `window.open` 或外部链接
 
 ### Requirement: 删除技能（仅我的技能 Tab）

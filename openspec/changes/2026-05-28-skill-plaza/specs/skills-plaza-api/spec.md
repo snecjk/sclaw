@@ -9,11 +9,13 @@
 所有接口遵循项目统一的 `{ success, results/data, error }` 包装格式：
 
 **成功响应**:
+
 ```json
 { "success": true, "data": { ... } }
 ```
 
 **错误响应**:
+
 ```json
 { "success": false, "error": "人类可读的错误信息", "code": "ERROR_CODE" }
 ```
@@ -26,43 +28,66 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 
 用于列表项展示的核心字段：
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `slug` | string | 是 | 技能唯一标识（kebab-case） |
-| `title` | string | 是 | 展示名称 |
-| `description` | string | 是 | 简短描述（最多 80 字符） |
-| `category` | string \| null | 是 | 分类 slug，未分类为 `null` |
-| `source` | `"official"` \| `"mine"` | 是 | 来源：官方 / 自建 |
-| `kind` | `"normal"` \| `"workflow"` | 是 | 类型：普通 / 工作流 |
-| `installed` | boolean | 是 | 本地是否已安装 |
-| `enabled` | boolean | 否 | 是否启用（仅已安装技能有效） |
-| `installCount` | number | 否 | 安装次数（用于热门排序） |
-| `useCount` | number | 否 | 使用次数 |
-| `points` | number \| null | 是 | 预计积分消耗，本期固定为 `null` 或 `8` |
-| `icon` | string | 否 | 图标 SVG 字符串或 icon key |
-| `href` | string | 是 | 使用跳转链接，格式为应用内路由路径（如 `/conversation?q=...`），非外部 `.html` 文件 |
-| `updatedAt` | string | 否 | 最近更新时间（ISO 8601） |
+
+| 字段             | 类型           | 必填       | 说明                                                        |
+| -------------- | ------------ | -------- | --------------------------------------------------------- |
+| `slug`         | string       | 是        | 技能唯一标识（kebab-case）                                        |
+| `title`        | string       | 是        | 展示名称                                                      |
+| `description`  | string       | 是        | 简短描述（最多 80 字符）                                            |
+| `category`     | string       | null     | 是                                                         |
+| `source`       | `"official"` | `"mine"` | 是                                                         |
+| `installed`    | boolean      | 是        | 本地是否已安装                                                   |
+| `enabled`      | boolean      | 否        | 是否启用（仅已安装技能有效）                                            |
+| `installCount` | number       | 否        | 安装次数（用于热门排序）                                              |
+| `useCount`     | number       | 否        | 使用次数                                                      |
+| `points`       | number       | null     | 是                                                         |
+| `icon`         | string       | 否        | 图标 SVG 字符串或 icon key                                      |
+| `defaultPrompt`| string       | 是        | 技能默认使用的初始 prompt，前端据此拼接为 `/conversation?q=<encodedPrompt>` 跳转 |
+| `updatedAt`    | string       | 否        | 最近更新时间（ISO 8601）                                          |
+
 
 ### SkillDetail（技能详情）
 
 详情弹窗使用的完整数据模型，包含 `SkillSummary` 全部字段加：
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `detail.intro` | string | 是 | 工作流/技能介绍文本 |
-| `detail.steps` | string[] | 否 | 流程步骤列表（仅 workflow 类型） |
-| `detail.schedule` | string | 否 | 调度说明（仅 workflow 类型） |
-| `detail.output` | string | 否 | 输出说明（仅 workflow 类型） |
-| `detail.overview` | string | 否 | 数据概览描述 |
+
+| 字段             | 类型     | 必填  | 说明     |
+| -------------- | ------ | --- | ------ |
+| `detail.intro` | string | 是   | 技能介绍文本 |
+
 
 ### CategoryDef（分类定义）
 
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `id` | string | 是 | 唯一标识 |
-| `slug` | string | 是 | kebab-case 分类标识 |
-| `label` | string | 是 | 展示名称（i18n 友好） |
-| `order` | number | 是 | 排序权重（升序） |
+
+| 字段      | 类型     | 必填  | 说明              |
+| ------- | ------ | --- | --------------- |
+| `id`    | string | 是   | 唯一标识            |
+| `slug`  | string | 是   | kebab-case 分类标识 |
+| `label` | string | 是   | 展示名称（i18n 友好）   |
+| `order` | number | 是   | 排序权重（升序）        |
+
+
+### `source` 字段推导规则
+
+`source` 不在数据库中持久化存储，由后端在查询时根据 `skills.author_id` 与当前登录用户对比实时推导：
+
+
+| 条件                                         | 推导结果       | 前端标签                                 |
+| ------------------------------------------ | ---------- | ------------------------------------ |
+| `author_id == 当前用户工号`                      | `mine`     | **自建**（橙色）                           |
+| `author_id ≠ 当前用户工号` 或 `author_id IS NULL` | `official` | 未安装时显示 **官方**（蓝色），已安装时显示 **已安装**（绿色） |
+
+
+> **Rationale**: 官方技能与自建技能的本质区别仅在于创建者是否当前用户，无需额外字段。标签显示由前端根据 `source` + `installed` 联合判断。
+
+#### `source` 查询参数过滤的实现
+
+当接口收到 `source=official` 或 `source=mine` 查询参数时，后端 MUST 将条件转换为 `author_id` 判断：
+
+- `source=mine` → `WHERE author_id = :currentUserId`
+- `source=official` → `WHERE (author_id != :currentUserId OR author_id IS NULL)`
+
+`categoryCounts` 的统计 MUST 同步应用上述过滤条件，确保计数与列表数据严格对齐。
 
 ---
 
@@ -73,15 +98,19 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 获取技能分类列表。
 
 **请求参数（Query）**:
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `q` | string | 否 | 搜索关键词（匹配 title / description） |
-| `category` | string | 否 | 分类 slug 过滤 |
-| `sort` | `"hot"` \| `"recent"` | 否 | 排序方式，默认 `hot` |
-| `page` | number | 否 | 页码，从 1 开始，默认 1 |
-| `pageSize` | number | 否 | 每页条数，默认 20，最大 50 |
+
+
+| 参数         | 类型      | 必填         | 说明                            |
+| ---------- | ------- | ---------- | ----------------------------- |
+| `q`        | string  | 否          | 搜索关键词（匹配 title / description） |
+| `category` | string  | 否          | 分类 slug 过滤                    |
+| `sort`     | `"hot"` | `"recent"` | 否                             |
+| `page`     | number  | 否          | 页码，从 1 开始，默认 1                |
+| `pageSize` | number  | 否          | 每页条数，默认 20，最大 50              |
+
 
 **响应** (`200 OK`):
+
 ```json
 {
   "success": true,
@@ -99,9 +128,12 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 ```
 
 **错误码**:
-| Code | 说明 |
-|------|------|
+
+
+| Code                     | 说明         |
+| ------------------------ | ---------- |
 | `CATEGORIES_LOAD_FAILED` | 分类配置文件读取失败 |
+
 
 ---
 
@@ -110,18 +142,22 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 获取技能广场全量列表（合并 STO 远端市场目录 + 本地已安装状态）。
 
 **请求参数（Query）**:
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `q` | string | 否 | 搜索关键词（匹配 title / description），不区分大小写 |
-| `category` | string | 否 | 分类 slug 过滤 |
-| `source` | `"official"` \| `"mine"` | 否 | 按来源过滤 |
-| `sort` | `"hot"` \| `"recent"` | 否 | 排序方式：`hot` 按安装数降序（默认），`recent` 按更新时间降序 |
-| `page` | number | 否 | 页码，从 1 开始，默认 1 |
-| `pageSize` | number | 否 | 每页条数，默认 20，最大 50 |
+
+
+| 参数         | 类型           | 必填         | 说明                                   |
+| ---------- | ------------ | ---------- | ------------------------------------ |
+| `q`        | string       | 否          | 搜索关键词（匹配 title / description），不区分大小写 |
+| `category` | string       | 否          | 分类 slug 过滤                           |
+| `source`   | `"official"` | `"mine"`   | 否                                    |
+| `sort`     | `"hot"`      | `"recent"` | 否                                    |
+| `page`     | number       | 否          | 页码，从 1 开始，默认 1                       |
+| `pageSize` | number       | 否          | 每页条数，默认 20，最大 50                     |
+
 
 **注**: 搜索、分类过滤、排序均由后端执行。`categoryCounts` 必须根据当前 `q` + `category` + `source` 条件在后端计算后返回，确保与列表数据严格对齐。
 
 **响应** (`200 OK`):
+
 ```json
 {
   "success": true,
@@ -142,21 +178,26 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 ```
 
 **字段说明**:
+
 - `skills`: 当前页的技能列表
 - `categoryCounts`: 各分类下的技能数量（按当前搜索/过滤条件计算）
 - `hasMore`: 是否存在更多未返回的技能（总数超过 `threshold` 时为 `true`）
 - `threshold`: 分页阈值，本期固定为 `50`
 
 **分页策略**:
+
 - 后端根据 `page` 和 `pageSize` 参数返回对应分页数据。
 - 响应中必须包含 `hasMore`（是否还有更多数据）、`page`（当前页码）、`pageSize`（当前每页条数）、`total`（总条数，可选）。
 - 当 `hasMore: false` 时，前端隐藏分页控件；当 `hasMore: true` 时，前端展示分页控件，用户翻页时传入新的 `page` 参数请求下一页。
 
 **错误码**:
-| Code | 说明 |
-|------|------|
-| `PLAZA_LIST_FAILED` | 列表获取失败 |
+
+
+| Code                        | 说明                     |
+| --------------------------- | ---------------------- |
+| `PLAZA_LIST_FAILED`         | 列表获取失败                 |
 | `REMOTE_MARKET_UNAVAILABLE` | 远端市场不可达（降级：仅返回本地已安装技能） |
+
 
 ---
 
@@ -167,6 +208,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 **请求参数**: 无
 
 **响应** (`200 OK`):
+
 ```json
 {
   "success": true,
@@ -187,9 +229,12 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 ```
 
 **错误码**:
-| Code | 说明 |
-|------|------|
+
+
+| Code               | 说明       |
+| ------------------ | -------- |
 | `MINE_LIST_FAILED` | 本地技能扫描失败 |
+
 
 ---
 
@@ -198,11 +243,15 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 获取单个技能的完整详情（用于详情弹窗）。
 
 **路径参数**:
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `slug` | string | 是 | 技能唯一标识 |
+
+
+| 参数     | 类型     | 必填  | 说明     |
+| ------ | ------ | --- | ------ |
+| `slug` | string | 是   | 技能唯一标识 |
+
 
 **响应** (`200 OK`):
+
 ```json
 {
   "success": true,
@@ -212,7 +261,8 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 }
 ```
 
-**非工作流技能示例**:
+**响应示例**:
+
 ```json
 {
   "success": true,
@@ -223,54 +273,14 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
       "description": "按账期汇总总部与各网点往来发生额、余额及对账状态，生成合并视图。",
       "category": "finance",
       "source": "official",
-      "kind": "normal",
       "installed": false,
       "installCount": 310,
       "useCount": 890,
       "points": 8,
       "icon": "document",
-      "href": "/conversation/conversation.html",
+      "defaultPrompt": "帮我汇总本月总部往来对账单",
       "detail": {
-        "intro": "按账期自动汇总总部与各网点的往来发生额和余额，生成对账状态合并视图。",
-        "steps": [],
-        "schedule": "",
-        "output": "",
-        "overview": "覆盖全部网点的账期数据汇总"
-      }
-    }
-  }
-}
-```
-
-**工作流技能示例**:
-```json
-{
-  "success": true,
-  "data": {
-    "skill": {
-      "slug": "发件客户成本分析",
-      "title": "发件客户成本分析",
-      "description": "按客户维度拆解出港单票成本、毛利与异常科目，输出成本报表与优化建议。",
-      "category": "operations",
-      "source": "mine",
-      "kind": "workflow",
-      "installed": true,
-      "enabled": true,
-      "installCount": 980,
-      "useCount": 1500,
-      "points": 8,
-      "icon": "chart",
-      "href": "/cost-analysis/cost-analysis.html",
-      "detail": {
-        "intro": "分析客户单票成本与毛利结构，识别高成本客户并输出优化建议清单。",
-        "steps": [
-          "按客户维度汇总发件成本与毛利基础数据",
-          "识别高成本客户与异常成本科目",
-          "输出优化建议清单并推送至相关小组"
-        ],
-        "schedule": "数据概览生成后触发出港成本小组",
-        "output": "生成报表链接触达出港成本小组",
-        "overview": "20积分 · 3步骤 · 自动生成报表"
+        "intro": "按账期自动汇总总部与各网点的往来发生额和余额，生成对账状态合并视图。"
       }
     }
   }
@@ -278,10 +288,13 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 ```
 
 **错误码**:
-| Code | 说明 |
-|------|------|
-| `SKILL_NOT_FOUND` | 技能不存在 |
+
+
+| Code                 | 说明       |
+| -------------------- | -------- |
+| `SKILL_NOT_FOUND`    | 技能不存在    |
 | `DETAIL_LOAD_FAILED` | 详情数据加载失败 |
+
 
 ---
 
@@ -290,6 +303,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 安装技能（官方技能或市场技能）。
 
 **请求体** (JSON):
+
 ```json
 {
   "slug": "string"
@@ -297,11 +311,13 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 ```
 
 **响应** (`200 OK`):
+
 ```json
 { "success": true }
 ```
 
 **错误响应**:
+
 ```json
 {
   "success": false,
@@ -311,11 +327,14 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 ```
 
 **错误码**:
-| Code | 说明 |
-|------|------|
-| `SKILL_NOT_FOUND` | 技能 slug 不存在 |
-| `INSTALL_FAILED` | 安装过程失败（下载/解压/配置失败） |
-| `INSTALL_ALREADY_INSTALLED` | 该技能已安装 |
+
+
+| Code                        | 说明                 |
+| --------------------------- | ------------------ |
+| `SKILL_NOT_FOUND`           | 技能 slug 不存在        |
+| `INSTALL_FAILED`            | 安装过程失败（下载/解压/配置失败） |
+| `INSTALL_ALREADY_INSTALLED` | 该技能已安装             |
+
 
 ---
 
@@ -324,6 +343,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 卸载/删除技能（仅我的技能中已安装的技能）。
 
 **请求体** (JSON):
+
 ```json
 {
   "slug": "string"
@@ -331,11 +351,13 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 ```
 
 **响应** (`200 OK`):
+
 ```json
 { "success": true }
 ```
 
 **错误响应**:
+
 ```json
 {
   "success": false,
@@ -345,11 +367,55 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 ```
 
 **错误码**:
-| Code | 说明 |
-|------|------|
+
+
+| Code                      | 说明                  |
+| ------------------------- | ------------------- |
+| `SKILL_NOT_FOUND`         | 技能 slug 不存在         |
+| `UNINSTALL_FAILED`        | 卸载过程失败（文件删除/配置清理失败） |
+| `UNINSTALL_NOT_INSTALLED` | 该技能未安装，无需卸载         |
+
+
+---
+
+### 7. POST /api/skill-plaza/use
+
+记录技能使用次数。用户点击"使用"按钮时调用，后端将对应技能的 `use_count` +1。
+
+**请求体** (JSON):
+
+```json
+{
+  "slug": "string"
+}
+```
+
+**响应** (`200 OK`):
+
+```json
+{ "success": true }
+```
+
+**错误响应**:
+
+```json
+{
+  "success": false,
+  "error": "技能不存在",
+  "code": "SKILL_NOT_FOUND"
+}
+```
+
+**错误码**:
+
+
+| Code              | 说明          |
+| ----------------- | ----------- |
 | `SKILL_NOT_FOUND` | 技能 slug 不存在 |
-| `UNINSTALL_FAILED` | 卸载过程失败（文件删除/配置清理失败） |
-| `UNINSTALL_NOT_INSTALLED` | 该技能未安装，无需卸载 |
+| `USE_LOG_FAILED`  | 使用记录写入失败    |
+
+
+> **Note**: 该接口为异步统计接口，前端在点击"使用"按钮后 SHOULD 调用，但不影响跳转流程。调用失败时不应阻塞用户进入对话页面。
 
 ---
 
@@ -358,6 +424,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 `points` 字段本期**不进行动态计算**，统一返回固定值 `8`。前端在卡片 meta 行展示为"预计8积分"。
 
 后续迭代计划：
+
 - 根据工作流步骤数量、API 调用次数、模型 token 消耗等因素动态计算 `points`
 - 后端新增积分计算引擎
 - 前端支持积分显示格式化（如 `8积分`、`免费`、`自定义`）
@@ -367,6 +434,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 ### 远端市场不可达
 
 当 `GET /api/skill-plaza/list` 调用时 STO 远端市场不可达：
+
 1. 后端 MUST 降级为仅返回本地已安装技能 + `skill-categories.json` 中配置的推荐技能
 2. 响应中 `success` 仍为 `true`
 3. 前端 NOT 展示降级提示（可后续迭代增加）
@@ -374,5 +442,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 ### Gateway 未就绪
 
 当 Gateway 进程尚未启动或正在重启时：
+
 1. "我的技能" Tab 的 `enabled` 状态从本地 `openclaw.json` 直接读取，不强依赖 Gateway RPC
 2. 广场 Tab 的已安装状态从本地 `lock.json` 读取
+
