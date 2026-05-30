@@ -65,6 +65,12 @@
 - **AND** 若数据已在本地缓存则 MUST NOT 重复请求
 - **AND** 响应中的 `detail` 对象 MUST 包含 `intro`、`steps`（可选）、`schedule`（可选）、`output`（可选）、`overview` 等字段
 
+#### Scenario: 详情数据缓存
+- **WHEN** 用户打开详情弹窗
+- **THEN** 系统 MUST 先检查 `useSkillPlazaStore` 中的 `skillDetailsCache`
+- **AND** 若缓存中存在该 slug 且 `Date.now() - timestamp < 5 * 60 * 1000`（5分钟），则 MUST 直接使用缓存数据，NOT 重复调用 API
+- **AND** 当技能发生安装、删除或更新操作后，MUST 清除该 slug 对应的缓存条目
+
 ### Requirement: 详情弹窗无障碍
 
 弹窗 MUST 使用 `role="dialog"`、`aria-modal="true"`、`aria-labelledby`、`aria-describedby` 属性，确保屏幕阅读器可正确识别。

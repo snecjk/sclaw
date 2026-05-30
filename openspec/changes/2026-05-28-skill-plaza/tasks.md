@@ -8,7 +8,7 @@
 - [ ] 1.2 新建 `electron/services/skill-plaza-service.ts`：`SkillPlazaService` 类，实现 `getCategories()`、`getPlazaSkills()`、`getMySkills()`、`getSkillDetail(slug)`、`installSkill(slug)`、`uninstallSkill(slug)` 方法；内部聚合 `StoSkillService`、本地 `skills/` 扫描、`lock.json`、`openclaw.json`、分类配置。满足 **Requirement: 分类数据本地配置持久化** + **Requirement: 技能归属分类** + **Requirement: 分类计数**。
 - [ ] 1.3 新建 `electron/api/routes/skill-plaza.ts`：注册 `GET /api/skill-plaza/categories`、`GET /api/skill-plaza/list`、`GET /api/skill-plaza/mine`、`GET /api/skill-plaza/skill/:slug`、`POST /api/skill-plaza/install`、`POST /api/skill-plaza/uninstall` 路由；在 `electron/api/server.ts` 中注册路由模块。接口契约详见 `skills-plaza-api` spec。满足 **Requirement: 分类导航** + **Requirement: 广场数据通过 host-api 获取** + **Requirement: 详情弹窗数据来自后端 API**。
 - [ ] 1.4 扩展 `electron/api/context.ts`：在 `HostApiContext` 中添加 `skillPlazaService` 实例初始化。
-- [ ] 1.5 实现分页阈值逻辑：`getPlazaSkills()` 和 `getMySkills()` 返回 `hasMore` 和 `threshold: 50` 字段，当技能数 > 50 时截断返回。满足 **Requirement: 分页阈值展示**。
+- [ ] 1.5 实现完整分页逻辑：`getPlazaSkills()` 和 `getMySkills()` 支持 `page`（默认1）、`pageSize`（默认20，最大50）、`sort`（默认`hot`）参数；返回 `skills`、`hasMore`、`page`、`pageSize`、`total`。满足 **Requirement: 分页展示**。
 - [ ] 1.6 实现 `categoryCounts` 计算：列表接口返回时根据当前搜索/过滤条件计算各分类下的技能数量。满足 **Requirement: 分类计数**。
 - [ ] 1.7 实现 `points` 固定值：本期所有技能的 `points` 字段统一返回 `8`。满足 **Requirement: 预计积分展示（本期固定值）**。
 
@@ -16,7 +16,9 @@
 
 - [ ] 2.1 新建 `src/stores/skill-plaza.ts`：定义 `SkillPlazaState` 接口（`activeTab`、`activeCategory`、`searchQuery`、`sortMode`、`viewMode`、`plazaSkills`、`mySkills`、`categories`、`categoryCounts`、`loading`、`installing`、`hasMore`、`threshold`）和 actions（`fetchCategories`、`fetchPlazaSkills`、`fetchMySkills`、`installSkill`、`uninstallSkill`、`toggleTab`、`toggleCategory`、`setSearch`、`setSort`、`setViewMode`）。满足 **Requirement: 双 Tab 切换** + **Requirement: 排序功能** + **Requirement: 视图切换**。
 - [ ] 2.2 实现 `categoryCounts` 状态消费：从列表接口响应中提取 `categoryCounts` 并更新到 store，驱动分类导航计数展示。
-- [ ] 2.3 实现分页状态：从列表接口响应中提取 `hasMore` 和 `threshold`，当 `hasMore: true` 时启用分页 UI。
+- [ ] 2.3 实现分页状态：从列表接口响应中提取 `hasMore`、`page`、`pageSize`、`total`，当 `hasMore: true` 时启用分页 UI，支持翻页时传入新的 `page` 参数。
+- [ ] 2.4 实现详情数据缓存：在 store 中新增 `skillDetailsCache: Map<string, { data: SkillDetail; timestamp: number }>`，缓存有效期 5 分钟。安装/删除/更新技能后清除对应 slug 缓存。满足 **Requirement: 详情弹窗数据缓存**。
+- [ ] 2.5 实现双 Tab 数据同步：`installSkill` / `uninstallSkill` 成功后，标记 `plazaSkills` 和 `mySkills` 为 stale，下次切换到对应 Tab 时自动重新 fetch。满足 **Requirement: 安装/删除后状态同步**。
 
 ## 3. Frontend API Client
 
@@ -37,8 +39,8 @@
 
 - [ ] 5.1 重写 `src/pages/Skills/`（或新建 `src/pages/Skills/SkillPlazaPage.tsx` + 更新路由）：组合 Header + Toolbar + CategoryNav + CardGrid/List + EmptyState + Pagination（当 `hasMore: true` 时），从 `useSkillPlazaStore` 驱动状态；挂载时 fetchCategories + fetchPlazaSkills。满足 **Requirement: 技能广场页面替换现有 Skills 路由** + **Requirement: 双 Tab 切换** + **Requirement: 搜索无结果** + **Requirement: 分页阈值展示**。
 - [ ] 5.2 实现 Tab 切换逻辑：`activeTab === 'all'` → 展示 plazaSkills + 隐藏视图切换；`activeTab === 'mine'` → 展示 mySkills + 显示视图切换 + fetchMySkills。满足 **Requirement: 默认展示技能广场 Tab** + **Requirement: 切换到我的技能 Tab** + **Requirement: 技能广场 Tab 隐藏视图切换**。
-- [ ] 5.3 实现搜索 + 分类联合过滤：在 store 中根据 `searchQuery` + `activeCategory` 过滤列表；分类计数从接口返回的 `categoryCounts` 读取。满足 **Requirement: 搜索与分类联合** + **Requirement: 分类计数更新**。
-- [ ] 5.4 实现排序逻辑：hot 按安装数降序、recent 按更新时间降序，前端本地排序。满足 **Requirement: 默认排序** + **Requirement: 切换排序**。
+- [ ] 5.3 实现搜索 + 分类联合过滤：当用户输入搜索词或切换分类时，调用列表接口并传入 `q` + `category` 参数，将返回结果直接赋值给列表状态；分类计数从接口返回的 `categoryCounts` 读取。满足 **Requirement: 搜索与分类联合** + **Requirement: 分类计数更新**。
+- [ ] 5.4 实现排序逻辑：切换排序时调用列表接口并传入 `sort` 参数（`hot` / `recent`），后端返回已排序数据，前端直接渲染。满足 **Requirement: 默认排序** + **Requirement: 切换排序**。
 - [ ] 5.5 实现卡片点击打开详情弹窗（非快捷操作区域）+ 卡片"使用"跳转 + 卡片"安装"触发安装流程。满足 **Requirement: 使用技能** + **Requirement: 安装技能**。
 - [ ] 5.6 实现"我的技能"条目视图下的开关控件（toggle install/uninstall）和删除按钮 + 确认弹窗。满足 **Requirement: 删除技能**。
 - [ ] 5.7 实现卡片 meta 行"预计积分"展示，本期固定显示"预计8积分"。满足 **Requirement: 预计积分展示（本期固定值）**。
@@ -62,3 +64,5 @@
 - [ ] 8.4 运行 `pnpm run lint` 并修复问题。
 - [ ] 8.5 运行 `pnpm run typecheck` 并修复类型错误。
 - [ ] 8.6 审阅 `README.md`、`README.zh-CN.md`、`README.ja-JP.md` 是否需更新 Skills 页面描述。
+- [ ] 8.7 E2E 测试（Playwright）：核心用户旅程——在技能广场 Tab 安装官方技能 → 切换至"我的技能"Tab → 点击使用 → 验证跳转至对话页面并携带 `q` 参数。
+- [ ] 8.8 E2E 测试（Playwright）：删除技能流程——在"我的技能"条目视图点击删除 → 确认弹窗点击删除 → 验证列表移除 + Toast 提示 + 广场 Tab 状态恢复为未安装。

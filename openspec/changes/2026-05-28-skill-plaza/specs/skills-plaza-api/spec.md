@@ -40,7 +40,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 | `useCount` | number | 否 | 使用次数 |
 | `points` | number \| null | 是 | 预计积分消耗，本期固定为 `null` 或 `8` |
 | `icon` | string | 否 | 图标 SVG 字符串或 icon key |
-| `href` | string | 是 | 使用跳转链接 |
+| `href` | string | 是 | 使用跳转链接，格式为应用内路由路径（如 `/conversation?q=...`），非外部 `.html` 文件 |
 | `updatedAt` | string | 否 | 最近更新时间（ISO 8601） |
 
 ### SkillDetail（技能详情）
@@ -72,7 +72,14 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 
 获取技能分类列表。
 
-**请求参数**: 无
+**请求参数（Query）**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `q` | string | 否 | 搜索关键词（匹配 title / description） |
+| `category` | string | 否 | 分类 slug 过滤 |
+| `sort` | `"hot"` \| `"recent"` | 否 | 排序方式，默认 `hot` |
+| `page` | number | 否 | 页码，从 1 开始，默认 1 |
+| `pageSize` | number | 否 | 每页条数，默认 20，最大 50 |
 
 **响应** (`200 OK`):
 ```json
@@ -105,11 +112,14 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 **请求参数（Query）**:
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `q` | string | 否 | 搜索关键词（匹配 title / description） |
+| `q` | string | 否 | 搜索关键词（匹配 title / description），不区分大小写 |
 | `category` | string | 否 | 分类 slug 过滤 |
 | `source` | `"official"` \| `"mine"` | 否 | 按来源过滤 |
+| `sort` | `"hot"` \| `"recent"` | 否 | 排序方式：`hot` 按安装数降序（默认），`recent` 按更新时间降序 |
+| `page` | number | 否 | 页码，从 1 开始，默认 1 |
+| `pageSize` | number | 否 | 每页条数，默认 20，最大 50 |
 
-**注**: 搜索与分类过滤也可由前端本地执行；后端支持这些参数是为了在远端市场数据量较大时减少传输量。
+**注**: 搜索、分类过滤、排序均由后端执行。`categoryCounts` 必须根据当前 `q` + `category` + `source` 条件在后端计算后返回，确保与列表数据严格对齐。
 
 **响应** (`200 OK`):
 ```json
@@ -137,10 +147,10 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 - `hasMore`: 是否存在更多未返回的技能（总数超过 `threshold` 时为 `true`）
 - `threshold`: 分页阈值，本期固定为 `50`
 
-**分页策略**（本期行为）:
-- 当技能总数 ≤ 50 时：一次性返回全部技能，`hasMore: false`
-- 当技能总数 > 50 时：返回前 50 条，`hasMore: true`，前端应展示分页控件
-- 下期迭代将新增 `page` 和 `pageSize` 查询参数支持完整分页
+**分页策略**:
+- 后端根据 `page` 和 `pageSize` 参数返回对应分页数据。
+- 响应中必须包含 `hasMore`（是否还有更多数据）、`page`（当前页码）、`pageSize`（当前每页条数）、`total`（总条数，可选）。
+- 当 `hasMore: false` 时，前端隐藏分页控件；当 `hasMore: true` 时，前端展示分页控件，用户翻页时传入新的 `page` 参数请求下一页。
 
 **错误码**:
 | Code | 说明 |

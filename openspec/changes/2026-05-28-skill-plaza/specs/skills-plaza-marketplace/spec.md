@@ -59,12 +59,15 @@
 
 #### Scenario: 输入搜索关键词
 - **WHEN** 用户在搜索框输入关键词"对账"
-- **THEN** 技能列表 MUST 仅展示名称或描述中包含"对账"的技能
+- **THEN** 系统 MUST 调用 `GET /api/skill-plaza/list?q=对账`（或 `/api/skill-plaza/mine?q=对账`）
+- **AND** 技能列表 MUST 仅展示后端返回的匹配结果
 - **AND** 匹配 MUST 不区分大小写
 
 #### Scenario: 搜索与分类联合
 - **WHEN** 用户已选择"财务管理"分类并输入搜索词
-- **THEN** 结果 MUST 同时满足分类和搜索条件
+- **THEN** 系统 MUST 调用列表接口并同时传入 `category=finance&q=对账`
+- **AND** 结果 MUST 同时满足分类和搜索条件
+- **AND** `categoryCounts` MUST 根据当前联合条件重新计算并更新
 
 #### Scenario: 搜索无结果
 - **WHEN** 搜索 + 分类组合无匹配结果
@@ -162,8 +165,9 @@
 
 #### Scenario: 点击使用按钮
 - **WHEN** 用户点击已安装技能的"使用"按钮
-- **THEN** 系统 MUST 导航至 `conversation.html?q=<encodedPrompt>`（或等价路由）
+- **THEN** 系统 MUST 通过 React Router 导航至应用内对话路由 `/conversation?q=<encodedPrompt>`
 - **AND** URL 中的 `q` 参数 MUST 为该技能配置的默认使用 prompt
+- **AND** 路由跳转 MUST 使用 `useNavigate`，NOT 使用 `window.open` 或外部链接
 
 ### Requirement: 删除技能（仅我的技能 Tab）
 
@@ -190,6 +194,12 @@
 - **WHEN** 用户在确认弹窗中点击"取消"或点击背景遮罩
 - **THEN** 弹窗 MUST 关闭
 - **AND** 技能 MUST NOT 被删除
+
+#### Scenario: 宫格视图下删除技能
+- **WHEN** 用户在"我的技能" Tab 的宫格视图下将鼠标悬停在卡片上
+- **THEN** 快捷操作区域 MUST 展示"更多"菜单（⋮）或直接展示"删除"图标按钮
+- **AND** 点击后 MUST 触发与条目视图相同的确认弹窗和删除流程
+- **AND** 删除完成后广场 Tab 中该技能的"已安装"标签 MUST 同步移除
 
 ### Requirement: Toast 通知
 

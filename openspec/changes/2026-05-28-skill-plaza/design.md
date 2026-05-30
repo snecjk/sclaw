@@ -38,6 +38,7 @@
 - **Decision**: 新建 `src/stores/skill-plaza.ts`（Zustand），管理广场专属状态（activeTab、activeCategory、searchQuery、sortMode、viewMode、plazaSkills、mySkills、categories）。保留现有 `useSkillsStore` 用于非广场场景（如高级设置页面将来使用）。
 - **Rationale**: 广场的状态维度（Tab + 分类 + 排序 + 视图模式 + 两个独立列表）与现有 store 差异大，混用会增加复杂性。
 - **Alternative considered**: 扩展现有 `useSkillsStore` 增加 `plazaSkills`、`categories` 等字段。拒绝，1470 行页面 + 459 行 store 已经过于膨胀，不利于渐进替换。
+- **Deprecation Note**: 现有 `useSkillsStore` 在本期 change 完成后不再被 `/skills` 路由引用。保留至后续"高级设置"页面实现后统一评估废弃或迁移，避免双 store 长期并存造成维护负担。
 
 ### 5. 卡片数据来源：广场 Tab 从后端 API 获取，我的技能从本地扫描
 - **Decision**:
@@ -56,10 +57,10 @@
 - **Rationale**: 详情数据由后端管理，保持一致性，避免前端硬编码各技能的步骤和输出描述。
 - **Alternative considered**: 类似设计稿的 `data-skill-*` 属性方式，在前端维护详情映射表。拒绝，不利于扩展和维护。
 
-### 8. 视图切换与排序：纯前端状态
-- **Decision**: 视图切换（card / list）和排序（hot / recent）仅影响前端渲染逻辑，不涉及后端查询参数。排序在后端返回固定顺序的基础上由前端根据统计字段（安装数 / 最近更新时间）本地排序。
-- **Rationale**: 当前技能数量有限（<100），本地排序即可；视图是纯 UI concern。
-- **Alternative considered**: 将排序和分类作为查询参数传给后端。可考虑但当前不需要，增加接口复杂度。
+### 8. 视图切换与排序：视图纯前端，排序与搜索走后端参数
+- **Decision**: 视图切换（card / list）是纯前端 UI 状态；排序（hot / recent）和搜索关键词通过后端查询参数传递，由服务端在分页前完成全量过滤与排序。前端根据返回顺序直接渲染，不再本地重排。
+- **Rationale**: 当技能总数超过分页阈值时，前端仅持有部分数据，本地排序/搜索会导致结果不准确（真正的"热门"或匹配项可能在未返回的分页数据中）。服务端全量处理可保证分页场景下的正确性，同时使 `categoryCounts` 与当前列表严格对齐。
+- **Alternative considered**: 纯前端本地排序 + 本期取消分页阈值。拒绝，因为全量返回会增加传输开销，且分页控件已在本期 UI 需求中。
 
 ### 9. 分页策略：阈值控制 + 后续迭代
 - **Decision**: 本期设置分页阈值为 50 条。当技能总数 ≤ 50 时一次性返回全量；当 > 50 时返回前 50 条并设置 `hasMore: true`，前端展示分页控件。完整分页（`page`/`pageSize` 参数）留到下期迭代。
@@ -79,6 +80,7 @@
 | Gateway 未就绪时广场列表缺少 enabled 状态 | "我的技能" Tab 从 `openclaw.json` 直接读取 enabled 状态，不强依赖 Gateway RPC；广场 Tab 的列表中已安装技能的安装状态从 `lock.json` 读取 |
 | STO 远端市场不可达时广场列表为空 | 后端降级策略：远端不可达时仅返回本地已安装技能 + 分类配置中的推荐技能，前端展示降级提示 |
 | 分类映射不完整导致部分技能出现在"全部"但无分类标签 | `SkillPlazaService` 对未映射技能标记 `category: null`，前端在"全部" Tab 展示但不显示分类标签 |
+| 分类映射文件随技能增长难以维护 | `skill-categories.json` 当前为手动维护；当技能数量超过 200 或分类调整频率提高时，需升级为远程分类 API 或工具化生成映射 |
 | 安装后 Gateway 重启耗时 ~10-30s 期间状态不一致 | 安装操作设置 `installing` loading 状态，完成后刷新列表；Toast 提示"安装成功，正在生效" |
 
 ## UI Tokens（docs/sto-design.md）

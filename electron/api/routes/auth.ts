@@ -217,7 +217,12 @@ export async function handleAuthRoutes(
         return true;
       }
 
-      const allowed = computeCrmWeekReportSurfaceAllowed(state.user.code, state.user.userName, json);
+      const { user } = state;
+      if (!user) {
+        sendJson(res, 200, { allowed: false });
+        return true;
+      }
+      const allowed = computeCrmWeekReportSurfaceAllowed(user.code, user.userName, json);
       sendJson(res, 200, { allowed });
     } catch (error) {
       logger.warn('CRM week report policy fetch failed:', error);
