@@ -109,6 +109,16 @@
 - **Alternative considered**: 
   - **方案 A（后端存完整 `href`）**：后端直接返回 `/conversation?q=...`。拒绝，因为 URL 编码、路由格式属于前端职责，后端不应硬编码前端路由路径；且同一 prompt 在不同环境（Web/桌面）可能有不同路由
 
+### 15. `icon` 字段：存完整 SVG 字符串
+- **Decision**: `icon` 字段存储完整的 SVG 字符串（如 `<svg xmlns="...">...</svg>`），前端直接渲染。现有 `skills.icon` 字段类型需从 `varchar(255)` 扩展为 `text`。
+- **Rationale**: 
+  - 技能图标可能为自定义设计，无法被有限的内置 icon key 覆盖
+  - 前端直接渲染 SVG，无需维护 icon key 到 SVG 的映射表，降低前端复杂度
+  - SVG 为矢量格式，缩放无损，适合不同尺寸的卡片和详情展示
+- **Alternative considered**: 
+  - **方案 A（icon 存 key，前端内置映射表）**：如 `"document"` → 前端查找对应 SVG。拒绝，因为需要维护映射表，新增技能图标时需同步更新前端代码。
+  - **方案 C（双字段：icon key + icon_svg）**：同时支持 key 和自定义 SVG。拒绝，本期所有技能均可直接提供 SVG，无需 fallback 机制，增加字段冗余。
+
 ## Risks / Trade-offs
 
 | Risk | Mitigation |

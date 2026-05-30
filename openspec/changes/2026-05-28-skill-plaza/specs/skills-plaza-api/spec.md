@@ -42,7 +42,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 | `installCount` | number       | 否        | 安装次数（用于热门排序）                                              |
 | `useCount`     | number       | 否        | 使用次数                                                      |
 | `points`       | number       | null     | 是                                                         |
-| `icon`         | string       | 否        | 图标 SVG 字符串或 icon key                                      |
+| `icon`         | string       | 否        | 图标完整 SVG 字符串，前端直接渲染                                |
 | `defaultPrompt`| string       | 是        | 技能默认使用的初始 prompt，前端据此拼接为 `/conversation?q=<encodedPrompt>` 跳转 |
 | `updatedAt`    | string       | 否        | 最近更新时间（ISO 8601）                                          |
 
@@ -281,7 +281,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
       "installCount": 310,
       "useCount": 890,
       "points": 8,
-      "icon": "document",
+      "icon": "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path fill='currentColor' d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/></svg>",
       "defaultPrompt": "帮我汇总本月总部往来对账单",
       "detail": {
         "intro": "按账期自动汇总总部与各网点的往来发生额和余额，生成对账状态合并视图。"
