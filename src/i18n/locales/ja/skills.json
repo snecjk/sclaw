@@ -132,5 +132,73 @@
         "installing": "インストール中...",
         "installSuccess": "{{name}} のインストールに成功しました",
         "installError": "インストールに失敗しました: {{error}}"
+    },
+    "plaza": {
+        "title": "スキルプラザ",
+        "subtitle": "インストールできるスキルを管理し、素早く確認・使用",
+        "tab": {
+            "all": "スキルプラザ",
+            "mine": "マイスキル"
+        },
+        "searchPlaceholder": "スキルを検索...",
+        "sort": {
+            "hot": "人気",
+            "recent": "最近"
+        },
+        "view": {
+            "grid": "グリッド",
+            "list": "リスト"
+        },
+        "category": {
+            "all": "すべて",
+            "jishu": "技術",
+            "chanpin": "プロダクト",
+            "sheji": "デザイン",
+            "xingzheng": "総務",
+            "caiwu": "財務",
+            "hr": "人事",
+            "tongyong": "汎用",
+            "moban": "テンプレート",
+            "wangluo": "ネットワーク",
+            "zhengce": "政策",
+            "yunying": "運営",
+            "kefu": "サポート",
+            "qita": "その他"
+        },
+        "tag": {
+            "installed": "インストール済",
+            "official": "公式",
+            "mine": "自作"
+        },
+        "meta": {
+            "installs": "{{count}} インストール",
+            "uses": "{{count}} 使用",
+            "points": "約{{count}}pt"
+        },
+        "action": {
+            "use": "使用",
+            "install": "インストール",
+            "delete": "削除",
+            "toggle": "有効/無効",
+            "useNow": "今すぐ使用"
+        },
+        "detail": {
+            "introTitle": "スキル紹介",
+            "defaultPromptTitle": "デフォルト質問"
+        },
+        "deleteConfirm": {
+            "title": "スキルを削除",
+            "message": "このスキルを削除してもよろしいですか？マイスキルから削除されます。",
+            "confirm": "削除",
+            "cancel": "キャンセル"
+        },
+        "toast": {
+            "installSuccess": "インストール成功",
+            "installError": "インストールに失敗しました",
+            "uninstallSuccess": "削除しました",
+            "uninstallError": "削除に失敗しました"
+        },
+        "loading": "読み込み中...",
+        "noSkills": "利用可能なスキルがありません"
     }
 }

@@ -12,7 +12,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { Models } from './pages/Models';
 import { Agents } from './pages/Agents';
 import { Channels } from './pages/Channels';
-import { Skills } from './pages/Skills';
+import { SkillPlazaPage } from './components/skill-plaza/SkillPlazaPage';
 import { Subscriptions } from './pages/Subscriptions';
 import { Cron } from './pages/Cron';
 import { Home } from './pages/Home';
@@ -272,7 +272,7 @@ function App() {
             <Route path="/models" element={<Models />} />
             <Route path="/agents" element={<Agents />} />
             <Route path="/channels" element={<Channels />} />
-            <Route path="/skills" element={<Skills />} />
+            <Route path="/skills" element={<SkillPlazaPage />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/cron" element={<Cron />} />
             <Route path="/settings/*" element={<Settings />} />
