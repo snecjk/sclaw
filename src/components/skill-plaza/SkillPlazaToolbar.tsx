@@ -46,7 +46,7 @@ export function SkillPlazaToolbar() {
       {/* Filters on the right */}
       <div className="flex flex-wrap items-center gap-2 ml-auto">
         {/* Search */}
-        <label className="flex items-center gap-2 h-8 px-3 py-0 rounded-[10px] border border-border bg-background min-w-[280px] max-w-[360px] flex-1">
+        <label className="flex items-center gap-2 h-8 px-3 py-0 rounded-[10px] border border-border bg-white min-w-[280px] max-w-[360px] flex-1">
           <Search className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           <input
             type="search"
@@ -59,7 +59,7 @@ export function SkillPlazaToolbar() {
 
         {/* Sort */}
         <div className="relative flex-shrink-0 w-32">
-          <div className="flex items-center gap-1.5 h-8 px-2 rounded-[10px] border border-border bg-background text-sm font-medium text-foreground cursor-pointer hover:border-[#dfe2e8] hover:bg-[#fafbfc] transition-colors">
+          <div className="flex items-center gap-1.5 h-8 px-2 rounded-[10px] border border-border bg-white text-sm font-medium text-foreground cursor-pointer hover:border-[#dfe2e8] hover:bg-[#fafbfc] transition-colors">
             <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
             <select
               value={sortMode}
