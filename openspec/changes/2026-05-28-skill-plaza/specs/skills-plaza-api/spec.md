@@ -43,7 +43,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 | `useCount`     | number       | 否        | 使用次数                                                      |
 | `points`       | number \| null | 是     | 预计积分消耗，本期固定返回 `8`                                |
 | `icon`         | string       | 否        | 图标完整 SVG 字符串，前端直接渲染                                |
-| `defaultPrompt`| string       | 是        | 技能默认使用的初始 prompt，前端据此拼接为 `/conversation?q=<encodedPrompt>` 跳转 |
+| `defaultPrompt`| string       | 是        | 技能默认使用的初始 prompt，前端据此拼接为 `/conversation?q=<encodedPrompt>` 跳转。**兜底：为空时默认使用 `title` 内容** |
 | `updatedAt`    | string       | 否        | 最近更新时间（ISO 8601）                                          |
 
 
