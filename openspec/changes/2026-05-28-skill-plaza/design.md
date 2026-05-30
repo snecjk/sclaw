@@ -44,10 +44,14 @@
 
 ### 5. 卡片数据来源：广场 Tab 从后端 API 获取，我的技能从本地扫描
 - **Decision**:
-  - "技能广场" Tab（`activeTab === 'all'`）：调用 `GET /api/skill-plaza/list`，后端合并 STO 远端市场目录 + 本地已安装状态返回完整列表
-  - "我的技能" Tab（`activeTab === 'mine'`）：调用 `GET /api/skill-plaza/mine`，后端扫描本地 `skills/` + `lock.json` + `openclaw.json` 返回已安装技能（含 enabled 状态）
-- **Rationale**: 广场 Tab 需要全量目录（含未安装），我的技能 Tab 只需要本地安装过的。分开接口减少不必要的数据传输。
-- **Alternative considered**: 单一接口返回全量 + 客户端过滤。拒绝， STO 远端市场列表可能较大，且"我的技能"不需要远端数据。
+  - "技能广场" Tab（`activeTab === 'all'`）：调用 `GET /api/skill-plaza/list`，后端从 `skills` 表查列表，逐条检查本地 `lock.json` / `skills/` 目录填充 `installed`，读取 `openclaw.json` 填充 `enabled`
+  - "我的技能" Tab（`activeTab === 'mine'`）：调用 `GET /api/skill-plaza/mine`，后端扫描本地 `skills/` + `lock.json` 获取已安装 slug 列表，再用 slug 去 `skills` 表反查详情；不在表中的自建技能从本地元数据读取
+- **Rationale**: 
+  - 广场 Tab 需要全量目录（含未安装），我的技能 Tab 只需要本地安装过的，分开接口减少不必要的数据传输
+  - `installed` / `enabled` 状态以本地文件系统（`lock.json`、`openclaw.json`、`skills/`）为唯一真实来源，不额外建 `user_skills` 关联表，避免数据冗余和同步风险
+- **Alternative considered**: 
+  - 单一接口返回全量 + 客户端过滤。拒绝， STO 远端市场列表可能较大，且"我的技能"不需要远端数据。
+  - 新建 `user_skills` 表存储安装状态。拒绝，安装/卸载操作已修改本地文件系统，再写数据库会增加同步风险；本地文件即为唯一真实来源。
 
 ### 6. 安装 / 删除流程：复用现有 `StoSkillService` 安装能力
 - **Decision**: 广场的安装操作调用 `POST /api/skill-plaza/install`，后端内部委托 `StoSkillService.install()`；删除操作调用 `POST /api/skill-plaza/uninstall`，委托 `StoSkillService.uninstall()` 或删除本地自建技能目录。安装后重启 Gateway 并刷新列表。

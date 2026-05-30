@@ -37,8 +37,8 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 | `category`     | string \| null | 是       | 分类中文展示名称（label），未分类为 `null`                             |
 | `categoryCode` | string \| null | 是       | 分类英文编码（slug），用于过滤和 `categoryCounts` 计数，未分类为 `null`      |
 | `source`       | `"official"` \| `"mine"` | 是 | 来源：官方 / 自建，**由后端根据 `author_id` 推导，不持久化存储** |
-| `installed`    | boolean      | 是        | 本地是否已安装                                                   |
-| `enabled`      | boolean      | 否        | 是否启用（仅已安装技能有效）                                            |
+| `installed`    | boolean      | 是        | 本地是否已安装，**从 `lock.json` / `skills/` 目录实时读取，不持久化存储**    |
+| `enabled`      | boolean      | 否        | 是否启用（仅已安装技能有效），**从 `openclaw.json` 实时读取，不持久化存储**    |
 | `installCount` | number       | 否        | 安装次数（用于热门排序）                                              |
 | `useCount`     | number       | 否        | 使用次数                                                      |
 | `points`       | number       | null     | 是                                                         |
@@ -206,7 +206,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 
 ### 3. GET /api/skill-plaza/mine
 
-获取"我的技能"列表（仅本地已安装技能）。
+获取"我的技能"列表（仅本地已安装技能）。后端通过扫描本地 `skills/` 目录和读取 `lock.json` 获取已安装技能 slug 列表，再用 slug 去 `skills` 表反查详情；不在 `skills` 表中的（如自建技能）从本地元数据读取。
 
 **请求参数**: 无
 
@@ -339,6 +339,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 | `INSTALL_FAILED`            | 安装过程失败（下载/解压/配置失败） |
 | `INSTALL_ALREADY_INSTALLED` | 该技能已安装             |
 
+> **Note**: 安装操作仅修改本地文件系统（下载技能包到 `skills/` + 更新 `lock.json`），不写入数据库。`installed` 状态以本地文件为唯一真实来源。
 
 ---
 
@@ -379,6 +380,7 @@ HTTP 状态码统一为 `200`，业务错误通过 `success` 字段和 `code` �
 | `UNINSTALL_FAILED`        | 卸载过程失败（文件删除/配置清理失败） |
 | `UNINSTALL_NOT_INSTALLED` | 该技能未安装，无需卸载         |
 
+> **Note**: 卸载操作仅修改本地文件系统（删除 `skills/` 下技能目录 + 更新 `lock.json`），不写入数据库。
 
 ---
 
