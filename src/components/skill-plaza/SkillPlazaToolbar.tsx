@@ -8,6 +8,7 @@ import {
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { useState, useEffect, useRef } from 'react';
 
 export function SkillPlazaToolbar() {
   const { t } = useTranslation('skills');
@@ -21,6 +22,26 @@ export function SkillPlazaToolbar() {
     setSortMode,
     setViewMode,
   } = useSkillPlazaStore();
+
+  const [inputValue, setInputValue] = useState(searchQuery);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      if (inputValue !== searchQuery) {
+        setSearchQuery(inputValue);
+      }
+    }, 300);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [inputValue, searchQuery, setSearchQuery]);
+
+  // Sync external searchQuery changes (e.g. tab switch clears query) back to input
+  useEffect(() => {
+    setInputValue(searchQuery);
+  }, [searchQuery]);
 
   const isMine = activeTab === 'mine';
 
@@ -63,8 +84,8 @@ export function SkillPlazaToolbar() {
           <input
             type="search"
             placeholder={t('plaza.searchPlaceholder', { defaultValue: '搜索技能名称或描述…' })}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
             className="flex-1 w-auto min-w-0 h-[30px] p-0 border-none bg-transparent text-xs font-medium text-foreground placeholder:text-muted-foreground focus:outline-none"
           />
         </label>
