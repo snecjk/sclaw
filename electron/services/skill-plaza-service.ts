@@ -316,10 +316,14 @@ export class SkillPlazaService {
   private overlayLocalState<T extends SkillSummary>(skill: T): T {
     const installedSlugs = this.getInstalledSlugs();
     const enabledSlugs = this.getEnabledSlugs();
+    const fromLock = readLockJsonSkills(this.configDir);
+    // 自建 = 本地存在 且 不是从 plaza 安装的（lock.json 中无记录）
+    const isLocalOnly = installedSlugs.has(skill.slug) && !fromLock.has(skill.slug);
     return {
       ...skill,
       installed: installedSlugs.has(skill.slug),
       enabled: installedSlugs.has(skill.slug) ? enabledSlugs.has(skill.slug) : undefined,
+      source: isLocalOnly ? 'mine' : (skill.source || 'official'),
     };
   }
 

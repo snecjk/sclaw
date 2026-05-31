@@ -21,9 +21,7 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
 
   const tag = skill.installed
     ? { label: t('plaza.tag.installed', { defaultValue: '已安装' }), bg: 'rgba(34,197,94,0.12)', text: '#15803d' }
-    : skill.source === 'mine'
-      ? { label: t('plaza.tag.mine', { defaultValue: '自建' }), bg: 'rgba(249,115,22,0.12)', text: '#ff6700' }
-      : { label: t('plaza.tag.official', { defaultValue: '官方' }), bg: 'rgba(59,130,246,0.1)', text: '#2563eb' };
+    : { label: t('plaza.tag.official', { defaultValue: '官方' }), bg: 'rgba(59,130,246,0.1)', text: '#2563eb' };
 
   const handleUse = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -57,7 +55,9 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
     );
   };
 
-  const canUse = skill.installed || skill.source === 'mine';
+  const canUse = isMineTab
+    ? (skill.installed || skill.source === 'mine')
+    : skill.installed;
 
   return (
     <article
@@ -126,13 +126,13 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
         {/* Meta */}
         <div className="flex items-center justify-between gap-2 mt-auto text-xs text-muted-foreground font-medium">
           <div className="inline-flex items-center gap-2.5 min-w-0">
-            {typeof skill.installCount === 'number' && skill.installCount > 0 && (
+            {typeof skill.installCount === 'number' && skill.installCount >= 0 && (
               <span className="inline-flex items-center gap-1">
                 <Users className="h-3.5 w-3.5 opacity-55 flex-shrink-0" />
                 {skill.installCount >= 1000 ? `${(skill.installCount / 1000).toFixed(1)}k` : skill.installCount}
               </span>
             )}
-            {typeof skill.useCount === 'number' && skill.useCount > 0 && (
+            {typeof skill.useCount === 'number' && skill.useCount >= 0 && (
               <span className="inline-flex items-center gap-1">
                 <ArrowDownToLine className="h-3.5 w-3.5 opacity-55 flex-shrink-0" />
                 {skill.useCount >= 1000 ? `${(skill.useCount / 1000).toFixed(1)}k` : skill.useCount}
