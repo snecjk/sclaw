@@ -24,7 +24,9 @@ export function SkillPlazaCategoryNav() {
               activeCategory === cat.slug ? 'text-[#6b7280]' : 'text-[#b0b7c3]',
             )}
           >
-            {categoryCounts[cat.slug] ?? 0}
+            {cat.slug === ''
+            ? categories.filter((c) => c.slug !== '').reduce((sum, c) => sum + (categoryCounts[c.slug] ?? 0), 0)
+            : (categoryCounts[cat.slug] ?? 0)}
           </span>
         </button>
       ))}

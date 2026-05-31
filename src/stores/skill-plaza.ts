@@ -59,8 +59,8 @@ interface SkillPlazaState {
   setPage: (page: number) => void;
 
   fetchCategories: () => Promise<void>;
-  fetchPlazaSkills: (opts?: { reset?: boolean }) => Promise<void>;
-  fetchMySkills: (opts?: { reset?: boolean }) => Promise<void>;
+  fetchPlazaSkills: (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => Promise<void>;
+  fetchMySkills: (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => Promise<void>;
 
   installSkill: (slug: string) => Promise<void>;
   uninstallSkill: (slug: string) => Promise<void>;
@@ -116,9 +116,9 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
   setActiveCategory: (category) => {
     set({ activeCategory: category, page: 1 });
     if (get().activeTab === 'all') {
-      get().fetchPlazaSkills({ reset: true });
+      get().fetchPlazaSkills({ reset: true, skipCategoryCounts: true });
     } else {
-      get().fetchMySkills({ reset: true });
+      get().fetchMySkills({ reset: true, skipCategoryCounts: true });
     }
   },
   setSearchQuery: (query) => {
@@ -150,7 +150,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
   },
 
   fetchPlazaSkills: async (opts) => {
-    const { reset } = opts || {};
+    const { reset, skipCategoryCounts } = opts || {};
     const page = reset ? 1 : get().page;
     if (reset) set({ page: 1 });
 
@@ -163,23 +163,26 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
         page,
         pageSize: get().pageSize,
       });
-      set({
+      const nextState: Partial<SkillPlazaState> = {
         plazaSkills: result.skills,
-        categoryCounts: result.categoryCounts,
         hasMore: result.hasMore,
         page: result.page,
         pageSize: result.pageSize,
         total: result.total,
         loading: false,
         plazaStale: false,
-      });
+      };
+      if (!skipCategoryCounts) {
+        nextState.categoryCounts = result.categoryCounts;
+      }
+      set(nextState);
     } catch (err) {
       set({ error: String(err), loading: false });
     }
   },
 
-  fetchMySkills: async (opts?: { reset?: boolean }) => {
-    const { reset } = opts || {};
+  fetchMySkills: async (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => {
+    const { reset, skipCategoryCounts } = opts || {};
     if (reset) set({ page: 1 });
 
     set({ loading: true, error: null });
@@ -190,16 +193,19 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
         category: get().activeCategory || undefined,
         sort: get().sortMode,
       });
-      set({
+      const nextState: Partial<SkillPlazaState> = {
         mySkills: result.skills,
-        categoryCounts: result.categoryCounts,
         hasMore: false,
         page: 1,
         pageSize: result.skills.length || 20,
         total: result.skills.length,
         loading: false,
         mineStale: false,
-      });
+      };
+      if (!skipCategoryCounts) {
+        nextState.categoryCounts = result.categoryCounts;
+      }
+      set(nextState);
     } catch (err) {
       set({ error: String(err), loading: false });
     }

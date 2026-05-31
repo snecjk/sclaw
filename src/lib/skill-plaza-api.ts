@@ -49,15 +49,11 @@ export async function fetchMySkills(params: FetchPlazaListParams = {}): Promise<
   if (params.page !== undefined) qs.set('page', String(params.page));
   if (params.pageSize !== undefined) qs.set('pageSize', String(params.pageSize));
 
-  const url = `/api/skill-plaza/mine?${qs.toString()}`;
-  console.log('[fetchMySkills] request URL:', url);
-
-  const res = await hostApiFetch<{ success: boolean; data?: PlazaListResult; error?: string }>(url);
-  console.log('[fetchMySkills] response:', JSON.stringify(res));
+  const res = await hostApiFetch<{ success: boolean; data?: PlazaListResult; error?: string }>(
+    `/api/skill-plaza/mine?${qs.toString()}`,
+  );
   if (!res.success) throw new Error(res.error || 'Failed to fetch my skills');
-  const result = res.data || { skills: [], categoryCounts: {}, hasMore: false, page: 1, pageSize: 20 };
-  console.log('[fetchMySkills] result.skills.length:', result.skills.length);
-  return result;
+  return res.data || { skills: [], categoryCounts: {}, hasMore: false, page: 1, pageSize: 20 };
 }
 
 // GET /api/skill-plaza/skill/:slug
