@@ -28,7 +28,7 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
   const handleUse = (e: React.MouseEvent) => {
     e.stopPropagation();
     const prompt = encodeURIComponent(skill.defaultPrompt || skill.title);
-    navigate(`/conversation?q=${prompt}`);
+    navigate(`/?q=${prompt}`);
     useSkillPlazaStore.getState().useSkill(skill.slug).catch(() => {});
   };
 

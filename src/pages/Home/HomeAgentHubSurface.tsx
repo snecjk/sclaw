@@ -30,7 +30,7 @@ const DOT_SUCCESS = 'bg-[#00B54B]';
 /** sto-design Brand-6 申通橙 */
 const DOT_BRAND = 'bg-[#FF6F00] dark:bg-[#FF8D2A]';
 
-export function HomeAgentHubSurface() {
+export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
   const { t } = useTranslation('home');
   const showConversation = useHomeConversationActive();
 
@@ -141,6 +141,7 @@ export function HomeAgentHubSurface() {
               onQueue={handleHubQueue}
               disabled={!isGatewayRunning}
               sending={sending}
+              seedText={seedText}
             />
             {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
           </section>

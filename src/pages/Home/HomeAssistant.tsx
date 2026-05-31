@@ -11,7 +11,7 @@ import { useHomeChatEntrySend } from './use-home-chat-entry-send';
  * 省区首页底部助手：与聊天页相同的 ChatInput（上传、粘贴图片、拖放、排队、停止），
  * 首次从首页默认态发言会创建会话，后续追问续写当前会话，行为与 HomeAgentHubSurface 一致。
  */
-export function HomeAssistant({ className }: { className?: string }) {
+export function HomeAssistant({ className, seedText }: { className?: string; seedText?: string }) {
   const { t } = useTranslation('home');
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
@@ -35,6 +35,7 @@ export function HomeAssistant({ className }: { className?: string }) {
           onQueue={handleHubQueue}
           disabled={!isGatewayRunning}
           sending={sending}
+          seedText={seedText}
         />
         {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
       </section>

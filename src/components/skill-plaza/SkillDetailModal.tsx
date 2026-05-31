@@ -23,7 +23,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
   const handleUse = () => {
     const prompt = encodeURIComponent(skill.defaultPrompt || skill.title);
     onClose();
-    navigate(`/conversation?q=${prompt}`);
+    navigate(`/?q=${prompt}`);
     // Fire-and-forget use record
     useSkillPlazaStore.getState().useSkill(skill.slug).catch(() => {});
   };
@@ -119,11 +119,10 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
               </div>
             </div>
 
-            {/* 工作流介绍 */}
-            <div className="border-t border-border" />
+            {/* 技能描述 */}
             <div className="p-5 py-4">
               <h3 className="text-xs text-muted-foreground mb-2">
-                {t('plaza.detail.workflowIntro', { defaultValue: '工作流介绍' })}
+                {t('plaza.detail.skillDesc', { defaultValue: '技能描述' })}
               </h3>
               <p className="text-sm text-foreground leading-relaxed">
                 {skill.description}
@@ -160,7 +159,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
                   <h3 className="text-xs text-muted-foreground mb-2">
                     {t('plaza.detail.dataOverview', { defaultValue: '数据概览' })}
                   </h3>
-                  <p className="text-sm text-foreground">
+                  <p className="text-sm text-muted-foreground">
                     {t('plaza.detail.usageEstimate', { count: skill.points, defaultValue: `使用 1 次工作流，预计消耗 ${skill.points} 积分` })}
                   </p>
                 </div>
@@ -169,7 +168,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
           </div>
 
           {/* CTA */}
-          <div className="p-4 border-t border-border bg-white">
+          <div className="p-4 bg-white">
             {skill.installed || skill.source === 'mine' ? (
               <button
                 onClick={handleUse}

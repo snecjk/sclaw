@@ -22,7 +22,7 @@ export function SkillCardList({ skill, onDelete }: SkillCardListProps) {
 
   const handleUse = () => {
     const prompt = encodeURIComponent(skill.defaultPrompt || skill.title);
-    navigate(`/conversation?q=${prompt}`);
+    navigate(`/?q=${prompt}`);
     useSkillPlazaStore.getState().useSkill(skill.slug).catch(() => {});
   };
 
