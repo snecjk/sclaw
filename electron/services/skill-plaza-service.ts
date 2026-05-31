@@ -112,7 +112,7 @@ class PythonApiClient {
   async getPlazaSkills(params: SkillPlazaListParams): Promise<PlazaListResult> {
     const qs = new URLSearchParams();
     if (params.q) qs.set('q', params.q);
-    if (params.category) qs.set('category', params.category);
+    if (params.category) qs.set('category_code', params.category);
     if (params.source) qs.set('source', params.source);
     if (params.sort) qs.set('sort', params.sort);
     if (params.page !== undefined) qs.set('page', String(params.page));

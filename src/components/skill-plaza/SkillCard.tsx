@@ -42,17 +42,17 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
     if (skill.icon) {
       return (
         <span
-          className="relative w-11 h-11 rounded-[11px] flex items-center justify-center bg-white text-[#2b2b2b] flex-shrink-0 border border-black/[0.06]"
+          className="relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-[#2b2b2b] flex-shrink-0 border border-black/[0.06]"
           style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}
         >
-          <span dangerouslySetInnerHTML={{ __html: skill.icon.replace(/width="[^"]*"/, 'width="18"').replace(/height="[^"]*"/, 'height="18"') }} />
+          <span dangerouslySetInnerHTML={{ __html: skill.icon.replace(/width="[^"]*"/, 'width="16"').replace(/height="[^"]*"/, 'height="16"') }} />
         </span>
       );
     }
     return (
-      <span className="relative w-11 h-11 rounded-[11px] flex items-center justify-center bg-white text-[#2b2b2b] flex-shrink-0 border border-black/[0.06]"
+      <span className="relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-[#2b2b2b] flex-shrink-0 border border-black/[0.06]"
         style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}>
-        <span className="text-lg">📦</span>
+        <span className="text-base">📦</span>
       </span>
     );
   };
@@ -61,7 +61,7 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
 
   return (
     <article
-      className="relative flex flex-col min-w-0 p-4 pb-3.5 border border-border rounded-xl bg-background cursor-pointer overflow-visible transition-[border-color,box-shadow] duration-150 hover:border-[#dfe2e8] hover:shadow-[0_4px_16px_rgba(15,23,42,0.05)]"
+      className="relative flex flex-col min-w-0 pt-3.5 px-4 pb-3.5 border border-border rounded-xl bg-white cursor-pointer overflow-visible transition-[border-color,box-shadow] duration-150 hover:border-[#dfe2e8] hover:shadow-[0_4px_16px_rgba(15,23,42,0.05)]"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => onOpenDetail?.(skill)}
@@ -101,7 +101,7 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
       {/* Body */}
       <div className="flex flex-col flex-1 min-h-0 no-underline text-inherit">
         {/* Top: icon + title + tags */}
-        <div className="flex items-start gap-3 mb-[18px] pr-[72px]">
+        <div className="flex items-start gap-2.5 mb-2 pr-[68px]">
           {renderIcon()}
           <div className="flex flex-col items-start gap-1.5 min-w-0 flex-1">
             <h2 className="m-0 w-full max-w-full text-sm font-bold tracking-tight text-foreground whitespace-nowrap overflow-hidden text-ellipsis">
@@ -109,7 +109,7 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
             </h2>
             <div className="flex flex-wrap items-center gap-1.5">
               <span
-                className="text-[11px] font-semibold px-2 py-0.5 rounded-md flex-shrink-0 leading-[1.4]"
+                className="text-[11px] font-semibold px-1.5 py-[2px] rounded flex-shrink-0 leading-[1.4]"
                 style={{ backgroundColor: tag.bg, color: tag.text }}
               >
                 {tag.label}
@@ -119,13 +119,13 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
         </div>
 
         {/* Description */}
-        <p className="m-0 mb-3.5 flex-1 text-[13px] leading-[1.5] text-muted-foreground line-clamp-2">
+        <p className="m-0 mb-2 flex-1 text-[13px] leading-snug text-muted-foreground line-clamp-2">
           {skill.description}
         </p>
 
         {/* Meta */}
-        <div className="flex items-center justify-between gap-3 mt-auto text-xs text-muted-foreground font-medium">
-          <div className="inline-flex items-center gap-3 min-w-0">
+        <div className="flex items-center justify-between gap-2 mt-auto text-xs text-muted-foreground font-medium">
+          <div className="inline-flex items-center gap-2.5 min-w-0">
             {typeof skill.installCount === 'number' && skill.installCount > 0 && (
               <span className="inline-flex items-center gap-1">
                 <Users className="h-3.5 w-3.5 opacity-55 flex-shrink-0" />

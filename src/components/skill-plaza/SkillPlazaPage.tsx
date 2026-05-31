@@ -91,7 +91,7 @@ export function SkillPlazaPage() {
           /* Grid view (default for plaza tab, grid for mine tab) */
           <div
             className={cn(
-              'grid gap-4',
+              'grid gap-3',
               'grid-cols-1 md:grid-cols-2 lg:grid-cols-3',
             )}
           >
