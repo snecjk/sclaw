@@ -182,17 +182,11 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
   },
 
   fetchMySkills: async (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => {
-    const { reset, skipCategoryCounts } = opts || {};
-    if (reset) set({ page: 1 });
+    const { skipCategoryCounts } = opts || {};
 
     set({ loading: true, error: null });
     try {
-      // NOTE: mine endpoint may not support pagination; pass only filter/sort params
-      const result = await fetchMySkillsApi({
-        q: get().searchQuery || undefined,
-        category: get().activeCategory || undefined,
-        sort: get().sortMode,
-      });
+      const result = await fetchMySkillsApi();
       const nextState: Partial<SkillPlazaState> = {
         mySkills: result.skills,
         hasMore: false,

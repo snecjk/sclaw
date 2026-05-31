@@ -19,9 +19,13 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const isInstalling = installing[skill.slug];
 
-  const tag = skill.installed
-    ? { label: t('plaza.tag.installed', { defaultValue: '已安装' }), bg: 'rgba(34,197,94,0.12)', text: '#15803d' }
-    : { label: t('plaza.tag.official', { defaultValue: '官方' }), bg: 'rgba(59,130,246,0.1)', text: '#2563eb' };
+  const tag = !isMineTab
+    ? (skill.installed
+      ? { label: t('plaza.tag.installed', { defaultValue: '已安装' }), bg: 'rgba(34,197,94,0.12)', text: '#15803d' }
+      : { label: t('plaza.tag.official', { defaultValue: '官方' }), bg: 'rgba(59,130,246,0.1)', text: '#2563eb' })
+    : skill.source === 'mine'
+      ? { label: t('plaza.tag.mine', { defaultValue: '自建' }), bg: 'rgba(249,115,22,0.12)', text: '#ff6700' }
+      : { label: t('plaza.tag.installed', { defaultValue: '已安装' }), bg: 'rgba(34,197,94,0.12)', text: '#15803d' };
 
   const handleUse = (e: React.MouseEvent) => {
     e.stopPropagation();

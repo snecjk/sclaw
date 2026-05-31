@@ -288,6 +288,85 @@ function readOpenClawEnabledSkills(configDir: string): Set<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Read local skill summary from skills directory
+// ---------------------------------------------------------------------------
+
+function readLocalSkillSummary(skillsDir: string, slug: string): Partial<SkillSummary> | null {
+  const skillDir = path.join(skillsDir, slug);
+
+  // Try openclaw.json inside skill dir
+  const openclawPath = path.join(skillDir, 'openclaw.json');
+  if (fs.existsSync(openclawPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(openclawPath, 'utf8'));
+      return {
+        slug,
+        title: data.name || data.title || slug,
+        description: data.description || '',
+        category: data.category || null,
+        categoryCode: data.category || null,
+        points: typeof data.points === 'number' ? data.points : 8,
+        icon: data.icon,
+        defaultPrompt: data.defaultPrompt || data.name || data.title || slug,
+      };
+    } catch (err) {
+      logger.warn(`[SkillPlazaService] Failed to parse openclaw.json for ${slug}:`, err);
+    }
+  }
+
+  // Try SKILL.md front matter
+  const skillMdPath = path.join(skillDir, 'SKILL.md');
+  if (fs.existsSync(skillMdPath)) {
+    try {
+      const content = fs.readFileSync(skillMdPath, 'utf8');
+      const frontMatterMatch = content.match(/^---\n([\s\S]*?)\n---\n/);
+      if (frontMatterMatch) {
+        const frontMatter = frontMatterMatch[1];
+        const lines = frontMatter.split('\n');
+        const meta: Record<string, string> = {};
+        for (const line of lines) {
+          const colonIdx = line.indexOf(':');
+          if (colonIdx > 0) {
+            const key = line.slice(0, colonIdx).trim();
+            const value = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, '');
+            meta[key] = value;
+          }
+        }
+        // front matter 里优先取 title，没有 title 再取 name
+        let title = meta.title || meta.name || '';
+        if (!title) {
+          const bodyStart = content.indexOf('---\n', 3) + 4;
+          const body = content.slice(bodyStart);
+          const firstLine = body.split('\n').find((l) => l.trim())?.replace(/^#+\s*/, '').trim();
+          title = firstLine || slug;
+        }
+        return {
+          slug,
+          title,
+          description: meta.description || '',
+          category: meta.category || null,
+          categoryCode: meta.category || null,
+          points: meta.points ? Number(meta.points) : 8,
+          defaultPrompt: meta.defaultPrompt || title || slug,
+        };
+      }
+      // No front matter, use first non-empty line as title
+      const firstLine = content.split('\n').find((l) => l.trim())?.replace(/^#+\s*/, '').trim();
+      return {
+        slug,
+        title: firstLine || slug,
+        description: content.slice(0, 200),
+        defaultPrompt: firstLine || slug,
+      };
+    } catch (err) {
+      logger.warn(`[SkillPlazaService] Failed to read SKILL.md for ${slug}:`, err);
+    }
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
@@ -347,6 +426,45 @@ export class SkillPlazaService {
     return {
       ...result,
       skills: result.skills.map((s) => this.overlayLocalState(s)),
+    };
+  }
+
+  async getLocalSkills(): Promise<PlazaListResult> {
+    const slugs = readSkillsDirSlugs(this.skillsDir);
+    const fromLock = readLockJsonSkills(this.configDir);
+    const enabledSlugs = this.getEnabledSlugs();
+
+    const skills: SkillSummary[] = [];
+    for (const slug of slugs) {
+      const summary = readLocalSkillSummary(this.skillsDir, slug);
+      if (summary) {
+        const isOfficial = fromLock.has(slug);
+        skills.push({
+          slug: summary.slug || slug,
+          title: summary.title || slug,
+          description: summary.description || '',
+          category: summary.category || null,
+          categoryCode: summary.categoryCode || null,
+          source: isOfficial ? 'official' : 'mine',
+          installed: true,
+          enabled: enabledSlugs.has(slug),
+          installCount: 0,
+          useCount: 0,
+          points: summary.points ?? 8,
+          icon: summary.icon,
+          defaultPrompt: summary.defaultPrompt || summary.title || slug,
+          updatedAt: undefined,
+        });
+      }
+    }
+
+    return {
+      skills,
+      categoryCounts: {},
+      hasMore: false,
+      page: 1,
+      pageSize: skills.length,
+      total: skills.length,
     };
   }
 

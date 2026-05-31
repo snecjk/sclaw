@@ -68,6 +68,21 @@ export async function handleSkillPlazaRoutes(
     return true;
   }
 
+  // GET /api/skill-plaza/local-skills
+  if (url.pathname === '/api/skill-plaza/local-skills' && req.method === 'GET') {
+    try {
+      const data = await ctx.skillPlazaService.getLocalSkills();
+      sendJson(res, 200, { success: true, data });
+    } catch (error) {
+      sendJson(res, 500, {
+        success: false,
+        error: String(error),
+        code: 'LOCAL_SKILLS_FAILED',
+      });
+    }
+    return true;
+  }
+
   // GET /api/skill-plaza/skill/:slug
   if (url.pathname.startsWith('/api/skill-plaza/skill/') && req.method === 'GET') {
     try {
