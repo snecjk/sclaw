@@ -6,6 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getOpenClawConfigDir, getOpenClawSkillsDir } from '../utils/paths';
+import { setSkillsEnabled } from '../utils/skill-config';
 import { getStoToken } from '../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
@@ -267,24 +268,24 @@ function readSkillsDirSlugs(skillsDir: string): Set<string> {
   return slugs;
 }
 
-function readOpenClawEnabledSkills(configDir: string): Set<string> {
-  const configPath = path.join(configDir, 'openclaw.json');
+function readDisabledDirSlugs(disabledDir: string): Set<string> {
+  const slugs = new Set<string>();
   try {
-    if (fs.existsSync(configPath)) {
-      const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      const entries = data?.skills?.entries || {};
-      const enabled = new Set<string>();
-      for (const [slug, entry] of Object.entries(entries)) {
-        if (typeof entry === 'object' && entry !== null && (entry as Record<string, unknown>).enabled === true) {
-          enabled.add(slug);
+    if (fs.existsSync(disabledDir)) {
+      const entries = fs.readdirSync(disabledDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const skillMdPath = path.join(disabledDir, entry.name, 'SKILL.md');
+          if (fs.existsSync(skillMdPath)) {
+            slugs.add(entry.name);
+          }
         }
       }
-      return enabled;
     }
   } catch (err) {
-    logger.warn('[SkillPlazaService] Failed to read openclaw.json:', err);
+    logger.warn('[SkillPlazaService] Failed to read disabled skills dir:', err);
   }
-  return new Set();
+  return slugs;
 }
 
 // ---------------------------------------------------------------------------
@@ -382,14 +383,20 @@ export class SkillPlazaService {
 
   // ---- Local state readers ----
 
+  private getDisabledDir(): string {
+    return path.join(this.configDir, 'skills-disabled');
+  }
+
   private getInstalledSlugs(): Set<string> {
     const fromLock = readLockJsonSkills(this.configDir);
     const fromDir = readSkillsDirSlugs(this.skillsDir);
-    return new Set([...fromLock, ...fromDir]);
+    const fromDisabled = readDisabledDirSlugs(this.getDisabledDir());
+    return new Set([...fromLock, ...fromDir, ...fromDisabled]);
   }
 
   private getEnabledSlugs(): Set<string> {
-    return readOpenClawEnabledSkills(this.configDir);
+    // 技能在 skills/ 目录下 = 启用；在 skills-disabled/ 下 = 禁用
+    return readSkillsDirSlugs(this.skillsDir);
   }
 
   private overlayLocalState<T extends SkillSummary>(skill: T): T {
@@ -430,9 +437,10 @@ export class SkillPlazaService {
   }
 
   async getLocalSkills(): Promise<PlazaListResult> {
-    const slugs = readSkillsDirSlugs(this.skillsDir);
+    const activeSlugs = readSkillsDirSlugs(this.skillsDir);
+    const disabledSlugs = readDisabledDirSlugs(this.getDisabledDir());
+    const allSlugs = new Set([...activeSlugs, ...disabledSlugs]);
     const fromLock = readLockJsonSkills(this.configDir);
-    const enabledSlugs = this.getEnabledSlugs();
 
     // 先拉 plaza 列表，用于补全官方技能的分类信息（循环拉取全部）
     let plazaSkillMap = new Map<string, SkillSummary>();
@@ -472,8 +480,10 @@ export class SkillPlazaService {
     const skills: SkillSummary[] = [];
     const categoryCounts: Record<string, number> = {};
 
-    for (const slug of slugs) {
-      const summary = readLocalSkillSummary(this.skillsDir, slug);
+    for (const slug of allSlugs) {
+      const isEnabled = activeSlugs.has(slug);
+      const skillDir = isEnabled ? this.skillsDir : this.getDisabledDir();
+      const summary = readLocalSkillSummary(skillDir, slug);
       if (summary) {
         const isOfficial = fromLock.has(slug);
         const source = isOfficial ? 'official' : 'mine';
@@ -494,7 +504,7 @@ export class SkillPlazaService {
           categoryCode: categorySlug || null,
           source,
           installed: true,
-          enabled: enabledSlugs.has(slug),
+          enabled: isEnabled,
           installCount: 0,
           useCount: 0,
           points: summary.points ?? 8,
@@ -533,21 +543,27 @@ export class SkillPlazaService {
   }
 
   async toggleSkillEnabled(slug: string, enabled: boolean): Promise<void> {
-    const configPath = path.join(this.configDir, 'openclaw.json');
-    try {
-      let data: Record<string, unknown> = {};
-      if (fs.existsSync(configPath)) {
-        data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      }
-      if (!data.skills) data.skills = {};
-      const skillsObj = data.skills as Record<string, unknown>;
-      if (!skillsObj.entries) skillsObj.entries = {};
-      const entries = skillsObj.entries as Record<string, unknown>;
-      if (!entries[slug]) entries[slug] = {};
-      (entries[slug] as Record<string, unknown>).enabled = enabled;
-      fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
-    } catch (err) {
-      throw new Error(`Failed to toggle skill enabled state: ${err}`);
+    const disabledDir = this.getDisabledDir();
+    const activeDir = this.skillsDir;
+    const srcDir = enabled ? path.join(disabledDir, slug) : path.join(activeDir, slug);
+    const destDir = enabled ? path.join(activeDir, slug) : path.join(disabledDir, slug);
+
+    if (!fs.existsSync(srcDir)) {
+      // 源目录不存在，可能只是 openclaw.json 里的标记，同步一下即可
+      await setSkillsEnabled([slug], enabled);
+      return;
     }
+
+    if (!fs.existsSync(disabledDir)) {
+      fs.mkdirSync(disabledDir, { recursive: true });
+    }
+
+    try {
+      fs.renameSync(srcDir, destDir);
+    } catch (err) {
+      logger.error(`[SkillPlazaService] Failed to rename ${srcDir} -> ${destDir}:`, err);
+      throw new Error(`Failed to move skill directory: ${err}`);
+    }
+    await setSkillsEnabled([slug], enabled);
   }
 }

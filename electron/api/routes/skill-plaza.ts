@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
+import { logger } from '../../utils/logger';
 
 export async function handleSkillPlazaRoutes(
   req: IncomingMessage,
@@ -176,7 +177,22 @@ export async function handleSkillPlazaRoutes(
         sendJson(res, 400, { success: false, error: 'Missing slug or enabled', code: 'BAD_REQUEST' });
         return true;
       }
+      // 1. Physically move skill dir (primary mechanism: runtime scans skills/ dir)
       await ctx.skillPlazaService.toggleSkillEnabled(slug, enabled);
+      // 2. Best-effort Gateway RPC (don't block if it fails)
+      try {
+        const gm = ctx.gatewayManager;
+        if (gm.isConnected()) {
+          if (enabled) {
+            await gm.rpc<void>('skills.enable', { skillId: slug });
+          } else {
+            await gm.rpc<void>('skills.disable', { skillId: slug });
+          }
+        }
+      } catch (rpcErr) {
+        // Gateway RPC is best-effort; the physical dir move is the real enforcement
+        logger.warn(`[skill-plaza/toggle] Gateway RPC failed for ${slug}:`, rpcErr);
+      }
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, {

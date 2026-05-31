@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, ArrowDownToLine } from 'lucide-react';
+import { toast } from 'sonner';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { Switch } from '@/components/ui/switch';
 import type { SkillSummary } from '@/types/skill-plaza';
@@ -18,6 +19,10 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
   const navigate = useNavigate();
   const { installing } = useSkillPlazaStore();
   const [isHovered, setIsHovered] = useState(false);
+  const [localEnabled, setLocalEnabled] = useState(skill.enabled ?? false);
+  useEffect(() => {
+    setLocalEnabled(skill.enabled ?? false);
+  }, [skill.enabled]);
   const isInstalling = installing[skill.slug];
 
   const tag = !isMineTab
@@ -76,9 +81,33 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
       {isMineTab ? (
         <div className="absolute top-3.5 right-4 z-[3]">
           <Switch
-            checked={skill.enabled ?? false}
+            checked={localEnabled}
             onCheckedChange={(checked) => {
-              useSkillPlazaStore.getState().toggleSkill(skill.slug, checked);
+              setLocalEnabled(checked);
+              useSkillPlazaStore.getState().toggleSkill(skill.slug, checked).then(() => {
+                if (!checked) {
+                  toast.custom(() => (
+                    <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">
+                      技能已关闭，仍可在「我的技能」中查看
+                    </div>
+                  ), { duration: 3000 });
+                } else {
+                  toast.custom(() => (
+                    <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">
+                      技能已开启
+                    </div>
+                  ), { duration: 3000 });
+                }
+              }).catch((err) => {
+                // Rollback on error
+                setLocalEnabled(!checked);
+                console.error('[SkillCard] toggle failed:', err);
+                toast.custom(() => (
+                  <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">
+                    操作失败，请重试
+                  </div>
+                ), { duration: 3000 });
+              });
             }}
             onClick={(e) => e.stopPropagation()}
             aria-label={t('plaza.action.toggle', { defaultValue: '启用/禁用' })}
