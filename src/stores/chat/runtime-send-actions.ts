@@ -1,7 +1,6 @@
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { useAgentsStore } from '@/stores/agents';
-import { useSkillsStore } from '@/stores/skills';
 import {
   clearErrorRecoveryTimer,
   clearHistoryPoll,
@@ -224,9 +223,6 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       try {
         const idempotencyKey = crypto.randomUUID();
         const hasMedia = attachments && attachments.length > 0;
-        if (hasMedia) {
-          console.log('[sendMessage] Media paths:', attachments!.map(a => a.stagedPath));
-        }
 
         // Cache image attachments BEFORE the IPC call to avoid race condition:
         // history may reload (via Gateway event) before the RPC returns.
@@ -276,13 +272,6 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
           ) as { success: boolean; result?: { runId?: string }; error?: string };
         }
 
-        console.log(`[sendMessage] RPC result: success=${result.success}, runId=${result.result?.runId || 'none'}`);
-        
-        // Debug: Log available skills to help diagnose why a skill might not be used
-        const allSkills = useSkillsStore.getState().skills;
-        const enabledSkills = allSkills.filter(s => s.enabled);
-        console.log('[sendMessage] Available skills (enabled):', enabledSkills.map(s => ({ id: s.id, name: s.name, source: s.source })));
-        console.log('[sendMessage] All skills (including disabled):', allSkills.map(s => ({ id: s.id, name: s.name, enabled: s.enabled, source: s.source })));
         
         if (!result.success) {
           clearHistoryPoll();

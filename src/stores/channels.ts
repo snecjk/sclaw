@@ -261,8 +261,6 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
     // Exponential backoff capped at 2 minutes
     const delay = Math.min(5000 * Math.pow(2, attempts), 120000);
     
-    console.log(`[Watchdog] Scheduling auto-reconnect for ${channelId} in ${delay}ms (attempt ${attempts + 1})`);
-    
     const timer = setTimeout(() => {
       reconnectTimers.delete(channelId);
       const state = get();
@@ -270,7 +268,6 @@ export const useChannelsStore = create<ChannelsState>((set, get) => ({
       
       if (channel && (channel.status === 'disconnected' || channel.status === 'error')) {
         reconnectAttempts.set(channelId, attempts + 1);
-        console.log(`[Watchdog] Executing auto-reconnect for ${channelId} (attempt ${attempts + 1})`);
         state.connectChannel(channelId).catch(() => {});
       }
     }, delay);

@@ -540,7 +540,6 @@ function MessageBubble({
                     </button>
                   );
                 }
-                console.log('href222', url, children);
                 return (
                   <a href={href} target="_blank" rel="noopener noreferrer" className="text-link hover:underline break-words break-all">
                     {children}
