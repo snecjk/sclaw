@@ -24,6 +24,7 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
     setLocalEnabled(skill.enabled ?? false);
   }, [skill.enabled]);
   const isInstalling = installing[skill.slug];
+  const isDisabled = skill.enabled === false;
 
   const tag = !isMineTab
     ? (skill.installed
@@ -144,7 +145,7 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
       )}
 
       {/* Body */}
-      <div className="flex flex-col flex-1 min-h-0 no-underline text-inherit">
+      <div className={cn('flex flex-col flex-1 min-h-0 no-underline text-inherit', isDisabled && 'opacity-50')}>
         {/* Top: icon + title + tags */}
         <div className="flex items-start gap-2.5 mb-2 pr-[68px]">
           {renderIcon()}
