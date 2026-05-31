@@ -6,7 +6,7 @@ import { create } from 'zustand';
 import {
   fetchSkillPlazaCategories,
   fetchSkillPlazaList,
-  fetchMySkills,
+  fetchMySkills as fetchMySkillsApi,
   installPlazaSkill,
   uninstallPlazaSkill,
   recordSkillUse,
@@ -118,7 +118,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     if (get().activeTab === 'all') {
       get().fetchPlazaSkills({ reset: true });
     } else {
-      get().fetchMySkills();
+      get().fetchMySkills({ reset: true });
     }
   },
   setSearchQuery: (query) => {
@@ -126,7 +126,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     if (get().activeTab === 'all') {
       get().fetchPlazaSkills({ reset: true });
     } else {
-      get().fetchMySkills();
+      get().fetchMySkills({ reset: true });
     }
   },
   setSortMode: (sort) => {
@@ -178,17 +178,25 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     }
   },
 
-  fetchMySkills: async () => {
+  fetchMySkills: async (opts?: { reset?: boolean }) => {
+    const { reset } = opts || {};
+    if (reset) set({ page: 1 });
+
     set({ loading: true, error: null });
     try {
-      const result = await fetchMySkills();
+      // NOTE: mine endpoint may not support pagination; pass only filter/sort params
+      const result = await fetchMySkillsApi({
+        q: get().searchQuery || undefined,
+        category: get().activeCategory || undefined,
+        sort: get().sortMode,
+      });
       set({
         mySkills: result.skills,
         categoryCounts: result.categoryCounts,
-        hasMore: result.hasMore,
-        page: result.page,
-        pageSize: result.pageSize,
-        total: result.total,
+        hasMore: false,
+        page: 1,
+        pageSize: result.skills.length || 20,
+        total: result.skills.length,
         loading: false,
         mineStale: false,
       });

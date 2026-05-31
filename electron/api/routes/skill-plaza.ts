@@ -49,7 +49,14 @@ export async function handleSkillPlazaRoutes(
   // GET /api/skill-plaza/mine
   if (url.pathname === '/api/skill-plaza/mine' && req.method === 'GET') {
     try {
-      const data = await ctx.skillPlazaService.getMySkills();
+      const params = {
+        q: url.searchParams.get('q') || undefined,
+        category: url.searchParams.get('category') || undefined,
+        sort: (url.searchParams.get('sort') as 'hot' | 'recent') || undefined,
+        page: url.searchParams.has('page') ? Number(url.searchParams.get('page')) : undefined,
+        pageSize: url.searchParams.has('pageSize') ? Number(url.searchParams.get('pageSize')) : undefined,
+      };
+      const data = await ctx.skillPlazaService.getMySkills(params);
       sendJson(res, 200, { success: true, data });
     } catch (error) {
       sendJson(res, 500, {

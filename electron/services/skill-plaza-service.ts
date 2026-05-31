@@ -118,12 +118,23 @@ class PythonApiClient {
     if (params.page !== undefined) qs.set('page', String(params.page));
     if (params.pageSize !== undefined) qs.set('page_size', String(params.pageSize));
 
-    const raw = await this.request<Record<string, unknown>>('GET', `/agent/v1/skills/plaza?${qs.toString()}`);
+    const query = qs.toString();
+    const endpoint = query ? `/agent/v1/skills/plaza?${query}` : '/agent/v1/skills/plaza';
+    const raw = await this.request<Record<string, unknown>>('GET', endpoint);
     return convertPlazaListResponse(raw);
   }
 
-  async getMySkills(): Promise<PlazaListResult> {
-    const raw = await this.request<Record<string, unknown>>('GET', '/agent/v1/skills/plaza/mine');
+  async getMySkills(params: SkillPlazaListParams = {}): Promise<PlazaListResult> {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set('q', params.q);
+    if (params.category) qs.set('category_code', params.category);
+    if (params.sort) qs.set('sort', params.sort);
+    if (params.page !== undefined) qs.set('page', String(params.page));
+    if (params.pageSize !== undefined) qs.set('page_size', String(params.pageSize));
+
+    const query = qs.toString();
+    const endpoint = query ? `/agent/v1/skills/plaza/mine?${query}` : '/agent/v1/skills/plaza/mine';
+    const raw = await this.request<Record<string, unknown>>('GET', endpoint);
     return convertPlazaListResponse(raw);
   }
 
@@ -326,8 +337,8 @@ export class SkillPlazaService {
     };
   }
 
-  async getMySkills(): Promise<PlazaListResult> {
-    const result = await this.client.getMySkills();
+  async getMySkills(params?: SkillPlazaListParams): Promise<PlazaListResult> {
+    const result = await this.client.getMySkills(params);
     return {
       ...result,
       skills: result.skills.map((s) => this.overlayLocalState(s)),

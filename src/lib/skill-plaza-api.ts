@@ -41,12 +41,23 @@ export async function fetchSkillPlazaList(params: FetchPlazaListParams = {}): Pr
 }
 
 // GET /api/skill-plaza/mine
-export async function fetchMySkills(): Promise<PlazaListResult> {
-  const res = await hostApiFetch<{ success: boolean; data?: PlazaListResult; error?: string }>(
-    '/api/skill-plaza/mine',
-  );
+export async function fetchMySkills(params: FetchPlazaListParams = {}): Promise<PlazaListResult> {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set('q', params.q);
+  if (params.category) qs.set('category', params.category);
+  if (params.sort) qs.set('sort', params.sort);
+  if (params.page !== undefined) qs.set('page', String(params.page));
+  if (params.pageSize !== undefined) qs.set('pageSize', String(params.pageSize));
+
+  const url = `/api/skill-plaza/mine?${qs.toString()}`;
+  console.log('[fetchMySkills] request URL:', url);
+
+  const res = await hostApiFetch<{ success: boolean; data?: PlazaListResult; error?: string }>(url);
+  console.log('[fetchMySkills] response:', JSON.stringify(res));
   if (!res.success) throw new Error(res.error || 'Failed to fetch my skills');
-  return res.data || { skills: [], categoryCounts: {}, hasMore: false, page: 1, pageSize: 20 };
+  const result = res.data || { skills: [], categoryCounts: {}, hasMore: false, page: 1, pageSize: 20 };
+  console.log('[fetchMySkills] result.skills.length:', result.skills.length);
+  return result;
 }
 
 // GET /api/skill-plaza/skill/:slug
