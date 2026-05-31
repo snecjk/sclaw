@@ -1,4 +1,10 @@
-import { Search, ArrowUpDown, LayoutGrid, List } from 'lucide-react';
+import { Search, ArrowUpDown, ChevronDown, Check, LayoutGrid, List } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -17,6 +23,12 @@ export function SkillPlazaToolbar() {
   } = useSkillPlazaStore();
 
   const isMine = activeTab === 'mine';
+
+  const sortOptions = [
+    { value: 'hot' as const, label: t('plaza.sort.hot', { defaultValue: '热门' }) },
+    { value: 'recent' as const, label: t('plaza.sort.recent', { defaultValue: '最近' }) },
+  ];
+  const currentSortLabel = sortOptions.find((o) => o.value === sortMode)?.label ?? '';
 
   return (
     <div className="flex flex-wrap items-center gap-4 w-full mb-0">
@@ -58,19 +70,27 @@ export function SkillPlazaToolbar() {
         </label>
 
         {/* Sort */}
-        <div className="relative flex-shrink-0 w-32">
-          <div className="flex items-center gap-1.5 h-8 px-2 rounded-[10px] border border-border bg-white text-sm font-medium text-foreground cursor-pointer hover:border-[#dfe2e8] hover:bg-[#fafbfc] transition-colors">
-            <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
-            <select
-              value={sortMode}
-              onChange={(e) => setSortMode(e.target.value as 'hot' | 'recent')}
-              className="flex-1 min-w-0 bg-transparent border-none text-[13px] font-medium text-foreground focus:outline-none cursor-pointer appearance-none"
-            >
-              <option value="hot">{t('plaza.sort.hot', { defaultValue: '热门' })}</option>
-              <option value="recent">{t('plaza.sort.recent', { defaultValue: '最近' })}</option>
-            </select>
-          </div>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="group flex items-center gap-1.5 h-8 px-2.5 rounded-[10px] border border-border bg-white text-[13px] font-medium text-foreground cursor-pointer hover:border-[#dfe2e8] hover:bg-[#fafbfc] transition-colors">
+              <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="whitespace-nowrap">{t('plaza.sort.prefix', { defaultValue: '排序' })}：{currentSortLabel}</span>
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[140px]">
+            {sortOptions.map((option) => (
+              <DropdownMenuItem
+                key={option.value}
+                onClick={() => setSortMode(option.value)}
+                className="flex items-center justify-between"
+              >
+                <span>{option.label}</span>
+                {sortMode === option.value && <Check className="h-4 w-4 text-foreground" />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {/* View toggle (mine tab only) */}
         {isMine && (
