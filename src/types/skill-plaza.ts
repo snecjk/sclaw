@@ -29,6 +29,7 @@ export interface SkillDetail extends SkillSummary {
 export interface CategoryDef {
   slug: string;
   label: string;
+  count?: number;
 }
 
 export interface PlazaListResult {

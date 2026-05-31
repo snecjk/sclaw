@@ -60,7 +60,7 @@ interface SkillPlazaState {
 
   fetchCategories: () => Promise<void>;
   fetchPlazaSkills: (opts?: { reset?: boolean }) => Promise<void>;
-  fetchMySkills: () => Promise<void>;
+  fetchMySkills: (opts?: { reset?: boolean }) => Promise<void>;
 
   installSkill: (slug: string) => Promise<void>;
   uninstallSkill: (slug: string) => Promise<void>;
