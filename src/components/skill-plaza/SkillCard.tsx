@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, ArrowDownToLine } from 'lucide-react';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
+import { Switch } from '@/components/ui/switch';
 import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -71,8 +72,19 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
       onClick={() => onOpenDetail?.(skill)}
       data-skill-installed={canUse}
     >
-      {/* Quick actions - top right, hover visible */}
-      {!isMineTab && (
+      {/* Quick actions - top right */}
+      {isMineTab ? (
+        <div className="absolute top-3.5 right-4 z-[3]">
+          <Switch
+            checked={skill.enabled ?? false}
+            onCheckedChange={(checked) => {
+              useSkillPlazaStore.getState().toggleSkill(skill.slug, checked);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={t('plaza.action.toggle', { defaultValue: '启用/禁用' })}
+          />
+        </div>
+      ) : (
         <div
           className={cn(
             'absolute top-3.5 right-4 z-[3] flex items-center gap-1.5 max-w-[calc(100%-32px)] transition-all duration-150',

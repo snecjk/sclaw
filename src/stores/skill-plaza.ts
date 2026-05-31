@@ -10,6 +10,7 @@ import {
   installPlazaSkill,
   uninstallPlazaSkill,
   recordSkillUse,
+  toggleSkillEnabled,
 } from '@/lib/skill-plaza-api';
 import type {
   SkillSummary,
@@ -65,6 +66,7 @@ interface SkillPlazaState {
   installSkill: (slug: string) => Promise<void>;
   uninstallSkill: (slug: string) => Promise<void>;
   useSkill: (slug: string) => Promise<void>;
+  toggleSkill: (slug: string, enabled: boolean) => Promise<void>;
 
   getCachedSkillDetail: (slug: string) => SkillSummary | undefined;
   setSkillDetailCache: (slug: string, skill: SkillSummary) => void;
@@ -238,6 +240,19 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
 
   useSkill: async (slug) => {
     await recordSkillUse(slug);
+  },
+
+  toggleSkill: async (slug, enabled) => {
+    try {
+      await toggleSkillEnabled(slug, enabled);
+      set((state) => ({
+        mySkills: state.mySkills.map((s) =>
+          s.slug === slug ? { ...s, enabled } : s
+        ),
+      }));
+    } catch (err) {
+      set({ error: String(err) });
+    }
   },
 
   // -- Cache --

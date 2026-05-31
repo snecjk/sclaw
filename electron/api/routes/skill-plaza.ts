@@ -166,5 +166,27 @@ export async function handleSkillPlazaRoutes(
     return true;
   }
 
+  // POST /api/skill-plaza/toggle
+  if (url.pathname === '/api/skill-plaza/toggle' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ slug?: string; enabled?: boolean }>(req);
+      const slug = body.slug;
+      const enabled = body.enabled;
+      if (!slug || typeof enabled !== 'boolean') {
+        sendJson(res, 400, { success: false, error: 'Missing slug or enabled', code: 'BAD_REQUEST' });
+        return true;
+      }
+      await ctx.skillPlazaService.toggleSkillEnabled(slug, enabled);
+      sendJson(res, 200, { success: true });
+    } catch (error) {
+      sendJson(res, 500, {
+        success: false,
+        error: String(error),
+        code: 'TOGGLE_FAILED',
+      });
+    }
+    return true;
+  }
+
   return false;
 }

@@ -91,3 +91,13 @@ export async function recordSkillUse(slug: string): Promise<void> {
     // Fire-and-forget: don't block navigation on use-record failure
   }
 }
+
+// POST /api/skill-plaza/toggle
+export async function toggleSkillEnabled(slug: string, enabled: boolean): Promise<void> {
+  const res = await hostApiFetch<{ success: boolean; error?: string }>('/api/skill-plaza/toggle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug, enabled }),
+  });
+  if (!res.success) throw new Error(res.error || 'Toggle failed');
+}

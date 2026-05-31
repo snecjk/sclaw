@@ -434,18 +434,65 @@ export class SkillPlazaService {
     const fromLock = readLockJsonSkills(this.configDir);
     const enabledSlugs = this.getEnabledSlugs();
 
+    // 先拉 plaza 列表，用于补全官方技能的分类信息（循环拉取全部）
+    let plazaSkillMap = new Map<string, SkillSummary>();
+    try {
+      const allPlazaSkills: SkillSummary[] = [];
+      let page = 1;
+      while (true) {
+        const result = await this.getPlazaSkills({ page, pageSize: 100 });
+        allPlazaSkills.push(...result.skills);
+        if (!result.hasMore || result.skills.length === 0) break;
+        page++;
+        if (page > 50) break; // safety limit
+      }
+      plazaSkillMap = new Map(allPlazaSkills.map((s) => [s.slug, s]));
+      logger.info(`[getLocalSkills] loaded ${allPlazaSkills.length} plaza skills for categorization`);
+    } catch (err) {
+      logger.warn('[SkillPlazaService] Failed to fetch plaza skills for categorization:', err);
+    }
+
+    // SKILL.md 里的 category 可能是中文标签，映射到前端 slug
+    const categoryLabelToSlug: Record<string, string> = {
+      '技术': 'jishu',
+      '产品': 'chanpin',
+      '设计': 'sheji',
+      '行政': 'xingzheng',
+      '财务': 'caiwu',
+      'HR': 'hr',
+      '通用': 'tongyong',
+      '模板': 'moban',
+      '网络': 'wangluo',
+      '政策': 'zhengce',
+      '运营': 'yunying',
+      '客服': 'kefu',
+      '其他': 'qita',
+    };
+
     const skills: SkillSummary[] = [];
+    const categoryCounts: Record<string, number> = {};
+
     for (const slug of slugs) {
       const summary = readLocalSkillSummary(this.skillsDir, slug);
       if (summary) {
         const isOfficial = fromLock.has(slug);
+        const source = isOfficial ? 'official' : 'mine';
+
+        // 本地没有 category 时，从 plaza 列表匹配
+        let rawCategory = summary.category || '';
+        if (!rawCategory && isOfficial) {
+          const plazaSkill = plazaSkillMap.get(slug);
+          rawCategory = plazaSkill?.categoryCode || plazaSkill?.category || '';
+        }
+        const categorySlug = categoryLabelToSlug[rawCategory] || rawCategory;
+
         skills.push({
           slug: summary.slug || slug,
           title: summary.title || slug,
           description: summary.description || '',
-          category: summary.category || null,
-          categoryCode: summary.categoryCode || null,
-          source: isOfficial ? 'official' : 'mine',
+          category: rawCategory || summary.category || null,
+          categoryCode: categorySlug || null,
+          source,
           installed: true,
           enabled: enabledSlugs.has(slug),
           installCount: 0,
@@ -455,12 +502,20 @@ export class SkillPlazaService {
           defaultPrompt: summary.defaultPrompt || summary.title || slug,
           updatedAt: undefined,
         });
+
+        if (source === 'official') {
+          categoryCounts[categorySlug] = (categoryCounts[categorySlug] || 0) + 1;
+        } else {
+          categoryCounts['mine'] = (categoryCounts['mine'] || 0) + 1;
+        }
       }
     }
 
+    categoryCounts[''] = skills.length;
+
     return {
       skills,
-      categoryCounts: {},
+      categoryCounts,
       hasMore: false,
       page: 1,
       pageSize: skills.length,
@@ -475,5 +530,24 @@ export class SkillPlazaService {
 
   async recordUse(slug: string): Promise<void> {
     await this.client.recordUse(slug);
+  }
+
+  async toggleSkillEnabled(slug: string, enabled: boolean): Promise<void> {
+    const configPath = path.join(this.configDir, 'openclaw.json');
+    try {
+      let data: Record<string, unknown> = {};
+      if (fs.existsSync(configPath)) {
+        data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      }
+      if (!data.skills) data.skills = {};
+      const skillsObj = data.skills as Record<string, unknown>;
+      if (!skillsObj.entries) skillsObj.entries = {};
+      const entries = skillsObj.entries as Record<string, unknown>;
+      if (!entries[slug]) entries[slug] = {};
+      (entries[slug] as Record<string, unknown>).enabled = enabled;
+      fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
+    } catch (err) {
+      throw new Error(`Failed to toggle skill enabled state: ${err}`);
+    }
   }
 }
