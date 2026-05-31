@@ -80,7 +80,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
               <Dialog.Close asChild>
                 <button
                   onClick={onClose}
-                  className="absolute right-4 top-4 h-7 w-7 inline-flex items-center justify-center rounded-full bg-[#f3f4f6] text-[#9ca3af] hover:text-[#6b7280] transition-colors"
+                  className="absolute right-4 top-4 h-7 w-7 inline-flex items-center justify-center rounded-full bg-[#f3f4f6] text-[#9ca3af] hover:text-[#6b7280] transition-colors focus:outline-none focus-visible:ring-0 focus-visible:outline-none"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -160,7 +160,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
                     {t('plaza.detail.dataOverview', { defaultValue: '数据概览' })}
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    {t('plaza.detail.usageEstimate', { count: skill.points, defaultValue: `使用 1 次工作流，预计消耗 ${skill.points} 积分` })}
+                    {t('plaza.detail.usageEstimate', { count: skill.points, defaultValue: `使用 1 次技能，预计消耗 ${skill.points} 积分` })}
                   </p>
                 </div>
               </>

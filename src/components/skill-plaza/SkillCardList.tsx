@@ -7,10 +7,11 @@ import { cn } from '@/lib/utils';
 
 interface SkillCardListProps {
   skill: SkillSummary;
+  onOpenDetail?: (skill: SkillSummary) => void;
   onDelete?: (skill: SkillSummary) => void;
 }
 
-export function SkillCardList({ skill, onDelete }: SkillCardListProps) {
+export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListProps) {
   const { t } = useTranslation('skills');
   const [enabled, setEnabled] = useState(skill.enabled ?? false);
   const [isHovered, setIsHovered] = useState(false);
@@ -40,9 +41,10 @@ export function SkillCardList({ skill, onDelete }: SkillCardListProps) {
 
   return (
     <div
-      className="flex items-center gap-3 px-5 py-4 border-b border-border last:border-b-0 transition-colors"
+      className="flex items-center gap-3 px-5 py-4 border-b border-border last:border-b-0 transition-colors cursor-pointer"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={() => onOpenDetail?.(skill)}
     >
       {renderIcon()}
 
@@ -58,7 +60,7 @@ export function SkillCardList({ skill, onDelete }: SkillCardListProps) {
       <div className="flex items-center gap-1 shrink-0">
         {onDelete && (
           <button
-            onClick={() => onDelete(skill)}
+            onClick={(e) => { e.stopPropagation(); onDelete(skill); }}
             className={cn(
               'inline-flex items-center justify-center w-8 h-8 p-0 border-none rounded-lg bg-transparent text-muted-foreground cursor-pointer hover:text-red-600 transition-all',
               isHovered ? 'opacity-100 visible' : 'opacity-0 invisible',
@@ -70,7 +72,8 @@ export function SkillCardList({ skill, onDelete }: SkillCardListProps) {
         )}
         <Switch
           checked={enabled}
-          onCheckedChange={handleToggle}
+          onCheckedChange={(checked) => { handleToggle(checked); }}
+          onClick={(e) => e.stopPropagation()}
           aria-label={t('plaza.action.toggle', { defaultValue: '启用/禁用' })}
         />
       </div>

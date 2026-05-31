@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Package, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
@@ -21,6 +21,7 @@ export function SkillPlazaPage() {
     mySkills,
     loading,
     viewMode,
+    searchQuery,
     fetchCategories,
     fetchPlazaSkills,
     fetchMySkills,
@@ -43,9 +44,21 @@ export function SkillPlazaPage() {
     }
   }, [activeTab, fetchMySkills]);
 
-  const skills = activeTab === 'all' ? plazaSkills : mySkills;
+  const rawSkills = activeTab === 'all' ? plazaSkills : mySkills;
   const isMine = activeTab === 'mine';
   const isGrid = viewMode === 'grid';
+
+  // Frontend filter for mine tab (backend /mine API doesn't support search yet)
+  const skills = useMemo(() => {
+    if (activeTab === 'all') return rawSkills;
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rawSkills;
+    return rawSkills.filter(
+      (s) =>
+        s.title.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q),
+    );
+  }, [rawSkills, searchQuery, activeTab]);
 
   const handleUninstall = useCallback(async (slug: string) => {
     try {
@@ -83,6 +96,7 @@ export function SkillPlazaPage() {
               <SkillCardList
                 key={skill.slug}
                 skill={skill}
+                onOpenDetail={setSelectedSkill}
                 onDelete={setDeleteTarget}
               />
             ))}

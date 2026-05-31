@@ -140,7 +140,7 @@
             "all": "技能广场",
             "mine": "我的技能"
         },
-        "searchPlaceholder": "搜索技能...",
+        "searchPlaceholder": "搜索技能名称或描述...",
         "sort": {
             "hot": "热门",
             "recent": "最近"
