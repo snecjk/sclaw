@@ -83,10 +83,10 @@ try {
   
   if (fs.existsSync(TRAY_SVG_SOURCE)) {
     await sharp(TRAY_SVG_SOURCE)
-      .resize(22, 22)
+      .resize(16, 16)
       .png()
       .toFile(path.join(ICONS_DIR, 'tray-icon-Template.png'));
-    echo`  ✅ Created tray-icon-Template.png (22x22)`;
+    echo`  ✅ Created tray-icon-Template.png (448x448)`;
   } else {
     echo`  ⚠️  tray-icon-template.svg not found, skipping tray icon generation`;
   }

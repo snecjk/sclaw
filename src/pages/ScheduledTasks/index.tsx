@@ -1,9 +1,10 @@
 /**
  * Scheduled Tasks Page (Redesigned)
- * Replaces the existing Cron page with a new card-based UI.
+ * Independent page using the new STO Scheduled Tasks API.
+ * Does NOT mix with legacy local cron store.
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useCronStore } from '@/stores/cron';
+import { useScheduledTasksStore } from '@/stores/scheduledTasks';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { toast } from 'sonner';
@@ -11,16 +12,14 @@ import { TaskHero } from './components/TaskHero';
 import { TaskCard } from './components/TaskCard';
 import { TaskCreateModal } from './components/TaskCreateModal';
 import { TaskEmptyState } from './components/TaskEmptyState';
-import type { CronJob, CronJobCreateInput, ScheduledTask } from '@/types/cron';
+import type { CronJob, CronJobCreateInput } from '@/types/cron';
 
-// Extended job type for unified display (local + scheduled)
-interface UnifiedJob extends CronJob {
-  isCloud?: boolean;
-  agentId?: string;
-  agentName?: string;
+// View model for the card grid (adapts ScheduledTask shape to what TaskCard expects)
+interface TaskViewModel extends CronJob {
+  isCloud: true;
 }
 
-function mapScheduledTaskToUnified(task: ScheduledTask): UnifiedJob {
+function toViewModel(task: import('@/types/scheduled-task').ScheduledTask): TaskViewModel {
   return {
     id: String(task.id),
     name: task.name,
@@ -31,18 +30,14 @@ function mapScheduledTaskToUnified(task: ScheduledTask): UnifiedJob {
     updatedAt: task.updatedAt,
     nextRun: task.nextRunAt ?? undefined,
     lastRun: task.lastRunAt
-      ? {
-          time: task.lastRunAt,
-          success: task.lastRunStatus === 'success',
-        }
+      ? { time: task.lastRunAt, success: task.lastRunStatus === 'success' }
       : undefined,
     isCloud: true,
   };
 }
 
-// Sort comparator
-function sortJobs(jobs: UnifiedJob[], sort: string): UnifiedJob[] {
-  const sorted = [...jobs];
+function sortTasks(tasks: TaskViewModel[], sort: string): TaskViewModel[] {
+  const sorted = [...tasks];
   switch (sort) {
     case 'created-asc':
       return sorted.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -59,138 +54,102 @@ function sortJobs(jobs: UnifiedJob[], sort: string): UnifiedJob[] {
 
 export default function ScheduledTasks() {
   const {
-    jobs,
-    scheduledTasks,
+    tasks,
     loading,
-    fetchScheduledTasks,
-    createScheduledTask,
-    updateScheduledTask,
-    deleteScheduledTask,
-    toggleScheduledTask,
-    triggerScheduledTask,
-    fetchJobs,
-    updateJob,
-    deleteJob,
-    toggleJob,
-    triggerJob,
-  } = useCronStore();
+    fetchTasks,
+    createTask,
+    updateTask,
+    deleteTask,
+    toggleTask,
+    triggerTask,
+  } = useScheduledTasksStore();
 
-  // Local UI state
   const [searchQuery, setSearchQuery] = useState('');
   const [sortValue, setSortValue] = useState('created-desc');
   const [createOpen, setCreateOpen] = useState(false);
-  const [editingJob, setEditingJob] = useState<UnifiedJob | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<{ job: UnifiedJob; isCloud: boolean } | null>(null);
+  const [editingJob, setEditingJob] = useState<TaskViewModel | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TaskViewModel | null>(null);
 
-  // Initial fetch
   useEffect(() => {
-    Promise.all([
-      fetchScheduledTasks().catch(() => {}),
-      fetchJobs().catch(() => {}),
-    ]);
-  }, [fetchScheduledTasks, fetchJobs]);
+    fetchTasks().catch(() => {});
+  }, [fetchTasks]);
 
-  // Merge local jobs and scheduled tasks for unified display
-  const allJobs = useMemo((): UnifiedJob[] => {
-    const unified: UnifiedJob[] = [
-      ...jobs.map(j => ({ ...j, isCloud: false as const })),
-      ...scheduledTasks.map(mapScheduledTaskToUnified),
-    ];
-    return unified;
-  }, [jobs, scheduledTasks]);
+  const viewModels = useMemo(() => tasks.map(toViewModel), [tasks]);
 
-  // Filter + Sort
-  const filteredJobs = useMemo(() => {
-    let result = allJobs;
+  const filteredTasks = useMemo(() => {
+    let result = viewModels;
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
-      result = result.filter(j =>
-        j.name.toLowerCase().includes(q) ||
-        j.message.toLowerCase().includes(q)
+      result = result.filter(
+        (t) => t.name.toLowerCase().includes(q) || t.message.toLowerCase().includes(q),
       );
     }
-    return sortJobs(result, sortValue);
-  }, [allJobs, searchQuery, sortValue]);
+    return sortTasks(result, sortValue);
+  }, [viewModels, searchQuery, sortValue]);
 
-  // Handlers
-  const handleToggle = useCallback(async (job: UnifiedJob) => {
-    try {
-      if (job.isCloud) {
-        await toggleScheduledTask(Number(job.id), !job.enabled);
-      } else {
-        await toggleJob(job.id, !job.enabled);
+  const handleToggle = useCallback(
+    async (job: TaskViewModel) => {
+      try {
+        await toggleTask(Number(job.id), !job.enabled);
+        toast.success(job.enabled ? '任务已暂停' : '任务已启用');
+      } catch (err) {
+        toast.error(String(err));
       }
-      toast.success(job.enabled ? '任务已暂停' : '任务已启用');
-    } catch (err) {
-      toast.error(String(err));
-    }
-  }, [toggleJob, toggleScheduledTask]);
+    },
+    [toggleTask],
+  );
 
-  const handleTrigger = useCallback(async (job: UnifiedJob) => {
-    try {
-      if (job.isCloud) {
-        await triggerScheduledTask(Number(job.id));
-      } else {
-        await triggerJob(job.id);
+  const handleTrigger = useCallback(
+    async (job: TaskViewModel) => {
+      try {
+        await triggerTask(Number(job.id));
+        toast.success('测试运行已触发');
+      } catch (err) {
+        toast.error(String(err));
       }
-      toast.success('测试运行已触发');
-    } catch (err) {
-      toast.error(String(err));
-    }
-  }, [triggerJob, triggerScheduledTask]);
+    },
+    [triggerTask],
+  );
 
-  const handleSave = useCallback(async (input: CronJobCreateInput) => {
-    if (editingJob) {
-      if (editingJob.isCloud) {
-        await updateScheduledTask({
+  const handleSave = useCallback(
+    async (input: CronJobCreateInput) => {
+      if (editingJob) {
+        await updateTask({
           taskId: Number(editingJob.id),
           name: input.name,
           cronExpr: input.schedule,
           description: input.message,
         });
+        toast.success('任务已更新');
       } else {
-        await updateJob(editingJob.id, input);
+        await createTask({
+          name: input.name,
+          cronExpr: input.schedule,
+          description: input.message,
+        });
+        toast.success('任务已创建');
       }
-      toast.success('任务已更新');
-    } else {
-      // Create as scheduled task (new API) by default
-      await createScheduledTask({
-        name: input.name,
-        cronExpr: input.schedule,
-        description: input.message,
-      });
-      toast.success('任务已创建');
-    }
-    await Promise.all([
-      fetchScheduledTasks().catch(() => {}),
-      fetchJobs().catch(() => {}),
-    ]);
-  }, [editingJob, createScheduledTask, updateScheduledTask, updateJob, fetchScheduledTasks, fetchJobs]);
+      await fetchTasks().catch(() => {});
+    },
+    [editingJob, createTask, updateTask, fetchTasks],
+  );
 
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) return;
     try {
-      if (deleteTarget.isCloud) {
-        await deleteScheduledTask(Number(deleteTarget.job.id));
-      } else {
-        await deleteJob(deleteTarget.job.id);
-      }
+      await deleteTask(Number(deleteTarget.id));
       toast.success('任务已删除');
-      await Promise.all([
-        fetchScheduledTasks().catch(() => {}),
-        fetchJobs().catch(() => {}),
-      ]);
+      await fetchTasks().catch(() => {});
     } catch (err) {
       toast.error(String(err));
     } finally {
       setDeleteTarget(null);
     }
-  }, [deleteTarget, deleteJob, deleteScheduledTask, fetchScheduledTasks, fetchJobs]);
+  }, [deleteTarget, deleteTask, fetchTasks]);
 
   const handleRecommendAdd = useCallback((task: { title: string; desc: string }) => {
     setEditingJob(null);
     setCreateOpen(true);
-    // Pre-fill after modal opens
     setTimeout(() => {
       const nameInput = document.querySelector<HTMLInputElement>('input[placeholder="描述你的任务"]');
       if (nameInput) nameInput.value = task.title;
@@ -203,22 +162,20 @@ export default function ScheduledTasks() {
     <div className="h-full flex flex-col">
       <div className="flex-1 overflow-y-auto px-6 py-6">
         <div className="max-w-7xl mx-auto">
-          {/* Hero */}
           <TaskHero
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             sortValue={sortValue}
             onSortChange={setSortValue}
             onCreate={() => { setEditingJob(null); setCreateOpen(true); }}
-            totalCount={allJobs.length}
+            totalCount={tasks.length}
           />
 
-          {/* Loading */}
-          {loading && allJobs.length === 0 ? (
+          {loading && tasks.length === 0 ? (
             <div className="flex items-center justify-center py-20">
               <LoadingSpinner size="lg" />
             </div>
-          ) : filteredJobs.length === 0 ? (
+          ) : filteredTasks.length === 0 ? (
             <TaskEmptyState
               searchQuery={searchQuery}
               onCreate={() => { setEditingJob(null); setCreateOpen(true); }}
@@ -226,13 +183,13 @@ export default function ScheduledTasks() {
             />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredJobs.map((job) => (
+              {filteredTasks.map((job) => (
                 <TaskCard
-                  key={`${job.isCloud ? 'cloud' : 'local'}-${job.id}`}
+                  key={job.id}
                   job={job}
                   onToggle={(enabled) => handleToggle({ ...job, enabled })}
                   onEdit={() => { setEditingJob(job); setCreateOpen(true); }}
-                  onDelete={() => setDeleteTarget({ job, isCloud: !!job.isCloud })}
+                  onDelete={() => setDeleteTarget(job)}
                   onTrigger={() => handleTrigger(job)}
                 />
               ))}
@@ -241,7 +198,6 @@ export default function ScheduledTasks() {
         </div>
       </div>
 
-      {/* Create / Edit Modal */}
       <TaskCreateModal
         job={editingJob}
         open={createOpen}
@@ -249,11 +205,10 @@ export default function ScheduledTasks() {
         onSave={handleSave}
       />
 
-      {/* Delete Confirm */}
       <ConfirmDialog
         open={!!deleteTarget}
         title="删除定时任务？"
-        message={`确定要删除「${deleteTarget?.job.name ?? ''}」吗？此操作无法撤销。`}
+        message={`确定要删除「${deleteTarget?.name ?? ''}」吗？此操作无法撤销。`}
         confirmLabel="删除"
         cancelLabel="取消"
         onConfirm={handleDelete}

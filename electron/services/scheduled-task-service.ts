@@ -144,6 +144,8 @@ export class ScheduledTaskService {
     const url = `${baseUrl}/list`;
     logger.info(`[ScheduledTaskService] >>> listTasks url=${url}`);
     logger.info(`[ScheduledTaskService] >>> listTasks headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
+    const curlCmd = `curl -X GET "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}"`;
+    logger.info(`[ScheduledTaskService] >>> listTasks curl=${curlCmd}`);
 
     const res = await fetch(url, { method: 'GET', headers });
     const bodyText = await res.text();

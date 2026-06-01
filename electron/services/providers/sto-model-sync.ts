@@ -105,11 +105,20 @@ export class StoModelSyncService {
     token: string,
   ): Promise<StoRemoteModel[]> {
     const url = `${domain}${STO_MODEL_LIST_PATH}`;
-    logger.info(`[sto-sync] Fetching remote models: url=${url}`);
+    const headers = buildStoMemoryCenterAuthHeaders(token);
+    logger.info(`[sto-sync] >>> fetchRemoteModels url=${url}`);
+    logger.info(`[sto-sync] >>> fetchRemoteModels headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
 
-    const response = await fetch(url, {
-      headers: buildStoMemoryCenterAuthHeaders(token),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    let response: Response;
+    try {
+      response = await fetch(url, { headers, signal: controller.signal });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    const bodyText = await response.text();
+    logger.info(`[sto-sync] <<< fetchRemoteModels status=${response.status} body=${bodyText.slice(0, 500)}`);
 
     if (!response.ok) {
       throw new Error(
@@ -117,7 +126,7 @@ export class StoModelSyncService {
       );
     }
 
-    const data = (await response.json()) as {
+    const data = JSON.parse(bodyText) as {
       data?: StoRemoteModel[];
       models?: StoRemoteModel[];
     };
