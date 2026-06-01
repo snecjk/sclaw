@@ -413,6 +413,7 @@ async function initialize(): Promise<void> {
     { ensureAllBundledPluginsInstalledAsync },
     { startHostApiServer },
     stoSkillMod,
+    skillPlazaMod,
     spriteWindowMod,
     floatIconMod,
   ] = await Promise.all([
@@ -435,6 +436,7 @@ async function initialize(): Promise<void> {
     import('../utils/plugin-install'),
     import('../api/server'),
     import('../services/sto-skill-service'),
+    import('../services/skill-plaza-service'),
     import('./sprite-window'),
     import('./float-icon-window'),
   ]);
@@ -445,6 +447,7 @@ async function initialize(): Promise<void> {
   const gm = new gatewayMod.GatewayManager();
   const chs = new clawhubMod.ClawHubService();
   const sss = new stoSkillMod.StoSkillService();
+  const sps = new skillPlazaMod.SkillPlazaService();
   const heb = new eventBusMod.HostEventBus();
   gatewayManager = gm;
   clawHubService = chs;
@@ -507,6 +510,7 @@ async function initialize(): Promise<void> {
     gatewayManager: gm,
     clawHubService: chs,
     stoSkillService: sss,
+    skillPlazaService: sps,
     eventBus: heb,
     mainWindow: window,
   });

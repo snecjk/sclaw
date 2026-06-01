@@ -12,6 +12,7 @@ import { handleChannelRoutes } from './routes/channels';
 import { handleLogRoutes } from './routes/logs';
 import { handleUsageRoutes } from './routes/usage';
 import { handleSkillRoutes } from './routes/skills';
+import { handleSkillPlazaRoutes } from './routes/skill-plaza';
 import { handleFileRoutes } from './routes/files';
 import { handleSessionRoutes } from './routes/sessions';
 import { handleCronRoutes } from './routes/cron';
@@ -40,6 +41,7 @@ const routeHandlers: RouteHandler[] = [
   handleAgentRoutes,
   handleChannelRoutes,
   handleSkillRoutes,
+  handleSkillPlazaRoutes,
   handleFileRoutes,
   handleSessionRoutes,
   handleCronRoutes,

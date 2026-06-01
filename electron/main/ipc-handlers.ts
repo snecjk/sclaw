@@ -1558,6 +1558,13 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
     return dir;
   });
 
+  // Open the OpenClaw skills directory in the system file manager
+  ipcMain.handle('open-skill-folder', async () => {
+    const dir = getOpenClawSkillsDir();
+    ensureDir(dir);
+    await shell.openPath(dir);
+  });
+
   // Get a shell command to run OpenClaw CLI without modifying PATH
   ipcMain.handle('openclaw:getCliCommand', () => {
     try {

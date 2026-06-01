@@ -67,6 +67,10 @@ export class StoSkillService {
     }
   }
 
+  private getDisabledDir(): string {
+    return path.join(this.workDir, 'skills-disabled');
+  }
+
   /**
    * Search / list skills from STO marketplace.
    */
@@ -196,9 +200,14 @@ export class StoSkillService {
       ? getOpenClawAgentSkillsDir(params.agentId)
       : this.skillsDir;
     const skillDir = path.join(skillsDir, params.slug);
+    const disabledDir = path.join(this.getDisabledDir(), params.slug);
     if (fs.existsSync(skillDir)) {
       logger.info(`[StoSkillService] uninstall: removing ${skillDir}`);
       await fs.promises.rm(skillDir, { recursive: true, force: true });
+    }
+    if (fs.existsSync(disabledDir)) {
+      logger.info(`[StoSkillService] uninstall: removing disabled ${disabledDir}`);
+      await fs.promises.rm(disabledDir, { recursive: true, force: true });
     }
 
     // Remove from lock.json
@@ -331,14 +340,6 @@ export class StoSkillService {
       description?: string;
       author?: string;
     }> = [];
-    if (!fs.existsSync(this.skillsDir)) return results;
-
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(this.skillsDir, { withFileTypes: true });
-    } catch {
-      return results;
-    }
 
     // Read lock.json for version/source/name/description/author metadata
     let lockSkills: Record<string, {
@@ -358,28 +359,43 @@ export class StoSkillService {
       // ignore
     }
 
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const skillDir = path.join(this.skillsDir, entry.name);
-      const skillMdPath = path.join(skillDir, 'SKILL.md');
-      if (!fs.existsSync(skillMdPath)) continue;
-
-      const lockInfo = lockSkills[entry.name];
-      // Only include STO-marketplace sourced skills
-      if (lockInfo?.source === 'sto-marketplace') {
-        // Prefer name from lock.json (saved from search results), fallback to file scan
-        const name = lockInfo.name || this.readSkillName(skillDir) || entry.name;
-        results.push({
-          slug: entry.name,
-          name,
-          version: lockInfo.version || 'unknown',
-          source: 'sto-marketplace',
-          baseDir: skillDir,
-          description: lockInfo.description,
-          author: lockInfo.author,
-        });
+    const seen = new Set<string>();
+    const scanDir = (baseDir: string) => {
+      if (!fs.existsSync(baseDir)) return;
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(baseDir, { withFileTypes: true });
+      } catch {
+        return;
       }
-    }
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (seen.has(entry.name)) continue;
+        const skillDir = path.join(baseDir, entry.name);
+        const skillMdPath = path.join(skillDir, 'SKILL.md');
+        if (!fs.existsSync(skillMdPath)) continue;
+        seen.add(entry.name);
+
+        const lockInfo = lockSkills[entry.name];
+        // Only include STO-marketplace sourced skills
+        if (lockInfo?.source === 'sto-marketplace') {
+          // Prefer name from lock.json (saved from search results), fallback to file scan
+          const name = lockInfo.name || this.readSkillName(skillDir) || entry.name;
+          results.push({
+            slug: entry.name,
+            name,
+            version: lockInfo.version || 'unknown',
+            source: 'sto-marketplace',
+            baseDir: skillDir,
+            description: lockInfo.description,
+            author: lockInfo.author,
+          });
+        }
+      }
+    };
+
+    scanDir(this.skillsDir);
+    scanDir(this.getDisabledDir());
 
     return results;
   }

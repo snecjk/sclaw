@@ -140,6 +140,7 @@ const electronAPI = {
         'openclaw:getConfigDir',
         'openclaw:getSkillsDir',
         'openclaw:getCliCommand',
+        'open-skill-folder',
         // Sprite
         'sprite:toggle',
         'sprite:getSessionContext',

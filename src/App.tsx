@@ -12,7 +12,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { Models } from './pages/Models';
 import { Agents } from './pages/Agents';
 import { Channels } from './pages/Channels';
-import { Skills } from './pages/Skills';
+import { SkillPlazaPage } from './components/skill-plaza/SkillPlazaPage';
 import { Subscriptions } from './pages/Subscriptions';
 import { Cron } from './pages/Cron';
 import ScheduledTasks from './pages/ScheduledTasks';
@@ -273,7 +273,7 @@ function App() {
             <Route path="/models" element={<Models />} />
             <Route path="/agents" element={<Agents />} />
             <Route path="/channels" element={<Channels />} />
-            <Route path="/skills" element={<Skills />} />
+            <Route path="/skills" element={<SkillPlazaPage />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/cron" element={<Cron />} />
             <Route path="/scheduled-tasks" element={<ScheduledTasks />} />
@@ -284,7 +284,7 @@ function App() {
         {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
         {location.pathname !== '/float-icon' ? (
           <Toaster
-            position="bottom-right"
+            position="bottom-center"
             richColors
             closeButton
             style={{ zIndex: 99999 }}
