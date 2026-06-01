@@ -11,6 +11,9 @@ import type {
   CloudCronJob,
   CloudAgentRef,
   CloudTaskResult,
+  ScheduledTask,
+  ScheduledTaskCreateInput,
+  ScheduledTaskUpdateInput,
 } from '../types/cron';
 
 interface CronState {
@@ -21,10 +24,18 @@ interface CronState {
   error: string | null;
   cloudError: string | null;
   lastSyncAt: string | null;
+  scheduledTasks: ScheduledTask[];
+  scheduledTasksError: string | null;
 
   // Actions
   fetchJobs: () => Promise<void>;
   fetchCloudAgents: () => Promise<void>;
+  fetchScheduledTasks: () => Promise<void>;
+  createScheduledTask: (input: ScheduledTaskCreateInput) => Promise<ScheduledTask>;
+  updateScheduledTask: (input: ScheduledTaskUpdateInput) => Promise<void>;
+  deleteScheduledTask: (taskId: number) => Promise<void>;
+  toggleScheduledTask: (taskId: number, enabled: boolean) => Promise<void>;
+  triggerScheduledTask: (taskId: number) => Promise<void>;
   createJob: (input: CronJobCreateInput) => Promise<CronJob>;
   createCloudJob: (input: { name: string; message: string; schedule: string; agentId: string; enabled?: boolean }) => Promise<CloudCronJob>;
   updateJob: (id: string, input: CronJobUpdateInput) => Promise<void>;
@@ -47,6 +58,8 @@ export const useCronStore = create<CronState>((set, get) => ({
   error: null,
   cloudError: null,
   lastSyncAt: null,
+  scheduledTasks: [],
+  scheduledTasksError: null,
 
   fetchJobs: async () => {
     set({ loading: true, error: null, cloudError: null });
@@ -79,6 +92,105 @@ export const useCronStore = create<CronState>((set, get) => ({
       });
     } catch (error) {
       set({ error: String(error), loading: false });
+    }
+  },
+
+  fetchScheduledTasks: async () => {
+    set({ loading: true, scheduledTasksError: null });
+    try {
+      const tasks = await hostApiFetch<ScheduledTask[]>('/api/scheduled-tasks');
+      set({ scheduledTasks: tasks, loading: false });
+    } catch (error) {
+      console.error('Failed to fetch scheduled tasks:', error);
+      set({ scheduledTasksError: String(error), loading: false });
+      throw error;
+    }
+  },
+
+  createScheduledTask: async (input) => {
+    try {
+      const task = await hostApiFetch<ScheduledTask>('/api/scheduled-tasks', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      });
+      set((state) => ({ scheduledTasks: [...state.scheduledTasks, task] }));
+      return task;
+    } catch (error) {
+      console.error('Failed to create scheduled task:', error);
+      throw error;
+    }
+  },
+
+  updateScheduledTask: async (input) => {
+    try {
+      const body: Record<string, unknown> = {};
+      if (input.name !== undefined) body.name = input.name;
+      if (input.cronExpr !== undefined) body.cronExpr = input.cronExpr;
+      if (input.description !== undefined) body.description = input.description;
+      if (input.notifyMode !== undefined) body.notifyMode = input.notifyMode;
+      if (input.enabled !== undefined) body.enabled = input.enabled;
+
+      const updated = await hostApiFetch<ScheduledTask>(`/api/scheduled-tasks/${input.taskId}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+      set((state) => ({
+        scheduledTasks: state.scheduledTasks.map((t) =>
+          t.id === input.taskId ? updated : t
+        ),
+      }));
+    } catch (error) {
+      const message = String(error);
+      if (message.includes('404') || message.includes('TASK_NOT_FOUND')) {
+        set((state) => ({
+          scheduledTasks: state.scheduledTasks.filter((t) => t.id !== input.taskId),
+        }));
+      }
+      console.error('Failed to update scheduled task:', error);
+      throw error;
+    }
+  },
+
+  deleteScheduledTask: async (taskId) => {
+    try {
+      await hostApiFetch(`/api/scheduled-tasks/${taskId}`, {
+        method: 'DELETE',
+      });
+      set((state) => ({
+        scheduledTasks: state.scheduledTasks.filter((t) => t.id !== taskId),
+      }));
+    } catch (error) {
+      console.error('Failed to delete scheduled task:', error);
+      throw error;
+    }
+  },
+
+  toggleScheduledTask: async (taskId, enabled) => {
+    try {
+      await hostApiFetch(`/api/scheduled-tasks/${taskId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ enabled }),
+      });
+      set((state) => ({
+        scheduledTasks: state.scheduledTasks.map((t) =>
+          t.id === taskId ? { ...t, enabled } : t
+        ),
+      }));
+    } catch (error) {
+      console.error('Failed to toggle scheduled task:', error);
+      throw error;
+    }
+  },
+
+  triggerScheduledTask: async (taskId) => {
+    try {
+      const result = await hostApiFetch<{ runId: number; outcome: string }>(`/api/scheduled-tasks/${taskId}/trigger`, {
+        method: 'POST',
+      });
+      console.log('Scheduled task trigger result:', result);
+    } catch (error) {
+      console.error('Failed to trigger scheduled task:', error);
+      throw error;
     }
   },
 
@@ -304,3 +416,5 @@ export const useCronStore = create<CronState>((set, get) => ({
 
   setJobs: (jobs) => set({ jobs }),
 }));
+
+export type { ScheduledTask, ScheduledTaskCreateInput, ScheduledTaskUpdateInput };

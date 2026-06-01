@@ -73,15 +73,19 @@ export class CloudTaskService {
     const baseUrl = await this.resolveBaseUrl();
     const headers = await this.buildHeaders();
     const url = `${baseUrl}/tasks`;
-    logger.info(`[CloudTaskService] listTasks: ${url}`);
+    logger.info(`[CloudTaskService] >>> listTasks url=${url}`);
+    logger.info(`[CloudTaskService] >>> listTasks headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
 
     const res = await fetch(url, { method: 'GET', headers });
+    const bodyText = await res.text();
+    logger.info(`[CloudTaskService] <<< listTasks status=${res.status} body=${bodyText.slice(0, 500)}`);
+
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`Cloud task list failed (${res.status}): ${text}`);
+      throw new Error(`Cloud task list failed (${res.status}): ${bodyText}`);
     }
 
-    const data = (await res.json()) as CloudTaskListResponse;
+    const data = JSON.parse(bodyText) as CloudTaskListResponse;
+    logger.info(`[CloudTaskService] listTasks returned ${data.tasks?.length ?? 0} tasks`);
     return data.tasks ?? [];
   }
 

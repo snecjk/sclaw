@@ -15,6 +15,7 @@ import { Channels } from './pages/Channels';
 import { Skills } from './pages/Skills';
 import { Subscriptions } from './pages/Subscriptions';
 import { Cron } from './pages/Cron';
+import ScheduledTasks from './pages/ScheduledTasks';
 import { Home } from './pages/Home';
 import { TaskDetail } from './pages/TaskDetail';
 import { Settings } from './pages/Settings';
@@ -275,6 +276,7 @@ function App() {
             <Route path="/skills" element={<Skills />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/cron" element={<Cron />} />
+            <Route path="/scheduled-tasks" element={<ScheduledTasks />} />
             <Route path="/settings/*" element={<Settings />} />
           </Route>
         </Routes>
