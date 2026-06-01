@@ -117,6 +117,7 @@ export async function exchangeCodeForUser(
     empCode: u.EmpCode ?? '',
     companyName: u.CompanyName ?? '',
     departmentName: u.DepartmentName ?? '',
+    categoryCode: u.CategoryCode ?? '',
     openId: u.OpenId ?? '',
     signature: u.Signature ?? '',
     authenticatedAt: toCSTISOString(now),

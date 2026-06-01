@@ -32,12 +32,16 @@ export interface SsoUserInfo {
   empCode: string;
   companyName: string;
   departmentName: string;
+  categoryCode: string;
   openId: string;
   signature: string;
   authenticatedAt: string;
   stoToken?: string;
   stoTokenExpiresAt?: string;
 }
+
+// Re-export shared site-user utilities.
+export { isSiteUser, setSiteDepartmentTypes, getSiteDepartmentTypes } from '../../shared/site-user-utils';
 
 export type CrmWeekReportPolicyStatus = 'idle' | 'loading' | 'ok' | 'error';
 
@@ -176,6 +180,10 @@ export const useAuthStore = create<AuthState>()(
             // before that sync completed. This call deduplicates safely against any
             // in-progress main-process sync.
             void syncStoModelsAndRefreshProviders('init');
+            // Warm site-department-types cache in renderer
+            void hostApiFetch<{ types: string[] }>('/api/auth/site-department-types')
+              .then((res) => setSiteDepartmentTypes(res.types))
+              .catch(() => {});
           }
         } catch {
           // Main-process unreachable — trust the renderer-persisted state as fallback.
@@ -214,6 +222,11 @@ export const useAuthStore = create<AuthState>()(
             void syncStoModelsAndRefreshProviders('login');
 
             void get().refreshCrmWeekReportPolicy();
+
+            // Warm site-department-types cache in renderer
+            void hostApiFetch<{ types: string[] }>('/api/auth/site-department-types')
+              .then((res) => setSiteDepartmentTypes(res.types))
+              .catch(() => {});
           } else {
             set({
               isLoggingIn: false,

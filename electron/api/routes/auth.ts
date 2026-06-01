@@ -18,6 +18,7 @@ import { syncStoDynamicRoutePluginToOpenClaw, removeStoDynamicRoutePluginFromOpe
 import { getStoPolicyReportApiHost } from '../../../shared/env-config';
 import { computeCrmWeekReportSurfaceAllowed } from '../../../shared/crm-week-report-policy';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
+import { loadSiteDepartmentTypes } from '../../services/sto-apollo-config-service';
 
 const ssoLoginManager = new SsoLoginManager();
 
@@ -79,6 +80,11 @@ export async function handleAuthRoutes(
 
       const user = await ssoLoginManager.startLogin(env, ctx.mainWindow);
       await setAuthUser(user);
+
+      // Load site department types from Apollo config for site-user detection
+      void loadSiteDepartmentTypes().catch((err) =>
+        logger.warn('Post-login site department types load failed:', err),
+      );
 
       // Ensure SAI CLI is installed so the synced token can be used by commands
       try {
@@ -178,6 +184,18 @@ export async function handleAuthRoutes(
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  // GET /api/auth/site-department-types — 返回 Apollo 配置中的网点类别列表
+  if (url.pathname === '/api/auth/site-department-types' && req.method === 'GET') {
+    try {
+      const types = await loadSiteDepartmentTypes();
+      sendJson(res, 200, { success: true, types: Array.from(types) });
+    } catch (error) {
+      logger.warn('Site department types fetch failed:', error);
+      sendJson(res, 200, { success: false, types: [] });
     }
     return true;
   }

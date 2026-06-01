@@ -25,12 +25,16 @@ export interface SsoUserInfo {
   empCode: string; // 工号（轩辕系统的）（新系统的工号）（新入职员工这两个工号都一样）
   companyName: string;
   departmentName: string;
+  categoryCode: string; // 用户类别编码：独立网点、承包区等
   openId: string;
   signature: string;
   authenticatedAt: string;
   stoToken?: string;
   stoTokenExpiresAt?: string;
 }
+
+// Re-export shared site-user utilities so main-process callers import from one place.
+export { isSiteUser, setSiteDepartmentTypes, getSiteDepartmentTypes } from '../../shared/site-user-utils';
 
 export interface AuthState {
   isAuthenticated: boolean;
@@ -196,6 +200,7 @@ function buildSaiCliSsoAuthPayload(user: SsoUserInfo, existing: JsonObject | nul
       Code: user.userName,
       CompanyName: user.companyName,
       DepartmentName: user.departmentName,
+      CategoryCode: user.categoryCode,
       OpenId: user.openId,
       Signature: user.signature,
     },
