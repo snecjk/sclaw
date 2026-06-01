@@ -7,10 +7,11 @@ import fs from 'fs';
 import path from 'path';
 import { getOpenClawConfigDir, getOpenClawSkillsDir } from '../utils/paths';
 import { setSkillsEnabled } from '../utils/skill-config';
-import { getStoToken } from '../utils/auth-store';
+import { getStoToken, getAuthState, isSiteUser } from '../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
 import { logger } from '../utils/logger';
+import { fetchApolloConfigValue } from './sto-apollo-config-service';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -107,8 +108,11 @@ class PythonApiClient {
     return (json.data ?? json) as T;
   }
 
-  async getCategories(): Promise<{ categories: CategoryDef[] }> {
-    return this.request<{ categories: CategoryDef[] }>('GET', '/agent/v1/skills/plaza/categories');
+  async getCategories(codesParam?: string): Promise<{ categories: CategoryDef[] }> {
+    const endpoint = codesParam
+      ? `/agent/v1/skills/plaza/categories?codes=${encodeURIComponent(codesParam)}`
+      : '/agent/v1/skills/plaza/categories';
+    return this.request<{ categories: CategoryDef[] }>('GET', endpoint);
   }
 
   async getPlazaSkills(params: SkillPlazaListParams): Promise<PlazaListResult> {
@@ -416,7 +420,24 @@ export class SkillPlazaService {
   // ---- Public API ----
 
   async getCategories(): Promise<CategoryDef[]> {
-    const res = await this.client.getCategories();
+    // Determine user role and fetch the appropriate Apollo config for category filtering
+    let queryParams = '';
+    try {
+      const authState = await getAuthState();
+      const categoryCode = authState.user?.categoryCode;
+      const apolloKey = isSiteUser(categoryCode)
+        ? 'claw.site.skill.category'
+        : 'claw.prov_head.skill.category';
+      const configValue = await fetchApolloConfigValue(apolloKey);
+      if (configValue) {
+        queryParams = configValue;
+        logger.info(`[SkillPlazaService] getCategories using Apollo config "${apolloKey}": ${configValue}`);
+      }
+    } catch (err) {
+      logger.warn('[SkillPlazaService] Failed to resolve category filter config:', err);
+    }
+
+    const res = await this.client.getCategories(queryParams || undefined);
     return res.categories || [];
   }
 
