@@ -65,6 +65,14 @@ export interface SkillPlazaListParams {
 }
 
 // ---------------------------------------------------------------------------
+// Office category override constants
+// ---------------------------------------------------------------------------
+
+const OFFICE_SKILL_SLUGS = new Set(['pdf', 'xlsx', 'docx', 'pptx']);
+const OFFICE_CATEGORY_SLUG = 'bangong';
+const OFFICE_CATEGORY_LABEL = '办公';
+
+// ---------------------------------------------------------------------------
 // Python API Client
 // ---------------------------------------------------------------------------
 
@@ -417,6 +425,51 @@ export class SkillPlazaService {
     };
   }
 
+  // ---- Office skills from local filesystem ----
+
+  private getOfficeSkillsFromLocal(q?: string): SkillSummary[] {
+    const activeSlugs = readSkillsDirSlugs(this.skillsDir);
+    const disabledSlugs = readDisabledDirSlugs(this.getDisabledDir());
+    const skills: SkillSummary[] = [];
+
+    for (const slug of OFFICE_SKILL_SLUGS) {
+      const isEnabled = activeSlugs.has(slug);
+      const isDisabled = disabledSlugs.has(slug);
+      if (!isEnabled && !isDisabled) continue;
+
+      const skillRootDir = isEnabled ? this.skillsDir : this.getDisabledDir();
+      const summary = readLocalSkillSummary(skillRootDir, slug);
+      if (!summary) continue;
+
+      // Apply search filter if provided
+      if (q) {
+        const lowerQ = q.toLowerCase();
+        const title = (summary.title || slug).toLowerCase();
+        const desc = (summary.description || '').toLowerCase();
+        if (!title.includes(lowerQ) && !desc.includes(lowerQ)) continue;
+      }
+
+      skills.push({
+        slug: summary.slug || slug,
+        title: summary.title || slug,
+        description: summary.description || '',
+        category: OFFICE_CATEGORY_LABEL,
+        categoryCode: OFFICE_CATEGORY_SLUG,
+        source: 'official',
+        installed: true,
+        enabled: isEnabled,
+        installCount: 0,
+        useCount: 0,
+        points: summary.points ?? 8,
+        icon: summary.icon,
+        defaultPrompt: summary.defaultPrompt || summary.title || slug,
+        updatedAt: undefined,
+      });
+    }
+
+    return skills;
+  }
+
   // ---- Public API ----
 
   async getCategories(): Promise<CategoryDef[]> {
@@ -438,22 +491,107 @@ export class SkillPlazaService {
     }
 
     const res = await this.client.getCategories(queryParams || undefined);
-    return res.categories || [];
+    const categories = res.categories || [];
+
+    // Inject "办公" category if not already present
+    if (!categories.some((c) => c.slug === OFFICE_CATEGORY_SLUG)) {
+      categories.push({ slug: OFFICE_CATEGORY_SLUG, label: OFFICE_CATEGORY_LABEL });
+    }
+
+    return categories;
   }
 
   async getPlazaSkills(params: SkillPlazaListParams): Promise<PlazaListResult> {
+    const isOfficeFilter = params.category === OFFICE_CATEGORY_SLUG;
+    const hasCategoryFilter = Boolean(params.category && params.category !== '');
+    const localOfficeSkills = this.getOfficeSkillsFromLocal(params.q);
+
+    if (isOfficeFilter) {
+      // API doesn't know about "办公" category; return local office skills only
+      const categoryCounts: Record<string, number> = {};
+      categoryCounts[OFFICE_CATEGORY_SLUG] = localOfficeSkills.length;
+      categoryCounts[''] = localOfficeSkills.length;
+
+      return {
+        skills: localOfficeSkills,
+        categoryCounts,
+        hasMore: false,
+        page: 1,
+        pageSize: localOfficeSkills.length,
+        total: localOfficeSkills.length,
+      };
+    }
+
+    // Normal request: fetch from API and merge local office skills
     const result = await this.client.getPlazaSkills(params);
+    let skills = result.skills.map((s) => this.overlayLocalState(s)).map((s) => {
+      if (OFFICE_SKILL_SLUGS.has(s.slug)) {
+        return { ...s, category: OFFICE_CATEGORY_LABEL, categoryCode: OFFICE_CATEGORY_SLUG };
+      }
+      return s;
+    });
+
+    // Merge local office skills when not filtering by another category
+    if (!hasCategoryFilter) {
+      const existingSlugs = new Set(skills.map((s) => s.slug));
+      const newLocalSkills = localOfficeSkills.filter((s) => !existingSlugs.has(s.slug));
+      if (newLocalSkills.length > 0) {
+        skills = [...skills, ...newLocalSkills];
+        result.categoryCounts[OFFICE_CATEGORY_SLUG] = (result.categoryCounts[OFFICE_CATEGORY_SLUG] || 0) + newLocalSkills.length;
+        result.categoryCounts[''] = (result.categoryCounts[''] || 0) + newLocalSkills.length;
+      }
+    }
+
     return {
       ...result,
-      skills: result.skills.map((s) => this.overlayLocalState(s)),
+      skills,
     };
   }
 
   async getMySkills(params?: SkillPlazaListParams): Promise<PlazaListResult> {
+    const isOfficeFilter = params?.category === OFFICE_CATEGORY_SLUG;
+    const hasCategoryFilter = Boolean(params?.category && params.category !== '');
+    const localOfficeSkills = this.getOfficeSkillsFromLocal(params?.q);
+
+    if (isOfficeFilter) {
+      // API doesn't know about "办公" category; return local office skills only
+      const categoryCounts: Record<string, number> = {};
+      categoryCounts[OFFICE_CATEGORY_SLUG] = localOfficeSkills.length;
+      categoryCounts[''] = localOfficeSkills.length;
+
+      return {
+        skills: localOfficeSkills,
+        categoryCounts,
+        hasMore: false,
+        page: 1,
+        pageSize: localOfficeSkills.length,
+        total: localOfficeSkills.length,
+      };
+    }
+
+    // Normal request: fetch from API and merge local office skills
     const result = await this.client.getMySkills(params);
+    let skills = result.skills.map((s) => this.overlayLocalState(s)).map((s) => {
+      if (OFFICE_SKILL_SLUGS.has(s.slug)) {
+        return { ...s, category: OFFICE_CATEGORY_LABEL, categoryCode: OFFICE_CATEGORY_SLUG };
+      }
+      return s;
+    });
+
+    // Merge local office skills when not filtering by another category
+    if (!hasCategoryFilter) {
+      const existingSlugs = new Set(skills.map((s) => s.slug));
+      const newLocalSkills = localOfficeSkills.filter((s) => !existingSlugs.has(s.slug));
+      if (newLocalSkills.length > 0) {
+        skills = [...skills, ...newLocalSkills];
+        result.categoryCounts[OFFICE_CATEGORY_SLUG] = (result.categoryCounts[OFFICE_CATEGORY_SLUG] || 0) + newLocalSkills.length;
+        result.categoryCounts[''] = (result.categoryCounts[''] || 0) + newLocalSkills.length;
+      }
+    }
+
     return {
       ...result,
-      skills: result.skills.map((s) => this.overlayLocalState(s)),
+      skills,
     };
   }
 
@@ -495,6 +633,7 @@ export class SkillPlazaService {
       '政策': 'zhengce',
       '运营': 'yunying',
       '客服': 'kefu',
+      '办公': 'bangong',
       '其他': 'qita',
     };
 
@@ -517,12 +656,17 @@ export class SkillPlazaService {
         }
         const categorySlug = categoryLabelToSlug[rawCategory] || rawCategory;
 
+        // 强制将特定办公技能归类到"办公"分类
+        const isOfficeSkill = OFFICE_SKILL_SLUGS.has(slug);
+        const finalCategory = isOfficeSkill ? OFFICE_CATEGORY_LABEL : (rawCategory || summary.category || null);
+        const finalCategoryCode = isOfficeSkill ? OFFICE_CATEGORY_SLUG : (categorySlug || null);
+
         skills.push({
           slug: summary.slug || slug,
           title: summary.title || slug,
           description: summary.description || '',
-          category: rawCategory || summary.category || null,
-          categoryCode: categorySlug || null,
+          category: finalCategory,
+          categoryCode: finalCategoryCode,
           source,
           installed: true,
           enabled: isEnabled,
@@ -535,7 +679,7 @@ export class SkillPlazaService {
         });
 
         if (source === 'official') {
-          categoryCounts[categorySlug] = (categoryCounts[categorySlug] || 0) + 1;
+          categoryCounts[finalCategoryCode || 'qita'] = (categoryCounts[finalCategoryCode || 'qita'] || 0) + 1;
         } else {
           categoryCounts['mine'] = (categoryCounts['mine'] || 0) + 1;
         }
@@ -556,7 +700,11 @@ export class SkillPlazaService {
 
   async getSkillDetail(slug: string): Promise<SkillDetail> {
     const detail = await this.client.getSkillDetail(slug);
-    return this.overlayLocalState(detail);
+    const withLocalState = this.overlayLocalState(detail);
+    if (OFFICE_SKILL_SLUGS.has(slug)) {
+      return { ...withLocalState, category: OFFICE_CATEGORY_LABEL, categoryCode: OFFICE_CATEGORY_SLUG };
+    }
+    return withLocalState;
   }
 
   async recordUse(slug: string): Promise<void> {
