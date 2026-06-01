@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, ArrowDownToLine } from 'lucide-react';
+import { Users, ArrowDownToLine, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { Switch } from '@/components/ui/switch';
@@ -11,10 +11,11 @@ import { cn } from '@/lib/utils';
 interface SkillCardProps {
   skill: SkillSummary;
   onOpenDetail?: (skill: SkillSummary) => void;
+  onDelete?: (skill: SkillSummary) => void;
   isMineTab?: boolean;
 }
 
-export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
+export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardProps) {
   const { t } = useTranslation('skills');
   const navigate = useNavigate();
   const { installing } = useSkillPlazaStore();
@@ -80,7 +81,19 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
     >
       {/* Quick actions - top right */}
       {isMineTab ? (
-        <div className="absolute top-3.5 right-4 z-[3]">
+        <div className="absolute top-3.5 right-4 z-[3] flex items-center gap-1.5">
+          {onDelete && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(skill); }}
+              className={cn(
+                'inline-flex items-center justify-center w-7 h-7 p-0 border-none rounded-full bg-transparent text-muted-foreground cursor-pointer hover:text-red-600 transition-all',
+                isHovered ? 'opacity-100 visible' : 'opacity-0 invisible',
+              )}
+              title={t('plaza.action.delete', { defaultValue: '删除' })}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
           <Switch
             checked={localEnabled}
             onCheckedChange={(checked) => {
@@ -172,16 +185,16 @@ export function SkillCard({ skill, onOpenDetail, isMineTab }: SkillCardProps) {
         {/* Meta */}
         <div className="flex items-center justify-between gap-2 mt-auto text-xs text-muted-foreground font-medium">
           <div className="inline-flex items-center gap-2.5 min-w-0">
-            {typeof skill.installCount === 'number' && skill.installCount >= 0 && (
-              <span className="inline-flex items-center gap-1">
-                <Users className="h-3.5 w-3.5 opacity-55 flex-shrink-0" />
-                {skill.installCount >= 1000 ? `${(skill.installCount / 1000).toFixed(1)}k` : skill.installCount}
-              </span>
-            )}
             {typeof skill.useCount === 'number' && skill.useCount >= 0 && (
               <span className="inline-flex items-center gap-1">
-                <ArrowDownToLine className="h-3.5 w-3.5 opacity-55 flex-shrink-0" />
+                <Users className="h-3.5 w-3.5 opacity-55 flex-shrink-0" />
                 {skill.useCount >= 1000 ? `${(skill.useCount / 1000).toFixed(1)}k` : skill.useCount}
+              </span>
+            )}
+            {typeof skill.installCount === 'number' && skill.installCount >= 0 && (
+              <span className="inline-flex items-center gap-1">
+                <ArrowDownToLine className="h-3.5 w-3.5 opacity-55 flex-shrink-0" />
+                {skill.installCount >= 1000 ? `${(skill.installCount / 1000).toFixed(1)}k` : skill.installCount}
               </span>
             )}
           </div>

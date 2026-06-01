@@ -102,6 +102,7 @@ export function SkillPlazaPage() {
                 key={skill.slug}
                 skill={skill}
                 onOpenDetail={setSelectedSkill}
+                onDelete={setDeleteTarget}
                 isMineTab={isMine}
               />
             ))}

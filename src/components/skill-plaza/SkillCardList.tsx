@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
+import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -13,18 +15,22 @@ interface SkillCardListProps {
 
 export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListProps) {
   const { t } = useTranslation('skills');
-  const [enabled, setEnabled] = useState(skill.enabled ?? false);
+  const [localEnabled, setLocalEnabled] = useState(skill.enabled ?? false);
   const [isHovered, setIsHovered] = useState(false);
+  const isDisabled = skill.enabled === false;
 
-  const handleToggle = (checked: boolean) => {
-    setEnabled(checked);
-  };
+  useEffect(() => {
+    setLocalEnabled(skill.enabled ?? false);
+  }, [skill.enabled]);
 
   const renderIcon = () => {
     if (skill.icon) {
       return (
         <span
-          className="relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-[#2b2b2b] flex-shrink-0 border border-black/[0.06]"
+          className={cn(
+            'relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-[#2b2b2b] flex-shrink-0 border border-black/[0.06]',
+            isDisabled && 'opacity-50',
+          )}
           style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}
         >
           <span dangerouslySetInnerHTML={{ __html: skill.icon.replace(/width="[^"]*"/, 'width="16"').replace(/height="[^"]*"/, 'height="16"') }} />
@@ -32,7 +38,10 @@ export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListPr
       );
     }
     return (
-      <span className="relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-[#2b2b2b] flex-shrink-0 border border-black/[0.06]"
+      <span className={cn(
+        'relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-[#2b2b2b] flex-shrink-0 border border-black/[0.06]',
+        isDisabled && 'opacity-50',
+      )}
         style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}>
         <span className="text-base">📦</span>
       </span>
@@ -48,7 +57,7 @@ export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListPr
     >
       {renderIcon()}
 
-      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+      <div className={cn('flex-1 min-w-0 flex flex-col gap-0.5', isDisabled && 'opacity-50')}>
         <h3 className="text-sm font-semibold text-foreground whitespace-nowrap overflow-hidden text-ellipsis">
           {skill.title}
         </h3>
@@ -71,8 +80,33 @@ export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListPr
           </button>
         )}
         <Switch
-          checked={enabled}
-          onCheckedChange={(checked) => { handleToggle(checked); }}
+          checked={localEnabled}
+          onCheckedChange={(checked) => {
+            setLocalEnabled(checked);
+            useSkillPlazaStore.getState().toggleSkill(skill.slug, checked).then(() => {
+              if (!checked) {
+                toast.custom(() => (
+                  <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">
+                    技能已关闭，仍可在「我的技能」中查看
+                  </div>
+                ), { duration: 3000 });
+              } else {
+                toast.custom(() => (
+                  <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">
+                    技能已开启
+                  </div>
+                ), { duration: 3000 });
+              }
+            }).catch((err) => {
+              setLocalEnabled(!checked);
+              console.error('[SkillCardList] toggle failed:', err);
+              toast.custom(() => (
+                <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">
+                  操作失败，请重试
+                </div>
+              ), { duration: 3000 });
+            });
+          }}
           onClick={(e) => e.stopPropagation()}
           aria-label={t('plaza.action.toggle', { defaultValue: '启用/禁用' })}
         />

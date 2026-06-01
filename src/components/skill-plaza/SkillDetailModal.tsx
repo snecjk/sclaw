@@ -102,16 +102,16 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
                     </span>
                   </div>
                   <div className="flex items-center gap-2.5 text-xs text-muted-foreground mt-1">
-                    {typeof skill.installCount === 'number' && skill.installCount > 0 && (
+                    {typeof skill.useCount === 'number' && skill.useCount >= 0 && (
                       <span className="inline-flex items-center gap-1">
                         <Users className="h-3 w-3 opacity-55" />
-                        {skill.installCount >= 1000 ? `${(skill.installCount / 1000).toFixed(1)}k` : skill.installCount}
+                        {skill.useCount >= 1000 ? `${(skill.useCount / 1000).toFixed(1)}k` : skill.useCount}
                       </span>
                     )}
-                    {typeof skill.useCount === 'number' && skill.useCount > 0 && (
+                    {typeof skill.installCount === 'number' && skill.installCount >= 0 && (
                       <span className="inline-flex items-center gap-1">
                         <ArrowDownToLine className="h-3 w-3 opacity-55" />
-                        {skill.useCount >= 1000 ? `${(skill.useCount / 1000).toFixed(1)}k` : skill.useCount}
+                        {skill.installCount >= 1000 ? `${(skill.installCount / 1000).toFixed(1)}k` : skill.installCount}
                       </span>
                     )}
                   </div>
