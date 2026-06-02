@@ -139,20 +139,6 @@ class PythonApiClient {
     return convertPlazaListResponse(raw);
   }
 
-  async getMySkills(params: SkillPlazaListParams = {}): Promise<PlazaListResult> {
-    const qs = new URLSearchParams();
-    if (params.q) qs.set('q', params.q);
-    if (params.category) qs.set('category_code', params.category);
-    if (params.sort) qs.set('sort', params.sort);
-    if (params.page !== undefined) qs.set('page', String(params.page));
-    if (params.pageSize !== undefined) qs.set('page_size', String(params.pageSize));
-
-    const query = qs.toString();
-    const endpoint = query ? `/agent/v1/skills/plaza/mine?${query}` : '/agent/v1/skills/plaza/mine';
-    const raw = await this.request<Record<string, unknown>>('GET', endpoint);
-    return convertPlazaListResponse(raw);
-  }
-
   async getSkillDetail(slug: string): Promise<SkillDetail> {
     const raw = await this.request<Record<string, unknown>>('GET', `/agent/v1/skills/plaza/${encodeURIComponent(slug)}`);
     return convertSkillDetail(raw);
@@ -542,53 +528,6 @@ export class SkillPlazaService {
 
     // Normal request: fetch from API and merge local office skills
     const result = await this.client.getPlazaSkills(params, categorys || undefined);
-    let skills = result.skills.map((s) => this.overlayLocalState(s)).map((s) => {
-      if (OFFICE_SKILL_SLUGS.has(s.slug)) {
-        return { ...s, category: OFFICE_CATEGORY_LABEL, categoryCode: OFFICE_CATEGORY_SLUG };
-      }
-      return s;
-    });
-
-    // Merge local office skills when not filtering by another category
-    if (!hasCategoryFilter) {
-      const existingSlugs = new Set(skills.map((s) => s.slug));
-      const newLocalSkills = localOfficeSkills.filter((s) => !existingSlugs.has(s.slug));
-      if (newLocalSkills.length > 0) {
-        skills = [...skills, ...newLocalSkills];
-        result.categoryCounts[OFFICE_CATEGORY_SLUG] = (result.categoryCounts[OFFICE_CATEGORY_SLUG] || 0) + newLocalSkills.length;
-        result.categoryCounts[''] = (result.categoryCounts[''] || 0) + newLocalSkills.length;
-      }
-    }
-
-    return {
-      ...result,
-      skills,
-    };
-  }
-
-  async getMySkills(params?: SkillPlazaListParams): Promise<PlazaListResult> {
-    const isOfficeFilter = params?.category === OFFICE_CATEGORY_SLUG;
-    const hasCategoryFilter = Boolean(params?.category && params.category !== '');
-    const localOfficeSkills = this.getOfficeSkillsFromLocal(params?.q);
-
-    if (isOfficeFilter) {
-      // API doesn't know about "办公" category; return local office skills only
-      const categoryCounts: Record<string, number> = {};
-      categoryCounts[OFFICE_CATEGORY_SLUG] = localOfficeSkills.length;
-      categoryCounts[''] = localOfficeSkills.length;
-
-      return {
-        skills: localOfficeSkills,
-        categoryCounts,
-        hasMore: false,
-        page: 1,
-        pageSize: localOfficeSkills.length,
-        total: localOfficeSkills.length,
-      };
-    }
-
-    // Normal request: fetch from API and merge local office skills
-    const result = await this.client.getMySkills(params);
     let skills = result.skills.map((s) => this.overlayLocalState(s)).map((s) => {
       if (OFFICE_SKILL_SLUGS.has(s.slug)) {
         return { ...s, category: OFFICE_CATEGORY_LABEL, categoryCode: OFFICE_CATEGORY_SLUG };

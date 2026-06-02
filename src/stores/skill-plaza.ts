@@ -6,7 +6,7 @@ import { create } from 'zustand';
 import {
   fetchSkillPlazaCategories,
   fetchSkillPlazaList,
-  fetchMySkills as fetchMySkillsApi,
+  fetchLocalSkills,
   installPlazaSkill,
   uninstallPlazaSkill,
   recordSkillUse,
@@ -61,7 +61,7 @@ interface SkillPlazaState {
 
   fetchCategories: () => Promise<void>;
   fetchPlazaSkills: (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => Promise<void>;
-  fetchMySkills: (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => Promise<void>;
+  fetchLocalSkills: (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => Promise<void>;
 
   installSkill: (slug: string) => Promise<void>;
   uninstallSkill: (slug: string) => Promise<void>;
@@ -113,7 +113,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     if (tab === 'all') {
       get().fetchPlazaSkills({ reset: true });
     } else if (tab === 'mine') {
-      get().fetchMySkills({ reset: true });
+      get().fetchLocalSkills({ reset: true });
     }
   },
   setActiveCategory: (category) => {
@@ -121,7 +121,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     if (get().activeTab === 'all') {
       get().fetchPlazaSkills({ reset: true, skipCategoryCounts: true });
     } else {
-      get().fetchMySkills({ reset: true, skipCategoryCounts: true });
+      get().fetchLocalSkills({ reset: true, skipCategoryCounts: true });
     }
   },
   setSearchQuery: (query) => {
@@ -129,7 +129,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     if (get().activeTab === 'all') {
       get().fetchPlazaSkills({ reset: true });
     } else {
-      get().fetchMySkills({ reset: true });
+      get().fetchLocalSkills({ reset: true });
     }
   },
   setSortMode: (sort) => {
@@ -184,12 +184,12 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     }
   },
 
-  fetchMySkills: async (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => {
+  fetchLocalSkills: async (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => {
     const { skipCategoryCounts } = opts || {};
 
     set({ loading: true, error: null });
     try {
-      const result = await fetchMySkillsApi();
+      const result = await fetchLocalSkills();
       const nextState: Partial<SkillPlazaState> = {
         mySkills: result.skills,
         hasMore: false,
@@ -229,7 +229,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
       await uninstallPlazaSkill(slug);
       set({ plazaStale: true, mineStale: true });
       // Immediately refresh my skills list
-      await get().fetchMySkills();
+      await get().fetchLocalSkills();
     } finally {
       set((state) => {
         const next = { ...state.uninstalling };

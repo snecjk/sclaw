@@ -47,28 +47,6 @@ export async function handleSkillPlazaRoutes(
     return true;
   }
 
-  // GET /api/skill-plaza/mine
-  if (url.pathname === '/api/skill-plaza/mine' && req.method === 'GET') {
-    try {
-      const params = {
-        q: url.searchParams.get('q') || undefined,
-        category: url.searchParams.get('category') || undefined,
-        sort: (url.searchParams.get('sort') as 'hot' | 'recent') || undefined,
-        page: url.searchParams.has('page') ? Number(url.searchParams.get('page')) : undefined,
-        pageSize: url.searchParams.has('pageSize') ? Number(url.searchParams.get('pageSize')) : undefined,
-      };
-      const data = await ctx.skillPlazaService.getMySkills(params);
-      sendJson(res, 200, { success: true, data });
-    } catch (error) {
-      sendJson(res, 500, {
-        success: false,
-        error: String(error),
-        code: 'MINE_LIST_FAILED',
-      });
-    }
-    return true;
-  }
-
   // GET /api/skill-plaza/local-skills
   if (url.pathname === '/api/skill-plaza/local-skills' && req.method === 'GET') {
     try {

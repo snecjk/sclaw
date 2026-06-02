@@ -41,7 +41,7 @@ export async function fetchSkillPlazaList(params: FetchPlazaListParams = {}): Pr
 }
 
 // GET /api/skill-plaza/local-skills (scan local skills dir, no remote request)
-export async function fetchMySkills(): Promise<PlazaListResult> {
+export async function fetchLocalSkills(): Promise<PlazaListResult> {
   const res = await hostApiFetch<{ success: boolean; data?: PlazaListResult; error?: string }>(
     '/api/skill-plaza/local-skills',
   );
