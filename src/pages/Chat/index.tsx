@@ -50,10 +50,10 @@ export function Chat() {
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
 
   // ── Message Queue ──
-  const queue = useMessageQueueStore((s) => s.queue);
-  const queueRemove = useMessageQueueStore((s) => s.remove);
-  const queueMoveUp = useMessageQueueStore((s) => s.moveUp);
-  const queueMoveDown = useMessageQueueStore((s) => s.moveDown);
+  const queue = useMessageQueueStore((s) => s.getQueue(currentSessionKey));
+  const queueRemove = useCallback((id: string) => useMessageQueueStore.getState().remove(currentSessionKey, id), [currentSessionKey]);
+  const queueMoveUp = useCallback((id: string) => useMessageQueueStore.getState().moveUp(currentSessionKey, id), [currentSessionKey]);
+  const queueMoveDown = useCallback((id: string) => useMessageQueueStore.getState().moveDown(currentSessionKey, id), [currentSessionKey]);
 
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
@@ -200,19 +200,20 @@ export function Chat() {
     if (parts && parts.length > 1) {
       sendMessage(parts[0].context, attachments, targetAgentId);
       for (let i = 1; i < parts.length; i++) {
-        useMessageQueueStore.getState().enqueue(parts[i].context, undefined, targetAgentId);
+        useMessageQueueStore.getState().enqueue(currentSessionKey, parts[i].context, undefined, targetAgentId);
       }
     } else {
       sendMessage(text, attachments, targetAgentId);
     }
-  }, [beginSendScroll, sendMessage]);
+  }, [beginSendScroll, sendMessage, currentSessionKey]);
 
   const handleQueue = useCallback((
     text: string,
     attachments?: FileAttachment[],
     targetAgentId?: string | null,
   ) => {
-    useMessageQueueStore.getState().enqueue(text, attachments, targetAgentId);
+    const { currentSessionKey } = useChatStore.getState();
+    useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId);
   }, []);
 
   // ── Resizable panel logic ──

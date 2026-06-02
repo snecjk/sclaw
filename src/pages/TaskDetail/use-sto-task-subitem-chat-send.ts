@@ -18,7 +18,8 @@ export function useStoTaskSubitemChatSend() {
 
   const handleQueue = useCallback(
     (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
-      useMessageQueueStore.getState().enqueue(text, attachments, targetAgentId);
+      const { currentSessionKey } = useChatStore.getState();
+      useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId);
     },
     [],
   );
@@ -50,8 +51,9 @@ export function useStoTaskSubitemChatSend() {
           toast.error(t('assistant.sendFailed'));
           return;
         }
+        const { currentSessionKey } = useChatStore.getState();
         for (let i = 1; i < parts.length; i++) {
-          useMessageQueueStore.getState().enqueue(parts[i].context, undefined, targetAgentId);
+          useMessageQueueStore.getState().enqueue(currentSessionKey, parts[i].context, undefined, targetAgentId);
         }
       } else {
         await sendMessage(text, attachments, targetAgentId);

@@ -21,7 +21,8 @@ export function useHomeChatEntrySend() {
 
   const handleHubQueue = useCallback(
     (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
-      useMessageQueueStore.getState().enqueue(text, attachments, targetAgentId);
+      const { currentSessionKey } = useChatStore.getState();
+      useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId);
     },
     [],
   );
@@ -57,8 +58,9 @@ export function useHomeChatEntrySend() {
           toast.error(t('assistant.sendFailed'));
           return;
         }
+        const { currentSessionKey: sessionKey } = useChatStore.getState();
         for (let i = 1; i < parts.length; i++) {
-          useMessageQueueStore.getState().enqueue(parts[i].context, undefined, targetAgentId);
+          useMessageQueueStore.getState().enqueue(sessionKey, parts[i].context, undefined, targetAgentId);
         }
       } else {
         await sendMessage(text, attachments, targetAgentId);
