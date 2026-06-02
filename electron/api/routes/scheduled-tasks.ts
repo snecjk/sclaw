@@ -2,6 +2,11 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { getScheduledTaskService } from '../../services/scheduled-task-service';
+import {
+  appendTriggerResultToSession,
+  readScheduledTaskSessionHistory,
+  listAllScheduledTaskSessions,
+} from '../../services/scheduled-task-session-writer';
 
 export async function handleScheduledTaskRoutes(
   req: IncomingMessage,
@@ -158,6 +163,19 @@ export async function handleScheduledTaskRoutes(
   }
 
   // -----------------------------------------------------------------------
+  // Sessions: GET /api/scheduled-tasks/sessions
+  // -----------------------------------------------------------------------
+  if (url.pathname === '/api/scheduled-tasks/sessions' && req.method === 'GET') {
+    try {
+      const sessions = await listAllScheduledTaskSessions();
+      sendJson(res, 200, { sessions });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  // -----------------------------------------------------------------------
   // Trigger: POST /api/scheduled-tasks/:id/trigger
   // -----------------------------------------------------------------------
   if (url.pathname.endsWith('/trigger') && req.method === 'POST') {
@@ -175,7 +193,20 @@ export async function handleScheduledTaskRoutes(
     try {
       const service = getScheduledTaskService();
       const result = await service.triggerTask(id);
-      sendJson(res, 200, result);
+
+      // Append result to local session
+      let hasSession = false;
+      if (result.run) {
+        try {
+          const task = await service.getTaskDetails(id);
+          await appendTriggerResultToSession(id, task.name, result.run);
+          hasSession = true;
+        } catch (sessionErr) {
+          console.error(`[ScheduledTasks] Failed to append session for task ${id}:`, sessionErr);
+        }
+      }
+
+      sendJson(res, 200, { ...result, hasSession });
     } catch (error) {
       const message = String(error);
       if (message.includes('404')) {
@@ -185,6 +216,23 @@ export async function handleScheduledTaskRoutes(
       } else {
         sendJson(res, 500, { success: false, error: message });
       }
+    }
+    return true;
+  }
+
+  // -----------------------------------------------------------------------
+  // Session History: GET /api/scheduled-tasks/session-history
+  // -----------------------------------------------------------------------
+  if (url.pathname === '/api/scheduled-tasks/session-history' && req.method === 'GET') {
+    const sessionKey = url.searchParams.get('sessionKey')?.trim() || '';
+    const rawLimit = Number(url.searchParams.get('limit') || '100');
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 100;
+
+    try {
+      const messages = await readScheduledTaskSessionHistory(sessionKey, limit);
+      sendJson(res, 200, { messages });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
     }
     return true;
   }

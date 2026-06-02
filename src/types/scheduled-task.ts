@@ -49,3 +49,20 @@ export interface ScheduledTaskUpdateInput {
   notifyMode?: string;
   enabled?: boolean;
 }
+
+export interface ScheduledTaskRun {
+  id: number;
+  taskId: number;
+  status: string;
+  executionResult?: string;
+  logText?: string;
+  notifyDingtalkOk?: boolean;
+}
+
+export interface ScheduledTaskTriggerResponse {
+  taskId: number;
+  runId: number;
+  outcome: string;
+  run?: ScheduledTaskRun;
+  hasSession?: boolean;
+}

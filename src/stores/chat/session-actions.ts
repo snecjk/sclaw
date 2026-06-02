@@ -1,4 +1,5 @@
 import { invokeIpc } from '@/lib/api-client';
+import { hostApiFetch } from '@/lib/host-api';
 import { CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
 import {
   getCanonicalPrefixFromSessions,
@@ -41,118 +42,132 @@ export function createSessionActions(
           {}
         ) as { success: boolean; result?: Record<string, unknown>; error?: string };
 
+        let rawSessions: Record<string, unknown>[] = [];
         if (result.success && result.result) {
           const data = result.result;
-          const rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
-          const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
-            const key = String(s.key || '');
-            return {
-              key,
-              label: s.label ? String(s.label) : undefined,
-              displayName: sanitizeSessionDisplayField(
-                key,
-                s.displayName ? String(s.displayName) : undefined,
-              ),
-              thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
-              model: s.model ? String(s.model) : undefined,
-              updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
-            };
-          }).filter((s: ChatSession) => s.key);
+          rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
+        }
 
-          const canonicalBySuffix = new Map<string, string>();
-          for (const session of sessions) {
-            if (!session.key.startsWith('agent:')) continue;
-            const parts = session.key.split(':');
-            if (parts.length < 3) continue;
-            const suffix = parts.slice(2).join(':');
-            if (suffix && !canonicalBySuffix.has(suffix)) {
-              canonicalBySuffix.set(suffix, session.key);
-            }
-          }
-
-          // Deduplicate: if both short and canonical existed, keep canonical only
-          const seen = new Set<string>();
-          const dedupedSessions = sessions.filter((s) => {
-            if (!s.key.startsWith('agent:') && canonicalBySuffix.has(s.key)) return false;
-            if (seen.has(s.key)) return false;
-            seen.add(s.key);
-            return true;
-          });
-
-          const { currentSessionKey } = get();
-          let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
-          if (!nextSessionKey.startsWith('agent:')) {
-            const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
-            if (canonicalMatch) {
-              nextSessionKey = canonicalMatch;
-            }
-          }
-          if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
-            // Current session not found in the backend list
-            const isNewEmptySession = get().messages.length === 0;
-            if (!isNewEmptySession) {
-              nextSessionKey = dedupedSessions[0].key;
-            }
-          }
-
-          const sessionsWithCurrent = !dedupedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
-            ? [...dedupedSessions, { key: nextSessionKey }]
-            : dedupedSessions;
-
-          const discoveredActivity = Object.fromEntries(
-            sessionsWithCurrent
-              .filter((session) => typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt))
-              .map((session) => [session.key, session.updatedAt!]),
+        // Also load scheduled task sessions from local filesystem
+        try {
+          const stResult = await hostApiFetch<{ sessions?: Array<{ key: string; label: string; updatedAt?: number }> }>(
+            '/api/scheduled-tasks/sessions',
           );
-
-          set((state) => ({
-            sessions: sessionsWithCurrent,
-            currentSessionKey: nextSessionKey,
-            currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
-            sessionLastActivity: {
-              ...state.sessionLastActivity,
-              ...discoveredActivity,
-            },
-          }));
-
-          if (currentSessionKey !== nextSessionKey) {
-            get().loadHistory();
+          if (stResult.sessions) {
+            rawSessions = [...rawSessions, ...stResult.sessions];
           }
+        } catch (err) {
+          console.warn('Failed to load scheduled task sessions:', err);
+        }
 
-          // Background: fetch first user message for every non-main session to populate labels upfront.
-          // Uses a small limit so it's cheap; runs in parallel and doesn't block anything.
-          const sessionsToLabel = sessionsWithCurrent.filter((s) => !s.key.endsWith(':main'));
-          if (sessionsToLabel.length > 0) {
-            void Promise.all(
-              sessionsToLabel.map(async (session) => {
-                try {
-                  const r = await invokeIpc(
-                    'gateway:rpc',
-                    'chat.history',
-                    { sessionKey: session.key, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
-                  ) as { success: boolean; result?: Record<string, unknown> };
-                  if (!r.success || !r.result) return;
-                  const msgs = Array.isArray(r.result.messages) ? r.result.messages as RawMessage[] : [];
-                  const firstUser = msgs.find((m) => m.role === 'user');
-                  const lastMsg = msgs[msgs.length - 1];
-                  set((s) => {
-                    const next: Partial<typeof s> = {};
-                    if (firstUser && !s.sessionLabels[session.key]) {
-                      const labelText = getMessageText(firstUser.content).trim();
-                      if (labelText) {
-                        const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
-                        next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
-                      }
-                    }
-                    if (lastMsg?.timestamp) {
-                      next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: toMs(lastMsg.timestamp) };
-                    }
-                    return next;
-                  });
-                } catch { /* ignore per-session errors */ }
-              }),
-            );
+        const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
+          const key = String(s.key || '');
+          return {
+            key,
+            label: s.label ? String(s.label) : undefined,
+            displayName: sanitizeSessionDisplayField(
+              key,
+              s.displayName ? String(s.displayName) : undefined,
+            ),
+            thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
+            model: s.model ? String(s.model) : undefined,
+            updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
+          };
+        }).filter((s: ChatSession) => s.key);
+
+        const canonicalBySuffix = new Map<string, string>();
+        for (const session of sessions) {
+          if (!session.key.startsWith('agent:')) continue;
+          const parts = session.key.split(':');
+          if (parts.length < 3) continue;
+          const suffix = parts.slice(2).join(':');
+          if (suffix && !canonicalBySuffix.has(suffix)) {
+            canonicalBySuffix.set(suffix, session.key);
           }
+        }
+
+        // Deduplicate: if both short and canonical existed, keep canonical only
+        const seen = new Set<string>();
+        const dedupedSessions = sessions.filter((s) => {
+          if (!s.key.startsWith('agent:') && canonicalBySuffix.has(s.key)) return false;
+          if (seen.has(s.key)) return false;
+          seen.add(s.key);
+          return true;
+        });
+
+        const { currentSessionKey } = get();
+        let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
+        if (!nextSessionKey.startsWith('agent:')) {
+          const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
+          if (canonicalMatch) {
+            nextSessionKey = canonicalMatch;
+          }
+        }
+        if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
+          // Current session not found in the backend list
+          const isNewEmptySession = get().messages.length === 0;
+          if (!isNewEmptySession) {
+            nextSessionKey = dedupedSessions[0].key;
+          }
+        }
+
+        const sessionsWithCurrent = !dedupedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
+          ? [...dedupedSessions, { key: nextSessionKey }]
+          : dedupedSessions;
+
+        const discoveredActivity = Object.fromEntries(
+          sessionsWithCurrent
+            .filter((session) => typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt))
+            .map((session) => [session.key, session.updatedAt!]),
+        );
+
+        set((state) => ({
+          sessions: sessionsWithCurrent,
+          currentSessionKey: nextSessionKey,
+          currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
+          sessionLastActivity: {
+            ...state.sessionLastActivity,
+            ...discoveredActivity,
+          },
+        }));
+
+        if (currentSessionKey !== nextSessionKey) {
+          get().loadHistory();
+        }
+
+        // Background: fetch first user message for every non-main session to populate labels upfront.
+        // Uses a small limit so it's cheap; runs in parallel and doesn't block anything.
+        const sessionsToLabel = sessionsWithCurrent.filter((s) => !s.key.endsWith(':main'));
+        if (sessionsToLabel.length > 0) {
+          void Promise.all(
+            sessionsToLabel.map(async (session) => {
+              try {
+                const r = await invokeIpc(
+                  'gateway:rpc',
+                  'chat.history',
+                  { sessionKey: session.key, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
+                ) as { success: boolean; result?: Record<string, unknown> };
+                if (!r.success || !r.result) return;
+                const msgs = Array.isArray(r.result.messages) ? r.result.messages as RawMessage[] : [];
+                const firstUser = msgs.find((m) => m.role === 'user');
+                const lastMsg = msgs[msgs.length - 1];
+                set((s) => {
+                  const next: Partial<typeof s> = {};
+                  if (firstUser && !s.sessionLabels[session.key]) {
+                    const labelText = getMessageText(firstUser.content).trim();
+                    if (labelText) {
+                      const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
+                      next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
+                    }
+                  }
+                  if (lastMsg?.timestamp) {
+                    next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: toMs(lastMsg.timestamp) };
+                  }
+                  return next;
+                });
+              } catch { /* ignore per-session errors */ }
+            }),
+          );
         }
       } catch (err) {
         console.warn('Failed to load sessions:', err);

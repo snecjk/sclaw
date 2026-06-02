@@ -5,6 +5,7 @@
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useScheduledTasksStore } from '@/stores/scheduledTasks';
+import { useChatStore } from '@/stores/chat';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { toast } from 'sonner';
@@ -102,8 +103,19 @@ export default function ScheduledTasks() {
   const handleTrigger = useCallback(
     async (job: TaskViewModel) => {
       try {
-        await triggerTask(Number(job.id));
-        toast.success('测试运行已触发');
+        const result = await triggerTask(Number(job.id));
+        if (result.hasSession) {
+          toast.success('测试运行已完成，结果已添加到会话', {
+            action: {
+              label: '查看会话',
+              onClick: () => {
+                useChatStore.getState().switchSession(`scheduled-task:${job.id}`);
+              },
+            },
+          });
+        } else {
+          toast.success('测试运行已触发');
+        }
       } catch (err) {
         toast.error(String(err));
       }

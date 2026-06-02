@@ -288,25 +288,31 @@ export class ScheduledTaskService {
     const baseUrl = await this.resolveBaseUrl();
     const headers = await this.buildHeaders();
     const url = `${baseUrl}/trigger`;
-    logger.info(`[ScheduledTaskService] triggerTask: ${taskId}`);
+    logger.info(`[ScheduledTaskService] >>> triggerTask url=${url} taskId=${taskId}`);
+    logger.info(`[ScheduledTaskService] >>> triggerTask headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
+    const body = JSON.stringify({ task_id: taskId });
+    const curlCmd = `curl -X POST "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}" -d '${body}'`;
+    logger.info(`[ScheduledTaskService] >>> triggerTask curl=${curlCmd}`);
 
     const res = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ task_id: taskId }),
+      body,
     });
+    const bodyText = await res.text();
+    logger.info(`[ScheduledTaskService] <<< triggerTask status=${res.status} body=${bodyText.slice(0, 500)}`);
+
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`Scheduled task trigger failed (${res.status}): ${text}`);
+      throw new Error(`Scheduled task trigger failed (${res.status}): ${bodyText}`);
     }
 
-    const data = (await res.json()) as { success?: boolean; data?: Record<string, unknown>; errMessage?: string };
+    const data = JSON.parse(bodyText) as { success?: boolean; data?: Record<string, unknown>; errMessage?: string };
     if (data.success === false) {
       throw new Error(data.errMessage || 'Scheduled task trigger failed');
     }
 
     const d = data.data ?? {};
-    return {
+    const result: ScheduledTaskTriggerResponse = {
       taskId: Number(d.task_id) || taskId,
       runId: Number(d.run_id) || 0,
       outcome: String(d.outcome || ''),
@@ -321,6 +327,8 @@ export class ScheduledTaskService {
           }
         : undefined,
     };
+    logger.info(`[ScheduledTaskService] triggerTask returned=${JSON.stringify(result)}`);
+    return result;
   }
 }
 

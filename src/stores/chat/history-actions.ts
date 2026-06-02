@@ -12,7 +12,12 @@ import {
   loadMissingPreviews,
   toMs,
 } from './helpers';
-import { buildCronSessionHistoryPath, isCronSessionKey } from './cron-session-utils';
+import {
+  buildCronSessionHistoryPath,
+  buildScheduledTaskSessionHistoryPath,
+  isCronSessionKey,
+  isScheduledTaskSessionKey,
+} from './cron-session-utils';
 import type { RawMessage } from './types';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 
@@ -25,6 +30,19 @@ async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY
     return Array.isArray(response.messages) ? response.messages : [];
   } catch (error) {
     console.warn('Failed to load cron fallback history:', error);
+    return [];
+  }
+}
+
+async function loadScheduledTaskFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
+  if (!isScheduledTaskSessionKey(sessionKey)) return [];
+  try {
+    const response = await hostApiFetch<{ messages?: RawMessage[] }>(
+      buildScheduledTaskSessionHistoryPath(sessionKey, limit),
+    );
+    return Array.isArray(response.messages) ? response.messages : [];
+  } catch (error) {
+    console.warn('Failed to load scheduled task fallback history:', error);
     return [];
   }
 }
@@ -176,10 +194,16 @@ export function createHistoryActions(
         if (rawMessages.length === 0 && isCronSessionKey(currentSessionKey)) {
           rawMessages = await loadCronFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
         }
+        if (rawMessages.length === 0 && isScheduledTaskSessionKey(currentSessionKey)) {
+          rawMessages = await loadScheduledTaskFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
+        }
         applyLoadedMessages(rawMessages, thinkingLevel);
       } catch (err) {
         console.warn('Failed to load chat history:', err);
-        const fallbackMessages = await loadCronFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
+        let fallbackMessages = await loadCronFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
+        if (fallbackMessages.length === 0) {
+          fallbackMessages = await loadScheduledTaskFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
+        }
         if (fallbackMessages.length > 0) {
           applyLoadedMessages(fallbackMessages, null);
         } else {

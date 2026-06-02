@@ -9,6 +9,7 @@ import type {
   ScheduledTask,
   ScheduledTaskCreateInput,
   ScheduledTaskUpdateInput,
+  ScheduledTaskTriggerResponse,
 } from '@/types/scheduled-task';
 
 interface ScheduledTasksState {
@@ -21,7 +22,7 @@ interface ScheduledTasksState {
   updateTask: (input: ScheduledTaskUpdateInput) => Promise<void>;
   deleteTask: (taskId: number) => Promise<void>;
   toggleTask: (taskId: number, enabled: boolean) => Promise<void>;
-  triggerTask: (taskId: number) => Promise<void>;
+  triggerTask: (taskId: number) => Promise<ScheduledTaskTriggerResponse>;
 }
 
 export const useScheduledTasksStore = create<ScheduledTasksState>((set) => ({
@@ -87,10 +88,11 @@ export const useScheduledTasksStore = create<ScheduledTasksState>((set) => ({
   },
 
   triggerTask: async (taskId) => {
-    const result = await hostApiFetch<{ runId: number; outcome: string }>(
+    const result = await hostApiFetch<ScheduledTaskTriggerResponse>(
       `/api/scheduled-tasks/${taskId}/trigger`,
       { method: 'POST' },
     );
     console.log('Scheduled task trigger result:', result);
+    return result;
   },
 }));
