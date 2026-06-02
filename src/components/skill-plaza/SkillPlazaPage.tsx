@@ -32,8 +32,9 @@ export function SkillPlazaPage() {
   const [selectedSkill, setSelectedSkill] = useState<SkillSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SkillSummary | null>(null);
 
-  // Initial load
+  // Initial load: reset category to 'all' when page mounts
   useEffect(() => {
+    useSkillPlazaStore.setState({ activeCategory: '' });
     fetchCategories();
     fetchPlazaSkills({ reset: true });
   }, [fetchCategories, fetchPlazaSkills]);

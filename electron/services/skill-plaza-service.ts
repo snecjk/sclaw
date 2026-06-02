@@ -123,7 +123,7 @@ class PythonApiClient {
     return this.request<{ categories: CategoryDef[] }>('GET', endpoint);
   }
 
-  async getPlazaSkills(params: SkillPlazaListParams): Promise<PlazaListResult> {
+  async getPlazaSkills(params: SkillPlazaListParams, categorys?: string): Promise<PlazaListResult> {
     const qs = new URLSearchParams();
     if (params.q) qs.set('q', params.q);
     if (params.category) qs.set('category_code', params.category);
@@ -131,6 +131,7 @@ class PythonApiClient {
     if (params.sort) qs.set('sort', params.sort);
     if (params.page !== undefined) qs.set('page', String(params.page));
     if (params.pageSize !== undefined) qs.set('page_size', String(params.pageSize));
+    if (categorys) qs.set('categorys', categorys);
 
     const query = qs.toString();
     const endpoint = query ? `/agent/v1/skills/plaza?${query}` : '/agent/v1/skills/plaza';
@@ -502,6 +503,23 @@ export class SkillPlazaService {
   }
 
   async getPlazaSkills(params: SkillPlazaListParams): Promise<PlazaListResult> {
+    // Resolve categorys filter from Apollo config based on user role
+    let categorys = '';
+    try {
+      const authState = await getAuthState();
+      const categoryCode = authState.user?.categoryCode;
+      const apolloKey = isSiteUser(categoryCode)
+        ? 'claw.site.skill.category'
+        : 'claw.prov_head.skill.category';
+      const configValue = await fetchApolloConfigValue(apolloKey);
+      if (configValue) {
+        categorys = configValue;
+        logger.info(`[SkillPlazaService] getPlazaSkills using Apollo config "${apolloKey}": ${configValue}`);
+      }
+    } catch (err) {
+      logger.warn('[SkillPlazaService] Failed to resolve categorys filter config:', err);
+    }
+
     const isOfficeFilter = params.category === OFFICE_CATEGORY_SLUG;
     const hasCategoryFilter = Boolean(params.category && params.category !== '');
     const localOfficeSkills = this.getOfficeSkillsFromLocal(params.q);
@@ -523,7 +541,7 @@ export class SkillPlazaService {
     }
 
     // Normal request: fetch from API and merge local office skills
-    const result = await this.client.getPlazaSkills(params);
+    const result = await this.client.getPlazaSkills(params, categorys || undefined);
     let skills = result.skills.map((s) => this.overlayLocalState(s)).map((s) => {
       if (OFFICE_SKILL_SLUGS.has(s.slug)) {
         return { ...s, category: OFFICE_CATEGORY_LABEL, categoryCode: OFFICE_CATEGORY_SLUG };
