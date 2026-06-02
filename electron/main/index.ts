@@ -733,6 +733,9 @@ if (gotTheLock) {
   // Application lifecycle
   app.whenReady().then(() => {
     _ts('app.whenReady() resolved');
+    void import('../utils/cleanup-old-app-bundles').then(({ scheduleOldAppBackupCleanup }) =>
+      scheduleOldAppBackupCleanup(),
+    );
     void import('../services/client-update-platform').then(({ runPendingInstallReport }) =>
       runPendingInstallReport(app.getVersion(), process.platform),
     );
