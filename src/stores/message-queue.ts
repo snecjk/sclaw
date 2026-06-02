@@ -1,6 +1,7 @@
 /**
  * Message Queue Store
- * Manages a pending message queue for the chat input.
+ * Manages pending message queues for multiple chat sessions.
+ * Each session has its own independent queue, allowing parallel execution.
  * When the AI is responding, new user messages are queued here
  * and automatically sent one-by-one as each response completes.
  */
@@ -8,7 +9,7 @@ import { create } from 'zustand';
 import { useChatStore } from './chat';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 
-const QUEUE_MAX = 10;
+const QUEUE_MAX_PER_SESSION = 10;
 
 export interface QueuedMessage {
   id: string;
@@ -18,22 +19,39 @@ export interface QueuedMessage {
   queuedAt: number;
 }
 
-interface MessageQueueState {
+interface SessionQueue {
   queue: QueuedMessage[];
-  enqueue: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => void;
-  remove: (id: string) => void;
-  moveUp: (id: string) => void;
-  moveDown: (id: string) => void;
-  clear: () => void;
-  dequeueFirst: () => QueuedMessage | null;
+  isActive: boolean; // Whether this session's queue is being processed
+}
+
+interface MessageQueueState {
+  queues: Map<string, SessionQueue>; // keyed by sessionKey
+  enqueue: (sessionKey: string, text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => void;
+  remove: (sessionKey: string, id: string) => void;
+  moveUp: (sessionKey: string, id: string) => void;
+  moveDown: (sessionKey: string, id: string) => void;
+  clear: (sessionKey: string) => void;
+  clearAll: () => void;
+  dequeueFirst: (sessionKey: string) => QueuedMessage | null;
+  getQueue: (sessionKey: string) => QueuedMessage[];
+  getSessionQueue: (sessionKey: string) => SessionQueue;
+  setSessionActive: (sessionKey: string, active: boolean) => void;
+}
+
+function getOrCreateSessionQueue(queues: Map<string, SessionQueue>, sessionKey: string): SessionQueue {
+  if (!queues.has(sessionKey)) {
+    queues.set(sessionKey, { queue: [], isActive: false });
+  }
+  return queues.get(sessionKey)!;
 }
 
 export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
-  queue: [],
+  queues: new Map(),
 
-  enqueue: (text, attachments, targetAgentId) => {
-    const { queue } = get();
-    if (queue.length >= QUEUE_MAX) return;
+  enqueue: (sessionKey, text, attachments, targetAgentId) => {
+    const { queues } = get();
+    const session = getOrCreateSessionQueue(queues, sessionKey);
+    if (session.queue.length >= QUEUE_MAX_PER_SESSION) return;
     const item: QueuedMessage = {
       id: crypto.randomUUID(),
       text,
@@ -41,88 +59,121 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       targetAgentId,
       queuedAt: Date.now(),
     };
-    set({ queue: [...queue, item] });
+    session.queue.push(item);
+    set({ queues: new Map(queues) });
   },
 
-  remove: (id) => {
-    set((s) => ({ queue: s.queue.filter((m) => m.id !== id) }));
+  remove: (sessionKey, id) => {
+    const { queues } = get();
+    const session = queues.get(sessionKey);
+    if (!session) return;
+    session.queue = session.queue.filter((m) => m.id !== id);
+    set({ queues: new Map(queues) });
   },
 
-  moveUp: (id) => {
-    set((s) => {
-      const idx = s.queue.findIndex((m) => m.id === id);
-      if (idx <= 0) return s;
-      const next = [...s.queue];
-      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-      return { queue: next };
-    });
+  moveUp: (sessionKey, id) => {
+    const { queues } = get();
+    const session = queues.get(sessionKey);
+    if (!session) return;
+    const idx = session.queue.findIndex((m) => m.id === id);
+    if (idx <= 0) return;
+    [session.queue[idx - 1], session.queue[idx]] = [session.queue[idx], session.queue[idx - 1]];
+    set({ queues: new Map(queues) });
   },
 
-  moveDown: (id) => {
-    set((s) => {
-      const idx = s.queue.findIndex((m) => m.id === id);
-      if (idx === -1 || idx >= s.queue.length - 1) return s;
-      const next = [...s.queue];
-      [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-      return { queue: next };
-    });
+  moveDown: (sessionKey, id) => {
+    const { queues } = get();
+    const session = queues.get(sessionKey);
+    if (!session) return;
+    const idx = session.queue.findIndex((m) => m.id === id);
+    if (idx === -1 || idx >= session.queue.length - 1) return;
+    [session.queue[idx], session.queue[idx + 1]] = [session.queue[idx + 1], session.queue[idx]];
+    set({ queues: new Map(queues) });
   },
 
-  clear: () => {
-    set({ queue: [] });
+  clear: (sessionKey) => {
+    const { queues } = get();
+    const session = queues.get(sessionKey);
+    if (!session) return;
+    session.queue = [];
+    set({ queues: new Map(queues) });
   },
 
-  dequeueFirst: () => {
-    const { queue } = get();
-    if (queue.length === 0) return null;
-    const [first, ...rest] = queue;
-    set({ queue: rest });
+  clearAll: () => {
+    set({ queues: new Map() });
+  },
+
+  dequeueFirst: (sessionKey) => {
+    const { queues } = get();
+    const session = queues.get(sessionKey);
+    if (!session || session.queue.length === 0) return null;
+    const [first, ...rest] = session.queue;
+    session.queue = rest;
+    set({ queues: new Map(queues) });
     return first;
+  },
+
+  getQueue: (sessionKey) => {
+    const { queues } = get();
+    return queues.get(sessionKey)?.queue || [];
+  },
+
+  getSessionQueue: (sessionKey) => {
+    const { queues } = get();
+    return getOrCreateSessionQueue(queues, sessionKey);
+  },
+
+  setSessionActive: (sessionKey, active) => {
+    const { queues } = get();
+    const session = getOrCreateSessionQueue(queues, sessionKey);
+    session.isActive = active;
+    set({ queues: new Map(queues) });
   },
 }));
 
 /**
  * Creates a watcher that auto-sends queued messages when the AI finishes responding.
+ * Each session has its own independent queue, allowing parallel execution.
  * Call once from the Chat page component; returns an unsubscribe function.
  */
 export function createAutoSendWatcher(
   onAutoSend?: () => void,
 ): () => void {
-  let prevSending = useChatStore.getState().sending;
-  let prevSessionKey = useChatStore.getState().currentSessionKey;
-  let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+  // Track per-session state for parallel execution
+  const sessionStates = new Map<string, { prevSending: boolean; timer: ReturnType<typeof setTimeout> | null }>();
+  
+  const getSessionState = (sessionKey: string) => {
+    if (!sessionStates.has(sessionKey)) {
+      // Initialize prevSending to false for new sessions to avoid false transitions
+      sessionStates.set(sessionKey, { prevSending: false, timer: null });
+    }
+    return sessionStates.get(sessionKey)!;
+  };
 
   const unsub = useChatStore.subscribe((state) => {
     const { sending, currentSessionKey, error } = state;
+    const sessionState = getSessionState(currentSessionKey);
 
-    // Session changed — clear the queue
-    if (currentSessionKey !== prevSessionKey) {
-      prevSessionKey = currentSessionKey;
-      useMessageQueueStore.getState().clear();
-      prevSending = sending;
-      return;
-    }
-
-    // Detect sending: true → false transition
-    if (prevSending && !sending) {
-      prevSending = sending;
+    // Detect sending: true → false transition for this session
+    if (sessionState.prevSending && !sending) {
+      sessionState.prevSending = sending;
 
       // Don't auto-send if there was an error
       if (error) return;
 
-      const { queue } = useMessageQueueStore.getState();
+      const queue = useMessageQueueStore.getState().getQueue(currentSessionKey);
       if (queue.length === 0) return;
 
       // Small delay to let UI settle before sending next
-      if (pendingTimer) clearTimeout(pendingTimer);
-      pendingTimer = setTimeout(() => {
-        pendingTimer = null;
+      if (sessionState.timer) clearTimeout(sessionState.timer);
+      sessionState.timer = setTimeout(() => {
+        sessionState.timer = null;
         // Re-check state after delay
         const chatState = useChatStore.getState();
         if (chatState.sending || chatState.error) return;
         if (chatState.currentSessionKey !== currentSessionKey) return;
 
-        const msg = useMessageQueueStore.getState().dequeueFirst();
+        const msg = useMessageQueueStore.getState().dequeueFirst(currentSessionKey);
         if (!msg) return;
 
         onAutoSend?.();
@@ -139,12 +190,14 @@ export function createAutoSendWatcher(
         );
       }, 150);
     } else {
-      prevSending = sending;
+      sessionState.prevSending = sending;
     }
   });
 
   return () => {
     unsub();
-    if (pendingTimer) clearTimeout(pendingTimer);
+    for (const [, state] of sessionStates) {
+      if (state.timer) clearTimeout(state.timer);
+    }
   };
 }

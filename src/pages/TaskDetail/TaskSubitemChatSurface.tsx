@@ -67,10 +67,10 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const { handleSend, handleQueue } = useStoTaskSubitemChatSend();
 
-  const queue = useMessageQueueStore((s) => s.queue);
-  const queueRemove = useMessageQueueStore((s) => s.remove);
-  const queueMoveUp = useMessageQueueStore((s) => s.moveUp);
-  const queueMoveDown = useMessageQueueStore((s) => s.moveDown);
+  const queue = useMessageQueueStore((s) => s.getQueue(sessionKey));
+  const queueRemove = useCallback((id: string) => useMessageQueueStore.getState().remove(sessionKey, id), [sessionKey]);
+  const queueMoveUp = useCallback((id: string) => useMessageQueueStore.getState().moveUp(sessionKey, id), [sessionKey]);
+  const queueMoveDown = useCallback((id: string) => useMessageQueueStore.getState().moveDown(sessionKey, id), [sessionKey]);
 
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [composeSeed, setComposeSeed] = useState<string | undefined>();
