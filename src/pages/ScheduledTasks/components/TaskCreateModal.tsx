@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
 import { cn } from '@/lib/utils';
 import type { CronJob, CronJobCreateInput } from '@/types/cron';
 
+export interface TaskCreateInputWithRun extends CronJobCreateInput {
+  runNow?: boolean;
+}
+
 interface TaskCreateModalProps {
   job?: CronJob | null;
   open: boolean;
   onClose: () => void;
-  onSave: (input: CronJobCreateInput) => Promise<void>;
+  onSave: (input: TaskCreateInputWithRun) => Promise<void>;
 }
 
 function defaultScheduleValue(): ScheduleValue {
@@ -71,6 +75,7 @@ export function TaskCreateModal({ job, open, onClose, onSave }: TaskCreateModalP
   const [name, setName] = useState('');
   const [instructions, setInstructions] = useState('');
   const [schedule, setSchedule] = useState<ScheduleValue>(defaultScheduleValue());
+  const [runNow, setRunNow] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; instructions?: string }>({});
 
@@ -108,6 +113,7 @@ export function TaskCreateModal({ job, open, onClose, onSave }: TaskCreateModalP
         message: instructions.trim(),
         schedule: scheduleValueToCron(schedule),
         enabled: true,
+        runNow,
       });
       onClose();
     } catch (err) {
@@ -218,23 +224,52 @@ export function TaskCreateModal({ job, open, onClose, onSave }: TaskCreateModalP
             </label>
             <SchedulePicker value={schedule} onChange={setSchedule} />
           </div>
+
+          {/* Run Now Option */}
+          <div className="flex items-start gap-3 p-3 rounded-lg border border-border bg-muted/30">
+            <input
+              type="checkbox"
+              id="runNow"
+              checked={runNow}
+              onChange={(e) => setRunNow(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-0"
+            />
+            <div className="flex-1">
+              <label htmlFor="runNow" className="text-[13.5px] font-medium text-foreground cursor-pointer">
+                立即执行
+              </label>
+              <p className="text-[12px] text-muted-foreground mt-0.5">
+                创建任务后立即运行一次
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-border bg-muted/20">
-          <Button variant="outline" onClick={onClose} className="rounded-lg px-5 h-9 text-[13px]">
-            取消
-          </Button>
-          <Button onClick={handleSubmit} disabled={saving} className="rounded-lg px-5 h-9 text-[13px]">
-            {saving ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                保存中…
-              </>
-            ) : (
-              '保存'
-            )}
-          </Button>
+        <div className="flex justify-between items-center px-6 py-4 border-t border-border bg-muted/20">
+          {runNow ? (
+            <div className="flex items-center gap-2 text-primary text-[13px]">
+              <Play className="h-3.5 w-3.5" />
+              <span>创建并立即执行</span>
+            </div>
+          ) : (
+            <div />
+          )}
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={onClose} className="rounded-lg px-5 h-9 text-[13px]">
+              取消
+            </Button>
+            <Button onClick={handleSubmit} disabled={saving} className="rounded-lg px-5 h-9 text-[13px]">
+              {saving ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  保存中…
+                </>
+              ) : (
+                runNow ? '创建并执行' : '保存'
+              )}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

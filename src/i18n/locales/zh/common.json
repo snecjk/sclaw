@@ -28,6 +28,7 @@
         "subscriptions": "订阅",
         "taskList": "任务列表",
         "taskHqReconciliation": "周会材料生成",
+        "taskWeeklyPpt": "生成周报 PPT",
         "toggleTaskListSection": "展开或收起任务列表",
         "toggleWorkspaceSection": "展开或收起工作台",
         "compactAccountMenu": "账户与设置"

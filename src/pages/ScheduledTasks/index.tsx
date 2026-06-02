@@ -11,9 +11,9 @@ import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { toast } from 'sonner';
 import { TaskHero } from './components/TaskHero';
 import { TaskCard } from './components/TaskCard';
-import { TaskCreateModal } from './components/TaskCreateModal';
+import { TaskCreateModal, type TaskCreateInputWithRun } from './components/TaskCreateModal';
 import { TaskEmptyState } from './components/TaskEmptyState';
-import type { CronJob, CronJobCreateInput } from '@/types/cron';
+import type { CronJob } from '@/types/cron';
 
 // View model for the card grid (adapts ScheduledTask shape to what TaskCard expects)
 interface TaskViewModel extends CronJob {
@@ -124,8 +124,10 @@ export default function ScheduledTasks() {
   );
 
   const handleSave = useCallback(
-    async (input: CronJobCreateInput) => {
+    async (input: TaskCreateInputWithRun) => {
       try {
+        let taskId: number | null = null;
+        
         if (editingJob) {
           await updateTask({
             taskId: Number(editingJob.id),
@@ -134,15 +136,29 @@ export default function ScheduledTasks() {
             description: input.message,
           });
           toast.success('任务已更新');
+          taskId = Number(editingJob.id);
         } else {
-          await createTask({
+          const task = await createTask({
             name: input.name,
             cronExpr: input.schedule,
             description: input.message,
           });
           toast.success('任务已创建');
+          taskId = task.id;
         }
+        
         await fetchTasks().catch(() => {});
+        
+        // If runNow is selected, trigger the task immediately
+        if (input.runNow && taskId !== null) {
+          try {
+            await triggerTask(taskId);
+            toast.success('任务已创建并执行');
+          } catch (triggerErr) {
+            console.error('Failed to trigger task after creation:', triggerErr);
+            toast.warning('任务已创建，但立即执行失败');
+          }
+        }
       } catch (err) {
         const message = String(err);
         if (message.includes('409') || message.includes('任务名称已存在')) {
@@ -153,7 +169,7 @@ export default function ScheduledTasks() {
         throw err;
       }
     },
-    [editingJob, createTask, updateTask, fetchTasks],
+    [editingJob, createTask, updateTask, triggerTask, fetchTasks],
   );
 
   const handleDelete = useCallback(async () => {
