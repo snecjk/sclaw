@@ -20,6 +20,7 @@ import {
   ChevronDown,
   AlertTriangle,
   RefreshCw,
+  Star,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,6 +50,8 @@ import {
   hasConfiguredCredentials,
   type ProviderListItem,
 } from '@/lib/provider-accounts';
+import { getWorkspaceDefaultModelId } from '@/lib/chat-model-options';
+import { syncWorkspaceDefaultModelToChat } from '@/lib/sync-workspace-default-to-chat';
 import { cn } from '@/lib/utils';
 import { glassNestedCard } from '@/lib/surfaces';
 import { toast } from 'sonner';
@@ -195,6 +198,7 @@ export function ProvidersSettings() {
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingProvider, setEditingProvider] = useState<string | null>(null);
+  const [settingDefaultKey, setSettingDefaultKey] = useState<string | null>(null);
   const vendorMap = new Map(vendors.map((vendor) => [vendor.id, vendor]));
   const existingVendorIds = new Set(accounts.map((account) => account.vendorId));
   const displayProviders = useMemo(
@@ -261,11 +265,59 @@ export function ProvidersSettings() {
   };
 
   const handleSetDefault = async (providerId: string) => {
+    setSettingDefaultKey(providerId);
+    const previousWorkspaceModel = getWorkspaceDefaultModelId(accounts, defaultAccountId);
     try {
       await setDefaultAccount(providerId);
+      await refreshProviderSnapshot();
+      const nextAccount = useProviderStore.getState().accounts.find((a) => a.id === providerId);
+      const nextModel = nextAccount?.model?.trim();
+      if (nextModel) {
+        await syncWorkspaceDefaultModelToChat({
+          modelId: nextModel,
+          accountId: providerId,
+          previousWorkspaceModel,
+        });
+      }
       toast.success(t('aiProviders.toast.defaultUpdated'));
     } catch (error) {
       toast.error(`${t('aiProviders.toast.failedDefault')}: ${error}`);
+    } finally {
+      setSettingDefaultKey(null);
+    }
+  };
+
+  const handleSetStoDefaultModel = async (accountId: string, modelId: string) => {
+    const rowKey = `sto-${accountId}-${modelId}`;
+    setSettingDefaultKey(rowKey);
+    try {
+      const account = accounts.find((a) => a.id === accountId);
+      const previousWorkspaceModel =
+        getWorkspaceDefaultModelId(accounts, defaultAccountId) || account?.model;
+      const needsDefaultAccount = defaultAccountId !== accountId;
+      const needsModelUpdate = account?.model !== modelId;
+      if (!needsDefaultAccount && !needsModelUpdate) {
+        return;
+      }
+
+      if (needsDefaultAccount) {
+        await setDefaultAccount(accountId);
+      }
+      if (needsModelUpdate) {
+        await updateAccount(accountId, { model: modelId });
+      } else {
+        await refreshProviderSnapshot();
+      }
+      await syncWorkspaceDefaultModelToChat({
+        modelId,
+        accountId,
+        previousWorkspaceModel,
+      });
+      toast.success(t('aiProviders.toast.defaultModelUpdated'));
+    } catch (error) {
+      toast.error(`${t('aiProviders.toast.failedDefault')}: ${error}`);
+    } finally {
+      setSettingDefaultKey(null);
     }
   };
 
@@ -336,7 +388,9 @@ export function ProvidersSettings() {
                   modelId={m}
                   account={item.account}
                   vendor={item.vendor}
-                  isDefault={item.account.id === defaultAccountId}
+                  isDefaultAccount={item.account.id === defaultAccountId}
+                  isSaving={settingDefaultKey === `sto-${item.account.id}-${m}`}
+                  onSetDefault={() => handleSetStoDefaultModel(item.account.id, m)}
                 />
               ));
             }
@@ -351,6 +405,7 @@ export function ProvidersSettings() {
                 onCancelEdit={() => setEditingProvider(null)}
                 onDelete={() => handleDeleteProvider(item.account.id)}
                 onSetDefault={() => handleSetDefault(item.account.id)}
+                isSavingDefault={settingDefaultKey === item.account.id}
                 onSaveEdits={async (payload) => {
                   const updates: Partial<ProviderAccount> = {};
                   if (payload.updates) {
@@ -397,15 +452,19 @@ function StoModelRow({
   modelId,
   account,
   vendor,
-  isDefault,
+  isDefaultAccount,
+  isSaving,
+  onSetDefault,
 }: {
   modelId: string;
   account: ProviderAccount;
   vendor?: ProviderVendorInfo;
-  isDefault: boolean;
+  isDefaultAccount: boolean;
+  isSaving: boolean;
+  onSetDefault: () => void;
 }) {
   const { t } = useTranslation('settings');
-  const isCurrentModel = isDefault && modelId === account.model;
+  const isCurrentModel = isDefaultAccount && modelId === account.model;
   const subtitle = getStoModelCatalogSubtitle(modelId, t);
 
   return (
@@ -436,6 +495,11 @@ function StoModelRow({
               <span className="inline-flex items-center rounded-md border border-[hsl(var(--link)/0.35)] bg-link-muted px-2 py-0.5 text-[10px] font-semibold text-link shadow-sm dark:border-[hsl(var(--link)/0.25)] dark:bg-[hsl(var(--link-muted))] dark:text-[hsl(var(--link))]">
                 {t('aiProviders.card.builtin', '内置')}
               </span>
+              {isCurrentModel && (
+                <span className="inline-flex items-center rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                  {t('aiProviders.card.defaultModel')}
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
               <span>{vendor?.name || account.label}</span>
@@ -462,7 +526,24 @@ function StoModelRow({
               {modelId}
             </div>
           </div>
-          <span aria-hidden />
+          <div className="flex items-center justify-end md:justify-self-end">
+            {isCurrentModel ? null : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-md px-3 text-[12px] font-medium shadow-none"
+                onClick={onSetDefault}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Star className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                {t('aiProviders.card.setDefaultModel')}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -478,6 +559,7 @@ interface ProviderCardProps {
   onCancelEdit: () => void;
   onDelete: () => void;
   onSetDefault: () => void;
+  isSavingDefault: boolean;
   onSaveEdits: (payload: { newApiKey?: string; updates?: Partial<ProviderConfig> }) => Promise<void>;
   onValidateKey: (
     key: string,
@@ -496,9 +578,8 @@ function ProviderCard({
   onEdit,
   onCancelEdit,
   onDelete,
-  // NOTE: 暂保留该回调以兼容父组件传参和后续恢复「设为默认」按钮。
-  // 当前卡片 UI 未使用它，前缀下划线避免 TS 未使用参数报错。
-  onSetDefault: _onSetDefault,
+  onSetDefault,
+  isSavingDefault,
   onSaveEdits,
   onValidateKey,
   devModeUnlocked,
@@ -686,6 +767,11 @@ function ProviderCard({
                   {t('aiProviders.card.custom', '自定义')}
                 </span>
               )}
+              {isDefault && (
+                <span className="inline-flex shrink-0 items-center rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                  {t('aiProviders.card.default')}
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
               <span className="capitalize">{vendor?.name || account.vendorId}</span>
@@ -743,28 +829,45 @@ function ProviderCard({
               </span>
             )}
             {!isEditing && (
-              <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                {!isStoManagedProvider && (
+              <div className="flex shrink-0 items-center gap-1">
+                {!isDefault && (
                   <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 rounded-md text-muted-foreground shadow-sm hover:bg-card hover:text-foreground"
-                    onClick={onEdit}
-                    title={t('aiProviders.card.editKey')}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-md px-3 text-[12px] font-medium shadow-none opacity-100 md:opacity-0 md:transition-opacity md:group-hover:opacity-100"
+                    onClick={onSetDefault}
+                    disabled={isSavingDefault}
+                    title={t('aiProviders.card.setDefault')}
                   >
-                    <Edit className="h-4 w-4" />
+                    {isSavingDefault ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Star className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {t('aiProviders.card.setDefault')}
                   </Button>
                 )}
                 {!isStoManagedProvider && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 rounded-md text-muted-foreground shadow-sm hover:bg-card hover:text-destructive"
-                    onClick={onDelete}
-                    title={t('aiProviders.card.delete')}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-md text-muted-foreground shadow-sm hover:bg-card hover:text-foreground"
+                      onClick={onEdit}
+                      title={t('aiProviders.card.editKey')}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-md text-muted-foreground shadow-sm hover:bg-card hover:text-destructive"
+                      onClick={onDelete}
+                      title={t('aiProviders.card.delete')}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 )}
               </div>
             )}
