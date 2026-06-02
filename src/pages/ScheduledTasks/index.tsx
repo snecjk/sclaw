@@ -125,23 +125,33 @@ export default function ScheduledTasks() {
 
   const handleSave = useCallback(
     async (input: CronJobCreateInput) => {
-      if (editingJob) {
-        await updateTask({
-          taskId: Number(editingJob.id),
-          name: input.name,
-          cronExpr: input.schedule,
-          description: input.message,
-        });
-        toast.success('任务已更新');
-      } else {
-        await createTask({
-          name: input.name,
-          cronExpr: input.schedule,
-          description: input.message,
-        });
-        toast.success('任务已创建');
+      try {
+        if (editingJob) {
+          await updateTask({
+            taskId: Number(editingJob.id),
+            name: input.name,
+            cronExpr: input.schedule,
+            description: input.message,
+          });
+          toast.success('任务已更新');
+        } else {
+          await createTask({
+            name: input.name,
+            cronExpr: input.schedule,
+            description: input.message,
+          });
+          toast.success('任务已创建');
+        }
+        await fetchTasks().catch(() => {});
+      } catch (err) {
+        const message = String(err);
+        if (message.includes('409') || message.includes('任务名称已存在')) {
+          toast.error('任务名称已存在，请使用其他名称');
+        } else {
+          toast.error(String(err));
+        }
+        throw err;
       }
-      await fetchTasks().catch(() => {});
     },
     [editingJob, createTask, updateTask, fetchTasks],
   );

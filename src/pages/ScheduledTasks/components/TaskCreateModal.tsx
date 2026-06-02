@@ -111,7 +111,11 @@ export function TaskCreateModal({ job, open, onClose, onSave }: TaskCreateModalP
       });
       onClose();
     } catch (err) {
-      // Error handled by parent toast
+      // Error is handled by parent - don't close modal on error
+      const message = String(err);
+      if (message.includes('409') || message.includes('任务名称已存在')) {
+        setErrors({ name: '任务名称已存在，请使用其他名称' });
+      }
     } finally {
       setSaving(false);
     }
@@ -125,7 +129,7 @@ export function TaskCreateModal({ job, open, onClose, onSave }: TaskCreateModalP
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg bg-white rounded-2xl border border-border shadow-2xl overflow-visible my-8"
+        className="w-full max-w-lg bg-background rounded-2xl border border-border shadow-2xl overflow-visible my-8"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -161,7 +165,7 @@ export function TaskCreateModal({ job, open, onClose, onSave }: TaskCreateModalP
               onChange={(e) => { setName(e.target.value); if (errors.name) setErrors(p => ({ ...p, name: undefined })); }}
               placeholder="描述你的任务"
               className={cn(
-                "w-full h-10 px-3 text-[13px] rounded-lg border bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors",
+                "w-full h-10 px-3 text-[13px] rounded-lg border bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors",
                 errors.name ? "border-destructive focus:border-destructive focus:ring-destructive/20" : "border-border"
               )}
               autoComplete="off"
@@ -200,7 +204,7 @@ export function TaskCreateModal({ job, open, onClose, onSave }: TaskCreateModalP
               rows={6}
               placeholder="让 STO Claw 帮你做什么…"
               className={cn(
-                "w-full px-3 py-2.5 text-[13px] rounded-lg border bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-none transition-colors leading-relaxed",
+                "w-full px-3 py-2.5 text-[13px] rounded-lg border bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-none transition-colors leading-relaxed",
                 errors.instructions ? "border-destructive focus:border-destructive focus:ring-destructive/20" : "border-border"
               )}
             />

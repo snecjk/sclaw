@@ -144,13 +144,13 @@ export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
           <button
             type="button"
             onClick={() => setFreqOpen(!freqOpen)}
-            className="flex items-center gap-2 h-10 px-3 text-[13px] rounded-lg border border-border bg-white text-foreground hover:bg-muted/30 transition-colors"
+            className="flex items-center gap-2 h-10 px-3 text-[13px] rounded-lg border border-border bg-background text-foreground hover:bg-muted/30 transition-colors"
           >
             <span>{freqDisplayLabel}</span>
             <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", freqOpen && "rotate-180")} />
           </button>
           {freqOpen && (
-            <div className="absolute left-0 top-full mt-1 w-28 bg-white border border-border rounded-lg shadow-lg py-1 z-50">
+            <div className="absolute left-0 top-full mt-1 w-28 bg-background border border-border rounded-lg shadow-lg py-1 z-50">
               {FREQUENCY_OPTIONS.map((opt) => (
                 <button
                   key={opt.value}
@@ -178,7 +178,7 @@ export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
               type="button"
               onClick={() => setWeekOpen(!weekOpen)}
               className={cn(
-                "flex items-center gap-2 h-10 px-3 text-[13px] rounded-lg border bg-white transition-colors min-w-[120px]",
+                "flex items-center gap-2 h-10 px-3 text-[13px] rounded-lg border bg-background transition-colors min-w-[120px]",
                 value.weekDays.length === 0
                   ? "border-border text-muted-foreground hover:bg-muted/30"
                   : "border-border text-foreground hover:bg-muted/30"
@@ -188,7 +188,7 @@ export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
               <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform ml-auto shrink-0", weekOpen && "rotate-180")} />
             </button>
             {weekOpen && (
-              <div className="absolute left-0 top-full mt-1 w-36 bg-white border border-border rounded-lg shadow-lg py-1 z-50">
+              <div className="absolute left-0 top-full mt-1 w-36 bg-background border border-border rounded-lg shadow-lg py-1 z-50">
                 {WEEKDAY_DROPDOWN_OPTIONS.map((opt) => {
                   const checked = isWeekOptionChecked(opt.value);
                   return (
@@ -203,7 +203,7 @@ export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
                     >
                       <span className={cn(
                         "w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0",
-                        checked ? "bg-primary border-primary" : "border-border bg-white"
+                        checked ? "bg-primary border-primary" : "border-border bg-background"
                       )}>
                         {checked && <Check className="h-3 w-3 text-white" />}
                       </span>
@@ -222,7 +222,7 @@ export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
             type="date"
             value={value.onceDate || ''}
             onChange={(e) => update({ onceDate: e.target.value })}
-            className="h-10 px-3 text-[13px] rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            className="h-10 px-3 text-[13px] rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
           />
         )}
 
@@ -232,7 +232,7 @@ export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
             <select
               value={value.monthDay ?? 1}
               onChange={(e) => update({ monthDay: Number(e.target.value) })}
-              className="h-10 px-3 pr-8 text-[13px] rounded-lg border border-border bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary cursor-pointer"
+              className="h-10 px-3 pr-8 text-[13px] rounded-lg border border-border bg-background appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary cursor-pointer"
             >
               {MONTH_DAYS.map(d => (
                 <option key={d} value={d}>{d} 号</option>
@@ -247,14 +247,14 @@ export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
           <button
             type="button"
             onClick={() => setTimeOpen(!timeOpen)}
-            className="flex items-center gap-2 h-10 px-3 text-[13px] rounded-lg border border-border bg-white text-foreground hover:bg-muted/30 transition-colors"
+            className="flex items-center gap-2 h-10 px-3 text-[13px] rounded-lg border border-border bg-background text-foreground hover:bg-muted/30 transition-colors"
           >
             <ClockIcon />
             <span>{value.time}</span>
             <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", timeOpen && "rotate-180")} />
           </button>
           {timeOpen && (
-            <div className="absolute left-0 top-full mt-1 w-28 max-h-48 overflow-y-auto bg-white border border-border rounded-lg shadow-lg z-50">
+            <div className="absolute left-0 top-full mt-1 w-28 max-h-48 overflow-y-auto bg-background border border-border rounded-lg shadow-lg z-50">
               {timeOptions.map((t) => (
                 <button
                   key={t}

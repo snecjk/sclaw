@@ -28,7 +28,7 @@ export function SkillPlazaHeader() {
         <button
           type="button"
           onClick={handleOpenFolder}
-          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border-none bg-[#111] text-sm font-semibold text-white shadow-[0_2px_10px_rgba(0,0,0,0.15)] hover:brightness-110 transition-[filter] duration-150"
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border-none bg-primary text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors duration-150"
         >
           <FolderOpen className="h-4 w-4 flex-shrink-0" />
           {t('openFolder', { defaultValue: '打开技能文件夹' })}
