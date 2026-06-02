@@ -93,7 +93,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
   // Pagination
   hasMore: false,
   page: 1,
-  pageSize: 20,
+  pageSize: 50,
   total: undefined,
 
   // Loading
@@ -119,9 +119,9 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
   setActiveCategory: (category) => {
     set({ activeCategory: category, page: 1 });
     if (get().activeTab === 'all') {
-      get().fetchPlazaSkills({ reset: true, skipCategoryCounts: true });
+      get().fetchPlazaSkills({ reset: true });
     } else {
-      get().fetchLocalSkills({ reset: true, skipCategoryCounts: true });
+      get().fetchLocalSkills({ reset: true });
     }
   },
   setSearchQuery: (query) => {

@@ -584,7 +584,7 @@ export class SkillPlazaService {
       const categoryCounts: Record<string, number> = {};
       categoryCounts[OFFICE_CATEGORY_SLUG] = localOfficeSkills.length;
       categoryCounts['qita'] = localPreinstalledOthers.length;
-      categoryCounts[''] = localOfficeSkills.length + localPreinstalledOthers.length;
+      categoryCounts[''] = localOfficeSkills.length;
 
       return {
         skills: localOfficeSkills,
@@ -623,9 +623,9 @@ export class SkillPlazaService {
       }
     }
 
-    // Update category counts: 【全部】= remote all + all local preinstalled skills
-    const allLocalPreinstalledCount = localOfficeSkills.length + localPreinstalledOthers.length;
-    result.categoryCounts[''] = (result.categoryCounts[''] || 0) + allLocalPreinstalledCount;
+    // Update category counts: only add *new* local skills (deduped against remote)
+    const newLocalCount = newLocalOffice.length + newLocalOthers.length;
+    result.categoryCounts[''] = (result.categoryCounts[''] || 0) + newLocalCount;
     result.categoryCounts[OFFICE_CATEGORY_SLUG] = (result.categoryCounts[OFFICE_CATEGORY_SLUG] || 0) + newLocalOffice.length;
     result.categoryCounts['qita'] = (result.categoryCounts['qita'] || 0) + newLocalOthers.length;
 
