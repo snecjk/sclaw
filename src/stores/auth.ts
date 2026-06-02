@@ -28,6 +28,8 @@ export interface SsoUserInfo {
   id: string;
   userName: string;
   realName: string;
+  code: string;
+  empCode: string;
   companyName: string;
   departmentName: string;
   openId: string;
