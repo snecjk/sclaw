@@ -17,6 +17,7 @@ export function SkillPlazaPage() {
   const { t } = useTranslation('skills');
   const {
     activeTab,
+    activeCategory,
     plazaSkills,
     mySkills,
     loading,
@@ -44,7 +45,11 @@ export function SkillPlazaPage() {
     }
   }, [activeTab, fetchMySkills]);
 
-  const skills = activeTab === 'all' ? plazaSkills : mySkills;
+  const skills = activeTab === 'all'
+    ? plazaSkills
+    : activeCategory
+      ? mySkills.filter((s) => s.categoryCode === activeCategory)
+      : mySkills;
   const isMine = activeTab === 'mine';
   const isGrid = viewMode === 'grid';
 

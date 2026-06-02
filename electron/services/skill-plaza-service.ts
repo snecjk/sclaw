@@ -678,7 +678,7 @@ export class SkillPlazaService {
           updatedAt: undefined,
         });
 
-        if (source === 'official') {
+        if (source === 'official' || isOfficeSkill) {
           categoryCounts[finalCategoryCode || 'qita'] = (categoryCounts[finalCategoryCode || 'qita'] || 0) + 1;
         } else {
           categoryCounts['mine'] = (categoryCounts['mine'] || 0) + 1;

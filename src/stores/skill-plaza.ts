@@ -108,11 +108,12 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
 
   // -- Setters --
   setActiveTab: (tab) => {
-    set({ activeTab: tab, page: 1 });
-    if (tab === 'all' && get().plazaStale) {
+    const nextCategory = get().activeCategory === 'mine' ? '' : get().activeCategory;
+    set({ activeTab: tab, page: 1, activeCategory: nextCategory });
+    if (tab === 'all') {
       get().fetchPlazaSkills({ reset: true });
-    } else if (tab === 'mine' && get().mineStale) {
-      get().fetchMySkills();
+    } else if (tab === 'mine') {
+      get().fetchMySkills({ reset: true });
     }
   },
   setActiveCategory: (category) => {

@@ -2,12 +2,9 @@ import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { cn } from '@/lib/utils';
 
 export function SkillPlazaCategoryNav() {
-  const { categories, categoryCounts, activeCategory, activeTab, setActiveCategory } = useSkillPlazaStore();
-  const isMineTab = activeTab === 'mine';
+  const { categories, categoryCounts, activeCategory, setActiveCategory } = useSkillPlazaStore();
 
-  const displayCategories = isMineTab
-    ? [...categories, { slug: 'mine', label: '自建' }]
-    : categories;
+  const displayCategories = categories;
 
   return (
     <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 my-2.5 mx-0 p-0" aria-label="技能分类">
