@@ -15,35 +15,40 @@ interface SkillDetailModalProps {
 export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps) {
   const { t } = useTranslation('skills');
   const navigate = useNavigate();
-  const { installing } = useSkillPlazaStore();
-  const isInstalling = skill ? installing[skill.slug] : false;
+  const { installing, plazaSkills, mySkills } = useSkillPlazaStore();
 
-  if (!skill) return null;
+  // Use live skill data from store so the modal reflects install/uninstall changes immediately
+  const liveSkill = skill
+    ? ([...plazaSkills, ...mySkills].find((s) => s.slug === skill.slug) ?? skill)
+    : null;
+  const isInstalling = liveSkill ? installing[liveSkill.slug] : false;
+
+  if (!liveSkill) return null;
 
   const handleUse = () => {
-    const prompt = encodeURIComponent(skill.defaultPrompt || skill.title);
+    const prompt = encodeURIComponent(liveSkill.defaultPrompt || liveSkill.title);
     onClose();
     navigate(`/?q=${prompt}`);
     // Fire-and-forget use record
-    useSkillPlazaStore.getState().useSkill(skill.slug).catch(() => {});
+    useSkillPlazaStore.getState().useSkill(liveSkill.slug).catch(() => {});
   };
 
   const handleInstall = () => {
     const { installSkill, fetchPlazaSkills } = useSkillPlazaStore.getState();
-    installSkill(skill.slug).then(() => fetchPlazaSkills({ reset: true })).catch(() => {});
+    installSkill(liveSkill.slug).then(() => fetchPlazaSkills({ reset: true })).catch(() => {});
   };
 
-  const tag = skill.installed
+  const tag = liveSkill.installed
     ? { label: t('plaza.tag.installed', { defaultValue: '已安装' }), bg: '#DCF5E2', text: '#00B54B' }
-    : skill.source === 'mine'
+    : liveSkill.source === 'mine'
       ? { label: t('plaza.tag.mine', { defaultValue: '自建' }), bg: '#FFF5E6', text: '#D95700' }
       : { label: t('plaza.tag.official', { defaultValue: '官方' }), bg: '#F0F4FF', text: '#4760FE' };
 
   const renderIcon = () => {
-    if (skill.icon) {
+    if (liveSkill.icon) {
       return (
         <span
-          dangerouslySetInnerHTML={{ __html: skill.icon.replace(/width="[^"]*"/, 'width="20"').replace(/height="[^"]*"/, 'height="20"') }}
+          dangerouslySetInnerHTML={{ __html: liveSkill.icon.replace(/width="[^"]*"/, 'width="20"').replace(/height="[^"]*"/, 'height="20"') }}
         />
       );
     }
@@ -51,7 +56,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
   };
 
   // Optional workflow steps from skill data (future backend support)
-  const workflowSteps = (skill as unknown as Record<string, unknown>).workflowSteps as string[] | undefined;
+  const workflowSteps = (liveSkill as unknown as Record<string, unknown>).workflowSteps as string[] | undefined;
 
   return (
     <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
@@ -93,7 +98,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h2 className="text-base font-semibold text-foreground">{skill.title}</h2>
+                    <h2 className="text-base font-semibold text-foreground">{liveSkill.title}</h2>
                     <span
                       className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium"
                       style={{ backgroundColor: tag.bg, color: tag.text }}
@@ -102,16 +107,16 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
                     </span>
                   </div>
                   <div className="flex items-center gap-2.5 text-xs text-muted-foreground mt-1">
-                    {typeof skill.useCount === 'number' && skill.useCount >= 0 && (
+                    {typeof liveSkill.useCount === 'number' && liveSkill.useCount >= 0 && (
                       <span className="inline-flex items-center gap-1">
                         <Users className="h-3 w-3 opacity-55" />
-                        {skill.useCount >= 1000 ? `${(skill.useCount / 1000).toFixed(1)}k` : skill.useCount}
+                        {liveSkill.useCount >= 1000 ? `${(liveSkill.useCount / 1000).toFixed(1)}k` : liveSkill.useCount}
                       </span>
                     )}
-                    {typeof skill.installCount === 'number' && skill.installCount >= 0 && (
+                    {typeof liveSkill.installCount === 'number' && liveSkill.installCount >= 0 && (
                       <span className="inline-flex items-center gap-1">
                         <ArrowDownToLine className="h-3 w-3 opacity-55" />
-                        {skill.installCount >= 1000 ? `${(skill.installCount / 1000).toFixed(1)}k` : skill.installCount}
+                        {liveSkill.installCount >= 1000 ? `${(liveSkill.installCount / 1000).toFixed(1)}k` : liveSkill.installCount}
                       </span>
                     )}
                   </div>
@@ -125,7 +130,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
                 {t('plaza.detail.skillDesc', { defaultValue: '技能描述' })}
               </h3>
               <p className="text-sm text-foreground leading-relaxed">
-                {skill.description}
+                {liveSkill.description}
               </p>
             </div>
 
@@ -152,7 +157,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
             )}
 
             {/* 数据概览 */}
-            {skill.points !== null && (
+            {liveSkill.points !== null && (
               <>
                 <div className="border-t border-border" />
                 <div className="p-5 py-4">
@@ -160,7 +165,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
                     {t('plaza.detail.dataOverview', { defaultValue: '数据概览' })}
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    {t('plaza.detail.usageEstimate', { count: skill.points, defaultValue: `使用 1 次技能，预计消耗 ${skill.points} 积分` })}
+                    {t('plaza.detail.usageEstimate', { count: liveSkill.points, defaultValue: `使用 1 次技能，预计消耗 ${liveSkill.points} 积分` })}
                   </p>
                 </div>
               </>
@@ -169,7 +174,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
 
           {/* CTA */}
           <div className="p-4 bg-white">
-            {skill.installed || skill.source === 'mine' ? (
+            {liveSkill.installed || liveSkill.source === 'mine' ? (
               <button
                 onClick={handleUse}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-black hover:bg-black/90 transition-colors"

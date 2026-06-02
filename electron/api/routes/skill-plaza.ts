@@ -92,6 +92,12 @@ export async function handleSkillPlazaRoutes(
         return true;
       }
       await ctx.stoSkillService.install({ slug });
+      // Best-effort: record install on backend (fire-and-forget)
+      try {
+        await ctx.skillPlazaService.recordInstall(slug);
+      } catch (err) {
+        logger.warn(`[skill-plaza/install] Failed to record install for ${slug}:`, err);
+      }
       sendJson(res, 200, { success: true });
     } catch (error) {
       const message = String(error);

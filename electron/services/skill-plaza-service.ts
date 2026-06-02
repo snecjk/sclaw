@@ -147,6 +147,10 @@ class PythonApiClient {
   async recordUse(slug: string): Promise<void> {
     await this.request<unknown>('POST', `/agent/v1/skills/plaza/${encodeURIComponent(slug)}/use`);
   }
+
+  async recordInstall(slug: string): Promise<void> {
+    await this.request<unknown>('POST', `/agent/v1/skills/plaza/${encodeURIComponent(slug)}/install`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -737,11 +741,18 @@ export class SkillPlazaService {
       }
     }
 
-    categoryCounts[''] = skills.length;
+    // 基于实际返回的 skills 数组重新计算分类计数，确保 categoryCounts 与 skills 严格一致
+    const finalCategoryCounts: Record<string, number> = {};
+    for (const skill of skills) {
+      // 使用 ?? 避免把 null 误判为 falsy；无分类的自建技能归入 'mine'
+      const code = skill.categoryCode ?? 'mine';
+      finalCategoryCounts[code] = (finalCategoryCounts[code] || 0) + 1;
+    }
+    finalCategoryCounts[''] = skills.length;
 
     return {
       skills,
-      categoryCounts,
+      categoryCounts: finalCategoryCounts,
       hasMore: false,
       page: 1,
       pageSize: skills.length,
@@ -760,6 +771,10 @@ export class SkillPlazaService {
 
   async recordUse(slug: string): Promise<void> {
     await this.client.recordUse(slug);
+  }
+
+  async recordInstall(slug: string): Promise<void> {
+    await this.client.recordInstall(slug);
   }
 
   async toggleSkillEnabled(slug: string, enabled: boolean): Promise<void> {
