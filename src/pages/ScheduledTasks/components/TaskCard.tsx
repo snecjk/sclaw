@@ -50,7 +50,7 @@ export function TaskCard({ job, onToggle, onEdit, onDelete, onTrigger }: TaskCar
   const scheduleLabel = parseScheduleToLabel(scheduleStr);
 
   return (
-    <article className="task-card group relative flex flex-col rounded-xl border border-border bg-white p-5 shadow-sm transition-all hover:shadow-md hover:border-primary/30">
+    <article className="task-card group relative flex flex-col rounded-xl border border-border bg-background p-5 shadow-sm transition-all hover:shadow-md hover:border-primary/30">
       {/* Title Row */}
       <div className="flex items-start gap-3 mb-3">
         <div className="mt-0.5 text-primary shrink-0">
@@ -89,7 +89,7 @@ export function TaskCard({ job, onToggle, onEdit, onDelete, onTrigger }: TaskCar
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onTrigger(); }}
-            className="text-[12.5px] px-3 py-1.5 rounded-lg border border-border bg-white text-foreground hover:border-primary hover:text-primary transition-colors"
+            className="text-[12.5px] px-3 py-1.5 rounded-lg border border-border bg-background text-foreground hover:border-primary hover:text-primary transition-colors"
           >
             <Play className="inline-block h-3 w-3 mr-1 -mt-0.5" />
             测试运行
@@ -109,7 +109,7 @@ export function TaskCard({ job, onToggle, onEdit, onDelete, onTrigger }: TaskCar
 
             {menuOpen && (
               <div
-                className="absolute right-0 bottom-full mb-1 w-36 bg-white border border-border rounded-lg shadow-lg py-1 z-50"
+                className="absolute right-0 bottom-full mb-1 w-36 bg-background border border-border rounded-lg shadow-lg py-1 z-50"
                 role="menu"
               >
                 <button

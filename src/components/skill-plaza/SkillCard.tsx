@@ -52,7 +52,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
     if (skill.icon) {
       return (
         <span
-          className="relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-[#2b2b2b] flex-shrink-0 border border-black/[0.06]"
+          className="relative w-9 h-9 rounded-lg flex items-center justify-center bg-background text-foreground flex-shrink-0 border border-border"
           style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}
         >
           <span dangerouslySetInnerHTML={{ __html: skill.icon.replace(/width="[^"]*"/, 'width="16"').replace(/height="[^"]*"/, 'height="16"') }} />
@@ -60,7 +60,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
       );
     }
     return (
-      <span className="relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-[#2b2b2b] flex-shrink-0 border border-black/[0.06]"
+      <span className="relative w-9 h-9 rounded-lg flex items-center justify-center bg-background text-foreground flex-shrink-0 border border-border"
         style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}>
         <span className="text-base">📦</span>
       </span>
@@ -73,7 +73,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
 
   return (
     <article
-      className="relative flex flex-col min-w-0 pt-3.5 px-4 pb-3.5 border border-border rounded-xl bg-white cursor-pointer overflow-visible transition-[border-color,box-shadow] duration-150 hover:border-[#dfe2e8] hover:shadow-[0_4px_16px_rgba(15,23,42,0.05)]"
+      className="relative flex flex-col min-w-0 pt-3.5 px-4 pb-3.5 border border-border rounded-xl bg-background cursor-pointer overflow-visible transition-[border-color,box-shadow] duration-150 hover:border-border hover:shadow-sm"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => onOpenDetail?.(skill)}
@@ -137,7 +137,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
           {canUse ? (
             <button
               onClick={handleUse}
-              className="inline-flex items-center justify-center h-7 px-3.5 border-none rounded-full bg-[#f1f3f5] text-xs font-semibold text-foreground cursor-pointer whitespace-nowrap no-underline shadow-sm transition-colors hover:bg-[#e8eaed]"
+              className="inline-flex items-center justify-center h-7 px-3.5 border-none rounded-full bg-muted text-xs font-semibold text-foreground cursor-pointer whitespace-nowrap no-underline shadow-sm transition-colors hover:bg-muted/80"
             >
               {t('plaza.action.use', { defaultValue: '使用' })}
             </button>
@@ -145,7 +145,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
             <button
               onClick={handleInstall}
               disabled={isInstalling}
-              className="inline-flex items-center justify-center h-7 px-3.5 border-none rounded-full bg-[#f1f3f5] text-xs font-semibold text-foreground cursor-pointer whitespace-nowrap no-underline shadow-sm transition-colors hover:bg-[#e8eaed] disabled:opacity-50"
+              className="inline-flex items-center justify-center h-7 px-3.5 border-none rounded-full bg-muted text-xs font-semibold text-foreground cursor-pointer whitespace-nowrap no-underline shadow-sm transition-colors hover:bg-muted/80 disabled:opacity-50"
             >
               {isInstalling ? (
                 <span className="animate-spin h-3 w-3 border-2 border-foreground/30 border-t-foreground rounded-full" />
