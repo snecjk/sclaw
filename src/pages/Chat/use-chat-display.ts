@@ -80,12 +80,11 @@ export function useChatDisplay(params: {
   }, [
     displayItems,
     sending,
+    pendingFinal,
+    showThinking,
     streamMsg,
     streamText,
     streamingTools,
-    pendingFinal,
-    hasAnyStreamContent,
-    shouldRenderStreaming,
   ]);
 
   return { staticItems, activeTurn, shouldRenderStreaming, hasAnyStreamContent };
