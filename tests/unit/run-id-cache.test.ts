@@ -2,11 +2,13 @@ import { describe, expect, it, beforeEach } from "vitest";
 import {
   clearSessionRunCache,
   getCachedRunId,
+  queuePendingAgentRunEnd,
   queuePendingModelCall,
   queuePendingModelEnded,
   rememberRunId,
   resetRunIdCacheForTest,
   shiftPendingModelCall,
+  takePendingAgentRunEnd,
   takePendingModelCalls,
   takePendingModelEnded,
 } from "../../sto-plugin/sto-agent-telemetry/run-id-cache";
@@ -60,6 +62,17 @@ describe("run-id-cache", () => {
     });
     expect(takePendingModelEnded("agent:main:web")).toHaveLength(1);
     expect(takePendingModelEnded("agent:main:web")).toHaveLength(0);
+  });
+
+  it("queues agent_run_end until real runId is known", () => {
+    queuePendingAgentRunEnd("agent:main:web", {
+      sessionId: "sess-1",
+      sessionKey: "agent:main:web",
+      event: { success: true },
+      ctx: { sessionId: "sess-1", sessionKey: "agent:main:web" },
+    });
+    expect(takePendingAgentRunEnd("agent:main:web")?.sessionId).toBe("sess-1");
+    expect(takePendingAgentRunEnd("agent:main:web")).toBeUndefined();
   });
 
   it("clears session cache on run end", () => {

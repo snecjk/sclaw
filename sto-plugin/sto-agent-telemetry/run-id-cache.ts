@@ -32,9 +32,22 @@ export type PendingModelEnded = {
   durationMs?: number;
 };
 
+export type PendingAgentRunEnd = {
+  sessionId: string;
+  sessionKey?: string;
+  event: unknown;
+  ctx: {
+    agentId?: string;
+    sessionKey?: string;
+    sessionId?: string;
+    channelId?: string;
+  };
+};
+
 const runIdBySessionKey = new Map<string, string>();
 const pendingModelCallsBySessionKey = new Map<string, PendingModelCall[]>();
 const pendingModelEndedBySessionKey = new Map<string, PendingModelEnded[]>();
+const pendingAgentRunEndByCacheKey = new Map<string, PendingAgentRunEnd>();
 
 export function rememberRunId(sessionKey: string | undefined, runId: string | undefined): void {
   const key = sessionKey?.trim();
@@ -100,12 +113,30 @@ export function takePendingModelEnded(sessionKey: string | undefined): PendingMo
   return list;
 }
 
-export function clearSessionRunCache(sessionKey: string | undefined): void {
-  const key = sessionKey?.trim();
+/** 纯聊天时 agent_end 可能早于 llm_output，先排队，等真 runId 再上报 */
+export function queuePendingAgentRunEnd(cacheKey: string, pending: PendingAgentRunEnd): void {
+  const key = cacheKey.trim();
   if (!key) return;
-  runIdBySessionKey.delete(key);
-  pendingModelCallsBySessionKey.delete(key);
-  pendingModelEndedBySessionKey.delete(key);
+  pendingAgentRunEndByCacheKey.set(key, pending);
+}
+
+export function takePendingAgentRunEnd(cacheKey: string | undefined): PendingAgentRunEnd | undefined {
+  const key = cacheKey?.trim();
+  if (!key) return undefined;
+  const pending = pendingAgentRunEndByCacheKey.get(key);
+  pendingAgentRunEndByCacheKey.delete(key);
+  return pending;
+}
+
+export function clearSessionRunCache(sessionKey: string | undefined, sessionId?: string): void {
+  for (const raw of [sessionKey, sessionId]) {
+    const key = raw?.trim();
+    if (!key) continue;
+    runIdBySessionKey.delete(key);
+    pendingModelCallsBySessionKey.delete(key);
+    pendingModelEndedBySessionKey.delete(key);
+    pendingAgentRunEndByCacheKey.delete(key);
+  }
 }
 
 /** 测试用 */
@@ -113,4 +144,5 @@ export function resetRunIdCacheForTest(): void {
   runIdBySessionKey.clear();
   pendingModelCallsBySessionKey.clear();
   pendingModelEndedBySessionKey.clear();
+  pendingAgentRunEndByCacheKey.clear();
 }

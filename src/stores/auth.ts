@@ -9,7 +9,7 @@ import { hostApiFetch } from '@/lib/host-api';
 import { getCurrentEnvConfig } from '../../shared/env-config';
 
 interface StoSyncResponse {
-  success: boolean;
+  success?: boolean;
   created?: string[];
   deleted?: string[];
   updated?: string[];
@@ -28,8 +28,6 @@ export interface SsoUserInfo {
   id: string;
   userName: string;
   realName: string;
-  code: string;
-  empCode: string;
   companyName: string;
   departmentName: string;
   openId: string;
@@ -61,54 +59,30 @@ interface AuthState {
   refreshCrmWeekReportPolicy: () => Promise<void>;
 }
 
-async function syncStoModelsAndRefreshProviders(context: 'init' | 'login'): Promise<void> {
-  const maxAttempts = context === 'login' ? 2 : 1;
+function showStoSyncErrorToasts(stoSync?: StoSyncResponse | null): void {
+  if (!stoSync?.error) return;
 
+  if (stoSync.error === 'empty-model-list') {
+    toast.error('获取 STO 模型失败', {
+      description: '远程模型列表为空，请检查网络连接或稍后手动重试',
+    });
+    return;
+  }
+
+  if (stoSync.error.startsWith('fetch-failed')) {
+    toast.error('模型列表同步失败', {
+      description: '无法获取远程模型列表，请检查网络连接后刷新重试',
+    });
+  }
+  // no-token 由主进程 auth:token-expired 事件处理，这里不重复操作
+}
+
+async function refreshProviderSnapshot(): Promise<void> {
   try {
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      try {
-        const result = await hostApiFetch<StoSyncResponse>('/api/sto-model-sync', { method: 'POST' });
-        if (result?.error) {
-          const isRetryable = result.error.startsWith('fetch-failed');
-          if (isRetryable && attempt < maxAttempts) {
-            console.warn(`[auth] STO model sync attempt ${attempt} failed: ${result.error}; retrying in 3s`);
-            await new Promise((resolve) => setTimeout(resolve, 3000));
-            continue;
-          }
-          // 非重试错误或最后一次尝试 — 给用户提示
-          if (result.error === 'empty-model-list') {
-            toast.error('获取 STO 模型失败', {
-              description: '远程模型列表为空，请检查网络连接或稍后手动重试',
-            });
-          } else if (result.error.startsWith('fetch-failed')) {
-            toast.error('模型列表同步失败', {
-              description: '无法获取远程模型列表，请检查网络连接后刷新重试',
-            });
-          }
-          // no-token 由主进程 auth:token-expired 事件处理，这里不重复操作
-        }
-        break;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (attempt < maxAttempts) {
-          console.warn(`[auth] STO model sync attempt ${attempt} failed during ${context}; retrying in 3s: ${message}`);
-          await new Promise((resolve) => setTimeout(resolve, 3000));
-          continue;
-        }
-        console.error(`[auth] STO model sync failed during ${context}: ${message}`);
-        toast.error('模型列表同步失败', { description: message });
-      }
-    }
-  } finally {
-    try {
-      const { useProviderStore } = await import('@/stores/providers');
-      await useProviderStore.getState().refreshProviderSnapshot();
-    } catch (error) {
-      console.warn(
-        `[auth] Provider snapshot refresh failed after ${context} STO sync attempt`,
-        error,
-      );
-    }
+    const { useProviderStore } = await import('@/stores/providers');
+    await useProviderStore.getState().refreshProviderSnapshot();
+  } catch (error) {
+    console.warn('[auth] Provider snapshot refresh failed:', error);
   }
 }
 
@@ -170,12 +144,8 @@ export const useAuthStore = create<AuthState>()(
             });
           } else {
             void get().refreshCrmWeekReportPolicy();
-            // If already authenticated on startup, ensure STO models are synced and
-            // the renderer's provider list is up-to-date. The main process runs its
-            // own startup sync (index.ts), but the renderer may have fetched providers
-            // before that sync completed. This call deduplicates safely against any
-            // in-progress main-process sync.
-            void syncStoModelsAndRefreshProviders('init');
+            // Main process runs batched setup on startup; refresh UI provider list only.
+            void refreshProviderSnapshot();
           }
         } catch {
           // Main-process unreachable — trust the renderer-persisted state as fallback.
@@ -197,6 +167,7 @@ export const useAuthStore = create<AuthState>()(
             cancelled?: boolean;
             user?: SsoUserInfo;
             error?: string;
+            stoSync?: StoSyncResponse;
           }>('/api/auth/login', {
             method: 'POST',
             body: JSON.stringify({ environment: env }),
@@ -210,9 +181,8 @@ export const useAuthStore = create<AuthState>()(
               error: null,
             });
 
-            // Trigger STO model sync and refresh provider list in UI
-            void syncStoModelsAndRefreshProviders('login');
-
+            showStoSyncErrorToasts(data.stoSync);
+            void refreshProviderSnapshot();
             void get().refreshCrmWeekReportPolicy();
           } else {
             set({
@@ -243,9 +213,7 @@ export const useAuthStore = create<AuthState>()(
         });
 
         // Refresh provider list to reflect STO model cleanup
-        void import('@/stores/providers').then(({ useProviderStore }) =>
-          useProviderStore.getState().refreshProviderSnapshot(),
-        ).catch(() => {});
+        void refreshProviderSnapshot();
       },
 
       setSsoEnvironment: async (env: SsoEnvironment) => {

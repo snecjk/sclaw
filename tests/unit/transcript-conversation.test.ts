@@ -5,6 +5,7 @@ import {
   extractAllTurnsFromJsonl,
   extractSyncableTurnsFromJsonl,
   hasPendingUserTurn,
+  getLastAssistantStopReason,
   isTranscriptReadyForSync,
 } from "../../sto-plugin/sto-agent-telemetry/transcript-parse";
 
@@ -45,7 +46,7 @@ describe("extractAllTurnsFromJsonl", () => {
 
     expect(countCompleteConversationTurns(jsonl)).toBe(1);
     expect(hasPendingUserTurn(jsonl)).toBe(true);
-    expect(isTranscriptReadyForSync(jsonl)).toBe(false);
+    expect(isTranscriptReadyForSync(jsonl)).toBe(true);
 
     const messages = extractSyncableTurnsFromJsonl(jsonl, {
       sessionId: "sess-1",
@@ -68,5 +69,44 @@ describe("extractAllTurnsFromJsonl", () => {
 
   it("is ready when last turn is complete Q&A", () => {
     expect(isTranscriptReadyForSync(sampleJsonl)).toBe(true);
+  });
+
+  it("is not ready while last assistant is still in toolUse", () => {
+    const jsonl = [
+      '{"type":"message","timestamp":"2026-06-01T00:51:19.349Z","message":{"role":"user","content":"问"}}',
+      '{"type":"message","timestamp":"2026-06-01T00:51:22.161Z","message":{"role":"assistant","usage":{"input":10,"output":1,"total":11},"content":[{"type":"thinking","thinking":"调用工具中"},{"type":"toolCall","name":"session_status"}],"stopReason":"toolUse"}}',
+    ].join("\n");
+    expect(getLastAssistantStopReason(jsonl)).toBe("toolUse");
+    expect(countCompleteConversationTurns(jsonl)).toBe(1);
+    expect(isTranscriptReadyForSync(jsonl)).toBe(false);
+  });
+
+  it("is ready when last assistant finishes with stop", () => {
+    const jsonl = [
+      '{"type":"message","timestamp":"2026-06-01T00:51:19.349Z","message":{"role":"user","content":"问"}}',
+      '{"type":"message","timestamp":"2026-06-01T00:51:22.161Z","message":{"role":"assistant","usage":{"input":10,"output":1,"total":11},"content":[{"type":"toolCall","name":"session_status"}],"stopReason":"toolUse"}}',
+      '{"type":"message","timestamp":"2026-06-01T00:51:24.667Z","message":{"role":"assistant","model":"qwen3.5-plus","usage":{"input":100,"output":50,"total":150},"content":[{"type":"text","text":"答"}],"stopReason":"stop"}}',
+    ].join("\n");
+    expect(isTranscriptReadyForSync(jsonl)).toBe(true);
+  });
+
+  it("merges consecutive assistant lines and uses last usage for tokens", () => {
+    const jsonl = [
+      '{"type":"message","timestamp":"2026-05-29T08:00:00.000Z","message":{"role":"user","content":"你好"}}',
+      '{"type":"message","timestamp":"2026-05-29T08:00:01.000Z","message":{"role":"assistant","model":"qwen3.5-plus","usage":{"input":10,"output":5,"total":15},"content":[{"type":"thinking","thinking":"思考中"},{"type":"text","text":"第一段"}]}}',
+      '{"type":"message","timestamp":"2026-05-29T08:00:02.000Z","message":{"role":"assistant","model":"qwen3.5-plus","usage":{"input":100,"output":50,"total":150},"content":[{"type":"text","text":"最终回答"}]}}',
+    ].join("\n");
+
+    const messages = extractSyncableTurnsFromJsonl(jsonl, {
+      sessionId: "sess-merge",
+      runId: "sess-merge:turn:1",
+    });
+
+    expect(messages).toHaveLength(2);
+    expect(messages[1].prompt_tokens).toBe(100);
+    expect(messages[1].completion_tokens).toBe(50);
+    expect(messages[1].content).toContain("第一段");
+    expect(messages[1].content).toContain("最终回答");
+    expect(messages[1].content).toContain("思考中");
   });
 });

@@ -79,7 +79,7 @@ export function resolveTelemetryConfig(raw: unknown): TelemetryPluginConfig {
     enabled: asBool(root.enabled, true),
     ingestUrl: asStr(root.ingestUrl),
     conversationBatchUrl: asStr(root.conversationBatchUrl),
-    conversationSyncEnabled: asBool(root.conversationSyncEnabled, true),
+    conversationSyncEnabled: asBool(root.conversationSyncEnabled, false),
     timeoutMs: asNum(root.timeoutMs, 5000, 500, 30_000),
     ssoAuthPath: asStr(root.ssoAuthPath) ?? "~/.stoclaw/openclaw/sso-auth.json",
     hooks: mergeHooks(root.hooks),

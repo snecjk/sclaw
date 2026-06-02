@@ -17,8 +17,11 @@ type SsoAuthInfo = {
   stoToken?: string;
 };
 
-/** agent_end 后按该时间表重试读取 transcript（相对 agent_end 的毫秒偏移）。 */
-export const CONVERSATION_SYNC_RETRY_SCHEDULE_MS = [0, 3000, 10000, 30000] as const;
+/**
+ * agent_end 后按该时间表重试读取 transcript（相对 agent_end 的毫秒偏移）。
+ * 不从 0s 开始：agent_end 触发时 transcript 往往尚未写入 assistant 行。
+ */
+export const CONVERSATION_SYNC_RETRY_SCHEDULE_MS = [3000, 10000, 30000, 60000] as const;
 
 function resolveTildePath(filePath: string): string {
   if (filePath.startsWith("~/") || filePath.startsWith("~\\")) {
@@ -108,8 +111,14 @@ export async function postConversationBatchMessages(params: {
       );
       return false;
     }
+    const assistant = params.messages.filter((item) => item.role === "assistant");
+    const promptSum = assistant.reduce((sum, item) => sum + (item.prompt_tokens || 0), 0);
+    const completionSum = assistant.reduce(
+      (sum, item) => sum + (item.completion_tokens || 0),
+      0,
+    );
     params.info?.(
-      `[sto-agent-telemetry] conversation batch ok messages=${params.messages.length} session=${params.sessionId} run=${params.runId} batch=${body.batch_id}`,
+      `[sto-agent-telemetry] conversation batch ok messages=${params.messages.length} session=${params.sessionId} run=${params.runId} batch=${body.batch_id} prompt=${promptSum} completion=${completionSum}`,
     );
     return true;
   } catch (err) {
@@ -161,8 +170,8 @@ export async function postConversationBatch(params: {
 }
 
 /**
- * agent_end 后延迟重试**本地读取** transcript（0 / 3s / 10s / 30s）。
- * 仅当判定「已有完整问答且末尾无悬空提问」时 **POST 一次**并结束重试；
+ * agent_end 后延迟重试**本地读取** transcript（3s / 10s / 30s / 60s）。
+ * 仅当判定「至少有一轮完整问答」时 **POST 一次**并结束重试（末尾未答提问不上报）；
  * 若 30s 内始终不完整则不上报。
  */
 export async function postConversationBatchWithRetries(params: {

@@ -18,11 +18,7 @@ import { useAgentsStore } from '@/stores/agents';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { buildProviderListItems } from '@/lib/provider-accounts';
-import {
-  buildChatModelOptions,
-  getWorkspaceDefaultModelId,
-  resolveChatToolbarModelId,
-} from '@/lib/chat-model-options';
+import { buildChatModelOptions } from '@/lib/chat-model-options';
 import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 import { hostApiFetch } from '@/lib/host-api';
@@ -50,11 +46,9 @@ export function ChatToolbar() {
   const showThinking = useChatStore((s) => s.showThinking);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
-  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
-  const sessions = useChatStore((s) => s.sessions);
-  const loadSessions = useChatStore((s) => s.loadSessions);
   const switchToAgentMainSession = useChatStore((s) => s.switchToAgentMainSession);
   const agents = useAgentsStore((s) => s.agents);
+  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
   const { t } = useTranslation('chat');
@@ -73,11 +67,6 @@ export function ChatToolbar() {
   const currentAgent = useMemo(
     () => (agents ?? []).find((a) => a.id === currentAgentId),
     [agents, currentAgentId],
-  );
-
-  const currentSession = useMemo(
-    () => sessions.find((s) => s.key === currentSessionKey),
-    [sessions, currentSessionKey],
   );
 
   const agentRows = useMemo(() => {
@@ -115,39 +104,14 @@ export function ChatToolbar() {
   );
   const modelOptions = useMemo(() => buildChatModelOptions(providerItems), [providerItems]);
 
-  const workspaceDefaultModelId = useMemo(
-    () => getWorkspaceDefaultModelId(accounts, defaultAccountId),
-    [accounts, defaultAccountId],
-  );
-
-  const stoCatalogModelIds = useMemo(() => {
-    const sto = accounts.find((a) => a.vendorId === 'sto');
-    return (sto?.metadata?.customModels as string[] | undefined) ?? [];
-  }, [accounts]);
-
-  // session override → agent default → workspace default (Settings 页默认模型)
+  // Sync selectedModelId from the agent store whenever the current agent or its model changes.
+  // Guard: don't override while a save is in-flight (optimistic update already applied).
   useEffect(() => {
-    if (modelSaving) return;
-    const resolved = resolveChatToolbarModelId({
-      sessionModel: currentSession?.model,
-      agentModelDisplay: currentAgent?.modelDisplay,
-      agentInheritedModel: currentAgent?.inheritedModel,
-      workspaceDefaultModel: workspaceDefaultModelId,
-      stoCatalogModelIds,
-    });
-    if (resolved) {
-      setSelectedModelId(resolved);
+    if (!modelSaving && currentAgent?.modelDisplay) {
+      setSelectedModelId(currentAgent.modelDisplay);
     }
-  }, [
-    modelSaving,
-    currentSessionKey,
-    currentSession?.model,
-    currentAgentId,
-    currentAgent?.modelDisplay,
-    currentAgent?.inheritedModel,
-    workspaceDefaultModelId,
-    stoCatalogModelIds,
-  ]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentAgentId, currentAgent?.modelDisplay]);
 
   const selectedModel = useMemo(
     () => modelOptions.find((o) => o.modelId === selectedModelId),
@@ -155,31 +119,21 @@ export function ChatToolbar() {
   );
 
   const handleModelSwitch = async (modelId: string) => {
-    if (!currentSessionKey || modelId === selectedModelId) return;
+    if (!currentAgentId || modelId === selectedModelId) return;
     const opt = modelOptions.find((o) => o.modelId === modelId);
-    setSelectedModelId(modelId);
+    setSelectedModelId(modelId); // optimistic
     setModelSaving(true);
     try {
-      await hostApiFetch('/api/sessions/model', {
-        method: 'POST',
-        body: JSON.stringify({
-          sessionKey: currentSessionKey,
-          model: modelId,
-          accountId: opt?.accountId,
-          agentId: currentAgentId || undefined,
-        }),
+      await hostApiFetch(`/api/agents/${encodeURIComponent(currentAgentId)}/model`, {
+        method: 'PUT',
+        body: JSON.stringify({ model: modelId, accountId: opt?.accountId }),
       });
-      void loadSessions();
+      // Refresh agents store so other pages (e.g. Agent detail model tab) reflect the change
+      void fetchAgents();
     } catch (err) {
-      toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));
-      const resolved = resolveChatToolbarModelId({
-        sessionModel: currentSession?.model,
-        agentModelDisplay: currentAgent?.modelDisplay,
-        agentInheritedModel: currentAgent?.inheritedModel,
-        workspaceDefaultModel: workspaceDefaultModelId,
-        stoCatalogModelIds,
-      });
-      if (resolved) setSelectedModelId(resolved);
+      toast.error(`切换模型失败: ${String(err)}`);
+      // Revert to agent's stored model on failure
+      if (currentAgent?.modelDisplay) setSelectedModelId(currentAgent.modelDisplay);
     } finally {
       setModelSaving(false);
     }

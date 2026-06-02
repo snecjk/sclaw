@@ -50,7 +50,7 @@ describe("postConversationBatchWithRetries", () => {
   });
 
   it("posts once only after transcript becomes ready", async () => {
-    const schedule = [0, 100, 200] as const;
+    const schedule = [100, 200, 300] as const;
     isReadyMock.mockReturnValueOnce(false).mockReturnValueOnce(false).mockReturnValueOnce(true);
     extractSyncableMock.mockReturnValue([
       {
@@ -79,7 +79,7 @@ describe("postConversationBatchWithRetries", () => {
       info: vi.fn(),
     });
 
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(100);
     await vi.advanceTimersByTimeAsync(100);
     await vi.advanceTimersByTimeAsync(100);
     await promise;
@@ -88,7 +88,7 @@ describe("postConversationBatchWithRetries", () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("exports default retry schedule 0/3s/10s/30s", () => {
-    expect(CONVERSATION_SYNC_RETRY_SCHEDULE_MS).toEqual([0, 3000, 10000, 30000]);
+  it("exports default retry schedule 3s/10s/30s/60s", () => {
+    expect(CONVERSATION_SYNC_RETRY_SCHEDULE_MS).toEqual([3000, 10000, 30000, 60000]);
   });
 });

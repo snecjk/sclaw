@@ -22,9 +22,32 @@ interface TranscriptUsageShape {
   input?: number;
   output?: number;
   total?: number;
+  cacheRead?: number;
+  cache_read?: number;
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}
+
+function parseUsageTokens(usage?: TranscriptUsageShape): {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+} {
+  const promptTokens =
+    usage?.input ?? usage?.promptTokens ?? usage?.prompt_tokens ?? 0;
+  const completionTokens =
+    usage?.output ?? usage?.completionTokens ?? usage?.completion_tokens ?? 0;
+  const cacheRead = usage?.cacheRead ?? usage?.cache_read ?? 0;
+  const totalTokens =
+    usage?.total ??
+    usage?.totalTokens ??
+    usage?.total_tokens ??
+    promptTokens + completionTokens + cacheRead;
+  return { promptTokens, completionTokens, totalTokens };
 }
 
 interface TranscriptLineShape {
@@ -46,9 +69,23 @@ function normalizeMessageContent(value: unknown): string | undefined {
     return trimmed.length > 0 ? trimmed : undefined;
   }
   if (Array.isArray(value)) {
-    const chunks = value
-      .map((item) => normalizeMessageContent(item))
-      .filter((item): item is string => Boolean(item));
+    const chunks: string[] = [];
+    for (const item of value) {
+      if (item && typeof item === "object") {
+        const block = item as Record<string, unknown>;
+        if (block.type === "thinking" && typeof block.thinking === "string") {
+          const thinking = block.thinking.trim();
+          if (thinking.length > 0) {
+            chunks.push(thinking);
+          }
+          continue;
+        }
+      }
+      const normalized = normalizeMessageContent(item);
+      if (normalized) {
+        chunks.push(normalized);
+      }
+    }
     return chunks.length > 0 ? chunks.join("\n\n") : undefined;
   }
   if (value && typeof value === "object") {
@@ -101,11 +138,7 @@ function parseLine(raw: string): ParsedLine | null {
     return null;
   }
 
-  const usage = message.usage;
-  const promptTokens = usage?.input ?? usage?.promptTokens ?? 0;
-  const completionTokens = usage?.output ?? usage?.completionTokens ?? 0;
-  const totalTokens =
-    usage?.total ?? usage?.totalTokens ?? promptTokens + completionTokens;
+  const { promptTokens, completionTokens, totalTokens } = parseUsageTokens(message.usage);
 
   const content = normalizeMessageContent(message.content);
   if (!content) {
@@ -128,26 +161,55 @@ type ConversationTurn = {
   assistant?: ParsedLine;
 };
 
-/** 按时间顺序将 user 与紧随其后的 assistant 配成多轮问答。 */
+/** 将同一轮内连续的 assistant 合并为一条（Token 取最后一次模型调用的 usage）。 */
+function mergeAssistantLines(lines: ParsedLine[]): ParsedLine | undefined {
+  if (lines.length === 0) {
+    return undefined;
+  }
+  const last = lines[lines.length - 1];
+  const content = lines
+    .map((line) => line.content?.trim())
+    .filter((text): text is string => Boolean(text))
+    .join("\n\n");
+  return {
+    ...last,
+    content: content || last.content,
+  };
+}
+
+/** 按时间顺序将 user 与紧随其后的 assistant（可多条）配成多轮问答。 */
 export function pairTurnsFromParsed(parsed: ParsedLine[]): ConversationTurn[] {
   const turns: ConversationTurn[] = [];
   let pendingUser: ParsedLine | undefined;
+  let pendingAssistants: ParsedLine[] = [];
+
+  const flushAssistants = () => {
+    const assistant = mergeAssistantLines(pendingAssistants);
+    pendingAssistants = [];
+    if (!assistant && !pendingUser) {
+      return;
+    }
+    turns.push({ user: pendingUser, assistant });
+    pendingUser = undefined;
+  };
 
   for (const item of parsed) {
     if (item.role === "user") {
+      flushAssistants();
       pendingUser = item;
       continue;
     }
     if (item.role === "assistant") {
-      turns.push({ user: pendingUser, assistant: item });
-      pendingUser = undefined;
+      pendingAssistants.push(item);
       continue;
     }
     if (item.role === "system") {
+      flushAssistants();
       pendingUser = undefined;
     }
   }
 
+  flushAssistants();
   if (pendingUser) {
     turns.push({ user: pendingUser });
   }
@@ -194,9 +256,34 @@ export function hasPendingUserTurn(content: string): boolean {
   return Boolean(last.user && !last.assistant);
 }
 
-/** transcript 是否满足「可上报」：至少一轮完整问答，且末尾无悬空用户提问。 */
+/** 最后一条 assistant 的 stopReason（判断是否仍在工具调用阶段）。 */
+export function getLastAssistantStopReason(content: string): string | undefined {
+  const lines = content.split(/\r?\n/).filter(Boolean);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    try {
+      const parsed = JSON.parse(lines[index]!) as TranscriptLineShape;
+      if (parsed.message?.role === "assistant") {
+        const stopReason = (parsed.message as { stopReason?: string }).stopReason;
+        return typeof stopReason === "string" ? stopReason : undefined;
+      }
+    } catch {
+      // skip malformed lines
+    }
+  }
+  return undefined;
+}
+
+/**
+ * transcript 是否满足「可上报」：
+ * - 至少一轮完整问答；
+ * - 最后一条 assistant 已结束工具调用（stopReason !== toolUse）。
+ * 末尾悬空 user 由 extractSyncableTurnsFromJsonl 排除。
+ */
 export function isTranscriptReadyForSync(content: string): boolean {
-  return countCompleteConversationTurns(content) > 0 && !hasPendingUserTurn(content);
+  if (countCompleteConversationTurns(content) === 0) {
+    return false;
+  }
+  return getLastAssistantStopReason(content) !== "toolUse";
 }
 
 /**

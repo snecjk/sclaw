@@ -10,10 +10,12 @@ import { createTelemetryPipeline } from "./pipeline.js";
 import {
   clearSessionRunCache,
   getCachedRunId,
+  queuePendingAgentRunEnd,
   queuePendingModelCall,
   queuePendingModelEnded,
   rememberRunId,
   shiftPendingModelCall,
+  takePendingAgentRunEnd,
   takePendingModelCalls,
   takePendingModelEnded,
 } from "./run-id-cache.js";
@@ -22,6 +24,62 @@ import { resolveLastTurnRunIdForSync } from "./transcript-sync.js";
 import type { TelemetryEnvelope } from "./types.js";
 
 const TAG = "sto-agent-telemetry";
+
+/** 对话同步占位 runId，不能用于行为遥测 correlation */
+function isSyntheticTelemetryRunId(runId: string): boolean {
+  return runId.includes(":turn:") || runId.endsWith(":agent_end");
+}
+
+function resolveTelemetryRunId(params: {
+  sessionKey?: string;
+  sessionId?: string;
+  ctxRunId?: string;
+  eventRunId?: string;
+}): string | undefined {
+  const candidates = [
+    getCachedRunId(params.sessionKey),
+    getCachedRunId(params.sessionId),
+    params.ctxRunId,
+    params.eventRunId,
+  ];
+  for (const candidate of candidates) {
+    const id = typeof candidate === "string" ? candidate.trim() : "";
+    if (id && !isSyntheticTelemetryRunId(id)) {
+      return id;
+    }
+  }
+  return undefined;
+}
+
+function rememberRunIdForSession(
+  sessionKey: string | undefined,
+  sessionId: string | undefined,
+  runId: string | undefined,
+): void {
+  rememberRunId(sessionKey, runId);
+  rememberRunId(sessionId, runId);
+}
+
+function sessionCacheKey(sessionKey: string | undefined, sessionId: string): string {
+  return sessionKey?.trim() || sessionId;
+}
+
+function pickRunIdFromAgentEndEvent(event: unknown): string | undefined {
+  if (!event || typeof event !== "object") {
+    return undefined;
+  }
+  const record = event as Record<string, unknown>;
+  for (const key of ["runId", "run_id"]) {
+    const value = record[key];
+    if (typeof value === "string") {
+      const id = value.trim();
+      if (id && !isSyntheticTelemetryRunId(id)) {
+        return id;
+      }
+    }
+  }
+  return undefined;
+}
 
 function slimAgentCtx(ctx: {
   agentId?: string;
@@ -234,11 +292,18 @@ function handleModelCallEnded(
   if (!sessionId) return;
 
   const sessionKey = ctx.sessionKey ?? event.sessionKey;
-  const runId = ctx.runId ?? event.runId ?? getCachedRunId(sessionKey);
+  const runId = resolveTelemetryRunId({
+    sessionKey,
+    sessionId,
+    ctxRunId: ctx.runId,
+    eventRunId: event.runId,
+  });
 
-  if (runId && sessionKey) {
-    rememberRunId(sessionKey, runId);
-    pairPendingModelStart(pipeline, sessionKey, runId);
+  if (runId) {
+    rememberRunIdForSession(sessionKey, sessionId, runId);
+    if (sessionKey) {
+      pairPendingModelStart(pipeline, sessionKey, runId);
+    }
   }
 
   if (!runId) {
@@ -266,6 +331,15 @@ function handleModelCallEnded(
     },
     nativeHook,
   );
+
+  const cacheKey = sessionCacheKey(sessionKey, sessionId);
+  if (sessionKey) {
+    flushPendingModelCalls(pipeline, sessionKey, runId);
+    flushPendingModelEnded(pipeline, sessionKey, runId);
+  }
+  if (flushPendingAgentRunEnd(pipeline, cacheKey, runId)) {
+    clearSessionRunCache(sessionKey, sessionId);
+  }
 }
 
 function flushPendingModelEnded(
@@ -278,14 +352,54 @@ function flushPendingModelEnded(
   }
 }
 
+function emitAgentRunEndEvent(
+  pipeline: ReturnType<typeof createTelemetryPipeline>,
+  runId: string,
+  pending: {
+    sessionId: string;
+    sessionKey?: string;
+    event: unknown;
+    ctx: {
+      agentId?: string;
+      sessionKey?: string;
+      sessionId?: string;
+      channelId?: string;
+    };
+  },
+): void {
+  const correlation: TelemetryEnvelope["correlation"] = {
+    agentId: pending.ctx.agentId,
+    sessionKey: pending.ctx.sessionKey ?? pending.sessionKey,
+    sessionId: pending.sessionId,
+    runId,
+    channelId: pending.ctx.channelId,
+  };
+  pipeline.emit({
+    nativeHook: "agent_end",
+    correlation,
+    data: { event: pending.event, agentContext: slimAgentCtx(pending.ctx) },
+  });
+}
+
+function flushPendingAgentRunEnd(
+  pipeline: ReturnType<typeof createTelemetryPipeline>,
+  cacheKey: string | undefined,
+  runId: string,
+): boolean {
+  const pending = takePendingAgentRunEnd(cacheKey);
+  if (!pending) return false;
+  emitAgentRunEndEvent(pipeline, runId, pending);
+  return true;
+}
+
 function bindRunIdFromToolHook(
   pipeline: ReturnType<typeof createTelemetryPipeline>,
-  ctx: { sessionKey?: string; runId?: string },
+  ctx: { sessionKey?: string; sessionId?: string; runId?: string },
 ): void {
   const sessionKey = ctx.sessionKey;
   const runId = ctx.runId;
   if (!sessionKey || !runId) return;
-  rememberRunId(sessionKey, runId);
+  rememberRunIdForSession(sessionKey, ctx.sessionId, runId);
   flushPendingModelCalls(pipeline, sessionKey, runId);
   flushPendingModelEnded(pipeline, sessionKey, runId);
 }
@@ -405,9 +519,7 @@ export function registerAgentTelemetry(api: OpenClawPluginApi): void {
         getCachedRunId(sessionKey);
 
       if (runId) {
-        if (sessionKey) {
-          rememberRunId(sessionKey, runId);
-        }
+        rememberRunIdForSession(sessionKey, sessionId, runId);
         emitModelCallStartedEvent(pipeline, runId, event, ctx);
         return;
       }
@@ -452,35 +564,46 @@ export function registerAgentTelemetry(api: OpenClawPluginApi): void {
           return;
         }
 
-        const explicitRunId =
-          ctx.runId ??
-          event.runId ??
-          getCachedRunId(ctx.sessionKey);
-        const runId = await resolveLastTurnRunIdForSync({
-          agentId: ctx.agentId,
+        const sessionKey = ctx.sessionKey ?? event.sessionKey;
+        const cacheKey = sessionCacheKey(sessionKey, sessionId);
+
+        const telemetryRunId = resolveTelemetryRunId({
+          sessionKey,
           sessionId,
-          sessionKey: ctx.sessionKey,
-          explicitRunId,
+          ctxRunId: ctx.runId,
+          eventRunId: event.runId ?? pickRunIdFromAgentEndEvent(event),
         });
 
-        flushPendingModelCalls(pipeline, ctx.sessionKey, runId);
-        flushPendingModelEnded(pipeline, ctx.sessionKey, runId);
-
-        const correlation: TelemetryEnvelope["correlation"] = {
-          agentId: ctx.agentId,
-          sessionKey: ctx.sessionKey,
+        queuePendingAgentRunEnd(cacheKey, {
           sessionId,
-          runId,
-          channelId: ctx.channelId,
-        };
+          sessionKey,
+          event,
+          ctx,
+        });
 
-        pipeline.emit({
-          nativeHook: "agent_end",
-          correlation,
-          data: { event, agentContext: slimAgentCtx(ctx) },
+        let agentEndFlushed = false;
+        if (telemetryRunId && sessionKey) {
+          flushPendingModelCalls(pipeline, sessionKey, telemetryRunId);
+          flushPendingModelEnded(pipeline, sessionKey, telemetryRunId);
+          agentEndFlushed = flushPendingAgentRunEnd(pipeline, cacheKey, telemetryRunId);
+        }
+
+        const syncRunId = await resolveLastTurnRunIdForSync({
+          agentId: ctx.agentId,
+          sessionId,
+          sessionKey,
+          explicitRunId:
+            telemetryRunId ??
+            ctx.runId ??
+            event.runId ??
+            getCachedRunId(sessionKey) ??
+            getCachedRunId(sessionId),
         });
 
         if (!cfg.conversationSyncEnabled || !cfg.ingestUrl) {
+          if (agentEndFlushed) {
+            clearSessionRunCache(sessionKey, sessionId);
+          }
           return;
         }
 
@@ -493,9 +616,9 @@ export function registerAgentTelemetry(api: OpenClawPluginApi): void {
           return;
         }
 
-        const syncAgentId = ctx.agentId ?? correlation.agentId;
-        const syncSessionKey = ctx.sessionKey ?? correlation.sessionKey;
-        const syncChannelId = ctx.channelId ?? correlation.channelId;
+        const syncAgentId = ctx.agentId ?? "main";
+        const syncSessionKey = sessionKey;
+        const syncChannelId = ctx.channelId;
 
         void postConversationBatchWithRetries({
           batchUrl,
@@ -505,14 +628,7 @@ export function registerAgentTelemetry(api: OpenClawPluginApi): void {
           sessionId,
           sessionKey: syncSessionKey,
           channelId: syncChannelId,
-          resolveRunId: () =>
-            resolveLastTurnRunIdForSync({
-              agentId: syncAgentId,
-              sessionId,
-              sessionKey: syncSessionKey,
-              explicitRunId:
-                ctx.runId ?? event.runId ?? getCachedRunId(syncSessionKey),
-            }),
+          resolveRunId: async () => syncRunId,
           warn: (msg) => api.logger.warn?.(msg),
           info: (msg) => api.logger.info?.(msg),
         }).catch((err) => {
@@ -521,7 +637,9 @@ export function registerAgentTelemetry(api: OpenClawPluginApi): void {
           );
         });
 
-        clearSessionRunCache(ctx.sessionKey);
+        if (agentEndFlushed) {
+          clearSessionRunCache(sessionKey, sessionId);
+        }
       })().catch((err) => {
         api.logger.warn?.(`[${TAG}] agent_end handler failed: ${String(err)}`);
       });

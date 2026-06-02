@@ -548,10 +548,6 @@ async function initialize(): Promise<void> {
       logger.warn('Failed to ensure long-output constraint for Main Agent:', error);
     }
 
-    await ensureAllBundledPluginsInstalledAsync().catch((error) => {
-      logger.warn('Failed to install/upgrade bundled plugins:', error);
-    });
-
     await autoInstallCliIfNeeded((installedPath) => {
       mainWindow?.webContents.send('openclaw:cli-installed', installedPath);
     }).then(() => {
@@ -645,12 +641,33 @@ async function initialize(): Promise<void> {
     heb.emit('channel:whatsapp-error', error);
   });
 
+  // Install bundled plugins before Gateway so the first agent run uses the latest mirror.
+  sendStartupProgress('Installing plugins...');
+  await ensureAllBundledPluginsInstalledAsync().catch((error) => {
+    logger.warn('Failed to install/upgrade bundled plugins:', error);
+  });
+
   // Start Gateway automatically (this seeds missing bootstrap files with full templates)
   const gatewayAutoStart = await getSetting('gatewayAutoStart');
   if (gatewayAutoStart) {
     try {
       sendStartupProgress('Starting Gateway...');
       await syncAllProviderAuthToRuntime();
+
+      try {
+        const { getAuthState, getStoToken } = await import('../utils/auth-store');
+        const { getStoModelSyncService } = await import('../services/providers/sto-model-sync');
+        const authState = await getAuthState();
+        const token = await getStoToken();
+        if (authState.isAuthenticated && token) {
+          const stoSync = getStoModelSyncService();
+          stoSync.setGatewayManager(gm);
+          stoSync.startPeriodicSync();
+        }
+      } catch (err) {
+        logger.warn('STO periodic sync startup check failed:', err);
+      }
+
       logger.debug('Auto-starting Gateway...');
       await gm.start();
       logger.info('Gateway auto-start succeeded');
@@ -669,42 +686,6 @@ async function initialize(): Promise<void> {
   void ensureClawXContext().catch((error) => {
     logger.warn('Failed to merge StoClaw context into workspace:', error);
   });
-
-  // Start STO model sync if user is already authenticated
-  void (async () => {
-    try {
-      const { getAuthState, getStoToken } = await import('../utils/auth-store');
-      const { getStoModelSyncService } = await import('../services/providers/sto-model-sync');
-      const authState = await getAuthState();
-      const token = await getStoToken();
-      if (authState.isAuthenticated && token) {
-        const stoSync = getStoModelSyncService();
-        stoSync.setGatewayManager(gm);
-        void stoSync.syncModels().catch((err) =>
-          logger.warn('Startup STO model sync failed:', err),
-        );
-        stoSync.startPeriodicSync();
-
-        // Auto-create department biz agents on startup (fire-and-forget)
-        const { getStoBizAgentSyncService } = await import('../services/sto-biz-agent-sync');
-        const bizAgentSync = getStoBizAgentSyncService();
-        bizAgentSync.setGatewayManager(gm);
-        void bizAgentSync.syncAgents().catch((err) =>
-          logger.warn('Startup STO biz-agent sync failed:', err),
-        );
-
-        const { syncStoDynamicRoutePluginToOpenClaw, syncStoAgentTelemetryPluginToOpenClaw } = await import('../utils/openclaw-auth');
-        void syncStoDynamicRoutePluginToOpenClaw().catch((err) =>
-          logger.warn('Startup STO dynamic route plugin config failed:', err),
-        );
-        void syncStoAgentTelemetryPluginToOpenClaw().catch((err) =>
-          logger.warn('Startup STO agent telemetry plugin config failed:', err),
-        );
-      }
-    } catch (err) {
-      logger.warn('STO model sync startup check failed:', err);
-    }
-  })();
 }
 
 if (gotTheLock) {

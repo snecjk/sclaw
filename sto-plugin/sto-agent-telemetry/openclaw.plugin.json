@@ -24,8 +24,8 @@
       },
       "conversationSyncEnabled": {
         "type": "boolean",
-        "default": true,
-        "description": "agent_end 后从 transcript JSONL 同步一问一答"
+        "default": false,
+        "description": "agent_end 后从 transcript JSONL 同步一问一答（默认关闭，仅上遥测时可保持 false）"
       },
       "timeoutMs": {
         "type": "number",

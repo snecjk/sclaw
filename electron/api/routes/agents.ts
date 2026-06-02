@@ -10,6 +10,7 @@ import {
   removeAgentWorkspaceDirectory,
   resolveAccountIdForAgent,
   updateAgentName,
+  updateAgentModel,
   getAgentWorkspacePath,
 } from '../../utils/agent-config';
 
@@ -20,7 +21,8 @@ const ALLOWED_WORKSPACE_FILES = new Set([
 ]);
 import { deleteChannelAccountConfig } from '../../utils/channel-config';
 import { syncAllProviderAuthToRuntime } from '../../services/providers/provider-runtime-sync';
-import { applyAgentDefaultModel, qualifyChatModelRef } from '../../utils/openclaw-model';
+import { getOpenClawProviderKey } from '../../services/providers/provider-runtime-sync';
+import { getProviderAccount } from '../../services/providers/provider-store';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -61,7 +63,7 @@ export async function restartGatewayForAgentDeletion(ctx: HostApiContext): Promi
     if (pid) {
       try {
         if (process.platform === 'win32') {
-          await execAsync(`taskkill /F /PID ${pid} /T`, { windowsHide: true });
+          await execAsync(`taskkill /F /PID ${pid} /T`);
         } else {
           process.kill(pid, 'SIGTERM');
           // Give it a moment to die
@@ -89,7 +91,7 @@ export async function restartGatewayForAgentDeletion(ctx: HostApiContext): Promi
           }
         } else if (process.platform === 'win32') {
           // Find PID listening on the port
-          const { stdout } = await execAsync(`netstat -ano | findstr :${port}`, { windowsHide: true });
+          const { stdout } = await execAsync(`netstat -ano | findstr :${port}`);
           const lines = stdout.trim().split('\n');
           const pids = new Set<string>();
           for (const line of lines) {
@@ -99,7 +101,7 @@ export async function restartGatewayForAgentDeletion(ctx: HostApiContext): Promi
             }
           }
           for (const p of pids) {
-            try { await execAsync(`taskkill /F /PID ${p} /T`, { windowsHide: true }); } catch { /* ignore */ }
+            try { await execAsync(`taskkill /F /PID ${p} /T`); } catch { /* ignore */ }
           }
         }
       } catch {
@@ -318,8 +320,20 @@ export async function handleAgentRoutes(
           return true;
         }
 
-        const qualifiedModel = await qualifyChatModelRef(rawModel, body.accountId);
-        const snapshot = await applyAgentDefaultModel(ctx, agentId, qualifiedModel);
+        // Normalize to qualified ref (e.g. "sto/qwen3.5-plus") so OpenClaw Gateway
+        // resolves the model to the correct provider instead of guessing.
+        let qualifiedModel = rawModel;
+        if (body.accountId) {
+          const account = await getProviderAccount(body.accountId);
+          if (account) {
+            const providerKey = getOpenClawProviderKey(account.vendorId, account.id);
+            if (!rawModel.startsWith(`${providerKey}/`)) {
+              qualifiedModel = `${providerKey}/${rawModel}`;
+            }
+          }
+        }
+
+        const snapshot = await updateAgentModel(agentId, qualifiedModel);
         sendJson(res, 200, { success: true, snapshot });
       } catch (err) {
         sendJson(res, 500, { success: false, error: String(err) });
