@@ -47,28 +47,6 @@ export async function handleSkillPlazaRoutes(
     return true;
   }
 
-  // GET /api/skill-plaza/mine
-  if (url.pathname === '/api/skill-plaza/mine' && req.method === 'GET') {
-    try {
-      const params = {
-        q: url.searchParams.get('q') || undefined,
-        category: url.searchParams.get('category') || undefined,
-        sort: (url.searchParams.get('sort') as 'hot' | 'recent') || undefined,
-        page: url.searchParams.has('page') ? Number(url.searchParams.get('page')) : undefined,
-        pageSize: url.searchParams.has('pageSize') ? Number(url.searchParams.get('pageSize')) : undefined,
-      };
-      const data = await ctx.skillPlazaService.getMySkills(params);
-      sendJson(res, 200, { success: true, data });
-    } catch (error) {
-      sendJson(res, 500, {
-        success: false,
-        error: String(error),
-        code: 'MINE_LIST_FAILED',
-      });
-    }
-    return true;
-  }
-
   // GET /api/skill-plaza/local-skills
   if (url.pathname === '/api/skill-plaza/local-skills' && req.method === 'GET') {
     try {
@@ -114,6 +92,12 @@ export async function handleSkillPlazaRoutes(
         return true;
       }
       await ctx.stoSkillService.install({ slug });
+      // Best-effort: record install on backend (fire-and-forget)
+      try {
+        await ctx.skillPlazaService.recordInstall(slug);
+      } catch (err) {
+        logger.warn(`[skill-plaza/install] Failed to record install for ${slug}:`, err);
+      }
       sendJson(res, 200, { success: true });
     } catch (error) {
       const message = String(error);

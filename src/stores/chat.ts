@@ -4,6 +4,7 @@
  * Communicates with OpenClaw Gateway via renderer WebSocket RPC.
  */
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
@@ -1012,7 +1013,9 @@ function hasAssistantTextOutput(message: RawMessage | undefined): boolean {
 
 // ── Store ────────────────────────────────────────────────────────
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>()(
+  persist(
+    (set, get) => ({
   messages: [],
   loading: false,
   error: null,
@@ -2102,4 +2105,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sessionLabels: { ...s.sessionLabels, [key]: trimmed },
     }));
   },
+}), {
+  name: 'stoclaw-chat-session-labels',
+  partialize: (state) => ({ sessionLabels: state.sessionLabels }),
 }));

@@ -25,7 +25,7 @@ export function SkillPlazaPage() {
 
     fetchCategories,
     fetchPlazaSkills,
-    fetchMySkills,
+    fetchLocalSkills,
     uninstallSkill,
   } = useSkillPlazaStore();
 
@@ -42,9 +42,9 @@ export function SkillPlazaPage() {
   // Tab switch data loading
   useEffect(() => {
     if (activeTab === 'mine') {
-      fetchMySkills();
+      fetchLocalSkills();
     }
-  }, [activeTab, fetchMySkills]);
+  }, [activeTab, fetchLocalSkills]);
 
   const skills = activeTab === 'all'
     ? plazaSkills
