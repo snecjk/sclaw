@@ -51,7 +51,7 @@ export function TaskHero({ searchQuery, onSearchChange, sortValue, onSortChange,
               type="search"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="h-9 pl-9 pr-3 text-[13px] rounded-lg border border-border bg-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary w-48 sm:w-56"
+              className="h-9 pl-9 pr-3 text-[13px] rounded-lg border border-border bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary w-48 sm:w-56"
               placeholder="搜索任务名称"
               autoComplete="off"
             />
@@ -63,7 +63,7 @@ export function TaskHero({ searchQuery, onSearchChange, sortValue, onSortChange,
             <button
               type="button"
               onClick={() => setSortOpen(!sortOpen)}
-              className="flex items-center gap-2 h-9 px-3 text-[13px] rounded-lg border border-border bg-white text-foreground hover:bg-muted/50 transition-colors"
+              className="flex items-center gap-2 h-9 px-3 text-[13px] rounded-lg border border-border bg-background text-foreground hover:bg-muted/50 transition-colors"
               aria-label="排序方式"
               aria-haspopup="listbox"
               aria-expanded={sortOpen}
@@ -75,7 +75,7 @@ export function TaskHero({ searchQuery, onSearchChange, sortValue, onSortChange,
               <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", sortOpen && "rotate-180")} />
             </button>
             {sortOpen && (
-              <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-border rounded-lg shadow-lg py-1 z-50">
+              <div className="absolute right-0 top-full mt-1 w-48 bg-background border border-border rounded-lg shadow-lg py-1 z-50">
                 {SORT_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
@@ -101,7 +101,7 @@ export function TaskHero({ searchQuery, onSearchChange, sortValue, onSortChange,
           <button
             type="button"
             onClick={onCreate}
-            className="flex items-center gap-1.5 h-9 px-4 text-[13px] font-medium rounded-lg bg-foreground text-white hover:bg-foreground/90 transition-colors"
+            className="flex items-center gap-1.5 h-9 px-4 text-[13px] font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
           >
             <Plus className="h-4 w-4" />
             新建定时任务

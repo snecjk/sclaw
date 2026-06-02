@@ -63,7 +63,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
           className={cn(
             'fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
             'w-full max-w-[440px] max-h-[85vh]',
-            'bg-white rounded-2xl shadow-2xl',
+            'bg-background rounded-2xl shadow-2xl',
             'flex flex-col overflow-hidden',
             'data-[state=open]:animate-in data-[state=closed]:animate-out',
             'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
@@ -80,14 +80,14 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
               <Dialog.Close asChild>
                 <button
                   onClick={onClose}
-                  className="absolute right-4 top-4 h-7 w-7 inline-flex items-center justify-center rounded-full bg-[#f3f4f6] text-[#9ca3af] hover:text-[#6b7280] transition-colors focus:outline-none focus-visible:ring-0 focus-visible:outline-none"
+                  className="absolute right-4 top-4 h-7 w-7 inline-flex items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus-visible:ring-0 focus-visible:outline-none"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
               </Dialog.Close>
 
               <div className="flex items-start gap-3 pr-8">
-                <div className="relative w-10 h-10 rounded-lg flex items-center justify-center bg-white flex-shrink-0 border border-black/[0.06]"
+                <div className="relative w-10 h-10 rounded-lg flex items-center justify-center bg-background flex-shrink-0 border border-border"
                   style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}>
                   {renderIcon()}
                 </div>
@@ -168,11 +168,11 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
           </div>
 
           {/* CTA */}
-          <div className="p-4 bg-white">
+          <div className="p-4 bg-background">
             {skill.installed || skill.source === 'mine' ? (
               <button
                 onClick={handleUse}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-black hover:bg-black/90 transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 transition-colors"
               >
                 <Play className="h-4 w-4" />
                 {t('plaza.action.useNow', { defaultValue: '立即使用' })}
@@ -181,7 +181,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
               <button
                 onClick={handleInstall}
                 disabled={isInstalling}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-black hover:bg-black/90 transition-colors disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
                 {isInstalling ? (
                   <span className="animate-spin h-4 w-4 border-2 border-white/30 border-t-white rounded-full" />

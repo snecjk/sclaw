@@ -62,7 +62,7 @@ export function TaskEmptyState({ searchQuery, onCreate, onRecommendAdd }: TaskEm
         <button
           type="button"
           onClick={onCreate}
-          className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-medium rounded-lg bg-foreground text-white hover:bg-foreground/90 transition-colors"
+          className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
         >
           <Plus className="h-4 w-4" />
           新建定时任务
@@ -76,7 +76,7 @@ export function TaskEmptyState({ searchQuery, onCreate, onRecommendAdd }: TaskEm
           {RECOMMEND_TASKS.map((task, i) => (
             <article
               key={i}
-              className="flex flex-col rounded-xl border border-border bg-white p-4 shadow-sm hover:shadow-md hover:border-primary/30 transition-all"
+              className="flex flex-col rounded-xl border border-border bg-background p-4 shadow-sm hover:shadow-md hover:border-primary/30 transition-all"
             >
               <div className="flex items-start gap-2.5 mb-2">
                 <Clock className="h-[18px] w-[18px] text-primary shrink-0 mt-0.5" strokeWidth={1.75} />
@@ -90,7 +90,7 @@ export function TaskEmptyState({ searchQuery, onCreate, onRecommendAdd }: TaskEm
                 <button
                   type="button"
                   onClick={() => onRecommendAdd(task)}
-                  className="text-[12.5px] px-3 py-1.5 rounded-lg border border-border bg-white text-foreground hover:border-primary hover:text-primary transition-colors"
+                  className="text-[12.5px] px-3 py-1.5 rounded-lg border border-border bg-background text-foreground hover:border-primary hover:text-primary transition-colors"
                 >
                   添加
                 </button>
