@@ -18,6 +18,7 @@ export function SkillPlazaPage() {
   const {
     activeTab,
     activeCategory,
+    searchQuery,
     plazaSkills,
     mySkills,
     loading,
@@ -46,11 +47,19 @@ export function SkillPlazaPage() {
     }
   }, [activeTab, fetchLocalSkills]);
 
-  const skills = activeTab === 'all'
+  const rawSkills = activeTab === 'all'
     ? plazaSkills
     : activeCategory
       ? mySkills.filter((s) => s.categoryCode === activeCategory)
       : mySkills;
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const skills = normalizedQuery
+    ? rawSkills.filter((s) =>
+        s.title.toLowerCase().includes(normalizedQuery) ||
+        s.description?.toLowerCase().includes(normalizedQuery)
+      )
+    : rawSkills;
   const isMine = activeTab === 'mine';
   const isGrid = viewMode === 'grid';
 

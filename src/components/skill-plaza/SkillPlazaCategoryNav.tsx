@@ -1,14 +1,39 @@
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { cn } from '@/lib/utils';
+import { useMemo } from 'react';
 
 export function SkillPlazaCategoryNav() {
-  const { categories, categoryCounts, activeCategory, setActiveCategory } = useSkillPlazaStore();
+  const { categories, categoryCounts, activeCategory, setActiveCategory, activeTab, mySkills, searchQuery } = useSkillPlazaStore();
 
-  const displayCategories = categories;
+  // For 'mine' tab, counts must be recomputed from frontend-filtered skills
+  // because search is done locally; for 'all' tab the backend already returns
+  // filtered categoryCounts.
+  const displayCounts = useMemo(() => {
+    if (activeTab !== 'mine') return categoryCounts;
+
+    const query = searchQuery.trim().toLowerCase();
+    const filtered = query
+      ? mySkills.filter((s) =>
+          s.title.toLowerCase().includes(query) ||
+          s.description?.toLowerCase().includes(query)
+        )
+      : mySkills;
+
+    const counts: Record<string, number> = {};
+    // Total count under empty string key (matching backend convention)
+    counts[''] = filtered.length;
+
+    for (const skill of filtered) {
+      const code = skill.categoryCode ?? 'mine';
+      counts[code] = (counts[code] || 0) + 1;
+    }
+
+    return counts;
+  }, [activeTab, categoryCounts, mySkills, searchQuery]);
 
   return (
     <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 my-2.5 mx-0 p-0" aria-label="技能分类">
-      {displayCategories.map((cat) => (
+      {categories.map((cat) => (
         <button
           key={cat.slug}
           onClick={() => setActiveCategory(cat.slug)}
@@ -26,7 +51,7 @@ export function SkillPlazaCategoryNav() {
               activeCategory === cat.slug ? 'text-muted-foreground' : 'text-muted-foreground/60',
             )}
           >
-            {categoryCounts[cat.slug] ?? 0}
+            {displayCounts[cat.slug] ?? 0}
           </span>
         </button>
       ))}
