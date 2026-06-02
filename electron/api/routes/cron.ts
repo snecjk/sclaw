@@ -5,8 +5,6 @@ import { CHAT_HISTORY_LIMIT } from '../../../shared/chat-config';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { getOpenClawConfigDir } from '../../utils/paths';
-import { getCloudTaskService } from '../../services/cloud-task-service';
-import { writeCloudResultsToCache, filterNewResults } from '../../services/cloud-result-cache';
 
 interface GatewayCronJob {
   id: string;
@@ -464,129 +462,6 @@ export async function handleCronRoutes(
     try {
       const body = await parseJsonBody<{ id: string }>(req);
       sendJson(res, 200, await ctx.gatewayManager.rpc('cron.run', { id: body.id, mode: 'force' }));
-    } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
-  // -------------------------------------------------------------------------
-  // Cloud Cron Routes
-  // -------------------------------------------------------------------------
-
-  if (url.pathname === '/api/cron/cloud/jobs' && req.method === 'GET') {
-    try {
-      const service = getCloudTaskService();
-      const tasks = await service.listTasks();
-      sendJson(res, 200, tasks);
-    } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
-  if (url.pathname === '/api/cron/cloud/jobs' && req.method === 'POST') {
-    try {
-      const input = await parseJsonBody<{ name: string; message: string; schedule: string; agentId: string; enabled?: boolean }>(req);
-      const service = getCloudTaskService();
-      const task = await service.createTask(input);
-      sendJson(res, 200, task);
-    } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
-  if (url.pathname.startsWith('/api/cron/cloud/jobs/') && req.method === 'PUT') {
-    try {
-      const id = decodeURIComponent(url.pathname.slice('/api/cron/cloud/jobs/'.length));
-      const input = await parseJsonBody<Record<string, unknown>>(req);
-      const service = getCloudTaskService();
-      const task = await service.updateTask(id, input as { name?: string; message?: string; schedule?: string; agentId?: string; enabled?: boolean });
-      sendJson(res, 200, task);
-    } catch (error) {
-      const message = String(error);
-      if (message.includes('TASK_NOT_FOUND')) {
-        sendJson(res, 404, { success: false, error: message });
-      } else {
-        sendJson(res, 500, { success: false, error: message });
-      }
-    }
-    return true;
-  }
-
-  if (url.pathname.startsWith('/api/cron/cloud/jobs/') && req.method === 'DELETE') {
-    try {
-      const id = decodeURIComponent(url.pathname.slice('/api/cron/cloud/jobs/'.length));
-      const service = getCloudTaskService();
-      await service.deleteTask(id);
-      sendJson(res, 204);
-    } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
-  if (url.pathname === '/api/cron/cloud/toggle' && req.method === 'POST') {
-    try {
-      const body = await parseJsonBody<{ id: string; enabled: boolean }>(req);
-      const service = getCloudTaskService();
-      await service.toggleTask(body.id, body.enabled);
-      sendJson(res, 200, { success: true });
-    } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
-  if (url.pathname === '/api/cron/cloud/trigger' && req.method === 'POST') {
-    try {
-      const body = await parseJsonBody<{ id: string }>(req);
-      const service = getCloudTaskService();
-      const result = await service.triggerTask(body.id);
-      sendJson(res, 200, result);
-    } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
-  if (url.pathname === '/api/cron/cloud/results' && req.method === 'GET') {
-    try {
-      const since = url.searchParams.get('since') || undefined;
-      const cursor = url.searchParams.get('cursor') || undefined;
-      const rawLimit = Number(url.searchParams.get('limit') || '50');
-      const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 200) : 50;
-      const service = getCloudTaskService();
-      const result = await service.fetchResults({ since, cursor, limit });
-      sendJson(res, 200, result);
-    } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
-  if (url.pathname === '/api/cron/cloud/agents' && req.method === 'GET') {
-    try {
-      const service = getCloudTaskService();
-      const agents = await service.listCloudAgents();
-      sendJson(res, 200, agents);
-    } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
-  if (url.pathname === '/api/cron/cloud/results/sync' && req.method === 'POST') {
-    try {
-      const body = await parseJsonBody<{ results: unknown[] }>(req);
-      const results = Array.isArray(body.results) ? body.results : [];
-      // Filter duplicates before writing
-      const newResults = filterNewResults(results as import('../../shared/cloud-cron').CloudTaskResult[]);
-      if (newResults.length > 0) {
-        await writeCloudResultsToCache(newResults);
-      }
-      sendJson(res, 200, { success: true, written: newResults.length });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }
