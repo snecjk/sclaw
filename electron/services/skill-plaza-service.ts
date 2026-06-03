@@ -12,6 +12,11 @@ import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
 import { logger } from '../utils/logger';
 import { fetchApolloConfigValue } from './sto-apollo-config-service';
+import {
+  isRemoteVersionNewer,
+  resolveInstalledVersionForCompare,
+} from '../utils/skill-version';
+import { PREINSTALLED_MARKER_NAME } from './sto-skill-service';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,6 +37,9 @@ export interface SkillSummary {
   icon?: string;
   defaultPrompt: string;
   updatedAt?: string;
+  version?: string;
+  installedVersion?: string;
+  updateAvailable?: boolean;
 }
 
 export interface SkillDetail extends SkillSummary {
@@ -220,6 +228,9 @@ function normalizeSkillSummary(skill: Partial<SkillSummary>): SkillSummary {
     icon: skill.icon,
     defaultPrompt: skill.defaultPrompt || skill.title || '',
     updatedAt: skill.updatedAt,
+    version: skill.version,
+    installedVersion: skill.installedVersion,
+    updateAvailable: skill.updateAvailable ?? false,
   };
 }
 
@@ -237,18 +248,32 @@ function normalizeSkillDetail(skill: Partial<SkillDetail>): SkillDetail {
 // Local state helpers
 // ---------------------------------------------------------------------------
 
-function readLockJsonSkills(configDir: string): Set<string> {
+function readLockJsonSkillEntries(configDir: string): Map<string, {
+  version?: string;
+  source?: string;
+  versionSource?: string;
+}> {
   const lockFile = path.join(configDir, '.clawhub', 'lock.json');
+  const entries = new Map<string, { version?: string; source?: string; versionSource?: string }>();
   try {
     if (fs.existsSync(lockFile)) {
       const data = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
       const skills = data?.skills || {};
-      return new Set(Object.keys(skills));
+      for (const [slug, info] of Object.entries(skills)) {
+        if (info && typeof info === 'object') {
+          const record = info as { version?: string; source?: string; versionSource?: string };
+          entries.set(slug, record);
+        }
+      }
     }
   } catch (err) {
     logger.warn('[SkillPlazaService] Failed to read lock.json:', err);
   }
-  return new Set();
+  return entries;
+}
+
+function readLockJsonSkills(configDir: string): Set<string> {
+  return new Set(readLockJsonSkillEntries(configDir).keys());
 }
 
 function readSkillsDirSlugs(skillsDir: string): Set<string> {
@@ -272,12 +297,35 @@ function readSkillsDirSlugs(skillsDir: string): Set<string> {
 }
 
 function isPreinstalledSkill(skillDir: string): boolean {
-  const markerPath = path.join(skillDir, '.stoclaw-preinstalled.json');
+  const markerPath = path.join(skillDir, PREINSTALLED_MARKER_NAME);
   try {
     return fs.existsSync(markerPath);
   } catch {
     return false;
   }
+}
+
+function readSkillMdVersion(skillDir: string): string | null {
+  try {
+    const skillMdPath = path.join(skillDir, 'SKILL.md');
+    if (!fs.existsSync(skillMdPath)) return null;
+    const raw = fs.readFileSync(skillMdPath, 'utf8');
+    const frontmatterMatch = raw.match(/^---\s*\n([\s\S]*?)\n---/);
+    if (!frontmatterMatch) return null;
+    const versionMatch = frontmatterMatch[1].match(/^\s*version\s*:\s*["']?([^"'\n]+)["']?\s*$/m);
+    if (!versionMatch) return null;
+    return versionMatch[1].trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveSkillDirForSlug(skillsDir: string, disabledDir: string, slug: string): string | null {
+  const activeDir = path.join(skillsDir, slug);
+  if (fs.existsSync(path.join(activeDir, 'SKILL.md'))) return activeDir;
+  const disabledSkillDir = path.join(disabledDir, slug);
+  if (fs.existsSync(path.join(disabledSkillDir, 'SKILL.md'))) return disabledSkillDir;
+  return null;
 }
 
 function readDisabledDirSlugs(disabledDir: string): Set<string> {
@@ -414,14 +462,38 @@ export class SkillPlazaService {
   private overlayLocalState<T extends SkillSummary>(skill: T): T {
     const installedSlugs = this.getInstalledSlugs();
     const enabledSlugs = this.getEnabledSlugs();
-    const fromLock = readLockJsonSkills(this.configDir);
-    // 自建 = 本地存在 且 不是从 plaza 安装的（lock.json 中无记录）
-    const isLocalOnly = installedSlugs.has(skill.slug) && !fromLock.has(skill.slug);
+    const lockEntries = readLockJsonSkillEntries(this.configDir);
+    const installed = installedSlugs.has(skill.slug);
+    // overlayLocalState 仅处理 plaza API 项，不应因 lock 缺失把市场安装误判为「纯本地自建」
+    const isLocalOnly = false;
+    const source: 'official' | 'mine' = skill.source === 'mine' ? 'mine' : 'official';
+
+    let installedVersion: string | undefined;
+    let updateAvailable = false;
+
+    const lockInfo = lockEntries.get(skill.slug);
+    const isStoMarketplaceInstall = lockInfo?.source === 'sto-marketplace';
+
+    if (installed && skill.version) {
+      const skillDir = resolveSkillDirForSlug(this.skillsDir, this.getDisabledDir(), skill.slug);
+      const lockVersion = isStoMarketplaceInstall ? lockInfo?.version : undefined;
+      const skillMdVersion = skillDir && !isPreinstalledSkill(skillDir)
+        ? readSkillMdVersion(skillDir)
+        : null;
+
+      if (skillDir && !isPreinstalledSkill(skillDir)) {
+        installedVersion = resolveInstalledVersionForCompare(lockVersion, skillMdVersion);
+        updateAvailable = isRemoteVersionNewer(skill.version, installedVersion);
+      }
+    }
+
     return {
       ...skill,
-      installed: installedSlugs.has(skill.slug),
-      enabled: installedSlugs.has(skill.slug) ? enabledSlugs.has(skill.slug) : undefined,
-      source: isLocalOnly ? 'mine' : (skill.source || 'official'),
+      installed,
+      enabled: installed ? enabledSlugs.has(skill.slug) : undefined,
+      source,
+      installedVersion,
+      updateAvailable,
     };
   }
 
@@ -693,15 +765,15 @@ export class SkillPlazaService {
     };
 
     const skills: SkillSummary[] = [];
-    const categoryCounts: Record<string, number> = {};
 
     for (const slug of allSlugs) {
       const isEnabled = activeSlugs.has(slug);
       const skillDir = isEnabled ? this.skillsDir : this.getDisabledDir();
       const summary = readLocalSkillSummary(skillDir, slug);
       if (summary) {
-        const isOfficial = fromLock.has(slug);
-        const source = isOfficial ? 'official' : 'mine';
+        const plazaSkill = plazaSkillMap.get(slug);
+        const isOfficial = fromLock.has(slug) || plazaSkill?.source === 'official';
+        const source: 'official' | 'mine' = isOfficial ? 'official' : 'mine';
 
         // 判断是否为预安装技能（通过 .stoclaw-preinstalled.json marker 文件）
         const skillDirPath = isEnabled ? path.join(this.skillsDir, slug) : path.join(this.getDisabledDir(), slug);
@@ -764,7 +836,7 @@ export class SkillPlazaService {
           logger.info(`[getLocalSkills] resolved for ${slug}: isOfficial=${isOfficial}, finalCategoryCode=${finalCategoryCode}, finalCategory=${finalCategory}, summary.category=${summary.category}, plazaHas=${plazaSkillMap.has(slug)}`);
         }
 
-        skills.push({
+        const baseSkill: SkillSummary = {
           slug: summary.slug || slug,
           title: summary.title || slug,
           description: summary.description || '',
@@ -773,28 +845,27 @@ export class SkillPlazaService {
           source,
           installed: true,
           enabled: isEnabled,
-          installCount: 0,
-          useCount: 0,
-          points: summary.points ?? 8,
-          icon: summary.icon,
+          installCount: plazaSkill?.installCount ?? 0,
+          useCount: plazaSkill?.useCount ?? 0,
+          points: summary.points ?? plazaSkill?.points ?? 8,
+          icon: summary.icon ?? plazaSkill?.icon,
           defaultPrompt: summary.defaultPrompt || summary.title || slug,
-          updatedAt: undefined,
-        });
-
-        if (source === 'official' || isOfficeSkill || isPreinstalled) {
-          categoryCounts[finalCategoryCode || 'qita'] = (categoryCounts[finalCategoryCode || 'qita'] || 0) + 1;
-        } else {
-          categoryCounts['mine'] = (categoryCounts['mine'] || 0) + 1;
-        }
+          updatedAt: plazaSkill?.updatedAt,
+          version: plazaSkill?.version,
+        };
+        skills.push(this.overlayLocalState(baseSkill));
       }
     }
 
-    // 基于实际返回的 skills 数组重新计算分类计数，确保 categoryCounts 与 skills 严格一致
+    // 基于实际返回的 skills 数组计算分类计数，确保 categoryCounts 与 skills 严格一致
+    // 规则：所有技能（官方/预安装/自建）都按实际 categoryCode 归类；
+    //       未分类技能（categoryCode 为 null）只在"全部"（''）中计数，不计入任何具体分类
     const finalCategoryCounts: Record<string, number> = {};
     for (const skill of skills) {
-      // 使用 ?? 避免把 null 误判为 falsy；无分类的自建技能归入 'mine'
-      const code = skill.categoryCode ?? 'mine';
-      finalCategoryCounts[code] = (finalCategoryCounts[code] || 0) + 1;
+      const code = skill.categoryCode;
+      if (code) {
+        finalCategoryCounts[code] = (finalCategoryCounts[code] || 0) + 1;
+      }
     }
     finalCategoryCounts[''] = skills.length;
 

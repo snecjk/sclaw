@@ -550,6 +550,12 @@ async function initialize(): Promise<void> {
       logger.warn('Failed to install preinstalled skills:', error);
     });
 
+    try {
+      sss.backfillLockVersions();
+    } catch (error) {
+      logger.warn('Failed to backfill skill lock versions:', error);
+    }
+
     // Ensure Main Agent's AGENTS.md includes the long-output constraint
     try {
       const mainWorkspace = await getAgentWorkspacePath('main');

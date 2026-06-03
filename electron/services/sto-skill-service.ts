@@ -13,10 +13,11 @@ import { getStoToken } from '../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
 import { logger } from '../utils/logger';
+import { proxyAwareFetch } from '../utils/proxy-fetch';
+import { TIMEOUTS } from '../utils/config';
+import { normalizeSkillVersion } from '../utils/skill-version';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+export const PREINSTALLED_MARKER_NAME = '.stoclaw-preinstalled.json';
 
 export interface StoSkillSearchParams {
   query?: string;
@@ -130,7 +131,11 @@ export class StoSkillService {
     const url = `${baseUrl}/agent/v1/skills/slug/${encodeURIComponent(params.slug)}/download?network=external`;
     logger.info(`[StoSkillService] install: downloading ${url}`);
 
-    const res = await fetch(url, { method: 'GET', headers });
+    const res = await proxyAwareFetch(url, {
+      method: 'GET',
+      headers,
+      timeoutMs: TIMEOUTS.SKILL_INSTALL,
+    });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       throw new Error(`STO 技能下载失败 (${res.status}): ${text}`);
@@ -181,6 +186,7 @@ export class StoSkillService {
         name: params.name,
         description: params.description,
         author: params.author,
+        versionSource: 'install',
       });
 
       logger.info(`[StoSkillService] install: ${params.slug} installed to ${targetDir}`);
@@ -400,6 +406,127 @@ export class StoSkillService {
     return results;
   }
 
+  /** Read version from SKILL.md YAML frontmatter. */
+  readSkillMdVersion(skillDir: string): string | null {
+    try {
+      const skillMdPath = path.join(skillDir, 'SKILL.md');
+      if (!fs.existsSync(skillMdPath)) return null;
+      const raw = fs.readFileSync(skillMdPath, 'utf8');
+      const frontmatterMatch = raw.match(/^---\s*\n([\s\S]*?)\n---/);
+      if (!frontmatterMatch) return null;
+      const versionMatch = frontmatterMatch[1].match(/^\s*version\s*:\s*["']?([^"'\n]+)["']?\s*$/m);
+      if (!versionMatch) return null;
+      const version = versionMatch[1].trim();
+      return version || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Sync lock.json entries for installed skills missing from lock (idempotent, runs each startup).
+   * Does not write server latest version — only local package metadata.
+   */
+  backfillLockVersions(): void {
+    const lockDir = path.join(this.workDir, '.clawhub');
+    const lockFile = path.join(lockDir, 'lock.json');
+
+    const slugs = new Set<string>();
+    const scanDir = (baseDir: string) => {
+      if (!fs.existsSync(baseDir)) return;
+      for (const entry of fs.readdirSync(baseDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const skillMd = path.join(baseDir, entry.name, 'SKILL.md');
+        if (fs.existsSync(skillMd)) slugs.add(entry.name);
+      }
+    };
+    scanDir(this.skillsDir);
+    scanDir(this.getDisabledDir());
+
+    let lockSkills: Record<string, {
+      version?: string;
+      source?: string;
+      versionSource?: string;
+      name?: string;
+      description?: string;
+      author?: string;
+      installedAt?: string;
+    }> = {};
+    if (fs.existsSync(lockFile)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
+        lockSkills = (data.skills || {}) as typeof lockSkills;
+      } catch (err) {
+        logger.warn('[StoSkillService] backfillLockVersions: failed to read lock.json:', err);
+      }
+    }
+
+    for (const slug of slugs) {
+      const skillDir = path.join(this.skillsDir, slug);
+      const disabledDir = path.join(this.getDisabledDir(), slug);
+      const dir = fs.existsSync(path.join(skillDir, 'SKILL.md')) ? skillDir : disabledDir;
+      if (!fs.existsSync(path.join(dir, 'SKILL.md'))) continue;
+
+      if (fs.existsSync(path.join(dir, PREINSTALLED_MARKER_NAME))) continue;
+
+      const lockInfo = lockSkills[slug];
+      // 可靠安装记录：install 写入且版本非占位 1.0.0
+      if (
+        lockInfo?.source === 'sto-marketplace'
+        && lockInfo.versionSource === 'install'
+        && lockInfo.version
+        && lockInfo.version !== '1.0.0'
+      ) {
+        continue;
+      }
+
+      const mdVersion = this.readSkillMdVersion(dir);
+      const mdName = this.readSkillName(dir);
+      const mdDescription = this.readSkillMdDescription(dir);
+      const version = mdVersion || lockInfo?.version || '1.0.0';
+
+      const normalizedTarget = normalizeSkillVersion(version);
+      const normalizedLock = normalizeSkillVersion(lockInfo?.version);
+      if (
+        lockInfo?.source === 'sto-marketplace'
+        && normalizedTarget
+        && normalizedLock
+        && normalizedTarget === normalizedLock
+      ) {
+        continue;
+      }
+
+      this.updateLockFile(slug, {
+        version,
+        name: lockInfo?.name || mdName || undefined,
+        description: lockInfo?.description || mdDescription || undefined,
+        author: lockInfo?.author,
+        versionSource: mdVersion ? 'skill-md-backfill' : 'directory-scan',
+      });
+      logger.info(`[StoSkillService] backfillLockVersions: ${slug} -> ${version}`);
+    }
+  }
+
+  /** Read description from SKILL.md YAML frontmatter. */
+  readSkillMdDescription(skillDir: string): string | null {
+    try {
+      const skillMdPath = path.join(skillDir, 'SKILL.md');
+      if (!fs.existsSync(skillMdPath)) return null;
+      const raw = fs.readFileSync(skillMdPath, 'utf8');
+      const frontmatterMatch = raw.match(/^---\s*\n([\s\S]*?)\n---/);
+      if (!frontmatterMatch) return null;
+      const descMatch = frontmatterMatch[1].match(/^\s*description\s*:\s*["']?([^"'\n]+)["']?\s*$/m);
+      if (!descMatch) return null;
+      return descMatch[1].trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Private helpers
+  // -----------------------------------------------------------------------
+
   /**
    * Read the human-readable skill name from _meta.json or SKILL.md.
    * Priority: _meta.json slug → SKILL.md frontmatter name → SKILL.md H1 title
@@ -519,6 +646,7 @@ export class StoSkillService {
     name?: string;
     description?: string;
     author?: string;
+    versionSource?: string;
   }): void {
     const lockDir = path.join(this.workDir, '.clawhub');
     if (!fs.existsSync(lockDir)) {
@@ -538,13 +666,17 @@ export class StoSkillService {
     if (!lockData.skills || typeof lockData.skills !== 'object') {
       lockData.skills = {};
     }
-    (lockData.skills as Record<string, unknown>)[slug] = {
+    const skillsMap = lockData.skills as Record<string, Record<string, unknown>>;
+    const existing = skillsMap[slug] || {};
+    skillsMap[slug] = {
+      ...existing,
       version: meta.version,
-      source: 'sto-marketplace',
-      name: meta.name,
-      description: meta.description,
-      author: meta.author,
-      installedAt: new Date().toISOString(),
+      source: existing.source || 'sto-marketplace',
+      name: meta.name ?? existing.name,
+      description: meta.description ?? existing.description,
+      author: meta.author ?? existing.author,
+      versionSource: meta.versionSource ?? existing.versionSource ?? 'install',
+      installedAt: (existing.installedAt as string | undefined) || new Date().toISOString(),
     };
     fs.writeFileSync(lockFile, JSON.stringify(lockData, null, 2));
   }

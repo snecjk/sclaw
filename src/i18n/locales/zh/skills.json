@@ -179,6 +179,7 @@
         "action": {
             "use": "使用",
             "install": "安装",
+            "update": "更新",
             "delete": "删除",
             "toggle": "启用/禁用",
             "useNow": "立即使用"

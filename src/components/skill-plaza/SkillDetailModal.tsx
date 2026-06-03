@@ -35,7 +35,12 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
 
   const handleInstall = () => {
     const { installSkill, fetchPlazaSkills } = useSkillPlazaStore.getState();
-    installSkill(liveSkill.slug).then(() => fetchPlazaSkills({ reset: true })).catch(() => {});
+    installSkill(liveSkill.slug, {
+      version: liveSkill.version,
+      force: liveSkill.updateAvailable,
+      title: liveSkill.title,
+      description: liveSkill.description,
+    }).then(() => fetchPlazaSkills({ reset: true })).catch(() => {});
   };
 
   const tag = liveSkill.installed
@@ -174,7 +179,20 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
 
           {/* CTA */}
           <div className="p-4 bg-background">
-            {liveSkill.installed || liveSkill.source === 'mine' ? (
+            {liveSkill.updateAvailable ? (
+              <button
+                onClick={handleInstall}
+                disabled={isInstalling}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-amber-950 bg-amber-100 hover:bg-amber-200 transition-colors disabled:opacity-50 dark:bg-amber-900/40 dark:text-amber-100 dark:hover:bg-amber-900/60"
+              >
+                {isInstalling ? (
+                  <span className="animate-spin h-4 w-4 border-2 border-amber-900/30 border-t-amber-900 rounded-full dark:border-amber-100/30 dark:border-t-amber-100" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                {t('plaza.action.update', { defaultValue: '更新' })}
+              </button>
+            ) : liveSkill.installed || liveSkill.source === 'mine' ? (
               <button
                 onClick={handleUse}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 transition-colors"
