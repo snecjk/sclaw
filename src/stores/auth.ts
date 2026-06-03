@@ -7,6 +7,7 @@ import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
 import { getCurrentEnvConfig } from '../../shared/env-config';
+import { setSiteDepartmentTypes } from '../../shared/site-user-utils';
 
 interface StoSyncResponse {
   success?: boolean;
@@ -89,6 +90,56 @@ async function refreshProviderSnapshot(): Promise<void> {
     await useProviderStore.getState().refreshProviderSnapshot();
   } catch (error) {
     console.warn('[auth] Provider snapshot refresh failed:', error);
+  }
+}
+async function syncStoModelsAndRefreshProviders(context: 'init' | 'login'): Promise<void> {
+  const maxAttempts = context === 'login' ? 2 : 1;
+
+  try {
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const result = await hostApiFetch<StoSyncResponse>('/api/sto-model-sync', { method: 'POST' });
+        if (result?.error) {
+          const isRetryable = result.error.startsWith('fetch-failed');
+          if (isRetryable && attempt < maxAttempts) {
+            console.warn(`[auth] STO model sync attempt ${attempt} failed: ${result.error}; retrying in 3s`);
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            continue;
+          }
+          // 非重试错误或最后一次尝试 — 给用户提示
+          if (result.error === 'empty-model-list') {
+            toast.error('获取 STO 模型失败', {
+              description: '远程模型列表为空，请检查网络连接或稍后手动重试',
+            });
+          } else if (result.error.startsWith('fetch-failed')) {
+            toast.error('模型列表同步失败', {
+              description: '无法获取远程模型列表，请检查网络连接后刷新重试',
+            });
+          }
+          // no-token 由主进程 auth:token-expired 事件处理，这里不重复操作
+        }
+        break;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (attempt < maxAttempts) {
+          console.warn(`[auth] STO model sync attempt ${attempt} failed during ${context}; retrying in 3s: ${message}`);
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+          continue;
+        }
+        console.error(`[auth] STO model sync failed during ${context}: ${message}`);
+        toast.error('模型列表同步失败', { description: message });
+      }
+    }
+  } finally {
+    try {
+      const { useProviderStore } = await import('@/stores/providers');
+      await useProviderStore.getState().refreshProviderSnapshot();
+    } catch (error) {
+      console.warn(
+        `[auth] Provider snapshot refresh failed after ${context} STO sync attempt`,
+        error,
+      );
+    }
   }
 }
 

@@ -845,7 +845,6 @@ export class SkillPlazaService {
       fs.renameSync(srcDir, destDir);
     } catch (err) {
       logger.error(`[SkillPlazaService] Failed to rename ${srcDir} -> ${destDir}:`, err);
-      throw new Error(`Failed to move skill directory: ${err}`);
     }
     await setSkillsEnabled([slug], enabled);
   }

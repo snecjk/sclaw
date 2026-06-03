@@ -5,7 +5,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'http';
 import { app } from 'electron';
-import { getAuthState, setAuthUser, clearAuthUser, getSsoEnvironment, setSsoEnvironment, getStoToken, syncSsoAuthToOpenClaw, removeSsoAuthFromOpenClaw } from '../../utils/auth-store';
+import { getAuthState, setAuthUser, clearAuthUser, getSsoEnvironment, setSsoEnvironment, getStoToken, removeSsoAuthFromOpenClaw } from '../../utils/auth-store';
 import type { SsoEnvironment } from '../../utils/auth-store';
 import { getBaseUrl, signOut } from '../../utils/sso-service';
 import { SsoLoginManager } from '../../utils/sso-login';
