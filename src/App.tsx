@@ -28,6 +28,7 @@ import { useAuthStore } from './stores/auth';
 import { useGatewayStore } from './stores/gateway';
 import { useProviderStore } from './stores/providers';
 import { useChatStore } from './stores/chat';
+import { useScheduledTaskUnreadStore } from './stores/scheduled-task-unread';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
 
 
@@ -186,6 +187,26 @@ function App() {
       }
     };
   }, []);
+
+  // Listen for scheduled task new results from main process
+  useEffect(() => {
+    const handleNewResult = (...args: unknown[]) => {
+      const payload = args[0] as { taskId: number } | undefined;
+      if (!payload || typeof payload.taskId !== 'number') return;
+      // Only add unread if user is not currently on the Scheduled Tasks page
+      if (location.pathname !== '/scheduled-tasks') {
+        useScheduledTaskUnreadStore.getState().addUnread(payload.taskId);
+      }
+    };
+
+    const unsubscribe = window.electron.ipcRenderer.on('scheduled-task:new-result', handleNewResult);
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, [location.pathname]);
 
   // Listen for SAI CLI install failure and prompt user to retry
   useEffect(() => {

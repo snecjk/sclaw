@@ -62,18 +62,20 @@ export interface ScheduledTaskUpdateInput {
   enabled?: boolean;
 }
 
+export interface ScheduledTaskRun {
+  id: number;
+  taskId: number;
+  status: string;
+  executionResult?: string;
+  logText?: string;
+  notifyDingtalkOk?: boolean;
+}
+
 export interface ScheduledTaskTriggerResponse {
   taskId: number;
   runId: number;
   outcome: string;
-  run?: {
-    id: number;
-    taskId: number;
-    status: string;
-    executionResult?: string;
-    logText?: string;
-    notifyDingtalkOk?: boolean;
-  };
+  run?: ScheduledTaskRun;
 }
 
 // ---------------------------------------------------------------------------
@@ -285,7 +287,7 @@ export class ScheduledTaskService {
   // Runs
   // -----------------------------------------------------------------------
 
-  async getTaskRuns(taskId: number): Promise<ScheduledTaskTriggerResponse['run'][]> {
+  async getTaskRuns(taskId: number): Promise<ScheduledTaskRun[]> {
     const baseUrl = await this.resolveBaseUrl();
     const headers = await this.buildHeaders();
     const url = `${baseUrl}/${taskId}/runs`;

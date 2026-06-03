@@ -25,9 +25,41 @@ function parseScheduleToLabel(schedule: string | unknown): string {
   const parts = schedule.split(' ');
   if (parts.length !== 5) return schedule;
   const [min, hour, day, , weekday] = parts;
-  if (weekday === '1-5') return `工作日 ${hour.padStart(2, '0')}:${min.padStart(2, '0')}`;
-  if (day !== '*') return `每月 ${day} 日 ${hour.padStart(2, '0')}:${min.padStart(2, '0')}`;
-  return `每天 ${hour.padStart(2, '0')}:${min.padStart(2, '0')}`;
+  
+  // 处理工作日（weekday）部分
+  const weekdayMap: Record<string, string> = {
+    '0': '周日',
+    '1': '周一',
+    '2': '周二',
+    '3': '周三',
+    '4': '周四',
+    '5': '周五',
+    '6': '周六',
+  };
+  
+  const timeLabel = `${hour.padStart(2, '0')}:${min.padStart(2, '0')}`;
+  
+  // 处理每月特定日期
+  if (day !== '*' && weekday === '*') {
+    return `每月 ${day} 日 ${timeLabel}`;
+  }
+  
+  // 处理特定星期几（逗号分隔，如 0,4,5）
+  if (weekday !== '*' && weekday.includes(',')) {
+    const days = weekday.split(',').map(d => weekdayMap[d] || d).join('、');
+    return `${days} ${timeLabel}`;
+  }
+  
+  // 处理星期范围（如 1-5）
+  if (weekday === '1-5') return `工作日 ${timeLabel}`;
+  
+  // 处理单个星期几
+  if (weekday !== '*' && weekdayMap[weekday]) {
+    return `${weekdayMap[weekday]} ${timeLabel}`;
+  }
+  
+  // 默认：每天
+  return `每天 ${timeLabel}`;
 }
 
 export function TaskCard({ job, onToggle, onEdit, onDelete, onTrigger }: TaskCardProps) {
@@ -81,18 +113,21 @@ export function TaskCard({ job, onToggle, onEdit, onDelete, onTrigger }: TaskCar
       </p>
 
       {/* Footer */}
-      <div className="mt-auto flex items-center justify-between pt-3 border-t border-border/60">
-        <span className="text-[12.5px] text-muted-foreground font-medium">
+      <div className="mt-auto flex items-start gap-3 pt-3 border-t border-border/60">
+        <span
+          className="text-[12.5px] text-muted-foreground font-medium flex-1 min-w-0"
+          title={scheduleLabel}
+        >
           {scheduleLabel}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onTrigger(); }}
             className="text-[12.5px] px-3 py-1.5 rounded-lg border border-border bg-background text-foreground hover:border-primary hover:text-primary transition-colors"
           >
             <Play className="inline-block h-3 w-3 mr-1 -mt-0.5" />
-            测试运行
+            立即运行
           </button>
 
           <div className="relative" ref={menuRef}>

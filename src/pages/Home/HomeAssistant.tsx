@@ -6,12 +6,21 @@ import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
 import { ChatInput } from '@/pages/Chat/ChatInput';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
+import type { FileAttachment } from '@/pages/Chat/ChatInput';
 
 /**
  * 省区首页底部助手：与聊天页相同的 ChatInput（上传、粘贴图片、拖放、排队、停止），
  * 首次从首页默认态发言会创建会话，后续追问续写当前会话，行为与 HomeAgentHubSurface 一致。
  */
-export function HomeAssistant({ className, seedText }: { className?: string; seedText?: string }) {
+export function HomeAssistant({
+  className,
+  seedText,
+  onSend,
+}: {
+  className?: string;
+  seedText?: string;
+  onSend?: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => void;
+}) {
   const { t } = useTranslation('home');
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
@@ -30,7 +39,7 @@ export function HomeAssistant({ className, seedText }: { className?: string; see
       <section className="flex flex-col" aria-label={t('assistant.placeholder')}>
         <ChatInput
           variant="embedded"
-          onSend={handleHubSend}
+          onSend={onSend || handleHubSend}
           onStop={() => void abortRun()}
           onQueue={handleHubQueue}
           disabled={!isGatewayRunning}

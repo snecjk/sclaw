@@ -42,6 +42,7 @@ import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAuthStore } from '@/stores/auth';
+import { useScheduledTaskUnreadStore } from '@/stores/scheduled-task-unread';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useTranslation } from 'react-i18next';
 import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
@@ -375,6 +376,7 @@ function SidebarNavLink({
   collapsed,
   onClick,
   isActiveOverride,
+  badge,
 }: {
   to: string;
   end?: boolean;
@@ -383,6 +385,7 @@ function SidebarNavLink({
   collapsed: boolean;
   onClick?: () => void;
   isActiveOverride?: boolean;
+  badge?: ReactNode;
 }) {
   const { pathname } = useLocation();
   // 使用路径匹配生成 className（字符串），避免 TooltipTrigger asChild 与 NavLink 的函数 className 合并时被破坏，导致选中态（橙底白图标）不生效。
@@ -411,7 +414,10 @@ function SidebarNavLink({
   const link = (
     <NavLink to={to} end={end} className={linkClassName} onClick={onClick}>
       <span className="flex shrink-0 items-center justify-center">{icon}</span>
-      {!collapsed ? <span className="min-w-0 flex-1 truncate">{label}</span> : null}
+      {!collapsed ? (
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+      ) : null}
+      {badge}
     </NavLink>
   );
 
@@ -588,15 +594,25 @@ export function Sidebar() {
     setBucketOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const hasScheduledTaskUnread = useScheduledTaskUnreadStore((s) => s.hasUnread());
+
   const primaryNav = useMemo(() => {
+    const scheduledTasksBadge = hasScheduledTaskUnread ? (
+      <span
+        className="h-2 w-2 shrink-0 rounded-full bg-[hsl(var(--destructive))]"
+        aria-label={t('tasks:unreadBadge', { defaultValue: 'Unread' })}
+      />
+    ) : null;
+
     const all: Array<{
       to: string;
       end?: boolean;
       icon: ReactNode;
       label: string;
+      badge?: ReactNode;
     }> = [
       { to: '/', end: true, icon: <Home className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.home') },
-      { to: '/scheduled-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
+      { to: '/scheduled-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks'), badge: scheduledTasksBadge },
       { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: `${t('common:sidebar.cronTasks')}(旧)` },
       { to: '/skills', icon: <Puzzle className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
@@ -605,7 +621,7 @@ export function Sidebar() {
       if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
       return true;
     });
-  }, [sidebarVis.primaryMyData, t]);
+  }, [sidebarVis.primaryMyData, t, hasScheduledTaskUnread]);
 
   const workspaceNav = [
     { to: '/agents', icon: <Bot className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.agents') },
@@ -703,6 +719,7 @@ export function Sidebar() {
       collapsed={sidebarCollapsed}
       onClick={item.to === '/' ? handleHomeClick : undefined}
       isActiveOverride={homeIsActiveOverride}
+      badge={item.badge}
     />
   );
 })}

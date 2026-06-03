@@ -1,0 +1,18 @@
+{
+  "id": "sto-scheduled-task-tool",
+  "name": "申通定时任务创建工具",
+  "description": "提供从自然语言创建定时任务的工具，支持意图识别和参数提取",
+  "tools": ["create_scheduled_task"],
+  "toolConfig": {
+    "create_scheduled_task": {
+      "label": "创建定时任务",
+      "help": "当用户需要创建定时任务时调用此工具，从自然语言描述中提取任务参数"
+    }
+  },
+  "uiHints": {
+    "toolSelection": {
+      "label": "工具选择",
+      "help": "选择要启用的工具"
+    }
+  }
+}

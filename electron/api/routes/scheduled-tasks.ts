@@ -206,6 +206,14 @@ export async function handleScheduledTaskRoutes(
         }
       }
 
+      // Start high-frequency poll for this task to catch async completion
+      try {
+        const { getScheduledTaskResultPoller } = await import('../../services/scheduled-task-result-poller');
+        getScheduledTaskResultPoller().startTaskPoll(id);
+      } catch (pollErr) {
+        console.error(`[ScheduledTasks] Failed to start task poll for ${id}:`, pollErr);
+      }
+
       sendJson(res, 200, { ...result, hasSession });
     } catch (error) {
       const message = String(error);

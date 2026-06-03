@@ -506,6 +506,15 @@ async function initialize(): Promise<void> {
   // Register IPC handlers
   registerIpcHandlers(gm, chs, window, spriteWindowMod.getSpriteWindow, floatIconMod.getFloatIconWindow);
 
+  // Start scheduled task result poller
+  const { getScheduledTaskResultPoller } = await import('../services/scheduled-task-result-poller');
+  const scheduledTaskPoller = getScheduledTaskResultPoller();
+  scheduledTaskPoller.attachMainWindow(window);
+  scheduledTaskPoller.start();
+  app.on('before-quit', () => {
+    scheduledTaskPoller.stop();
+  });
+
   hostApiServer = startHostApiServer({
     gatewayManager: gm,
     clawHubService: chs,
@@ -660,7 +669,7 @@ async function initialize(): Promise<void> {
       await syncAllProviderAuthToRuntime();
 
       try {
-        const { getAuthState, getStoToken, startSaiAuthWatcher } = await import('../utils/auth-store');
+        const { getAuthState, getStoToken } = await import('../utils/auth-store');
         const { getStoModelSyncService } = await import('../services/providers/sto-model-sync');
         const authState = await getAuthState();
         const token = await getStoToken();
@@ -669,8 +678,6 @@ async function initialize(): Promise<void> {
           stoSync.setGatewayManager(gm);
           stoSync.startPeriodicSync();
         }
-        // Start watcher for ~/.sai/sso-auth.json to detect external changes (e.g., sai-cli logout)
-        void startSaiAuthWatcher();
       } catch (err) {
         logger.warn('STO periodic sync startup check failed:', err);
       }

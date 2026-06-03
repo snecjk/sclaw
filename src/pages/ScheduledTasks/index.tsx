@@ -6,6 +6,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useScheduledTasksStore } from '@/stores/scheduledTasks';
 import { useChatStore } from '@/stores/chat';
+import { useScheduledTaskUnreadStore } from '@/stores/scheduled-task-unread';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { toast } from 'sonner';
@@ -73,6 +74,7 @@ export default function ScheduledTasks() {
 
   useEffect(() => {
     fetchTasks().catch(() => {});
+    useScheduledTaskUnreadStore.getState().markAllRead();
   }, [fetchTasks]);
 
   const viewModels = useMemo(() => tasks.map(toViewModel), [tasks]);

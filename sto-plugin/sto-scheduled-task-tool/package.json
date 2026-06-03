@@ -1,0 +1,8 @@
+{
+  "name": "sto-scheduled-task-tool",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.ts",
+  "description": "申通定时任务创建工具 - 从自然语言创建定时任务",
+  "private": true
+}

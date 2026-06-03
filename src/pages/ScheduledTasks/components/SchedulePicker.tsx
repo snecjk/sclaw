@@ -272,11 +272,6 @@ export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
           )}
         </div>
       </div>
-
-      {/* Cron Preview */}
-      <p className="text-[12px] text-muted-foreground">
-        Cron 表达式：<code className="px-1.5 py-0.5 bg-muted rounded text-[11px] font-mono">{cronExpr}</code>
-      </p>
     </div>
   );
 }
