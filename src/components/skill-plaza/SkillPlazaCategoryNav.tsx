@@ -24,8 +24,10 @@ export function SkillPlazaCategoryNav() {
     counts[''] = filtered.length;
 
     for (const skill of filtered) {
-      const code = skill.categoryCode ?? 'mine';
-      counts[code] = (counts[code] || 0) + 1;
+      const code = skill.categoryCode;
+      if (code) {
+        counts[code] = (counts[code] || 0) + 1;
+      }
     }
 
     return counts;

@@ -765,7 +765,6 @@ export class SkillPlazaService {
     };
 
     const skills: SkillSummary[] = [];
-    const categoryCounts: Record<string, number> = {};
 
     for (const slug of allSlugs) {
       const isEnabled = activeSlugs.has(slug);
@@ -855,21 +854,18 @@ export class SkillPlazaService {
           version: plazaSkill?.version,
         };
         skills.push(this.overlayLocalState(baseSkill));
-
-        if (source === 'official' || isOfficeSkill || isPreinstalled) {
-          categoryCounts[finalCategoryCode || 'qita'] = (categoryCounts[finalCategoryCode || 'qita'] || 0) + 1;
-        } else {
-          categoryCounts['mine'] = (categoryCounts['mine'] || 0) + 1;
-        }
       }
     }
 
-    // 基于实际返回的 skills 数组重新计算分类计数，确保 categoryCounts 与 skills 严格一致
+    // 基于实际返回的 skills 数组计算分类计数，确保 categoryCounts 与 skills 严格一致
+    // 规则：所有技能（官方/预安装/自建）都按实际 categoryCode 归类；
+    //       未分类技能（categoryCode 为 null）只在"全部"（''）中计数，不计入任何具体分类
     const finalCategoryCounts: Record<string, number> = {};
     for (const skill of skills) {
-      // 使用 ?? 避免把 null 误判为 falsy；无分类的自建技能归入 'mine'
-      const code = skill.categoryCode ?? 'mine';
-      finalCategoryCounts[code] = (finalCategoryCounts[code] || 0) + 1;
+      const code = skill.categoryCode;
+      if (code) {
+        finalCategoryCounts[code] = (finalCategoryCounts[code] || 0) + 1;
+      }
     }
     finalCategoryCounts[''] = skills.length;
 
