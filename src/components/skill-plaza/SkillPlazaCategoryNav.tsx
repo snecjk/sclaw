@@ -40,7 +40,7 @@ export function SkillPlazaCategoryNav() {
           className={cn(
             'inline-flex items-center gap-0.5 px-3 py-1.5 border-none rounded-lg bg-transparent text-sm font-medium whitespace-nowrap cursor-pointer transition-colors',
             activeCategory === cat.slug
-              ? 'bg-muted text-foreground font-semibold'
+              ? 'bg-[#e5e7eb] text-[#111827] font-semibold'
               : 'text-muted-foreground hover:text-foreground',
           )}
         >
