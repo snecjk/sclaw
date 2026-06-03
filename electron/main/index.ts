@@ -660,7 +660,7 @@ async function initialize(): Promise<void> {
       await syncAllProviderAuthToRuntime();
 
       try {
-        const { getAuthState, getStoToken } = await import('../utils/auth-store');
+        const { getAuthState, getStoToken, startSaiAuthWatcher } = await import('../utils/auth-store');
         const { getStoModelSyncService } = await import('../services/providers/sto-model-sync');
         const authState = await getAuthState();
         const token = await getStoToken();
@@ -669,6 +669,8 @@ async function initialize(): Promise<void> {
           stoSync.setGatewayManager(gm);
           stoSync.startPeriodicSync();
         }
+        // Start watcher for ~/.sai/sso-auth.json to detect external changes (e.g., sai-cli logout)
+        void startSaiAuthWatcher();
       } catch (err) {
         logger.warn('STO periodic sync startup check failed:', err);
       }
