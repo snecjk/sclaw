@@ -24,9 +24,15 @@ export interface SsoUserInfo {
   realName: string;
   code: string; // 梧桐工号（基础资料）（老系统的工号）
   empCode: string; // 工号（轩辕系统的）（新系统的工号）（新入职员工这两个工号都一样）
+  companyId: string;
+  companyCode: string;
   companyName: string;
+  departmentId: string;
+  departmentCode: string;
   departmentName: string;
   categoryCode: string; // 用户类别编码：独立网点、承包区等
+  isAdministrator: boolean;
+  loginMode: string;
   openId: string;
   signature: string;
   authenticatedAt: string;
@@ -91,9 +97,15 @@ export async function getAuthState(): Promise<AuthState> {
         realName: String(userInfo.RealName ?? ''),
         code: String(userInfo.Code ?? ''),
         empCode: String(userInfo.Code ?? ''),
+        companyId: String(userInfo.CompanyId ?? ''),
+        companyCode: String(userInfo.CompanyCode ?? ''),
         companyName: String(userInfo.CompanyName ?? ''),
+        departmentId: String(userInfo.DepartmentId ?? ''),
+        departmentCode: String(userInfo.DepartmentCode ?? ''),
         departmentName: String(userInfo.DepartmentName ?? ''),
         categoryCode: String(userInfo.CategoryCode ?? ''),
+        isAdministrator: Boolean(userInfo.IsAdministrator ?? false),
+        loginMode: String(userInfo.LoginMode ?? ''),
         openId: String(userInfo.OpenId ?? ''),
         signature: String(userInfo.Signature ?? ''),
         authenticatedAt: new Date().toISOString(),
@@ -304,9 +316,15 @@ function buildSaiCliSsoAuthPayload(user: SsoUserInfo, existing: JsonObject | nul
       RealName: user.realName,
       NickName: user.realName,
       Code: user.userName,
+      CompanyId: user.companyId,
+      CompanyCode: user.companyCode,
       CompanyName: user.companyName,
+      DepartmentId: user.departmentId,
+      DepartmentCode: user.departmentCode,
       DepartmentName: user.departmentName,
       CategoryCode: user.categoryCode,
+      IsAdministrator: user.isAdministrator,
+      LoginMode: user.loginMode,
       OpenId: user.openId,
       Signature: user.signature,
     },
