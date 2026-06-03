@@ -589,6 +589,9 @@ exports.default = async function afterPack(context) {
   //     - node_modules/ is excluded by .gitignore so the deps copy must be manual
   const BUNDLED_PLUGINS = [
     // { type: 'npm', npmName: '@soimy/dingtalk', pluginId: 'dingtalk' },
+    // { type: 'npm', npmName: '@wecom/wecom-openclaw-plugin', pluginId: 'wecom' },
+    // { type: 'npm', npmName: '@sliverp/qqbot', pluginId: 'qqbot' },
+    { type: 'npm', npmName: '@tencent-weixin/openclaw-weixin', pluginId: 'openclaw-weixin' },
     { type: 'local', localDir: 'sto-dynamic-agent-route', pluginId: 'sto-dynamic-agent-route' },
     { type: 'local', localDir: 'sto-agent-telemetry', pluginId: 'sto-agent-telemetry' },
   ];

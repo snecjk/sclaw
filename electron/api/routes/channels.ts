@@ -34,6 +34,7 @@ import {
   OPENCLAW_WECHAT_CHANNEL_TYPE,
   UI_WECHAT_CHANNEL_TYPE,
   buildQrChannelEventName,
+  isWechatChannelType,
   toOpenClawChannelType,
   toUiChannelType,
 } from '../../utils/channel-alias';
@@ -230,6 +231,11 @@ async function ensureScopedChannelBinding(channelType: string, accountId?: strin
   const agents = await listAgentsSnapshot();
   if (!agents.agents || agents.agents.length === 0) return;
 
+  // Preserve an existing user choice — never overwrite a binding that is already set.
+  if (agents.channelAccountOwners[`${storedChannelType}:${accountId}`]) {
+    return;
+  }
+
   // Keep backward compatibility for the legacy default account.
   if (accountId === 'default') {
     if (agents.agents.some((entry) => entry.id === 'main')) {
@@ -241,6 +247,14 @@ async function ensureScopedChannelBinding(channelType: string, accountId?: strin
   // Legacy compatibility: if accountId matches an existing agentId, keep auto-binding.
   if (agents.agents.some((entry) => entry.id === accountId)) {
     await assignChannelAccountToAgent(accountId, storedChannelType, accountId);
+    return;
+  }
+
+  // Plugin-managed WeChat accounts use opaque bot ids — default to main on first bind.
+  if (isWechatChannelType(channelType) || isWechatChannelType(storedChannelType)) {
+    if (agents.agents.some((entry) => entry.id === 'main')) {
+      await assignChannelAccountToAgent('main', storedChannelType, accountId);
+    }
   }
 }
 
@@ -287,12 +301,13 @@ interface ChannelAccountsView {
 }
 
 async function buildChannelAccountsView(ctx: HostApiContext): Promise<ChannelAccountsView[]> {
-  const [configuredChannels, configuredAccounts, openClawConfig, agentsSnapshot] = await Promise.all([
+  const [configuredChannels, configuredAccounts, openClawConfig] = await Promise.all([
     listConfiguredChannels(),
     listConfiguredChannelAccounts(),
     readOpenClawConfig(),
-    listAgentsSnapshot(),
   ]);
+
+  let agentsSnapshot = await listAgentsSnapshot();
 
   let gatewayStatus: GatewayChannelStatusPayload | null;
   try {
@@ -336,6 +351,19 @@ async function buildChannelAccountsView(ctx: HostApiContext): Promise<ChannelAcc
       .map((account) => account.accountId)
       .filter((accountId): accountId is string => typeof accountId === 'string' && accountId.trim().length > 0);
     const accountIds = Array.from(new Set([...channelAccountsFromConfig, ...runtimeAccountIds, defaultAccountId]));
+
+    // Backfill first-time default for WeChat accounts that connected before auto-bind existed.
+    if (isWechatChannelType(rawChannelType)) {
+      let backfilledBinding = false;
+      for (const accountId of accountIds) {
+        if (agentsSnapshot.channelAccountOwners[`${rawChannelType}:${accountId}`]) continue;
+        await ensureScopedChannelBinding(uiChannelType, accountId);
+        backfilledBinding = true;
+      }
+      if (backfilledBinding) {
+        agentsSnapshot = await listAgentsSnapshot();
+      }
+    }
 
     const accounts: ChannelAccountView[] = accountIds.map((accountId) => {
       const runtime = runtimeAccounts.find((item) => item.accountId === accountId);
