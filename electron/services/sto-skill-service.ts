@@ -13,6 +13,8 @@ import { getStoToken } from '../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
 import { logger } from '../utils/logger';
+import { proxyAwareFetch } from '../utils/proxy-fetch';
+import { TIMEOUTS } from '../utils/config';
 import { normalizeSkillVersion } from '../utils/skill-version';
 
 export const PREINSTALLED_MARKER_NAME = '.stoclaw-preinstalled.json';
@@ -129,7 +131,11 @@ export class StoSkillService {
     const url = `${baseUrl}/agent/v1/skills/slug/${encodeURIComponent(params.slug)}/download?network=external`;
     logger.info(`[StoSkillService] install: downloading ${url}`);
 
-    const res = await fetch(url, { method: 'GET', headers });
+    const res = await proxyAwareFetch(url, {
+      method: 'GET',
+      headers,
+      timeoutMs: TIMEOUTS.SKILL_INSTALL,
+    });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       throw new Error(`STO 技能下载失败 (${res.status}): ${text}`);
