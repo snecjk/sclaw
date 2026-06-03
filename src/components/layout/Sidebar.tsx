@@ -100,8 +100,9 @@ function collapsedEntryLabel(full: string): string {
   return `${first}…`;
 }
 
-const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' }[] = [
+const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' | 'taskWeeklyPpt' }[] = [
   { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation' },
+  { id: 'weekly-ppt', labelKey: 'taskWeeklyPpt' },
 ];
 
 function SidebarTaskDateLinks({
@@ -236,11 +237,14 @@ function SidebarTaskGroup({
     return false;
   }, [entries, taskId, activeEntryId, sessionKeyBySubitem, sessionLastActivity, isSubitemUnread]);
 
+  // Only ensure subitems on mount and when taskId changes
+  // Avoid calling ensureSubitem on every entries change to prevent infinite loop
   useLayoutEffect(() => {
     for (const entryId of entries) {
       ensureSubitem(taskId, entryId);
     }
-  }, [entries, taskId, ensureSubitem]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId]); // Only depend on taskId, not entries
   const overviewTo = taskOverviewPath(taskId);
   const underTask =
     entries.length > 0

@@ -5,6 +5,7 @@
  * results as messages to the corresponding session transcript (.jsonl).
  *
  * Session key format: scheduled-task:{taskId}
+ * Also writes to OpenClaw agent session for gateway lookup.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -14,6 +15,104 @@ import { getOpenClawConfigDir } from '../utils/paths';
 import { logger } from '../utils/logger';
 
 const CURRENT_SESSION_VERSION = 1;
+
+/**
+ * OpenClaw agent session writer for gateway lookup
+ */
+function getAgentSessionsJsonPath(agentId: string): string {
+  return join(getOpenClawConfigDir(), 'agents', agentId, 'sessions', 'sessions.json');
+}
+
+function getAgentSessionsDir(agentId: string): string {
+  return join(getOpenClawConfigDir(), 'agents', agentId, 'sessions');
+}
+
+interface AgentSessionStoreEntry {
+  sessionId: string;
+  sessionFile: string;
+  label?: string;
+  [key: string]: unknown;
+}
+
+interface AgentSessionStore {
+  sessions?: Array<{ key?: string; sessionKey?: string; sessionFile?: string; sessionId?: string; label?: string; [key: string]: unknown }>;
+  [sessionKey: string]: unknown;
+}
+
+async function readAgentSessionStore(agentId: string): Promise<AgentSessionStore> {
+  const storePath = getAgentSessionsJsonPath(agentId);
+  try {
+    const raw = await readFile(storePath, 'utf8');
+    if (!raw.trim()) return {};
+    return JSON.parse(raw) as AgentSessionStore;
+  } catch {
+    return {};
+  }
+}
+
+async function writeAgentSessionStore(agentId: string, store: AgentSessionStore): Promise<void> {
+  const storePath = getAgentSessionsJsonPath(agentId);
+  await mkdir(getAgentSessionsDir(agentId), { recursive: true });
+  await writeFile(storePath, JSON.stringify(store, null, 2), 'utf8');
+}
+
+/**
+ * Create a session entry in the OpenClaw agent session store for gateway lookup
+ */
+async function createAgentSessionEntry(
+  agentId: string,
+  sessionKey: string,
+  label: string,
+): Promise<AgentSessionStoreEntry> {
+  const sessionId = randomUUID();
+  const sessionFile = join(getAgentSessionsDir(agentId), `${sessionId}.jsonl`);
+
+  // Write session header to jsonl
+  const header = {
+    type: 'session',
+    version: CURRENT_SESSION_VERSION,
+    id: sessionId,
+    timestamp: new Date().toISOString(),
+    cwd: process.cwd(),
+  };
+  await mkdir(getAgentSessionsDir(agentId), { recursive: true });
+  await writeFile(sessionFile, `${JSON.stringify(header)}\n`, 'utf8');
+
+  // Register in sessions.json
+  const store = await readAgentSessionStore(agentId);
+  const entry: AgentSessionStoreEntry = { sessionId, sessionFile, label };
+  store[sessionKey] = entry;
+  await writeAgentSessionStore(agentId, store);
+
+  logger.info(`[ScheduledTaskSessionWriter] Created agent session ${sessionKey} -> ${sessionFile}`);
+  return entry;
+}
+
+/**
+ * Append a message to an OpenClaw agent session
+ */
+async function appendMessageToAgentSession(
+  agentId: string,
+  sessionKey: string,
+  label: string,
+  message: { role: string; content: string },
+): Promise<void> {
+  const store = await readAgentSessionStore(agentId);
+  let entry = store[sessionKey] as AgentSessionStoreEntry | undefined;
+  
+  if (!entry || typeof entry !== 'object' || !entry.sessionFile) {
+    entry = await createAgentSessionEntry(agentId, sessionKey, label);
+  }
+
+  const messageLine = {
+    type: 'message',
+    timestamp: new Date().toISOString(),
+    message,
+  };
+  
+  await appendFile(entry.sessionFile, `${JSON.stringify(messageLine)}\n`, 'utf8');
+  logger.info(`[ScheduledTaskSessionWriter] Appended message to agent session ${sessionKey}`);
+}
 
 function getSessionsJsonPath(taskId: number): string {
   return join(getOpenClawConfigDir(), 'scheduled-tasks', String(taskId), 'sessions', 'sessions.json');
@@ -152,7 +251,18 @@ export interface TriggerRunResult {
 }
 
 /**
+ * Format current date as YYYY-MM-DD string
+ */
+function formatLocalYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
  * Append a trigger execution result to the task's session transcript.
+ * Also writes to OpenClaw agent session for gateway lookup.
  */
 export async function appendTriggerResultToSession(
   taskId: number,
@@ -161,11 +271,23 @@ export async function appendTriggerResultToSession(
 ): Promise<void> {
   const session = await ensureSession(taskId, taskName);
 
+  // Also write to OpenClaw agent session for gateway lookup
+  const entryId = formatLocalYmd(new Date());
+  const agentId = 'main';
+  const agentSessionKey = `agent:${agentId}:scheduled-task:${taskId}:${entryId}`;
+  
+  const executionContent = run.executionResult?.trim() || `任务执行完成 (状态：${run.status})`;
+  await appendMessageToAgentSession(
+    agentId,
+    agentSessionKey,
+    `${taskName} - ${entryId}`,
+    { role: 'assistant', content: executionContent },
+  );
+
   const lines: string[] = [];
   const now = new Date().toISOString();
 
   // Append execution result as assistant message
-  const executionContent = run.executionResult?.trim() ?? '';
   if (executionContent) {
     const messageLine = {
       type: 'message',

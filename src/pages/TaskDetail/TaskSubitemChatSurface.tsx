@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
-import { createAutoSendWatcher, useMessageQueueStore } from '@/stores/message-queue';
+import { createAutoSendWatcher, /* useMessageQueueStore */ } from '@/stores/message-queue';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import {
   STO_TASK_PENDING_COMPOSE_KEY,
@@ -22,7 +22,7 @@ import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
 import { usePreviewableFiles } from '@/pages/Chat/message-utils';
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
-import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
+// import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
 import { extractText } from '@/pages/Chat/message-utils';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
@@ -67,10 +67,10 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const { handleSend, handleQueue } = useStoTaskSubitemChatSend();
 
-  const queue = useMessageQueueStore((s) => s.getQueue(sessionKey));
-  const queueRemove = useCallback((id: string) => useMessageQueueStore.getState().remove(sessionKey, id), [sessionKey]);
-  const queueMoveUp = useCallback((id: string) => useMessageQueueStore.getState().moveUp(sessionKey, id), [sessionKey]);
-  const queueMoveDown = useCallback((id: string) => useMessageQueueStore.getState().moveDown(sessionKey, id), [sessionKey]);
+  // const queue = useMessageQueueStore((s) => s.getQueue(sessionKey));
+  // const queueRemove = useCallback((id: string) => useMessageQueueStore.getState().remove(sessionKey, id), [sessionKey]);
+  // const queueMoveUp = useCallback((id: string) => useMessageQueueStore.getState().moveUp(sessionKey, id), [sessionKey]);
+  // const queueMoveDown = useCallback((id: string) => useMessageQueueStore.getState().moveDown(sessionKey, id), [sessionKey]);
 
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [composeSeed, setComposeSeed] = useState<string | undefined>();
@@ -480,12 +480,12 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
           </div>
         </div>
 
-        <PendingQueuePanel
+        {/* <PendingQueuePanel
           queue={queue}
           onRemove={queueRemove}
           onMoveUp={queueMoveUp}
           onMoveDown={queueMoveDown}
-        />
+        /> */}
 
         <ChatInput
           className="pb-0"

@@ -44,29 +44,41 @@ export const useStoTaskSubitemsStore = create<StoTaskSubitemsState>()(
       ensureSubitem: (taskId, entryId) => {
         set((s) => {
           const sk = stoTaskSubitemKey(taskId, entryId);
+          const cur = s.entriesByTask[taskId] ?? [];
+          const entryExists = cur.includes(entryId);
+          
+          // Check if session key already exists
+          const existingSk = s.sessionKeyBySubitem[sk];
+          
+          // If entry already exists and has a session key, no need to update
+          if (entryExists && existingSk) {
+            return s;
+          }
+          
+          // Create new session key if needed
           let sessionKeys = { ...s.sessionKeyBySubitem };
-          if (!sessionKeys[sk]) {
+          if (!existingSk) {
             sessionKeys[sk] = newSubitemSessionKey();
           }
-          const cur = s.entriesByTask[taskId] ?? [];
-          if (cur.includes(entryId)) {
-            const sorted = sortEntryIdsDesc(cur);
-            const entriesSame = sorted.length === cur.length && sorted.every((id, i) => id === cur[i]);
-            const sessionUnchanged =
-              s.sessionKeyBySubitem[sk] === sessionKeys[sk] &&
-              Object.keys(sessionKeys).length === Object.keys(s.sessionKeyBySubitem).length;
-            if (entriesSame && sessionUnchanged) return s;
+          
+          // Add entry if it doesn't exist
+          if (!entryExists) {
             return {
               ...s,
-              entriesByTask: entriesSame ? s.entriesByTask : { ...s.entriesByTask, [taskId]: sorted },
+              entriesByTask: { ...s.entriesByTask, [taskId]: sortEntryIdsDesc([...cur, entryId]) },
               sessionKeyBySubitem: sessionKeys,
             };
           }
-          return {
-            ...s,
-            entriesByTask: { ...s.entriesByTask, [taskId]: sortEntryIdsDesc([...cur, entryId]) },
-            sessionKeyBySubitem: sessionKeys,
-          };
+          
+          // Only update session keys if we created a new one
+          if (!existingSk) {
+            return {
+              ...s,
+              sessionKeyBySubitem: sessionKeys,
+            };
+          }
+          
+          return s;
         });
       },
       listEntries: (taskId) => sortEntryIdsDesc(get().entriesByTask[taskId] ?? []),
