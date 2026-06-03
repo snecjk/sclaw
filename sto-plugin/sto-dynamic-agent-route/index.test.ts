@@ -50,7 +50,7 @@ describe("sto-dynamic-agent-route plugin", () => {
 		expect(api.registerProvider).toHaveBeenCalledWith(
 			expect.objectContaining({ id: PROVIDER_ID, label: "STO Dynamic Route" }),
 		);
-		expect(api.on).toHaveBeenCalledTimes(1);
+		expect(api.on).toHaveBeenCalledTimes(2);
 		expect(api.on).toHaveBeenCalledWith("before_model_resolve", expect.any(Function));
 	});
 
@@ -81,8 +81,8 @@ describe("sto-dynamic-agent-route plugin", () => {
 					apiKey: "default",
 					models: [
 						expect.objectContaining({
-							id: "qwen-72b",
-							name: "qwen-72b",
+							id: "sto-route-model",
+							name: "sto-route-model",
 						}),
 					],
 				},
@@ -181,7 +181,7 @@ describe("sto-dynamic-agent-route plugin", () => {
 			);
 			await hooks.before_model_resolve(
 				{ prompt: "test" },
-				{ agentId: "my-agent", channelId: "discord", sessionKey: "sess-xyz" },
+				{ agentId: "my-agent", channelId: "discord", sessionKey: "sess-xyz", trigger: "user" },
 			);
 
 			// Now call wrapStreamFn — it should include agent context headers.
@@ -210,7 +210,7 @@ describe("sto-dynamic-agent-route plugin", () => {
 		};
 
 		const hookEvent = { prompt: "hello world" };
-		const hookCtx = { agentId: "agent-1", channelId: "telegram", sessionKey: "sess-abc" };
+		const hookCtx = { agentId: "agent-1", channelId: "telegram", sessionKey: "sess-abc", trigger: "user" };
 
 		it("returns override when routing API returns shouldOverride: true", async () => {
 			const api = buildApi(defaultPluginConfig);
@@ -224,7 +224,7 @@ describe("sto-dynamic-agent-route plugin", () => {
 
 			expect(result).toEqual({
 				providerOverride: PROVIDER_ID,
-				modelOverride: "qwen-72b",
+				modelOverride: "sto-route-model",
 			});
 		});
 
@@ -346,6 +346,84 @@ describe("sto-dynamic-agent-route plugin", () => {
 				channelId: "telegram",
 				sessionKey: "sess-abc",
 			});
+		});
+	});
+
+	describe("before_prompt_build hook", () => {
+		let tempDir: string;
+
+		beforeEach(async () => {
+			tempDir = join(tmpdir(), `sto-test-${Date.now()}`);
+			await mkdir(tempDir, { recursive: true });
+		});
+
+		afterEach(async () => {
+			await rm(tempDir, { recursive: true, force: true });
+		});
+
+		it("injects SSO user context when auth file exists", async () => {
+			const ssoPath = join(tempDir, "sso-auth.json");
+			await writeFile(
+				ssoPath,
+				JSON.stringify({
+					userName: "test-user",
+					realName: "Test User",
+					companyCode: "430000",
+					companyName: "Test Company",
+					departmentCode: "430001",
+					departmentName: "Test Department",
+				}),
+			);
+
+			const api = buildApi({ ssoAuthPath: ssoPath });
+			register.register(api as any);
+
+			const result = await hooks.before_prompt_build(
+				{ prompt: "hello", messages: [] },
+				{ agentId: "agent-1", sessionKey: "sess-abc", trigger: "user" },
+			);
+
+			expect(result).toBeDefined();
+			expect(result?.prependContext).toContain("当前登录用户信息（已认证）");
+			expect(result?.prependContext).toContain("用户名：test-user");
+			expect(result?.prependContext).toContain("真实姓名：Test User");
+			expect(result?.prependContext).toContain("网点编码（companyCode）：430000");
+			expect(result?.prependContext).toContain("网点名称（companyName）：Test Company");
+			expect(result?.prependContext).toContain("组织编码（departmentCode）：430001");
+			expect(result?.prependContext).toContain("组织名称（departmentName）：Test Department");
+		});
+
+		it("returns undefined when no SSO auth file exists", async () => {
+			const api = buildApi({ ssoAuthPath: join(tempDir, "nonexistent.json") });
+			register.register(api as any);
+
+			const result = await hooks.before_prompt_build(
+				{ prompt: "hello", messages: [] },
+				{ agentId: "agent-1", sessionKey: "sess-abc", trigger: "user" },
+			);
+
+			expect(result).toBeUndefined();
+			expect(api.logger.warn).toHaveBeenCalledWith(
+				expect.stringContaining("failed to read SSO auth"),
+			);
+		});
+
+		it("returns undefined when auth file has no userName", async () => {
+			const ssoPath = join(tempDir, "sso-auth.json");
+			await writeFile(ssoPath, JSON.stringify({ stoToken: "tok-123" }));
+
+			const api = buildApi({ ssoAuthPath: ssoPath });
+			register.register(api as any);
+
+			const result = await hooks.before_prompt_build(
+				{ prompt: "hello", messages: [] },
+				{ agentId: "agent-1", sessionKey: "sess-abc", trigger: "user" },
+			);
+
+			expect(result).toBeUndefined();
+			expect(api.logger.debug).toHaveBeenCalledWith(
+				expect.stringContaining("no SSO auth found, skipping context injection"),
+			);
 		});
 	});
 });
