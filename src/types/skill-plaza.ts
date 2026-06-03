@@ -35,6 +35,12 @@ export interface CategoryDef {
   count?: number;
 }
 
+export interface PlazaSkillMeta {
+  title: string;
+  category: string | null;
+  categoryCode: string | null;
+}
+
 export interface PlazaListResult {
   skills: SkillSummary[];
   categoryCounts: Record<string, number>;

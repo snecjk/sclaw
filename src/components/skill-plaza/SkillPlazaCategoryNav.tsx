@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { useMemo } from 'react';
 
 export function SkillPlazaCategoryNav() {
-  const { categories, categoryCounts, activeCategory, setActiveCategory, activeTab, mySkills, searchQuery } = useSkillPlazaStore();
+  const { categories, categoryCounts, activeCategory, setActiveCategory, activeTab, mySkills, searchQuery, plazaSkillMetaMap } = useSkillPlazaStore();
 
   // For 'mine' tab, counts must be recomputed from frontend-filtered skills
   // because search is done locally; for 'all' tab the backend already returns
@@ -24,14 +24,25 @@ export function SkillPlazaCategoryNav() {
     counts[''] = filtered.length;
 
     for (const skill of filtered) {
-      const code = skill.categoryCode;
+      // Prefer skill.categoryCode; fallback to plaza meta cache for accurate categorization
+      let code = skill.categoryCode;
+      if (!code) {
+        const meta = plazaSkillMetaMap[skill.slug];
+        if (meta) {
+          code = meta.categoryCode;
+          if (!code && meta.category) {
+            const cat = categories.find((c) => c.label === meta.category);
+            if (cat) code = cat.slug;
+          }
+        }
+      }
       if (code) {
         counts[code] = (counts[code] || 0) + 1;
       }
     }
 
     return counts;
-  }, [activeTab, categoryCounts, mySkills, searchQuery]);
+  }, [activeTab, categoryCounts, mySkills, searchQuery, plazaSkillMetaMap, categories]);
 
   return (
     <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 my-2.5 mx-0 p-0" aria-label="技能分类">

@@ -19,6 +19,7 @@ import type {
   SkillPlazaTab,
   SkillPlazaSort,
   SkillPlazaView,
+  PlazaSkillMeta,
 } from '@/types/skill-plaza';
 
 interface SkillPlazaState {
@@ -35,6 +36,7 @@ interface SkillPlazaState {
   categories: CategoryDef[];
   categoryCounts: Record<string, number>;
   skillDetailsCache: Map<string, { skill: SkillSummary; expiresAt: number }>;
+  plazaSkillMetaMap: Record<string, PlazaSkillMeta>;
 
   // Pagination
   hasMore: boolean;
@@ -74,6 +76,26 @@ interface SkillPlazaState {
   clearSkillDetailCache: () => void;
 }
 
+// Load plaza meta cache from localStorage on init
+function loadPlazaMetaCache(): Record<string, PlazaSkillMeta> {
+  try {
+    const raw = localStorage.getItem('skill-plaza-meta-cache');
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // ignore parse errors
+  }
+  return {};
+}
+
+// Persist plaza meta cache to localStorage
+function savePlazaMetaCache(map: Record<string, PlazaSkillMeta>) {
+  try {
+    localStorage.setItem('skill-plaza-meta-cache', JSON.stringify(map));
+  } catch {
+    // ignore storage errors
+  }
+}
+
 const DETAIL_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
@@ -90,6 +112,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
   categories: [],
   categoryCounts: {},
   skillDetailsCache: new Map(),
+  plazaSkillMetaMap: loadPlazaMetaCache(),
 
   // Pagination
   hasMore: false,
@@ -109,8 +132,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
 
   // -- Setters --
   setActiveTab: (tab) => {
-    const nextCategory = get().activeCategory === 'mine' ? '' : get().activeCategory;
-    set({ activeTab: tab, page: 1, activeCategory: nextCategory });
+    set({ activeTab: tab, page: 1, activeCategory: '' });
     if (tab === 'all') {
       get().fetchPlazaSkills({ reset: true });
     } else if (tab === 'mine') {
@@ -167,6 +189,18 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
         page,
         pageSize: get().pageSize,
       });
+      const metaMap = { ...get().plazaSkillMetaMap };
+      for (const skill of result.skills) {
+        if (skill.category || skill.categoryCode) {
+          metaMap[skill.slug] = {
+            title: skill.title,
+            category: skill.category,
+            categoryCode: skill.categoryCode,
+          };
+        }
+      }
+      savePlazaMetaCache(metaMap);
+
       const nextState: Partial<SkillPlazaState> = {
         plazaSkills: result.skills,
         hasMore: result.hasMore,
@@ -175,6 +209,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
         total: result.total,
         loading: false,
         plazaStale: false,
+        plazaSkillMetaMap: metaMap,
       };
       if (!skipCategoryCounts && get().activeTab === 'all' && !get().activeCategory) {
         nextState.categoryCounts = result.categoryCounts;
@@ -191,8 +226,30 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const result = await fetchLocalSkills();
+      // Enrich mySkills category info from plaza cache when backend categoryCode is missing
+      const { plazaSkillMetaMap, categories } = get();
+      const enrichedSkills = result.skills.map((skill) => {
+        if (skill.categoryCode) return skill;
+        const meta = plazaSkillMetaMap[skill.slug];
+        if (meta) {
+          let code = meta.categoryCode;
+          if (!code && meta.category) {
+            const cat = categories.find((c) => c.label === meta.category);
+            if (cat) code = cat.slug;
+          }
+          if (code) {
+            return {
+              ...skill,
+              category: meta.category || skill.category,
+              categoryCode: code,
+            };
+          }
+        }
+        return skill;
+      });
+
       const nextState: Partial<SkillPlazaState> = {
-        mySkills: result.skills,
+        mySkills: enrichedSkills,
         hasMore: false,
         page: 1,
         pageSize: result.skills.length || 20,
