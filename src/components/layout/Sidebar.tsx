@@ -1045,6 +1045,35 @@ isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION
               sideOffset={8}
               className={SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS}
             >
+              {/* 2026.6.3 暂时不显示这个信息 */}
+              {/* <div className="px-2.5 py-2">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-semibold text-foreground">
+                    {authUser.realName?.trim() || authUser.userName}
+                  </span>
+                  {authUser.userName ? (
+                    <span className="text-xs text-muted-foreground">
+                      工号：{authUser.userName}
+                    </span>
+                  ) : null}
+                  {(authUser.companyCode || authUser.departmentCode) ? (
+                    <span className="text-xs text-muted-foreground">
+                      网点代码：{authUser.companyCode || authUser.departmentCode}
+                    </span>
+                  ) : null}
+                  {(authUser.companyName || authUser.departmentName) ? (
+                    <span className="text-xs text-muted-foreground">
+                      网点名称：{authUser.companyName || authUser.departmentName}
+                    </span>
+                  ) : null}
+                  {authUser.categoryCode ? (
+                    <span className="text-xs text-muted-foreground">
+                      用户类别：{authUser.categoryCode}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <DropdownMenuSeparator /> */}
               <DropdownMenuItem
                 onClick={() => navigate('/settings')}
                 className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}

@@ -31,9 +31,15 @@ export interface SsoUserInfo {
   realName: string;
   code: string;
   empCode: string;
+  companyId: string;
+  companyCode: string;
   companyName: string;
+  departmentId: string;
+  departmentCode: string;
   departmentName: string;
   categoryCode: string;
+  isAdministrator: boolean;
+  loginMode: string;
   openId: string;
   signature: string;
   authenticatedAt: string;
