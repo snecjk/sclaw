@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CLEANUP_RETRY_DELAYS_MS,
   getMacAppBundleInfo,
   isOldAppBackupName,
 } from '../../electron/utils/cleanup-old-app-bundles';
@@ -25,5 +26,9 @@ describe('cleanup-old-app-bundles', () => {
     expect(isOldAppBackupName(bundle, 'STO Claw.app')).toBe(false);
     expect(isOldAppBackupName(bundle, 'STO Claw.app.old')).toBe(false);
     expect(isOldAppBackupName(bundle, 'Other.app.old-123')).toBe(false);
+  });
+
+  it('retries cleanup while ShipIt may still be renaming backups', () => {
+    expect(CLEANUP_RETRY_DELAYS_MS).toEqual([0, 30_000, 120_000, 300_000]);
   });
 });

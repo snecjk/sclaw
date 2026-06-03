@@ -172,7 +172,7 @@ const PLUGIN_NPM_NAMES: Record<string, string> = {
   // dingtalk: '@soimy/dingtalk',
   // wecom: '@wecom/wecom-openclaw-plugin',
   // qqbot: '@sliverp/qqbot',
-  // 'openclaw-weixin': '@tencent-weixin/openclaw-weixin',
+  'openclaw-weixin': '@tencent-weixin/openclaw-weixin',
 };
 
 // ── Local plugin directory mapping ───────────────────────────────────────────
