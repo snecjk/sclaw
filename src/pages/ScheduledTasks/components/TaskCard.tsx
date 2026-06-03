@@ -6,7 +6,7 @@ import type { CronJob } from '@/types/cron';
 
 interface TaskCardProps {
   job: CronJob;
-  onToggle: (enabled: boolean) => void;
+  onToggle: (enabled: boolean, currentEnabled: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
   onTrigger: () => void;
@@ -102,7 +102,7 @@ export function TaskCard({ job, onToggle, onEdit, onDelete, onTrigger }: TaskCar
         </div>
         <Switch
           checked={job.enabled}
-          onCheckedChange={onToggle}
+          onCheckedChange={(newEnabled) => onToggle(newEnabled, job.enabled)}
           aria-label={job.enabled ? '暂停任务' : '启用任务'}
         />
       </div>

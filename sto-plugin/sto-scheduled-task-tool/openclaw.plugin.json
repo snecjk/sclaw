@@ -2,6 +2,24 @@
   "id": "sto-scheduled-task-tool",
   "name": "申通定时任务创建工具",
   "description": "提供从自然语言创建定时任务的工具，支持意图识别和参数提取",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "description": "STO 后端 base URL，如 https://baseinfo-aimemory.sto.cn"
+      },
+      "ssoAuthPath": {
+        "type": "string",
+        "default": "~/.stoclaw/openclaw/sso-auth.json",
+        "description": "SSO 凭据文件路径"
+      }
+    }
+  },
   "tools": ["create_scheduled_task"],
   "toolConfig": {
     "create_scheduled_task": {

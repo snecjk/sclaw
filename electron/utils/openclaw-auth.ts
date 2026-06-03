@@ -1324,7 +1324,7 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
     plugins.enabled = true;
 
     const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
-    for (const pluginId of ['sto-dynamic-agent-route', 'sto-agent-telemetry']) {
+    for (const pluginId of ['sto-dynamic-agent-route', 'sto-agent-telemetry', 'sto-scheduled-task-tool']) {
       if (!allow.includes(pluginId)) {
         allow.push(pluginId);
       }
@@ -1356,8 +1356,27 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
         },
       },
     };
+    entries['sto-scheduled-task-tool'] = {
+      enabled: true,
+      config: {
+        baseUrl: stoBaseUrl,
+        ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
+      },
+    };
     plugins.entries = entries;
     config.plugins = plugins;
+
+    // Disable the built-in "cron" tool so the agent must use
+    // create_scheduled_task (provided by sto-scheduled-task-tool)
+    // when creating scheduled jobs. This prevents local-only cron
+    // creation and forces the cloud scheduled-task flow.
+    const tools = (config.tools || {}) as Record<string, unknown>;
+    const deny = Array.isArray(tools.deny) ? [...(tools.deny as string[])] : [];
+    if (!deny.includes('cron')) {
+      deny.push('cron');
+    }
+    tools.deny = deny;
+    config.tools = tools;
 
     await writeOpenClawJson(config);
     console.log(

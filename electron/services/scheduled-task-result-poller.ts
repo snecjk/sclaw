@@ -186,41 +186,50 @@ export class ScheduledTaskResultPoller {
 
   private async syncTaskResults(task: ScheduledTask): Promise<boolean> {
     const taskId = task.id;
-    const lastRunAt = task.lastRunAt;
 
-    if (!lastRunAt) {
+    try {
+      const service = getScheduledTaskService();
+      const runs = await service.queryTaskRuns(taskId);
+
+      if (!runs || runs.length === 0) {
+        await setLastPolledAt(taskId, new Date().toISOString());
+        return false;
+      }
+
+      const newRuns: ScheduledTaskRun[] = [];
+      for (const run of runs) {
+        const dedupeKey = `${taskId}:${run.id}`;
+        if (await isRunProcessed(dedupeKey)) {
+          continue;
+        }
+
+        // 跳过仍在执行中的 run，pending 状态不推送也不标记为已处理
+        if (run.status === 'pending') {
+          continue;
+        }
+
+        await appendTriggerResultToSession(taskId, task.name, {
+          status: run.status,
+          executionResult: run.executionResult,
+          logText: run.logText,
+        });
+
+        await markRunProcessed(dedupeKey);
+        newRuns.push(run);
+      }
+
+      await setLastPolledAt(taskId, new Date().toISOString());
+
+      if (newRuns.length > 0) {
+        this.notifyRenderer(taskId, task.name, newRuns);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      logger.warn(`[ScheduledTaskPoller] Failed to sync task ${taskId}:`, err);
       await setLastPolledAt(taskId, new Date().toISOString());
       return false;
     }
-
-    // 用 taskId:lastRunAt 去重（runs 接口暂未上线，无法获取 runId）
-    const dedupeKey = `${taskId}:${lastRunAt}`;
-    if (await isRunProcessed(dedupeKey)) {
-      await setLastPolledAt(taskId, new Date().toISOString());
-      return false;
-    }
-
-    // Mock 执行结果（runs 接口上线后替换为真实数据）
-    const status = task.lastRunStatus || 'unknown';
-    const executionResult = `定时任务「${task.name}」已执行完成（状态：${status}）`;
-
-    await appendTriggerResultToSession(taskId, task.name, {
-      status,
-      executionResult,
-      logText: undefined,
-    });
-
-    await markRunProcessed(dedupeKey);
-    await setLastPolledAt(taskId, new Date().toISOString());
-
-    const mockRun: ScheduledTaskRun = {
-      id: Date.now(),
-      taskId,
-      status,
-      executionResult,
-    };
-    this.notifyRenderer(taskId, task.name, [mockRun]);
-    return true;
   }
 
   private notifyRenderer(taskId: number, taskName: string, runs: ScheduledTaskRun[]) {

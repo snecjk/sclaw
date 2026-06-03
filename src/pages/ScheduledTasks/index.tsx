@@ -71,6 +71,7 @@ export default function ScheduledTasks() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<TaskViewModel | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TaskViewModel | null>(null);
+  const [recommendInitialValues, setRecommendInitialValues] = useState<{ name?: string; message?: string } | undefined>(undefined);
 
   useEffect(() => {
     fetchTasks().catch(() => {});
@@ -91,10 +92,10 @@ export default function ScheduledTasks() {
   }, [viewModels, searchQuery, sortValue]);
 
   const handleToggle = useCallback(
-    async (job: TaskViewModel) => {
+    async (job: TaskViewModel, newEnabled: boolean) => {
       try {
-        await toggleTask(Number(job.id), !job.enabled);
-        toast.success(job.enabled ? '任务已暂停' : '任务已启用');
+        await toggleTask(Number(job.id), newEnabled);
+        toast.success(newEnabled ? '任务已启用' : '任务已暂停');
       } catch (err) {
         toast.error(String(err));
       }
@@ -106,7 +107,9 @@ export default function ScheduledTasks() {
     async (job: TaskViewModel) => {
       try {
         const result = await triggerTask(Number(job.id));
-        if (result.hasSession) {
+        if (result.outcome === 'async_started') {
+          toast.success('测试运行已在云端开始执行，结果将通过轮询同步');
+        } else if (result.hasSession) {
           toast.success('测试运行已完成，结果已添加到会话', {
             action: {
               label: '查看会话',
@@ -128,8 +131,6 @@ export default function ScheduledTasks() {
   const handleSave = useCallback(
     async (input: TaskCreateInputWithRun) => {
       try {
-        let taskId: number | null = null;
-        
         if (editingJob) {
           await updateTask({
             taskId: Number(editingJob.id),
@@ -138,40 +139,70 @@ export default function ScheduledTasks() {
             description: input.message,
           });
           toast.success('任务已更新');
-          taskId = Number(editingJob.id);
         } else {
-          const task = await createTask({
+          await createTask({
             name: input.name,
             cronExpr: input.schedule,
             description: input.message,
           });
           toast.success('任务已创建');
-          taskId = task.id;
         }
         
         await fetchTasks().catch(() => {});
-        
-        // If runNow is selected, trigger the task immediately
-        if (input.runNow && taskId !== null) {
-          try {
-            await triggerTask(taskId);
-            toast.success('任务已创建并执行');
-          } catch (triggerErr) {
-            console.error('Failed to trigger task after creation:', triggerErr);
-            toast.warning('任务已创建，但立即执行失败');
-          }
-        }
       } catch (err) {
         const message = String(err);
+        
+        // 尝试解析 API 返回的详细错误信息
+        let userFriendlyMessage = '操作失败，请稍后重试';
+        
         if (message.includes('409') || message.includes('任务名称已存在')) {
-          toast.error('任务名称已存在，请使用其他名称');
-        } else {
-          toast.error(String(err));
+          userFriendlyMessage = '任务名称已存在，请使用其他名称';
+        } else if (message.includes('422') || message.includes('400')) {
+          // 尝试从 JSON 中提取验证错误信息
+          try {
+            const jsonStart = message.indexOf('{');
+            if (jsonStart !== -1) {
+              const errorData = JSON.parse(message.substring(jsonStart));
+              if (errorData.detail && Array.isArray(errorData.detail)) {
+                // 提取验证错误字段
+                const fieldErrors = errorData.detail.map((d: any) => {
+                  if (d.msg) {
+                    // 将技术性的错误消息转换为用户友好的提示
+                    if (d.msg.includes('String should have at most')) {
+                      const match = d.msg.match(/at most (\d+) characters/);
+                      const maxLen = match ? match[1] : '最大';
+                      const field = d.loc?.[1] || '字段';
+                      return `${field}长度不能超过${maxLen}个字符`;
+                    }
+                    if (d.msg.includes('should have at least')) {
+                      const field = d.loc?.[1] || '字段';
+                      return `${field}长度不足`;
+                    }
+                    if (d.msg.includes('required') || d.msg.includes('Missing required')) {
+                      return `${d.loc?.[1] || '该'}字段为必填项`;
+                    }
+                    return d.msg;
+                  }
+                  return null;
+                }).filter(Boolean);
+                
+                if (fieldErrors.length > 0) {
+                  userFriendlyMessage = fieldErrors.join('；');
+                }
+              } else if (errorData.msg) {
+                userFriendlyMessage = errorData.msg;
+              }
+            }
+          } catch {
+            // JSON 解析失败，使用默认消息
+          }
         }
+        
+        toast.error(userFriendlyMessage);
         throw err;
       }
     },
-    [editingJob, createTask, updateTask, triggerTask, fetchTasks],
+    [editingJob, createTask, updateTask, fetchTasks],
   );
 
   const handleDelete = useCallback(async () => {
@@ -188,14 +219,9 @@ export default function ScheduledTasks() {
   }, [deleteTarget, deleteTask, fetchTasks]);
 
   const handleRecommendAdd = useCallback((task: { title: string; desc: string }) => {
+    setRecommendInitialValues({ name: task.title, message: task.desc });
     setEditingJob(null);
     setCreateOpen(true);
-    setTimeout(() => {
-      const nameInput = document.querySelector<HTMLInputElement>('input[placeholder="描述你的任务"]');
-      if (nameInput) nameInput.value = task.title;
-      const msgInput = document.querySelector<HTMLTextAreaElement>('textarea[placeholder="让 STO Claw 帮你做什么…"]');
-      if (msgInput) msgInput.value = task.desc;
-    }, 100);
   }, []);
 
   return (
@@ -227,7 +253,7 @@ export default function ScheduledTasks() {
                 <TaskCard
                   key={job.id}
                   job={job}
-                  onToggle={(enabled) => handleToggle({ ...job, enabled })}
+                  onToggle={(newEnabled) => handleToggle(job, newEnabled)}
                   onEdit={() => { setEditingJob(job); setCreateOpen(true); }}
                   onDelete={() => setDeleteTarget(job)}
                   onTrigger={() => handleTrigger(job)}
@@ -241,8 +267,9 @@ export default function ScheduledTasks() {
       <TaskCreateModal
         job={editingJob}
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onSave={handleSave}
+        onClose={() => { setCreateOpen(false); setRecommendInitialValues(undefined); }}
+        onSave={(input) => { setRecommendInitialValues(undefined); return handleSave(input); }}
+        initialValues={recommendInitialValues}
       />
 
       <ConfirmDialog

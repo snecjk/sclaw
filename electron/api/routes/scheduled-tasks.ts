@@ -194,7 +194,26 @@ export async function handleScheduledTaskRoutes(
       const service = getScheduledTaskService();
       const result = await service.triggerTask(id);
 
-      // Append result to local session
+      // Start high-frequency poll for this task to catch async completion
+      try {
+        const { getScheduledTaskResultPoller } = await import('../../services/scheduled-task-result-poller');
+        getScheduledTaskResultPoller().startTaskPoll(id);
+      } catch (pollErr) {
+        console.error(`[ScheduledTasks] Failed to start task poll for ${id}:`, pollErr);
+      }
+
+      // For async execution (timed out), return immediately without waiting for result
+      if (result.outcome === 'async_started') {
+        sendJson(res, 200, {
+          taskId: id,
+          runId: 0,
+          outcome: 'async_started',
+          hasSession: false,
+        });
+        return true;
+      }
+
+      // Append result to local session if returned synchronously
       let hasSession = false;
       if (result.run) {
         try {
@@ -204,14 +223,6 @@ export async function handleScheduledTaskRoutes(
         } catch (sessionErr) {
           console.error(`[ScheduledTasks] Failed to append session for task ${id}:`, sessionErr);
         }
-      }
-
-      // Start high-frequency poll for this task to catch async completion
-      try {
-        const { getScheduledTaskResultPoller } = await import('../../services/scheduled-task-result-poller');
-        getScheduledTaskResultPoller().startTaskPoll(id);
-      } catch (pollErr) {
-        console.error(`[ScheduledTasks] Failed to start task poll for ${id}:`, pollErr);
       }
 
       sendJson(res, 200, { ...result, hasSession });

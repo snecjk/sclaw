@@ -316,6 +316,58 @@ export class ScheduledTaskService {
   }
 
   // -----------------------------------------------------------------------
+  // Query Runs (cloud execution results)
+  // -----------------------------------------------------------------------
+  async queryTaskRuns(taskId: number, executionTime?: string): Promise<ScheduledTaskRun[]> {
+    const baseUrl = await this.resolveBaseUrl();
+    const headers = await this.buildHeaders();
+    let url = `${baseUrl}/runs/query?task_id=${encodeURIComponent(taskId)}`;
+    if (executionTime) {
+      url += `&execution_time=${encodeURIComponent(executionTime)}`;
+    }
+    logger.info(`[ScheduledTaskService] >>> queryTaskRuns url=${url}`);
+    logger.info(`[ScheduledTaskService] >>> queryTaskRuns headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
+    const curlCmd = `curl -X GET "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}"`;
+    logger.info(`[ScheduledTaskService] >>> queryTaskRuns curl=${curlCmd}`);
+
+    const res = await fetch(url, { method: 'GET', headers });
+    const bodyText = await res.text();
+    logger.info(`[ScheduledTaskService] <<< queryTaskRuns status=${res.status} body=${bodyText.slice(0, 1000)}`);
+
+    if (!res.ok) {
+      throw new Error(`Scheduled task runs query failed (${res.status}): ${bodyText}`);
+    }
+
+    const data = JSON.parse(bodyText) as { success?: boolean; data?: unknown; errMessage?: string };
+    if (data.success === false) {
+      throw new Error(data.errMessage || 'Scheduled task runs query failed');
+    }
+
+    // 兼容多种返回结构：data 为数组 / data.items 为数组 / data 为单条对象
+    let items: Array<Record<string, unknown>> = [];
+    if (Array.isArray(data.data)) {
+      items = data.data as Array<Record<string, unknown>>;
+    } else if (data.data && typeof data.data === 'object') {
+      const maybeItems = (data.data as Record<string, unknown>).items;
+      if (Array.isArray(maybeItems)) {
+        items = maybeItems as Array<Record<string, unknown>>;
+      } else {
+        // 单条记录，包装成数组
+        items = [data.data as Record<string, unknown>];
+      }
+    }
+
+    return items.map((r) => ({
+      id: Number(r.id) || 0,
+      taskId: Number(r.task_id) || taskId,
+      status: String(r.status || ''),
+      executionResult: r.execution_result != null ? String(r.execution_result) : undefined,
+      logText: r.log_text != null ? String(r.log_text) : undefined,
+      notifyDingtalkOk: r.notify_dingtalk_ok != null ? Boolean(r.notify_dingtalk_ok) : undefined,
+    }));
+  }
+
+  // -----------------------------------------------------------------------
   // Trigger
   // -----------------------------------------------------------------------
   async triggerTask(taskId: number): Promise<ScheduledTaskTriggerResponse> {
@@ -328,11 +380,31 @@ export class ScheduledTaskService {
     const curlCmd = `curl -X POST "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}" -d '${body}'`;
     logger.info(`[ScheduledTaskService] >>> triggerTask curl=${curlCmd}`);
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body,
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === 'AbortError') {
+        logger.info(`[ScheduledTaskService] triggerTask timed out for task ${taskId}, treating as async execution started`);
+        return {
+          taskId,
+          runId: 0,
+          outcome: 'async_started',
+        };
+      }
+      throw err;
+    }
+
     const bodyText = await res.text();
     logger.info(`[ScheduledTaskService] <<< triggerTask status=${res.status} body=${bodyText.slice(0, 500)}`);
 

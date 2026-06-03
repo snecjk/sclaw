@@ -553,6 +553,14 @@ export function ensureStoAgentTelemetryPluginInstalled(): { installed: boolean; 
   );
 }
 
+export function ensureStoScheduledTaskToolPluginInstalled(): { installed: boolean; warning?: string } {
+  return ensurePluginInstalled(
+    'sto-scheduled-task-tool',
+    buildCandidateSources('sto-scheduled-task-tool'),
+    'STO Scheduled Task Tool',
+  );
+}
+
 // ── Bulk startup installer ───────────────────────────────────────────────────
 
 /**
@@ -565,6 +573,7 @@ const ALL_BUNDLED_PLUGINS = [
   { fn: ensureWeChatPluginInstalled, label: 'WeChat' },
   { fn: ensureStoDynamicRoutePluginInstalled, label: 'STO Dynamic Route' },
   { fn: ensureStoAgentTelemetryPluginInstalled, label: 'STO Agent Telemetry' },
+  { fn: ensureStoScheduledTaskToolPluginInstalled, label: 'STO Scheduled Task Tool' },
 ] as const;
 
 async function ensurePluginInstalledAsync(
@@ -675,6 +684,7 @@ export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
     { dirName: 'openclaw-weixin', label: 'WeChat' },
     { dirName: 'sto-dynamic-agent-route', label: 'STO Dynamic Route' },
     { dirName: 'sto-agent-telemetry', label: 'STO Agent Telemetry' },
+    { dirName: 'sto-scheduled-task-tool', label: 'STO Scheduled Task Tool' },
   ] as const;
 
   for (const { dirName, label } of pluginSpecs) {
