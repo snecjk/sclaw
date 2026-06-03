@@ -282,6 +282,38 @@ export class ScheduledTaskService {
   }
 
   // -----------------------------------------------------------------------
+  // Runs
+  // -----------------------------------------------------------------------
+
+  async getTaskRuns(taskId: number): Promise<ScheduledTaskTriggerResponse['run'][]> {
+    const baseUrl = await this.resolveBaseUrl();
+    const headers = await this.buildHeaders();
+    const url = `${baseUrl}/${taskId}/runs`;
+    logger.info(`[ScheduledTaskService] getTaskRuns: ${url}`);
+
+    const res = await fetch(url, { method: 'GET', headers });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Scheduled task runs failed (${res.status}): ${text}`);
+    }
+
+    const data = (await res.json()) as { success?: boolean; data?: Array<Record<string, unknown>>; errMessage?: string };
+    if (data.success === false) {
+      throw new Error(data.errMessage || 'Scheduled task runs failed');
+    }
+
+    const items = data.data ?? [];
+    return items.map((r) => ({
+      id: Number(r.id) || 0,
+      taskId: Number(r.task_id) || taskId,
+      status: String(r.status || ''),
+      executionResult: r.execution_result != null ? String(r.execution_result) : undefined,
+      logText: r.log_text != null ? String(r.log_text) : undefined,
+      notifyDingtalkOk: r.notify_dingtalk_ok != null ? Boolean(r.notify_dingtalk_ok) : undefined,
+    }));
+  }
+
+  // -----------------------------------------------------------------------
   // Trigger
   // -----------------------------------------------------------------------
   async triggerTask(taskId: number): Promise<ScheduledTaskTriggerResponse> {
