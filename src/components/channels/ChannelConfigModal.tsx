@@ -94,6 +94,7 @@ export function ChannelConfigModal({
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [isExistingConfig, setIsExistingConfig] = useState(false);
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const qrConnectedRef = useRef(false);
   const [validationResult, setValidationResult] = useState<{
     valid: boolean;
     errors: string[];
@@ -207,6 +208,7 @@ export function ChannelConfigModal({
 
   const finishSaveRef = useRef(finishSave);
   const onCloseRef = useRef(onClose);
+  const onChannelSavedRef = useRef(onChannelSaved);
   const translateRef = useRef(t);
 
   useEffect(() => {
@@ -216,6 +218,10 @@ export function ChannelConfigModal({
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
+
+  useEffect(() => {
+    onChannelSavedRef.current = onChannelSaved;
+  }, [onChannelSaved]);
 
   useEffect(() => {
     translateRef.current = t;
@@ -241,6 +247,7 @@ export function ChannelConfigModal({
   useEffect(() => {
     if (!selectedType || meta?.connectionType !== 'qr') return;
     const channelType = selectedType;
+    qrConnectedRef.current = false;
 
     const onQr = (...args: unknown[]) => {
       const data = args[0] as { qr?: string; raw?: string };
@@ -253,6 +260,7 @@ export function ChannelConfigModal({
     const onSuccess = async (...args: unknown[]) => {
       const data = args[0] as { accountId?: string } | undefined;
       void data?.accountId;
+      qrConnectedRef.current = true;
       toast.success(translateRef.current('toast.qrConnected', { name: CHANNEL_NAMES[channelType] }));
       try {
         if (channelType === 'whatsapp') {
@@ -271,7 +279,12 @@ export function ChannelConfigModal({
           toast.warning(translateRef.current('toast.savedButRefreshFailed'));
           console.warn('Channel saved but post-save refresh failed:', postSaveError);
         }
-        onCloseRef.current();
+
+        if (onChannelSavedRef.current) {
+          await onChannelSavedRef.current(channelType);
+        } else {
+          onCloseRef.current();
+        }
       } catch (error) {
         toast.error(translateRef.current('toast.configFailed', { error: String(error) }));
         setConnecting(false);
@@ -295,6 +308,9 @@ export function ChannelConfigModal({
       removeQrListener();
       removeSuccessListener();
       removeErrorListener();
+      if (qrConnectedRef.current) {
+        return;
+      }
       hostApiFetch(`/api/channels/${encodeURIComponent(channelType)}/cancel`, {
         method: 'POST',
         body: JSON.stringify(resolvedAccountId ? { accountId: resolvedAccountId } : {}),

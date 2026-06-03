@@ -231,8 +231,14 @@ async function ensureScopedChannelBinding(channelType: string, accountId?: strin
   const agents = await listAgentsSnapshot();
   if (!agents.agents || agents.agents.length === 0) return;
 
-  // Preserve an existing user choice — never overwrite a binding that is already set.
-  if (agents.channelAccountOwners[`${storedChannelType}:${accountId}`]) {
+  const ownerKey = `${storedChannelType}:${accountId}`;
+  if (agents.channelAccountOwners[ownerKey]) {
+    return;
+  }
+
+  // WeChat: default route new/unbound accounts to the primary agent; user can change later.
+  if (isWechatChannelType(channelType) && agents.agents.some((entry) => entry.id === 'main')) {
+    await assignChannelAccountToAgent('main', storedChannelType, accountId);
     return;
   }
 
@@ -247,14 +253,6 @@ async function ensureScopedChannelBinding(channelType: string, accountId?: strin
   // Legacy compatibility: if accountId matches an existing agentId, keep auto-binding.
   if (agents.agents.some((entry) => entry.id === accountId)) {
     await assignChannelAccountToAgent(accountId, storedChannelType, accountId);
-    return;
-  }
-
-  // Plugin-managed WeChat accounts use opaque bot ids — default to main on first bind.
-  if (isWechatChannelType(channelType) || isWechatChannelType(storedChannelType)) {
-    if (agents.agents.some((entry) => entry.id === 'main')) {
-      await assignChannelAccountToAgent('main', storedChannelType, accountId);
-    }
   }
 }
 
@@ -301,13 +299,12 @@ interface ChannelAccountsView {
 }
 
 async function buildChannelAccountsView(ctx: HostApiContext): Promise<ChannelAccountsView[]> {
-  const [configuredChannels, configuredAccounts, openClawConfig] = await Promise.all([
+  const [configuredChannels, configuredAccounts, openClawConfig, initialAgentsSnapshot] = await Promise.all([
     listConfiguredChannels(),
     listConfiguredChannelAccounts(),
     readOpenClawConfig(),
+    listAgentsSnapshot(),
   ]);
-
-  let agentsSnapshot = await listAgentsSnapshot();
 
   let gatewayStatus: GatewayChannelStatusPayload | null;
   try {
@@ -322,6 +319,7 @@ async function buildChannelAccountsView(ctx: HostApiContext): Promise<ChannelAcc
     ...Object.keys(gatewayStatus?.channelAccounts || {}),
   ]);
 
+  let agentsSnapshot = initialAgentsSnapshot;
   const channels: ChannelAccountsView[] = [];
   for (const rawChannelType of channelTypes) {
     const uiChannelType = toUiChannelType(rawChannelType);
@@ -362,6 +360,7 @@ async function buildChannelAccountsView(ctx: HostApiContext): Promise<ChannelAcc
       }
       if (backfilledBinding) {
         agentsSnapshot = await listAgentsSnapshot();
+        scheduleGatewayChannelSaveRefresh(ctx, OPENCLAW_WECHAT_CHANNEL_TYPE, `channel:backfillWeChatBinding:${rawChannelType}`);
       }
     }
 
