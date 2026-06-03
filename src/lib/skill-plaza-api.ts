@@ -59,12 +59,28 @@ export async function fetchSkillDetail(slug: string): Promise<SkillDetail> {
   return res.data.skill;
 }
 
+export interface InstallPlazaSkillOptions {
+  version?: string;
+  force?: boolean;
+  title?: string;
+  description?: string;
+}
+
 // POST /api/skill-plaza/install
-export async function installPlazaSkill(slug: string): Promise<void> {
+export async function installPlazaSkill(
+  slug: string,
+  options: InstallPlazaSkillOptions = {},
+): Promise<void> {
   const res = await hostApiFetch<{ success: boolean; error?: string }>('/api/skill-plaza/install', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slug }),
+    body: JSON.stringify({
+      slug,
+      version: options.version,
+      force: options.force,
+      name: options.title,
+      description: options.description,
+    }),
   });
   if (!res.success) throw new Error(res.error || 'Install failed');
 }
