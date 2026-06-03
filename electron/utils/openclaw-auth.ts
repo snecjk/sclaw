@@ -1305,15 +1305,13 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
 }
 
 /**
- * Configure the sto-dynamic-agent-route plugin in openclaw.json after SSO login.
- * Adds models.providers entry and plugins.allow/entries with environment-specific URLs.
+ * Configure STO plugins in a single openclaw.json write (avoids multiple hot-reload cycles).
  */
-export async function syncStoDynamicRoutePluginToOpenClaw(): Promise<void> {
+export async function syncStoPluginsToOpenClaw(): Promise<void> {
   return withConfigLock(async () => {
     const stoBaseUrl = await resolveStoBaseUrl();
     const config = await readOpenClawJson();
 
-    // 1. Upsert models.providers.sto-dynamic-agent-route
     upsertOpenClawProviderEntry(config, 'sto-dynamic-agent-route', {
       baseUrl: `${stoBaseUrl}/agent/v1/biz-agent`,
       api: 'openai-completions',
@@ -1322,13 +1320,14 @@ export async function syncStoDynamicRoutePluginToOpenClaw(): Promise<void> {
       defaultModelInput: ['text', 'image'],
     });
 
-    // 2. Configure plugins section
     const plugins = (config.plugins || {}) as Record<string, unknown>;
     plugins.enabled = true;
 
     const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
-    if (!allow.includes('sto-dynamic-agent-route')) {
-      allow.push('sto-dynamic-agent-route');
+    for (const pluginId of ['sto-dynamic-agent-route', 'sto-agent-telemetry']) {
+      if (!allow.includes(pluginId)) {
+        allow.push(pluginId);
+      }
     }
     plugins.allow = allow;
 
@@ -1340,12 +1339,47 @@ export async function syncStoDynamicRoutePluginToOpenClaw(): Promise<void> {
         providerBaseUrl: `${stoBaseUrl}/agent/v1/biz-agent`,
       },
     };
+    entries['sto-agent-telemetry'] = {
+      enabled: true,
+      config: {
+        enabled: true,
+        ingestUrl: `${stoBaseUrl}/agent/v1/agent-telemetry/events`,
+        timeoutMs: 5000,
+        ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
+        conversationSyncEnabled: false,
+        hooks: {
+          beforeToolCall: true,
+          afterToolCall: true,
+          modelCallStarted: true,
+          modelCallEnded: true,
+          agentEnd: true,
+        },
+      },
+    };
     plugins.entries = entries;
     config.plugins = plugins;
 
     await writeOpenClawJson(config);
-    console.log(`Configured sto-dynamic-agent-route plugin (baseUrl=${stoBaseUrl}/agent/v1/biz-agent)`);
+    console.log(
+      `Configured STO plugins in one write (baseUrl=${stoBaseUrl}/agent/v1/biz-agent, telemetry ingest enabled)`,
+    );
   });
+}
+
+/**
+ * Configure the sto-dynamic-agent-route plugin in openclaw.json after SSO login.
+ * Adds models.providers entry and plugins.allow/entries with environment-specific URLs.
+ */
+export async function syncStoDynamicRoutePluginToOpenClaw(): Promise<void> {
+  return syncStoPluginsToOpenClaw();
+}
+
+/**
+ * Configure the sto-agent-telemetry plugin in openclaw.json after SSO login.
+ * Writes ingest URL and SSO auth path into plugins.entries.
+ */
+export async function syncStoAgentTelemetryPluginToOpenClaw(): Promise<void> {
+  return syncStoPluginsToOpenClaw();
 }
 
 /**
@@ -1376,6 +1410,28 @@ export async function removeStoDynamicRoutePluginFromOpenClaw(): Promise<void> {
     if (modified) {
       await writeOpenClawJson(config);
       console.log('Disabled sto-dynamic-agent-route plugin config');
+    }
+  });
+}
+
+/**
+ * Disable the sto-agent-telemetry plugin in openclaw.json on logout or token expiry.
+ */
+export async function removeStoAgentTelemetryPluginFromOpenClaw(): Promise<void> {
+  return withConfigLock(async () => {
+    const config = await readOpenClawJson();
+    let modified = false;
+
+    const plugins = config.plugins as Record<string, unknown> | undefined;
+    const entries = (plugins?.entries ?? {}) as Record<string, Record<string, unknown>>;
+    if (entries['sto-agent-telemetry']) {
+      entries['sto-agent-telemetry'].enabled = false;
+      modified = true;
+    }
+
+    if (modified) {
+      await writeOpenClawJson(config);
+      console.log('Disabled sto-agent-telemetry plugin config');
     }
   });
 }

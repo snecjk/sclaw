@@ -180,6 +180,7 @@ const PLUGIN_NPM_NAMES: Record<string, string> = {
 
 const LOCAL_PLUGIN_DIRS: Record<string, string> = {
   'sto-dynamic-agent-route': 'sto-dynamic-agent-route',
+  'sto-agent-telemetry': 'sto-agent-telemetry',
 };
 
 // ── Version helper ───────────────────────────────────────────────────────────
@@ -192,6 +193,47 @@ function readPluginVersion(pkgJsonPath: string): string | null {
   } catch {
     return null;
   }
+}
+
+function comparePluginVersions(a: string, b: string): number {
+  const pa = a.split(/[.+-]/).map((part) => parseInt(part, 10) || 0);
+  const pb = b.split(/[.+-]/).map((part) => parseInt(part, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const da = pa[i] ?? 0;
+    const db = pb[i] ?? 0;
+    if (da !== db) return da - db;
+  }
+  return 0;
+}
+
+/** 在 bundled / build / sto-plugin 等候选源中选版本最高且可用的目录。 */
+function pickPluginSourceDir(
+  pluginDirName: string,
+  candidateSources: string[],
+): string | undefined {
+  const ranked: Array<{ dir: string; version: string }> = [];
+
+  for (const dir of candidateSources) {
+    if (!existsSync(fsPath(join(dir, 'openclaw.plugin.json')))) continue;
+    const version = readPluginVersion(join(dir, 'package.json'));
+    if (version) ranked.push({ dir, version });
+  }
+
+  if (!app.isPackaged) {
+    const localDir = LOCAL_PLUGIN_DIRS[pluginDirName];
+    if (localDir) {
+      const localSourceDir = join(process.cwd(), 'sto-plugin', localDir);
+      if (existsSync(fsPath(join(localSourceDir, 'openclaw.plugin.json')))) {
+        const version = readPluginVersion(join(localSourceDir, 'package.json'));
+        if (version) ranked.push({ dir: localSourceDir, version });
+      }
+    }
+  }
+
+  if (ranked.length === 0) return undefined;
+  ranked.sort((left, right) => comparePluginVersions(right.version, left.version));
+  return ranked[0].dir;
 }
 
 // ── pnpm-aware node_modules copy helpers ─────────────────────────────────────
@@ -313,7 +355,7 @@ export function ensurePluginInstalled(
   const targetManifest = join(targetDir, 'openclaw.plugin.json');
   const targetPkgJson = join(targetDir, 'package.json');
 
-  const sourceDir = candidateSources.find((dir) => existsSync(fsPath(join(dir, 'openclaw.plugin.json'))));
+  const sourceDir = pickPluginSourceDir(pluginDirName, candidateSources);
 
   // If already installed, check whether an upgrade is available
   if (existsSync(fsPath(targetManifest))) {
@@ -503,6 +545,14 @@ export function ensureStoDynamicRoutePluginInstalled(): { installed: boolean; wa
   );
 }
 
+export function ensureStoAgentTelemetryPluginInstalled(): { installed: boolean; warning?: string } {
+  return ensurePluginInstalled(
+    'sto-agent-telemetry',
+    buildCandidateSources('sto-agent-telemetry'),
+    'STO Agent Telemetry',
+  );
+}
+
 // ── Bulk startup installer ───────────────────────────────────────────────────
 
 /**
@@ -514,6 +564,7 @@ const ALL_BUNDLED_PLUGINS = [
   { fn: ensureQQBotPluginInstalled, label: 'QQ Bot' },
   { fn: ensureWeChatPluginInstalled, label: 'WeChat' },
   { fn: ensureStoDynamicRoutePluginInstalled, label: 'STO Dynamic Route' },
+  { fn: ensureStoAgentTelemetryPluginInstalled, label: 'STO Agent Telemetry' },
 ] as const;
 
 async function ensurePluginInstalledAsync(
@@ -524,7 +575,7 @@ async function ensurePluginInstalledAsync(
   const targetDir = join(getOpenClawConfigDir(), 'extensions', pluginDirName);
   const targetManifest = join(targetDir, 'openclaw.plugin.json');
   const targetPkgJson = join(targetDir, 'package.json');
-  const sourceDir = candidateSources.find((dir) => existsSync(fsPath(join(dir, 'openclaw.plugin.json'))));
+  const sourceDir = pickPluginSourceDir(pluginDirName, candidateSources);
 
   // Keep dev behavior unchanged (including node_modules fallback) by
   // delegating to the existing sync implementation outside packaged mode.
@@ -623,6 +674,7 @@ export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
     { dirName: 'qqbot', label: 'QQ Bot' },
     { dirName: 'openclaw-weixin', label: 'WeChat' },
     { dirName: 'sto-dynamic-agent-route', label: 'STO Dynamic Route' },
+    { dirName: 'sto-agent-telemetry', label: 'STO Agent Telemetry' },
   ] as const;
 
   for (const { dirName, label } of pluginSpecs) {

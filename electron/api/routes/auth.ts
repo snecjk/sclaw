@@ -13,8 +13,9 @@ import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { logger } from '../../utils/logger';
 import { getStoModelSyncService } from '../../services/providers/sto-model-sync';
+import { runAuthenticatedSetup } from '../../services/auth-setup-orchestrator';
 import { runPendingInstallReport } from '../../services/client-update-platform';
-import { syncStoDynamicRoutePluginToOpenClaw, removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-auth';
+import { removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-auth';
 import { getStoPolicyReportApiHost } from '../../../shared/env-config';
 import { computeCrmWeekReportSurfaceAllowed } from '../../../shared/crm-week-report-policy';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
@@ -22,7 +23,6 @@ import { loadSiteDepartmentTypes } from '../../services/sto-apollo-config-servic
 
 const ssoLoginManager = new SsoLoginManager();
 
-// TODO：暂时的省区权限名单接口，后面上权限管理之后会去掉
 const CRM_WEEK_REPORT_POLICY_PATH =
   '/sto-policy/api/v1/base/getReportAuthUserIgnoreLogin?reportType=POLICY_CRM_WEEK_REPORT';
 
@@ -94,33 +94,23 @@ export async function handleAuthRoutes(
         logger.warn('SAI CLI auto-install on login failed:', err);
       }
 
-      void syncSsoAuthToOpenClaw(user);
-      void syncStoDynamicRoutePluginToOpenClaw().catch((err) =>
-        logger.warn('Post-login STO dynamic route plugin config failed:', err),
-      );
+      const setup = await runAuthenticatedSetup({
+        user,
+        gatewayManager: ctx.gatewayManager,
+        source: 'login',
+      });
+
+      const stoSync = getStoModelSyncService();
+      stoSync.startPeriodicSync();
 
       void runPendingInstallReport(app.getVersion(), process.platform);
 
-      // Trigger STO model sync after successful login (fire-and-forget)
-      const stoSync = getStoModelSyncService();
-      if (ctx.gatewayManager) {
-        stoSync.setGatewayManager(ctx.gatewayManager);
-      }
-      void stoSync.syncModels().catch((err) =>
-        logger.error('Post-login STO model sync failed:', err),
-      );
-      stoSync.startPeriodicSync();
-
-      // Auto-create department biz agents after login (fire-and-forget)
-      import('../../services/sto-biz-agent-sync').then(({ getStoBizAgentSyncService }) => {
-        const bizAgentSync = getStoBizAgentSyncService();
-        bizAgentSync.setGatewayManager(ctx.gatewayManager);
-        void bizAgentSync.syncAgents().catch((err) =>
-          logger.warn('Post-login STO biz-agent sync failed:', err),
-        );
-      }).catch((err) => logger.warn('Failed to load sto-biz-agent-sync module:', err));
-
-      sendJson(res, 200, { success: true, user });
+      sendJson(res, 200, {
+        success: true,
+        user,
+        stoSync: setup.stoSync,
+        bizAgentSync: setup.bizAgentSync,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message === 'SSO_LOGIN_CANCELLED') {
@@ -204,8 +194,7 @@ export async function handleAuthRoutes(
   if (url.pathname === '/api/auth/crm-week-report-policy' && req.method === 'GET') {
     try {
       const state = await getAuthState();
-      const hasCodeOrUserName = state.user?.code?.trim() || state.user?.userName?.trim();
-      if (!state.isAuthenticated || !hasCodeOrUserName) {
+      if (!state.isAuthenticated || !state.user?.userName?.trim()) {
         sendJson(res, 200, { allowed: false });
         return true;
       }
@@ -235,12 +224,11 @@ export async function handleAuthRoutes(
         return true;
       }
 
-      const { user } = state;
-      if (!user) {
-        sendJson(res, 200, { allowed: false });
-        return true;
-      }
-      const allowed = computeCrmWeekReportSurfaceAllowed(user.code, user.userName, json);
+      const allowed = computeCrmWeekReportSurfaceAllowed(
+        state.user.code,
+        state.user.userName,
+        json,
+      );
       sendJson(res, 200, { allowed });
     } catch (error) {
       logger.warn('CRM week report policy fetch failed:', error);

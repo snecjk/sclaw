@@ -175,6 +175,23 @@ export async function syncGatewayConfigBeforeLaunch(
   } catch (err) {
     logger.warn('Failed to sync session idle minutes to openclaw.json:', err);
   }
+
+  // SSO / STO plugins / models — must land on disk before the Gateway process starts,
+  // otherwise OpenClaw hot-reloads and StoClaw schedules a second debouncedRestart.
+  try {
+    const { getAuthState, getStoToken } = await import('../utils/auth-store');
+    const { runAuthenticatedSetup } = await import('../services/auth-setup-orchestrator');
+    const authState = await getAuthState();
+    const token = await getStoToken();
+    if (authState.isAuthenticated && token) {
+      await runAuthenticatedSetup({
+        source: 'startup',
+        skipGatewayRefresh: true,
+      });
+    }
+  } catch (err) {
+    logger.warn('Pre-launch authenticated setup failed:', err);
+  }
 }
 
 async function loadProviderEnv(): Promise<{ providerEnv: Record<string, string>; loadedProviderKeyCount: number }> {

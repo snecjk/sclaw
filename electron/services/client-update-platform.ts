@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import type { SsoEnvironment } from '../utils/auth-store';
 import { getSsoEnvironment, getStoToken } from '../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
+import { cleanupOldMacAppBackups } from '../utils/cleanup-old-app-bundles';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { logger } from '../utils/logger';
 
@@ -217,4 +218,7 @@ export async function runPendingInstallReport(currentVersion: string, platform: 
       platform,
     },
   ]);
+  if (platform === 'darwin') {
+    void cleanupOldMacAppBackups(process.execPath);
+  }
 }

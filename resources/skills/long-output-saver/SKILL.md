@@ -38,7 +38,7 @@ metadata:
    - 无指定时根据内容语义命名（如 `daily_report.sql`、`api_routes.yaml`）
    - 文件已存在时自动追加序号（`_1`、`_2`）
 3. **回复格式**：
-   - 使用 `[file-preview: <路径>]` 标记提供文件路径，例如 `[file-preview: ./.claw-output/daily_report.sql]`
+   - 提供文件路径（如 `./.claw-output/daily_report.sql`）
    - 给出内容摘要（不超过 5 个 bullet points）
    - 说明用户可以点击路径预览完整内容
    - 可附上前 5–10 行作为预览

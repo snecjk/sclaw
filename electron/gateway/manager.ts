@@ -278,6 +278,25 @@ export class GatewayManager extends EventEmitter {
     return this.stateController.isConnected(this.ws?.readyState === WebSocket.OPEN);
   }
 
+  /** True while start/reconnect is in flight — avoid scheduling restarts that get deferred. */
+  isGatewayLifecycleSettling(): boolean {
+    return (
+      this.startLock
+      || this.status.state === 'starting'
+      || this.status.state === 'reconnecting'
+    );
+  }
+
+  /** Cancel debounced restart/reload and drop a pending deferred restart (e.g. login during startup). */
+  cancelPendingGatewayRefresh(): void {
+    this.restartController.clearDebounceTimer();
+    this.restartController.resetDeferredRestart();
+    if (this.reloadDebounceTimer) {
+      clearTimeout(this.reloadDebounceTimer);
+      this.reloadDebounceTimer = null;
+    }
+  }
+
   /**
    * Start Gateway process
    */

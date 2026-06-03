@@ -100,14 +100,30 @@ export function getPreloadPath(): string {
 /**
  * Get OpenClaw package directory
  * - Production (packaged): from resources/openclaw (copied by electron-builder extraResources)
- * - Development: from node_modules/openclaw
+ * - Development: node_modules/openclaw，若 pnpm 链接不完整则回退 build/openclaw（bundle-openclaw.mjs 产出）
  */
+function isValidOpenClawPackageDir(dir: string): boolean {
+  return existsSync(join(dir, 'package.json')) && existsSync(join(dir, 'openclaw.mjs'));
+}
+
 export function getOpenClawDir(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'openclaw');
   }
-  // Development: use node_modules/openclaw
-  return join(__dirname, '../../node_modules/openclaw');
+
+  const projectRoot = join(__dirname, '../..');
+  const candidates = [
+    join(projectRoot, 'node_modules/openclaw'),
+    join(projectRoot, 'build/openclaw'),
+  ];
+
+  for (const dir of candidates) {
+    if (isValidOpenClawPackageDir(dir)) {
+      return dir;
+    }
+  }
+
+  return candidates[0];
 }
 
 /**

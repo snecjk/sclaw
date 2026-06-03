@@ -326,9 +326,11 @@ async function tryReadMarker(markerPath: string): Promise<PreinstalledMarker | n
  * deployed to ~/.stoclaw/openclaw/skills/<slug>/ as full directories.
  *
  * Policy:
- * - All preinstalled skills (both local and remote) follow conservative rules:
- *   never overwrite existing skills.  Only install when the target directory
- *   does not yet exist.  This respects the user policy of "no skill auto-update".
+ * - Local built-in skills ("local": true) are ALWAYS copied over the local
+ *   copy so the app-shipped version takes precedence.  Their version is derived
+ *   from the sha256 hash of the bundled SKILL.md so edits are picked up.
+ * - Remote skills follow the conservative rules: never overwrite user-managed
+ *   skills, skip if the version already matches.
  */
 export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
     const skills = await readPreinstalledManifest();
@@ -369,20 +371,25 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
         const marker = await tryReadMarker(markerPath);
 
         if (existsSync(targetManifest)) {
-            // 禁止自动更新 skill：已存在的 skill 不再覆盖，无论 local 还是 remote。
             if (spec.local) {
+                // Built-in local skill: overwrite the user's copy so the app
+                // version is always authoritative.
                 if (marker && marker.version === desiredVersion) {
                     continue; // already up to date
                 }
-                logger.info(`Skipping built-in local skill update: ${spec.slug} (user policy: no skill auto-update)`);
+                logger.info(`Replacing built-in local skill: ${spec.slug} (version ${desiredVersion})`);
             } else {
+                // Remote skill: conservative, don't overwrite user-managed copies.
                 if (!marker) {
                     logger.info(`Skipping user-managed skill: ${spec.slug}`);
-                } else if (marker.version !== desiredVersion) {
-                    logger.info(`Skipping preinstalled skill update for ${spec.slug} (local marker version=${marker.version}, desired=${desiredVersion})`);
+                    continue;
                 }
+                if (marker.version === desiredVersion) {
+                    continue;
+                }
+                logger.info(`Skipping preinstalled skill update for ${spec.slug} (local marker version=${marker.version}, desired=${desiredVersion})`);
+                continue;
             }
-            continue;
         }
 
         try {
@@ -399,40 +406,21 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
                 toEnable.push(spec.slug);
             }
             logger.info(`Installed preinstalled skill: ${spec.slug} -> ${targetDir}`);
-        } catch (error) {
-            logger.warn(`Failed to install preinstalled skill ${spec.slug}:`, error);
-            continue;
-        }
 
-        // Also sync local built-in skills into OpenClaw's bundled skills directory
-        // so the Gateway marks them as bundled (shows in the "Built-in" tab).
-        if (spec.local) {
-            try {
+            // Also sync local built-in skills into OpenClaw's bundled skills directory
+            // so the Gateway marks them as bundled (shows in the "Built-in" tab).
+            if (spec.local) {
                 const openclawSkillsDir = join(getOpenClawDir(), 'skills');
                 ensureDir(openclawSkillsDir);
                 const bundledTarget = join(openclawSkillsDir, spec.slug);
-                const bundledManifest = join(bundledTarget, 'SKILL.md');
-                const sourceManifest = join(sourceDir, 'SKILL.md');
-
-                // Skip sync if OpenClaw already bundles an identical skill to avoid
-                // Windows EPERM from cpSync on pre-existing bundled directories.
-                if (existsSync(bundledManifest) && existsSync(sourceManifest)) {
-                    const bundledHash = hashFileSync(bundledManifest);
-                    const sourceHash = hashFileSync(sourceManifest);
-                    if (bundledHash === sourceHash) {
-                        logger.info(`OpenClaw already bundles skill ${spec.slug} (identical), skipping sync`);
-                        continue;
-                    }
-                }
-
                 if (existsSync(bundledTarget)) {
                     rmSync(bundledTarget, { recursive: true, force: true });
                 }
                 cpSync(sourceDir, bundledTarget, { recursive: true, dereference: true });
                 logger.info(`Synced built-in skill to OpenClaw bundled dir: ${bundledTarget}`);
-            } catch (syncError) {
-                logger.warn(`Failed to sync built-in skill to OpenClaw bundled dir: ${spec.slug}`, syncError);
             }
+        } catch (error) {
+            logger.warn(`Failed to install preinstalled skill ${spec.slug}:`, error);
         }
     }
 

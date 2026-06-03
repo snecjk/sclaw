@@ -63,7 +63,7 @@ export async function restartGatewayForAgentDeletion(ctx: HostApiContext): Promi
     if (pid) {
       try {
         if (process.platform === 'win32') {
-          await execAsync(`taskkill /F /PID ${pid} /T`, { windowsHide: true });
+          await execAsync(`taskkill /F /PID ${pid} /T`);
         } else {
           process.kill(pid, 'SIGTERM');
           // Give it a moment to die
@@ -91,7 +91,7 @@ export async function restartGatewayForAgentDeletion(ctx: HostApiContext): Promi
           }
         } else if (process.platform === 'win32') {
           // Find PID listening on the port
-          const { stdout } = await execAsync(`netstat -ano | findstr :${port}`, { windowsHide: true });
+          const { stdout } = await execAsync(`netstat -ano | findstr :${port}`);
           const lines = stdout.trim().split('\n');
           const pids = new Set<string>();
           for (const line of lines) {
@@ -101,7 +101,7 @@ export async function restartGatewayForAgentDeletion(ctx: HostApiContext): Promi
             }
           }
           for (const p of pids) {
-            try { await execAsync(`taskkill /F /PID ${p} /T`, { windowsHide: true }); } catch { /* ignore */ }
+            try { await execAsync(`taskkill /F /PID ${p} /T`); } catch { /* ignore */ }
           }
         }
       } catch {

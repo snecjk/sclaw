@@ -4,7 +4,7 @@ import {
   collectToolUpdates,
   extractImagesAsAttachedFiles,
   extractMediaRefs,
-  extractFilePreviewRefs,
+  extractRawFilePaths,
   getMessageText,
   getToolCallFilePath,
   hasErrorRecoveryTimer,
@@ -86,7 +86,7 @@ export function handleRuntimeEventState(
                 const mediaRefs = extractMediaRefs(text);
                 const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
                 for (const ref of mediaRefs) toolFiles.push(makeAttachedFile(ref));
-                for (const ref of extractFilePreviewRefs(text)) {
+                for (const ref of extractRawFilePaths(text)) {
                   if (!mediaRefPaths.has(ref.filePath)) toolFiles.push(makeAttachedFile(ref));
                 }
               }

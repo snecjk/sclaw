@@ -1,6 +1,6 @@
 {
     "name": "stoclaw",
-    "version": "2026.6.2-test-GA.1",
+    "version": "2026.6.2-GA.2",
     "pnpm": {
         "onlyBuiltDependencies": [
             "@discordjs/opus",
@@ -32,7 +32,7 @@
     "private": true,
     "scripts": {
         "init": "pnpm install && pnpm run uv:download && pnpm run py:deps",
-        "predev": "zx scripts/prepare-preinstalled-skills-dev.mjs",
+        "predev": "zx scripts/ensure-openclaw-dev.mjs && zx scripts/prepare-preinstalled-skills-dev.mjs",
         "dev": "vite",
         "build": "pnpm run uv:download:all && vite build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs && electron-builder --config electron-builder.config.js",
         "build:test": "pnpm run package:test && electron-builder --config electron-builder.config.js",

@@ -31,6 +31,11 @@ export interface StoBizAgentSyncResult {
   error?: string;
 }
 
+export type StoBizAgentSyncOptions = {
+  /** When true, skip Gateway reload; caller should reload once after batching. */
+  deferGatewayRefresh?: boolean;
+};
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -49,11 +54,11 @@ export class StoBizAgentSyncService {
    * Run a full sync cycle. Safe to call concurrently — if a sync is already
    * in progress the caller gets the same promise back.
    */
-  async syncAgents(): Promise<StoBizAgentSyncResult> {
+  async syncAgents(options?: StoBizAgentSyncOptions): Promise<StoBizAgentSyncResult> {
     if (this.currentSync) {
       return this.currentSync;
     }
-    this.currentSync = this.doSync();
+    this.currentSync = this.doSync(options);
     try {
       return await this.currentSync;
     } finally {
@@ -61,7 +66,7 @@ export class StoBizAgentSyncService {
     }
   }
 
-  private async doSync(): Promise<StoBizAgentSyncResult> {
+  private async doSync(options?: StoBizAgentSyncOptions): Promise<StoBizAgentSyncResult> {
     const result: StoBizAgentSyncResult = {
       created: [],
       skipped: [],
@@ -137,11 +142,13 @@ export class StoBizAgentSyncService {
 
     // Step 5 — Post-creation housekeeping
     if (result.created.length > 0) {
-      syncAllProviderAuthToRuntime().catch((err) => {
+      try {
+        await syncAllProviderAuthToRuntime();
+      } catch (err) {
         logger.warn('[sto-biz-agent] Failed to sync provider auth after agent creation:', err);
-      });
+      }
 
-      if (this.gatewayManager) {
+      if (!options?.deferGatewayRefresh && this.gatewayManager) {
         this.gatewayManager.debouncedReload();
       }
     }

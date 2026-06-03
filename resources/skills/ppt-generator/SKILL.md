@@ -31,7 +31,7 @@ title: 通用 PPT 生成器
 
 **Agent 在调用本 skill 生成 HTML 报告后，禁止以任何方式主动打开浏览器或系统默认程序来查看该文件。**
 
- sto-claw 通过 `[file-preview: <路径>]` 标记识别文件并提供内置预览。Agent 生成文件后，必须在回复中使用该标记输出文件路径，例如 `[file-preview: /Users/sto/.openclaw/workspace/weekly-report.html]`，**绝不调用任何打开操作**。
+ sto-claw 会自动识别消息中的 HTML 文件路径并提供内置预览。Agent 只需在回复中输出文件路径，**绝不调用任何打开操作**。
 
 具体禁止的行为：
 - ❌ 禁止调用 `browser` 工具（`action="open"`）打开本地 `file://` 路径
@@ -236,5 +236,5 @@ uv run python scripts/generate.py \
 1. **本 skill 不查询数据**，只负责渲染。数据必须由调用方提供。
 2. 模板配置错误时，脚本会输出具体错误信息到 stderr。
 3. 如果数据文件中缺少模板要求的字段，对应位置显示 "-" 或 "暂无数据"。
-4. **生成的 HTML 文件不自开浏览器，只通过 `[file-preview: <路径>]` 标记输出。** sto-claw 内置预览会自动处理，Agent 禁止调用任何工具（browser/exec/openExternal 等）主动打开。
+4. **生成的 HTML 文件不自开浏览器，只输出文件路径。** sto-claw 内置预览会自动处理，Agent 禁止调用任何工具（browser/exec/openExternal 等）主动打开。
 5. **禁止覆盖已有文件**：无论通过 `--output` 指定还是使用默认路径，脚本都会确保写入的是新文件。若需迭代调整，请在 `--output` 中使用 `_v{N}` 批次命名，或让脚本自动递增版本号。

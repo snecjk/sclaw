@@ -590,6 +590,7 @@ exports.default = async function afterPack(context) {
   const BUNDLED_PLUGINS = [
     // { type: 'npm', npmName: '@soimy/dingtalk', pluginId: 'dingtalk' },
     { type: 'local', localDir: 'sto-dynamic-agent-route', pluginId: 'sto-dynamic-agent-route' },
+    { type: 'local', localDir: 'sto-agent-telemetry', pluginId: 'sto-agent-telemetry' },
   ];
 
   const localPluginSourceRoot = join(__dirname, '..', 'sto-plugin');

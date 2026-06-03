@@ -29,10 +29,10 @@ uv run python scripts/generate_report.py \
 ## 输出约束
 
 生成文件后：
-- 在回答中使用 `[file-preview: <路径>]` 标记输出文件路径，例如 `[file-preview: /Users/sto/.openclaw/workspace/daily-report.html]`
+- 在回答中输出生成的文件绝对路径
 - **绝对不要**执行 `open` 命令或自动唤起浏览器
 - **绝对不要**说"已在浏览器中打开"、"已为您打开"等暗示已自动打开的话
-- 对话界面会自动识别 `[file-preview: ...]` 标记并支持右侧预览
+- 对话界面会自动识别文件路径并支持右侧预览
 
 ## Core Workflow
 
