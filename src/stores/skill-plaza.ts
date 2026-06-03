@@ -191,11 +191,13 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
       });
       const metaMap = { ...get().plazaSkillMetaMap };
       for (const skill of result.skills) {
-        if (skill.category || skill.categoryCode) {
+        if (skill.category || skill.categoryCode || skill.installCount != null || skill.useCount != null) {
           metaMap[skill.slug] = {
             title: skill.title,
             category: skill.category,
             categoryCode: skill.categoryCode,
+            installCount: skill.installCount,
+            useCount: skill.useCount,
           };
         }
       }
@@ -226,26 +228,40 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const result = await fetchLocalSkills();
-      // Enrich mySkills category info from plaza cache when backend categoryCode is missing
+      // Enrich mySkills from plaza cache (category/installCount/useCount may be missing from backend)
       const { plazaSkillMetaMap, categories } = get();
       const enrichedSkills = result.skills.map((skill) => {
-        if (skill.categoryCode) return skill;
         const meta = plazaSkillMetaMap[skill.slug];
-        if (meta) {
-          let code = meta.categoryCode;
-          if (!code && meta.category) {
-            const cat = categories.find((c) => c.label === meta.category);
-            if (cat) code = cat.slug;
-          }
-          if (code) {
-            return {
-              ...skill,
-              category: meta.category || skill.category,
-              categoryCode: code,
-            };
-          }
+        if (!meta) return skill;
+
+        let code = skill.categoryCode || meta.categoryCode || null;
+        if (!code && meta.category) {
+          const cat = categories.find((c) => c.label === meta.category);
+          if (cat) code = cat.slug;
         }
-        return skill;
+
+        const merged: SkillSummary = { ...skill };
+        if (code) {
+          merged.category = meta.category || skill.category;
+          merged.categoryCode = code;
+        }
+        if (meta.installCount != null) {
+          merged.installCount = meta.installCount;
+        }
+        if (meta.useCount != null) {
+          merged.useCount = meta.useCount;
+        }
+
+        // Return original object if nothing changed
+        if (
+          merged.category === skill.category &&
+          merged.categoryCode === skill.categoryCode &&
+          merged.installCount === skill.installCount &&
+          merged.useCount === skill.useCount
+        ) {
+          return skill;
+        }
+        return merged;
       });
 
       const nextState: Partial<SkillPlazaState> = {
@@ -272,6 +288,30 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     try {
       await installPlazaSkill(slug, options);
       set({ plazaStale: true, mineStale: true });
+      // Optimistic update: increment installCount locally
+      set((state) => {
+        const nextMetaMap = { ...state.plazaSkillMetaMap };
+        if (nextMetaMap[slug]) {
+          nextMetaMap[slug] = {
+            ...nextMetaMap[slug],
+            installCount: (nextMetaMap[slug].installCount || 0) + 1,
+          };
+        }
+        savePlazaMetaCache(nextMetaMap);
+        return {
+          plazaSkillMetaMap: nextMetaMap,
+          plazaSkills: state.plazaSkills.map((s) =>
+            s.slug === slug
+              ? { ...s, installed: true, installCount: (s.installCount || 0) + 1 }
+              : s
+          ),
+          mySkills: state.mySkills.map((s) =>
+            s.slug === slug
+              ? { ...s, installed: true, installCount: (s.installCount || 0) + 1 }
+              : s
+          ),
+        };
+      });
     } finally {
       set((state) => {
         const next = { ...state.installing };
@@ -299,6 +339,26 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
 
   useSkill: async (slug) => {
     await recordSkillUse(slug);
+    // Optimistic update: increment useCount locally
+    set((state) => {
+      const nextMetaMap = { ...state.plazaSkillMetaMap };
+      if (nextMetaMap[slug]) {
+        nextMetaMap[slug] = {
+          ...nextMetaMap[slug],
+          useCount: (nextMetaMap[slug].useCount || 0) + 1,
+        };
+      }
+      savePlazaMetaCache(nextMetaMap);
+      return {
+        plazaSkillMetaMap: nextMetaMap,
+        plazaSkills: state.plazaSkills.map((s) =>
+          s.slug === slug ? { ...s, useCount: (s.useCount || 0) + 1 } : s
+        ),
+        mySkills: state.mySkills.map((s) =>
+          s.slug === slug ? { ...s, useCount: (s.useCount || 0) + 1 } : s
+        ),
+      };
+    });
   },
 
   toggleSkill: async (slug, enabled) => {

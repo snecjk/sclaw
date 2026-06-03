@@ -39,6 +39,8 @@ export interface PlazaSkillMeta {
   title: string;
   category: string | null;
   categoryCode: string | null;
+  installCount?: number;
+  useCount?: number;
 }
 
 export interface PlazaListResult {
