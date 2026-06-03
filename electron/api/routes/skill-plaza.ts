@@ -85,13 +85,27 @@ export async function handleSkillPlazaRoutes(
   // POST /api/skill-plaza/install
   if (url.pathname === '/api/skill-plaza/install' && req.method === 'POST') {
     try {
-      const body = await parseJsonBody<{ slug?: string }>(req);
+      const body = await parseJsonBody<{
+        slug?: string;
+        version?: string;
+        force?: boolean;
+        name?: string;
+        description?: string;
+        author?: string;
+      }>(req);
       const slug = body.slug;
       if (!slug) {
         sendJson(res, 400, { success: false, error: 'Missing slug', code: 'SKILL_NOT_FOUND' });
         return true;
       }
-      await ctx.stoSkillService.install({ slug });
+      await ctx.stoSkillService.install({
+        slug,
+        version: body.version,
+        force: body.force ?? false,
+        name: body.name,
+        description: body.description,
+        author: body.author,
+      });
       // Best-effort: record install on backend (fire-and-forget)
       try {
         await ctx.skillPlazaService.recordInstall(slug);

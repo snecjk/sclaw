@@ -179,6 +179,7 @@
         "action": {
             "use": "Use",
             "install": "Install",
+            "update": "Update",
             "delete": "Delete",
             "toggle": "Enable/Disable",
             "useNow": "Use Now"

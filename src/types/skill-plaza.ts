@@ -18,6 +18,9 @@ export interface SkillSummary {
   icon?: string;
   defaultPrompt: string;
   updatedAt?: string;
+  version?: string;
+  installedVersion?: string;
+  updateAvailable?: boolean;
 }
 
 export interface SkillDetail extends SkillSummary {

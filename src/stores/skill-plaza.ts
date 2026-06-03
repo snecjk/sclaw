@@ -11,6 +11,7 @@ import {
   uninstallPlazaSkill,
   recordSkillUse,
   toggleSkillEnabled,
+  type InstallPlazaSkillOptions,
 } from '@/lib/skill-plaza-api';
 import type {
   SkillSummary,
@@ -63,7 +64,7 @@ interface SkillPlazaState {
   fetchPlazaSkills: (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => Promise<void>;
   fetchLocalSkills: (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => Promise<void>;
 
-  installSkill: (slug: string) => Promise<void>;
+  installSkill: (slug: string, options?: InstallPlazaSkillOptions) => Promise<void>;
   uninstallSkill: (slug: string) => Promise<void>;
   useSkill: (slug: string) => Promise<void>;
   toggleSkill: (slug: string, enabled: boolean) => Promise<void>;
@@ -209,10 +210,10 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
   },
 
   // -- Mutations --
-  installSkill: async (slug) => {
+  installSkill: async (slug, options) => {
     set((state) => ({ installing: { ...state.installing, [slug]: true } }));
     try {
-      await installPlazaSkill(slug);
+      await installPlazaSkill(slug, options);
       set({ plazaStale: true, mineStale: true });
     } finally {
       set((state) => {

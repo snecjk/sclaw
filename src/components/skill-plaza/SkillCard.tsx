@@ -45,7 +45,12 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
   const handleInstall = (e: React.MouseEvent) => {
     e.stopPropagation();
     const { installSkill, fetchPlazaSkills } = useSkillPlazaStore.getState();
-    installSkill(skill.slug).then(() => fetchPlazaSkills({ reset: true })).catch(() => {});
+    installSkill(skill.slug, {
+      version: skill.version,
+      force: skill.updateAvailable,
+      title: skill.title,
+      description: skill.description,
+    }).then(() => fetchPlazaSkills({ reset: true })).catch(() => {});
   };
 
   const renderIcon = () => {
@@ -134,7 +139,19 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
             isHovered ? 'opacity-100 visible pointer-events-auto translate-y-0' : 'opacity-0 invisible pointer-events-none -translate-y-0.5',
           )}
         >
-          {canUse ? (
+          {skill.updateAvailable ? (
+            <button
+              onClick={handleInstall}
+              disabled={isInstalling}
+              className="inline-flex items-center justify-center h-7 px-3.5 border-none rounded-full bg-amber-100 text-xs font-semibold text-amber-800 cursor-pointer whitespace-nowrap no-underline shadow-sm transition-colors hover:bg-amber-200 disabled:opacity-50 dark:bg-amber-900/40 dark:text-amber-200 dark:hover:bg-amber-900/60"
+            >
+              {isInstalling ? (
+                <span className="animate-spin h-3 w-3 border-2 border-amber-800/30 border-t-amber-800 rounded-full dark:border-amber-200/30 dark:border-t-amber-200" />
+              ) : (
+                t('plaza.action.update', { defaultValue: '更新' })
+              )}
+            </button>
+          ) : canUse ? (
             <button
               onClick={handleUse}
               className="inline-flex items-center justify-center h-7 px-3.5 border-none rounded-full bg-muted text-xs font-semibold text-foreground cursor-pointer whitespace-nowrap no-underline shadow-sm transition-colors hover:bg-muted/80"
