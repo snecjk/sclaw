@@ -215,11 +215,12 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
               </span>
             )}
           </div>
-          {skill.points !== null && (
+          {/* 2026.6.3 暂时不支持 */}
+          {/* {skill.points !== null && (
             <span className="flex-shrink-0">
               {t('plaza.meta.points', { count: skill.points, defaultValue: `预计${skill.points}积分` })}
             </span>
-          )}
+          )} */}
         </div>
       </div>
     </article>

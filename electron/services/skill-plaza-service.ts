@@ -663,7 +663,7 @@ export class SkillPlazaService {
         categoryCounts,
         hasMore: false,
         page: 1,
-        pageSize: localOfficeSkills.length,
+        pageSize: params.pageSize ?? 20,
         total: localOfficeSkills.length,
       };
     }

@@ -161,8 +161,8 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
               </>
             )}
 
-            {/* 数据概览 */}
-            {liveSkill.points !== null && (
+            {/* 数据概览--2026.6.3 暂时不支持 */}
+            {/* {liveSkill.points !== null && (
               <>
                 <div className="border-t border-border" />
                 <div className="p-5 py-4">
@@ -174,7 +174,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
                   </p>
                 </div>
               </>
-            )}
+            )} */}
           </div>
 
           {/* CTA */}
