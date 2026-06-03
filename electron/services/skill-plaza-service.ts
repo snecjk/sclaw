@@ -642,6 +642,16 @@ export class SkillPlazaService {
     const allSlugs = new Set([...activeSlugs, ...disabledSlugs]);
     const fromLock = readLockJsonSkills(this.configDir);
 
+    // 获取 plaza 分类列表，建立 label → slug 映射（权威来源）
+    let labelToSlug = new Map<string, string>();
+    try {
+      const categories = await this.getCategories();
+      labelToSlug = new Map(categories.map((c) => [c.label, c.slug]));
+      logger.info(`[getLocalSkills] categories loaded: ${categories.map((c) => `${c.label}=${c.slug}`).join(', ')}`);
+    } catch (err) {
+      logger.warn('[SkillPlazaService] Failed to fetch categories for local skills:', err);
+    }
+
     // 先拉 plaza 列表，用于补全官方技能的分类信息（循环拉取全部）
     let plazaSkillMap = new Map<string, SkillSummary>();
     try {
@@ -656,11 +666,15 @@ export class SkillPlazaService {
       }
       plazaSkillMap = new Map(allPlazaSkills.map((s) => [s.slug, s]));
       logger.info(`[getLocalSkills] loaded ${allPlazaSkills.length} plaza skills for categorization`);
+      // 打印 plaza 技能的分类信息样本（用于排查）
+      for (const [s, skill] of plazaSkillMap.entries()) {
+        logger.info(`[getLocalSkills] plaza skill sample: slug=${s}, category=${skill.category}, categoryCode=${skill.categoryCode}`);
+      }
     } catch (err) {
       logger.warn('[SkillPlazaService] Failed to fetch plaza skills for categorization:', err);
     }
 
-    // SKILL.md 里的 category 可能是中文标签，映射到前端 slug
+    // SKILL.md 里的 category 可能是中文标签，映射到前端 slug（仅当 plaza 完全不可用时兜底）
     const categoryLabelToSlug: Record<string, string> = {
       '技术': 'jishu',
       '产品': 'chanpin',
@@ -689,20 +703,12 @@ export class SkillPlazaService {
         const isOfficial = fromLock.has(slug);
         const source = isOfficial ? 'official' : 'mine';
 
-        // 本地没有 category 时，从 plaza 列表匹配
-        let rawCategory = summary.category || '';
-        if (!rawCategory && isOfficial) {
-          const plazaSkill = plazaSkillMap.get(slug);
-          rawCategory = plazaSkill?.categoryCode || plazaSkill?.category || '';
-        }
-        const categorySlug = categoryLabelToSlug[rawCategory] || rawCategory;
-
         // 判断是否为预安装技能（通过 .stoclaw-preinstalled.json marker 文件）
         const skillDirPath = isEnabled ? path.join(this.skillsDir, slug) : path.join(this.getDisabledDir(), slug);
         const isPreinstalled = isPreinstalledSkill(skillDirPath);
         const isOfficeSkill = OFFICE_SKILL_SLUGS.has(slug);
 
-        // 分类优先级：办公技能 > 预安装技能（其他）> 按本地元数据
+        // 分类优先级：办公技能 > 预安装技能（其他）> 按 plaza 权威数据 / 本地元数据
         let finalCategory: string | null;
         let finalCategoryCode: string | null;
         if (isOfficeSkill) {
@@ -712,8 +718,50 @@ export class SkillPlazaService {
           finalCategory = '其他';
           finalCategoryCode = 'qita';
         } else {
-          finalCategory = rawCategory || summary.category || null;
-          finalCategoryCode = categorySlug || null;
+          // 优先使用 plaza 权威数据（categoryCode + category）
+          let resolvedCode: string | null = null;
+          let resolvedLabel: string | null = null;
+
+          if (isOfficial) {
+            const plazaSkill = plazaSkillMap.get(slug);
+            if (plazaSkill) {
+              // 部分 plaza 接口 categoryCode 可能为空字符串，但 category（中文 label）可靠
+              resolvedCode = plazaSkill.categoryCode || null;
+              resolvedLabel = plazaSkill.category || null;
+
+              // 若 categoryCode 缺失但 label 存在，通过分类列表反查 slug
+              if (!resolvedCode && resolvedLabel) {
+                resolvedCode = labelToSlug.get(resolvedLabel) || null;
+              }
+
+              // 若 plaza 列表中既无 categoryCode 也无 category，尝试调详情接口补全
+              if (!resolvedCode && !resolvedLabel) {
+                try {
+                  const detail = await this.getSkillDetail(slug);
+                  resolvedCode = detail.categoryCode || null;
+                  resolvedLabel = detail.category || null;
+                  if (!resolvedCode && resolvedLabel) {
+                    resolvedCode = labelToSlug.get(resolvedLabel) || null;
+                  }
+                  logger.info(`[getLocalSkills] detail fallback for ${slug}: categoryCode=${resolvedCode}, category=${resolvedLabel}`);
+                } catch (detailErr) {
+                  logger.warn(`[getLocalSkills] getSkillDetail failed for ${slug}:`, detailErr);
+                }
+              }
+            }
+          }
+
+          // plaza 不可用时 fallback 到本地元数据
+          if (!resolvedCode && !resolvedLabel) {
+            resolvedLabel = summary.category || null;
+            if (resolvedLabel) {
+              resolvedCode = labelToSlug.get(resolvedLabel) || categoryLabelToSlug[resolvedLabel] || resolvedLabel;
+            }
+          }
+
+          finalCategory = resolvedLabel;
+          finalCategoryCode = resolvedCode;
+          logger.info(`[getLocalSkills] resolved for ${slug}: isOfficial=${isOfficial}, finalCategoryCode=${finalCategoryCode}, finalCategory=${finalCategory}, summary.category=${summary.category}, plazaHas=${plazaSkillMap.has(slug)}`);
         }
 
         skills.push({
