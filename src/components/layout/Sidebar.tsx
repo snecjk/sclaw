@@ -42,7 +42,7 @@ import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAuthStore } from '@/stores/auth';
-import { useScheduledTaskUnreadStore } from '@/stores/scheduled-task-unread';
+
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useTranslation } from 'react-i18next';
 import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
@@ -52,6 +52,7 @@ import { taskDetailPath, taskOverviewPath, type StoTaskId } from '@/lib/sto-task
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
+import { parseCronSessionKey } from '@/stores/chat/cron-session-utils';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
@@ -62,7 +63,8 @@ type SessionBucketKey =
   | 'withinWeek'
   | 'withinTwoWeeks'
   | 'withinMonth'
-  | 'older';
+  | 'older'
+  | 'cronTasks';
 
 
 const INITIAL_NOW_MS = Date.now();
@@ -479,6 +481,7 @@ export function Sidebar() {
     withinTwoWeeks: true,
     withinMonth: true,
     older: true,
+    cronTasks: true,
   });
 
   const { t } = useTranslation(['common', 'chat', 'auth', 'tasks']);
@@ -572,6 +575,16 @@ export function Sidebar() {
     [sessions],
   );
 
+  const cronSessions = useMemo(
+    () => visibleSessions.filter((s) => parseCronSessionKey(s.key)),
+    [visibleSessions],
+  );
+
+  const nonCronSessions = useMemo(
+    () => visibleSessions.filter((s) => !parseCronSessionKey(s.key)),
+    [visibleSessions],
+  );
+
   const getEffectiveActivityMs = (sessionKey: string): number => {
     const recorded = sessionLastActivity[sessionKey] ?? 0;
     if (recorded > 0) return recorded;
@@ -579,7 +592,7 @@ export function Sidebar() {
     return isFreshCurrentSession ? nowMs : 0;
   };
 
-  for (const session of [...visibleSessions].sort((a, b) =>
+  for (const session of [...nonCronSessions].sort((a, b) =>
     getEffectiveActivityMs(b.key) - getEffectiveActivityMs(a.key),
   )) {
     const bucketKey = getSessionBucket(getEffectiveActivityMs(session.key), nowMs);
@@ -594,16 +607,7 @@ export function Sidebar() {
     setBucketOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const hasScheduledTaskUnread = useScheduledTaskUnreadStore((s) => s.hasUnread());
-
   const primaryNav = useMemo(() => {
-    const scheduledTasksBadge = hasScheduledTaskUnread ? (
-      <span
-        className="h-2 w-2 shrink-0 rounded-full bg-[hsl(var(--destructive))]"
-        aria-label={t('tasks:unreadBadge', { defaultValue: 'Unread' })}
-      />
-    ) : null;
-
     const all: Array<{
       to: string;
       end?: boolean;
@@ -612,8 +616,8 @@ export function Sidebar() {
       badge?: ReactNode;
     }> = [
       { to: '/', end: true, icon: <Home className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.home') },
-      { to: '/scheduled-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks'), badge: scheduledTasksBadge },
-      { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: `${t('common:sidebar.cronTasks')}(旧)` },
+      { to: '/scheduled-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: `${t('common:sidebar.cronTasks')}（云）` },
+      { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
       { to: '/skills', icon: <Puzzle className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
     ];
@@ -621,7 +625,7 @@ export function Sidebar() {
       if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
       return true;
     });
-  }, [sidebarVis.primaryMyData, t, hasScheduledTaskUnread]);
+  }, [sidebarVis.primaryMyData, t]);
 
   const workspaceNav = [
     { to: '/agents', icon: <Bot className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.agents') },
@@ -875,9 +879,114 @@ export function Sidebar() {
                 {t('common:sidebar.emptyChatHistory')}
               </p>
             ) : (
-              sessionBuckets.map((bucket) =>
-                bucket.sessions.length > 0 ? (
-                <div key={bucket.key} className="rounded-lg">
+              <>
+                {/* Cron sessions bucket */}
+                {cronSessions.length > 0 && (
+                  <div className="rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => toggleBucket('cronTasks')}
+                      className="flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] dark:hover:bg-white/[0.08]"
+                    >
+                      <span className="truncate">{t('common:sidebar.cronTasks', '定时任务')}</span>
+                      <ChevronDown
+                        className={cn('h-4 w-4 shrink-0 transition-transform', bucketOpen['cronTasks'] ? 'rotate-180' : '')}
+                        aria-hidden
+                      />
+                    </button>
+                    {bucketOpen['cronTasks'] &&
+                      cronSessions.map((s) => {
+                        const isEditing = editingSessionKey === s.key;
+                        const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
+                        return (
+                          <div key={s.key} className="group relative flex items-center">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                autoFocus
+                                value={editingValue}
+                                onChange={(e) => setEditingValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    renameSession(s.key, editingValue);
+                                    setEditingSessionKey(null);
+                                  } else if (e.key === 'Escape') {
+                                    setEditingSessionKey(null);
+                                  }
+                                }}
+                                onBlur={() => {
+                                  renameSession(s.key, editingValue);
+                                  setEditingSessionKey(null);
+                                }}
+                                className={cn(
+                                  'w-full rounded-[8px] px-[10px] py-[6px] pr-16 text-left text-[13px] transition-colors outline-none',
+                                  'bg-white border border-[var(--sto-brand-6)] text-foreground dark:bg-card',
+                                )}
+                              />
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  switchSession(s.key);
+                                  navigateToMainChatHome(navigate, location.pathname);
+                                }}
+                                title={sessionLabel}
+                                className={cn(
+                                  'w-full rounded-[8px] px-[10px] py-[6px] pr-9 text-left text-[13px] transition-colors',
+                                  isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY
+                                    ? 'bg-[#E5E6EB] font-medium text-foreground dark:bg-white/[0.12]'
+                                    : 'text-foreground/80 hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
+                                )}
+                              >
+                                <span className="block min-w-0 truncate">{sessionLabel}</span>
+                              </button>
+                            )}
+                            {!sidebarCollapsed && !isEditing ? (
+                              <>
+                                <button
+                                  type="button"
+                                  aria-label={t('common:actions.edit')}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingSessionKey(s.key);
+                                    setEditingValue(sessionLabel);
+                                  }}
+                                  className={cn(
+                                    'absolute right-6 flex items-center justify-center rounded p-0.5 transition-opacity',
+                                    'opacity-0 group-hover:opacity-100',
+                                    'text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground',
+                                  )}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label={t('common:actions.delete')}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSessionToDelete({
+                                      key: s.key,
+                                      label: sessionLabel,
+                                    });
+                                  }}
+                                  className={cn(
+                                    'absolute right-1 flex items-center justify-center rounded p-0.5 transition-opacity',
+                                    'opacity-0 group-hover:opacity-100',
+                                    'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
+                                  )}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+                {sessionBuckets.map((bucket) =>
+                  bucket.sessions.length > 0 ? (
+                  <div key={bucket.key} className="rounded-lg">
                   <button
                     type="button"
                     onClick={() => toggleBucket(bucket.key)}
@@ -978,8 +1087,9 @@ isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION
                       );
                     })}
                 </div>
-              ) : null,
-              )
+              ) : null
+              )}
+              </>
             )
           )}
         </div>

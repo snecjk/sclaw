@@ -7,20 +7,26 @@ export interface CronSessionKeyParts {
 }
 
 export function parseCronSessionKey(sessionKey: string): CronSessionKeyParts | null {
-  if (!sessionKey.startsWith('agent:')) return null;
-  const parts = sessionKey.split(':');
-  if (parts.length < 4 || parts[2] !== 'cron') return null;
-
-  const agentId = parts[1] || 'main';
-  const jobId = parts[3];
-  if (!jobId) return null;
-
-  if (parts.length === 4) {
-    return { agentId, jobId };
+  // New format: agent:{agentId}:cron:{jobId} or agent:{agentId}:cron:{jobId}:run:{runSessionId}
+  if (sessionKey.startsWith('agent:')) {
+    const parts = sessionKey.split(':');
+    if (parts.length >= 4 && parts[2] === 'cron') {
+      const agentId = parts[1] || 'main';
+      const jobId = parts[3];
+      if (!jobId) return null;
+      if (parts.length === 4) return { agentId, jobId };
+      if (parts.length === 6 && parts[4] === 'run' && parts[5]) {
+        return { agentId, jobId, runSessionId: parts[5] };
+      }
+      return { agentId, jobId };
+    }
   }
 
-  if (parts.length === 6 && parts[4] === 'run' && parts[5]) {
-    return { agentId, jobId, runSessionId: parts[5] };
+  // Legacy format: [cron:{jobId}] or cron:{jobId}
+  const legacyMatch = sessionKey.match(/^\[?cron:([^\]]+)\]?$/);
+  if (legacyMatch) {
+    const jobId = legacyMatch[1];
+    if (jobId) return { agentId: 'main', jobId };
   }
 
   return null;

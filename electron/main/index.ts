@@ -506,6 +506,10 @@ async function initialize(): Promise<void> {
   // Register IPC handlers
   registerIpcHandlers(gm, chs, window, spriteWindowMod.getSpriteWindow, floatIconMod.getFloatIconWindow);
 
+  // Register form IPC handlers
+  const { registerFormHandlers } = await import('./ipc/form-handlers');
+  registerFormHandlers();
+
   // Start scheduled task result poller
   const { getScheduledTaskResultPoller } = await import('../services/scheduled-task-result-poller');
   const scheduledTaskPoller = getScheduledTaskResultPoller();

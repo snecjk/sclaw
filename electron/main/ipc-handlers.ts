@@ -551,7 +551,7 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
               patch.payload = { kind: 'agentTurn', message: patch.message };
               delete patch.message;
             }
-            data = await gatewayManager.rpc('cron.update', { id, patch });
+            data = await gatewayManager.rpc('cron.update', { jobId: id, patch });
             break;
           }
           if (request.action === 'delete') {
@@ -566,7 +566,7 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             const id = Array.isArray(payload) ? payload[0] : payload?.id;
             const enabled = Array.isArray(payload) ? payload[1] : payload?.enabled;
             if (!id || typeof enabled !== 'boolean') throw new Error('Invalid cron.toggle payload');
-            data = await gatewayManager.rpc('cron.update', { id, patch: { enabled } });
+            data = await gatewayManager.rpc('cron.update', { jobId: id, patch: { enabled } });
             break;
           }
           if (request.action === 'trigger') {
@@ -918,7 +918,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
       for (const job of jobs) {
         const isIsolatedAgent =
           (job.sessionTarget === 'isolated' || !job.sessionTarget) &&
-          job.payload?.kind === 'agentTurn';
+          job.payload?.kind === 'systemEvent';
         const needsRepair =
           isIsolatedAgent &&
           job.delivery?.mode === 'announce' &&
@@ -927,7 +927,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
         if (needsRepair) {
           try {
             await gatewayManager.rpc('cron.update', {
-              id: job.id,
+              jobId: job.id,
               patch: { delivery: { mode: 'none' } },
             });
             job.delivery = { mode: 'none' };
@@ -999,7 +999,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
         patch.payload = { kind: 'agentTurn', message: patch.message };
         delete patch.message;
       }
-      const result = await gatewayManager.rpc('cron.update', { id, patch });
+      const result = await gatewayManager.rpc('cron.update', { jobId: id, patch });
       return result;
     } catch (error) {
       console.error('Failed to update cron job:', error);
@@ -1021,7 +1021,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
   // Toggle a cron job enabled/disabled
   ipcMain.handle('cron:toggle', async (_, id: string, enabled: boolean) => {
     try {
-      const result = await gatewayManager.rpc('cron.update', { id, patch: { enabled } });
+      const result = await gatewayManager.rpc('cron.update', { jobId: id, patch: { enabled } });
       return result;
     } catch (error) {
       console.error('Failed to toggle cron job:', error);

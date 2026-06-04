@@ -365,7 +365,7 @@ export async function handleCronRoutes(
       for (const job of jobs) {
         const isIsolatedAgent =
           (job.sessionTarget === 'isolated' || !job.sessionTarget) &&
-          job.payload?.kind === 'agentTurn';
+          job.payload?.kind === 'systemEvent';
         const needsRepair =
           isIsolatedAgent &&
           job.delivery?.mode === 'announce' &&
@@ -373,7 +373,7 @@ export async function handleCronRoutes(
         if (needsRepair) {
           try {
             await ctx.gatewayManager.rpc('cron.update', {
-              id: job.id,
+              jobId: job.id,
               patch: { delivery: { mode: 'none' } },
             });
             job.delivery = { mode: 'none' };
@@ -431,7 +431,7 @@ export async function handleCronRoutes(
         patch.payload = { kind: 'agentTurn', message: patch.message };
         delete patch.message;
       }
-      sendJson(res, 200, await ctx.gatewayManager.rpc('cron.update', { id, patch }));
+      sendJson(res, 200, await ctx.gatewayManager.rpc('cron.update', { jobId: id, patch }));
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }
@@ -451,7 +451,7 @@ export async function handleCronRoutes(
   if (url.pathname === '/api/cron/toggle' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ id: string; enabled: boolean }>(req);
-      sendJson(res, 200, await ctx.gatewayManager.rpc('cron.update', { id: body.id, patch: { enabled: body.enabled } }));
+      sendJson(res, 200, await ctx.gatewayManager.rpc('cron.update', { jobId: body.id, patch: { enabled: body.enabled } }));
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

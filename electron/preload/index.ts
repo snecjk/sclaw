@@ -152,6 +152,11 @@ const electronAPI = {
         'floaticon:getPosition',
         'floaticon:toggle',
         'floaticon:setVisible',
+        // Form
+        'form:show',
+        'form:response',
+        'form:isShowing',
+        'form:hide',
       ];
 
       if (validChannels.includes(channel)) {

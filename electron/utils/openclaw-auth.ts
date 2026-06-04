@@ -1324,11 +1324,12 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
     plugins.enabled = true;
 
     const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
-    for (const pluginId of ['sto-dynamic-agent-route', 'sto-agent-telemetry', 'sto-scheduled-task-tool']) {
+    for (const pluginId of ['sto-dynamic-agent-route', 'sto-agent-telemetry']) {
       if (!allow.includes(pluginId)) {
         allow.push(pluginId);
       }
     }
+    // sto-scheduled-task-tool is temporarily disabled; cloud scheduled tasks are not live this release
     plugins.allow = allow;
 
     const entries = (plugins.entries || {}) as Record<string, unknown>;
@@ -1356,26 +1357,22 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
         },
       },
     };
-    entries['sto-scheduled-task-tool'] = {
-      enabled: true,
-      config: {
-        baseUrl: stoBaseUrl,
-        ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
-      },
-    };
+    // sto-scheduled-task-tool disabled: cloud scheduled tasks not live this release
+    if (entries['sto-scheduled-task-tool']) {
+      delete entries['sto-scheduled-task-tool'];
+    }
     plugins.entries = entries;
     config.plugins = plugins;
 
-    // Disable the built-in "cron" tool so the agent must use
-    // create_scheduled_task (provided by sto-scheduled-task-tool)
-    // when creating scheduled jobs. This prevents local-only cron
-    // creation and forces the cloud scheduled-task flow.
+    // Deny create_scheduled_task so natural-language requests do not route to the cloud flow.
+    // The built-in "cron" tool is left available for local scheduled jobs if the runtime provides it.
     const tools = (config.tools || {}) as Record<string, unknown>;
     const deny = Array.isArray(tools.deny) ? [...(tools.deny as string[])] : [];
-    if (!deny.includes('cron')) {
-      deny.push('cron');
+    if (!deny.includes('create_scheduled_task')) {
+      deny.push('create_scheduled_task');
     }
-    tools.deny = deny;
+    // Remove the old 'cron' deny so local cron creation is possible again
+    tools.deny = deny.filter((t) => t !== 'cron');
     config.tools = tools;
 
     await writeOpenClawJson(config);

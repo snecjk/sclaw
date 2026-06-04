@@ -1,516 +1,36 @@
 /**
  * Cron Page
- * Manage scheduled tasks
+ * Manage scheduled tasks (legacy local Gateway tasks)
  */
-import { useEffect, useState, useCallback } from 'react';
-import {
-  Plus,
-  Clock,
-  Play,
-  Trash2,
-  RefreshCw,
-  X,
-  Calendar,
-  AlertCircle,
-  CheckCircle2,
-  XCircle,
-  MessageSquare,
-  Loader2,
-  Timer,
-  History,
-  Pause,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { AlertCircle } from 'lucide-react';
 import { useCronStore } from '@/stores/cron';
 import { useGatewayStore } from '@/stores/gateway';
+import { useChatStore } from '@/stores/chat';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
-import { formatRelativeTime, cn } from '@/lib/utils';
-import { glassNestedCard, glassSectionSurface } from '@/lib/surfaces';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { toast } from 'sonner';
-import type { CronJob, CronJobCreateInput, ScheduleType } from '@/types/cron';
-import { CHANNEL_ICONS, type ChannelType } from '@/types/channel';
 import { useTranslation } from 'react-i18next';
-import type { TFunction } from 'i18next';
+import type { CronJob, CronJobCreateInput } from '@/types/cron';
 
-// Common cron schedule presets
-const schedulePresets: { key: string; value: string; type: ScheduleType }[] = [
-  { key: 'everyMinute', value: '* * * * *', type: 'interval' },
-  { key: 'every5Min', value: '*/5 * * * *', type: 'interval' },
-  { key: 'every15Min', value: '*/15 * * * *', type: 'interval' },
-  { key: 'everyHour', value: '0 * * * *', type: 'interval' },
-  { key: 'daily9am', value: '0 9 * * *', type: 'daily' },
-  { key: 'daily6pm', value: '0 18 * * *', type: 'daily' },
-  { key: 'weeklyMon', value: '0 9 * * 1', type: 'weekly' },
-  { key: 'monthly1st', value: '0 9 1 * *', type: 'monthly' },
-];
-
-// Parse cron schedule to human-readable format
-// Handles both plain cron strings and Gateway CronSchedule objects:
-//   { kind: "cron", expr: "...", tz?: "..." }
-//   { kind: "every", everyMs: number }
-//   { kind: "at", at: "..." }
-function parseCronSchedule(schedule: unknown, t: TFunction<'cron'>): string {
-  // Handle Gateway CronSchedule object format
-  if (schedule && typeof schedule === 'object') {
-    const s = schedule as { kind?: string; expr?: string; tz?: string; everyMs?: number; at?: string };
-    if (s.kind === 'cron' && typeof s.expr === 'string') {
-      return parseCronExpr(s.expr, t);
-    }
-    if (s.kind === 'every' && typeof s.everyMs === 'number') {
-      const ms = s.everyMs;
-      if (ms < 60_000) return t('schedule.everySeconds', { count: Math.round(ms / 1000) });
-      if (ms < 3_600_000) return t('schedule.everyMinutes', { count: Math.round(ms / 60_000) });
-      if (ms < 86_400_000) return t('schedule.everyHours', { count: Math.round(ms / 3_600_000) });
-      return t('schedule.everyDays', { count: Math.round(ms / 86_400_000) });
-    }
-    if (s.kind === 'at' && typeof s.at === 'string') {
-      try {
-        return t('schedule.onceAt', { time: new Date(s.at).toLocaleString() });
-      } catch {
-        return t('schedule.onceAt', { time: s.at });
-      }
-    }
-    return String(schedule);
-  }
-
-  // Handle plain cron string
-  if (typeof schedule === 'string') {
-    return parseCronExpr(schedule, t);
-  }
-
-  return String(schedule ?? t('schedule.unknown'));
-}
-
-// Parse a plain cron expression string to human-readable text
-function parseCronExpr(cron: string, t: TFunction<'cron'>): string {
-  const preset = schedulePresets.find((p) => p.value === cron);
-  if (preset) return t(`presets.${preset.key}` as const);
-
-  const parts = cron.split(' ');
-  if (parts.length !== 5) return cron;
-
-  const [minute, hour, dayOfMonth, , dayOfWeek] = parts;
-
-  if (minute === '*' && hour === '*') return t('presets.everyMinute');
-  if (minute.startsWith('*/')) return t('schedule.everyMinutes', { count: Number(minute.slice(2)) });
-  if (hour === '*' && minute === '0') return t('presets.everyHour');
-  if (dayOfWeek !== '*' && dayOfMonth === '*') {
-    return t('schedule.weeklyAt', { day: dayOfWeek, time: `${hour}:${minute.padStart(2, '0')}` });
-  }
-  if (dayOfMonth !== '*') {
-    return t('schedule.monthlyAtDay', { day: dayOfMonth, time: `${hour}:${minute.padStart(2, '0')}` });
-  }
-  if (hour !== '*') {
-    return t('schedule.dailyAt', { time: `${hour}:${minute.padStart(2, '0')}` });
-  }
-
-  return cron;
-}
-
-function estimateNextRun(scheduleExpr: string): string | null {
-  const now = new Date();
-  const next = new Date(now.getTime());
-
-  if (scheduleExpr === '* * * * *') {
-    next.setSeconds(0, 0);
-    next.setMinutes(next.getMinutes() + 1);
-    return next.toLocaleString();
-  }
-
-  if (scheduleExpr === '*/5 * * * *') {
-    const delta = 5 - (next.getMinutes() % 5 || 5);
-    next.setSeconds(0, 0);
-    next.setMinutes(next.getMinutes() + delta);
-    return next.toLocaleString();
-  }
-
-  if (scheduleExpr === '*/15 * * * *') {
-    const delta = 15 - (next.getMinutes() % 15 || 15);
-    next.setSeconds(0, 0);
-    next.setMinutes(next.getMinutes() + delta);
-    return next.toLocaleString();
-  }
-
-  if (scheduleExpr === '0 * * * *') {
-    next.setMinutes(0, 0, 0);
-    next.setHours(next.getHours() + 1);
-    return next.toLocaleString();
-  }
-
-  if (scheduleExpr === '0 9 * * *' || scheduleExpr === '0 18 * * *') {
-    const targetHour = scheduleExpr === '0 9 * * *' ? 9 : 18;
-    next.setSeconds(0, 0);
-    next.setHours(targetHour, 0, 0, 0);
-    if (next <= now) next.setDate(next.getDate() + 1);
-    return next.toLocaleString();
-  }
-
-  if (scheduleExpr === '0 9 * * 1') {
-    next.setSeconds(0, 0);
-    next.setHours(9, 0, 0, 0);
-    const day = next.getDay();
-    const daysUntilMonday = day === 1 ? 7 : (8 - day) % 7;
-    next.setDate(next.getDate() + daysUntilMonday);
-    return next.toLocaleString();
-  }
-
-  if (scheduleExpr === '0 9 1 * *') {
-    next.setSeconds(0, 0);
-    next.setDate(1);
-    next.setHours(9, 0, 0, 0);
-    if (next <= now) next.setMonth(next.getMonth() + 1);
-    return next.toLocaleString();
-  }
-
-  return null;
-}
-
-// Create/Edit Task Dialog
-interface TaskDialogProps {
-  job?: CronJob;
-  onClose: () => void;
-  onSave: (input: CronJobCreateInput) => Promise<void>;
-}
-
-function TaskDialog({ job, onClose, onSave }: TaskDialogProps) {
-  const { t } = useTranslation('cron');
-  const [saving, setSaving] = useState(false);
-
-  const [name, setName] = useState(job?.name || '');
-  const [message, setMessage] = useState(job?.message || '');
-  // Extract cron expression string from CronSchedule object or use as-is if string
-  const initialSchedule = (() => {
-    const s = job?.schedule;
-    if (!s) return '0 9 * * *';
-    if (typeof s === 'string') return s;
-    if (typeof s === 'object' && 'expr' in s && typeof (s as { expr: string }).expr === 'string') {
-      return (s as { expr: string }).expr;
-    }
-    return '0 9 * * *';
-  })();
-  const [schedule, setSchedule] = useState(initialSchedule);
-  const [customSchedule, setCustomSchedule] = useState('');
-  const [useCustom, setUseCustom] = useState(false);
-  const [enabled, setEnabled] = useState(job?.enabled ?? true);
-  const schedulePreview = estimateNextRun(useCustom ? customSchedule : schedule);
-
-  const handleSubmit = async () => {
-    if (!name.trim()) {
-      toast.error(t('toast.nameRequired'));
-      return;
-    }
-    if (!message.trim()) {
-      toast.error(t('toast.messageRequired'));
-      return;
-    }
-
-    const finalSchedule = useCustom ? customSchedule : schedule;
-    if (!finalSchedule.trim()) {
-      toast.error(t('toast.scheduleRequired'));
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await onSave({
-        name: name.trim(),
-        message: message.trim(),
-        schedule: finalSchedule,
-        enabled,
-      });
-      onClose();
-      toast.success(job ? t('toast.updated') : t('toast.created'));
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 dark:bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <Card className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-3xl border border-glass-border shadow-2xl glass-panel overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <CardHeader className="flex flex-row items-start justify-between pb-2 shrink-0">
-          <div>
-            <CardTitle className="text-2xl font-serif font-normal">{job ? t('dialog.editTitle') : t('dialog.createTitle')}</CardTitle>
-            <CardDescription className="text-[15px] mt-1 text-foreground/70">{t('dialog.description')}</CardDescription>
-          </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full h-8 w-8 -mr-2 -mt-2 text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5">
-            <X className="h-4 w-4" />
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-6 pt-4 overflow-y-auto flex-1 p-6">
-          {/* Name */}
-          <div className="space-y-2.5">
-            <Label htmlFor="name" className="text-[14px] text-foreground/80 font-bold">{t('dialog.taskName')}</Label>
-            <Input
-              id="name"
-              placeholder={t('dialog.taskNamePlaceholder')}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="h-[44px] rounded-xl font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:border-primary shadow-sm transition-all text-foreground placeholder:text-foreground/40"
-            />
-          </div>
-
-          {/* Message */}
-          <div className="space-y-2.5">
-            <Label htmlFor="message" className="text-[14px] text-foreground/80 font-bold">{t('dialog.message')}</Label>
-            <Textarea
-              id="message"
-              placeholder={t('dialog.messagePlaceholder')}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              rows={3}
-              className="rounded-xl font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:border-primary shadow-sm transition-all text-foreground placeholder:text-foreground/40 resize-none"
-            />
-          </div>
-
-          {/* Schedule */}
-          <div className="space-y-2.5">
-            <Label className="text-[14px] text-foreground/80 font-bold">{t('dialog.schedule')}</Label>
-            {!useCustom ? (
-              <div className="grid grid-cols-2 gap-2">
-                {schedulePresets.map((preset) => (
-                  <Button
-                    key={preset.value}
-                    type="button"
-                    variant={schedule === preset.value ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setSchedule(preset.value)}
-                    className={cn(
-                      "justify-start h-10 rounded-xl font-medium text-[13px] transition-all",
-                      schedule === preset.value
-                        ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm border-transparent"
-                        : "bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80 hover:text-foreground"
-                    )}
-                  >
-                    <Timer className="h-4 w-4 mr-2 opacity-70" />
-                    {t(`presets.${preset.key}` as const)}
-                  </Button>
-                ))}
-              </div>
-            ) : (
-              <Input
-                placeholder={t('dialog.cronPlaceholder')}
-                value={customSchedule}
-                onChange={(e) => setCustomSchedule(e.target.value)}
-                className="h-[44px] rounded-xl font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:border-primary shadow-sm transition-all text-foreground placeholder:text-foreground/40"
-              />
-            )}
-            <div className="flex items-center justify-between mt-2">
-              <p className="text-[12px] text-muted-foreground/80 font-medium">
-                {schedulePreview ? `${t('card.next')}: ${schedulePreview}` : t('dialog.cronPlaceholder')}
-              </p>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setUseCustom(!useCustom)}
-                className="text-[12px] h-7 px-2 text-foreground/60 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5 rounded-lg"
-              >
-                {useCustom ? t('dialog.usePresets') : t('dialog.useCustomCron')}
-              </Button>
-            </div>
-          </div>
-
-          {/* Enabled */}
-          <div className="flex items-center justify-between rounded-2xl border border-glass-border bg-white/75 p-4 shadow-sm dark:bg-[hsl(var(--glass-bg)/0.5)]">
-            <div>
-              <Label className="text-[14px] text-foreground/80 font-bold">{t('dialog.enableImmediately')}</Label>
-              <p className="text-[13px] text-muted-foreground mt-0.5">
-                {t('dialog.enableImmediatelyDesc')}
-              </p>
-            </div>
-            <Switch checked={enabled} onCheckedChange={setEnabled} />
-          </div>
-
-          {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4">
-            <Button variant="outline" onClick={onClose} className="rounded-full px-6 h-[42px] text-[13px] font-semibold border-black/20 dark:border-white/20 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 text-foreground/80 hover:text-foreground shadow-sm">
-              {t('common:actions.cancel', 'Cancel')}
-            </Button>
-            <Button onClick={handleSubmit} disabled={saving} className="rounded-full px-6 h-[42px] text-[13px] font-semibold shadow-sm border border-transparent transition-all">
-              {saving ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  {t('common:status.saving', 'Saving...')}
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                  {job ? t('dialog.saveChanges') : t('dialog.createTitle')}
-                </>
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// Job Card Component
-interface CronJobCardProps {
-  job: CronJob;
-  onToggle: (enabled: boolean) => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  onTrigger: () => Promise<void>;
-}
-
-function CronJobCard({ job, onToggle, onEdit, onDelete, onTrigger }: CronJobCardProps) {
-  const { t } = useTranslation('cron');
-  const [triggering, setTriggering] = useState(false);
-
-  const handleTrigger = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setTriggering(true);
-    try {
-      await onTrigger();
-      toast.success(t('toast.triggered'));
-    } catch (error) {
-      console.error('Failed to trigger cron job:', error);
-      toast.error(t('toast.failedTrigger', { error: error instanceof Error ? error.message : String(error) }));
-    } finally {
-      setTriggering(false);
-    }
-  };
-
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onDelete();
-  };
-
-  return (
-    <div
-      className={cn(
-        'group relative flex cursor-pointer flex-col rounded-md border border-border p-4 transition-colors hover:border-border hover:shadow-md',
-        glassNestedCard,
-      )}
-      onClick={onEdit}
-    >
-      <div className="mb-4 flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-primary/[0.06] text-foreground shadow-sm transition-transform group-hover:scale-[1.02]">
-            <Clock className={cn("h-5 w-5", job.enabled ? "text-foreground" : "text-muted-foreground")} />
-          </div>
-          <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-[16px] font-semibold text-foreground truncate">{job.name}</h3>
-              <div
-                className={cn(
-                  "w-2 h-2 rounded-full shrink-0",
-                  job.enabled ? "bg-green-500" : "bg-muted-foreground"
-                )}
-                title={job.enabled ? t('stats.active') : t('stats.paused')}
-              />
-            </div>
-            <p className="text-[13px] text-muted-foreground flex items-center gap-1.5">
-              <Timer className="h-3.5 w-3.5" />
-              {parseCronSchedule(job.schedule, t)}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-          <Switch
-            checked={job.enabled}
-            onCheckedChange={onToggle}
-          />
-        </div>
-      </div>
-
-      <div className="mt-2 flex flex-1 flex-col justify-end pl-14">
-        <div className="flex items-start gap-2 mb-3">
-          <MessageSquare className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
-          <p className="text-[13.5px] text-muted-foreground line-clamp-2 leading-[1.5]">
-            {job.message}
-          </p>
-        </div>
-
-        {/* Metadata */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] text-muted-foreground/80 font-medium mb-3">
-          {job.target && (
-            <span className="flex items-center gap-1.5">
-              {CHANNEL_ICONS[job.target.channelType as ChannelType]}
-              {job.target.channelName}
-            </span>
-          )}
-
-          {job.lastRun && (
-            <span className="flex items-center gap-1.5">
-              <History className="h-3.5 w-3.5" />
-              {t('card.last')}: {formatRelativeTime(job.lastRun.time)}
-              {job.lastRun.success ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-              ) : (
-                <XCircle className="h-3.5 w-3.5 text-red-500" />
-              )}
-            </span>
-          )}
-
-          {job.nextRun && job.enabled && (
-            <span className="flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5" />
-              {t('card.next')}: {new Date(job.nextRun).toLocaleString()}
-            </span>
-          )}
-        </div>
-
-        {/* Last Run Error */}
-        {job.lastRun && !job.lastRun.success && job.lastRun.error && (
-          <div className="flex items-start gap-2 p-2.5 mb-3 rounded-xl bg-destructive/10 border border-destructive/20 text-[13px] text-destructive">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span className="line-clamp-2">{job.lastRun.error}</span>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity mt-auto">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleTrigger}
-            disabled={triggering}
-            className="h-8 px-3 text-foreground/70 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5 rounded-lg text-[13px] font-medium transition-colors"
-          >
-            {triggering ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-            ) : (
-              <Play className="h-3.5 w-3.5 mr-1.5" />
-            )}
-            {t('card.runNow')}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleDelete}
-            className="h-8 px-3 text-destructive/70 hover:text-destructive hover:bg-destructive/10 rounded-lg text-[13px] font-medium transition-colors"
-          >
-            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-            {t('common:actions.delete', 'Delete')}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
+import { CronTaskHero } from './components/CronTaskHero';
+import { CronTaskCard } from './components/CronTaskCard';
+import { CronTaskCreateModal } from './components/CronTaskCreateModal';
+import { CronTaskEmptyState, type RecommendTask } from './components/CronTaskEmptyState';
+import { filterTasks, sortTasks } from './components/utils';
 
 export function Cron() {
   const { t } = useTranslation('cron');
   const { jobs, loading, error, fetchJobs, createJob, updateJob, toggleJob, deleteJob, triggerJob } = useCronStore();
   const gatewayStatus = useGatewayStore((state) => state.status);
-  const [showDialog, setShowDialog] = useState(false);
-  const [editingJob, setEditingJob] = useState<CronJob | undefined>();
-  const [jobToDelete, setJobToDelete] = useState<{ id: string } | null>(null);
-
   const isGatewayRunning = gatewayStatus.state === 'running';
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortValue, setSortValue] = useState('created-desc');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editingJob, setEditingJob] = useState<CronJob | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CronJob | null>(null);
+  const [recommendInitialValues, setRecommendInitialValues] = useState<{ name?: string; message?: string } | undefined>(undefined);
 
   // Fetch jobs on mount
   useEffect(() => {
@@ -519,234 +39,169 @@ export function Cron() {
     }
   }, [fetchJobs, isGatewayRunning]);
 
-  // Statistics
-  const safeJobs = Array.isArray(jobs) ? jobs : [];
-  const activeJobs = safeJobs.filter((j) => j.enabled);
-  const pausedJobs = safeJobs.filter((j) => !j.enabled);
-  const failedJobs = safeJobs.filter((j) => j.lastRun && !j.lastRun.success);
+  const safeJobs = useMemo(() => (Array.isArray(jobs) ? jobs : []), [jobs]);
 
-  const handleSave = useCallback(async (input: CronJobCreateInput) => {
-    if (editingJob) {
-      await updateJob(editingJob.id, input);
-    } else {
-      await createJob(input);
-    }
-  }, [editingJob, createJob, updateJob]);
+  const filteredTasks = useMemo(() => {
+    let result = filterTasks(safeJobs, searchQuery);
+    result = sortTasks(result, sortValue);
+    return result;
+  }, [safeJobs, searchQuery, sortValue]);
 
-  const handleToggle = useCallback(async (id: string, enabled: boolean) => {
+  const handleSave = useCallback(
+    async (input: CronJobCreateInput) => {
+      try {
+        if (editingJob) {
+          await updateJob(editingJob.id, input);
+          toast.success(t('toast.updated'));
+        } else {
+          await createJob(input);
+          toast.success(t('toast.created'));
+        }
+        await fetchJobs().catch(() => {});
+      } catch (err) {
+        const errStr = String(err);
+        let userMessage = '操作失败，请稍后重试';
+        if (errStr.includes('409') || errStr.includes('already exists') || errStr.includes('duplicate')) {
+          userMessage = '任务名称已存在，请使用其他名称';
+        } else if (errStr.includes('422') || errStr.includes('validation')) {
+          userMessage = '输入内容不符合要求，请检查字段';
+        }
+        toast.error(userMessage);
+        throw err;
+      }
+    },
+    [editingJob, createJob, updateJob, fetchJobs, t]
+  );
+
+  const handleToggle = useCallback(
+    async (id: string, enabled: boolean) => {
+      try {
+        await toggleJob(id, enabled);
+        toast.success(enabled ? t('toast.enabled') : t('toast.paused'));
+      } catch {
+        toast.error(t('toast.failedUpdate'));
+      }
+    },
+    [toggleJob, t]
+  );
+
+  const handleTrigger = useCallback(
+    async (job: CronJob) => {
+      try {
+        await triggerJob(job.id);
+        const sessionKey = `agent:${job.agentId ?? 'main'}:cron:${job.id}`;
+        useChatStore.getState().switchSession(sessionKey);
+      } catch (error) {
+        console.error('Failed to trigger cron job:', error);
+        toast.error(t('toast.failedTrigger', { error: error instanceof Error ? error.message : String(error) }));
+      }
+    },
+    [triggerJob, t]
+  );
+
+  const handleDelete = useCallback(async () => {
+    if (!deleteTarget) return;
     try {
-      await toggleJob(id, enabled);
-      toast.success(enabled ? t('toast.enabled') : t('toast.paused'));
+      await deleteJob(deleteTarget.id);
+      toast.success(t('toast.deleted'));
+      await fetchJobs().catch(() => {});
     } catch {
-      toast.error(t('toast.failedUpdate'));
+      toast.error(t('toast.failedDelete'));
+    } finally {
+      setDeleteTarget(null);
     }
-  }, [toggleJob, t]);
+  }, [deleteTarget, deleteJob, fetchJobs, t]);
 
+  const handleRecommendAdd = useCallback((task: RecommendTask) => {
+    setRecommendInitialValues({ name: task.title, message: task.desc });
+    setEditingJob(null);
+    setCreateOpen(true);
+  }, []);
 
-
-  if (loading) {
+  if (loading && safeJobs.length === 0) {
     return (
-      <div className="mx-auto flex w-full max-w-5xl flex-col pb-10">
-        <div className="flex min-h-[50vh] items-center justify-center">
-          <LoadingSpinner size="lg" />
+      <div className="h-full flex flex-col">
+        <div className="flex-1 overflow-y-auto px-6 py-6">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center justify-center py-20">
+              <LoadingSpinner size="lg" />
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
-      <header className="shrink-0 border-b border-border pb-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(255,111,0,0.10)]">
-              <Timer className="h-5 w-5" strokeWidth={2} />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-[1.65rem]">
-                {t('title')}
-              </h1>
-              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-                {t('subtitle')}
-              </p>
-            </div>
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:pt-0.5">
-            <Button
-              variant="outline"
-              onClick={fetchJobs}
-              disabled={!isGatewayRunning}
-              className="h-9 rounded-md border-glass-border bg-transparent px-4 text-[13px] font-medium shadow-none hover:bg-[hsl(var(--glass-bg)/0.35)]"
-            >
-              <RefreshCw className="mr-2 h-4 w-4" />
-              {t('refresh')}
-            </Button>
-            <Button
-              onClick={() => {
-                setEditingJob(undefined);
-                setShowDialog(true);
-              }}
-              disabled={!isGatewayRunning}
-              className="h-9 rounded-md px-4 text-[13px] font-medium shadow-none"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              {t('newTask')}
-            </Button>
-          </div>
-        </div>
-      </header>
+    <div className="h-full flex flex-col">
+      <div className="flex-1 overflow-y-auto px-6 py-6">
+        <div className="max-w-7xl mx-auto">
+          <CronTaskHero
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            sortValue={sortValue}
+            onSortChange={setSortValue}
+            onCreate={() => { setEditingJob(null); setRecommendInitialValues(undefined); setCreateOpen(true); }}
+            totalCount={safeJobs.length}
+            isGatewayRunning={isGatewayRunning}
+          />
 
-      <div className="flex flex-col gap-6">
-        {!isGatewayRunning && (
-          <div className="flex items-center gap-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-4">
-            <AlertCircle className="h-5 w-5 shrink-0 text-yellow-600 dark:text-yellow-400" />
-            <span className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
-              {t('gatewayWarning')}
-            </span>
-          </div>
-        )}
-
-        {error && (
-          <div className="flex items-center gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-4">
-            <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
-            <span className="text-sm font-medium text-destructive">{error}</span>
-          </div>
-        )}
-
-        <section className={glassSectionSurface}>
-          <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-            <div
-              className={cn(
-                'flex min-h-[112px] flex-col justify-between rounded-lg border border-border p-4 transition-colors hover:border-border hover:shadow-md',
-                glassNestedCard,
-              )}
-            >
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
-                <Clock className="h-4 w-4 text-primary" />
-              </div>
-              <div className="mt-3 flex items-baseline gap-2">
-                <p className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{safeJobs.length}</p>
-                <p className="text-[13px] font-medium text-muted-foreground">{t('stats.total')}</p>
-              </div>
+          {!isGatewayRunning && (
+            <div className="flex items-center gap-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-4 mb-6">
+              <AlertCircle className="h-5 w-5 shrink-0 text-yellow-600 dark:text-yellow-400" />
+              <span className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
+                {t('gatewayWarning')}
+              </span>
             </div>
+          )}
 
-            <div
-              className={cn(
-                'flex min-h-[112px] flex-col justify-between rounded-lg border border-border p-4 transition-colors hover:border-border hover:shadow-md',
-                glassNestedCard,
-              )}
-            >
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-green-500/10">
-                <Play className="ml-0.5 h-4 w-4 text-green-600 dark:text-green-500" />
-              </div>
-              <div className="mt-3 flex items-baseline gap-2">
-                <p className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{activeJobs.length}</p>
-                <p className="text-[13px] font-medium text-muted-foreground">{t('stats.active')}</p>
-              </div>
+          {error && (
+            <div className="flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-4 mb-6">
+              <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
+              <span className="text-sm font-medium text-destructive">{error}</span>
             </div>
+          )}
 
-            <div
-              className={cn(
-                'flex min-h-[112px] flex-col justify-between rounded-lg border border-border p-4 transition-colors hover:border-border hover:shadow-md',
-                glassNestedCard,
-              )}
-            >
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-yellow-500/10">
-                <Pause className="h-4 w-4 text-yellow-600 dark:text-yellow-500" />
-              </div>
-              <div className="mt-3 flex items-baseline gap-2">
-                <p className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{pausedJobs.length}</p>
-                <p className="text-[13px] font-medium text-muted-foreground">{t('stats.paused')}</p>
-              </div>
-            </div>
-
-            <div
-              className={cn(
-                'flex min-h-[112px] flex-col justify-between rounded-lg border border-border p-4 transition-colors hover:border-border hover:shadow-md',
-                glassNestedCard,
-              )}
-            >
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-destructive/10">
-                <XCircle className="h-4 w-4 text-destructive" />
-              </div>
-              <div className="mt-3 flex items-baseline gap-2">
-                <p className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{failedJobs.length}</p>
-                <p className="text-[13px] font-medium text-muted-foreground">{t('stats.failed')}</p>
-              </div>
-            </div>
-          </div>
-
-          {safeJobs.length === 0 ? (
-            <div
-              className={cn(
-                'flex flex-col items-center justify-center rounded-md border border-dashed border-border py-16 text-muted-foreground',
-                glassNestedCard,
-              )}
-            >
-              <Clock className="mb-4 h-10 w-10 opacity-50" />
-              <h3 className="mb-2 text-lg font-medium text-foreground">{t('empty.title')}</h3>
-              <p className="mb-6 max-w-md text-center text-[14px]">
-                {t('empty.description')}
-              </p>
-              <Button
-                onClick={() => {
-                  setEditingJob(undefined);
-                  setShowDialog(true);
-                }}
-                disabled={!isGatewayRunning}
-                className="h-9 rounded-md px-4 text-[13px] font-medium shadow-none"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                {t('empty.create')}
-              </Button>
-            </div>
+          {filteredTasks.length === 0 ? (
+            <CronTaskEmptyState
+              searchQuery={searchQuery}
+              onCreate={() => { setEditingJob(null); setRecommendInitialValues(undefined); setCreateOpen(true); }}
+              onRecommendAdd={handleRecommendAdd}
+            />
           ) : (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
-              {safeJobs.map((job) => (
-                <CronJobCard
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredTasks.map((job) => (
+                <CronTaskCard
                   key={job.id}
                   job={job}
-                  onToggle={(enabled) => handleToggle(job.id, enabled)}
-                  onEdit={() => {
-                    setEditingJob(job);
-                    setShowDialog(true);
-                  }}
-                  onDelete={() => setJobToDelete({ id: job.id })}
-                  onTrigger={() => triggerJob(job.id)}
+                  onToggle={(newEnabled) => handleToggle(job.id, newEnabled)}
+                  onEdit={() => { setEditingJob(job); setRecommendInitialValues(undefined); setCreateOpen(true); }}
+                  onDelete={() => setDeleteTarget(job)}
+                  onTrigger={() => handleTrigger(job)}
                 />
               ))}
             </div>
           )}
-        </section>
+        </div>
       </div>
 
-      {/* Create/Edit Dialog */}
-      {showDialog && (
-        <TaskDialog
-          job={editingJob}
-          onClose={() => {
-            setShowDialog(false);
-            setEditingJob(undefined);
-          }}
-          onSave={handleSave}
-        />
-      )}
+      <CronTaskCreateModal
+        job={editingJob}
+        open={createOpen}
+        onClose={() => { setCreateOpen(false); setRecommendInitialValues(undefined); }}
+        onSave={(input) => { setRecommendInitialValues(undefined); return handleSave(input); }}
+        initialValues={recommendInitialValues}
+      />
 
       <ConfirmDialog
-        open={!!jobToDelete}
+        open={!!deleteTarget}
         title={t('common:actions.confirm', 'Confirm')}
         message={t('card.deleteConfirm')}
         confirmLabel={t('common:actions.delete', 'Delete')}
         cancelLabel={t('common:actions.cancel', 'Cancel')}
         variant="destructive"
-        onConfirm={async () => {
-          if (jobToDelete) {
-            await deleteJob(jobToDelete.id);
-            setJobToDelete(null);
-            toast.success(t('toast.deleted'));
-          }
-        }}
-        onCancel={() => setJobToDelete(null)}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
       />
     </div>
   );

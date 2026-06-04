@@ -1,25 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { homedir } from "node:os";
 import { Type } from "@sinclair/typebox";
 import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
-
-function resolveTildePath(filePath: string): string {
-  if (filePath.startsWith("~/")) {
-    return resolve(homedir(), filePath.slice(2));
-  }
-  return resolve(filePath);
-}
-
-async function readSsoAuth(ssoAuthPath: string): Promise<{ userName?: string; stoToken?: string }> {
-  const resolved = resolveTildePath(ssoAuthPath);
-  const raw = await readFile(resolved, "utf-8");
-  const parsed = JSON.parse(raw) as Record<string, unknown>;
-  return {
-    userName: typeof parsed.userName === "string" ? parsed.userName : undefined,
-    stoToken: typeof parsed.stoToken === "string" ? parsed.stoToken : undefined,
-  };
-}
 
 export default definePluginEntry({
   id: "sto-scheduled-task-tool",
@@ -62,141 +42,61 @@ export default definePluginEntry({
           if (!params.name) missing.push("任务名称（name）");
           if (!params.cronExpr) missing.push("执行时间 cron 表达式（cronExpr）");
           if (!params.description) missing.push("任务描述（description）");
-          return {
+          const payload = {
+            type: "scheduled_task_confirmation",
             success: false,
-            error: `缺少必填参数：${missing.join("、")}`,
-            content: JSON.stringify({
-              type: "scheduled_task_error",
-              success: false,
-              error: "缺少必填参数",
-              missing,
-            }),
+            error: "缺少必填参数",
+            missing,
+            extractedParams: {
+              name: params.name || undefined,
+              cronExpr: params.cronExpr || undefined,
+              description: params.description || undefined,
+              notifyMode: params.notifyMode || undefined,
+            },
+          };
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(payload) }],
+            details: payload,
           };
         }
 
         // 验证 cron 表达式格式（简单验证）
         const cronParts = params.cronExpr.split(" ");
         if (cronParts.length !== 5) {
-          return {
+          const payload = {
+            type: "scheduled_task_confirmation",
             success: false,
-            error: "cron 表达式格式不正确，应为 5 个部分（分 时 日 月 星期）",
-            content: JSON.stringify({
-              type: "scheduled_task_error",
-              success: false,
-              error: "cron 表达式格式不正确",
-            }),
-          };
-        }
-
-        // 读取插件配置
-        const pluginCfg = (api.config?.plugins?.entries?.["sto-scheduled-task-tool"] as Record<string, unknown> | undefined)?.config as Record<string, unknown> | undefined;
-        const baseUrl = typeof pluginCfg?.baseUrl === "string" ? pluginCfg.baseUrl.trim() : "";
-        const ssoAuthPath = typeof pluginCfg?.ssoAuthPath === "string" ? pluginCfg.ssoAuthPath.trim() : "~/.stoclaw/openclaw/sso-auth.json";
-
-        if (!baseUrl) {
-          return {
-            success: false,
-            error: "插件未配置 baseUrl，无法创建云端定时任务",
-            content: JSON.stringify({
-              type: "scheduled_task_error",
-              success: false,
-              error: "插件配置缺失",
-            }),
-          };
-        }
-
-        // 读取 SSO Token
-        let stoToken: string | undefined;
-        try {
-          const ssoAuth = await readSsoAuth(ssoAuthPath);
-          stoToken = ssoAuth.stoToken;
-        } catch (err) {
-          api.logger.warn?.(`[sto-scheduled-task-tool] failed to read SSO auth: ${String(err)}`);
-        }
-
-        if (!stoToken) {
-          return {
-            success: false,
-            error: "未登录或 SSO Token 已过期，请重新登录",
-            content: JSON.stringify({
-              type: "scheduled_task_error",
-              success: false,
-              error: "未登录",
-            }),
-          };
-        }
-
-        // 调用云端 API 创建定时任务
-        const url = `${baseUrl}/agent/v1/scheduled-tasks`;
-        const body = {
-          name: params.name,
-          cron_expr: params.cronExpr,
-          description: params.description,
-          notify_mode: params.notifyMode || "none",
-        };
-
-        try {
-          const res = await fetch(url, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              stotoken: stoToken,
+            error: "cron 表达式格式不正确",
+            extractedParams: {
+              name: params.name,
+              cronExpr: params.cronExpr,
+              description: params.description,
+              notifyMode: params.notifyMode || undefined,
             },
-            body: JSON.stringify(body),
-          });
-
-          const resText = await res.text();
-          let resData: Record<string, unknown> = {};
-          try {
-            resData = JSON.parse(resText) as Record<string, unknown>;
-          } catch {
-            // ignore parse error
-          }
-
-          if (!res.ok) {
-            const errMsg = typeof resData.errMessage === "string" ? resData.errMessage : resText;
-            return {
-              success: false,
-              error: `创建失败 (${res.status}): ${errMsg}`,
-              content: JSON.stringify({
-                type: "scheduled_task_error",
-                success: false,
-                error: errMsg,
-              }),
-            };
-          }
-
-          const data = resData.data as Record<string, unknown> | undefined;
-          const taskId = data?.id ?? "unknown";
-          const taskName = data?.name ?? params.name;
-
-          return {
-            success: true,
-            content: JSON.stringify({
-              type: "scheduled_task_created",
-              success: true,
-              task: {
-                id: taskId,
-                name: taskName,
-                cronExpr: params.cronExpr,
-                description: params.description,
-              },
-              message: `定时任务「${taskName}」已创建成功，任务 ID: ${taskId}`,
-            }),
           };
-        } catch (err) {
-          const errorMsg = String(err);
-          api.logger.error?.(`[sto-scheduled-task-tool] create task failed: ${errorMsg}`);
           return {
-            success: false,
-            error: `创建失败: ${errorMsg}`,
-            content: JSON.stringify({
-              type: "scheduled_task_error",
-              success: false,
-              error: errorMsg,
-            }),
+            content: [{ type: "text" as const, text: JSON.stringify(payload) }],
+            details: payload,
           };
         }
+
+        // 返回提取的参数供前端确认，不直接创建任务
+        // 前端弹窗确认后，由前端调用云端 API 创建
+        const payload = {
+          type: "scheduled_task_confirmation",
+          success: true,
+          extractedParams: {
+            name: params.name,
+            cronExpr: params.cronExpr,
+            description: params.description,
+            notifyMode: params.notifyMode || "none",
+          },
+          message: `已提取定时任务参数：「${params.name}」，执行时间 ${params.cronExpr}，请确认`,
+        };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(payload) }],
+          details: payload,
+        };
       },
     });
 

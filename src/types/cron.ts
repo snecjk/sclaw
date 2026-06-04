@@ -47,6 +47,7 @@ export interface CronJob {
   updatedAt: string;
   lastRun?: CronJobLastRun;
   nextRun?: string;
+  agentId?: string;
 }
 
 /**

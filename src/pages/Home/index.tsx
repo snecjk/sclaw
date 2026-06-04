@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useRef, useCallback } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { HomeAgentHubSurface } from './HomeAgentHubSurface';
 import { HomeHero } from './HomeHero';
 import { HomeSummaryCards } from './HomeSummaryCards';
@@ -9,10 +10,12 @@ import { useHomeConversationActive } from './use-home-conversation-active';
 import { useAuthStore } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
+import { useScheduledTasksStore } from '@/stores/scheduledTasks';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { useScheduledTaskToolListener } from '@/hooks/use-scheduled-task-tool-listener';
-import { TaskNlCreationModal } from '@/pages/ScheduledTasks/components/TaskNlCreationModal';
+import { TaskCreateModal } from '@/pages/ScheduledTasks/components/TaskCreateModal';
+import type { TaskCreateInputWithRun } from '@/pages/ScheduledTasks/components/TaskCreateModal';
 
 /**
  * 首页：有 CRM 周报权限时为 Hero + 任务卡片 + 底部助手；无权限时为 Hero + 能力卡片 + 底部输入。
@@ -21,12 +24,36 @@ export function Home() {
   const crmWeekReportSurfaceAllowed = useAuthStore((s) => s.crmWeekReportSurfaceAllowed);
   const showConversation = useHomeConversationActive();
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
+  const navigate = useNavigate();
+  const createTask = useScheduledTasksStore((s) => s.createTask);
+  const fetchTasks = useScheduledTasksStore((s) => s.fetchTasks);
+
   const {
-    toolModalOpen,
-    extractedParams,
-    closeToolModal,
-    handleConfirmCreation,
+    nlModalOpen,
+    nlInitialValues,
+    closeNlModal,
   } = useScheduledTaskToolListener();
+
+  const handleNlSave = useCallback(
+    async (input: TaskCreateInputWithRun) => {
+      try {
+        const task = await createTask({
+          name: input.name,
+          cronExpr: input.schedule,
+          description: input.message,
+        });
+        toast.success(`任务"${task.name}"已创建`);
+        await fetchTasks().catch(() => {});
+        navigate('/scheduled-tasks');
+        closeNlModal();
+      } catch (err) {
+        const message = String(err);
+        toast.error(`创建失败：${message}`);
+        throw err;
+      }
+    },
+    [createTask, fetchTasks, navigate, closeNlModal],
+  );
 
   useEffect(() => {
     const unsub = createAutoSendWatcher();
@@ -60,11 +87,11 @@ export function Home() {
         <div className="mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-2 sm:px-2">
           <HomeAgentHubSurface seedText={seedText} />
         </div>
-        <TaskNlCreationModal
-          open={toolModalOpen}
-          onClose={closeToolModal}
-          extractedParams={extractedParams}
-          onSave={handleConfirmCreation}
+        <TaskCreateModal
+          open={nlModalOpen}
+          onClose={closeNlModal}
+          onSave={handleNlSave}
+          initialValues={nlInitialValues}
         />
       </>
     );
@@ -84,14 +111,14 @@ export function Home() {
           )}
         </div>
         <div className="sticky z-10 shrink-0 bg-[var(--sto-page-bg)] pt-6 dark:bg-background">
-          <HomeAssistant seedText={seedText} />
+          <HomeAssistant seedText={seedText} onSend={handleHubSend} />
         </div>
       </div>
-      <TaskNlCreationModal
-        open={toolModalOpen}
-        onClose={closeToolModal}
-        extractedParams={extractedParams}
-        onSave={handleConfirmCreation}
+      <TaskCreateModal
+        open={nlModalOpen}
+        onClose={closeNlModal}
+        onSave={handleNlSave}
+        initialValues={nlInitialValues}
       />
     </>
   );

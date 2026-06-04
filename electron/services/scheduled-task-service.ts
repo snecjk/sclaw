@@ -5,9 +5,10 @@
  * Uses stoToken for authentication against baseinfo-aimemory*.sto.cn.
  */
 
-import { getStoToken } from '../utils/auth-store';
+import { getStoToken, getAuthState } from '../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
+import { getCurrentEnvConfig } from '../../shared/env-config';
 import { logger } from '../utils/logger';
 
 // ---------------------------------------------------------------------------
@@ -119,6 +120,28 @@ function mapTask(data: Record<string, unknown>): ScheduledTask {
 }
 
 // ---------------------------------------------------------------------------
+// Robot Code (fixed per environment and user type)
+// ---------------------------------------------------------------------------
+
+const ROBOT_CODE_SITE = 'J251030001';
+const ROBOT_CODE_PROVINCE_PROD = 'J241112001';
+const ROBOT_CODE_PROVINCE_NON_PROD = 'J241104001';
+
+async function getRobotCode(): Promise<string | undefined> {
+  const authState = await getAuthState();
+  const categoryCode = authState.user?.categoryCode ?? '';
+  const isSite = categoryCode === '独立网点';
+  const envConfig = getCurrentEnvConfig();
+  const robotCode = isSite
+    ? ROBOT_CODE_SITE
+    : envConfig.isProduction
+      ? ROBOT_CODE_PROVINCE_PROD
+      : ROBOT_CODE_PROVINCE_NON_PROD;
+  logger.info(`[ScheduledTaskService] getRobotCode categoryCode=${categoryCode} isSite=${isSite} env=${envConfig.displayLabel} robotCode=${robotCode}`);
+  return robotCode;
+}
+
+// ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
@@ -197,8 +220,10 @@ export class ScheduledTaskService {
     const baseUrl = await this.resolveBaseUrl();
     const headers = await this.buildHeaders();
     const url = `${baseUrl}`;
-    logger.info(`[ScheduledTaskService] createTask: ${url}`);
+    logger.info(`[ScheduledTaskService] >>> createTask url=${url}`);
+    logger.info(`[ScheduledTaskService] >>> createTask headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
 
+    const robotCode = await getRobotCode();
     const body: Record<string, unknown> = {
       name: input.name,
       cron_expr: input.cronExpr,
@@ -212,15 +237,22 @@ export class ScheduledTaskService {
       ...(input.dingdingGroupName ? { dingding_group_name: input.dingdingGroupName } : {}),
       ...(input.dialogSessionKey ? { dialog_session_key: input.dialogSessionKey } : {}),
       ...(input.openclawGatewayUrl ? { openclaw_gateway_url: input.openclawGatewayUrl } : {}),
+      ...(robotCode ? { robot_code: robotCode } : {}),
     };
 
-    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    const bodyJson = JSON.stringify(body);
+    const curlCmd = `curl -X POST "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}" -d '${bodyJson}'`;
+    logger.info(`[ScheduledTaskService] >>> createTask curl=${curlCmd}`);
+
+    const res = await fetch(url, { method: 'POST', headers, body: bodyJson });
+    const bodyText = await res.text();
+    logger.info(`[ScheduledTaskService] <<< createTask status=${res.status} body=${bodyText.slice(0, 1000)}`);
+
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`Scheduled task creation failed (${res.status}): ${text}`);
+      throw new Error(`Scheduled task creation failed (${res.status}): ${bodyText}`);
     }
 
-    const data = (await res.json()) as { success?: boolean; data?: Record<string, unknown>; errMessage?: string };
+    const data = JSON.parse(bodyText) as { success?: boolean; data?: Record<string, unknown>; errMessage?: string };
     if (data.success === false) {
       throw new Error(data.errMessage || 'Scheduled task creation failed');
     }
@@ -235,22 +267,31 @@ export class ScheduledTaskService {
     const baseUrl = await this.resolveBaseUrl();
     const headers = await this.buildHeaders();
     const url = `${baseUrl}/update`;
-    logger.info(`[ScheduledTaskService] updateTask: ${url}`);
+    logger.info(`[ScheduledTaskService] >>> updateTask url=${url}`);
+    logger.info(`[ScheduledTaskService] >>> updateTask headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
 
+    const robotCode = await getRobotCode();
     const body: Record<string, unknown> = { task_id: input.taskId };
     if (input.name !== undefined) body.name = input.name;
     if (input.cronExpr !== undefined) body.cron_expr = input.cronExpr;
     if (input.description !== undefined) body.description = input.description;
     if (input.notifyMode !== undefined) body.notify_mode = input.notifyMode;
     if (input.enabled !== undefined) body.enabled = input.enabled;
+    if (robotCode !== undefined) body.robot_code = robotCode;
 
-    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    const bodyJson = JSON.stringify(body);
+    const curlCmd = `curl -X POST "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}" -d '${bodyJson}'`;
+    logger.info(`[ScheduledTaskService] >>> updateTask curl=${curlCmd}`);
+
+    const res = await fetch(url, { method: 'POST', headers, body: bodyJson });
+    const bodyText = await res.text();
+    logger.info(`[ScheduledTaskService] <<< updateTask status=${res.status} body=${bodyText.slice(0, 1000)}`);
+
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`Scheduled task update failed (${res.status}): ${text}`);
+      throw new Error(`Scheduled task update failed (${res.status}): ${bodyText}`);
     }
 
-    const data = (await res.json()) as { success?: boolean; data?: Record<string, unknown>; errMessage?: string };
+    const data = JSON.parse(bodyText) as { success?: boolean; data?: Record<string, unknown>; errMessage?: string };
     if (data.success === false) {
       throw new Error(data.errMessage || 'Scheduled task update failed');
     }

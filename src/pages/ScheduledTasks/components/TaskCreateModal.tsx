@@ -5,14 +5,14 @@ import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
 import { cn } from '@/lib/utils';
 import type { CronJob, CronJobCreateInput } from '@/types/cron';
 
-export interface TaskCreateInputWithRun extends CronJobCreateInput {}
+export type TaskCreateInputWithRun = CronJobCreateInput;
 
 interface TaskCreateModalProps {
   job?: CronJob | null;
   open: boolean;
   onClose: () => void;
   onSave: (input: TaskCreateInputWithRun) => Promise<void>;
-  initialValues?: { name?: string; message?: string };
+  initialValues?: { name?: string; message?: string; schedule?: string };
 }
 
 function defaultScheduleValue(): ScheduleValue {
@@ -88,7 +88,7 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
       } else if (initialValues) {
         setName(initialValues.name || '');
         setInstructions(initialValues.message || '');
-        setSchedule(defaultScheduleValue());
+        setSchedule(initialValues.schedule ? cronToScheduleValue(initialValues.schedule) : defaultScheduleValue());
       } else {
         setName('');
         setInstructions('');

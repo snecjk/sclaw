@@ -8,6 +8,7 @@ import {
   toMs,
 } from './helpers';
 import { DEFAULT_CANONICAL_PREFIX, DEFAULT_SESSION_KEY, type ChatSession, type RawMessage } from './types';
+import { parseCronSessionKey } from './cron-session-utils';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 
 function getAgentIdFromSessionKey(sessionKey: string): string {
@@ -120,6 +121,26 @@ export function createSessionActions(
             .filter((session) => typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt))
             .map((session) => [session.key, session.updatedAt!]),
         );
+
+        // Enrich cron session labels from job names
+        const cronSessionsNeedingLabel = sessionsWithCurrent.filter(
+          (s) => !s.label && parseCronSessionKey(s.key)
+        );
+        if (cronSessionsNeedingLabel.length > 0) {
+          try {
+            const jobsResult = await hostApiFetch<Array<{ id: string; name: string }>>('/api/cron/jobs');
+            const jobNameMap = new Map(jobsResult.map((j) => [j.id, j.name]));
+            for (const session of sessionsWithCurrent) {
+              const parsed = parseCronSessionKey(session.key);
+              if (parsed && !session.label) {
+                const name = jobNameMap.get(parsed.jobId);
+                if (name) session.label = name;
+              }
+            }
+          } catch {
+            // Ignore cron label enrichment failure
+          }
+        }
 
         set((state) => ({
           sessions: sessionsWithCurrent,
