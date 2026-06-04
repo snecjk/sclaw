@@ -21,13 +21,12 @@ type SsoAuthInfo = {
 type PendingSkillUsage = {
   slug: string;
   name: string;
-  reported: boolean;
 };
 
-const RECENT_EXPLICIT_TTL_MS = 5 * 60 * 1000;
-
 const pendingSkillUsageBySession = new Map<string, Map<string, PendingSkillUsage>>();
-const recentExplicitSkillReports = new Map<string, number>();
+const DEFAULT_ALLOWED_SKILL_PATH_MARKERS = [
+  "/.stoclaw/openclaw/skills/",
+];
 
 function resolveTildePath(filePath: string): string {
   if (filePath.startsWith("~/") || filePath.startsWith("~\\")) {
@@ -62,45 +61,22 @@ function getOrCreateSessionUsage(sessionKey?: string, sessionId?: string) {
   return pending;
 }
 
-function rememberExplicitSkillReport(skillSlug: string): void {
-  recentExplicitSkillReports.set(skillSlug, Date.now());
+function normalizePath(value: string): string {
+  return value.replace(/\\/g, "/");
 }
 
-function hasRecentExplicitSkillReport(skillSlug: string): boolean {
-  const at = recentExplicitSkillReports.get(skillSlug);
-  if (!at) return false;
-  if (Date.now() - at > RECENT_EXPLICIT_TTL_MS) {
-    recentExplicitSkillReports.delete(skillSlug);
-    return false;
-  }
-  return true;
-}
-
-function markSessionSkillReported(
-  sessionKey: string | undefined,
-  sessionId: string | undefined,
-  skillSlug: string,
-): void {
-  rememberExplicitSkillReport(skillSlug);
-  const pending = getOrCreateSessionUsage(sessionKey, sessionId);
-  if (!pending) return;
-  const current = pending.get(skillSlug);
-  if (current) {
-    current.reported = true;
-    current.name = current.name || skillSlug;
-  } else {
-    pending.set(skillSlug, {
-      slug: skillSlug,
-      name: skillSlug,
-      reported: true,
-    });
-  }
+function isAllowedSkillPath(value: string): boolean {
+  const normalized = normalizePath(value).toLowerCase();
+  return DEFAULT_ALLOWED_SKILL_PATH_MARKERS.some((marker) => normalized.includes(marker.toLowerCase()));
 }
 
 function extractSkillSlugsFromValue(value: unknown, found = new Set<string>()): Set<string> {
   if (typeof value === "string") {
-    const normalized = value.replace(/\\/g, "/");
-    const matches = normalized.matchAll(/\/([^/\s]+)\/SKILL\.md\b/g);
+    const normalized = normalizePath(value);
+    if (!isAllowedSkillPath(normalized)) {
+      return found;
+    }
+    const matches = normalized.matchAll(/\/skills\/([^/\s]+)\/skill\.md\b/gi);
     for (const match of matches) {
       const slug = match[1]?.trim();
       if (slug) {
@@ -124,23 +100,40 @@ function extractSkillSlugsFromValue(value: unknown, found = new Set<string>()): 
 }
 
 function rememberDetectedSkills(
+  api: OpenClawPluginApi,
   sessionKey: string | undefined,
   sessionId: string | undefined,
   source: unknown,
 ): void {
   const pending = getOrCreateSessionUsage(sessionKey, sessionId);
-  if (!pending) return;
-  for (const slug of extractSkillSlugsFromValue(source)) {
+  if (!pending) {
+    api.logger.debug?.(
+      `[${TAG}] detect-skill: skipped because no session cache key (sessionKey=${sessionKey ?? "-"} sessionId=${sessionId ?? "-"})`,
+    );
+    return;
+  }
+
+  const detected = Array.from(extractSkillSlugsFromValue(source));
+  api.logger.info?.(
+    `[${TAG}] detect-skill: sessionKey=${sessionKey ?? "-"} sessionId=${sessionId ?? "-"} detected=${detected.length > 0 ? detected.join(",") : "(none)"}`,
+  );
+
+  for (const slug of detected) {
     const current = pending.get(slug);
     if (current) {
       current.name = current.name || slug;
+      api.logger.debug?.(
+        `[${TAG}] detect-skill: already pending slug=${slug} sessionKey=${sessionKey ?? "-"} sessionId=${sessionId ?? "-"}`,
+      );
       continue;
     }
     pending.set(slug, {
       slug,
       name: slug,
-      reported: hasRecentExplicitSkillReport(slug),
     });
+    api.logger.info?.(
+      `[${TAG}] detect-skill: queued slug=${slug} sessionKey=${sessionKey ?? "-"} sessionId=${sessionId ?? "-"}`,
+    );
   }
 }
 
@@ -196,34 +189,10 @@ async function postSkillUsage(
   }
 }
 
-const logSkillUsageParameters = {
-  type: "object" as const,
-  properties: {
-    skill_slug: {
-      type: "string" as const,
-      description: "使用的 skill 标识（即 SKILL.md 所在目录名）",
-    },
-    skill_name: {
-      type: "string" as const,
-      description: "skill 的显示名称",
-    },
-    result: {
-      type: "string" as const,
-      enum: ["success", "failed", "partial"],
-      description: "执行结果：success / failed / partial",
-    },
-    notes: {
-      type: "string" as const,
-      description: "备注：简要说明本次 skill 执行了什么操作",
-    },
-  },
-  required: ["skill_slug", "skill_name", "result"],
-};
-
 export default definePluginEntry({
   id: "sto-skill-call-monitor",
   name: "技能调用监控",
-  description: "注册 log_skill_usage 工具，让 agent 在使用 skill 后主动上报调用日志。",
+  description: "检测 Skill 使用并在会话结束时自动上报调用日志。",
   register(api: OpenClawPluginApi) {
     const pluginCfg = (api.pluginConfig ?? {}) as SkillCallMonitorConfig;
     const reportApiUrl = pluginCfg.reportApiUrl?.trim();
@@ -234,84 +203,55 @@ export default definePluginEntry({
       `[${TAG}] plugin registering — reportApiUrl=${reportApiUrl ?? "(not set)"}, ssoAuthPath=${ssoAuthPath}`,
     );
 
-    api.registerTool({
-      name: "log_skill_usage",
-      description:
-        "记录一次 skill 的使用结果。每次使用完一个 skill 后，必须调用此工具上报日志，包括 skill 标识、名称、执行结果和备注。",
-      parameters: logSkillUsageParameters,
-      async execute(_id: string, params: Record<string, unknown>) {
-        const { skill_slug, skill_name, result, notes } = params as {
-          skill_slug: string;
-          skill_name: string;
-          result: string;
-          notes?: string;
-        };
-        rememberExplicitSkillReport(skill_slug);
-        void postSkillUsage(
-          api,
-          { reportApiUrl, ssoAuthPath, timeoutMs },
-          { skill_slug, skill_name, result, notes },
-        );
-
-        return {
-          content: [],
-        };
-      },
-    });
-
-    api.on("before_prompt_build", () => ({
-      appendSystemContext:
-        "如果本轮读取并使用了任何 SKILL.md，完成该 Skill 后必须立即调用 log_skill_usage。若遗漏，系统会在本轮结束时自动补报 partial 记录。",
-    }));
-
     api.on("after_tool_call", (event, ctx) => {
       const record = event as Record<string, unknown>;
-      const skillSlug =
-        typeof record.toolName === "string" && record.toolName === "log_skill_usage"
-          ? typeof record.skill_slug === "string"
-            ? record.skill_slug
-            : typeof (record.params as Record<string, unknown> | undefined)?.skill_slug === "string"
-              ? (record.params as Record<string, unknown>).skill_slug as string
-              : undefined
-          : undefined;
-
-      if (skillSlug) {
-        markSessionSkillReported(ctx.sessionKey, ctx.sessionId, skillSlug);
-        return;
-      }
-
-      rememberDetectedSkills(ctx.sessionKey, ctx.sessionId, record);
+      const toolName = typeof record.toolName === "string" ? record.toolName : "(unknown)";
+      api.logger.info?.(
+        `[${TAG}] after_tool_call: toolName=${toolName} sessionKey=${ctx.sessionKey ?? "-"} sessionId=${ctx.sessionId ?? "-"} keys=${Object.keys(record).join(",")}`,
+      );
+      rememberDetectedSkills(api, ctx.sessionKey, ctx.sessionId, event);
     });
 
     api.on("agent_end", (event, ctx) => {
       void (async () => {
         const key = sessionCacheKey(ctx.sessionKey, event.sessionId ?? ctx.sessionId);
-        if (!key) return;
+        api.logger.info?.(
+          `[${TAG}] agent_end: sessionKey=${ctx.sessionKey ?? "-"} sessionId=${ctx.sessionId ?? "-"} eventSessionId=${event.sessionId ?? "-"} cacheKey=${key ?? "-"}`,
+        );
+        if (!key) {
+          api.logger.warn?.(`[${TAG}] agent_end: missing cache key, skip auto-report`);
+          return;
+        }
         const pending = pendingSkillUsageBySession.get(key);
         pendingSkillUsageBySession.delete(key);
-        if (!pending || pending.size === 0) return;
+        api.logger.info?.(
+          `[${TAG}] agent_end: pendingSkills=${pending ? Array.from(pending.keys()).join(",") || "(none)" : "(missing cache)"}`,
+        );
+        if (!pending || pending.size === 0) {
+          api.logger.warn?.(`[${TAG}] agent_end: no detected skills to report for cacheKey=${key}`);
+          return;
+        }
 
         for (const item of pending.values()) {
-          if (item.reported || hasRecentExplicitSkillReport(item.slug)) {
-            continue;
-          }
-          item.reported = true;
+          api.logger.info?.(
+            `[${TAG}] agent_end: posting slug=${item.slug} skillName=${item.name || item.slug} cacheKey=${key}`,
+          );
           await postSkillUsage(
             api,
             { reportApiUrl, ssoAuthPath, timeoutMs },
             {
               skill_slug: item.slug,
               skill_name: item.name || item.slug,
-              result: "partial",
-              notes: "auto-fallback: detected SKILL.md usage but agent did not call log_skill_usage",
+              result: "success",
+              notes: `auto-report: detected skill usage (${item.slug})`,
             },
           );
         }
       })().catch((err) => {
-        api.logger.warn?.(`[${TAG}] agent_end fallback reporting failed (${String(err)})`);
+        api.logger.warn?.(`[${TAG}] agent_end auto-report failed (${String(err)})`);
       });
     });
 
-    api.logger.info?.(`[${TAG}] plugin registered — log_skill_usage tool available`);
+    api.logger.info?.(`[${TAG}] plugin registered — automatic skill usage reporting enabled`);
   },
 });

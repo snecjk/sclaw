@@ -3,21 +3,24 @@ import { cn } from '@/lib/utils';
 import { useMemo } from 'react';
 
 export function SkillPlazaCategoryNav() {
-  const { categories, categoryCounts, activeCategory, setActiveCategory, activeTab, mySkills, searchQuery, plazaSkillMetaMap } = useSkillPlazaStore();
+  const { categories, categoryCounts, activeCategory, setActiveCategory, activeTab, mySkills, plazaSkills, searchQuery, plazaSkillMetaMap } = useSkillPlazaStore();
 
-  // For 'mine' tab, counts must be recomputed from frontend-filtered skills
-  // because search is done locally; for 'all' tab the backend already returns
-  // filtered categoryCounts.
+  // Recompute counts from the actually displayed skills when search is active,
+  // because backend categoryCounts may reflect the full unfiltered set.
   const displayCounts = useMemo(() => {
-    if (activeTab !== 'mine') return categoryCounts;
-
     const query = searchQuery.trim().toLowerCase();
+
+    // Determine the skill list that is actually being displayed
+    const sourceSkills = activeTab === 'mine' ? mySkills : plazaSkills;
     const filtered = query
-      ? mySkills.filter((s) =>
+      ? sourceSkills.filter((s) =>
           s.title.toLowerCase().includes(query) ||
           s.description?.toLowerCase().includes(query)
         )
-      : mySkills;
+      : sourceSkills;
+
+    // When no search query, use backend counts for 'all' tab to preserve accuracy
+    if (!query && activeTab !== 'mine') return categoryCounts;
 
     const counts: Record<string, number> = {};
     // Total count under empty string key (matching backend convention)
@@ -42,7 +45,7 @@ export function SkillPlazaCategoryNav() {
     }
 
     return counts;
-  }, [activeTab, categoryCounts, mySkills, searchQuery, plazaSkillMetaMap, categories]);
+  }, [activeTab, categoryCounts, mySkills, plazaSkills, searchQuery, plazaSkillMetaMap, categories]);
 
   return (
     <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 my-2.5 mx-0 p-0" aria-label="技能分类">
