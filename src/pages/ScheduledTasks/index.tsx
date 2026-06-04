@@ -4,8 +4,10 @@
  * Does NOT mix with legacy local cron store.
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useScheduledTasksStore } from '@/stores/scheduledTasks';
 import { useChatStore } from '@/stores/chat';
+import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { useScheduledTaskUnreadStore } from '@/stores/scheduled-task-unread';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
@@ -55,6 +57,8 @@ function sortTasks(tasks: TaskViewModel[], sort: string): TaskViewModel[] {
 }
 
 export default function ScheduledTasks() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const {
     tasks,
     loading,
@@ -110,14 +114,14 @@ export default function ScheduledTasks() {
         if (result.outcome === 'async_started') {
           toast.success('测试运行已在云端开始执行，结果将通过轮询同步');
         } else if (result.hasSession) {
-          toast.success('测试运行已完成，结果已添加到会话', {
-            action: {
-              label: '查看会话',
-              onClick: () => {
-                useChatStore.getState().switchSession(`scheduled-task:${job.id}`);
-              },
-            },
-          });
+          // Switch to the per-run agent session (dated) instead of the summary session
+          const today = new Date().toISOString().slice(0, 10);
+          const agentSessionKey = `agent:main:scheduled-task:${job.id}:${today}`;
+          useChatStore.getState().switchSession(agentSessionKey);
+          navigateToMainChatHome(navigate, location.pathname);
+          toast.success('测试运行已完成，结果已添加到会话');
+          // Refresh sessions so the new agent session appears in the sidebar
+          void useChatStore.getState().loadSessions();
         } else {
           toast.success('测试运行已触发');
         }
@@ -125,7 +129,7 @@ export default function ScheduledTasks() {
         toast.error(String(err));
       }
     },
-    [triggerTask],
+    [triggerTask, navigate, location.pathname],
   );
 
   const handleSave = useCallback(

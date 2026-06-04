@@ -348,6 +348,9 @@ function SidebarScheduledTaskGroup({
 
   if (sessions.length === 0) return null;
 
+  // Strip common prefixes from group name for cleaner display
+  const displayName = name.replace(/^Cron:\s*/i, '').replace(/^定时任务\s*/i, '');
+
   return (
     <div className="rounded-lg">
       <button
@@ -355,7 +358,7 @@ function SidebarScheduledTaskGroup({
         onClick={() => setOpen((v) => !v)}
         className="group/sto-task-row flex w-full items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] text-left outline-none ring-offset-2 transition-colors hover:bg-[rgba(229,230,235,0.7)] focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.08]"
       >
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{name}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{displayName}</span>
         <ChevronDown
           className={cn(
             'h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] group-hover/sto-task-row:opacity-100 group-focus-within/sto-task-row:opacity-100',
@@ -369,10 +372,15 @@ function SidebarScheduledTaskGroup({
         <div className="mt-1.5 flex w-full flex-col gap-1 pl-5">
           {sessions.map((s) => {
             const parsed = parseScheduledTaskAgentSessionKey(s.key);
+            const cronParsed = parseCronSessionKey(s.key);
             let label: string;
             if (parsed) {
               const dateLabel = formatMaterialDateFromEntryId(parsed.date, i18n.language);
               label = t('tasks:sidebarMaterialTitle', { date: dateLabel, defaultValue: `${dateLabel}的材料` });
+            } else if (cronParsed) {
+              // Legacy cron: show job name (strip technical prefixes)
+              const raw = s.label || s.displayName || '';
+              label = raw.replace(/^Cron:\s*/i, '').replace(/^\[.*?\]\s*/, '') || `执行记录 ${cronParsed.jobId.slice(0, 8)}`;
             } else {
               label = s.label || s.displayName || s.key;
             }
