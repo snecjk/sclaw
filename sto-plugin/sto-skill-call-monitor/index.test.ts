@@ -3,9 +3,11 @@ import register from "./index.js";
 
 describe("sto-skill-call-monitor plugin", () => {
   const registeredTools: Array<{ name: string; description: string; execute: Function }> = [];
+  const registeredHooks = new Map<string, Function>();
 
   function buildApi(pluginConfig: Record<string, unknown> = {}) {
     registeredTools.length = 0;
+    registeredHooks.clear();
 
     return {
       pluginConfig,
@@ -14,7 +16,9 @@ describe("sto-skill-call-monitor plugin", () => {
       name: "技能调用监控",
       source: "test",
       logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
-      on: vi.fn(),
+      on: vi.fn((eventName: string, handler: Function) => {
+        registeredHooks.set(eventName, handler);
+      }),
       registerTool: vi.fn((tool: { name: string; description: string; execute: Function }) => {
         registeredTools.push(tool);
       }),
@@ -56,8 +60,7 @@ describe("sto-skill-call-monitor plugin", () => {
     expect(api.logger.info).toHaveBeenCalledWith(
       expect.stringContaining("result=success"),
     );
-    expect(result.content[0].text).toContain("天气查询");
-    expect(result.content[0].text).toContain("success");
+    expect(result).toEqual({ content: [] });
   });
 
   it("handles missing notes gracefully", async () => {
@@ -74,8 +77,7 @@ describe("sto-skill-call-monitor plugin", () => {
     expect(api.logger.info).toHaveBeenCalledWith(
       expect.stringContaining("notes=-"),
     );
-    expect(result.content[0].text).toContain("图片生成");
-    expect(result.content[0].text).toContain("failed");
+    expect(result).toEqual({ content: [] });
   });
 
   it("sends HTTP POST when reportApiUrl is configured", async () => {
@@ -116,5 +118,94 @@ describe("sto-skill-call-monitor plugin", () => {
     await new Promise((r) => setTimeout(r, 50));
 
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("auto-reports detected skill usage on agent_end when the agent forgot to log it", async () => {
+    const api = buildApi({ reportApiUrl: "https://example.com/agent/v1/skills/usage-report" });
+    register.register(api as any);
+
+    const afterToolCall = registeredHooks.get("after_tool_call");
+    const agentEnd = registeredHooks.get("agent_end");
+
+    expect(typeof afterToolCall).toBe("function");
+    expect(typeof agentEnd).toBe("function");
+
+    await afterToolCall?.(
+      {
+        toolName: "read_file",
+        params: {
+          path: "/mock/skills/systematic-debugging/SKILL.md",
+        },
+      },
+      {
+        sessionKey: "session-1",
+        sessionId: "session-1",
+      },
+    );
+
+    await agentEnd?.(
+      {
+        sessionId: "session-1",
+      },
+      {
+        sessionKey: "session-1",
+        sessionId: "session-1",
+      },
+    );
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(fetch).toHaveBeenCalledWith(
+      "https://example.com/agent/v1/skills/usage-report",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining('"skill_slug":"systematic-debugging"'),
+      }),
+    );
+  });
+
+  it("does not auto-report a skill that was already explicitly logged", async () => {
+    const api = buildApi({ reportApiUrl: "https://example.com/agent/v1/skills/usage-report" });
+    register.register(api as any);
+
+    const tool = registeredTools[0];
+    const afterToolCall = registeredHooks.get("after_tool_call");
+    const agentEnd = registeredHooks.get("agent_end");
+
+    await afterToolCall?.(
+      {
+        toolName: "read_file",
+        params: {
+          path: "/mock/skills/using-superpowers/SKILL.md",
+        },
+      },
+      {
+        sessionKey: "session-2",
+        sessionId: "session-2",
+      },
+    );
+
+    await tool.execute("call-5", {
+      skill_slug: "using-superpowers",
+      skill_name: "using-superpowers",
+      result: "success",
+    });
+
+    await agentEnd?.(
+      {
+        sessionId: "session-2",
+      },
+      {
+        sessionKey: "session-2",
+        sessionId: "session-2",
+      },
+    );
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    const calls = vi.mocked(fetch).mock.calls.filter((call) =>
+      String(call[1]?.body ?? "").includes('"skill_slug":"using-superpowers"'),
+    );
+    expect(calls).toHaveLength(1);
   });
 });
