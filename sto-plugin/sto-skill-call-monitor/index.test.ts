@@ -2,11 +2,9 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import register from "./index.js";
 
 describe("sto-skill-call-monitor plugin", () => {
-  const registeredTools: Array<{ name: string; description: string; execute: Function }> = [];
   const registeredHooks = new Map<string, Function>();
 
   function buildApi(pluginConfig: Record<string, unknown> = {}) {
-    registeredTools.length = 0;
     registeredHooks.clear();
 
     return {
@@ -34,65 +32,43 @@ describe("sto-skill-call-monitor plugin", () => {
     vi.unstubAllGlobals();
   });
 
-  it("registers the log_skill_usage tool", () => {
+  it("does not register a model-visible logging tool", () => {
     const api = buildApi();
     register.register(api as any);
 
-    expect(api.registerTool).toHaveBeenCalledTimes(1);
-    expect(registeredTools[0]?.name).toBe("log_skill_usage");
+    expect(api.registerTool).not.toHaveBeenCalled();
   });
 
-  it("logs skill usage and returns confirmation", async () => {
-    const api = buildApi();
-    register.register(api as any);
-
-    const tool = registeredTools[0];
-    const result = await tool.execute("call-1", {
-      skill_slug: "weather",
-      skill_name: "天气查询",
-      result: "success",
-      notes: "查询了北京天气",
-    });
-
-    expect(api.logger.info).toHaveBeenCalledWith(
-      expect.stringContaining("skill_usage: slug=weather"),
-    );
-    expect(api.logger.info).toHaveBeenCalledWith(
-      expect.stringContaining("result=success"),
-    );
-    expect(result).toEqual({ content: [] });
-  });
-
-  it("handles missing notes gracefully", async () => {
-    const api = buildApi();
-    register.register(api as any);
-
-    const tool = registeredTools[0];
-    const result = await tool.execute("call-2", {
-      skill_slug: "image-lab",
-      skill_name: "图片生成",
-      result: "failed",
-    });
-
-    expect(api.logger.info).toHaveBeenCalledWith(
-      expect.stringContaining("notes=-"),
-    );
-    expect(result).toEqual({ content: [] });
-  });
-
-  it("sends HTTP POST when reportApiUrl is configured", async () => {
+  it("sends HTTP POST on agent_end when a whitelisted skill path was detected", async () => {
     const api = buildApi({ reportApiUrl: "https://example.com/agent/v1/skills/usage-report" });
     register.register(api as any);
 
-    const tool = registeredTools[0];
-    await tool.execute("call-3", {
-      skill_slug: "weather",
-      skill_name: "天气查询",
-      result: "success",
-      notes: "测试上报",
-    });
+    const afterToolCall = registeredHooks.get("after_tool_call");
+    const agentEnd = registeredHooks.get("agent_end");
 
-    // Give the fire-and-forget async IIFE a tick to run
+    await afterToolCall?.(
+      {
+        toolName: "read_file",
+        params: {
+          path: "~/.stoclaw\\openclaw\\skills\\weather\\skill.md",
+        },
+      },
+      {
+        sessionKey: "session-post",
+        sessionId: "session-post",
+      },
+    );
+
+    await agentEnd?.(
+      {
+        sessionId: "session-post",
+      },
+      {
+        sessionKey: "session-post",
+        sessionId: "session-post",
+      },
+    );
+
     await new Promise((r) => setTimeout(r, 50));
 
     expect(fetch).toHaveBeenCalledWith(
@@ -102,18 +78,40 @@ describe("sto-skill-call-monitor plugin", () => {
         body: expect.stringContaining('"skill_slug":"weather"'),
       }),
     );
+    expect(api.logger.info).toHaveBeenCalledWith(
+      expect.stringContaining("result=success"),
+    );
   });
 
   it("skips HTTP POST when reportApiUrl is not configured", async () => {
-    const api = buildApi(); // no reportApiUrl
+    const api = buildApi();
     register.register(api as any);
 
-    const tool = registeredTools[0];
-    await tool.execute("call-4", {
-      skill_slug: "weather",
-      skill_name: "天气查询",
-      result: "success",
-    });
+    const afterToolCall = registeredHooks.get("after_tool_call");
+    const agentEnd = registeredHooks.get("agent_end");
+
+    await afterToolCall?.(
+      {
+        toolName: "read_file",
+        params: {
+          path: "~/.stoclaw\\openclaw\\skills\\weather\\SKILL.md",
+        },
+      },
+      {
+        sessionKey: "session-no-http",
+        sessionId: "session-no-http",
+      },
+    );
+
+    await agentEnd?.(
+      {
+        sessionId: "session-no-http",
+      },
+      {
+        sessionKey: "session-no-http",
+        sessionId: "session-no-http",
+      },
+    );
 
     await new Promise((r) => setTimeout(r, 50));
 
@@ -134,7 +132,7 @@ describe("sto-skill-call-monitor plugin", () => {
       {
         toolName: "read_file",
         params: {
-          path: "/mock/skills/systematic-debugging/SKILL.md",
+          path: "~/.stoclaw\\openclaw\\skills\\systematic-debugging\\SKILL.md",
         },
       },
       {
@@ -164,11 +162,10 @@ describe("sto-skill-call-monitor plugin", () => {
     );
   });
 
-  it("does not auto-report a skill that was already explicitly logged", async () => {
+  it("does not auto-report non-whitelisted SKILL.md paths", async () => {
     const api = buildApi({ reportApiUrl: "https://example.com/agent/v1/skills/usage-report" });
     register.register(api as any);
 
-    const tool = registeredTools[0];
     const afterToolCall = registeredHooks.get("after_tool_call");
     const agentEnd = registeredHooks.get("agent_end");
 
@@ -176,7 +173,7 @@ describe("sto-skill-call-monitor plugin", () => {
       {
         toolName: "read_file",
         params: {
-          path: "/mock/skills/using-superpowers/SKILL.md",
+          path: "D:\\tmp\\docs\\using-superpowers\\SKILL.md",
         },
       },
       {
@@ -184,12 +181,6 @@ describe("sto-skill-call-monitor plugin", () => {
         sessionId: "session-2",
       },
     );
-
-    await tool.execute("call-5", {
-      skill_slug: "using-superpowers",
-      skill_name: "using-superpowers",
-      result: "success",
-    });
 
     await agentEnd?.(
       {
@@ -203,9 +194,6 @@ describe("sto-skill-call-monitor plugin", () => {
 
     await new Promise((r) => setTimeout(r, 50));
 
-    const calls = vi.mocked(fetch).mock.calls.filter((call) =>
-      String(call[1]?.body ?? "").includes('"skill_slug":"using-superpowers"'),
-    );
-    expect(calls).toHaveLength(1);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
