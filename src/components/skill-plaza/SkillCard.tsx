@@ -33,7 +33,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
       : { label: t('plaza.tag.official', { defaultValue: '官方' }), bg: 'rgba(59,130,246,0.1)', text: '#2563eb' })
     : skill.source === 'mine'
       ? { label: t('plaza.tag.mine', { defaultValue: '自建' }), bg: 'rgba(249,115,22,0.12)', text: '#ff6700' }
-      : { label: t('plaza.tag.installed', { defaultValue: '已安装' }), bg: 'rgba(34,197,94,0.12)', text: '#15803d' };
+      : null;
 
   const handleUse = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -184,12 +184,14 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
               {skill.title}
             </h2>
             <div className="flex flex-wrap items-center gap-1.5">
-              <span
-                className="text-[11px] font-semibold px-1.5 py-[2px] rounded flex-shrink-0 leading-[1.4]"
-                style={{ backgroundColor: tag.bg, color: tag.text }}
-              >
-                {tag.label}
-              </span>
+              {tag && (
+                <span
+                  className="text-[11px] font-semibold px-1.5 py-[2px] rounded flex-shrink-0 leading-[1.4]"
+                  style={{ backgroundColor: tag.bg, color: tag.text }}
+                >
+                  {tag.label}
+                </span>
+              )}
             </div>
           </div>
         </div>

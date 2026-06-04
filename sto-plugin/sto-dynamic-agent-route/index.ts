@@ -30,7 +30,12 @@ type RouteApiResponse = {
 
 type SsoAuthInfo = {
 	userName?: string;
+	realName?: string;
 	stoToken?: string;
+	companyCode?: string;
+	companyName?: string;
+	departmentCode?: string;
+	departmentName?: string;
 };
 
 // Bridge for passing agent context from before_model_resolve hook to wrapStreamFn.
@@ -52,7 +57,12 @@ async function readSsoAuth(ssoAuthPath: string): Promise<SsoAuthInfo> {
 	const parsed = JSON.parse(raw) as Record<string, unknown>;
 	return {
 		userName: typeof parsed.userName === "string" ? parsed.userName : undefined,
+		realName: typeof parsed.realName === "string" ? parsed.realName : undefined,
 		stoToken: typeof parsed.stoToken === "string" ? parsed.stoToken : undefined,
+		companyCode: typeof parsed.companyCode === "string" ? parsed.companyCode : undefined,
+		companyName: typeof parsed.companyName === "string" ? parsed.companyName : undefined,
+		departmentCode: typeof parsed.departmentCode === "string" ? parsed.departmentCode : undefined,
+		departmentName: typeof parsed.departmentName === "string" ? parsed.departmentName : undefined,
 	};
 }
 
@@ -278,6 +288,41 @@ export default definePluginEntry({
 				return undefined;
 			}
 		});
+
+
+			// Inject current SSO user info into the system prompt so the model knows
+			// the default organization/site context and does not ask the user for it.
+			api.on("before_prompt_build", async (event, ctx) => {
+				api.logger.debug?.(
+					`[${TAG}] before_prompt_build: fired — agentId=${ctx.agentId ?? "(none)"}, sessionKey=${ctx.sessionKey ?? "(none)"}`,
+				);
+
+				try {
+					const ssoAuth = await readSsoAuth(ssoAuthPath);
+					if (!ssoAuth.userName) {
+						api.logger.debug?.(`[${TAG}] before_prompt_build: no SSO auth found, skipping context injection`);
+						return undefined;
+					}
+
+					const lines: string[] = [];
+					lines.push("当前登录用户信息（已认证）：");
+					if (ssoAuth.userName) lines.push(`- 用户名：${ssoAuth.userName}`);
+					if (ssoAuth.realName) lines.push(`- 真实姓名：${ssoAuth.realName}`);
+					if (ssoAuth.companyCode) lines.push(`- 网点编码（companyCode）：${ssoAuth.companyCode}`);
+					if (ssoAuth.companyName) lines.push(`- 网点名称（companyName）：${ssoAuth.companyName}`);
+					if (ssoAuth.departmentCode) lines.push(`- 组织编码（departmentCode）：${ssoAuth.departmentCode}`);
+					if (ssoAuth.departmentName) lines.push(`- 组织名称（departmentName）：${ssoAuth.departmentName}`);
+					lines.push("");
+					lines.push("当用户查询涉及网点、组织的数据时，如果用户未指定具体的网点编码或组织编码，默认使用上述当前登录用户的信息，不需要再向用户询问。");
+
+					const appendSystemContext = lines.join("\n");
+					api.logger.debug?.(`[${TAG}] before_prompt_build: injected SSO user context for ${ssoAuth.userName}`);
+					return { appendSystemContext };
+				} catch (err) {
+					api.logger.warn?.(`[${TAG}] before_prompt_build: failed to read SSO auth (${String(err)}), skipping context injection`);
+					return undefined;
+				}
+			});
 
 		api.logger.info?.(`[${TAG}] plugin registered successfully`);
 	},
