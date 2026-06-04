@@ -8,7 +8,7 @@ import {
   toMs,
 } from './helpers';
 import { DEFAULT_CANONICAL_PREFIX, DEFAULT_SESSION_KEY, type ChatSession, type RawMessage } from './types';
-import { parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './cron-session-utils';
+import { parseCronSessionKey, parseScheduledTaskAgentSessionKey, parseScheduledTaskSessionKey } from './cron-session-utils';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 
 function getAgentIdFromSessionKey(sessionKey: string): string {

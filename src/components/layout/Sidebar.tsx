@@ -776,6 +776,7 @@ export function Sidebar() {
     ];
     return all.filter((item) => {
       if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
+      if (item.to === '/scheduled-tasks' && import.meta.env.PROD) return false;
       return true;
     });
   }, [sidebarVis.primaryMyData, t]);

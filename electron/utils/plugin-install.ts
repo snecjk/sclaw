@@ -181,6 +181,8 @@ const PLUGIN_NPM_NAMES: Record<string, string> = {
 const LOCAL_PLUGIN_DIRS: Record<string, string> = {
   'sto-dynamic-agent-route': 'sto-dynamic-agent-route',
   'sto-agent-telemetry': 'sto-agent-telemetry',
+  'sto-scheduled-task-tool': 'sto-scheduled-task-tool',
+  'sto-skill-call-monitor': 'sto-skill-call-monitor',
 };
 
 // ── Version helper ───────────────────────────────────────────────────────────
@@ -561,6 +563,14 @@ export function ensureStoScheduledTaskToolPluginInstalled(): { installed: boolea
   );
 }
 
+export function ensureStoSkillCallMonitorPluginInstalled(): { installed: boolean; warning?: string } {
+  return ensurePluginInstalled(
+    'sto-skill-call-monitor',
+    buildCandidateSources('sto-skill-call-monitor'),
+    'STO Skill Call Monitor',
+  );
+}
+
 // ── Bulk startup installer ───────────────────────────────────────────────────
 
 /**
@@ -574,6 +584,7 @@ const ALL_BUNDLED_PLUGINS = [
   { fn: ensureStoDynamicRoutePluginInstalled, label: 'STO Dynamic Route' },
   { fn: ensureStoAgentTelemetryPluginInstalled, label: 'STO Agent Telemetry' },
   { fn: ensureStoScheduledTaskToolPluginInstalled, label: 'STO Scheduled Task Tool' },
+  { fn: ensureStoSkillCallMonitorPluginInstalled, label: 'STO Skill Call Monitor' },
 ] as const;
 
 async function ensurePluginInstalledAsync(
@@ -685,6 +696,7 @@ export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
     { dirName: 'sto-dynamic-agent-route', label: 'STO Dynamic Route' },
     { dirName: 'sto-agent-telemetry', label: 'STO Agent Telemetry' },
     { dirName: 'sto-scheduled-task-tool', label: 'STO Scheduled Task Tool' },
+    { dirName: 'sto-skill-call-monitor', label: 'STO Skill Call Monitor' },
   ] as const;
 
   for (const { dirName, label } of pluginSpecs) {

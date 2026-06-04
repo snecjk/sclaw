@@ -1324,7 +1324,7 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
     plugins.enabled = true;
 
     const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
-    for (const pluginId of ['sto-dynamic-agent-route', 'sto-agent-telemetry']) {
+    for (const pluginId of ['sto-dynamic-agent-route', 'sto-agent-telemetry', 'sto-scheduled-task-tool', 'sto-skill-call-monitor']) {
       if (!allow.includes(pluginId)) {
         allow.push(pluginId);
       }
@@ -1361,6 +1361,14 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
     if (entries['sto-scheduled-task-tool']) {
       delete entries['sto-scheduled-task-tool'];
     }
+    entries['sto-skill-call-monitor'] = {
+      enabled: true,
+      config: {
+        reportApiUrl: `${stoBaseUrl}/agent/v1/skills/usage-report`,
+        ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
+        timeoutMs: 5000,
+      },
+    };
     plugins.entries = entries;
     config.plugins = plugins;
 
