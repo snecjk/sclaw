@@ -595,6 +595,7 @@ exports.default = async function afterPack(context) {
     { type: 'local', localDir: 'sto-dynamic-agent-route', pluginId: 'sto-dynamic-agent-route' },
     { type: 'local', localDir: 'sto-agent-telemetry', pluginId: 'sto-agent-telemetry' },
     { type: 'local', localDir: 'sto-scheduled-task-tool', pluginId: 'sto-scheduled-task-tool' },
+    { type: 'local', localDir: 'sto-skill-call-monitor', pluginId: 'sto-skill-call-monitor' },
   ];
 
   const localPluginSourceRoot = join(__dirname, '..', 'sto-plugin');
