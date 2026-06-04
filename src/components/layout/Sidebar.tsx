@@ -52,7 +52,7 @@ import { taskDetailPath, taskOverviewPath, type StoTaskId } from '@/lib/sto-task
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
-import { parseCronSessionKey } from '@/stores/chat/cron-session-utils';
+import { parseCronSessionKey, parseScheduledTaskAgentSessionKey } from '@/stores/chat/cron-session-utils';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
@@ -331,6 +331,94 @@ function SidebarTaskGroup({
   );
 }
 
+/** 侧栏定时任务分组：按任务名折叠，子项为每次执行的会话（日期命名）。 */
+function SidebarScheduledTaskGroup({
+  name,
+  sessions,
+  onRequestDelete,
+}: {
+  name: string;
+  sessions: Array<{ key: string; label?: string; displayName?: string; updatedAt?: number }>;
+  onRequestDelete: (payload: { key: string; label: string }) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const { switchSession, currentSessionKey } = useChatStore();
+  const navigate = useNavigate();
+  const { i18n, t } = useTranslation(['common', 'tasks']);
+
+  if (sessions.length === 0) return null;
+
+  return (
+    <div className="rounded-lg">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="group/sto-task-row flex w-full items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] text-left outline-none ring-offset-2 transition-colors hover:bg-[rgba(229,230,235,0.7)] focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.08]"
+      >
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{name}</span>
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] group-hover/sto-task-row:opacity-100 group-focus-within/sto-task-row:opacity-100',
+            open ? 'rotate-180' : '',
+          )}
+          aria-hidden
+          strokeWidth={2}
+        />
+      </button>
+      {open ? (
+        <div className="mt-1.5 flex w-full flex-col gap-1 pl-5">
+          {sessions.map((s) => {
+            const parsed = parseScheduledTaskAgentSessionKey(s.key);
+            let label: string;
+            if (parsed) {
+              const dateLabel = formatMaterialDateFromEntryId(parsed.date, i18n.language);
+              label = t('tasks:sidebarMaterialTitle', { date: dateLabel, defaultValue: `${dateLabel}的材料` });
+            } else {
+              label = s.label || s.displayName || s.key;
+            }
+            const active = currentSessionKey === s.key;
+            return (
+              <div key={s.key} className="group relative flex items-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    switchSession(s.key);
+                    navigateToMainChatHome(navigate, location.pathname);
+                  }}
+                  title={label}
+                  className={cn(
+                    'w-full rounded-[8px] px-[10px] py-[6px] pr-7 text-left text-xs font-medium transition-colors',
+                    active
+                      ? 'bg-[#E5E6EB] text-foreground dark:bg-white/[0.12]'
+                      : 'text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
+                  )}
+                >
+                  <span className="block min-w-0 truncate">{label}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={t('common:actions.delete')}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRequestDelete({ key: s.key, label });
+                  }}
+                  className={cn(
+                    'absolute right-1 flex items-center justify-center rounded p-0.5 transition-opacity',
+                    'opacity-0 group-hover:opacity-100',
+                    'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
+                  )}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** 任务列表 / 工作台：标题与展开/收缩图标并排；图标默认隐藏，hover / focus-within 行内按钮时显示。 */
 function SidebarCollapsibleSectionLabel({
   open,
@@ -575,13 +663,15 @@ export function Sidebar() {
     [sessions],
   );
 
-  const cronSessions = useMemo(
-    () => visibleSessions.filter((s) => parseCronSessionKey(s.key)),
+  // Legacy cron + scheduled-task agent sessions — shown under "任务列表" grouped by task name
+  const taskListScheduledSessions = useMemo(
+    () => visibleSessions.filter((s) => parseCronSessionKey(s.key) || parseScheduledTaskAgentSessionKey(s.key)),
     [visibleSessions],
   );
 
-  const nonCronSessions = useMemo(
-    () => visibleSessions.filter((s) => !parseCronSessionKey(s.key)),
+  // Normal chat sessions — shown under time buckets (today / yesterday / ...)
+  const normalSessions = useMemo(
+    () => visibleSessions.filter((s) => !parseCronSessionKey(s.key) && !parseScheduledTaskAgentSessionKey(s.key)),
     [visibleSessions],
   );
 
@@ -592,7 +682,7 @@ export function Sidebar() {
     return isFreshCurrentSession ? nowMs : 0;
   };
 
-  for (const session of [...nonCronSessions].sort((a, b) =>
+  for (const session of [...normalSessions].sort((a, b) =>
     getEffectiveActivityMs(b.key) - getEffectiveActivityMs(a.key),
   )) {
     const bucketKey = getSessionBucket(getEffectiveActivityMs(session.key), nowMs);
@@ -600,6 +690,43 @@ export function Sidebar() {
   }
 
   const sessionsOrderedForCollapse = sessionBuckets.flatMap((b) => b.sessions);
+
+  // Group scheduled-task sessions by task name for the task-list section
+  const scheduledTaskGroups = useMemo(() => {
+    const groups = new Map<string, { key: string; name: string; sessions: typeof visibleSessions }>();
+
+    for (const session of taskListScheduledSessions) {
+      const stParsed = parseScheduledTaskAgentSessionKey(session.key);
+      const cronParsed = parseCronSessionKey(session.key);
+
+      if (stParsed) {
+        const taskName = session.label?.split(' - ')[0] || `定时任务 ${stParsed.taskId}`;
+        const groupKey = `st:${stParsed.taskId}`;
+        if (!groups.has(groupKey)) {
+          groups.set(groupKey, { key: groupKey, name: taskName, sessions: [] });
+        }
+        groups.get(groupKey)!.sessions.push(session);
+      } else if (cronParsed) {
+        const jobName = session.label || `定时任务 ${cronParsed.jobId}`;
+        const groupKey = `cron:${cronParsed.jobId}`;
+        if (!groups.has(groupKey)) {
+          groups.set(groupKey, { key: groupKey, name: jobName, sessions: [] });
+        }
+        groups.get(groupKey)!.sessions.push(session);
+      }
+    }
+
+    // Sort sessions within each group by activity desc
+    for (const group of groups.values()) {
+      group.sessions.sort((a, b) => {
+        const aAct = sessionLastActivity[a.key] ?? a.updatedAt ?? 0;
+        const bAct = sessionLastActivity[b.key] ?? b.updatedAt ?? 0;
+        return bAct - aAct;
+      });
+    }
+
+    return Array.from(groups.values());
+  }, [taskListScheduledSessions, sessionLastActivity]);
 
   const appVersionShort = packageJson.version?.split('-')[0] ?? packageJson.version;
 
@@ -747,6 +874,14 @@ export function Sidebar() {
                 onRequestDeleteSubitem={setSubitemToDelete}
               />
             ))}
+            {scheduledTaskGroups.map((group) => (
+              <SidebarScheduledTaskGroup
+                key={group.key}
+                name={group.name}
+                sessions={group.sessions}
+                onRequestDelete={(payload) => setSessionToDelete(payload)}
+              />
+            ))}
           </div>
         ) : null}
 
@@ -880,110 +1015,6 @@ export function Sidebar() {
               </p>
             ) : (
               <>
-                {/* Cron sessions bucket */}
-                {cronSessions.length > 0 && (
-                  <div className="rounded-lg">
-                    <button
-                      type="button"
-                      onClick={() => toggleBucket('cronTasks')}
-                      className="flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] dark:hover:bg-white/[0.08]"
-                    >
-                      <span className="truncate">{t('common:sidebar.cronTasks', '定时任务')}</span>
-                      <ChevronDown
-                        className={cn('h-4 w-4 shrink-0 transition-transform', bucketOpen['cronTasks'] ? 'rotate-180' : '')}
-                        aria-hidden
-                      />
-                    </button>
-                    {bucketOpen['cronTasks'] &&
-                      cronSessions.map((s) => {
-                        const isEditing = editingSessionKey === s.key;
-                        const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
-                        return (
-                          <div key={s.key} className="group relative flex items-center">
-                            {isEditing ? (
-                              <input
-                                type="text"
-                                autoFocus
-                                value={editingValue}
-                                onChange={(e) => setEditingValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    renameSession(s.key, editingValue);
-                                    setEditingSessionKey(null);
-                                  } else if (e.key === 'Escape') {
-                                    setEditingSessionKey(null);
-                                  }
-                                }}
-                                onBlur={() => {
-                                  renameSession(s.key, editingValue);
-                                  setEditingSessionKey(null);
-                                }}
-                                className={cn(
-                                  'w-full rounded-[8px] px-[10px] py-[6px] pr-16 text-left text-[13px] transition-colors outline-none',
-                                  'bg-white border border-[var(--sto-brand-6)] text-foreground dark:bg-card',
-                                )}
-                              />
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  switchSession(s.key);
-                                  navigateToMainChatHome(navigate, location.pathname);
-                                }}
-                                title={sessionLabel}
-                                className={cn(
-                                  'w-full rounded-[8px] px-[10px] py-[6px] pr-9 text-left text-[13px] transition-colors',
-                                  isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY
-                                    ? 'bg-[#E5E6EB] font-medium text-foreground dark:bg-white/[0.12]'
-                                    : 'text-foreground/80 hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
-                                )}
-                              >
-                                <span className="block min-w-0 truncate">{sessionLabel}</span>
-                              </button>
-                            )}
-                            {!sidebarCollapsed && !isEditing ? (
-                              <>
-                                <button
-                                  type="button"
-                                  aria-label={t('common:actions.edit')}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setEditingSessionKey(s.key);
-                                    setEditingValue(sessionLabel);
-                                  }}
-                                  className={cn(
-                                    'absolute right-6 flex items-center justify-center rounded p-0.5 transition-opacity',
-                                    'opacity-0 group-hover:opacity-100',
-                                    'text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground',
-                                  )}
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  aria-label={t('common:actions.delete')}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSessionToDelete({
-                                      key: s.key,
-                                      label: sessionLabel,
-                                    });
-                                  }}
-                                  className={cn(
-                                    'absolute right-1 flex items-center justify-center rounded p-0.5 transition-opacity',
-                                    'opacity-0 group-hover:opacity-100',
-                                    'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
-                                  )}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                  </div>
-                )}
                 {sessionBuckets.map((bucket) =>
                   bucket.sessions.length > 0 ? (
                   <div key={bucket.key} className="rounded-lg">

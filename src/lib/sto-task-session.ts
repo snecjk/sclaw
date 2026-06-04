@@ -25,9 +25,20 @@ export function isMainAgentChatSessionKey(sessionKey: string): boolean {
   return sessionKey.endsWith(':main');
 }
 
+/** Scheduled-task summary session (e.g. scheduled-task:1) — hidden because per-run agent sessions are shown instead. */
+export function isScheduledTaskSummarySessionKey(sessionKey: string): boolean {
+  if (!sessionKey.startsWith('scheduled-task:')) return false;
+  const rest = sessionKey.slice('scheduled-task:'.length);
+  return /^\d+$/.test(rest);
+}
+
 /** Sessions that must not appear as rows in the chat sidebar session list. */
 export function isSidebarHiddenChatSessionKey(sessionKey: string): boolean {
-  return isHiddenStoTaskSubitemChatSessionKey(sessionKey) || isMainAgentChatSessionKey(sessionKey);
+  return (
+    isHiddenStoTaskSubitemChatSessionKey(sessionKey) ||
+    isMainAgentChatSessionKey(sessionKey) ||
+    isScheduledTaskSummarySessionKey(sessionKey)
+  );
 }
 
 /** True when user left a task subitem route but the store still points at its hidden session. */

@@ -71,3 +71,32 @@ export function buildScheduledTaskSessionHistoryPath(sessionKey: string, limit =
   }
   return `/api/scheduled-tasks/session-history?${params.toString()}`;
 }
+
+// ---------------------------------------------------------------------------
+// Scheduled Task Agent Session Keys (e.g. agent:main:scheduled-task:1:2026-06-04)
+// ---------------------------------------------------------------------------
+
+export interface ScheduledTaskAgentSessionKeyParts {
+  agentId: string;
+  taskId: number;
+  date: string; // YYYY-MM-DD
+}
+
+export function parseScheduledTaskAgentSessionKey(sessionKey: string): ScheduledTaskAgentSessionKeyParts | null {
+  if (!sessionKey.startsWith('agent:')) return null;
+  const parts = sessionKey.split(':');
+  // agent:{agentId}:scheduled-task:{taskId}:{date}
+  if (parts.length === 5 && parts[2] === 'scheduled-task') {
+    const agentId = parts[1] || 'main';
+    const taskId = Number(parts[3]);
+    const date = parts[4];
+    if (!Number.isNaN(taskId) && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return { agentId, taskId, date };
+    }
+  }
+  return null;
+}
+
+export function isScheduledTaskAgentSessionKey(sessionKey: string): boolean {
+  return parseScheduledTaskAgentSessionKey(sessionKey) !== null;
+}
