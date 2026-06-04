@@ -95,7 +95,7 @@ export function Cron() {
         await triggerJob(job.id);
         const sessionKey = `agent:${job.agentId ?? 'main'}:cron:${job.id}`;
         useChatStore.getState().switchSession(sessionKey);
-        navigateToMainChatHome(navigate, location.pathname);
+        // navigateToMainChatHome(navigate, location.pathname);
         // Refresh sessions so the new cron session gets its label enriched
         void useChatStore.getState().loadSessions();
       } catch (error) {

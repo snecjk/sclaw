@@ -4,10 +4,12 @@ export interface CronSessionKeyParts {
   agentId: string;
   jobId: string;
   runSessionId?: string;
+  date?: string;
 }
 
 export function parseCronSessionKey(sessionKey: string): CronSessionKeyParts | null {
   // New format: agent:{agentId}:cron:{jobId} or agent:{agentId}:cron:{jobId}:run:{runSessionId}
+  // or agent:{agentId}:cron:{jobId}:{date} (YYYY-MM-DD)
   if (sessionKey.startsWith('agent:')) {
     const parts = sessionKey.split(':');
     if (parts.length >= 4 && parts[2] === 'cron') {
@@ -15,6 +17,13 @@ export function parseCronSessionKey(sessionKey: string): CronSessionKeyParts | n
       const jobId = parts[3];
       if (!jobId) return null;
       if (parts.length === 4) return { agentId, jobId };
+      if (parts.length === 5) {
+        const date = parts[4];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          return { agentId, jobId, date };
+        }
+        return { agentId, jobId };
+      }
       if (parts.length === 6 && parts[4] === 'run' && parts[5]) {
         return { agentId, jobId, runSessionId: parts[5] };
       }

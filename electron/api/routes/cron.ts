@@ -46,6 +46,7 @@ interface CronSessionKeyParts {
   agentId: string;
   jobId: string;
   runSessionId?: string;
+  date?: string;
 }
 
 interface CronSessionFallbackMessage {
@@ -66,6 +67,14 @@ function parseCronSessionKey(sessionKey: string): CronSessionKeyParts | null {
   if (!jobId) return null;
 
   if (parts.length === 4) {
+    return { agentId, jobId };
+  }
+
+  if (parts.length === 5) {
+    const date = parts[4];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return { agentId, jobId, date };
+    }
     return { agentId, jobId };
   }
 

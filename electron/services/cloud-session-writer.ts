@@ -28,6 +28,13 @@ function buildSessionKey(agentId: string, jobId: string): string {
   return `agent:${agentId}:cron:${jobId}`;
 }
 
+function formatLocalYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 interface SessionStoreEntry {
   sessionId: string;
   sessionFile: string;
@@ -83,7 +90,7 @@ function findSessionEntry(store: SessionStore, sessionKey: string): SessionStore
   return undefined;
 }
 
-async function createSessionEntry(agentId: string, sessionKey: string): Promise<SessionStoreEntry> {
+async function createSessionEntry(agentId: string, sessionKey: string, label?: string): Promise<SessionStoreEntry> {
   const sessionId = randomUUID();
   const sessionFile = join(getSessionsDir(agentId), `${sessionId}.jsonl`);
 
@@ -100,7 +107,7 @@ async function createSessionEntry(agentId: string, sessionKey: string): Promise<
 
   // Register in sessions.json
   const store = await readSessionStore(agentId);
-  const entry: SessionStoreEntry = { sessionId, sessionFile };
+  const entry: SessionStoreEntry = { sessionId, sessionFile, ...(label ? { label } : {}) };
 
   // Prefer direct key format (same as OpenClaw Gateway)
   store[sessionKey] = entry;
@@ -110,8 +117,7 @@ async function createSessionEntry(agentId: string, sessionKey: string): Promise<
   return entry;
 }
 
-async function ensureSession(agentId: string, jobId: string): Promise<SessionStoreEntry> {
-  const sessionKey = buildSessionKey(agentId, jobId);
+async function ensureSession(agentId: string, sessionKey: string, label?: string): Promise<SessionStoreEntry> {
   const store = await readSessionStore(agentId);
   const existing = findSessionEntry(store, sessionKey);
   if (existing) {
@@ -124,7 +130,7 @@ async function ensureSession(agentId: string, jobId: string): Promise<SessionSto
       logger.warn(`[CloudSessionWriter] Session file missing for ${sessionKey}, recreating`);
     }
   }
-  return createSessionEntry(agentId, sessionKey);
+  return createSessionEntry(agentId, sessionKey, label);
 }
 
 /**
@@ -135,7 +141,7 @@ export async function appendCloudResultToSession(
   jobId: string,
   result: CloudTaskResult,
 ): Promise<void> {
-  const session = await ensureSession(agentId, jobId);
+  const session = await ensureSession(agentId, buildSessionKey(agentId, jobId));
 
   const content = result.output?.message ?? '';
   if (!content && result.status !== 'failure') {
@@ -167,15 +173,18 @@ export async function appendCloudResultToSession(
 
 /**
  * Append multiple cloud execution results to their respective sessions.
- * Results are grouped by (agentId, jobId) and written in batch.
+ * Results are grouped by (agentId, jobId) for summary sessions and
+ * by (agentId, jobId, date) for dated sessions, and written in batch.
  */
 export async function appendCloudResultsToSessions(
   results: CloudTaskResult[],
 ): Promise<void> {
   if (!results.length) return;
 
-  // Group by agentId + jobId
-  const groups = new Map<string, { agentId: string; jobId: string; results: CloudTaskResult[] }>();
+  // Group by agentId + jobId (summary sessions)
+  const summaryGroups = new Map<string, { agentId: string; jobId: string; results: CloudTaskResult[] }>();
+  // Group by agentId + jobId + date (dated sessions)
+  const datedGroups = new Map<string, { agentId: string; jobId: string; date: string; results: CloudTaskResult[] }>();
 
   for (const result of results) {
     // CloudTaskResult may carry agentId; fallback to lookup via taskId if missing
@@ -184,17 +193,33 @@ export async function appendCloudResultsToSessions(
       logger.warn(`[CloudSessionWriter] Result ${result.id} missing agentId, skipping session append`);
       continue;
     }
-    const key = `${agentId}:${result.taskId}`;
-    const group = groups.get(key);
-    if (group) {
-      group.results.push(result);
+
+    const summaryKey = `${agentId}:${result.taskId}`;
+    const sGroup = summaryGroups.get(summaryKey);
+    if (sGroup) {
+      sGroup.results.push(result);
     } else {
-      groups.set(key, { agentId, jobId: result.taskId, results: [result] });
+      summaryGroups.set(summaryKey, { agentId, jobId: result.taskId, results: [result] });
+    }
+
+    const date = formatLocalYmd(new Date(result.completedAt));
+    const datedKey = `${agentId}:${result.taskId}:${date}`;
+    const dGroup = datedGroups.get(datedKey);
+    if (dGroup) {
+      dGroup.results.push(result);
+    } else {
+      datedGroups.set(datedKey, { agentId, jobId: result.taskId, date, results: [result] });
     }
   }
 
-  for (const { agentId, jobId, results: groupResults } of groups.values()) {
-    const session = await ensureSession(agentId, jobId);
+  async function writeGroup(
+    agentId: string,
+    jobId: string,
+    groupResults: CloudTaskResult[],
+    sessionKey: string,
+    label?: string,
+  ): Promise<void> {
+    const session = await ensureSession(agentId, sessionKey, label);
     const lines: string[] = [];
 
     for (const result of groupResults) {
@@ -227,5 +252,16 @@ export async function appendCloudResultsToSessions(
         `[CloudSessionWriter] Appended ${lines.length} results to session ${session.sessionFile}`,
       );
     }
+  }
+
+  // Write summary sessions
+  for (const { agentId, jobId, results: groupResults } of summaryGroups.values()) {
+    await writeGroup(agentId, jobId, groupResults, buildSessionKey(agentId, jobId));
+  }
+
+  // Write dated sessions
+  for (const { agentId, jobId, date, results: groupResults } of datedGroups.values()) {
+    const sessionKey = `${buildSessionKey(agentId, jobId)}:${date}`;
+    await writeGroup(agentId, jobId, groupResults, sessionKey, `${jobId} - ${date}`);
   }
 }

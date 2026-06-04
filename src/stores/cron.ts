@@ -227,6 +227,7 @@ export const useCronStore = create<CronState>((set) => ({
       // Refresh jobs after trigger to update lastRun/nextRun state
       try {
         const jobs = await hostApiFetch<CronJob[]>('/api/cron/jobs');
+        console.log('Cron trigger result:', result, jobs);
         set({ jobs });
       } catch {
         // Ignore refresh error

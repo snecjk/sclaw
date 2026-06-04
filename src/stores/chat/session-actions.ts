@@ -8,7 +8,7 @@ import {
   toMs,
 } from './helpers';
 import { DEFAULT_CANONICAL_PREFIX, DEFAULT_SESSION_KEY, type ChatSession, type RawMessage } from './types';
-import { parseCronSessionKey, parseScheduledTaskSessionKey } from './cron-session-utils';
+import { parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './cron-session-utils';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 
 function getAgentIdFromSessionKey(sessionKey: string): string {
@@ -122,7 +122,10 @@ export function createSessionActions(
             .map((session) => [session.key, session.updatedAt!]),
         );
 
-        // Enrich cron session labels from job names (always overwrite so stale labels are refreshed)
+        // ------------------------------------------------------------------
+        // 定时任务会话 label：按执行日期命名；同时保留任务原始名称到 displayName
+        // ------------------------------------------------------------------
+        // 1) 先获取任务名称并写入 displayName（供侧边栏分组名称使用）
         try {
           const jobsResult = await hostApiFetch<Array<{ id: string; name: string }>>('/api/cron/jobs');
           const jobNameMap = new Map(jobsResult.map((j) => [j.id, j.name]));
@@ -130,26 +133,76 @@ export function createSessionActions(
             const parsed = parseCronSessionKey(session.key);
             if (parsed) {
               const name = jobNameMap.get(parsed.jobId);
-              if (name) session.label = name;
+              if (name) session.displayName = name;
             }
           }
         } catch {
-          // Ignore cron label enrichment failure
+          // Ignore cron name enrichment failure
         }
 
-        // Enrich scheduled-task summary session labels from task names
         try {
           const tasksResult = await hostApiFetch<Array<{ id: number; name: string }>>('/api/scheduled-tasks');
           const taskNameMap = new Map(tasksResult.map((t) => [t.id, t.name]));
           for (const session of sessionsWithCurrent) {
             const parsed = parseScheduledTaskSessionKey(session.key);
+            const stAgentParsed = parseScheduledTaskAgentSessionKey(session.key);
             if (parsed) {
               const name = taskNameMap.get(parsed.taskId);
-              if (name) session.label = name;
+              if (name) session.displayName = name;
+            } else if (stAgentParsed) {
+              const name = taskNameMap.get(stAgentParsed.taskId);
+              if (name) session.displayName = name;
             }
           }
         } catch {
-          // Ignore scheduled-task label enrichment failure
+          // Ignore scheduled-task name enrichment failure
+        }
+
+        // 2) 再按日期生成 label
+        const taskSessionDayCounts = new Map<string, number>();
+        for (const session of sessionsWithCurrent) {
+          const cronParsed = parseCronSessionKey(session.key);
+          const stParsed = parseScheduledTaskAgentSessionKey(session.key);
+          let taskId: string | undefined;
+          const ts = session.updatedAt;
+          if (cronParsed) {
+            taskId = `cron:${cronParsed.jobId}`;
+          } else if (stParsed) {
+            taskId = `st:${stParsed.taskId}`;
+          }
+          if (taskId && ts) {
+            const d = new Date(ts);
+            const dateKey = `${taskId}:${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            taskSessionDayCounts.set(dateKey, (taskSessionDayCounts.get(dateKey) ?? 0) + 1);
+          }
+        }
+
+        for (const session of sessionsWithCurrent) {
+          const cronParsed = parseCronSessionKey(session.key);
+          const stParsed = parseScheduledTaskAgentSessionKey(session.key);
+          let taskId: string | undefined;
+          const ts = session.updatedAt;
+          if (cronParsed) {
+            taskId = `cron:${cronParsed.jobId}`;
+          } else if (stParsed) {
+            taskId = `st:${stParsed.taskId}`;
+          }
+          if (taskId && ts) {
+            const d = new Date(ts);
+            const dateKey = `${taskId}:${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const hasMultiple = (taskSessionDayCounts.get(dateKey) ?? 0) > 1;
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            if (hasMultiple) {
+              const h = String(d.getHours()).padStart(2, '0');
+              const min = String(d.getMinutes()).padStart(2, '0');
+              const s = String(d.getSeconds()).padStart(2, '0');
+              session.label = `${y}年${m}月${day}日${h}时${min}分${s}秒 的材料`;
+            } else {
+              session.label = `${y}年${m}月${day}日 的材料`;
+            }
+          }
         }
 
         set((state) => ({

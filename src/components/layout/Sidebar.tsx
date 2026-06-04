@@ -104,8 +104,7 @@ function collapsedEntryLabel(full: string): string {
 }
 
 const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' | 'taskWeeklyPpt' }[] = [
-  { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation' },
-  { id: 'weekly-ppt', labelKey: 'taskWeeklyPpt' },
+  // { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation' },
 ];
 
 function SidebarTaskDateLinks({
@@ -344,12 +343,24 @@ function SidebarScheduledTaskGroup({
   const [open, setOpen] = useState(true);
   const { switchSession, currentSessionKey } = useChatStore();
   const navigate = useNavigate();
-  const { i18n, t } = useTranslation(['common', 'tasks']);
+  const { t } = useTranslation(['common', 'tasks']);
+  const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
 
   if (sessions.length === 0) return null;
 
   // Strip common prefixes from group name for cleaner display
   const displayName = name.replace(/^Cron:\s*/i, '').replace(/^定时任务\s*/i, '');
+
+  // 按日期统计当天会话数量，用于决定用哪种日期格式
+  const dayCounts = new Map<string, number>();
+  for (const s of sessions) {
+    const ts = sessionLastActivity[s.key] ?? s.updatedAt ?? 0;
+    if (ts > 0) {
+      const d = new Date(ts);
+      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      dayCounts.set(dateKey, (dayCounts.get(dateKey) ?? 0) + 1);
+    }
+  }
 
   return (
     <div className="rounded-lg">
@@ -371,16 +382,23 @@ function SidebarScheduledTaskGroup({
       {open ? (
         <div className="mt-1.5 flex w-full flex-col gap-1 pl-5">
           {sessions.map((s) => {
-            const parsed = parseScheduledTaskAgentSessionKey(s.key);
-            const cronParsed = parseCronSessionKey(s.key);
+            const ts = sessionLastActivity[s.key] ?? s.updatedAt ?? 0;
             let label: string;
-            if (parsed) {
-              const dateLabel = formatMaterialDateFromEntryId(parsed.date, i18n.language);
-              label = t('tasks:sidebarMaterialTitle', { date: dateLabel, defaultValue: `${dateLabel}的材料` });
-            } else if (cronParsed) {
-              // Legacy cron: show job name (strip technical prefixes)
-              const raw = s.label || s.displayName || '';
-              label = raw.replace(/^Cron:\s*/i, '').replace(/^\[.*?\]\s*/, '') || `执行记录 ${cronParsed.jobId.slice(0, 8)}`;
+            if (ts > 0) {
+              const d = new Date(ts);
+              const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+              const hasMultiple = (dayCounts.get(dateKey) ?? 0) > 1;
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, '0');
+              const day = String(d.getDate()).padStart(2, '0');
+              if (hasMultiple) {
+                const h = String(d.getHours()).padStart(2, '0');
+                const min = String(d.getMinutes()).padStart(2, '0');
+                const sec = String(d.getSeconds()).padStart(2, '0');
+                label = `${y}年${m}月${day}日${h}时${min}分${sec}秒 的材料`;
+              } else {
+                label = `${y}年${m}月${day}日 的材料`;
+              }
             } else {
               label = s.label || s.displayName || s.key;
             }
@@ -708,14 +726,14 @@ export function Sidebar() {
       const cronParsed = parseCronSessionKey(session.key);
 
       if (stParsed) {
-        const taskName = session.label?.split(' - ')[0] || `定时任务 ${stParsed.taskId}`;
+        const taskName = session.displayName || session.label?.split(' - ')[0] || `定时任务 ${stParsed.taskId}`;
         const groupKey = `st:${stParsed.taskId}`;
         if (!groups.has(groupKey)) {
           groups.set(groupKey, { key: groupKey, name: taskName, sessions: [] });
         }
         groups.get(groupKey)!.sessions.push(session);
       } else if (cronParsed) {
-        const jobName = session.label || `定时任务 ${cronParsed.jobId}`;
+        const jobName = session.displayName || session.label || `定时任务 ${cronParsed.jobId}`;
         const groupKey = `cron:${cronParsed.jobId}`;
         if (!groups.has(groupKey)) {
           groups.set(groupKey, { key: groupKey, name: jobName, sessions: [] });
