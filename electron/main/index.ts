@@ -412,6 +412,7 @@ async function initialize(): Promise<void> {
     { ensureClawXContext, repairClawXOnlyBootstrapFiles },
     { autoInstallCliIfNeeded, generateCompletionCache, installCompletionToProfile },
     { autoInstallSaiCliIfNeeded },
+    { autoInstallDwsCliIfNeeded },
     { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled },
     { ensureLongOutputConstraint, ensureChineseThinkingConstraint, getAgentWorkspacePath },
     { ensureAllBundledPluginsInstalledAsync },
@@ -435,6 +436,7 @@ async function initialize(): Promise<void> {
     import('../utils/openclaw-workspace'),
     import('../utils/openclaw-cli'),
     import('../utils/sai-cli'),
+    import('../utils/dws-cli'),
     import('../utils/skill-config'),
     import('../utils/agent-config'),
     import('../utils/plugin-install'),
@@ -591,6 +593,13 @@ async function initialize(): Promise<void> {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn('SAI CLI auto-install failed:', message);
       mainWindow?.webContents.send('sai:cli-install-failed', message);
+    });
+    await autoInstallDwsCliIfNeeded((installedPath) => {
+      mainWindow?.webContents.send('dws:cli-installed', installedPath);
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn('dws auto-install failed:', message);
+      mainWindow?.webContents.send('dws:cli-install-failed', message);
     });
   });
 

@@ -564,7 +564,12 @@ export async function handleChannelRoutes(
       if (storedChannelType === 'dingtalk') {
         const installResult = await ensureDingTalkPluginInstalled();
         if (!installResult.installed) {
-          sendJson(res, 500, { success: false, error: installResult.warning || 'DingTalk plugin install failed' });
+          sendJson(res, 503, {
+            success: false,
+            fallback: 'dws',
+            error: installResult.warning
+              || '钉钉 OpenClaw 通道插件当前未启用（需 OpenClaw >= 2026.3.28）。请改用 dws：在设置页安装并登录 dws，在聊天输入 @ 选择钉钉收件人，由 Agent 调用 dws 发送。',
+          });
           return true;
         }
       }

@@ -52,6 +52,7 @@
         "uv:download:win": "zx scripts/download-bundled-uv.mjs --platform=win",
         "uv:download:linux": "zx scripts/download-bundled-uv.mjs --platform=linux",
         "uv:download:all": "zx scripts/download-bundled-uv.mjs --all",
+        "dws:manifest": "zx scripts/download-dws-manifest.mjs",
         "node:download:win": "zx scripts/download-bundled-node.mjs --platform=win",
         "prep:win-binaries": "pnpm run uv:download:win && pnpm run node:download:win",
         "icons": "zx scripts/generate-icons.mjs",

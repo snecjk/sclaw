@@ -331,7 +331,7 @@ Renderer **禁止** 直接 `ipc` spawn；仅 `host-api` / `api-client`。
 ### 9.1 原则
 
 - 用户通过输入 `@` 已选定 **准确收件人**（含 `userId` / `openConversationId`）。
-- 发送时 **禁止 Agent 再** `contact user search` 猜人。
+- 发送时若消息已附带 `dingTalkMentions` 结构化块，**禁止 Agent 对块内收件人重复** `contact user search`；对话中用户另行要求搜人（无该块时）**允许** Agent 调 dws 只读搜人命令。
 - 发送类操作前 **预览/确认**（对话确认或 `dws --dry-run`），符合钉钉 CLI 安全设计。
 
 ### 9.2 发送 payload

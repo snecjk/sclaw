@@ -48,6 +48,7 @@ import { applyProxySettings } from './proxy';
 import { syncLaunchAtStartupSettingFromStore } from './launch-at-startup';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { getStoToken } from '../utils/auth-store';
+import { preprocessChatSendParams } from '../utils/dingtalk-mention-send';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { getRecentTokenUsageHistory } from '../utils/token-usage';
@@ -725,6 +726,43 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             },
           };
         }
+        case 'dws': {
+          if (request.action === 'checkInstalled') {
+            data = await import('../utils/dws-cli').then((m) => m.dwsCheckInstalled());
+            break;
+          }
+          if (request.action === 'install') {
+            data = await import('../utils/dws-cli').then((m) =>
+              m.autoInstallDwsCliIfNeeded((path) => {
+                BrowserWindow.getAllWindows()[0]?.webContents.send('dws:cli-installed', path);
+              }),
+            );
+            break;
+          }
+          if (request.action === 'authStatus') {
+            data = await import('../utils/dws-cli').then((m) => m.dwsAuthStatus());
+            break;
+          }
+          if (request.action === 'authLogin') {
+            const parentWindow = BrowserWindow.getFocusedWindow()
+              ?? BrowserWindow.getAllWindows().find((win) => !win.isDestroyed())
+              ?? null;
+            data = await import('../utils/dws-cli').then((m) => m.dwsAuthLogin(parentWindow));
+            break;
+          }
+          if (request.action === 'version') {
+            data = await import('../utils/dws-cli').then((m) => m.dwsVersion());
+            break;
+          }
+          return {
+            id: request.id,
+            ok: false,
+            error: {
+              code: 'UNSUPPORTED',
+              message: `APP_REQUEST_UNSUPPORTED:${request.module}.${request.action}`,
+            },
+          };
+        }
         case 'question': {
           if (request.action === 'split') {
             const payload = request.payload as {
@@ -1177,6 +1215,7 @@ function registerGatewayHandlers(
     /^process\.(spawn|exec|run)/i,
     /^cli\.(upgrade|install)/i,
     /^sai\.(upgrade|install)/i,
+    /^dws\.(upgrade|install)/i,
     /^(npm|pnpm|yarn)\./i,
     /^pip\.(install|upgrade|uninstall)/i,
     /^(update|upgrade|install|exec|shell|run)$/i,
@@ -1198,7 +1237,10 @@ function registerGatewayHandlers(
       if (blockedMsg) {
         return { success: false, error: blockedMsg };
       }
-      const result = await gatewayManager.rpc(method, params, timeoutMs);
+      const rpcParams = method === 'chat.send'
+        ? await preprocessChatSendParams(params)
+        : params;
+      const result = await gatewayManager.rpc(method, rpcParams, timeoutMs);
       return { success: true, result };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -1361,6 +1403,20 @@ function registerGatewayHandlers(
     deliver?: boolean;
     idempotencyKey: string;
     media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
+    dingTalkMentions?: Array<{
+      type: 'user' | 'group';
+      displayName: string;
+      userId?: string;
+      openConversationId?: string;
+      corpId?: string;
+    }>;
+    dingTalkSendFileIntent?: boolean;
+    dingTalkAttachedFiles?: Array<{
+      fileName: string;
+      filePath: string;
+      mimeType: string;
+      fileSize?: number;
+    }>;
   }) => {
     try {
       let message = params.message;
@@ -1418,7 +1474,7 @@ function registerGatewayHandlers(
         message = message ? `${message}\n\n${refs}` : refs;
       }
 
-      const rpcParams: Record<string, unknown> = {
+      let rpcParams: Record<string, unknown> = {
         sessionKey: params.sessionKey,
         message,
         deliver: params.deliver ?? false,
@@ -1428,8 +1484,20 @@ function registerGatewayHandlers(
       if (imageAttachments.length > 0) {
         rpcParams.attachments = imageAttachments;
       }
+      if (params.dingTalkMentions?.length) {
+        rpcParams.dingTalkMentions = params.dingTalkMentions;
+      }
+      if (params.dingTalkSendFileIntent) {
+        rpcParams.dingTalkSendFileIntent = params.dingTalkSendFileIntent;
+      }
+      if (params.dingTalkAttachedFiles?.length) {
+        rpcParams.dingTalkAttachedFiles = params.dingTalkAttachedFiles;
+      }
 
-      logger.info(`[chat:sendWithMedia] Sending: message="${message.substring(0, 100)}", attachments=${imageAttachments.length}, fileRefs=${fileReferences.length}`);
+      rpcParams = await preprocessChatSendParams(rpcParams) as Record<string, unknown>;
+      const outboundMessage = typeof rpcParams.message === 'string' ? rpcParams.message : message;
+
+      logger.info(`[chat:sendWithMedia] Sending: message="${outboundMessage.substring(0, 100)}", attachments=${imageAttachments.length}, fileRefs=${fileReferences.length}`);
 
       // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
       const timeoutMs = 120000;

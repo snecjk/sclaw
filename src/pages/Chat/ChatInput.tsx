@@ -1,6 +1,6 @@
 /**
  * Chat Input Component
- * Textarea with send button and universal file upload support.
+ * Rich mention editor with send button and universal file upload support.
  * Enter to send, Shift+Enter for new line.
  * Supports: native file picker, clipboard paste, drag & drop.
  * Files are staged to disk via IPC — only lightweight path references
@@ -9,7 +9,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { SendHorizontal, Square, X, Paperclip, FileText, Film, Music, FileArchive, File, Loader2, AtSign, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
@@ -18,6 +17,12 @@ import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import type { AgentSummary } from '@/types/agent';
 import { useTranslation } from 'react-i18next';
+import { DingTalkMentionEditor, type DingTalkMentionEditorHandle } from '@/components/dingtalk/DingTalkMentionEditor';
+import { DingTalkMentionPopover } from '@/components/dingtalk/DingTalkMentionPopover';
+import { useDingTalkMention } from '@/hooks/useDingTalkMention';
+import type { ActiveMentionTrigger, MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
+import type { DingTalkMention, MentionSearchItem } from '@/types/dingtalk-mention';
+import { mentionSearchItemToMention } from '@/types/dingtalk-mention';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -33,9 +38,19 @@ export interface FileAttachment {
 }
 
 interface ChatInputProps {
-  onSend: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => void;
+  onSend: (
+    text: string,
+    attachments?: FileAttachment[],
+    targetAgentId?: string | null,
+    dingTalkMentions?: DingTalkMention[],
+  ) => void;
   onStop?: () => void;
-  onQueue?: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => void;
+  onQueue?: (
+    text: string,
+    attachments?: FileAttachment[],
+    targetAgentId?: string | null,
+    dingTalkMentions?: DingTalkMention[],
+  ) => void;
   disabled?: boolean;
   sending?: boolean;
   isEmpty?: boolean;
@@ -119,14 +134,19 @@ export function ChatInput({
   className,
 }: ChatInputProps) {
   const { t } = useTranslation('chat');
-  const [input, setInput] = useState('');
+  const [composerSnapshot, setComposerSnapshot] = useState<MentionComposerSnapshot>({
+    plainText: '',
+    mentions: [],
+    isEmpty: true,
+  });
+  const [mentionTrigger, setMentionTrigger] = useState<ActiveMentionTrigger | null>(null);
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const [targetAgentId, setTargetAgentId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mentionEditorRef = useRef<DingTalkMentionEditorHandle>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const mentionPopoverRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
-  const seedAppliedRef = useRef(false);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
@@ -144,6 +164,25 @@ export function ChatInput({
     [agents, targetAgentId],
   );
   const showAgentPicker = mentionableAgents.length > 0;
+  const {
+    open: dingTalkMentionOpen,
+    trigger: dingTalkTrigger,
+    items: dingTalkItems,
+    recent: dingTalkRecent,
+    loading: dingTalkLoading,
+    loadingMore: dingTalkLoadingMore,
+    hasMore: dingTalkHasMore,
+    loadMore: loadMoreDingTalkMentions,
+    error: dingTalkError,
+    needsAuth: dingTalkNeedsAuth,
+    needsInstall: dingTalkNeedsInstall,
+    activeIndex: dingTalkActiveIndex,
+    setActiveIndex: setDingTalkActiveIndex,
+    moveActive: moveDingTalkActive,
+    close: closeDingTalkMention,
+    login: loginDingTalkMention,
+    loggingIn: dingTalkLoggingIn,
+  } = useDingTalkMention(mentionTrigger);
   const composerPlaceholder = disabled
     ? t('composer.gatewayDisconnectedPlaceholder')
     : t('composer.messagePlaceholder', { agent: currentAgentName });
@@ -163,36 +202,12 @@ export function ChatInput({
     return Number(usedToday) > Number(limit);
   }, [dailyTokenQuotaStatus]);
 
-  // Auto-resize textarea
+  // Focus editor on mount (avoids Windows focus loss after session delete + native dialog)
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
-    }
-  }, [input]);
-
-  // Focus textarea on mount (avoids Windows focus loss after session delete + native dialog)
-  useEffect(() => {
-    if (!disabled && textareaRef.current) {
-      textareaRef.current.focus();
+    if (!disabled) {
+      mentionEditorRef.current?.focus();
     }
   }, [disabled]);
-
-  useEffect(() => {
-    const trimmed = seedText?.trim();
-    if (trimmed) {
-      if (seedAppliedRef.current) return;
-      seedAppliedRef.current = true;
-      setInput(trimmed);
-      return;
-    }
-    // Parent cleared seed (e.g. after programmatic task auto-send) — drop stale composer text
-    if (seedAppliedRef.current) {
-      seedAppliedRef.current = false;
-      setInput('');
-      if (textareaRef.current) textareaRef.current.style.height = 'auto';
-    }
-  }, [seedText]);
 
   useEffect(() => {
     if (!targetAgentId) return;
@@ -219,6 +234,14 @@ export function ChatInput({
       document.removeEventListener('mousedown', handlePointerDown);
     };
   }, [pickerOpen]);
+
+  const applyDingTalkMention = useCallback((item: MentionSearchItem) => {
+    if (!dingTalkTrigger) return;
+    const mention = mentionSearchItemToMention(item);
+    mentionEditorRef.current?.insertMention(mention, dingTalkTrigger);
+    closeDingTalkMention();
+    setMentionTrigger(null);
+  }, [closeDingTalkMention, dingTalkTrigger]);
 
   // ── File staging via native dialog ─────────────────────────────
 
@@ -349,30 +372,32 @@ export function ChatInput({
 
   const allReady = attachments.length === 0 || attachments.every(a => a.status === 'ready');
   const hasFailedAttachments = attachments.some((a) => a.status === 'error');
-  const canSend = (input.trim() || attachments.length > 0) && allReady && !disabled;
+  const canSend = ((!composerSnapshot.isEmpty && composerSnapshot.plainText.trim().length > 0) || attachments.length > 0)
+    && allReady
+    && !disabled;
   const canStop = sending && !disabled && !!onStop;
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
     const readyAttachments = attachments.filter(a => a.status === 'ready');
-    // Capture values before clearing — clear input immediately for snappy UX,
-    // but keep attachments available for the async send
-    const textToSend = input.trim();
+    // Read DOM snapshot directly — React state can lag one frame behind the editor.
+    const snapshot = mentionEditorRef.current?.getSnapshot() ?? composerSnapshot;
+    const textToSend = snapshot.plainText.trim();
     const attachmentsToSend = readyAttachments.length > 0 ? readyAttachments : undefined;
-    setInput('');
+    const mentionsToSend = snapshot.mentions.length > 0 ? snapshot.mentions : undefined;
+    mentionEditorRef.current?.clear();
     setAttachments([]);
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
+    setMentionTrigger(null);
     // When AI is responding and queue callback is available, add to queue instead of sending directly
     if (sending && onQueue) {
-      onQueue(textToSend, attachmentsToSend, targetAgentId);
+      onQueue(textToSend, attachmentsToSend, targetAgentId, mentionsToSend);
     } else {
-      onSend(textToSend, attachmentsToSend, targetAgentId);
+      onSend(textToSend, attachmentsToSend, targetAgentId, mentionsToSend);
     }
     setTargetAgentId(null);
     setPickerOpen(false);
-  }, [input, attachments, canSend, onSend, onQueue, sending, targetAgentId]);
+    closeDingTalkMention();
+  }, [attachments, canSend, closeDingTalkMention, composerSnapshot, onQueue, onSend, sending, targetAgentId]);
 
   const handleStop = useCallback(() => {
     if (!canStop) return;
@@ -381,7 +406,34 @@ export function ChatInput({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Backspace' && !input && targetAgentId) {
+      if (dingTalkMentionOpen && dingTalkItems.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          moveDingTalkActive(1);
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          moveDingTalkActive(-1);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeDingTalkMention();
+          return;
+        }
+        if (e.key === 'Enter' && !e.shiftKey) {
+          const nativeEvent = e.nativeEvent as KeyboardEvent;
+          if (!isComposingRef.current && !nativeEvent.isComposing && nativeEvent.keyCode !== 229) {
+            e.preventDefault();
+            const selected = dingTalkItems[dingTalkActiveIndex];
+            if (selected) applyDingTalkMention(selected);
+            return;
+          }
+        }
+      }
+
+      if (e.key === 'Backspace' && composerSnapshot.isEmpty && targetAgentId) {
         setTargetAgentId(null);
         return;
       }
@@ -394,7 +446,17 @@ export function ChatInput({
         handleSend();
       }
     },
-    [handleSend, input, targetAgentId],
+    [
+      applyDingTalkMention,
+      closeDingTalkMention,
+      dingTalkActiveIndex,
+      dingTalkItems,
+      dingTalkMentionOpen,
+      composerSnapshot.isEmpty,
+      handleSend,
+      moveDingTalkActive,
+      targetAgentId,
+    ],
   );
 
   // Handle paste (Ctrl/Cmd+V with files)
@@ -509,23 +571,40 @@ export function ChatInput({
           )}
 
           <div className={cn('px-4', attachments.length > 0 ? 'pt-1.5' : 'pt-2.5')}>
-            <div className="flex-1 relative">
-              <Textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
+            <div ref={mentionPopoverRef} className="flex-1 relative">
+              <DingTalkMentionPopover
+                open={dingTalkMentionOpen}
+                items={dingTalkItems}
+                query={mentionTrigger?.query ?? ''}
+                recent={dingTalkRecent}
+                loading={dingTalkLoading}
+                loadingMore={dingTalkLoadingMore}
+                hasMore={dingTalkHasMore}
+                loggingIn={dingTalkLoggingIn}
+                error={dingTalkError}
+                needsAuth={dingTalkNeedsAuth}
+                needsInstall={dingTalkNeedsInstall}
+                activeIndex={dingTalkActiveIndex}
+                onHoverIndex={setDingTalkActiveIndex}
+                onSelect={applyDingTalkMention}
+                onLogin={loginDingTalkMention}
+                onLoadMore={loadMoreDingTalkMentions}
+              />
+              <DingTalkMentionEditor
+                ref={mentionEditorRef}
+                placeholder={composerPlaceholder}
+                disabled={disabled}
+                seedText={seedText}
+                onSnapshotChange={setComposerSnapshot}
+                onTriggerChange={setMentionTrigger}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 onCompositionStart={() => {
                   isComposingRef.current = true;
                 }}
                 onCompositionEnd={() => {
                   isComposingRef.current = false;
                 }}
-                onPaste={handlePaste}
-                placeholder={composerPlaceholder}
-                disabled={disabled}
-                className="!min-h-[42px] max-h-[120px] resize-none border-0 bg-transparent px-0 py-0 text-[15px] leading-5 text-foreground shadow-none placeholder:text-[15px] placeholder:text-muted-foreground/55 focus-visible:ring-0 focus-visible:ring-offset-0"
-                rows={1}
               />
             </div>
           </div>
@@ -572,7 +651,7 @@ export function ChatInput({
                             onSelect={() => {
                               setTargetAgentId(agent.id);
                               setPickerOpen(false);
-                              textareaRef.current?.focus();
+                              mentionEditorRef.current?.focus();
                             }}
                           />
                         ))}

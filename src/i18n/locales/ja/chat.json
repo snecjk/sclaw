@@ -34,7 +34,19 @@
         "stop": "停止",
         "gatewayConnected": "接続済み",
         "gatewayStatus": "ゲートウェイ {{state}} | ポート: {{port}} {{pid}}",
-        "retryFailedAttachments": "失敗した添付を再試行"
+        "retryFailedAttachments": "失敗した添付を再試行",
+        "dingtalkMentionTitle": "钉钉の連絡先またはグループを選択",
+        "dingtalkMentionSearchTitle": "「{{query}}」を検索",
+        "dingtalkRecentTitle": "最近の連絡先またはグループ",
+        "dingtalkMentionChip": "@{{name}}",
+        "dingtalkSearching": "検索中…",
+        "dingtalkLoadingMore": "さらに読み込み中…",
+        "dingtalkLoadMore": "さらに表示",
+        "dingtalkNoResults": "一致する結果がありません",
+        "dingtalkNeedsInstall": "先に dws をインストールしてください（設定で確認）",
+        "dingtalkNeedsAuth": "連絡先を検索するには钉钉へのログインが必要です",
+        "dingtalkLogin": "钉钉にログイン",
+        "dingtalkLoggingIn": "ログイン中…"
     },
     "streaming": {
         "connectingModel": "モデルに接続中...",
