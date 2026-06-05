@@ -24,38 +24,79 @@ if (!fs.existsSync(SVG_SOURCE)) {
 await fs.ensureDir(ICONS_DIR);
 
 try {
-  // 1. Generate Master PNG Buffer (1024x1024)
+  // Configurable sizes - adjust these values to change icon size
+  const MASTER_SIZE = 512; // Master buffer size
+  const OUTPUT_SIZE = 512; // Main icon.png output size (standard macOS icon size)
+  const ICON_PADDING = 0.15; // Padding ratio (15% padding on each side = 70% icon content)
+  const CORNER_RADIUS = 102; // Rounded corner radius (~20% of 512)
+
+  // 1. Generate Master PNG Buffer
   echo`  Processing SVG source...`;
-  const masterPngBuffer = await sharp(SVG_SOURCE)
-    .resize(1024, 1024)
-    .png() // Ensure it's PNG
+  let masterPngBuffer = await sharp(SVG_SOURCE)
+    .resize(MASTER_SIZE, MASTER_SIZE)
+    .png()
     .toBuffer();
 
-  // Save the main icon.png (typically 512x512 for Electron root icon)
-  await sharp(masterPngBuffer)
-    .resize(512, 512)
-    .toFile(path.join(ICONS_DIR, 'icon.png'));
-  echo`  ✅ Created icon.png (512x512)`;
+  // 2. Add padding (shrink icon content to make room for padding)
+  echo`  Adding padding...`;
+  const contentSize = Math.floor(MASTER_SIZE * (1 - ICON_PADDING * 2));
+  const paddedIcon = await sharp(masterPngBuffer)
+    .resize(contentSize, contentSize)
+    .toBuffer();
+  
+  // Create a new canvas with padding
+  masterPngBuffer = await sharp({
+    create: {
+      width: MASTER_SIZE,
+      height: MASTER_SIZE,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 }
+    }
+  })
+    .composite([{
+      input: paddedIcon,
+      top: Math.floor(MASTER_SIZE * ICON_PADDING),
+      left: Math.floor(MASTER_SIZE * ICON_PADDING)
+    }])
+    .png()
+    .toBuffer();
 
-  // 2. Generate Windows .ico
-  // png2icons expects a buffer. It returns a buffer (or null).
-  // createICO(buffer, scalingAlgorithm, withSize, useMath)
-  // scalingAlgorithm: 1 = Bilinear (better), 2 = Hermite (good), 3 = Bezier (best/slowest)
-  // Defaulting to Bezier (3) for quality or Hermite (2) for speed. Let's use 2 (Hermite) as it's balanced.
+  // 3. Create rounded corner mask
+  echo`  Adding rounded corners...`;
+  const roundedRectSvg = `
+    <svg width="${MASTER_SIZE}" height="${MASTER_SIZE}" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="${MASTER_SIZE}" height="${MASTER_SIZE}" rx="${CORNER_RADIUS}" ry="${CORNER_RADIUS}" fill="white"/>
+    </svg>
+  `;
+  
+  // Apply the rounded corner mask to the icon
+  const masterIconWithRoundedCorners = await sharp(masterPngBuffer)
+    .composite([{
+      input: Buffer.from(roundedRectSvg),
+      blend: 'dest-in'
+    }])
+    .toBuffer();
+
+  // 4. Save the main icon.png
+  await sharp(masterIconWithRoundedCorners)
+    .resize(OUTPUT_SIZE, OUTPUT_SIZE)
+    .toFile(path.join(ICONS_DIR, 'icon.png'));
+  echo`  ✅ Created icon.png (${OUTPUT_SIZE}x${OUTPUT_SIZE}) with padding and rounded corners`;
+
+  // 4. Generate Windows .ico
   echo`🪟 Generating Windows .ico...`;
-  const icoBuffer = png2icons.createICO(masterPngBuffer, png2icons.HERMITE, 0, false);
+  const icoBuffer = png2icons.createICO(masterIconWithRoundedCorners, png2icons.HERMITE, 0, false);
   
   if (icoBuffer) {
     fs.writeFileSync(path.join(ICONS_DIR, 'icon.ico'), icoBuffer);
     echo`  ✅ Created icon.ico`;
   } else {
     echo(chalk.red`  ❌ Failed to create icon.ico`);
-    // detailed error might not be available from png2icons simple API, often returns null on failure
   }
 
-  // 3. Generate macOS .icns
+  // 5. Generate macOS .icns
   echo`🍎 Generating macOS .icns...`;
-  const icnsBuffer = png2icons.createICNS(masterPngBuffer, png2icons.HERMITE, 0);
+  const icnsBuffer = png2icons.createICNS(masterIconWithRoundedCorners, png2icons.HERMITE, 0);
   
   if (icnsBuffer) {
     fs.writeFileSync(path.join(ICONS_DIR, 'icon.icns'), icnsBuffer);
@@ -64,29 +105,29 @@ try {
     echo(chalk.red`  ❌ Failed to create icon.icns`);
   }
 
-  // 4. Generate Linux PNGs (various sizes)
+  // 6. Generate Linux PNGs (various sizes)
   echo`🐧 Generating Linux PNG icons...`;
   const linuxSizes = [16, 32, 48, 64, 128, 256, 512];
   let generatedCount = 0;
   
   for (const size of linuxSizes) {
-    await sharp(masterPngBuffer)
+    await sharp(masterIconWithRoundedCorners)
       .resize(size, size)
       .toFile(path.join(ICONS_DIR, `${size}x${size}.png`));
     generatedCount++;
   }
   echo`  ✅ Created ${generatedCount} Linux PNG icons`;
 
-  // 5. Generate macOS Tray Icon Template
+  // 7. Generate macOS Tray Icon Template
   echo`📍 Generating macOS tray icon template...`;
   const TRAY_SVG_SOURCE = path.join(ICONS_DIR, 'tray-icon-template.svg');
   
   if (fs.existsSync(TRAY_SVG_SOURCE)) {
     await sharp(TRAY_SVG_SOURCE)
-      .resize(16, 16)
+      .resize(22, 22)
       .png()
       .toFile(path.join(ICONS_DIR, 'tray-icon-Template.png'));
-    echo`  ✅ Created tray-icon-Template.png (448x448)`;
+    echo`  ✅ Created tray-icon-Template.png (22x22)`;
   } else {
     echo`  ⚠️  tray-icon-template.svg not found, skipping tray icon generation`;
   }
@@ -94,6 +135,7 @@ try {
   echo`\n✨ Icon generation complete! Files located in: ${ICONS_DIR}`;
 
 } catch (error) {
-  echo(chalk.red`\n❌ Fatal Error: ${error.message}`);
+  echo(chalk.red`\n Fatal Error: ${error.message}`);
   process.exit(1);
 }
+
