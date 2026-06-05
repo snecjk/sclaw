@@ -90,28 +90,30 @@ export function SkillPlazaToolbar() {
           />
         </label>
 
-        {/* Sort */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="group flex items-center gap-1.5 h-8 px-2.5 rounded-[10px] border border-border bg-background text-[13px] font-medium text-foreground cursor-pointer hover:border-border hover:bg-muted/50 transition-colors">
-              <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="whitespace-nowrap">{t('plaza.sort.prefix', { defaultValue: '排序' })}：{currentSortLabel}</span>
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[140px]">
-            {sortOptions.map((option) => (
-              <DropdownMenuItem
-                key={option.value}
-                onClick={() => setSortMode(option.value)}
-                className="flex items-center justify-between"
-              >
-                <span>{option.label}</span>
-                {sortMode === option.value && <Check className="h-4 w-4 text-foreground" />}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* Sort (plaza tab only) */}
+        {!isMine && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="group flex items-center gap-1.5 h-8 px-2.5 rounded-[10px] border border-border bg-background text-[13px] font-medium text-foreground cursor-pointer hover:border-border hover:bg-muted/50 transition-colors">
+                <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="whitespace-nowrap">{t('plaza.sort.prefix', { defaultValue: '排序' })}：{currentSortLabel}</span>
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[140px]">
+              {sortOptions.map((option) => (
+                <DropdownMenuItem
+                  key={option.value}
+                  onClick={() => setSortMode(option.value)}
+                  className="flex items-center justify-between"
+                >
+                  <span>{option.label}</span>
+                  {sortMode === option.value && <Check className="h-4 w-4 text-foreground" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
 
         {/* View toggle (mine tab only) */}
         {isMine && (
