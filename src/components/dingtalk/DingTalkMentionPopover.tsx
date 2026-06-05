@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getHostApiBase } from '@/lib/host-api';
@@ -105,6 +105,15 @@ export function DingTalkMentionPopover({
 }: DingTalkMentionPopoverProps) {
   const { t } = useTranslation('chat');
   const loadMoreLockRef = useRef(false);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open || items.length === 0) return;
+    const container = listRef.current;
+    if (!container) return;
+    const activeEl = container.querySelector<HTMLElement>(`[data-mention-index="${activeIndex}"]`);
+    activeEl?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex, open, items.length]);
 
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     if (!recent || !hasMore || loading || loadingMore || !onLoadMore) return;
@@ -173,6 +182,7 @@ export function DingTalkMentionPopover({
 
       {!loading && items.length > 0 && (
         <div
+          ref={listRef}
           className="max-h-72 min-h-[12.5rem] overflow-y-auto overscroll-contain"
           onScroll={handleScroll}
         >
@@ -180,6 +190,7 @@ export function DingTalkMentionPopover({
             <button
               key={`${item.type}:${item.id}`}
               type="button"
+              data-mention-index={index}
               className={cn(
                 'flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors',
                 index === activeIndex ? 'bg-primary/10 text-foreground' : 'hover:bg-muted/60',
