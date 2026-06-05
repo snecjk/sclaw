@@ -65,7 +65,7 @@ export async function waitForGatewayReady(options: {
   retries?: number;
   intervalMs?: number;
 }): Promise<void> {
-  const retries = options.retries ?? 2400;
+  const retries = options.retries ?? 300; // ~60s at 200ms interval
   const intervalMs = options.intervalMs ?? 200;
 
   for (let i = 0; i < retries; i++) {
