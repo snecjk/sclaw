@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Users, ArrowDownToLine, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
+import { useChatStore } from '@/stores/chat';
 import { Switch } from '@/components/ui/switch';
 import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
@@ -37,6 +38,8 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
 
   const handleUse = (e: React.MouseEvent) => {
     e.stopPropagation();
+    // Start a new session so the Gateway picks up any newly installed skills
+    useChatStore.getState().newSession();
     const prompt = encodeURIComponent(skill.defaultPrompt || skill.title);
     navigate(`/?q=${prompt}`);
     useSkillPlazaStore.getState().useSkill(skill.slug).catch(() => {});
