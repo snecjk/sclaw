@@ -1,0 +1,40 @@
+{
+  "backHome": "ホームに戻る",
+  "sidebarMaterialTitle": "{{date}}の資料",
+  "subitemMaterialHeading": "{{date}}の資料",
+  "subitemChatEmpty": "まだメッセージがありません。送信して開始してください。",
+  "overviewHint": "ホームの該当カードから開くと、当日の資料サブ項目を作成し会話を開始します。",
+  "unreadBadge": "未読",
+  "deleteSubitemConfirm": "「{{label}}」を削除しますか？紐づくチャット履歴は履歴セッション削除と同様に一覧から外れます。",
+  "detail": {
+    "hq-reconciliation": {
+      "pageTitle": "週次会議資料",
+      "intro": "プロトタイプ概要（以下はサンプルデータです）。",
+      "metaReconTime": "照合時刻",
+      "metaReconTimeValue": "2026-05-10 06:00",
+      "metaGenerated": "生成日時",
+      "metaGeneratedValue": "2026-05-10 08:30",
+      "summaryTitle": "サマリー",
+      "summary": {
+        "headers": ["指標", "金額（元）"],
+        "rows": [
+          ["総収支", "128,560"],
+          ["収入", "98,750"],
+          ["支出", "29,810"]
+        ]
+      },
+      "abnormalTitle": "異常明細",
+      "abnormal": {
+        "headers": ["流水号", "チャネル", "金額（元）", "状態"],
+        "rows": [
+          ["RC-20260510-001", "華東直営", "1,240", "差額"],
+          ["RC-20260510-014", "加盟", "860", "未照合"],
+          ["RC-20260510-022", "大口", "420", "レビュー中"],
+          ["RC-20260510-031", "ハブ", "310", "確認待ち"]
+        ]
+      },
+      "threadLine1": "システム: 週次会議資料に基づき HTML 版を生成しました（A4 横、印刷余白プリセット）。",
+      "threadLine2": "ユーザー: HTML で見たい"
+    }
+  }
+}

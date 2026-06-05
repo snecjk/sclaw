@@ -463,8 +463,12 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             break;
           }
           if (request.action === 'install') {
-            appUpdater.quitAndInstall();
-            data = { success: true };
+            try {
+              await appUpdater.manualInstall();
+              data = { success: true };
+            } catch (error) {
+              data = { success: false, error: String(error) };
+            }
             break;
           }
           if (request.action === 'setChannel') {
@@ -547,7 +551,7 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
               patch.payload = { kind: 'agentTurn', message: patch.message };
               delete patch.message;
             }
-            data = await gatewayManager.rpc('cron.update', { id, patch });
+            data = await gatewayManager.rpc('cron.update', { jobId: id, patch });
             break;
           }
           if (request.action === 'delete') {
@@ -562,7 +566,7 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             const id = Array.isArray(payload) ? payload[0] : payload?.id;
             const enabled = Array.isArray(payload) ? payload[1] : payload?.enabled;
             if (!id || typeof enabled !== 'boolean') throw new Error('Invalid cron.toggle payload');
-            data = await gatewayManager.rpc('cron.update', { id, patch: { enabled } });
+            data = await gatewayManager.rpc('cron.update', { jobId: id, patch: { enabled } });
             break;
           }
           if (request.action === 'trigger') {
@@ -669,6 +673,58 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             },
           };
         }
+        case 'sai': {
+          if (request.action === 'checkInstalled') {
+            data = await import('../utils/sai-cli').then((m) => m.saiCheckInstalled());
+            break;
+          }
+          if (request.action === 'install') {
+            data = await import('../utils/sai-cli').then((m) =>
+              m.autoInstallSaiCliIfNeeded((path) => {
+                BrowserWindow.getAllWindows()[0]?.webContents.send('sai:cli-installed', path);
+              }),
+            );
+            break;
+          }
+          if (request.action === 'version') {
+            data = await import('../utils/sai-cli').then((m) => m.saiVersion());
+            break;
+          }
+          if (request.action === 'whoami') {
+            data = await import('../utils/sai-cli').then((m) => m.saiWhoami());
+            break;
+          }
+          if (request.action === 'discover') {
+            const payload = request.payload as { context?: string } | undefined;
+            data = await import('../utils/sai-cli').then((m) => m.saiDiscover(payload?.context));
+            break;
+          }
+          if (request.action === 'list') {
+            const payload = request.payload as { product?: string; module?: string } | undefined;
+            data = await import('../utils/sai-cli').then((m) => m.saiList(payload));
+            break;
+          }
+          if (request.action === 'execute') {
+            const payload = request.payload as
+              | { commandPath: string; params?: Record<string, unknown> }
+              | undefined;
+            if (!payload?.commandPath) {
+              throw new Error('Invalid sai.execute payload: commandPath required');
+            }
+            data = await import('../utils/sai-cli').then((m) =>
+              m.saiExecute(payload.commandPath, payload.params),
+            );
+            break;
+          }
+          return {
+            id: request.id,
+            ok: false,
+            error: {
+              code: 'UNSUPPORTED',
+              message: `APP_REQUEST_UNSUPPORTED:${request.module}.${request.action}`,
+            },
+          };
+        }
         case 'question': {
           if (request.action === 'split') {
             const payload = request.payload as {
@@ -749,7 +805,7 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
 
 /**
  * Skill config IPC handlers
- * Direct read/write to ~/.openclaw/openclaw.json (bypasses Gateway RPC)
+ * Direct read/write to ~/.stoclaw/openclaw/openclaw.json (bypasses Gateway RPC)
  */
 function registerSkillConfigHandlers(): void {
   // Update skill config (apiKey and env)
@@ -862,7 +918,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
       for (const job of jobs) {
         const isIsolatedAgent =
           (job.sessionTarget === 'isolated' || !job.sessionTarget) &&
-          job.payload?.kind === 'agentTurn';
+          job.payload?.kind === 'systemEvent';
         const needsRepair =
           isIsolatedAgent &&
           job.delivery?.mode === 'announce' &&
@@ -871,7 +927,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
         if (needsRepair) {
           try {
             await gatewayManager.rpc('cron.update', {
-              id: job.id,
+              jobId: job.id,
               patch: { delivery: { mode: 'none' } },
             });
             job.delivery = { mode: 'none' };
@@ -943,7 +999,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
         patch.payload = { kind: 'agentTurn', message: patch.message };
         delete patch.message;
       }
-      const result = await gatewayManager.rpc('cron.update', { id, patch });
+      const result = await gatewayManager.rpc('cron.update', { jobId: id, patch });
       return result;
     } catch (error) {
       console.error('Failed to update cron job:', error);
@@ -965,7 +1021,7 @@ function registerCronHandlers(gatewayManager: GatewayManager): void {
   // Toggle a cron job enabled/disabled
   ipcMain.handle('cron:toggle', async (_, id: string, enabled: boolean) => {
     try {
-      const result = await gatewayManager.rpc('cron.update', { id, patch: { enabled } });
+      const result = await gatewayManager.rpc('cron.update', { jobId: id, patch: { enabled } });
       return result;
     } catch (error) {
       console.error('Failed to toggle cron job:', error);
@@ -1113,9 +1169,35 @@ function registerGatewayHandlers(
     }
   });
 
+  // ── Gateway RPC 安全黑名单（main-process 后备防线）────────────────────────
+  const BLOCKED_RPC_METHODS: RegExp[] = [
+    /^openclaw\./i,
+    /^system\.(update|upgrade|install|exec|shell|run)/i,
+    /^shell\./i,
+    /^process\.(spawn|exec|run)/i,
+    /^cli\.(upgrade|install)/i,
+    /^sai\.(upgrade|install)/i,
+    /^(npm|pnpm|yarn)\./i,
+    /^pip\.(install|upgrade|uninstall)/i,
+    /^(update|upgrade|install|exec|shell|run)$/i,
+  ];
+  function getBlockedRpcErrorMessage(method: string): string | null {
+    for (const pattern of BLOCKED_RPC_METHODS) {
+      if (pattern.test(method)) {
+        return `系统安全策略已阻止该操作（${method}）：暂不支持通过对话执行升级或安装类命令，请通过设置页面手动操作。`;
+      }
+    }
+    return null;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Gateway RPC call
   ipcMain.handle('gateway:rpc', async (_, method: string, params?: unknown, timeoutMs?: number) => {
     try {
+      const blockedMsg = getBlockedRpcErrorMessage(method);
+      if (blockedMsg) {
+        return { success: false, error: blockedMsg };
+      }
       const result = await gatewayManager.rpc(method, params, timeoutMs);
       return { success: true, result };
     } catch (error) {
@@ -1131,6 +1213,21 @@ function registerGatewayHandlers(
       const status = gatewayManager.getStatus();
       const port = status.port || 18789;
       const path = request?.path && request.path.startsWith('/') ? request.path : '/';
+
+      // HTTP proxy 路径安全检查（防御性）
+      const BLOCKED_HTTP_PATHS = [
+        /\/(update|upgrade|install|exec|shell)\b/i,
+        /\/openclaw\//i,
+        /\/api\/v1\/cli\/(update|download)/i,
+      ];
+      for (const pattern of BLOCKED_HTTP_PATHS) {
+        if (pattern.test(path)) {
+          return {
+            success: false,
+            error: `系统安全策略已阻止该请求（${path}）：暂不支持通过该路径执行操作。`,
+          };
+        }
+      }
       const method = (request?.method || 'GET').toUpperCase();
       const timeoutMs =
         typeof request?.timeoutMs === 'number' && request.timeoutMs > 0
@@ -1449,16 +1546,23 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
     return getOpenClawDir();
   });
 
-  // Get the OpenClaw config directory (~/.openclaw)
+  // Get the OpenClaw config directory (~/.stoclaw/openclaw)
   ipcMain.handle('openclaw:getConfigDir', () => {
     return getOpenClawConfigDir();
   });
 
-  // Get the OpenClaw skills directory (~/.openclaw/skills)
+  // Get the OpenClaw skills directory (~/.stoclaw/openclaw/skills)
   ipcMain.handle('openclaw:getSkillsDir', () => {
     const dir = getOpenClawSkillsDir();
     ensureDir(dir);
     return dir;
+  });
+
+  // Open the OpenClaw skills directory in the system file manager
+  ipcMain.handle('open-skill-folder', async () => {
+    const dir = getOpenClawSkillsDir();
+    ensureDir(dir);
+    await shell.openPath(dir);
   });
 
   // Get a shell command to run OpenClaw CLI without modifying PATH
@@ -2016,7 +2120,12 @@ function registerProviderHandlers(gatewayManager: GatewayManager): void {
 function registerShellHandlers(): void {
   // Open external URL
   ipcMain.handle('shell:openExternal', async (_, url: string) => {
-    await shell.openExternal(url);
+    try {
+      await shell.openExternal(url);
+    } catch (err) {
+      console.error('Failed to open external URL via IPC:', url, err);
+      throw err;
+    }
   });
 
   // Open path in file explorer
@@ -2373,6 +2482,7 @@ const EXT_MIME_MAP: Record<string, string> = {
   '.txt': 'text/plain',
   '.md': 'text/markdown',
   '.html': 'text/html',
+  '.htm': 'text/html',
   '.css': 'text/css',
   '.js': 'text/javascript',
   '.ts': 'text/typescript',
@@ -2396,7 +2506,7 @@ function mimeToExt(mimeType: string): string {
   return '';
 }
 
-const OUTBOUND_DIR = join(homedir(), '.openclaw', 'media', 'outbound');
+const OUTBOUND_DIR = join(getOpenClawConfigDir(), 'media', 'outbound');
 
 /**
  * Generate a preview data URL for image files.
@@ -2428,7 +2538,7 @@ async function generateImagePreview(filePath: string, mimeType: string): Promise
 
 /**
  * File staging IPC handlers
- * Stage files to ~/.openclaw/media/outbound/ for gateway access
+ * Stage files to ~/.stoclaw/openclaw/media/outbound/ for gateway access
  */
 function registerFileHandlers(): void {
   // Stage files from real disk paths (used with dialog:open)
@@ -2550,7 +2660,7 @@ function registerFileHandlers(): void {
  *
  * Performs a soft-delete of a session's JSONL transcript on disk.
  * sessionKey format: "agent:<agentId>:<suffix>" — e.g. "agent:main:session-1234567890".
- * The JSONL file lives at: ~/.openclaw/agents/<agentId>/sessions/<suffix>.jsonl
+ * The JSONL file lives at: ~/.stoclaw/openclaw/agents/<agentId>/sessions/<suffix>.jsonl
  * Renaming to <suffix>.deleted.jsonl hides it from sessions.list.
  */
 function registerSessionHandlers(): void {

@@ -118,7 +118,7 @@ async function setupTarget(id) {
       archivePath = path.join(ROOT_DIR, target.filename);
       needsCleanup = true;
       echo`⬇️ Downloading: ${downloadUrl}`;
-      const response = await fetch(downloadUrl);
+      const response = await fetch(downloadUrl, { signal: AbortSignal.timeout(120_000) });
       if (!response.ok) throw new Error(`Failed to download: ${response.statusText}`);
       const buffer = await response.arrayBuffer();
       await fs.writeFile(archivePath, Buffer.from(buffer));
@@ -139,7 +139,7 @@ async function setupTarget(id) {
       if (os.platform() === 'win32') {
         const { execFileSync } = await import('child_process');
         const psCommand = `Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('${archivePath.replace(/'/g, "''")}', '${tempDir.replace(/'/g, "''")}')`;
-        execFileSync('powershell.exe', ['-NoProfile', '-Command', psCommand], { stdio: 'inherit' });
+        execFileSync('powershell.exe', ['-NoProfile', '-Command', psCommand], { stdio: 'inherit', windowsHide: true });
       } else {
         await $`unzip -q -o ${archivePath} -d ${tempDir}`;
       }

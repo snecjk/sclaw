@@ -3,6 +3,7 @@
  * Ported from OpenClaw's message-extract.ts to handle the various
  * message content formats returned by the Gateway.
  */
+import { useMemo } from 'react';
 import type { RawMessage, ContentBlock } from '@/stores/chat';
 
 /**
@@ -87,6 +88,62 @@ export function extractThinking(message: RawMessage | unknown): string | null {
 
   const combined = parts.join('\n\n').trim();
   return combined.length > 0 ? combined : null;
+}
+
+export type ThinkingTimelineItem =
+  | { type: 'thinking'; content: string }
+  | { type: 'tool'; index: number; id: string; name: string; input: unknown };
+
+/**
+ * Ordered thinking + tool_use segments from message content (preserves block order).
+ */
+export function extractThinkingTimeline(message: RawMessage | unknown): ThinkingTimelineItem[] {
+  if (!message || typeof message !== 'object') return [];
+  const msg = message as Record<string, unknown>;
+  const content = msg.content;
+
+  const items: ThinkingTimelineItem[] = [];
+  let toolIndex = 0;
+
+  if (Array.isArray(content)) {
+    for (const block of content as ContentBlock[]) {
+      if (block.type === 'thinking' && block.thinking) {
+        const cleaned = block.thinking.trim();
+        if (cleaned) {
+          items.push({ type: 'thinking', content: cleaned });
+        }
+      } else if ((block.type === 'tool_use' || block.type === 'toolCall') && block.name) {
+        toolIndex += 1;
+        items.push({
+          type: 'tool',
+          index: toolIndex,
+          id: block.id || `tool-${toolIndex}`,
+          name: block.name,
+          input: block.input ?? block.arguments,
+        });
+      }
+    }
+  }
+
+  if (items.length === 0) {
+    const thinking = extractThinking(message);
+    if (thinking) {
+      items.push({ type: 'thinking', content: thinking });
+    }
+    const tools = extractToolUse(message);
+    for (const tool of tools) {
+      toolIndex += 1;
+      items.push({
+        type: 'tool',
+        index: toolIndex,
+        id: tool.id || `tool-${toolIndex}`,
+        name: tool.name,
+        input: tool.input,
+      });
+    }
+  }
+
+  return items;
 }
 
 /**
@@ -199,6 +256,183 @@ export function extractToolUse(message: RawMessage | unknown): Array<{ id: strin
   }
 
   return tools;
+}
+
+/**
+ * Determine if an attached file is previewable in the side panel.
+ */
+const PREVIEWABLE_MIME_PREFIXES = [
+  'text/html',
+  'text/plain',
+  'application/json',
+  'text/csv',
+];
+
+export function isPreviewableFile(file: { mimeType: string; filePath?: string }): boolean {
+  if (!file.filePath) return false;
+  // Web URLs (http/https) are excluded from built-in preview because they may have
+  // anti-hotlink / X-Frame-Options / CSP blocking, and should open in external browser.
+  if (file.filePath.startsWith('http://') || file.filePath.startsWith('https://')) return false;
+  return PREVIEWABLE_MIME_PREFIXES.some((prefix) =>
+    prefix.endsWith('/') ? file.mimeType.startsWith(prefix) : file.mimeType === prefix,
+  );
+}
+
+function extToMimeType(ext: string): string {
+  const map: Record<string, string> = {
+    html: 'text/html',
+    htm: 'text/html',
+    pdf: 'application/pdf',
+    md: 'text/markdown', txt: 'text/plain',
+    json: 'application/json', csv: 'text/csv',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    // Code files
+    sql: 'text/plain', py: 'text/plain', js: 'text/plain', ts: 'text/plain',
+    jsx: 'text/plain', tsx: 'text/plain', java: 'text/plain', go: 'text/plain',
+    rs: 'text/plain', cpp: 'text/plain', c: 'text/plain', h: 'text/plain',
+    cs: 'text/plain', rb: 'text/plain', php: 'text/plain', swift: 'text/plain',
+    kt: 'text/plain', scala: 'text/plain', r: 'text/plain', m: 'text/plain', mm: 'text/plain',
+    // Config files
+    yaml: 'text/plain', yml: 'text/plain', xml: 'text/plain', toml: 'text/plain',
+    ini: 'text/plain', conf: 'text/plain', properties: 'text/plain', env: 'text/plain',
+    // Data/Log files
+    log: 'text/plain', tsv: 'text/plain',
+    // Web files
+    css: 'text/plain', scss: 'text/plain', less: 'text/plain',
+    // Shell scripts
+    sh: 'text/plain', bash: 'text/plain', zsh: 'text/plain', fish: 'text/plain',
+    ps1: 'text/plain', bat: 'text/plain', cmd: 'text/plain',
+  };
+  return map[ext] || 'application/octet-stream';
+}
+
+/** Shared extension list for previewable local file paths (used by extractPreviewableRefs and preprocessTextForPreviewLinks). */
+export const PREVIEWABLE_FILE_EXTS =
+  'html?|sql|py|js|ts|jsx|tsx|java|go|rs|cpp|c|h|cs|rb|php|swift|kt|scala|r|m|mm|json|yaml|yml|xml|toml|ini|conf|properties|env|md|txt|csv|tsv|log|css|scss|less|sh|bash|zsh|fish|ps1|bat|cmd|pdf';
+
+/** Remove fenced code blocks from text so paths inside them are not matched.
+ *  Inline code (`path`) is preserved — it often contains actual file paths the user/AI wants to preview.
+ */
+function stripCodeBlocks(text: string): string {
+  return text.replace(/```[\s\S]*?```/g, '');
+}
+
+/**
+ * Extract previewable local file paths, file:// URLs, and localhost URLs from plain text.
+ * Matches absolute paths like /Users/.../file.html, file:///Users/.../file.html,
+ * and localhost URLs like http://localhost:8080/path.
+ * Code blocks are stripped before matching to avoid false positives.
+ * Lookbehind rejects URL path components (e.g. /report.html inside https://example.com/report.html).
+ */
+export function extractPreviewableRefs(text: string): Array<{ filePath: string; fileName: string; mimeType: string }> {
+  const cleanText = stripCodeBlocks(text);
+  const results: Array<{ filePath: string; fileName: string; mimeType: string }> = [];
+  const seen = new Set<string>();
+
+  function addIfNotImage(filePath: string, fileName: string, ext: string) {
+    const mimeType = extToMimeType(ext);
+    if (mimeType.startsWith('image/')) return;
+    if (seen.has(filePath)) return;
+    seen.add(filePath);
+    results.push({ filePath, fileName, mimeType });
+  }
+
+  // file:// URLs — strip the scheme and use the underlying local path
+  // Regex consumes file:// (2 slashes), capture group gets the 3rd slash + path.
+  // For Windows: /C:/Users/... → strip leading / → C:/Users/...
+  // For Unix: /Users/... → keep as-is → /Users/...
+  const fileUrlRegex = /file:\/\/(\/[A-Za-z]:[\\/][^\s)\]"',;<>]+|\/[^\s)\]"',;<>]+)/g;
+  let match;
+  while ((match = fileUrlRegex.exec(cleanText)) !== null) {
+    const captured = match[1];
+    // Strip leading / for Windows paths (/C:/ → C:/), keep for Unix (/Users/ → /Users/)
+    const filePath = captured.match(/^\/[A-Za-z]:/) ? captured.slice(1) : captured;
+    const fileName = filePath.split('/').pop() || '';
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    addIfNotImage(filePath, fileName, ext);
+  }
+
+  // Localhost URLs only (previewable in side panel)
+  const urlRegex = /(https?:\/\/localhost:[^\s)\]"',;<>]+)/g;
+  while ((match = urlRegex.exec(cleanText)) !== null) {
+    const url = match[1];
+    const fileName = url.split('/').pop() || 'index.html';
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    addIfNotImage(url, fileName, ext);
+  }
+
+  // File paths (relative ./, absolute /, and Windows C:\) — support code, config, doc, and web files
+  // Lookbehind (?<![\\w./:]) rejects matches that are part of a URL path component
+  const pathRegex = new RegExp(
+    `(?<![\\w./:])(\\./(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\n\\r]+[\\\\/])*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`,
+    'gi',
+  );
+  while ((match = pathRegex.exec(cleanText)) !== null) {
+    const path = match[1].replace(/\\/g, '/');
+    const fileName = path.split('/').pop() || '';
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    addIfNotImage(path, fileName, ext);
+  }
+
+  return results;
+}
+
+/**
+ * Extract previewable files from an array of messages.
+ * Includes both _attachedFiles and references found in message text.
+ */
+export function usePreviewableFiles(messages: Array<unknown & { _attachedFiles?: Array<{ mimeType: string; filePath?: string; fileName: string }>; content?: unknown; role?: string }>) {
+  return useMemo(() => {
+    const seen = new Set<string>();
+    const result: Array<{ mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }> = [];
+
+    function addItem(item: { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }) {
+      if (seen.has(item.filePath)) return;
+      seen.add(item.filePath);
+      result.push(item);
+    }
+
+    for (const msg of messages) {
+      // Path 1: explicit attached files
+      // Skip user-uploaded attachments (role === 'user'); only show AI-generated outputs
+      if (msg._attachedFiles && msg.role !== 'user') {
+        for (const file of msg._attachedFiles) {
+          if (!isPreviewableFile(file)) continue;
+          const fp = file.filePath || file.fileName;
+          if (!fp) continue;
+          addItem({
+            mimeType: file.mimeType,
+            filePath: fp,
+            fileName: file.fileName,
+            fileSize: (file as { fileSize?: number }).fileSize ?? 0,
+            preview: (file as { preview?: string | null }).preview ?? null,
+          });
+        }
+      }
+
+      // Path 2: references in message text (from assistant/tool outputs)
+      const text = extractText(msg);
+      if (text) {
+        const refs = extractPreviewableRefs(text);
+        for (const ref of refs) {
+          addItem({
+            mimeType: ref.mimeType,
+            filePath: ref.filePath,
+            fileName: ref.fileName,
+            fileSize: 0,
+            preview: null,
+          });
+        }
+      }
+    }
+
+    return result;
+  }, [messages]);
 }
 
 /**

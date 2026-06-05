@@ -42,6 +42,7 @@ import { createSignalQuitHandler } from './signal-quit';
 import { acquireProcessInstanceFileLock } from './process-instance-lock';
 import { getSetting } from '../utils/store';
 import { getCurrentEnvConfig } from '../../shared/env-config';
+import { log } from 'node:console';
 
 _ts('static imports loaded');
 
@@ -270,7 +271,9 @@ function createWindow(): BrowserWindow {
 
   // Handle external links
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    shell.openExternal(url).catch((err) => {
+      console.error('Failed to open external URL:', url, err);
+    });
     return { action: 'deny' };
   });
 
@@ -331,7 +334,18 @@ function createMainWindow(): BrowserWindow {
     }
     if (!isQuitting()) {
       event.preventDefault();
-      win.hide();
+      // macOS 全屏下直接 hide() 会导致空间切换动画异常而黑屏，
+      // 需先退出全屏再隐藏。
+      if (process.platform === 'darwin' && win.isFullScreen()) {
+        win.once('leave-full-screen', () => {
+          if (!win.isDestroyed()) {
+            win.hide();
+          }
+        });
+        win.setFullScreen(false);
+      } else {
+        win.hide();
+      }
     }
   });
 
@@ -393,10 +407,13 @@ async function initialize(): Promise<void> {
     { syncAllProviderAuthToRuntime },
     { ensureClawXContext, repairClawXOnlyBootstrapFiles },
     { autoInstallCliIfNeeded, generateCompletionCache, installCompletionToProfile },
+    { autoInstallSaiCliIfNeeded },
     { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled },
+    { ensureLongOutputConstraint, ensureChineseThinkingConstraint, getAgentWorkspacePath },
     { ensureAllBundledPluginsInstalledAsync },
     { startHostApiServer },
     stoSkillMod,
+    skillPlazaMod,
     spriteWindowMod,
     floatIconMod,
   ] = await Promise.all([
@@ -413,10 +430,13 @@ async function initialize(): Promise<void> {
     import('../services/providers/provider-runtime-sync'),
     import('../utils/openclaw-workspace'),
     import('../utils/openclaw-cli'),
+    import('../utils/sai-cli'),
     import('../utils/skill-config'),
+    import('../utils/agent-config'),
     import('../utils/plugin-install'),
     import('../api/server'),
     import('../services/sto-skill-service'),
+    import('../services/skill-plaza-service'),
     import('./sprite-window'),
     import('./float-icon-window'),
   ]);
@@ -427,6 +447,7 @@ async function initialize(): Promise<void> {
   const gm = new gatewayMod.GatewayManager();
   const chs = new clawhubMod.ClawHubService();
   const sss = new stoSkillMod.StoSkillService();
+  const sps = new skillPlazaMod.SkillPlazaService();
   const heb = new eventBusMod.HostEventBus();
   gatewayManager = gm;
   clawHubService = chs;
@@ -453,7 +474,7 @@ async function initialize(): Promise<void> {
   // Create sprite window (hidden by default, toggled via tray)
   spriteWindowMod.createSpriteWindow();
 
-  // Create float icon window (visible by default, acts as sprite launcher)
+  // Create float icon window (hidden by default, toggled via tray)
   floatIconMod.createFloatIconWindow();
 
   // Create system tray (with sprite and float icon toggle support)
@@ -485,10 +506,24 @@ async function initialize(): Promise<void> {
   // Register IPC handlers
   registerIpcHandlers(gm, chs, window, spriteWindowMod.getSpriteWindow, floatIconMod.getFloatIconWindow);
 
+  // Register form IPC handlers
+  const { registerFormHandlers } = await import('./ipc/form-handlers');
+  registerFormHandlers();
+
+  // Start scheduled task result poller
+  const { getScheduledTaskResultPoller } = await import('../services/scheduled-task-result-poller');
+  const scheduledTaskPoller = getScheduledTaskResultPoller();
+  scheduledTaskPoller.attachMainWindow(window);
+  scheduledTaskPoller.start();
+  app.on('before-quit', () => {
+    scheduledTaskPoller.stop();
+  });
+
   hostApiServer = startHostApiServer({
     gatewayManager: gm,
     clawHubService: chs,
     stoSkillService: sss,
+    skillPlazaService: sps,
     eventBus: heb,
     mainWindow: window,
   });
@@ -519,9 +554,23 @@ async function initialize(): Promise<void> {
       logger.warn('Failed to install preinstalled skills:', error);
     });
 
-    await ensureAllBundledPluginsInstalledAsync().catch((error) => {
-      logger.warn('Failed to install/upgrade bundled plugins:', error);
-    });
+    try {
+      sss.backfillLockVersions();
+    } catch (error) {
+      logger.warn('Failed to backfill skill lock versions:', error);
+    }
+
+    // Ensure Main Agent's AGENTS.md includes the long-output constraint
+    try {
+      const mainWorkspace = await getAgentWorkspacePath('main');
+      if (mainWorkspace) {
+        await ensureLongOutputConstraint(mainWorkspace);
+        await ensureChineseThinkingConstraint(mainWorkspace);
+        logger.info('Ensured long-output and chinese-thinking constraints in Main Agent AGENTS.md');
+      }
+    } catch (error) {
+      logger.warn('Failed to ensure long-output constraint for Main Agent:', error);
+    }
 
     await autoInstallCliIfNeeded((installedPath) => {
       mainWindow?.webContents.send('openclaw:cli-installed', installedPath);
@@ -530,6 +579,14 @@ async function initialize(): Promise<void> {
       installCompletionToProfile();
     }).catch((error) => {
       logger.warn('CLI auto-install failed:', error);
+    });
+    logger.warn('autoInstallSaiCliIfNeeded start');
+    await autoInstallSaiCliIfNeeded((installedPath) => {
+      mainWindow?.webContents.send('sai:cli-installed', installedPath);
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn('SAI CLI auto-install failed:', message);
+      mainWindow?.webContents.send('sai:cli-install-failed', message);
     });
   });
 
@@ -608,12 +665,33 @@ async function initialize(): Promise<void> {
     heb.emit('channel:whatsapp-error', error);
   });
 
+  // Install bundled plugins before Gateway so the first agent run uses the latest mirror.
+  sendStartupProgress('Installing plugins...');
+  await ensureAllBundledPluginsInstalledAsync().catch((error) => {
+    logger.warn('Failed to install/upgrade bundled plugins:', error);
+  });
+
   // Start Gateway automatically (this seeds missing bootstrap files with full templates)
   const gatewayAutoStart = await getSetting('gatewayAutoStart');
   if (gatewayAutoStart) {
     try {
       sendStartupProgress('Starting Gateway...');
       await syncAllProviderAuthToRuntime();
+
+      try {
+        const { getAuthState, getStoToken } = await import('../utils/auth-store');
+        const { getStoModelSyncService } = await import('../services/providers/sto-model-sync');
+        const authState = await getAuthState();
+        const token = await getStoToken();
+        if (authState.isAuthenticated && token) {
+          const stoSync = getStoModelSyncService();
+          stoSync.setGatewayManager(gm);
+          stoSync.startPeriodicSync();
+        }
+      } catch (err) {
+        logger.warn('STO periodic sync startup check failed:', err);
+      }
+
       logger.debug('Auto-starting Gateway...');
       await gm.start();
       logger.info('Gateway auto-start succeeded');
@@ -632,34 +710,6 @@ async function initialize(): Promise<void> {
   void ensureClawXContext().catch((error) => {
     logger.warn('Failed to merge StoClaw context into workspace:', error);
   });
-
-  // Start STO model sync if user is already authenticated
-  void (async () => {
-    try {
-      const { getAuthState, getStoToken } = await import('../utils/auth-store');
-      const { getStoModelSyncService } = await import('../services/providers/sto-model-sync');
-      const authState = await getAuthState();
-      const token = await getStoToken();
-      if (authState.isAuthenticated && token) {
-        const stoSync = getStoModelSyncService();
-        stoSync.setGatewayManager(gm);
-        void stoSync.syncModels().catch((err) =>
-          logger.warn('Startup STO model sync failed:', err),
-        );
-        stoSync.startPeriodicSync();
-
-        // Auto-create department biz agents on startup (fire-and-forget)
-        const { getStoBizAgentSyncService } = await import('../services/sto-biz-agent-sync');
-        const bizAgentSync = getStoBizAgentSyncService();
-        bizAgentSync.setGatewayManager(gm);
-        void bizAgentSync.syncAgents().catch((err) =>
-          logger.warn('Startup STO biz-agent sync failed:', err),
-        );
-      }
-    } catch (err) {
-      logger.warn('STO model sync startup check failed:', err);
-    }
-  })();
 }
 
 if (gotTheLock) {
@@ -707,6 +757,9 @@ if (gotTheLock) {
   // Application lifecycle
   app.whenReady().then(() => {
     _ts('app.whenReady() resolved');
+    void import('../utils/cleanup-old-app-bundles').then(({ scheduleOldAppBackupCleanup }) =>
+      scheduleOldAppBackupCleanup(),
+    );
     void import('../services/client-update-platform').then(({ runPendingInstallReport }) =>
       runPendingInstallReport(app.getVersion(), process.platform),
     );
@@ -733,6 +786,15 @@ if (gotTheLock) {
 
   app.on('before-quit', (event) => {
     setQuitting();
+
+    // Reset sprite and float icon visibility so they don't auto-show on next launch
+    void import('./sprite-window').then(({ resetSpriteVisibilityOnQuit }) =>
+      resetSpriteVisibilityOnQuit().catch(() => { /* ignore */ }),
+    );
+    void import('./float-icon-window').then(({ resetFloatIconVisibilityOnQuit }) =>
+      resetFloatIconVisibilityOnQuit().catch(() => { /* ignore */ }),
+    );
+
     const action = requestQuitLifecycleAction(quitLifecycleState);
 
     if (action === 'allow-quit') {

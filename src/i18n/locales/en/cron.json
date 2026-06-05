@@ -4,6 +4,7 @@
     "newTask": "New Task",
     "refresh": "Refresh",
     "gatewayWarning": "Gateway is not running. Scheduled tasks cannot be managed without an active Gateway.",
+    "cloudSyncWarning": "Cloud task sync failed. Showing cached data.",
     "stats": {
         "total": "Total Tasks",
         "active": "Active",
@@ -17,6 +18,7 @@
     },
     "card": {
         "runNow": "Run Now",
+        "session": "Session",
         "deleteConfirm": "Are you sure you want to delete this task?",
         "last": "Last",
         "next": "Next"
@@ -40,7 +42,9 @@
         "discordChannelIdDesc": "Right-click the Discord channel → Copy Channel ID",
         "enableImmediately": "Enable immediately",
         "enableImmediatelyDesc": "Start running this task after creation",
-        "saveChanges": "Save Changes"
+        "saveChanges": "Save Changes",
+        "cloudAgent": "Cloud Agent",
+        "noCloudAgents": "No cloud agents available. Please create a cloud agent first."
     },
     "presets": {
         "everyMinute": "Every minute",
@@ -66,7 +70,8 @@
         "messageRequired": "Please enter a message",
         "channelRequired": "Please select a channel",
         "discordIdRequired": "Please enter a Discord Channel ID",
-        "scheduleRequired": "Please select or enter a schedule"
+        "scheduleRequired": "Please select or enter a schedule",
+        "agentRequired": "Please select a cloud agent"
     },
     "schedule": {
         "everySeconds": "Every {{count}}s",

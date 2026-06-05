@@ -1,0 +1,40 @@
+{
+  "backHome": "返回首页",
+  "sidebarMaterialTitle": "{{date}}的材料",
+  "subitemMaterialHeading": "{{date}}的材料",
+  "subitemChatEmpty": "暂无消息，发送一条消息开始对话。",
+  "overviewHint": "请从首页对应卡片进入：将按当日创建材料子项并自动开始会话。",
+  "unreadBadge": "未读",
+  "deleteSubitemConfirm": "确定要删除「{{label}}」吗？对应会话记录将从列表移除（与删除历史对话相同）。",
+  "detail": {
+    "hq-reconciliation": {
+      "pageTitle": "周会材料生成",
+      "intro": "周会材料占位概览如下（示例数据）。",
+      "metaReconTime": "对账时间",
+      "metaReconTimeValue": "2026-05-10 06:00",
+      "metaGenerated": "生成日期",
+      "metaGeneratedValue": "2026-05-10 08:30",
+      "summaryTitle": "汇总",
+      "summary": {
+        "headers": ["指标", "金额（元）"],
+        "rows": [
+          ["总收支", "128,560"],
+          ["收入", "98,750"],
+          ["支出", "29,810"]
+        ]
+      },
+      "abnormalTitle": "异常明细",
+      "abnormal": {
+        "headers": ["流水号", "渠道", "金额（元）", "状态"],
+        "rows": [
+          ["RC-20260510-001", "华东直营", "1,240", "差额"],
+          ["RC-20260510-014", "加盟网点", "860", "未匹配"],
+          ["RC-20260510-022", "大客户部", "420", "复核中"],
+          ["RC-20260510-031", "转运中心", "310", "待确认"]
+        ]
+      },
+      "threadLine1": "系统：已根据当前周会材料生成 HTML 版本，版式为 A4 横向，页边距已按打印预设。",
+      "threadLine2": "用户：我想查看 Html 格式"
+    }
+  }
+}

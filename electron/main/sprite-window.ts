@@ -15,6 +15,7 @@ let spriteStateStore: any = null;
 interface SpriteWindowState {
   x?: number;
   y?: number;
+  visible?: boolean;
 }
 
 async function getStore() {
@@ -23,7 +24,7 @@ async function getStore() {
     spriteStateStore = new Store<{ spriteState: SpriteWindowState }>({
       name: 'sprite-window-state',
       defaults: {
-        spriteState: {},
+        spriteState: { visible: false },
       },
     });
   }
@@ -66,12 +67,17 @@ async function getSpritePosition(): Promise<{ x: number; y: number }> {
 }
 
 /**
- * Save sprite position
+ * Save sprite state (position + visibility)
  */
-async function saveSpritePosition(win: BrowserWindow): Promise<void> {
+async function saveSpriteState(win: BrowserWindow, visible?: boolean): Promise<void> {
   const store = await getStore();
   const bounds = win.getBounds();
-  store.set('spriteState', { x: bounds.x, y: bounds.y });
+  const current: SpriteWindowState = store.get('spriteState');
+  store.set('spriteState', {
+    x: bounds.x,
+    y: bounds.y,
+    visible: visible !== undefined ? visible : current.visible,
+  });
 }
 
 /**
@@ -135,11 +141,26 @@ export function createSpriteWindow(): BrowserWindow {
 
   // Save position on move
   win.on('move', () => {
-    void saveSpritePosition(win);
+    void saveSpriteState(win);
+  });
+
+  // Save visible=false when user closes the sprite window
+  win.on('hide', () => {
+    void saveSpriteState(win, false);
   });
 
   spriteWindow = win;
   return win;
+}
+
+/**
+ * Reset sprite visibility to false on app quit.
+ * Ensures the sprite does not auto-show on next launch.
+ */
+export async function resetSpriteVisibilityOnQuit(): Promise<void> {
+  const store = await getStore();
+  const current: SpriteWindowState = store.get('spriteState');
+  store.set('spriteState', { ...current, visible: false });
 }
 
 /**
@@ -159,6 +180,7 @@ export function showSprite(): void {
   const win = getSpriteWindow();
   if (win) {
     win.show();
+    void saveSpriteState(win, true);
   }
 }
 
@@ -169,6 +191,7 @@ export function hideSprite(): void {
   const win = getSpriteWindow();
   if (win) {
     win.hide();
+    void saveSpriteState(win, false);
   }
 }
 

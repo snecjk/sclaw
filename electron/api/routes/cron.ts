@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { join } from 'node:path';
+import { CHAT_HISTORY_LIMIT } from '../../../shared/chat-config';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { getOpenClawConfigDir } from '../../utils/paths';
@@ -45,6 +46,7 @@ interface CronSessionKeyParts {
   agentId: string;
   jobId: string;
   runSessionId?: string;
+  date?: string;
 }
 
 interface CronSessionFallbackMessage {
@@ -65,6 +67,14 @@ function parseCronSessionKey(sessionKey: string): CronSessionKeyParts | null {
   if (!jobId) return null;
 
   if (parts.length === 4) {
+    return { agentId, jobId };
+  }
+
+  if (parts.length === 5) {
+    const date = parts[4];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return { agentId, jobId, date };
+    }
     return { agentId, jobId };
   }
 
@@ -322,10 +332,10 @@ export async function handleCronRoutes(
       return true;
     }
 
-    const rawLimit = Number(url.searchParams.get('limit') || '200');
+    const rawLimit = Number(url.searchParams.get('limit') || String(CHAT_HISTORY_LIMIT));
     const limit = Number.isFinite(rawLimit)
-      ? Math.min(Math.max(Math.floor(rawLimit), 1), 200)
-      : 200;
+      ? Math.min(Math.max(Math.floor(rawLimit), 1), CHAT_HISTORY_LIMIT)
+      : CHAT_HISTORY_LIMIT;
 
     try {
       const [jobsResult, runs, sessionEntry] = await Promise.all([
@@ -364,7 +374,7 @@ export async function handleCronRoutes(
       for (const job of jobs) {
         const isIsolatedAgent =
           (job.sessionTarget === 'isolated' || !job.sessionTarget) &&
-          job.payload?.kind === 'agentTurn';
+          job.payload?.kind === 'systemEvent';
         const needsRepair =
           isIsolatedAgent &&
           job.delivery?.mode === 'announce' &&
@@ -372,7 +382,7 @@ export async function handleCronRoutes(
         if (needsRepair) {
           try {
             await ctx.gatewayManager.rpc('cron.update', {
-              id: job.id,
+              jobId: job.id,
               patch: { delivery: { mode: 'none' } },
             });
             job.delivery = { mode: 'none' };
@@ -430,7 +440,7 @@ export async function handleCronRoutes(
         patch.payload = { kind: 'agentTurn', message: patch.message };
         delete patch.message;
       }
-      sendJson(res, 200, await ctx.gatewayManager.rpc('cron.update', { id, patch }));
+      sendJson(res, 200, await ctx.gatewayManager.rpc('cron.update', { jobId: id, patch }));
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }
@@ -450,7 +460,7 @@ export async function handleCronRoutes(
   if (url.pathname === '/api/cron/toggle' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ id: string; enabled: boolean }>(req);
-      sendJson(res, 200, await ctx.gatewayManager.rpc('cron.update', { id: body.id, patch: { enabled: body.enabled } }));
+      sendJson(res, 200, await ctx.gatewayManager.rpc('cron.update', { jobId: body.id, patch: { enabled: body.enabled } }));
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

@@ -1,5 +1,13 @@
 {
     "sidebar": {
+        "home": "ホーム",
+        "myData": "マイデータ",
+        "workspace": "ワークスペース",
+        "sessionList": "会話一覧",
+        "toggleSidebarCollapse": "サイドバーを折りたたむ",
+        "toggleSidebarExpand": "サイドバーを展開",
+        "appVersionLabel": "v {{version}}",
+        "enterpriseTag": "エンタープライズ",
         "chat": "チャット",
         "newChat": "新しいチャット",
         "cronTasks": "定期タスク",
@@ -17,7 +25,12 @@
         "emptyChatHistory": "会話履歴はありません",
         "expandHistoryPanel": "履歴パネルを開く",
         "collapseHistoryPanel": "履歴パネルを閉じる",
-        "subscriptions": "サブスクリプション"
+        "subscriptions": "サブスクリプション",
+        "taskList": "タスク一覧",
+        "taskHqReconciliation": "週次会議資料",
+        "toggleTaskListSection": "タスク一覧を展開または折りたたむ",
+        "toggleWorkspaceSection": "ワークスペースを展開または折りたたむ",
+        "compactAccountMenu": "アカウントと設定"
     },
     "actions": {
         "save": "保存",

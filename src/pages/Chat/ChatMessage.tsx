@@ -15,7 +15,8 @@ import { cn } from '@/lib/utils';
 import { assistantChatCardBg, assistantChatCardBgStreaming } from '@/lib/surfaces';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
-import { extractText, extractThinking, extractImages, extractToolUse, formatTimestamp } from './message-utils';
+import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS } from './message-utils';
+import { ThinkingProcessPanel } from './ThinkingProcessPanel';
 
 interface ChatMessageProps {
   message: RawMessage;
@@ -29,6 +30,10 @@ interface ChatMessageProps {
     durationMs?: number;
     summary?: string;
   }>;
+  onPreviewFile?: (file: AttachedFileMeta) => void;
+  /** Used when rendered inside AssistantTurnMessage */
+  hideAvatar?: boolean;
+  hideThinkingPanel?: boolean;
 }
 
 interface ExtractedImage { url?: string; data?: string; mimeType: string; }
@@ -45,38 +50,109 @@ export const ChatMessage = memo(function ChatMessage({
   showThinking,
   isStreaming = false,
   streamingTools = [],
+  onPreviewFile,
+  hideAvatar = false,
+  hideThinkingPanel = false,
 }: ChatMessageProps) {
   const { t } = useTranslation('chat');
   const isUser = message.role === 'user';
   const role = typeof message.role === 'string' ? message.role.toLowerCase() : '';
+  const isSystem = role === 'system';
   const isToolResult = role === 'toolresult' || role === 'tool_result';
   const text = extractText(message);
   const hasText = text.trim().length > 0;
-  const thinking = extractThinking(message);
+  const [systemExpanded, setSystemExpanded] = useState(false);
   const images = extractImages(message);
   const tools = extractToolUse(message);
-  const visibleThinking = showThinking ? thinking : null;
-  const visibleTools = tools;
+  const thinkingTimeline = showThinking ? extractThinkingTimeline(message) : [];
+  const showThinkingPanel =
+    !hideThinkingPanel &&
+    showThinking &&
+    (thinkingTimeline.length > 0 || (isStreaming && streamingTools.length > 0));
+  const visibleTools = showThinking ? [] : tools;
 
   const attachedFiles = message._attachedFiles || [];
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
+
+  // Extract previewable refs from message text
+  const extractedRefs = extractPreviewableRefs(text)
+    .filter((ref) => !attachedFiles.some((f) => f.filePath === ref.filePath))
+    .filter((ref) => isPreviewableFile(ref));
+
+  // All attached files should render as cards (images as thumbnails, everything else as FileCard)
+  const hasRenderableFiles = attachedFiles.length > 0;
 
   // Never render tool result messages in chat UI
   if (isToolResult) return null;
 
   const hasStreamingToolStatus = isStreaming && streamingTools.length > 0;
-  if (!hasText && !visibleThinking && images.length === 0 && visibleTools.length === 0 && attachedFiles.length === 0 && !hasStreamingToolStatus) return null;
+  if (!hasText && !showThinkingPanel && images.length === 0 && visibleTools.length === 0 && !hasRenderableFiles && extractedRefs.length === 0 && !hasStreamingToolStatus) return null;
+
+  if (isSystem) {
+    const compactText = text.replace(/\s+/g, ' ').trim();
+    const firstLine = text.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || compactText;
+    const summary = firstLine.length > 88 ? `${firstLine.slice(0, 88)}…` : firstLine;
+    const showToggle = compactText.length > summary.length || text.includes('\n');
+    return (
+      <div
+        data-chat-message-role="system"
+        data-chat-message-id={message.id ?? undefined}
+        className="mx-auto w-full max-w-4xl"
+      >
+        <div className="rounded-xl border border-amber-200/55 bg-amber-50/72 px-3 py-2 text-[13px] text-amber-900/90 shadow-[0_4px_14px_rgba(245,158,11,0.06)] dark:border-amber-500/15 dark:bg-amber-950/12 dark:text-amber-100/80">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-600/80 dark:text-amber-300/70" />
+            <span className="shrink-0 text-[11px] font-medium text-amber-700/85 dark:text-amber-200/75">
+              {t('systemNotice.label')}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[12px] text-amber-900/75 dark:text-amber-100/70">
+              {summary}
+            </span>
+            {message.timestamp ? (
+              <span className="shrink-0 text-[11px] text-amber-700/60 dark:text-amber-200/55">
+                {formatTimestamp(message.timestamp)}
+              </span>
+            ) : null}
+            {showToggle ? (
+              <button
+                type="button"
+                onClick={() => setSystemExpanded((value) => !value)}
+                className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-amber-700/80 transition-colors hover:bg-amber-100/70 hover:text-amber-900 dark:text-amber-200/75 dark:hover:bg-amber-900/25 dark:hover:text-amber-100"
+                aria-expanded={systemExpanded}
+              >
+                {systemExpanded ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+                <span>{systemExpanded ? t('systemNotice.collapse') : t('systemNotice.expand')}</span>
+              </button>
+            ) : null}
+          </div>
+          {systemExpanded && hasText ? (
+            <div className="mt-2 border-t border-amber-200/45 pt-2 dark:border-amber-500/10">
+              <p className="whitespace-pre-wrap break-words break-all leading-6">{text}</p>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  const isEmbeddedAssistant = hideAvatar && !isUser;
 
   return (
     <div
+      data-chat-message-role={isUser ? 'user' : 'assistant'}
+      data-chat-message-id={message.id ?? undefined}
       className={cn(
-        'flex gap-3 group',
-        isUser ? 'flex-row-reverse' : 'flex-row',
+        isEmbeddedAssistant ? 'w-full' : 'flex gap-3 group',
+        !isEmbeddedAssistant && (isUser ? 'flex-row-reverse' : 'flex-row'),
       )}
     >
       {/* Avatar */}
-      {!isUser && (
-        <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-[linear-gradient(180deg,rgba(125,211,252,0.16),rgba(56,189,248,0.10))] text-primary shadow-[0_12px_24px_rgba(56,189,248,0.10)]">
+      {!isUser && !hideAvatar && (
+        <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,#FFF5E6,#FFE8CC)] text-primary shadow-[0_8px_20px_rgba(255,111,0,0.12)]">
           <Sparkles className="h-4 w-4" />
         </div>
       )}
@@ -84,17 +160,21 @@ export const ChatMessage = memo(function ChatMessage({
       {/* Content */}
       <div
         className={cn(
-          'flex flex-col w-full min-w-0 max-w-[80%] space-y-2',
+          'flex flex-col w-full min-w-0 space-y-2',
+          !isEmbeddedAssistant && 'max-w-[80%]',
           isUser ? 'items-end' : 'items-start',
         )}
       >
-        {isStreaming && !isUser && streamingTools.length > 0 && (
+        {isStreaming && !isUser && streamingTools.length > 0 && !showThinking && (
           <ToolStatusBar tools={streamingTools} />
         )}
 
-        {/* Thinking section */}
-        {visibleThinking && (
-          <ThinkingBlock content={visibleThinking} />
+        {showThinkingPanel && (
+          <ThinkingProcessPanel
+            timeline={thinkingTimeline}
+            isStreaming={isStreaming && !isUser}
+            streamingTools={isStreaming ? streamingTools : []}
+          />
         )}
 
         {/* Tool use cards */}
@@ -128,7 +208,7 @@ export const ChatMessage = memo(function ChatMessage({
         )}
 
         {/* File attachments — images above text for user, file cards below */}
-        {isUser && attachedFiles.length > 0 && (
+        {isUser && hasRenderableFiles && (
           <div className="flex flex-wrap gap-2">
             {attachedFiles.map((file, i) => {
               const isImage = file.mimeType.startsWith('image/');
@@ -147,14 +227,14 @@ export const ChatMessage = memo(function ChatMessage({
                 ) : (
                   <div
                     key={`local-${i}`}
-                    className="flex h-36 w-36 items-center justify-center rounded-2xl border border-primary/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(125,211,252,0.06))] text-muted-foreground"
+                    className="flex h-36 w-36 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(245,246,247,0.95))] text-muted-foreground"
                   >
                     <File className="h-8 w-8" />
                   </div>
                 );
               }
-              // Non-image files → file card
-              return <FileCard key={`local-${i}`} file={file} />;
+              // All non-image attachments render as FileCard
+              return <FileCard key={`local-${i}`} file={file} onPreviewFile={onPreviewFile} />;
             })}
           </div>
         )}
@@ -168,6 +248,7 @@ export const ChatMessage = memo(function ChatMessage({
             streamingLabel={t('streaming.respondingBadge')}
             completedLabel={t('streaming.completedLabel')}
             completedBadge={t('streaming.completedBadge')}
+            onPreviewFile={onPreviewFile}
           />
         )}
 
@@ -192,7 +273,7 @@ export const ChatMessage = memo(function ChatMessage({
         )}
 
         {/* File attachments — assistant messages (below text) */}
-        {!isUser && attachedFiles.length > 0 && (
+        {!isUser && (attachedFiles.length > 0 || extractedRefs.length > 0) && (
           <div className="flex flex-wrap gap-2">
             {attachedFiles.map((file, i) => {
               const isImage = file.mimeType.startsWith('image/');
@@ -211,13 +292,21 @@ export const ChatMessage = memo(function ChatMessage({
               }
               if (isImage && !file.preview) {
                 return (
-                  <div key={`local-${i}`} className="flex h-36 w-36 items-center justify-center rounded-2xl border border-primary/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(125,211,252,0.06))] text-muted-foreground">
+                  <div key={`local-${i}`} className="flex h-36 w-36 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(245,246,247,0.95))] text-muted-foreground">
                     <File className="h-8 w-8" />
                   </div>
                 );
               }
-              return <FileCard key={`local-${i}`} file={file} />;
+              // All non-image attachments render as FileCard
+              return <FileCard key={`local-${i}`} file={file} onPreviewFile={onPreviewFile} />;
             })}
+            {extractedRefs.map((ref, i) => (
+              <FileCard
+                key={`extracted-${i}`}
+                file={{ ...ref, fileSize: 0, preview: null }}
+                onPreviewFile={onPreviewFile}
+              />
+            ))}
           </div>
         )}
 
@@ -278,8 +367,8 @@ function ToolStatusBar({
             key={tool.toolCallId || tool.id || tool.name}
             className={cn(
               'flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs transition-all duration-300',
-              isRunning && 'border-primary/20 bg-[linear-gradient(135deg,rgba(125,211,252,0.14),rgba(56,189,248,0.08))] text-foreground shadow-[0_10px_20px_rgba(56,189,248,0.08)]',
-              !isRunning && !isError && cn('border-primary/10 text-muted-foreground', assistantChatCardBg),
+              isRunning && 'border-[hsl(var(--primary)/0.35)] bg-[linear-gradient(135deg,rgba(255,245,230,0.95),rgba(255,232,204,0.75))] text-foreground shadow-[0_8px_18px_rgba(255,111,0,0.08)]',
+              !isRunning && !isError && cn('border-border text-muted-foreground', assistantChatCardBg),
               isError && 'border-destructive/30 bg-destructive/5 text-destructive',
             )}
           >
@@ -318,7 +407,7 @@ function AssistantHoverBar({ text, timestamp }: { text: string; timestamp?: numb
       <Button
         variant="ghost"
         size="icon"
-        className="h-7 w-7 rounded-full border border-primary/10 bg-primary/[0.04] hover:bg-primary/[0.08]"
+        className="h-7 w-7 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]"
         onClick={copyContent}
       >
         {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
@@ -336,6 +425,7 @@ function MessageBubble({
   streamingLabel,
   completedLabel,
   completedBadge,
+  onPreviewFile,
 }: {
   text: string;
   isUser: boolean;
@@ -343,6 +433,7 @@ function MessageBubble({
   streamingLabel: string;
   completedLabel: string;
   completedBadge: string;
+  onPreviewFile?: (file: AttachedFileMeta) => void;
 }) {
   const showStreamingChrome = isStreaming && !isUser;
 
@@ -354,20 +445,20 @@ function MessageBubble({
         isUser
           ? cn(
               'border text-foreground',
-              'border-primary/22 dark:border-primary/55',
+              'border-border dark:border-white/12',
               'bg-[linear-gradient(165deg,hsl(var(--primary)/0.26),hsl(var(--primary)/0.11))]',
               'dark:bg-[linear-gradient(165deg,hsl(var(--primary)/0.45),hsl(var(--primary)/0.22))]',
-              'shadow-[0_10px_26px_rgba(56,189,248,0.11),inset_0_1px_0_0_hsl(var(--glass-highlight)/0.45)]',
-              'dark:shadow-[0_8px_28px_rgba(56,189,248,0.28),inset_0_1px_0_0_hsl(var(--glass-highlight)/0.18)]',
+              'shadow-[0_10px_26px_rgba(255,111,0,0.12),inset_0_1px_0_0_hsl(var(--glass-highlight)/0.45)]',
+              'dark:shadow-[0_8px_28px_rgba(255,111,0,0.18),inset_0_1px_0_0_hsl(var(--glass-highlight)/0.18)]',
             )
           : showStreamingChrome
             ? cn(
-                'border border-primary/20 text-foreground shadow-[0_0_0_1px_rgba(56,189,248,0.06),0_18px_34px_rgba(15,23,42,0.10)]',
-                'dark:border-primary/25 dark:shadow-[0_0_0_1px_rgba(56,189,248,0.12),0_14px_32px_rgba(0,0,0,0.45)]',
+                'border border-border text-foreground shadow-[0_0_0_1px_rgba(15,23,42,0.04),0_18px_34px_rgba(15,23,42,0.08)]',
+                'dark:border-border dark:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_14px_32px_rgba(0,0,0,0.45)]',
                 assistantChatCardBgStreaming,
               )
             : cn(
-                'border border-primary/10 text-foreground shadow-[0_12px_28px_rgba(15,23,42,0.08)]',
+                'border border-border text-foreground shadow-[0_12px_28px_rgba(15,23,42,0.08)]',
                 'dark:border-border dark:shadow-[0_10px_28px_rgba(0,0,0,0.4)]',
                 assistantChatCardBg,
               ),
@@ -397,29 +488,67 @@ function MessageBubble({
                 const isInline = !match && !className;
                 if (isInline) {
                   return (
-                    <code className="rounded-md bg-background/55 px-1.5 py-0.5 text-sm font-mono break-all break-words text-primary" {...props}>
+                    <code className="rounded-md bg-background/55 px-1.5 py-0.5 text-sm font-mono break-all break-words text-foreground" {...props}>
                       {children}
                     </code>
                   );
                 }
                 return (
-                  <pre className="overflow-x-auto rounded-xl border border-primary/10 bg-background/55 p-4">
+                  <pre className="overflow-x-auto rounded-xl border border-border bg-background/55 p-4">
                     <code className={cn('text-sm font-mono', className)} {...props}>
                       {children}
                     </code>
                   </pre>
                 );
               },
-              a({ href, children }) {
+              a({ href: url, children }) {
+                const href: any = url || children;
+                if (href?.startsWith('preview://') && onPreviewFile) {
+                  const target = href.slice('preview://'.length);
+                  const fileName = target.split('/').pop() || '';
+                  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+                  const mimeMap: Record<string, string> = {
+                    html: 'text/html', htm: 'text/html',
+                    pdf: 'application/pdf',
+                    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+                    gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp',
+                    md: 'text/markdown',
+                    sql: 'text/plain', py: 'text/plain', js: 'text/plain', ts: 'text/plain',
+                    jsx: 'text/plain', tsx: 'text/plain', java: 'text/plain', go: 'text/plain',
+                    rs: 'text/plain', cpp: 'text/plain', c: 'text/plain', h: 'text/plain',
+                    cs: 'text/plain', rb: 'text/plain', php: 'text/plain', swift: 'text/plain',
+                    kt: 'text/plain', scala: 'text/plain', r: 'text/plain', m: 'text/plain', mm: 'text/plain',
+                    json: 'application/json', yaml: 'text/plain', yml: 'text/plain', xml: 'text/plain',
+                    toml: 'text/plain', ini: 'text/plain', conf: 'text/plain', properties: 'text/plain',
+                    env: 'text/plain', txt: 'text/plain', csv: 'text/csv', tsv: 'text/plain',
+                    log: 'text/plain', css: 'text/plain', scss: 'text/plain', less: 'text/plain',
+                    sh: 'text/plain', bash: 'text/plain', zsh: 'text/plain', fish: 'text/plain',
+                    ps1: 'text/plain', bat: 'text/plain', cmd: 'text/plain',
+                  };
+                  return (
+                    <button
+                      onClick={() => onPreviewFile({
+                        filePath: target,
+                        fileName,
+                        mimeType: mimeMap[ext] || 'text/html',
+                        fileSize: 0,
+                        preview: null,
+                      })}
+                      className="inline bg-transparent border-0 p-0 text-link hover:underline break-words break-all cursor-pointer font-inherit"
+                    >
+                      {children}
+                    </button>
+                  );
+                }
                 return (
-                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-words break-all">
+                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-link hover:underline break-words break-all">
                     {children}
                   </a>
                 );
               },
             }}
           >
-            {text}
+            {onPreviewFile ? preprocessTextForPreviewLinks(text) : text}
           </ReactMarkdown>
           {isStreaming && (
             <StreamingCursor />
@@ -428,7 +557,7 @@ function MessageBubble({
       )}
 
       {showStreamingChrome && (
-        <div className="relative mt-3 flex items-center justify-between gap-3 border-t border-primary/10 pt-2 text-[11px] text-muted-foreground">
+        <div className="relative mt-3 flex items-center justify-between gap-3 border-t border-border pt-2 text-[11px] text-muted-foreground">
           <div className="flex items-center gap-2 min-w-0">
             <StreamingPulse />
             <span className="truncate font-medium tracking-[0.02em] text-foreground/80">
@@ -455,10 +584,90 @@ function MessageBubble({
   );
 }
 
+/** Wrap local file paths and web URLs in preview:// markdown links so ReactMarkdown can render them as clickable buttons. */
+function preprocessTextForPreviewLinks(text: string): string {
+  // Protect code blocks and inline code from being modified
+  const codeBlocks: string[] = [];
+  text = text.replace(/```[\s\S]*?```/g, (match) => {
+    codeBlocks.push(match);
+    return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+  });
+
+  const inlineCodes: string[] = [];
+  text = text.replace(/`[^`]*`/g, (match) => {
+    inlineCodes.push(match);
+    return `__INLINE_CODE_${inlineCodes.length - 1}__`;
+  });
+
+  // Remove [media attached: ...] blocks so their inner paths don't get mangled
+  // and the raw metadata isn't shown in the message bubble.
+  text = text.replace(/\s*\[media attached:[^\]]*\]/g, '');
+
+  // Protect existing markdown links [text](url) — extract them so inner paths/URLs
+  // are not mangled by the subsequent replacements.
+  // For local file targets, rewrite to preview://; for external URLs, leave intact.
+  const mdLinks: string[] = [];
+  text = text.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (match, linkText, href) => {
+    // If the href is a local file path (not http/https), convert to preview:// link
+    if (!href.startsWith('http://') && !href.startsWith('https://')) {
+      mdLinks.push(`[${linkText}](preview://${href})`);
+    } else {
+      mdLinks.push(match);
+    }
+    return `__MD_LINK_${mdLinks.length - 1}__`;
+  });
+
+  // Replace file:// URLs — strip the scheme and wrap the underlying local path
+  // file:///C:/... → C:/... ; file:///Users/... → /Users/...
+  // Regex consumes file:// (2 slashes), capture group gets the 3rd slash + path.
+  // For Windows: /C:/Users/... → strip leading / → C:/Users/...
+  // For Unix: /Users/... → keep as-is → /Users/...
+  // The result is placed in a __FILE_URL__ placeholder to prevent the path regex
+  // from double-wrapping the extracted path.
+  const fileUrlPlaceholders: string[] = [];
+  text = text.replace(
+    /file:\/\/(\/[A-Za-z]:[\\/][^\s)\]"',;<>]+|\/[^\s)\]"',;<>]+)/g,
+    (_match, captured) => {
+      // Strip leading / for Windows paths (/C:/ → C:/), keep for Unix (/Users/ → /Users/)
+      const filePath = captured.match(/^\/[A-Za-z]:/) ? captured.slice(1) : captured;
+      fileUrlPlaceholders.push(`[${filePath}](preview://${filePath})`);
+      return `__FILE_URL_${fileUrlPlaceholders.length - 1}__`;
+    },
+  );
+
+  // Replace localhost URLs (previewable in side panel)
+  text = text.replace(
+    /(https?:\/\/localhost:[^\s)\]"',;<>]+)/g,
+    '[$1](preview://$1)',
+  );
+
+  // Replace file paths (relative ./, absolute /, and Windows C:\)
+  // Lookbehind (?<![\\w./:]) rejects matches that are part of a URL path component
+  // (e.g. "/report.html" inside "https://example.com/report.html").
+  text = text.replace(
+    new RegExp(`(?<![\\w./:])(\\./(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\n\\r]+[\\\\/])*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`, 'g'),
+    '[$1](preview://$1)',
+  );
+
+  // Restore file URL placeholders (before other restores so markdown links don't interfere)
+  text = text.replace(/__FILE_URL_(\d+)__/g, (_, i) => fileUrlPlaceholders[Number(i)]);
+
+  // Restore markdown links
+  text = text.replace(/__MD_LINK_(\d+)__/g, (_, i) => mdLinks[Number(i)]);
+
+  // Restore inline code
+  text = text.replace(/__INLINE_CODE_(\d+)__/g, (_, i) => inlineCodes[Number(i)]);
+
+  // Restore code blocks
+  text = text.replace(/__CODE_BLOCK_(\d+)__/g, (_, i) => codeBlocks[Number(i)]);
+
+  return text;
+}
+
 function StreamingCursor() {
   return (
     <motion.span
-      className="ml-1 inline-flex h-[0.95rem] w-6 rounded-full align-[-0.1em] bg-primary/45 shadow-[0_0_0_1px_rgba(59,130,246,0.12)]"
+      className="ml-1 inline-flex h-[0.95rem] w-6 rounded-full align-[-0.1em] bg-primary/45 shadow-[0_0_0_1px_rgba(255,111,0,0.18)]"
       animate={{
         opacity: [0.35, 1, 0.45],
         scaleX: [0.92, 1.08, 0.96],
@@ -489,36 +698,6 @@ function StreamingPulse() {
   );
 }
 
-// ── Thinking Block ──────────────────────────────────────────────
-
-function ThinkingBlock({ content }: { content: string }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div
-      className={cn(
-        'w-full rounded-2xl border border-primary/10 text-[14px] shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
-        assistantChatCardBg,
-      )}
-    >
-      <button
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-muted-foreground transition-colors hover:text-foreground"
-        onClick={() => setExpanded(!expanded)}
-      >
-        {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        <span className="font-medium">思考过程</span>
-      </button>
-      {expanded && (
-        <div className="px-3 pb-3 text-muted-foreground">
-          <div className="prose prose-sm dark:prose-invert max-w-none opacity-75">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── File Card (for user-uploaded non-image files) ───────────────
 
 function formatFileSize(bytes: number): string {
@@ -537,22 +716,29 @@ function FileIcon({ mimeType, className }: { mimeType: string; className?: strin
   return <File className={className} />;
 }
 
-function FileCard({ file }: { file: AttachedFileMeta }) {
+function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFile?: (file: AttachedFileMeta) => void }) {
   const handleOpen = useCallback(() => {
-    if (file.filePath) {
+    if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
+      // Web URLs always open in external browser due to anti-hotlink / iframe blocking
+      window.electron.openExternal(file.filePath);
+    } else if (onPreviewFile) {
+      onPreviewFile(file);
+    } else if (file.filePath) {
       invokeIpc('shell:openPath', file.filePath);
     }
-  }, [file.filePath]);
+  }, [file, onPreviewFile]);
+
+  const isPreviewable = isPreviewableFile(file);
 
   return (
-    <div 
+    <div
       className={cn(
-        'flex max-w-[220px] items-center gap-3 rounded-2xl border border-primary/10 px-3 py-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
+        'flex max-w-[220px] items-center gap-3 rounded-2xl border border-border px-3 py-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
         assistantChatCardBg,
-        file.filePath && 'cursor-pointer transition-all hover:border-primary/20 hover:bg-white/[0.97] dark:hover:bg-white/[0.12]',
+        (file.filePath || onPreviewFile) && 'cursor-pointer transition-all hover:border-muted-foreground/35 hover:bg-white/[0.97] dark:hover:bg-white/[0.12]',
       )}
       onClick={handleOpen}
-      title={file.filePath ? "打开文件" : undefined}
+      title={isPreviewable ? '点击预览' : file.filePath ? '打开文件' : undefined}
     >
       <FileIcon mimeType={file.mimeType} className="h-5 w-5 shrink-0 text-muted-foreground" />
       <div className="min-w-0 overflow-hidden">
@@ -561,6 +747,9 @@ function FileCard({ file }: { file: AttachedFileMeta }) {
           {file.fileSize > 0 ? formatFileSize(file.fileSize) : 'File'}
         </p>
       </div>
+      {isPreviewable && onPreviewFile && (
+        <span className="ml-auto shrink-0 text-[10px] text-primary">预览</span>
+      )}
     </div>
   );
 }
@@ -585,7 +774,7 @@ function ImageThumbnail({
   void filePath; void base64; void mimeType;
   return (
     <div
-      className="group/img relative h-36 w-36 cursor-zoom-in overflow-hidden rounded-2xl border border-primary/10 bg-white/30 shadow-[0_10px_24px_rgba(15,23,42,0.08)] dark:bg-white/[0.08]"
+      className="group/img relative h-36 w-36 cursor-zoom-in overflow-hidden rounded-2xl border border-border bg-white/30 shadow-[0_10px_24px_rgba(15,23,42,0.08)] dark:bg-white/[0.08]"
       onClick={onPreview}
     >
       <img src={src} alt={fileName} className="w-full h-full object-cover" />
@@ -617,7 +806,7 @@ function ImagePreviewCard({
   return (
     <div
       className={cn(
-        'group/img relative max-w-xs cursor-zoom-in overflow-hidden rounded-2xl border border-primary/10 shadow-[0_10px_24px_rgba(15,23,42,0.08)]',
+        'group/img relative max-w-xs cursor-zoom-in overflow-hidden rounded-2xl border border-border shadow-[0_10px_24px_rgba(15,23,42,0.08)]',
         assistantChatCardBg,
       )}
       onClick={onPreview}
@@ -716,7 +905,7 @@ function ToolCard({ name, input }: { name: string; input: unknown }) {
   return (
     <div
       className={cn(
-        'rounded-2xl border border-primary/10 text-[14px] shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
+        'rounded-2xl border border-border text-[14px] shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
         assistantChatCardBg,
       )}
     >

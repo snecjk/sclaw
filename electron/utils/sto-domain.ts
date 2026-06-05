@@ -12,6 +12,10 @@ const STO_DOMAINS: Record<string, string> = {
 const STO_DOMAIN_DEFAULT = 'https://baseinfo-aimemory.sto.cn';
 
 export async function resolveStoBaseUrl(): Promise<string> {
+  const override = process.env.STO_MEMORY_CENTER_BASE_URL?.trim();
+  if (override) {
+    return override.replace(/\/+$/, '');
+  }
   const env = await getSsoEnvironment();
   return STO_DOMAINS[env] || STO_DOMAIN_DEFAULT;
 }

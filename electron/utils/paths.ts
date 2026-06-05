@@ -28,9 +28,10 @@ export function expandPath(path: string): string {
 
 /**
  * Get OpenClaw config directory
+ * Isolated under ~/.stoclaw/openclaw to avoid colliding with other OpenClaw installations.
  */
 export function getOpenClawConfigDir(): string {
-  return join(homedir(), '.openclaw');
+  return join(homedir(), '.stoclaw', 'openclaw');
 }
 
 /**
@@ -43,7 +44,7 @@ export function getOpenClawSkillsDir(): string {
 /**
  * Get agent-scoped skills directory
  * Used when a skill is installed from an Agent detail page,
- * scoping it to ~/.openclaw/agents/{agentId}/agent/skills/
+ * scoping it to ~/.stoclaw/openclaw/agents/{agentId}/agent/skills/
  */
 export function getOpenClawAgentSkillsDir(agentId: string): string {
   return join(getOpenClawConfigDir(), 'agents', agentId, 'agent', 'skills');
@@ -99,14 +100,30 @@ export function getPreloadPath(): string {
 /**
  * Get OpenClaw package directory
  * - Production (packaged): from resources/openclaw (copied by electron-builder extraResources)
- * - Development: from node_modules/openclaw
+ * - Development: node_modules/openclaw，若 pnpm 链接不完整则回退 build/openclaw（bundle-openclaw.mjs 产出）
  */
+function isValidOpenClawPackageDir(dir: string): boolean {
+  return existsSync(join(dir, 'package.json')) && existsSync(join(dir, 'openclaw.mjs'));
+}
+
 export function getOpenClawDir(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'openclaw');
   }
-  // Development: use node_modules/openclaw
-  return join(__dirname, '../../node_modules/openclaw');
+
+  const projectRoot = join(__dirname, '../..');
+  const candidates = [
+    join(projectRoot, 'node_modules/openclaw'),
+    join(projectRoot, 'build/openclaw'),
+  ];
+
+  for (const dir of candidates) {
+    if (isValidOpenClawPackageDir(dir)) {
+      return dir;
+    }
+  }
+
+  return candidates[0];
 }
 
 /**

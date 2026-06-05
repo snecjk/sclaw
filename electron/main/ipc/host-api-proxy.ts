@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
-import { PORTS } from '../../utils/config';
+import { PORTS, TIMEOUTS } from '../../utils/config';
 
 type HostApiFetchRequest = {
   path: string;
@@ -8,6 +8,22 @@ type HostApiFetchRequest = {
   headers?: Record<string, string>;
   body?: unknown;
 };
+
+const SKILL_INSTALL_PATHS = new Set([
+  '/api/skill-plaza/install',
+  '/api/sto-skills/install',
+  '/api/clawhub/install',
+]);
+
+function resolveHostApiTimeoutMs(path: string): number {
+  if (path === '/api/auth/login') {
+    return TIMEOUTS.AUTH_LOGIN;
+  }
+  if (SKILL_INSTALL_PATHS.has(path)) {
+    return TIMEOUTS.SKILL_INSTALL;
+  }
+  return TIMEOUTS.DEFAULT_FETCH;
+}
 
 export function registerHostApiProxyHandlers(): void {
   ipcMain.handle('hostapi:fetch', async (_, request: HostApiFetchRequest) => {
@@ -36,6 +52,7 @@ export function registerHostApiProxyHandlers(): void {
         method,
         headers,
         body,
+        timeoutMs: resolveHostApiTimeoutMs(path),
       });
 
       const data: { status: number; ok: boolean; json?: unknown; text?: string } = {

@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import type { SsoEnvironment } from '../utils/auth-store';
 import { getSsoEnvironment, getStoToken } from '../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
+import { cleanupOldMacAppBackups } from '../utils/cleanup-old-app-bundles';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { logger } from '../utils/logger';
 
@@ -19,6 +20,7 @@ const MEMORY_CENTER_ORIGIN: Record<SsoEnvironment, string> = {
   'daily-external': 'https://baseinfo-aimemory-test.sto.cn',
   'pre-release': 'https://pre-baseinfo-aimemory.sto.cn',
   'production-external': 'https://baseinfo-aimemory.sto.cn',
+  'production-internal': 'https://baseinfo-aimemory.sto.cn',
   'local': 'http://127.0.0.1:7001',
 };
 
@@ -47,7 +49,21 @@ export type ClientUpdatePolicyData = {
   platform?: string | null;
 };
 
-type ApiOk<T> = { success?: boolean; data?: T };
+/** 解析失败的详细原因，供 UI 展示具体错误 */
+export type ResolveFailureReason = {
+  /** HTTP 状态码（0 = 网络不可达） */
+  httpStatus: number;
+  /** 服务端返回的错误消息（如有） */
+  serverMessage?: string;
+  /** 异常信息（网络层错误） */
+  exceptionMessage?: string;
+};
+
+type ResolveResult =
+  | { ok: true; data: ClientUpdatePolicyData }
+  | { ok: false; reason: ResolveFailureReason };
+
+type ApiOk<T> = { success?: boolean; data?: T; errMessage?: string };
 
 export type ClientUpdateEventItem = {
   event_type: string;
@@ -64,34 +80,59 @@ function jsonAuthHeaders(token: string): Record<string, string> {
   };
 }
 
+const RESOLVE_TIMEOUT_MS = 20_000;
+
 export async function resolveUpdatePolicy(
   token: string,
   env: SsoEnvironment,
   body: ClientUpdatePolicyPayload,
-): Promise<ClientUpdatePolicyData | null> {
+): Promise<ResolveResult> {
   const origin = getMemoryCenterApiOrigin(env);
-  const url = `${origin}/agent/v1/client-updates/resolve`;
+  const url = `${origin}/api/v1/client-updates/resolve`;
   try {
-    const res = await proxyAwareFetch(url, {
-      method: 'POST',
-      headers: jsonAuthHeaders(token),
-      body: JSON.stringify({
-        product: body.product ?? CLIENT_UPDATE_PRODUCT,
-        current_version: body.current_version ?? undefined,
-        platform: body.platform ?? undefined,
-      }),
-    });
-    const json = (await res.json().catch(() => null)) as ApiOk<ClientUpdatePolicyData> | null;
-    if (!res.ok || !json?.success || !json.data) {
-      logger.warn(
-        `[client-update] resolve failed: status=${res.status} ok=${json?.success ?? false}`,
-      );
-      return null;
-    }
-    return json.data;
-  } catch (e) {
-    logger.warn('[client-update] resolve error:', e);
-    return null;
+    logger.info(`[client-update] resolve request: POST ${url} product=${body.product ?? CLIENT_UPDATE_PRODUCT}`);
+    const result = await Promise.race([
+      (async () => {
+        const res = await proxyAwareFetch(url, {
+          method: 'POST',
+          headers: jsonAuthHeaders(token),
+          body: JSON.stringify({
+            product: body.product ?? CLIENT_UPDATE_PRODUCT,
+            current_version: body.current_version ?? undefined,
+            platform: body.platform ?? undefined,
+          }),
+        });
+        const raw = await res.text();
+        const json = JSON.parse(raw) as ApiOk<ClientUpdatePolicyData>;
+        if (!res.ok) {
+          const msg = json?.errMessage ?? raw.slice(0, 200);
+          logger.warn(
+            `[client-update] resolve HTTP ${res.status}: ${msg}`,
+          );
+          return { ok: false, reason: { httpStatus: res.status, serverMessage: msg } } as ResolveResult;
+        }
+        if (!json?.success || !json.data) {
+          const msg = json?.errMessage ?? 'success=false or data missing';
+          logger.warn(
+            `[client-update] resolve bad response: ${msg}`,
+          );
+          return { ok: false, reason: { httpStatus: res.status, serverMessage: msg } } as ResolveResult;
+        }
+        logger.info(`[client-update] resolve ok: cohort=${json.data.cohort} offered=${json.data.update_offered} slug=${json.data.feed_slug}`);
+        return { ok: true, data: json.data } as ResolveResult;
+      })(),
+      new Promise<ResolveResult>((_resolve) =>
+        setTimeout(
+          () => _resolve({ ok: false, reason: { httpStatus: 0, exceptionMessage: `resolve 请求超时（${Math.round(RESOLVE_TIMEOUT_MS / 1000)}秒未响应）` } }),
+          RESOLVE_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+    return result;
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.warn('[client-update] resolve error:', msg);
+    return { ok: false, reason: { httpStatus: 0, exceptionMessage: msg } };
   }
 }
 
@@ -102,7 +143,7 @@ export async function postClientUpdateEvents(
 ): Promise<void> {
   if (events.length === 0) return;
   const origin = getMemoryCenterApiOrigin(env);
-  const url = `${origin}/agent/v1/client-updates/events`;
+  const url = `${origin}/api/v1/client-updates/events`;
   try {
     const res = await proxyAwareFetch(url, {
       method: 'POST',
@@ -177,4 +218,7 @@ export async function runPendingInstallReport(currentVersion: string, platform: 
       platform,
     },
   ]);
+  if (platform === 'darwin') {
+    void cleanupOldMacAppBackups(process.execPath);
+  }
 }

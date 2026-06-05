@@ -86,7 +86,7 @@ const sendMessage = useChatStore((s) => s.sendMessage)
 
 **文件**: `electron/api/routes/files.ts` (line 84-108)
 
-`POST /api/files/stage-paths` 路由：将文件暂存到 `~/.openclaw/media/outbound/`
+`POST /api/files/stage-paths` 路由：将文件暂存到 `~/.stoclaw/openclaw/media/outbound/`
 
 ---
 

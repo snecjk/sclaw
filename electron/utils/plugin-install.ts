@@ -12,6 +12,7 @@ import { cp as cpAsync, mkdir as mkdirAsync, rm as rmAsync } from 'node:fs/promi
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { logger } from './logger';
+import { getOpenClawConfigDir } from './paths';
 
 function normalizeFsPathForWindows(filePath: string): string {
   if (process.platform !== 'win32') return filePath;
@@ -59,7 +60,7 @@ const MANIFEST_ID_FIXES: Record<string, string> = {
 };
 
 /**
- * After a plugin has been copied to ~/.openclaw/extensions/<dir>, fix any
+ * After a plugin has been copied to ~/.stoclaw/openclaw/extensions/<dir>, fix any
  * known manifest-ID mismatches so the Gateway can load the plugin.
  * Also patches package.json fields that the Gateway uses as "entry hints".
  */
@@ -171,7 +172,7 @@ const PLUGIN_NPM_NAMES: Record<string, string> = {
   // dingtalk: '@soimy/dingtalk',
   // wecom: '@wecom/wecom-openclaw-plugin',
   // qqbot: '@sliverp/qqbot',
-  // 'openclaw-weixin': '@tencent-weixin/openclaw-weixin',
+  'openclaw-weixin': '@tencent-weixin/openclaw-weixin',
 };
 
 // ── Local plugin directory mapping ───────────────────────────────────────────
@@ -179,6 +180,9 @@ const PLUGIN_NPM_NAMES: Record<string, string> = {
 
 const LOCAL_PLUGIN_DIRS: Record<string, string> = {
   'sto-dynamic-agent-route': 'sto-dynamic-agent-route',
+  'sto-agent-telemetry': 'sto-agent-telemetry',
+  'sto-scheduled-task-tool': 'sto-scheduled-task-tool',
+  'sto-skill-call-monitor': 'sto-skill-call-monitor',
 };
 
 // ── Version helper ───────────────────────────────────────────────────────────
@@ -191,6 +195,47 @@ function readPluginVersion(pkgJsonPath: string): string | null {
   } catch {
     return null;
   }
+}
+
+function comparePluginVersions(a: string, b: string): number {
+  const pa = a.split(/[.+-]/).map((part) => parseInt(part, 10) || 0);
+  const pb = b.split(/[.+-]/).map((part) => parseInt(part, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const da = pa[i] ?? 0;
+    const db = pb[i] ?? 0;
+    if (da !== db) return da - db;
+  }
+  return 0;
+}
+
+/** 在 bundled / build / sto-plugin 等候选源中选版本最高且可用的目录。 */
+function pickPluginSourceDir(
+  pluginDirName: string,
+  candidateSources: string[],
+): string | undefined {
+  const ranked: Array<{ dir: string; version: string }> = [];
+
+  for (const dir of candidateSources) {
+    if (!existsSync(fsPath(join(dir, 'openclaw.plugin.json')))) continue;
+    const version = readPluginVersion(join(dir, 'package.json'));
+    if (version) ranked.push({ dir, version });
+  }
+
+  if (!app.isPackaged) {
+    const localDir = LOCAL_PLUGIN_DIRS[pluginDirName];
+    if (localDir) {
+      const localSourceDir = join(process.cwd(), 'sto-plugin', localDir);
+      if (existsSync(fsPath(join(localSourceDir, 'openclaw.plugin.json')))) {
+        const version = readPluginVersion(join(localSourceDir, 'package.json'));
+        if (version) ranked.push({ dir: localSourceDir, version });
+      }
+    }
+  }
+
+  if (ranked.length === 0) return undefined;
+  ranked.sort((left, right) => comparePluginVersions(right.version, left.version));
+  return ranked[0].dir;
 }
 
 // ── pnpm-aware node_modules copy helpers ─────────────────────────────────────
@@ -308,11 +353,11 @@ export function ensurePluginInstalled(
   candidateSources: string[],
   pluginLabel: string,
 ): { installed: boolean; warning?: string } {
-  const targetDir = join(homedir(), '.openclaw', 'extensions', pluginDirName);
+  const targetDir = join(getOpenClawConfigDir(), 'extensions', pluginDirName);
   const targetManifest = join(targetDir, 'openclaw.plugin.json');
   const targetPkgJson = join(targetDir, 'package.json');
 
-  const sourceDir = candidateSources.find((dir) => existsSync(fsPath(join(dir, 'openclaw.plugin.json'))));
+  const sourceDir = pickPluginSourceDir(pluginDirName, candidateSources);
 
   // If already installed, check whether an upgrade is available
   if (existsSync(fsPath(targetManifest))) {
@@ -330,7 +375,7 @@ export function ensurePluginInstalled(
 
   // Fresh install or upgrade — try bundled/build sources first
   if (sourceDir) {
-    const extensionsRoot = join(homedir(), '.openclaw', 'extensions');
+    const extensionsRoot = join(getOpenClawConfigDir(), 'extensions');
     const attempts: Array<{ attempt: number; code?: string; name?: string; message: string }> = [];
     const maxAttempts = process.platform === 'win32' ? 2 : 1;
 
@@ -387,7 +432,7 @@ export function ensurePluginInstalled(
             `${installedVersion ? `: ${installedVersion} → ${sourceVersion}` : `: ${sourceVersion}`} (dev/node_modules)`,
           );
           try {
-            mkdirSync(fsPath(join(homedir(), '.openclaw', 'extensions')), { recursive: true });
+            mkdirSync(fsPath(join(getOpenClawConfigDir(), 'extensions')), { recursive: true });
             copyPluginFromNodeModules(npmPkgPath, targetDir, npmName);
             fixupPluginManifest(targetDir);
             if (existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) {
@@ -426,7 +471,7 @@ export function ensurePluginInstalled(
             `${installedVersion ? `${installedVersion} → ${sourceVersion}` : sourceVersion} (dev/sto-plugin)`,
           );
           try {
-            mkdirSync(fsPath(join(homedir(), '.openclaw', 'extensions')), { recursive: true });
+            mkdirSync(fsPath(join(getOpenClawConfigDir(), 'extensions')), { recursive: true });
             rmSync(fsPath(targetDir), { recursive: true, force: true });
             cpSync(fsPath(localSourceDir), fsPath(targetDir), {
               recursive: true,
@@ -502,6 +547,30 @@ export function ensureStoDynamicRoutePluginInstalled(): { installed: boolean; wa
   );
 }
 
+export function ensureStoAgentTelemetryPluginInstalled(): { installed: boolean; warning?: string } {
+  return ensurePluginInstalled(
+    'sto-agent-telemetry',
+    buildCandidateSources('sto-agent-telemetry'),
+    'STO Agent Telemetry',
+  );
+}
+
+export function ensureStoScheduledTaskToolPluginInstalled(): { installed: boolean; warning?: string } {
+  return ensurePluginInstalled(
+    'sto-scheduled-task-tool',
+    buildCandidateSources('sto-scheduled-task-tool'),
+    'STO Scheduled Task Tool',
+  );
+}
+
+export function ensureStoSkillCallMonitorPluginInstalled(): { installed: boolean; warning?: string } {
+  return ensurePluginInstalled(
+    'sto-skill-call-monitor',
+    buildCandidateSources('sto-skill-call-monitor'),
+    'STO Skill Call Monitor',
+  );
+}
+
 // ── Bulk startup installer ───────────────────────────────────────────────────
 
 /**
@@ -513,6 +582,9 @@ const ALL_BUNDLED_PLUGINS = [
   { fn: ensureQQBotPluginInstalled, label: 'QQ Bot' },
   { fn: ensureWeChatPluginInstalled, label: 'WeChat' },
   { fn: ensureStoDynamicRoutePluginInstalled, label: 'STO Dynamic Route' },
+  { fn: ensureStoAgentTelemetryPluginInstalled, label: 'STO Agent Telemetry' },
+  { fn: ensureStoScheduledTaskToolPluginInstalled, label: 'STO Scheduled Task Tool' },
+  { fn: ensureStoSkillCallMonitorPluginInstalled, label: 'STO Skill Call Monitor' },
 ] as const;
 
 async function ensurePluginInstalledAsync(
@@ -520,10 +592,10 @@ async function ensurePluginInstalledAsync(
   candidateSources: string[],
   pluginLabel: string,
 ): Promise<{ installed: boolean; warning?: string }> {
-  const targetDir = join(homedir(), '.openclaw', 'extensions', pluginDirName);
+  const targetDir = join(getOpenClawConfigDir(), 'extensions', pluginDirName);
   const targetManifest = join(targetDir, 'openclaw.plugin.json');
   const targetPkgJson = join(targetDir, 'package.json');
-  const sourceDir = candidateSources.find((dir) => existsSync(fsPath(join(dir, 'openclaw.plugin.json'))));
+  const sourceDir = pickPluginSourceDir(pluginDirName, candidateSources);
 
   // Keep dev behavior unchanged (including node_modules fallback) by
   // delegating to the existing sync implementation outside packaged mode.
@@ -550,7 +622,7 @@ async function ensurePluginInstalledAsync(
     };
   }
 
-  const extensionsRoot = join(homedir(), '.openclaw', 'extensions');
+  const extensionsRoot = join(getOpenClawConfigDir(), 'extensions');
   const attempts: Array<{ attempt: number; code?: string; name?: string; message: string }> = [];
   const maxAttempts = process.platform === 'win32' ? 2 : 1;
 
@@ -595,7 +667,7 @@ async function ensurePluginInstalledAsync(
 
 /**
  * Ensure all bundled OpenClaw plugins are installed/upgraded in
- * `~/.openclaw/extensions/`.  Designed to be called once at app startup
+ * `~/.stoclaw/openclaw/extensions/`.  Designed to be called once at app startup
  * as a fire-and-forget task — errors are logged but never thrown.
  */
 export async function ensureAllBundledPluginsInstalled(): Promise<void> {
@@ -622,6 +694,9 @@ export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
     { dirName: 'qqbot', label: 'QQ Bot' },
     { dirName: 'openclaw-weixin', label: 'WeChat' },
     { dirName: 'sto-dynamic-agent-route', label: 'STO Dynamic Route' },
+    { dirName: 'sto-agent-telemetry', label: 'STO Agent Telemetry' },
+    { dirName: 'sto-scheduled-task-tool', label: 'STO Scheduled Task Tool' },
+    { dirName: 'sto-skill-call-monitor', label: 'STO Skill Call Monitor' },
   ] as const;
 
   for (const { dirName, label } of pluginSpecs) {

@@ -2,20 +2,22 @@
  * Root Application Component
  * Handles routing and global providers
  */
-import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Component, useEffect } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 import i18n from './i18n';
 import { MainLayout } from './components/layout/MainLayout';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Models } from './pages/Models';
-import { Chat } from './pages/Chat';
 import { Agents } from './pages/Agents';
 import { Channels } from './pages/Channels';
-import { Skills } from './pages/Skills';
+import { SkillPlazaPage } from './components/skill-plaza/SkillPlazaPage';
 import { Subscriptions } from './pages/Subscriptions';
 import { Cron } from './pages/Cron';
+import ScheduledTasks from './pages/ScheduledTasks';
+import { Home } from './pages/Home';
+import { TaskDetail } from './pages/TaskDetail';
 import { Settings } from './pages/Settings';
 import { Setup } from './pages/Setup';
 import { Login } from './pages/Login';
@@ -26,6 +28,7 @@ import { useAuthStore } from './stores/auth';
 import { useGatewayStore } from './stores/gateway';
 import { useProviderStore } from './stores/providers';
 import { useChatStore } from './stores/chat';
+import { useScheduledTaskUnreadStore } from './stores/scheduled-task-unread';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
 
 
@@ -171,10 +174,62 @@ function App() {
       useAuthStore.setState({
         isAuthenticated: false,
         user: null,
+        crmWeekReportSurfaceAllowed: false,
+        crmWeekReportPolicyStatus: 'idle',
       });
     };
 
     const unsubscribe = window.electron.ipcRenderer.on('auth:token-expired', handleTokenExpired);
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  // Listen for scheduled task new results from main process
+  useEffect(() => {
+    const handleNewResult = (...args: unknown[]) => {
+      const payload = args[0] as { taskId: number } | undefined;
+      if (!payload || typeof payload.taskId !== 'number') return;
+      // Only add unread if user is not currently on the Scheduled Tasks page
+      if (location.pathname !== '/scheduled-tasks') {
+        useScheduledTaskUnreadStore.getState().addUnread(payload.taskId);
+      }
+    };
+
+    const unsubscribe = window.electron.ipcRenderer.on('scheduled-task:new-result', handleNewResult);
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, [location.pathname]);
+
+  // Listen for SAI CLI install failure and prompt user to retry
+  useEffect(() => {
+    const handleSaiCliInstallFailed = (...args: unknown[]) => {
+      const errorMsg = typeof args[0] === 'string' ? args[0] : 'SAI CLI 安装失败';
+      toast.error('SAI CLI 安装失败', {
+        description: errorMsg,
+        duration: 0,
+        action: {
+          label: '一键安装',
+          onClick: async () => {
+            const result = await invokeIpc('sai.install') as { success?: boolean; path?: string; error?: string } | undefined;
+            if (result?.success) {
+              toast.success('SAI CLI 安装成功', { description: result.path });
+            } else {
+              toast.error('SAI CLI 安装失败', { description: result?.error || '未知错误' });
+            }
+          },
+        },
+      });
+    };
+
+    const unsubscribe = window.electron.ipcRenderer.on('sai:cli-install-failed', handleSaiCliInstallFailed);
 
     return () => {
       if (typeof unsubscribe === 'function') {
@@ -232,13 +287,17 @@ function App() {
 
           {/* Main application routes */}
           <Route element={<MainLayout />}>
-            <Route path="/" element={<Chat />} />
+            <Route path="/" element={<Home />} />
+            <Route path="/tasks/:taskId/:entryId" element={<TaskDetail />} />
+            <Route path="/tasks/:taskId" element={<TaskDetail />} />
+            <Route path="/chat" element={<Navigate to="/" replace />} />
             <Route path="/models" element={<Models />} />
             <Route path="/agents" element={<Agents />} />
             <Route path="/channels" element={<Channels />} />
-            <Route path="/skills" element={<Skills />} />
+            <Route path="/skills" element={<SkillPlazaPage />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/cron" element={<Cron />} />
+            <Route path="/scheduled-tasks" element={<ScheduledTasks />} />
             <Route path="/settings/*" element={<Settings />} />
           </Route>
         </Routes>
@@ -246,7 +305,7 @@ function App() {
         {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
         {location.pathname !== '/float-icon' ? (
           <Toaster
-            position="bottom-right"
+            position="bottom-center"
             richColors
             closeButton
             style={{ zIndex: 99999 }}

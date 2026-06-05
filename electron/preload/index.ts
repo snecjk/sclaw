@@ -62,6 +62,9 @@ const electronAPI = {
         'update:check',
         'update:download',
         'update:install',
+        'update:installViaSquirrel',
+        'update:restart',
+        'update:cancelRestartCountdown',
         'update:setChannel',
         'update:setAutoDownload',
         'update:cancelAutoInstall',
@@ -137,6 +140,7 @@ const electronAPI = {
         'openclaw:getConfigDir',
         'openclaw:getSkillsDir',
         'openclaw:getCliCommand',
+        'open-skill-folder',
         // Sprite
         'sprite:toggle',
         'sprite:getSessionContext',
@@ -148,6 +152,11 @@ const electronAPI = {
         'floaticon:getPosition',
         'floaticon:toggle',
         'floaticon:setVisible',
+        // Form
+        'form:show',
+        'form:response',
+        'form:isShowing',
+        'form:hide',
       ];
 
       if (validChannels.includes(channel)) {
@@ -184,11 +193,15 @@ const electronAPI = {
         'update:downloaded',
         'update:error',
         'update:auto-install-countdown',
+        'update:restart-countdown',
         'cron:updated',
+        'scheduled-task:new-result',
         'oauth:code',
         'oauth:success',
         'oauth:error',
+        'scheduled-task:new-result',
         'openclaw:cli-installed',
+        'sai:cli-install-failed',
         'startup-progress',
         'auth:token-expired',
       ];
@@ -236,6 +249,7 @@ const electronAPI = {
         'update:downloaded',
         'update:error',
         'update:auto-install-countdown',
+        'update:restart-countdown',
         'oauth:code',
         'oauth:success',
         'oauth:error',

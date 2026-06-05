@@ -19,6 +19,8 @@ import enSetup from './locales/en/setup.json';
 import enAuth from './locales/en/auth.json';
 import enSprite from './locales/en/sprite.json';
 import enSubscriptions from './locales/en/subscriptions.json';
+import enHome from './locales/en/home.json';
+import enTasks from './locales/en/tasks.json';
 
 // ZH
 import zhCommon from './locales/zh/common.json';
@@ -33,6 +35,8 @@ import zhSetup from './locales/zh/setup.json';
 import zhAuth from './locales/zh/auth.json';
 import zhSprite from './locales/zh/sprite.json';
 import zhSubscriptions from './locales/zh/subscriptions.json';
+import zhHome from './locales/zh/home.json';
+import zhTasks from './locales/zh/tasks.json';
 
 // JA
 import jaCommon from './locales/ja/common.json';
@@ -47,6 +51,8 @@ import jaSetup from './locales/ja/setup.json';
 import jaAuth from './locales/ja/auth.json';
 import jaSprite from './locales/ja/sprite.json';
 import jaSubscriptions from './locales/ja/subscriptions.json';
+import jaHome from './locales/ja/home.json';
+import jaTasks from './locales/ja/tasks.json';
 
 export const SUPPORTED_LANGUAGES = [
     { code: 'en', label: 'English' },
@@ -68,6 +74,8 @@ const resources = {
         auth: enAuth,
         sprite: enSprite,
         subscriptions: enSubscriptions,
+        home: enHome,
+        tasks: enTasks,
     },
     zh: {
         common: zhCommon,
@@ -82,6 +90,8 @@ const resources = {
         auth: zhAuth,
         sprite: zhSprite,
         subscriptions: zhSubscriptions,
+        home: zhHome,
+        tasks: zhTasks,
     },
     ja: {
         common: jaCommon,
@@ -96,6 +106,8 @@ const resources = {
         auth: jaAuth,
         sprite: jaSprite,
         subscriptions: jaSubscriptions,
+        home: jaHome,
+        tasks: jaTasks,
     },
 };
 
@@ -107,7 +119,7 @@ i18n
         fallbackLng: 'en',
         supportedLngs: [...SUPPORTED_LANGUAGE_CODES],
         defaultNS: 'common',
-        ns: ['common', 'settings', 'dashboard', 'chat', 'channels', 'agents', 'skills', 'cron', 'setup', 'auth', 'sprite', 'subscriptions'],
+        ns: ['common', 'settings', 'dashboard', 'chat', 'channels', 'agents', 'skills', 'cron', 'setup', 'auth', 'sprite', 'subscriptions', 'home', 'tasks'],
         interpolation: {
             escapeValue: false, // React already escapes
         },

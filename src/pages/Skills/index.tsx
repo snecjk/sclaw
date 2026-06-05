@@ -265,7 +265,7 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall, onOp
             {!skill.isCore && (
               <div className="space-y-2">
                 <h3 className="text-[13px] font-bold flex items-center gap-2 text-foreground/80">
-                  <Key className="h-3.5 w-3.5 text-blue-500" />
+                  <Key className="h-3.5 w-3.5 text-link" />
                   {t('detail.apiKey')}
                 </h3>
                 <Input
@@ -273,7 +273,7 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall, onOp
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   type="password"
-                  className="h-[44px] font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40"
+                  className="h-[44px] font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 rounded-xl focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-ring shadow-sm transition-all text-foreground placeholder:text-foreground/40"
                 />
                 <p className="text-[12px] text-foreground/50 mt-2 font-medium">
                   {t('detail.apiKeyDesc', 'The primary API key for this skill. Leave blank if not required or configured elsewhere.')}
@@ -318,13 +318,13 @@ function SkillDetailDialog({ skill, isOpen, onClose, onToggle, onUninstall, onOp
                       <Input
                         value={env.key}
                         onChange={(e) => handleUpdateEnv(index, 'key', e.target.value)}
-                        className="flex-1 h-[40px] font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500/50 shadow-sm text-foreground"
+                        className="flex-1 h-[40px] font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 rounded-xl focus-visible:ring-2 focus-visible:ring-ring/40 shadow-sm text-foreground"
                         placeholder={t('detail.keyPlaceholder', 'Key')}
                       />
                       <Input
                         value={env.value}
                         onChange={(e) => handleUpdateEnv(index, 'value', e.target.value)}
-                        className="flex-1 h-[40px] font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500/50 shadow-sm text-foreground"
+                        className="flex-1 h-[40px] font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-black/10 dark:border-white/10 rounded-xl focus-visible:ring-2 focus-visible:ring-ring/40 shadow-sm text-foreground"
                         placeholder={t('detail.valuePlaceholder', 'Value')}
                       />
                       <Button
@@ -426,12 +426,13 @@ export function Skills() {
   const [installQuery, setInstallQuery] = useState('');
   const [installSheetOpen, setInstallSheetOpen] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
-  const [selectedSource, setSelectedSource] = useState<'all' | 'built-in' | 'marketplace' | 'enterprise'>('all');
+  const [selectedSource, setSelectedSource] = useState<'all' | 'built-in' | 'marketplace' | 'enterprise'>('enterprise');
   const [batchMode, setBatchMode] = useState(false);
   const [batchSelected, setBatchSelected] = useState<Set<string>>(new Set());
   const [activeInstallTab, setActiveInstallTab] = useState<'sto' | 'clawhub'>('sto');
   const [stoSearchQuery, setStoSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [refreshing, setRefreshing] = useState(false);
 
   const isGatewayRunning = gatewayStatus.state === 'running';
   const [showGatewayWarning, setShowGatewayWarning] = useState(false);
@@ -614,7 +615,7 @@ export function Skills() {
     }
   }, [t]);
 
-  const [skillsDirPath, setSkillsDirPath] = useState('~/.openclaw/skills');
+  const [skillsDirPath, setSkillsDirPath] = useState('~/.stoclaw/openclaw/skills');
 
   useEffect(() => {
     invokeIpc<string>('openclaw:getSkillsDir')
@@ -668,6 +669,63 @@ export function Skills() {
     }
   }, [uninstallSkill, uninstallStoSkill, t]);
 
+  const handleRefresh = useCallback(async () => {
+    if (!isGatewayRunning || refreshing) {
+      return;
+    }
+
+    setRefreshing(true);
+    try {
+      await fetchSkills();
+      const latestError = useSkillsStore.getState().error;
+      if (latestError) {
+        toast.error(
+          ['fetchTimeoutError', 'fetchRateLimitError', 'timeoutError', 'rateLimitError'].includes(latestError)
+            ? t(`toast.${latestError}`, { path: skillsDirPath })
+            : latestError,
+        );
+        return;
+      }
+      toast.success(t('toast.refreshed'));
+    } catch (err) {
+      toast.error(t('toast.failedRefresh') + ': ' + String(err));
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchSkills, isGatewayRunning, refreshing, skillsDirPath, t]);
+
+  const handleRefreshStoMarketplace = useCallback(async () => {
+    if (stoSearching) {
+      return;
+    }
+
+    await searchStoSkills(stoSearchQuery);
+    const latestError = useSkillsStore.getState().stoSearchError;
+    if (latestError) {
+      toast.error(t('marketplace.installTabs.stoSearchError'));
+      return;
+    }
+    toast.success(t('marketplace.refreshedSto'));
+  }, [searchStoSkills, stoSearchQuery, stoSearching, t]);
+
+  const handleRefreshClawHubMarketplace = useCallback(async () => {
+    if (searching) {
+      return;
+    }
+
+    await searchSkills(installQuery.trim());
+    const latestError = useSkillsStore.getState().searchError;
+    if (latestError) {
+      toast.error(
+        ['searchTimeoutError', 'searchRateLimitError', 'timeoutError', 'rateLimitError'].includes(latestError.replace('Error: ', ''))
+          ? t(`toast.${latestError.replace('Error: ', '')}`, { path: skillsDirPath })
+          : t('marketplace.searchError'),
+      );
+      return;
+    }
+    toast.success(t('marketplace.refreshedClawHub'));
+  }, [installQuery, searchSkills, searching, skillsDirPath, t]);
+
   if (loading) {
     return (
       <div className="mx-auto flex w-full max-w-5xl flex-col pb-10">
@@ -680,10 +738,10 @@ export function Skills() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
-      <header className="shrink-0 border-b border-primary/10 pb-6">
+      <header className="shrink-0 border-b border-border pb-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(56,189,248,0.12)]">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(255,111,0,0.10)]">
               <Puzzle className="h-5 w-5" strokeWidth={2} />
             </div>
             <div className="min-w-0">
@@ -723,10 +781,10 @@ export function Skills() {
 
         <section className={glassSectionSurface}>
         {/* Tab bar */}
-        <div className="-mx-6 -mt-6 mb-6 flex items-stretch border-b border-primary/10 px-2 pt-1">
+        <div className="-mx-6 -mt-6 mb-6 flex items-stretch border-b border-border px-2 pt-1">
           {([
-            { key: 'all' as const, label: t('filter.all', { count: sourceStats.all }) },
-            { key: 'built-in' as const, label: t('filter.builtIn', { count: sourceStats.builtIn }) },
+            // { key: 'all' as const, label: t('filter.all', { count: sourceStats.all }) },
+            // { key: 'built-in' as const, label: t('filter.builtIn', { count: sourceStats.builtIn }) },
             { key: 'enterprise' as const, label: t('filter.enterprise', { count: sourceStats.enterprise }) },
             { key: 'marketplace' as const, label: t('filter.marketplace', { count: sourceStats.marketplace }) },
           ]).map(({ key, label }) => (
@@ -774,9 +832,9 @@ export function Skills() {
             </button>
           </div>
         </div>
-        <div className="flex flex-col gap-4 border-b border-primary/10 pb-4 mb-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 border-b border-border pb-4 mb-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center flex-wrap gap-4 text-[14px]">
-            <div className="group relative mr-2 flex items-center rounded-md border border-transparent bg-black/5 px-3 py-1.5 transition-colors focus-within:border-primary/15 focus-within:bg-[hsl(var(--glass-bg)/0.25)] dark:bg-white/5 dark:focus-within:bg-white/10">
+            <div className="group relative mr-2 flex items-center rounded-md border border-transparent bg-black/5 px-3 py-1.5 transition-colors focus-within:border-border focus-within:bg-[hsl(var(--glass-bg)/0.25)] dark:bg-white/5 dark:focus-within:bg-white/10">
               <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
               <input
                 placeholder={t('search')}
@@ -820,12 +878,12 @@ export function Skills() {
             <Button
               variant="outline"
               size="icon"
-              onClick={fetchSkills}
-              disabled={!isGatewayRunning}
+              onClick={() => void handleRefresh()}
+              disabled={!isGatewayRunning || refreshing}
               className="ml-1 h-8 w-8 rounded-md border-glass-border bg-transparent text-muted-foreground shadow-none hover:bg-[hsl(var(--glass-bg)/0.35)] hover:text-foreground"
               title={t('refresh')}
             >
-              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+              <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
             </Button>
           </div>
         </div>
@@ -946,7 +1004,7 @@ export function Skills() {
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <h3 className="text-[14px] font-semibold text-foreground truncate">{skill.name}</h3>
                         {skill.isCore && <Lock className="h-3 w-3 text-muted-foreground shrink-0" />}
-                        {skill.isBundled && <Puzzle className="h-3 w-3 text-blue-500/70 shrink-0" />}
+                        {skill.isBundled && <Puzzle className="h-3 w-3 text-link/70 shrink-0" />}
                         {skill.slug && skill.slug !== skill.name && (
                           <span className="text-[11px] font-mono px-1.5 py-0 rounded border border-black/10 dark:border-white/10 text-muted-foreground inline-block">
                             {skill.slug}
@@ -993,7 +1051,7 @@ export function Skills() {
                   <div
                     key={skill.id}
                     className={cn(
-                      'group flex flex-col cursor-pointer rounded-md border border-primary/10 p-4 transition-all duration-200 hover:border-primary/18 hover:shadow-md',
+                      'group flex flex-col cursor-pointer rounded-md border border-border p-4 transition-all duration-200 hover:border-border hover:shadow-md',
                       glassNestedCard,
                       isSelected && 'ring-2 ring-primary/50',
                     )}
@@ -1033,7 +1091,7 @@ export function Skills() {
                         <div className="flex items-center gap-1.5">
                           <h3 className="text-[15px] font-semibold text-foreground truncate">{skill.name}</h3>
                           {skill.isCore && <Lock className="h-3 w-3 text-muted-foreground shrink-0" />}
-                          {skill.isBundled && <Puzzle className="h-3 w-3 text-blue-500/70 shrink-0" />}
+                          {skill.isBundled && <Puzzle className="h-3 w-3 text-link/70 shrink-0" />}
                         </div>
                         {skill.slug && skill.slug !== skill.name && (
                           <span className="text-[11px] font-mono px-1.5 py-0.5 rounded border border-black/10 dark:border-white/10 text-muted-foreground mt-1 inline-block">
@@ -1125,23 +1183,35 @@ export function Skills() {
               {/* === STO Tab === */}
               <TabsContent value="sto" className="flex-1 flex flex-col overflow-hidden mt-0 data-[state=inactive]:hidden">
                 <div className="px-8 py-4 border-b border-black/5 dark:border-white/5">
-                  <div className="relative flex items-center glass rounded-xl px-3 py-2 border">
-                    <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <Input
-                      placeholder={t('marketplace.installTabs.stoSearchPlaceholder')}
-                      value={stoSearchQuery}
-                      onChange={(e) => setStoSearchQuery(e.target.value)}
-                      className="ml-2 h-auto border-0 bg-transparent p-0 shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 text-[13px]"
-                    />
-                    {stoSearchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setStoSearchQuery('')}
-                        className="text-foreground/50 hover:text-foreground shrink-0 ml-1"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
+                  <div className="flex flex-col md:flex-row gap-2">
+                    <div className="relative flex items-center glass rounded-xl px-3 py-2 border flex-1">
+                      <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <Input
+                        placeholder={t('marketplace.installTabs.stoSearchPlaceholder')}
+                        value={stoSearchQuery}
+                        onChange={(e) => setStoSearchQuery(e.target.value)}
+                        className="ml-2 h-auto border-0 bg-transparent p-0 shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 text-[13px]"
+                      />
+                      {stoSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setStoSearchQuery('')}
+                          className="text-foreground/50 hover:text-foreground shrink-0 ml-1"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => void handleRefreshStoMarketplace()}
+                      disabled={stoSearching}
+                      className="h-10 w-10 rounded-xl border-black/10 dark:border-white/10 bg-transparent text-muted-foreground shadow-none hover:bg-[hsl(var(--glass-bg)/0.35)] hover:text-foreground"
+                      title={t('refresh')}
+                    >
+                      <RefreshCw className={cn('h-4 w-4', stoSearching && 'animate-spin')} />
+                    </Button>
                   </div>
                 </div>
                 <div className="flex-1 overflow-y-auto px-8 py-6">
@@ -1261,6 +1331,16 @@ export function Skills() {
                         </button>
                       )}
                     </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => void handleRefreshClawHubMarketplace()}
+                      disabled={searching}
+                      className="h-10 w-10 rounded-xl border-black/10 dark:border-white/10 bg-transparent text-muted-foreground shadow-none hover:bg-[hsl(var(--glass-bg)/0.35)] hover:text-foreground"
+                      title={t('refresh')}
+                    >
+                      <RefreshCw className={cn('h-4 w-4', searching && 'animate-spin')} />
+                    </Button>
                     <Button
                       variant="outline"
                       disabled

@@ -7,6 +7,7 @@ import path from 'path';
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
 import { PORTS } from '../utils/config';
+import { findAvailablePort } from '../utils/port-utils';
 import { JsonRpcNotification, isNotification, isResponse } from './protocol';
 import { logger } from '../utils/logger';
 import { captureTelemetryEvent, trackMetric } from '../utils/telemetry';
@@ -277,6 +278,25 @@ export class GatewayManager extends EventEmitter {
     return this.stateController.isConnected(this.ws?.readyState === WebSocket.OPEN);
   }
 
+  /** True while start/reconnect is in flight — avoid scheduling restarts that get deferred. */
+  isGatewayLifecycleSettling(): boolean {
+    return (
+      this.startLock
+      || this.status.state === 'starting'
+      || this.status.state === 'reconnecting'
+    );
+  }
+
+  /** Cancel debounced restart/reload and drop a pending deferred restart (e.g. login during startup). */
+  cancelPendingGatewayRefresh(): void {
+    this.restartController.clearDebounceTimer();
+    this.restartController.resetDeferredRestart();
+    if (this.reloadDebounceTimer) {
+      clearTimeout(this.reloadDebounceTimer);
+      this.reloadDebounceTimer = null;
+    }
+  }
+
   /**
    * Start Gateway process
    */
@@ -315,6 +335,19 @@ export class GatewayManager extends EventEmitter {
     // Check if Python environment is ready (self-healing) asynchronously.
     // Fire-and-forget: only needs to run once, not on every retry.
     warmupManagedPythonReadiness();
+
+    // If the default port is occupied by another process, auto-increment
+    // to avoid killing an unrelated OpenClaw / StoClaw gateway.
+    try {
+      const currentPort = this.status.port;
+      const availablePort = await findAvailablePort(currentPort);
+      if (availablePort !== currentPort) {
+        logger.info(`Port ${currentPort} is occupied, switching to ${availablePort}`);
+        this.setStatus({ port: availablePort });
+      }
+    } catch (portErr) {
+      logger.warn('Failed to find an available port for Gateway:', portErr);
+    }
 
     try {
       await runGatewayStartupSequence({

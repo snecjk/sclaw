@@ -26,7 +26,7 @@ async function getStore() {
     floatIconStore = new Store<{ floatIconState: FloatIconState }>({
       name: 'float-icon-state',
       defaults: {
-        floatIconState: { visible: true },
+        floatIconState: { visible: false },
       },
     });
   }
@@ -199,6 +199,16 @@ export function toggleFloatIcon(): void {
 export function isFloatIconVisible(): boolean {
   const win = getFloatIconWindow();
   return !!win && win.isVisible();
+}
+
+/**
+ * Reset float icon visibility to false on app quit.
+ * Ensures the float icon does not auto-show on next launch.
+ */
+export async function resetFloatIconVisibilityOnQuit(): Promise<void> {
+  const store = await getStore();
+  const current: FloatIconState = store.get('floatIconState');
+  store.set('floatIconState', { ...current, visible: false });
 }
 
 /**

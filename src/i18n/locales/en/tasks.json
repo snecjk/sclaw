@@ -1,0 +1,40 @@
+{
+  "backHome": "Back to home",
+  "sidebarMaterialTitle": "{{date}} materials",
+  "subitemMaterialHeading": "{{date}} materials",
+  "subitemChatEmpty": "No messages yet. Send a message to start.",
+  "overviewHint": "Open the matching card on Home to create today’s material sub-item and start the chat session.",
+  "unreadBadge": "Unread",
+  "deleteSubitemConfirm": "Delete \"{{label}}\"? The linked chat transcript will be removed from the list, same as deleting a history session.",
+  "detail": {
+    "hq-reconciliation": {
+      "pageTitle": "Weekly meeting materials",
+      "intro": "Prototype overview (sample figures below).",
+      "metaReconTime": "Reconciliation time",
+      "metaReconTimeValue": "2026-05-10 06:00",
+      "metaGenerated": "Generated at",
+      "metaGeneratedValue": "2026-05-10 08:30",
+      "summaryTitle": "Summary",
+      "summary": {
+        "headers": ["Indicator", "Amount (CNY)"],
+        "rows": [
+          ["Total in / out", "128,560"],
+          ["Income", "98,750"],
+          ["Expense", "29,810"]
+        ]
+      },
+      "abnormalTitle": "Exceptions",
+      "abnormal": {
+        "headers": ["Serial", "Channel", "Amount (CNY)", "Status"],
+        "rows": [
+          ["RC-20260510-001", "East direct", "1,240", "Variance"],
+          ["RC-20260510-014", "Franchise", "860", "Unmatched"],
+          ["RC-20260510-022", "Key accounts", "420", "In review"],
+          ["RC-20260510-031", "Hub", "310", "Pending"]
+        ]
+      },
+      "threadLine1": "System: An HTML version was generated from the weekly meeting materials with A4 landscape print margins.",
+      "threadLine2": "User: I want to view the HTML format"
+    }
+  }
+}

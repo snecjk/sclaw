@@ -33,10 +33,8 @@ const {
 
 const ORIGINAL_PLATFORM_DESCRIPTOR = Object.getOwnPropertyDescriptor(process, 'platform');
 
-vi.mock('node:fs', async () => {
-  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+vi.mock('node:fs', () => {
   const mocked = {
-    ...actual,
     existsSync: mockExistsSync,
     cpSync: mockCpSync,
     mkdirSync: mockMkdirSync,
@@ -115,9 +113,15 @@ describe('plugin installer diagnostics', () => {
     mockHomedir.mockReturnValue('C:\\Users\\test');
 
     const sourceDir = 'C:\\Program Files\\StoClaw\\resources\\openclaw-plugins\\wecom';
-    const sourceManifestSuffix = 'Program Files\\StoClaw\\resources\\openclaw-plugins\\wecom\\openclaw.plugin.json';
+    const sourceManifestSuffix = 'openclaw-plugins\\wecom\\openclaw.plugin.json';
 
     mockExistsSync.mockImplementation((input: string) => String(input).includes(sourceManifestSuffix));
+    mockReadFileSync.mockImplementation((input: string) => {
+      if (String(input).includes('openclaw-plugins\\wecom\\package.json')) {
+        return JSON.stringify({ version: '1.2.3' });
+      }
+      return '{}';
+    });
     mockCpSync.mockImplementation(() => {
       const error = new Error('path too long') as NodeJS.ErrnoException;
       error.code = 'ENAMETOOLONG';
@@ -157,9 +161,15 @@ describe('plugin installer diagnostics', () => {
     mockHomedir.mockReturnValue('C:\\Users\\test');
 
     const sourceDir = 'C:\\Program Files\\StoClaw\\resources\\openclaw-plugins\\wecom';
-    const sourceManifestSuffix = 'Program Files\\StoClaw\\resources\\openclaw-plugins\\wecom\\openclaw.plugin.json';
+    const sourceManifestSuffix = 'openclaw-plugins\\wecom\\openclaw.plugin.json';
 
     mockExistsSync.mockImplementation((input: string) => String(input).includes(sourceManifestSuffix));
+    mockReadFileSync.mockImplementation((input: string) => {
+      if (String(input).includes('openclaw-plugins\\wecom\\package.json')) {
+        return JSON.stringify({ version: '1.2.3' });
+      }
+      return '{}';
+    });
     mockCpSync.mockImplementation(() => {
       const error = new Error('access denied') as NodeJS.ErrnoException;
       error.code = 'EPERM';
@@ -176,7 +186,7 @@ describe('plugin installer diagnostics', () => {
       '[plugin] Bundled mirror install failed for WeCom',
       expect.objectContaining({
         sourceDir,
-        targetDir: expect.stringContaining('.openclaw/extensions/wecom'),
+        targetDir: expect.stringContaining('extensions\\wecom'),
         platform: 'win32',
         attempts: [
           expect.objectContaining({ attempt: 1, code: 'EPERM' }),
@@ -184,5 +194,11 @@ describe('plugin installer diagnostics', () => {
         ],
       }),
     );
+  });
+
+  it('exposes sto-skill-call-monitor as a bundled local plugin installer', async () => {
+    const pluginInstall = await import('@electron/utils/plugin-install');
+
+    expect(typeof pluginInstall.ensureStoSkillCallMonitorPluginInstalled).toBe('function');
   });
 });

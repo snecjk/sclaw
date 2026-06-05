@@ -4,9 +4,13 @@
  * Communicates with OpenClaw Gateway via renderer WebSocket RPC.
  */
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import { toast } from 'sonner';
+import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-to-chat';
 import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
+import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
 import { buildCronSessionHistoryPath, isCronSessionKey } from './chat/cron-session-utils';
 import { sanitizeSessionDisplayField } from './chat/helpers';
@@ -227,6 +231,8 @@ function mimeFromExtension(filePath: string): string {
     'md': 'text/markdown',
     'rtf': 'application/rtf',
     'epub': 'application/epub+zip',
+    'html': 'text/html',
+    'htm': 'text/html',
     // Archives
     'zip': 'application/zip',
     'tar': 'application/x-tar',
@@ -251,23 +257,51 @@ function mimeFromExtension(filePath: string): string {
   return map[ext] || 'application/octet-stream';
 }
 
+/** Remove fenced code blocks from text so paths inside them are not matched.
+ *  Inline code (`path`) is preserved — it often contains actual file paths the user/AI wants to preview.
+ */
+function stripCodeBlocks(text: string): string {
+  return text.replace(/```[\s\S]*?```/g, '');
+}
+
 /**
  * Extract raw file paths from message text.
- * Detects absolute paths (Unix: / or ~/, Windows: C:\ etc.) ending with common file extensions.
+ * Detects absolute paths (Unix: / or ~/, Windows: C:\ etc.), file:// URLs,
+ * and localhost URLs ending with common file extensions.
  * Handles both image and non-image files, consistent with channel push message behavior.
+ * Code blocks are stripped before matching to avoid false positives.
  */
 function extractRawFilePaths(text: string): Array<{ filePath: string; mimeType: string }> {
+  const cleanText = stripCodeBlocks(text);
   const refs: Array<{ filePath: string; mimeType: string }> = [];
   const seen = new Set<string>();
-  const exts = 'png|jpe?g|gif|webp|bmp|avif|svg|pdf|docx?|xlsx?|pptx?|txt|csv|md|rtf|epub|zip|tar|gz|rar|7z|mp3|wav|ogg|aac|flac|m4a|mp4|mov|avi|mkv|webm|m4v';
+  const exts = 'png|jpe?g|gif|webp|bmp|avif|svg|pdf|docx?|xlsx?|pptx?|txt|csv|md|rtf|epub|zip|tar|gz|rar|7z|mp3|wav|ogg|aac|flac|m4a|mp4|mov|avi|mkv|webm|m4v|html?';
+
+  // file:// URLs — strip the scheme and use the underlying local path
+  // Regex consumes file:// (2 slashes), capture group gets the 3rd slash + path.
+  // For Windows: /C:/Users/... → strip leading / → C:/Users/...
+  // For Unix: /Users/... → keep as-is → /Users/...
+  const fileUrlRegex = /file:\/\/(\/[A-Za-z]:[\\/][^\s)\]"',;<>]+|\/[^\s)\]"',;<>]+)/g;
+  let match;
+  while ((match = fileUrlRegex.exec(cleanText)) !== null) {
+    const captured = match[1];
+    // Strip leading / for Windows paths (/C:/ → C:/), keep for Unix (/Users/ → /Users/)
+    const p = captured.match(/^\/[A-Za-z]:/) ? captured.slice(1) : captured;
+    if (p && !seen.has(p)) {
+      seen.add(p);
+      refs.push({ filePath: p, mimeType: mimeFromExtension(p) });
+    }
+  }
+
   // Unix absolute paths (/... or ~/...) — lookbehind rejects mid-token slashes
   // (e.g. "path/to/file.mp4", "https://example.com/file.mp4")
-  const unixRegex = new RegExp(`(?<![\\w./:])((?:\\/|~\\/)[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
-  // Windows absolute paths (C:\... D:\...) — lookbehind rejects drive letter glued to a word
-  const winRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\\\[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
-  for (const regex of [unixRegex, winRegex]) {
-    let match;
-    while ((match = regex.exec(text)) !== null) {
+  const unixRegex = new RegExp(`(?<![\\w./:])((?:\\/|~\\/)[^\\n\\r"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
+  // Windows absolute paths with backslash (C:\... D:\...) — lookbehind rejects drive letter glued to a word
+  const winBackslashRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\\\[^\\n\\r"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
+  // Windows absolute paths with forward slash (C:/... D:/...) — lookbehind rejects drive letter glued to a word
+  const winForwardRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\/[^\\n\\r"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
+  for (const regex of [unixRegex, winBackslashRegex, winForwardRegex]) {
+    while ((match = regex.exec(cleanText)) !== null) {
       const p = match[1];
       if (p && !seen.has(p)) {
         seen.add(p);
@@ -671,7 +705,7 @@ function parseSessionUpdatedAtMs(value: unknown): number | undefined {
   return undefined;
 }
 
-async function loadCronFallbackMessages(sessionKey: string, limit = 200): Promise<RawMessage[]> {
+async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
   if (!isCronSessionKey(sessionKey)) return [];
   try {
     const response = await hostApiFetch<{ messages?: RawMessage[] }>(
@@ -1031,7 +1065,9 @@ function hasAssistantTextOutput(message: RawMessage | undefined): boolean {
 
 // ── Store ────────────────────────────────────────────────────────
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>()(
+  persist(
+    (set, get) => ({
   messages: [],
   loading: false,
   error: null,
@@ -1157,14 +1193,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 try {
                   const r = await useGatewayStore.getState().rpc<Record<string, unknown>>(
                     'chat.history',
-                    { sessionKey: session.key, limit: 1000 },
+                    { sessionKey: session.key, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
                   );
                   const msgs = Array.isArray(r.messages) ? r.messages as RawMessage[] : [];
                   const firstUser = msgs.find((m) => m.role === 'user');
                   const lastMsg = msgs[msgs.length - 1];
                   set((s) => {
                     const next: Partial<typeof s> = {};
-                    if (firstUser) {
+                    if (firstUser && !s.sessionLabels[session.key]) {
                       const labelText = getMessageText(firstUser.content).trim();
                       if (labelText) {
                         const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
@@ -1290,10 +1326,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ?? getCanonicalPrefixFromSessions(sessions)
       ?? DEFAULT_CANONICAL_PREFIX;
     const newKey = `${prefix}:session-${Date.now()}`;
+    const newAgentId = getAgentIdFromSessionKey(newKey);
     const newSessionEntry: ChatSession = { key: newKey };
     set((s) => ({
       currentSessionKey: newKey,
-      currentAgentId: getAgentIdFromSessionKey(newKey),
+      currentAgentId: newAgentId,
       sessions: [
         ...(leavingEmpty ? s.sessions.filter((sess) => sess.key !== currentSessionKey) : s.sessions),
         newSessionEntry,
@@ -1314,6 +1351,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       lastUserMessageAt: null,
       pendingToolImages: [],
     }));
+    void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
   },
 
   // ── Cleanup empty session on navigate away ──
@@ -1345,14 +1383,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ── Load chat history ──
 
   loadHistory: async (quiet = false) => {
-    const { currentSessionKey } = get();
-    const existingLoad = _historyLoadInFlight.get(currentSessionKey);
+    const targetSessionKey = get().currentSessionKey;
+    const existingLoad = _historyLoadInFlight.get(targetSessionKey);
     if (existingLoad) {
       await existingLoad;
+      if (get().currentSessionKey !== targetSessionKey) {
+        return get().loadHistory(quiet);
+      }
       return;
     }
 
-    const lastLoadAt = _lastHistoryLoadAtBySession.get(currentSessionKey) || 0;
+    const lastLoadAt = _lastHistoryLoadAtBySession.get(targetSessionKey) || 0;
     if (quiet && Date.now() - lastLoadAt < HISTORY_LOAD_MIN_INTERVAL_MS) {
       return;
     }
@@ -1369,6 +1410,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const loadPromise = (async () => {
       const applyLoadedMessages = (rawMessages: RawMessage[], thinkingLevel: string | null) => {
+      if (get().currentSessionKey !== targetSessionKey) return;
+
       // Before filtering: attach images/files from tool_result messages to the next assistant message
       const messagesWithToolImages = enrichWithToolResultFiles(rawMessages);
       const filteredMessages = messagesWithToolImages.filter((msg) => !isToolResultRole(msg.role));
@@ -1396,20 +1439,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       }
 
+      if (get().currentSessionKey !== targetSessionKey) return;
+
       set({ messages: finalMessages, thinkingLevel, loading: false });
 
       // Extract first user message text as a session label for display in the toolbar.
+      // Only set when there is no existing label so manual renames are preserved.
       // Skip main sessions (key ends with ":main") — they rely on the Gateway-provided
       // displayName (e.g. the configured agent name "StoClaw") instead.
-      const isMainSession = currentSessionKey.endsWith(':main');
-      if (!isMainSession) {
+      const isMainSession = targetSessionKey.endsWith(':main');
+      if (!isMainSession && !get().sessionLabels[targetSessionKey]) {
         const firstUserMsg = finalMessages.find((m) => m.role === 'user');
         if (firstUserMsg) {
           const labelText = getMessageText(firstUserMsg.content).trim();
           if (labelText) {
             const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
             set((s) => ({
-              sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated },
+              sessionLabels: { ...s.sessionLabels, [targetSessionKey]: truncated },
             }));
           }
         }
@@ -1420,12 +1466,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (lastMsg?.timestamp) {
         const lastAt = toMs(lastMsg.timestamp);
         set((s) => ({
-          sessionLastActivity: { ...s.sessionLastActivity, [currentSessionKey]: lastAt },
+          sessionLastActivity: { ...s.sessionLastActivity, [targetSessionKey]: lastAt },
         }));
       }
 
       // Async: load missing image previews from disk (updates in background)
       loadMissingPreviews(finalMessages).then((updated) => {
+        if (get().currentSessionKey !== targetSessionKey) return;
         if (updated) {
           // Create new object references so React.memo detects changes.
           // loadMissingPreviews mutates AttachedFileMeta in place, so we
@@ -1439,6 +1486,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           });
         }
       });
+      if (get().currentSessionKey !== targetSessionKey) return;
+
       const { pendingFinal, lastUserMessageAt, sending: isSendingNow } = get();
 
       // If we're sending but haven't received streaming events, check
@@ -1467,6 +1516,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return isAfterUserMsg(msg);
       });
 
+      if (get().currentSessionKey !== targetSessionKey) return;
+
       if (recentAssistant || currentRecentAssistant) {
         clearHistoryPoll();
         set({ sending: false, activeRunId: null, pendingFinal: false });
@@ -1476,38 +1527,49 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
 
       try {
+        // Gateway chat.history does not support offset; load up to the hard max in one call.
+        let thinkingLevel: string | null = null;
         const data = await useGatewayStore.getState().rpc<Record<string, unknown>>(
           'chat.history',
-          { sessionKey: currentSessionKey, limit: 200 },
+          { sessionKey: targetSessionKey, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
         );
-        if (data) {
-          let rawMessages = Array.isArray(data.messages) ? data.messages as RawMessage[] : [];
-          const thinkingLevel = data.thinkingLevel ? String(data.thinkingLevel) : null;
-          if (rawMessages.length === 0 && isCronSessionKey(currentSessionKey)) {
-            rawMessages = await loadCronFallbackMessages(currentSessionKey, 200);
-          }
+        if (get().currentSessionKey !== targetSessionKey) return;
 
-          applyLoadedMessages(rawMessages, thinkingLevel);
-        } else {
-          const fallbackMessages = await loadCronFallbackMessages(currentSessionKey, 200);
-          if (fallbackMessages.length > 0) {
-            applyLoadedMessages(fallbackMessages, null);
-          } else {
-            set({ messages: [], loading: false });
-          }
+        const allMessages: RawMessage[] = Array.isArray(data.messages)
+          ? data.messages as RawMessage[]
+          : [];
+        if (data.thinkingLevel) {
+          thinkingLevel = String(data.thinkingLevel);
         }
+
+        if (allMessages.length >= CHAT_HISTORY_LENGTH_MAX_LIMIT) {
+          toast.info('会话消息已达上限', {
+            description: '当前会话历史记录较多，建议开启新会话以获得更好的体验。',
+            duration: 5000,
+          });
+        }
+
+        let rawMessages = allMessages;
+        if (rawMessages.length === 0 && isCronSessionKey(targetSessionKey)) {
+          rawMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
+        }
+
+        if (get().currentSessionKey !== targetSessionKey) return;
+        applyLoadedMessages(rawMessages, thinkingLevel);
       } catch (err) {
         console.warn('Failed to load chat history:', err);
-        const fallbackMessages = await loadCronFallbackMessages(currentSessionKey, 200);
+        if (get().currentSessionKey !== targetSessionKey) return;
+        const fallbackMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
+        if (get().currentSessionKey !== targetSessionKey) return;
         if (fallbackMessages.length > 0) {
           applyLoadedMessages(fallbackMessages, null);
-        } else {
+        } else if (get().currentSessionKey === targetSessionKey) {
           set({ messages: [], loading: false });
         }
       }
     })();
 
-    _historyLoadInFlight.set(currentSessionKey, loadPromise);
+    _historyLoadInFlight.set(targetSessionKey, loadPromise);
     try {
       await loadPromise;
     } finally {
@@ -1515,12 +1577,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (loadingSafetyTimer) clearTimeout(loadingSafetyTimer);
       if (!loadingTimedOut) {
         // Only update load time if we actually didn't time out
-        _lastHistoryLoadAtBySession.set(currentSessionKey, Date.now());
+        _lastHistoryLoadAtBySession.set(targetSessionKey, Date.now());
       }
-      
-      const active = _historyLoadInFlight.get(currentSessionKey);
+
+      const active = _historyLoadInFlight.get(targetSessionKey);
       if (active === loadPromise) {
-        _historyLoadInFlight.delete(currentSessionKey);
+        _historyLoadInFlight.delete(targetSessionKey);
       }
     }
   },
@@ -1651,9 +1713,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const idempotencyKey = crypto.randomUUID();
       const hasMedia = attachments && attachments.length > 0;
-      if (hasMedia) {
-        console.log('[sendMessage] Media paths:', attachments!.map(a => a.stagedPath));
-      }
 
       // Cache image attachments BEFORE the IPC call to avoid race condition:
       // history may reload (via Gateway event) before the RPC returns.
@@ -1707,7 +1766,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         result = { success: true, result: rpcResult };
       }
 
-      console.log(`[sendMessage] RPC result: success=${result.success}, runId=${result.result?.runId || 'none'}`);
 
       if (!result.success) {
         clearHistoryPoll();
@@ -2093,4 +2151,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  renameSession: (key: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    set((s) => ({
+      sessionLabels: { ...s.sessionLabels, [key]: trimmed },
+    }));
+  },
+}), {
+  name: 'stoclaw-chat-session-labels',
+  partialize: (state) => ({ sessionLabels: state.sessionLabels }),
 }));

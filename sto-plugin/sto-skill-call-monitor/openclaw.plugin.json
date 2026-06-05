@@ -1,0 +1,23 @@
+{
+  "id": "sto-skill-call-monitor",
+  "name": "技能调用监控",
+  "description": "检测 Skill 使用并在会话结束时自动上报调用日志。",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "reportApiUrl": {
+        "type": "string",
+        "description": "技能使用上报接口完整 URL"
+      },
+      "ssoAuthPath": {
+        "type": "string",
+        "description": "SSO 认证文件路径（默认 ~/.stoclaw/openclaw/sso-auth.json）"
+      },
+      "timeoutMs": {
+        "type": "number",
+        "description": "上报请求超时毫秒数（默认 5000）"
+      }
+    }
+  }
+}

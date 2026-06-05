@@ -4,24 +4,26 @@
  * via gateway:rpc IPC. Session selector, thinking toggle, and refresh
  * are in the toolbar; messages render with markdown + streaming.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowDown, Bot, Cpu, Loader2, Orbit, Sparkles, Workflow } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useChatStore, type RawMessage } from '@/stores/chat';
+import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAgentsStore } from '@/stores/agents';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
-import { ParticleConstellation } from '@/components/common/ParticleConstellation';
 import { ChatMessage } from './ChatMessage';
+import { AssistantTurnMessage } from './AssistantTurnMessage';
+import { useChatDisplay } from './use-chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatToolbar } from './ChatToolbar';
 import { PendingQueuePanel } from './PendingQueuePanel';
-import { extractImages, extractText, extractThinking, extractToolUse } from './message-utils';
+import { ChatPreviewPanel } from './ChatPreviewPanel';
+import { extractText, usePreviewableFiles } from './message-utils';
 import { useMessageQueueStore, createAutoSendWatcher } from '@/stores/message-queue';
 import { invokeApi } from '@/lib/api-client';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import { assistantChatCardBgStreaming } from '@/lib/surfaces';
+import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 
@@ -39,6 +41,7 @@ export function Chat() {
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
+  const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
@@ -47,16 +50,21 @@ export function Chat() {
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
 
   // ── Message Queue ──
-  const queue = useMessageQueueStore((s) => s.queue);
-  const queueRemove = useMessageQueueStore((s) => s.remove);
-  const queueMoveUp = useMessageQueueStore((s) => s.moveUp);
-  const queueMoveDown = useMessageQueueStore((s) => s.moveDown);
+  const queue = useMessageQueueStore((s) => s.getQueue(currentSessionKey));
+  const queueRemove = useCallback((id: string) => useMessageQueueStore.getState().remove(currentSessionKey, id), [currentSessionKey]);
+  const queueMoveUp = useCallback((id: string) => useMessageQueueStore.getState().moveUp(currentSessionKey, id), [currentSessionKey]);
+  const queueMoveDown = useCallback((id: string) => useMessageQueueStore.getState().moveDown(currentSessionKey, id), [currentSessionKey]);
 
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [splitting, setSplitting] = useState(false);
+  const [showPreviewPanel, setShowPreviewPanel] = useState(false);
+  const [activePreviewFilePath, setActivePreviewFilePath] = useState<string | null>(null);
+  const [previewPanelWidth, setPreviewPanelWidth] = useState(480);
+  const [isResizing, setIsResizing] = useState(false);
+  const previewPanelRef = useRef<HTMLDivElement>(null);
   const minLoading = useMinLoading(loading && messages.length > 0);
-  const { contentRef, scrollRef } = useStickToBottomInstant(currentSessionKey);
+  const { contentRef, scrollRef, scrollToBottom, stopScroll } = useStickToBottomInstant(currentSessionKey);
 
   // Load data when gateway is running.
   // When the store already holds messages for this session (i.e. the user
@@ -88,30 +96,54 @@ export function Chat() {
   // Gateway not running block has been completely removed so the UI always renders.
 
   const streamMsg = streamingMessage && typeof streamingMessage === 'object'
-    ? streamingMessage as unknown as { role?: string; content?: unknown; timestamp?: number }
+    ? streamingMessage as unknown as { role?: string; content?: unknown; timestamp?: number; id?: string }
     : null;
   const streamText = streamMsg ? extractText(streamMsg) : (typeof streamingMessage === 'string' ? streamingMessage : '');
-  const hasStreamText = streamText.trim().length > 0;
-  const streamThinking = streamMsg ? extractThinking(streamMsg) : null;
-  const hasStreamThinking = showThinking && !!streamThinking && streamThinking.trim().length > 0;
-  const streamTools = streamMsg ? extractToolUse(streamMsg) : [];
-  const hasStreamTools = streamTools.length > 0;
-  const streamImages = streamMsg ? extractImages(streamMsg) : [];
-  const hasStreamImages = streamImages.length > 0;
-  const hasStreamToolStatus = streamingTools.length > 0;
-  const shouldRenderStreaming = sending && (hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasStreamToolStatus);
-  const hasAnyStreamContent = hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasStreamToolStatus;
+
+  const { staticItems, activeTurn, shouldRenderStreaming, hasAnyStreamContent } = useChatDisplay({
+    messages,
+    sending,
+    pendingFinal,
+    showThinking,
+    streamMsg,
+    streamText,
+    streamingTools,
+  });
+
+  const streamContentKey = useMemo(
+    () =>
+      [
+        messages.length,
+        staticItems.length,
+        activeTurn ? 1 : 0,
+        streamText.length,
+        streamingTools.length,
+        pendingFinal ? 1 : 0,
+        shouldRenderStreaming ? 1 : 0,
+      ].join(':'),
+    [
+      messages.length,
+      staticItems.length,
+      activeTurn,
+      streamText.length,
+      streamingTools.length,
+      pendingFinal,
+      shouldRenderStreaming,
+    ],
+  );
+
+  const { beginSendScroll, scrollToLatest } = useChatScrollFollow({
+    scrollRef,
+    contentRef,
+    scrollToBottom,
+    stopScroll,
+    sending,
+    lastUserMessageAt,
+    hasStreamContent: hasAnyStreamContent || !!activeTurn,
+    streamContentKey,
+  });
 
   const isEmpty = messages.length === 0 && !sending;
-
-  const scrollToLatest = useCallback((behavior: ScrollBehavior = 'smooth') => {
-    const scrollElement = scrollRef.current;
-    if (!scrollElement) return;
-    scrollElement.scrollTo({
-      top: scrollElement.scrollHeight,
-      behavior,
-    });
-  }, [scrollRef]);
 
   const updateJumpToLatestVisibility = useCallback(() => {
     const scrollElement = scrollRef.current;
@@ -147,7 +179,7 @@ export function Chat() {
     attachments?: Parameters<typeof sendMessage>[1],
     targetAgentId?: Parameters<typeof sendMessage>[2],
   ) => {
-    scrollToLatest('auto');
+    beginSendScroll();
 
     // Call question-split API (silent fallback on failure)
     setSplitting(true);
@@ -168,26 +200,93 @@ export function Chat() {
     if (parts && parts.length > 1) {
       sendMessage(parts[0].context, attachments, targetAgentId);
       for (let i = 1; i < parts.length; i++) {
-        useMessageQueueStore.getState().enqueue(parts[i].context, undefined, targetAgentId);
+        useMessageQueueStore.getState().enqueue(currentSessionKey, parts[i].context, undefined, targetAgentId);
       }
     } else {
       sendMessage(text, attachments, targetAgentId);
     }
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        scrollToLatest('smooth');
-      });
-    });
-  }, [scrollToLatest, sendMessage]);
+  }, [beginSendScroll, sendMessage, currentSessionKey]);
 
   const handleQueue = useCallback((
     text: string,
     attachments?: FileAttachment[],
     targetAgentId?: string | null,
   ) => {
-    useMessageQueueStore.getState().enqueue(text, attachments, targetAgentId);
+    const { currentSessionKey } = useChatStore.getState();
+    useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId);
   }, []);
+
+  // ── Resizable panel logic ──
+  // Use a full-screen overlay during drag so mouse events are never lost,
+  // even when moving quickly outside the resizer or the page container.
+  const startResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = previewPanelRef.current?.offsetWidth ?? previewPanelWidth;
+    let rafId: number | null = null;
+    let pendingWidth = startWidth;
+
+    setIsResizing(true);
+    document.body.style.userSelect = 'none';
+
+    // Full-screen overlay captures all mouse events during drag
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:col-resize;';
+    document.body.appendChild(overlay);
+
+    const applyWidth = () => {
+      rafId = null;
+      if (previewPanelRef.current) {
+        previewPanelRef.current.style.width = `${pendingWidth}px`;
+      }
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = startX - moveEvent.clientX;
+      pendingWidth = Math.max(320, Math.min(900, startWidth + delta));
+      if (rafId === null) {
+        rafId = requestAnimationFrame(applyWidth);
+      }
+    };
+
+    const cleanup = () => {
+      overlay.removeEventListener('mousemove', handleMouseMove);
+      overlay.removeEventListener('mouseup', handleMouseUp);
+      overlay.remove();
+      document.body.style.userSelect = '';
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      setPreviewPanelWidth(pendingWidth);
+      setIsResizing(false);
+    };
+
+    const handleMouseUp = () => {
+      cleanup();
+    };
+
+    overlay.addEventListener('mousemove', handleMouseMove);
+    overlay.addEventListener('mouseup', handleMouseUp);
+
+    // Safety: if component unmounts during drag, remove overlay
+    return () => {
+      cleanup();
+    };
+  }, [previewPanelWidth]);
+
+  // Collect previewable files from messages and streaming message
+  const allMessagesForPreview = useMemo(() => {
+    const arr = [...messages] as Array<{ _attachedFiles?: AttachedFileMeta[]; role?: string }>;
+    if (streamMsg) {
+      arr.push(streamMsg as unknown as { _attachedFiles?: AttachedFileMeta[]; role?: string });
+    }
+    return arr;
+  }, [messages, streamMsg]);
+  const previewableFiles = usePreviewableFiles(allMessagesForPreview);
+  const hasPreviewableFiles = previewableFiles.length > 0;
+
+
 
   // Auto-send watcher: sends queued messages one-by-one when AI finishes responding
   useEffect(() => {
@@ -196,18 +295,17 @@ export function Chat() {
   }, [scrollToLatest]);
 
   return (
-    <div className={cn("relative flex flex-col -m-6 transition-colors duration-500")} style={{ height: 'calc(100vh - 2.5rem)' }}>
+    <div
+      className={cn('relative -m-6 flex min-h-0 min-w-0 overflow-x-hidden transition-colors duration-500')}
+      style={{ height: 'calc(100vh - 2.5rem)' }}
+    >
+      {/* Left: Chat area */}
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.10),_transparent_28%),radial-gradient(circle_at_80%_20%,_rgba(191,219,254,0.10),_transparent_24%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,140,0,0.06),_transparent_30%),radial-gradient(circle_at_80%_20%,_rgba(229,230,235,0.35),_transparent_26%)]" />
         <div className="absolute inset-0 neural-grid opacity-20" />
-        <ParticleConstellation
-          className="z-0 opacity-[0.88] dark:opacity-[0.74]"
-          particleCount={54}
-          connectionDistance={136}
-          speed={0.28}
-        />
         <div className="absolute left-8 top-10 h-40 w-40 rounded-full bg-cyan-400/10 blur-[90px]" />
-        <div className="absolute right-8 top-20 h-48 w-48 rounded-full bg-sky-100/10 blur-[110px]" />
+        <div className="absolute right-8 top-20 h-48 w-48 rounded-full bg-[rgba(255,111,0,0.06)] blur-[110px]" />
       </div>
 
       {/* Toolbar */}
@@ -216,50 +314,56 @@ export function Chat() {
       </div>
 
       {/* Messages Area */}
-      <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto px-6 py-4">
+      <div
+        ref={scrollRef}
+        className="relative z-10 flex-1 overflow-y-auto overscroll-y-contain px-6 py-4 [scrollbar-gutter:stable]"
+      >
         <div ref={contentRef} className="max-w-5xl mx-auto space-y-4">
           {isEmpty ? (
             <WelcomeScreen />
           ) : (
             <>
-              {messages.map((msg, idx) => (
-                <ChatMessage
-                  key={msg.id || `msg-${idx}`}
-                  message={msg}
+              {staticItems.map((item) => {
+                const onPreviewFile = (file: AttachedFileMeta) => {
+                  if (file.filePath) {
+                    setActivePreviewFilePath(file.filePath);
+                    setShowPreviewPanel(true);
+                  }
+                };
+                if (item.type === 'assistant-turn') {
+                  return (
+                    <AssistantTurnMessage
+                      key={item.key}
+                      turnMessages={item.messages}
+                      showThinking={showThinking}
+                      onPreviewFile={onPreviewFile}
+                    />
+                  );
+                }
+                return (
+                  <ChatMessage
+                    key={item.key}
+                    message={item.message}
+                    showThinking={showThinking}
+                    onPreviewFile={onPreviewFile}
+                  />
+                );
+              })}
+
+              {activeTurn ? (
+                <AssistantTurnMessage
+                  key="active-turn"
+                  turnMessages={activeTurn.turnMessages}
                   showThinking={showThinking}
+                  activeStream={activeTurn.activeStream}
+                  onPreviewFile={(file) => {
+                    if (file.filePath) {
+                      setActivePreviewFilePath(file.filePath);
+                      setShowPreviewPanel(true);
+                    }
+                  }}
                 />
-              ))}
-
-              {/* Streaming message */}
-              {shouldRenderStreaming && (
-                <ChatMessage
-                  message={(streamMsg
-                    ? {
-                        ...(streamMsg as Record<string, unknown>),
-                        role: (typeof streamMsg.role === 'string' ? streamMsg.role : 'assistant') as RawMessage['role'],
-                        content: streamMsg.content ?? streamText,
-                        timestamp: streamMsg.timestamp ?? streamingTimestamp,
-                      }
-                    : {
-                        role: 'assistant',
-                        content: streamText,
-                        timestamp: streamingTimestamp,
-                      }) as RawMessage}
-                  showThinking={showThinking}
-                  isStreaming
-                  streamingTools={streamingTools}
-                />
-              )}
-
-              {/* Activity indicator: waiting for next AI turn after tool execution */}
-              {sending && pendingFinal && !shouldRenderStreaming && (
-                <ActivityIndicator phase="tool_processing" />
-              )}
-
-              {/* Typing indicator when sending but no stream content yet */}
-              {sending && !pendingFinal && !hasAnyStreamContent && (
-                <TypingIndicator />
-              )}
+              ) : null}
             </>
           )}
         </div>
@@ -294,7 +398,7 @@ export function Chat() {
           <motion.button
             type="button"
             onClick={() => scrollToLatest('smooth')}
-            className="pointer-events-auto inline-flex h-7 items-center gap-1.5 rounded-full border border-primary/15 bg-white/45 px-2.5 text-[11px] font-medium leading-none text-foreground/90 shadow-none backdrop-blur-sm transition-colors hover:bg-white/60 dark:border-white/12 dark:bg-white/[0.08] dark:text-foreground/95 dark:hover:bg-white/[0.14] sm:h-8 sm:px-3 sm:text-xs"
+            className="pointer-events-auto inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-white/45 px-2.5 text-[11px] font-medium leading-none text-foreground/90 shadow-none backdrop-blur-sm transition-colors hover:bg-white/60 dark:border-white/12 dark:bg-white/[0.08] dark:text-foreground/95 dark:hover:bg-white/[0.14] sm:h-8 sm:px-3 sm:text-xs"
             initial={false}
             animate={{
               opacity: showJumpToLatest ? 1 : 0,
@@ -320,7 +424,7 @@ export function Chat() {
             transition={{ duration: 0.18, ease: 'easeOut' }}
             className="shrink-0 px-6"
           >
-            <div className="max-w-5xl mx-auto flex items-center gap-2 rounded-lg border border-primary/15 bg-white/50 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm dark:bg-white/[0.06]">
+            <div className="max-w-5xl mx-auto flex items-center gap-2 rounded-lg border border-border bg-white/50 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm dark:bg-white/[0.06]">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
               <span>{t('splitting')}</span>
             </div>
@@ -353,6 +457,58 @@ export function Chat() {
             <LoadingSpinner size="md" />
           </div>
         </div>
+      )}
+      </div>
+      {/* Resizer */}
+      {hasPreviewableFiles && showPreviewPanel && (
+        <div
+          onMouseDown={startResize}
+          className={cn(
+            'relative z-20 flex h-full shrink-0 cursor-col-resize items-center justify-center transition-colors',
+            isResizing ? 'bg-primary/50 w-[5px]' : 'bg-border/50 w-[5px] hover:bg-primary/40',
+          )}
+          style={{ cursor: isResizing ? 'col-resize' : undefined }}
+        >
+          <div className={cn('h-8 w-[2px] rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
+        </div>
+      )}
+
+      {/* Right: Preview Panel */}
+      <AnimatePresence>
+        {hasPreviewableFiles && showPreviewPanel && (
+          <motion.div
+            ref={previewPanelRef}
+            layout={false}
+            initial={{ opacity: 0, x: 40 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 40 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            // className="shrink-0 overflow-hidden"
+            style={{ width: previewPanelWidth }}
+            className="flex h-full min-h-0 shrink-0 flex-col overflow-hidden [contain:inline-size]"
+          >
+            <ChatPreviewPanel
+              files={previewableFiles}
+              activeFilePath={activePreviewFilePath}
+              onSelectFile={setActivePreviewFilePath}
+              onClose={() => setShowPreviewPanel(false)}
+              className="h-full w-full"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating toggle button when panel is hidden but files exist */}
+      {hasPreviewableFiles && !showPreviewPanel && (
+        <button
+          onClick={() => setShowPreviewPanel(true)}
+          className="absolute right-4 top-4 z-20 inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-white/60 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white/80 dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
+        >
+          <span>预览产物</span>
+          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] text-primary">
+            {previewableFiles.length}
+          </span>
+        </button>
       )}
     </div>
   );
@@ -485,126 +641,6 @@ function WelcomeScreen() {
             </div>
           ))}
         </motion.div>
-      </div>
-    </div>
-  );
-}
-
-// ── Typing Indicator ────────────────────────────────────────────
-
-function TypingIndicator() {
-  const { t } = useTranslation('chat');
-
-  return (
-    <AssistantActivityCard
-      badge={t('streaming.thinkingBadge')}
-      title={t('streaming.thinkingTitle')}
-      description={t('streaming.thinkingDescription')}
-      tone="thinking"
-    />
-  );
-}
-
-// ── Activity Indicator (shown between tool cycles) ─────────────
-
-function ActivityIndicator({ phase }: { phase: 'tool_processing' }) {
-  void phase;
-  const { t } = useTranslation('chat');
-
-  return (
-    <AssistantActivityCard
-      badge={t('streaming.processingBadge')}
-      title={t('streaming.processingTitle')}
-      description={t('streaming.processingDescription')}
-      tone="processing"
-    />
-  );
-}
-
-function AssistantActivityCard({
-  badge,
-  title,
-  description,
-  tone,
-}: {
-  badge: string;
-  title: string;
-  description: string;
-  tone: 'thinking' | 'processing';
-}) {
-  const isProcessing = tone === 'processing';
-
-  return (
-    <div className="flex gap-3">
-      <div className="relative mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/15 bg-white/[0.88] text-foreground shadow-sm dark:bg-white/[0.12]">
-        <motion.span
-          className="absolute inset-0 rounded-full border border-primary/25"
-          animate={{ scale: [1, 1.18], opacity: [0.3, 0] }}
-          transition={{ duration: 2, repeat: Infinity, ease: 'easeOut' }}
-        />
-        {isProcessing ? (
-          <Loader2 className="h-4 w-4 animate-spin text-primary" />
-        ) : (
-          <Sparkles className="h-4 w-4 text-primary" />
-        )}
-      </div>
-
-      <div
-        className={cn(
-          'relative min-w-[280px] overflow-hidden rounded-2xl border px-4 py-3.5 text-foreground shadow-[0_10px_30px_rgba(15,23,42,0.08)]',
-          assistantChatCardBgStreaming,
-          isProcessing ? 'border-primary/15' : 'border-primary/20',
-        )}
-      >
-        <motion.div
-          className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-primary/10 to-transparent"
-          initial={{ x: '-120%' }}
-          animate={{ x: '120%' }}
-          transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-        />
-
-        <div className="relative flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.22em] text-primary/80">
-          <motion.span
-            className="h-2.5 w-8 rounded-full bg-primary/25"
-            animate={{
-              opacity: [0.45, 1, 0.55],
-              scaleX: [0.94, 1.04, 0.97],
-            }}
-            transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-          />
-          <span>{badge}</span>
-        </div>
-
-        <div className="relative mt-2">
-          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-            {isProcessing ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-            ) : (
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-            )}
-            <span>{title}</span>
-          </div>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            {description}
-          </p>
-
-          <div className="mt-3 flex gap-2">
-            {[72, 56, 44].map((width, index) => (
-              <motion.span
-                key={`${tone}-${width}`}
-                className="h-1.5 rounded-full bg-primary/20"
-                style={{ width }}
-                animate={{ opacity: [0.3, 0.85, 0.35] }}
-                transition={{
-                  duration: 1.8,
-                  repeat: Infinity,
-                  ease: 'easeInOut',
-                  delay: index * 0.16,
-                }}
-              />
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );

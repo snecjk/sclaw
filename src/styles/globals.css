@@ -4,68 +4,117 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 218 42% 13%;
-    --card: 210 36% 99%;
-    --card-foreground: 218 42% 13%;
-    --popover: 210 36% 99%;
-    --popover-foreground: 218 42% 13%;
-    --primary: 196 90% 58%;
-    --primary-foreground: 214 52% 12%;
-    --secondary: 205 55% 96%;
-    --secondary-foreground: 218 42% 13%;
-    --muted: 205 44% 95%;
-    --muted-foreground: 214 16% 43%;
-    --accent: 205 76% 72%;
-    --accent-foreground: 210 40% 98%;
+    /* Neutrals + Brand / Link per docs/sto-design.md */
+    --background: 220 14% 97%;
+    --foreground: 220 26% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 26% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 26% 14%;
+    /* Brand-6 #FF6F00 */
+    --primary: 26 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 26% 14%;
+    /* Grey-2 / Grey-8 */
+    --muted: 220 13% 96%;
+    --muted-foreground: 215 14% 45%;
+    /* Brand-1 tint for soft hovers */
+    --accent: 32 100% 95%;
+    --accent-foreground: 26 100% 36%;
     --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 204 32% 87%;
-    --input: 204 32% 87%;
-    --ring: 196 90% 58%;
+    --destructive-foreground: 0 0% 100%;
+    /* Grey-4 #E5E6EB */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 26 100% 50%;
     --radius: 0.5rem;
 
-    --glass-bg: 210 45% 98%;
+    --glass-bg: 220 14% 98%;
     --glass-opacity: 0.72;
     --glass-blur: 16px;
-    --glass-border: 196 92% 76% / 0.28;
-    --glass-shadow: 0 18px 48px rgba(20, 48, 76, 0.12);
+    --glass-border: 220 12% 78% / 0.4;
+    --glass-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
     --glass-highlight: 0 0% 100% / 0.82;
-    --canvas-from: #f4fbff;
-    --canvas-via: #eaf5ff;
-    --canvas-to: #f3f9ff;
+    --canvas-from: #f7f8fa;
+    --canvas-via: #f5f6f7;
+    --canvas-to: #fafbfc;
+
+    /* Link / Info Blue-6 + Blue-1 (sto-design §二) */
+    --link: 231 99% 64%;
+    --link-foreground: 0 0% 100%;
+    --link-muted: 228 100% 97%;
+
+    /* STO Claw 壳层（归档设计稿对齐） */
+    --sto-page-bg: #f7f8fa;
+    --sto-sidebar-bg: #f3f4f6;
+    --sto-sidebar-border: #e8eaef;
+    --sto-accent: #ff8c00;
+    --sto-accent-soft: #fff3e0;
+    /* 侧栏主导航选中态：与 docs/sto-design.md Brand-6 一致 */
+    --sto-brand-6: #ff6f00;
+    --sto-sidebar-w-expanded: 248px;
+    --sto-sidebar-w-collapsed: 72px;
+    /* 折叠侧栏主导航项（设计标注：59×28、padding 5px 10px、未选中图标 #7A8494） */
+    --sto-sidebar-collapsed-nav-item-w: 59px;
+    --sto-sidebar-collapsed-nav-item-h: 28px;
+    --sto-sidebar-collapsed-nav-py: 5px;
+    --sto-sidebar-collapsed-nav-px: 10px;
+    --sto-sidebar-collapsed-nav-icon-idle: #7a8494;
+    --sto-main-inner-max: 1100px;
+    --sto-content-pad-x: 20px;
   }
 
   .dark {
-    --background: 207 53% 8%;
-    --foreground: 205 36% 96%;
-    --card: 207 42% 11%;
-    --card-foreground: 205 36% 96%;
-    --popover: 207 42% 11%;
-    --popover-foreground: 205 36% 96%;
-    --primary: 194 94% 69%;
-    --primary-foreground: 209 58% 9%;
-    --secondary: 208 34% 16%;
-    --secondary-foreground: 205 36% 96%;
-    --muted: 208 30% 15%;
-    --muted-foreground: 206 18% 72%;
-    --accent: 205 72% 76%;
-    --accent-foreground: 210 40% 98%;
+    --background: 220 24% 9%;
+    --foreground: 220 14% 96%;
+    --card: 220 22% 11%;
+    --card-foreground: 220 14% 96%;
+    --popover: 220 22% 11%;
+    --popover-foreground: 220 14% 96%;
+    --primary: 26 100% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 18% 16%;
+    --secondary-foreground: 220 14% 96%;
+    --muted: 220 16% 15%;
+    --muted-foreground: 215 14% 68%;
+    --accent: 32 45% 16%;
+    --accent-foreground: 32 100% 88%;
     --destructive: 0 72% 56%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 204 28% 20%;
-    --input: 204 28% 18%;
-    --ring: 194 94% 69%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 14% 22%;
+    --input: 220 14% 20%;
+    --ring: 26 100% 55%;
 
-    --glass-bg: 206 36% 13%;
+    --glass-bg: 220 18% 12%;
     --glass-opacity: 0.52;
     --glass-blur: 18px;
-    --glass-border: 194 92% 74% / 0.14;
-    --glass-shadow: 0 24px 80px rgba(3, 12, 24, 0.54);
+    --glass-border: 220 14% 30% / 0.45;
+    --glass-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
     --glass-highlight: 0 0% 100% / 0.08;
-    --canvas-from: #07111c;
-    --canvas-via: #0b1a29;
-    --canvas-to: #102538;
+    --canvas-from: #0a0f14;
+    --canvas-via: #0d1218;
+    --canvas-to: #121a22;
+
+    --link: 231 92% 72%;
+    --link-foreground: 0 0% 100%;
+    --link-muted: 231 35% 18%;
+
+    --sto-page-bg: hsl(207 53% 9%);
+    --sto-sidebar-bg: hsl(208 40% 11%);
+    --sto-sidebar-border: hsl(204 28% 18%);
+    --sto-accent: #ff9f2e;
+    --sto-accent-soft: hsl(32 45% 14%);
+    --sto-brand-6: #ff6f00;
+    --sto-sidebar-w-expanded: 248px;
+    --sto-sidebar-w-collapsed: 72px;
+    --sto-sidebar-collapsed-nav-item-w: 59px;
+    --sto-sidebar-collapsed-nav-item-h: 28px;
+    --sto-sidebar-collapsed-nav-py: 5px;
+    --sto-sidebar-collapsed-nav-px: 10px;
+    --sto-sidebar-collapsed-nav-icon-idle: #9aa5b8;
+    --sto-main-inner-max: 1100px;
+    --sto-content-pad-x: 20px;
   }
 }
 
@@ -80,8 +129,8 @@
     min-height: 100vh;
     background-color: hsl(var(--background));
     background-image:
-      radial-gradient(circle at top, rgba(112, 212, 255, 0.14), transparent 32%),
-      radial-gradient(circle at 85% 18%, rgba(189, 227, 255, 0.11), transparent 24%),
+      radial-gradient(circle at top, rgba(255, 140, 0, 0.05), transparent 34%),
+      radial-gradient(circle at 85% 18%, rgba(229, 230, 235, 0.45), transparent 26%),
       linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 36%);
     background-attachment: fixed;
   }
@@ -106,6 +155,15 @@
     -webkit-backdrop-filter: blur(var(--glass-blur));
     border-color: hsl(var(--glass-border));
     box-shadow: var(--glass-shadow), inset 0 1px 0 0 hsl(var(--glass-highlight));
+  }
+
+  /** 顶栏等全宽壳层：与 .glass 同磨砂底，但不加外阴影与内高光边（避免与主区底色接茬出现灰/白条） */
+  .glass-chrome {
+    background: hsl(var(--glass-bg) / var(--glass-opacity));
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border-color: hsl(var(--glass-border));
+    box-shadow: none;
   }
   .glass-panel {
     background:
@@ -186,6 +244,11 @@
   .signal-card:hover::after {
     transform: translateX(130%);
   }
+
+  .sto-tool-btn {
+    @apply inline-flex items-center gap-1.5 rounded-lg border border-[var(--sto-sidebar-border)] bg-white px-2.5 py-2 text-[13px] font-medium text-muted-foreground transition-colors;
+    @apply hover:border-[rgba(255,140,0,0.45)] hover:text-[var(--sto-accent)] dark:border-border dark:bg-transparent;
+  }
 }
 
 /* Custom scrollbar */
@@ -229,6 +292,7 @@
 .prose {
   font-size: 0.875rem;
   line-height: 1.625;
+  overflow-wrap: anywhere;
 }
 
 .prose :where(h1, h2, h3, h4, h5, h6) {
@@ -302,6 +366,33 @@
 
   30% {
     transform: translateY(-4px);
+  }
+}
+
+/* Home hero mascot idle (钉钉录屏 / 归档 styles.css hero-mascot-idle) */
+@keyframes hero-mascot-idle {
+
+  0%,
+  100% {
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+
+  35% {
+    transform: translateY(-8px) scale(1.03) rotate(-1.4deg);
+  }
+
+  70% {
+    transform: translateY(-4px) scale(1.015) rotate(1.1deg);
+  }
+}
+
+.hero-mascot-idle {
+  animation: hero-mascot-idle 4.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-mascot-idle {
+    animation: none;
   }
 }
 

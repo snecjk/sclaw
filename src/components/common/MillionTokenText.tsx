@@ -16,7 +16,7 @@ export function MillionTokenText({ value, className }: MillionTokenTextProps) {
     display.unit === '百万Token'
       ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-200/80 font-semibold'
       : display.unit === '千Token'
-        ? 'bg-sky-100 text-sky-700 ring-1 ring-sky-200/80'
+        ? 'bg-link-muted text-link ring-1 ring-[hsl(var(--link)/0.22)]'
         : 'bg-muted/70 text-muted-foreground ring-1 ring-border'
 
   return (

@@ -18,6 +18,9 @@ import {
   Copy,
   XCircle,
   ChevronDown,
+  AlertTriangle,
+  RefreshCw,
+  Star,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,16 +50,19 @@ import {
   hasConfiguredCredentials,
   type ProviderListItem,
 } from '@/lib/provider-accounts';
+import { getWorkspaceDefaultModelId } from '@/lib/chat-model-options';
+import { syncWorkspaceDefaultModelToChat } from '@/lib/sync-workspace-default-to-chat';
 import { cn } from '@/lib/utils';
 import { glassNestedCard } from '@/lib/surfaces';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { invokeIpc } from '@/lib/api-client';
 import { useSettingsStore } from '@/stores/settings';
+import { useAuthStore } from '@/stores/auth';
 import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
 
-const inputClasses = 'h-[44px] rounded-md font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-glass border-glass-border focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40';
+const inputClasses = 'h-[44px] rounded-md font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-glass border-glass-border focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-ring shadow-sm transition-all text-foreground placeholder:text-foreground/40';
 const labelClasses = 'text-[14px] text-foreground/80 font-bold';
 type ArkMode = 'apikey' | 'codeplan';
 
@@ -162,6 +168,7 @@ function getAuthModeLabel(
 export function ProvidersSettings() {
   const { t } = useTranslation('settings');
   const devModeUnlocked = useSettingsStore((state) => state.devModeUnlocked);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const {
     statuses,
     accounts,
@@ -176,8 +183,22 @@ export function ProvidersSettings() {
     validateAccountApiKey,
   } = useProviderStore();
 
+  const hasStoProvider = accounts.some((a) => a.vendorId === 'sto');
+
+  const handleRetryStoSync = async () => {
+    try {
+      await hostApiFetch('/api/sto-model-sync', { method: 'POST' });
+      await refreshProviderSnapshot();
+      toast.success('STO 模型同步成功');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error('同步失败', { description: message });
+    }
+  };
+
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingProvider, setEditingProvider] = useState<string | null>(null);
+  const [settingDefaultKey, setSettingDefaultKey] = useState<string | null>(null);
   const vendorMap = new Map(vendors.map((vendor) => [vendor.id, vendor]));
   const existingVendorIds = new Set(accounts.map((account) => account.vendorId));
   const displayProviders = useMemo(
@@ -244,11 +265,59 @@ export function ProvidersSettings() {
   };
 
   const handleSetDefault = async (providerId: string) => {
+    setSettingDefaultKey(providerId);
+    const previousWorkspaceModel = getWorkspaceDefaultModelId(accounts, defaultAccountId);
     try {
       await setDefaultAccount(providerId);
+      await refreshProviderSnapshot();
+      const nextAccount = useProviderStore.getState().accounts.find((a) => a.id === providerId);
+      const nextModel = nextAccount?.model?.trim();
+      if (nextModel) {
+        await syncWorkspaceDefaultModelToChat({
+          modelId: nextModel,
+          accountId: providerId,
+          previousWorkspaceModel,
+        });
+      }
       toast.success(t('aiProviders.toast.defaultUpdated'));
     } catch (error) {
       toast.error(`${t('aiProviders.toast.failedDefault')}: ${error}`);
+    } finally {
+      setSettingDefaultKey(null);
+    }
+  };
+
+  const handleSetStoDefaultModel = async (accountId: string, modelId: string) => {
+    const rowKey = `sto-${accountId}-${modelId}`;
+    setSettingDefaultKey(rowKey);
+    try {
+      const account = accounts.find((a) => a.id === accountId);
+      const previousWorkspaceModel =
+        getWorkspaceDefaultModelId(accounts, defaultAccountId) || account?.model;
+      const needsDefaultAccount = defaultAccountId !== accountId;
+      const needsModelUpdate = account?.model !== modelId;
+      if (!needsDefaultAccount && !needsModelUpdate) {
+        return;
+      }
+
+      if (needsDefaultAccount) {
+        await setDefaultAccount(accountId);
+      }
+      if (needsModelUpdate) {
+        await updateAccount(accountId, { model: modelId });
+      } else {
+        await refreshProviderSnapshot();
+      }
+      await syncWorkspaceDefaultModelToChat({
+        modelId,
+        accountId,
+        previousWorkspaceModel,
+      });
+      toast.success(t('aiProviders.toast.defaultModelUpdated'));
+    } catch (error) {
+      toast.error(`${t('aiProviders.toast.failedDefault')}: ${error}`);
+    } finally {
+      setSettingDefaultKey(null);
     }
   };
 
@@ -264,12 +333,38 @@ export function ProvidersSettings() {
         </Button>
       </div>
 
+      {/* STO 模型同步失败提示 */}
+      {!loading && isAuthenticated && !hasStoProvider && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                获取 STO 模型失败
+              </p>
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                远程模型列表为空，可能是网络波动或服务端异常。您可以稍后自动重试，或点击下方按钮手动同步。
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 h-8 border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-900/50"
+                onClick={handleRetryStoSync}
+              >
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                重新同步 STO 模型
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {loading ? (
-        <div className="flex items-center justify-center rounded-md border border-dashed border-primary/18 bg-white/50 py-12 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">
+        <div className="flex items-center justify-center rounded-md border border-dashed border-border bg-white/50 py-12 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>
       ) : displayProviders.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-primary/18 bg-white/50 py-16 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">
+        <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-border bg-white/50 py-16 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">
           <Key className="mb-4 h-12 w-12 opacity-50" />
           <h3 className="mb-1 text-[15px] font-medium text-foreground">{t('aiProviders.empty.title')}</h3>
           <p className="mb-6 max-w-sm text-center text-[13px]">
@@ -293,7 +388,9 @@ export function ProvidersSettings() {
                   modelId={m}
                   account={item.account}
                   vendor={item.vendor}
-                  isDefault={item.account.id === defaultAccountId}
+                  isDefaultAccount={item.account.id === defaultAccountId}
+                  isSaving={settingDefaultKey === `sto-${item.account.id}-${m}`}
+                  onSetDefault={() => handleSetStoDefaultModel(item.account.id, m)}
                 />
               ));
             }
@@ -308,6 +405,7 @@ export function ProvidersSettings() {
                 onCancelEdit={() => setEditingProvider(null)}
                 onDelete={() => handleDeleteProvider(item.account.id)}
                 onSetDefault={() => handleSetDefault(item.account.id)}
+                isSavingDefault={settingDefaultKey === item.account.id}
                 onSaveEdits={async (payload) => {
                   const updates: Partial<ProviderAccount> = {};
                   if (payload.updates) {
@@ -354,21 +452,25 @@ function StoModelRow({
   modelId,
   account,
   vendor,
-  isDefault,
+  isDefaultAccount,
+  isSaving,
+  onSetDefault,
 }: {
   modelId: string;
   account: ProviderAccount;
   vendor?: ProviderVendorInfo;
-  isDefault: boolean;
+  isDefaultAccount: boolean;
+  isSaving: boolean;
+  onSetDefault: () => void;
 }) {
   const { t } = useTranslation('settings');
-  const isCurrentModel = isDefault && modelId === account.model;
+  const isCurrentModel = isDefaultAccount && modelId === account.model;
   const subtitle = getStoModelCatalogSubtitle(modelId, t);
 
   return (
     <div
       className={cn(
-        'group relative flex flex-col overflow-hidden rounded-md border border-primary/12 p-4 transition-all hover:border-primary/18 hover:shadow-md',
+        'group relative flex flex-col overflow-hidden rounded-md border border-border p-4 transition-all hover:border-border hover:shadow-md',
         !isCurrentModel && glassNestedCard,
         !isCurrentModel && 'hover:bg-white/80 dark:hover:bg-[hsl(var(--glass-bg)/0.2)]',
         isCurrentModel && 'border-primary/20 bg-primary/[0.06]',
@@ -376,7 +478,7 @@ function StoModelRow({
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between md:gap-6">
         <div className="flex min-w-0 flex-1 items-start gap-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/12 bg-primary/[0.06] text-foreground shadow-sm transition-transform group-hover:scale-[1.02]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-primary/[0.06] text-foreground shadow-sm transition-transform group-hover:scale-[1.02]">
             {getProviderIconUrl(account.vendorId) ? (
               <img
                 src={getProviderIconUrl(account.vendorId)}
@@ -390,9 +492,14 @@ function StoModelRow({
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-[15px]">{modelId}</span>
-              <span className="inline-flex items-center rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-700 shadow-sm dark:border-sky-400/25 dark:bg-sky-400/14 dark:text-sky-200">
+              <span className="inline-flex items-center rounded-md border border-[hsl(var(--link)/0.35)] bg-link-muted px-2 py-0.5 text-[10px] font-semibold text-link shadow-sm dark:border-[hsl(var(--link)/0.25)] dark:bg-[hsl(var(--link-muted))] dark:text-[hsl(var(--link))]">
                 {t('aiProviders.card.builtin', '内置')}
               </span>
+              {isCurrentModel && (
+                <span className="inline-flex items-center rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                  {t('aiProviders.card.defaultModel')}
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
               <span>{vendor?.name || account.label}</span>
@@ -419,7 +526,24 @@ function StoModelRow({
               {modelId}
             </div>
           </div>
-          <span aria-hidden />
+          <div className="flex items-center justify-end md:justify-self-end">
+            {isCurrentModel ? null : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-md px-3 text-[12px] font-medium shadow-none"
+                onClick={onSetDefault}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Star className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                {t('aiProviders.card.setDefaultModel')}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -435,6 +559,7 @@ interface ProviderCardProps {
   onCancelEdit: () => void;
   onDelete: () => void;
   onSetDefault: () => void;
+  isSavingDefault: boolean;
   onSaveEdits: (payload: { newApiKey?: string; updates?: Partial<ProviderConfig> }) => Promise<void>;
   onValidateKey: (
     key: string,
@@ -453,9 +578,8 @@ function ProviderCard({
   onEdit,
   onCancelEdit,
   onDelete,
-  // NOTE: 暂保留该回调以兼容父组件传参和后续恢复「设为默认」按钮。
-  // 当前卡片 UI 未使用它，前缀下划线避免 TS 未使用参数报错。
-  onSetDefault: _onSetDefault,
+  onSetDefault,
+  isSavingDefault,
   onSaveEdits,
   onValidateKey,
   devModeUnlocked,
@@ -604,7 +728,7 @@ function ProviderCard({
   };
 
   const currentInputClasses = isDefault
-    ? 'h-[40px] rounded-md font-mono text-[13px] bg-white/60 dark:bg-white/15 border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-blue-500/50 shadow-sm'
+    ? 'h-[40px] rounded-md font-mono text-[13px] bg-white/60 dark:bg-white/15 border-black/10 dark:border-white/10 focus-visible:ring-2 focus-visible:ring-ring/40 shadow-sm'
     : inputClasses;
 
   const currentLabelClasses = isDefault ? "text-[13px] text-muted-foreground" : labelClasses;
@@ -615,7 +739,7 @@ function ProviderCard({
   return (
     <div
       className={cn(
-        'group relative flex flex-col overflow-hidden rounded-md border border-primary/12 p-4 transition-all hover:border-primary/18 hover:shadow-md',
+        'group relative flex flex-col overflow-hidden rounded-md border border-border p-4 transition-all hover:border-border hover:shadow-md',
         !isDefault && glassNestedCard,
         !isDefault && 'hover:bg-white/80 dark:hover:bg-[hsl(var(--glass-bg)/0.2)]',
         isDefault && 'border-primary/20 bg-primary/[0.06]',
@@ -623,7 +747,7 @@ function ProviderCard({
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between md:gap-6">
         <div className="flex min-w-0 flex-1 items-start gap-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/12 bg-primary/[0.06] text-foreground shadow-sm transition-transform group-hover:scale-[1.02]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-primary/[0.06] text-foreground shadow-sm transition-transform group-hover:scale-[1.02]">
             {getProviderIconUrl(account.vendorId) ? (
               <img src={getProviderIconUrl(account.vendorId)} alt={typeInfo?.name || account.vendorId} className={cn('h-5 w-5', shouldInvertInDark(account.vendorId) && 'dark:invert')} />
             ) : (
@@ -634,13 +758,18 @@ function ProviderCard({
             <div className="flex flex-wrap items-center gap-2 min-w-0">
               <span className="font-semibold text-[15px]">{account.label}</span>
               {isStoManagedProvider && (
-                <span className="inline-flex shrink-0 items-center rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-700 shadow-sm dark:border-sky-400/25 dark:bg-sky-400/14 dark:text-sky-200">
+                <span className="inline-flex shrink-0 items-center rounded-md border border-[hsl(var(--link)/0.35)] bg-link-muted px-2 py-0.5 text-[10px] font-semibold text-link shadow-sm dark:border-[hsl(var(--link)/0.25)] dark:bg-[hsl(var(--link-muted))] dark:text-[hsl(var(--link))]">
                   {t('aiProviders.card.builtin', '内置')}
                 </span>
               )}
               {account.vendorId === 'custom' && (
                 <span className="inline-flex shrink-0 items-center rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 shadow-sm dark:border-amber-400/25 dark:bg-amber-400/14 dark:text-amber-200">
                   {t('aiProviders.card.custom', '自定义')}
+                </span>
+              )}
+              {isDefault && (
+                <span className="inline-flex shrink-0 items-center rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                  {t('aiProviders.card.default')}
                 </span>
               )}
             </div>
@@ -700,28 +829,45 @@ function ProviderCard({
               </span>
             )}
             {!isEditing && (
-              <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                {!isStoManagedProvider && (
+              <div className="flex shrink-0 items-center gap-1">
+                {!isDefault && (
                   <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 rounded-md text-muted-foreground shadow-sm hover:bg-card hover:text-foreground"
-                    onClick={onEdit}
-                    title={t('aiProviders.card.editKey')}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-md px-3 text-[12px] font-medium shadow-none opacity-100 md:opacity-0 md:transition-opacity md:group-hover:opacity-100"
+                    onClick={onSetDefault}
+                    disabled={isSavingDefault}
+                    title={t('aiProviders.card.setDefault')}
                   >
-                    <Edit className="h-4 w-4" />
+                    {isSavingDefault ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Star className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {t('aiProviders.card.setDefault')}
                   </Button>
                 )}
                 {!isStoManagedProvider && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 rounded-md text-muted-foreground shadow-sm hover:bg-card hover:text-destructive"
-                    onClick={onDelete}
-                    title={t('aiProviders.card.delete')}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-md text-muted-foreground shadow-sm hover:bg-card hover:text-foreground"
+                      onClick={onEdit}
+                      title={t('aiProviders.card.editKey')}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-md text-muted-foreground shadow-sm hover:bg-card hover:text-destructive"
+                      onClick={onDelete}
+                      title={t('aiProviders.card.delete')}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 )}
               </div>
             )}
@@ -737,7 +883,7 @@ function ProviderCard({
                 href={effectiveDocsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[12px] text-blue-500 hover:text-blue-600 font-medium inline-flex items-center gap-1"
+                className="text-[12px] text-link hover:opacity-90 font-medium inline-flex items-center gap-1"
               >
                 {t('aiProviders.dialog.customDoc')}
                 <ExternalLink className="h-3 w-3" />
@@ -778,7 +924,7 @@ function ProviderCard({
                         href={typeInfo.codePlanDocsUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[12px] text-blue-500 hover:text-blue-600 font-medium inline-flex items-center gap-1"
+                        className="text-[12px] text-link hover:opacity-90 font-medium inline-flex items-center gap-1"
                       >
                         {t('aiProviders.dialog.codePlanDoc')}
                         <ExternalLink className="h-3 w-3" />
@@ -876,8 +1022,8 @@ function ProviderCard({
                     onChange={(e) => setFallbackModelsText(e.target.value)}
                     placeholder={t('aiProviders.dialog.fallbackModelIdsPlaceholder')}
                     className={isDefault
-                      ? "min-h-24 w-full rounded-md border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/15 px-3 py-2 text-[13px] font-mono outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shadow-sm"
-                      : "min-h-24 w-full rounded-md border border-black/10 dark:border-white/10 bg-[hsl(var(--glass-bg)/0.5)] px-3 py-2 text-[13px] font-mono outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40"}
+                      ? "min-h-24 w-full rounded-md border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/15 px-3 py-2 text-[13px] font-mono outline-none focus-visible:ring-2 focus-visible:ring-ring/40 shadow-sm"
+                      : "min-h-24 w-full rounded-md border border-black/10 dark:border-white/10 bg-[hsl(var(--glass-bg)/0.5)] px-3 py-2 text-[13px] font-mono outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-ring shadow-sm transition-all text-foreground placeholder:text-foreground/40"}
                   />
                   <p className="text-[12px] text-muted-foreground">
                     {t('aiProviders.dialog.fallbackModelIdsHelp')}
@@ -895,9 +1041,9 @@ function ProviderCard({
                             type="checkbox"
                             checked={fallbackProviderIds.includes(candidate.account.id)}
                             onChange={() => toggleFallbackProvider(candidate.account.id)}
-                            className="rounded border-black/20 dark:border-white/20 text-blue-500 focus:ring-blue-500/50"
+                            className="rounded border-black/20 dark:border-white/20 text-link focus:ring-ring/40"
                           />
-                          <span className="font-medium group-hover/label:text-blue-500 transition-colors">{candidate.account.label}</span>
+                          <span className="font-medium group-hover/label:text-link transition-colors">{candidate.account.label}</span>
                           <span className="text-[12px] text-muted-foreground">
                             {candidate.account.model || candidate.vendor?.name || candidate.account.vendorId}
                           </span>
@@ -932,7 +1078,7 @@ function ProviderCard({
                   href={typeInfo.apiKeyUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[13px] text-blue-500 hover:text-blue-600 hover:underline flex items-center gap-1"
+                  className="text-[13px] text-link hover:opacity-90 hover:underline flex items-center gap-1"
                   tabIndex={-1}
                 >
                   {t('aiProviders.oauth.getApiKey')} <ExternalLink className="h-3 w-3" />
@@ -1401,7 +1547,7 @@ function AddProviderDialog({
                     setShowAdvancedConfig(false);
                     setArkMode('apikey');
                   }}
-                  className="text-[13px] text-blue-500 hover:text-blue-600 font-medium"
+                  className="text-[13px] text-link hover:opacity-90 font-medium"
                 >
                     {t('aiProviders.dialog.change')}
                   </button>
@@ -1412,7 +1558,7 @@ function AddProviderDialog({
                         href={effectiveDocsUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[13px] text-blue-500 hover:text-blue-600 font-medium inline-flex items-center gap-1"
+                        className="text-[13px] text-link hover:opacity-90 font-medium inline-flex items-center gap-1"
                       >
                         {t('aiProviders.dialog.customDoc')}
                         <ExternalLink className="h-3 w-3" />
@@ -1468,7 +1614,7 @@ function AddProviderDialog({
                           href={typeInfo.apiKeyUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[13px] text-blue-500 hover:text-blue-600 font-medium flex items-center gap-1"
+                          className="text-[13px] text-link hover:opacity-90 font-medium flex items-center gap-1"
                           tabIndex={-1}
                         >
                           {t('aiProviders.oauth.getApiKey')} <ExternalLink className="h-3 w-3" />
@@ -1541,7 +1687,7 @@ function AddProviderDialog({
                           href={typeInfo.codePlanDocsUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[13px] text-blue-500 hover:text-blue-600 font-medium inline-flex items-center gap-1"
+                          className="text-[13px] text-link hover:opacity-90 font-medium inline-flex items-center gap-1"
                           tabIndex={-1}
                         >
                           {t('aiProviders.dialog.codePlanDoc')}
@@ -1639,8 +1785,8 @@ function AddProviderDialog({
                 {/* Device OAuth Trigger — only shown when in OAuth mode */}
                 {useOAuthFlow && (
                   <div className="space-y-4 pt-2">
-                    <div className="rounded-md border border-blue-500/20 bg-blue-500/10 p-5 text-center">
-                      <p className="mb-4 block text-[13px] font-medium text-blue-600 dark:text-blue-400">
+                    <div className="rounded-md border border-[hsl(var(--link)/0.22)] bg-link-muted p-5 text-center">
+                      <p className="mb-4 block text-[13px] font-medium text-link dark:text-[hsl(var(--link))]">
                         {t('aiProviders.oauth.loginPrompt')}
                       </p>
                       <Button
@@ -1660,7 +1806,7 @@ function AddProviderDialog({
                     {oauthFlowing && (
                       <div className="relative mt-4 overflow-hidden rounded-md border border-glass-border bg-[hsl(var(--glass-bg)/0.5)] p-5 shadow-sm backdrop-blur-sm">
                         {/* Background pulse effect */}
-                        <div className="absolute inset-0 bg-blue-500/5 animate-pulse" />
+                        <div className="absolute inset-0 bg-[hsl(var(--link)/0.06)] animate-pulse" />
 
                         <div className="relative z-10 flex flex-col items-center justify-center text-center space-y-5">
                           {oauthError ? (
@@ -1674,7 +1820,7 @@ function AddProviderDialog({
                             </div>
                           ) : !oauthData ? (
                             <div className="space-y-4 py-6">
-                              <Loader2 className="h-10 w-10 animate-spin text-blue-500 mx-auto" />
+                              <Loader2 className="h-10 w-10 animate-spin text-link mx-auto" />
                               <p className="text-[13px] font-medium text-muted-foreground animate-pulse">{t('aiProviders.oauth.requestingCode')}</p>
                             </div>
                           ) : oauthData.mode === 'manual' ? (
@@ -1752,7 +1898,7 @@ function AddProviderDialog({
                               </Button>
 
                               <div className="flex items-center justify-center gap-2 text-[13px] font-medium text-muted-foreground pt-2">
-                                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                                <Loader2 className="h-4 w-4 animate-spin text-link" />
                                 <span>{t('aiProviders.oauth.waitingApproval')}</span>
                               </div>
 

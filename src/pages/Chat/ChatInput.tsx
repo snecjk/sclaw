@@ -39,6 +39,12 @@ interface ChatInputProps {
   disabled?: boolean;
   sending?: boolean;
   isEmpty?: boolean;
+  /** Full-width embed (e.g. home agent hub): no page gutters, hide gateway/quota footer row. */
+  variant?: 'default' | 'embedded';
+  /** One-time seed into the textarea (e.g. task subitem default prompt). */
+  seedText?: string;
+  /** Merged onto the outer wrapper (after defaults); use to tune padding, e.g. task subitem bottom inset. */
+  className?: string;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -101,7 +107,17 @@ function readFileAsBase64(file: globalThis.File): Promise<string> {
 
 // ── Component ────────────────────────────────────────────────────
 
-export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending = false, isEmpty: _isEmpty = false }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  onStop,
+  onQueue,
+  disabled = false,
+  sending = false,
+  isEmpty: _isEmpty = false,
+  variant = 'default',
+  seedText,
+  className,
+}: ChatInputProps) {
   const { t } = useTranslation('chat');
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
@@ -110,6 +126,7 @@ export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending =
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
+  const seedAppliedRef = useRef(false);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
@@ -160,6 +177,22 @@ export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending =
       textareaRef.current.focus();
     }
   }, [disabled]);
+
+  useEffect(() => {
+    const trimmed = seedText?.trim();
+    if (trimmed) {
+      if (seedAppliedRef.current) return;
+      seedAppliedRef.current = true;
+      setInput(trimmed);
+      return;
+    }
+    // Parent cleared seed (e.g. after programmatic task auto-send) — drop stale composer text
+    if (seedAppliedRef.current) {
+      seedAppliedRef.current = false;
+      setInput('');
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    }
+  }, [seedText]);
 
   useEffect(() => {
     if (!targetAgentId) return;
@@ -215,7 +248,6 @@ export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending =
       }
 
       // Stage all files via IPC
-      console.log('[pickFiles] Staging files:', result.filePaths);
       const staged = await hostApiFetch<Array<{
         id: string;
         fileName: string;
@@ -227,7 +259,6 @@ export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending =
         method: 'POST',
         body: JSON.stringify({ filePaths: result.filePaths }),
       });
-      console.log('[pickFiles] Stage result:', staged?.map(s => ({ id: s?.id, fileName: s?.fileName, mimeType: s?.mimeType, fileSize: s?.fileSize, stagedPath: s?.stagedPath, hasPreview: !!s?.preview })));
 
       // Update each placeholder with real data
       setAttachments(prev => {
@@ -280,9 +311,7 @@ export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending =
       }]);
 
       try {
-        console.log(`[stageBuffer] Reading file: ${file.name} (${file.type}, ${file.size} bytes)`);
         const base64 = await readFileAsBase64(file);
-        console.log(`[stageBuffer] Base64 length: ${base64?.length ?? 'null'}`);
         const staged = await hostApiFetch<{
           id: string;
           fileName: string;
@@ -298,7 +327,6 @@ export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending =
             mimeType: file.type || 'application/octet-stream',
           }),
         });
-        console.log(`[stageBuffer] Staged: id=${staged?.id}, path=${staged?.stagedPath}, size=${staged?.fileSize}`);
         setAttachments(prev => prev.map(a =>
           a.id === tempId ? { ...staged, status: 'ready' as const } : a,
         ));
@@ -331,13 +359,6 @@ export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending =
     // but keep attachments available for the async send
     const textToSend = input.trim();
     const attachmentsToSend = readyAttachments.length > 0 ? readyAttachments : undefined;
-    console.log(`[handleSend] text="${textToSend.substring(0, 50)}", attachments=${attachments.length}, ready=${readyAttachments.length}, sending=${!!attachmentsToSend}`);
-    if (attachmentsToSend) {
-      console.log('[handleSend] Attachment details:', attachmentsToSend.map(a => ({
-        id: a.id, fileName: a.fileName, mimeType: a.mimeType, fileSize: a.fileSize,
-        stagedPath: a.stagedPath, status: a.status, hasPreview: !!a.preview,
-      })));
-    }
     setInput('');
     setAttachments([]);
     if (textareaRef.current) {
@@ -424,10 +445,14 @@ export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending =
     [stageBufferFiles],
   );
 
+  const isEmbedded = variant === 'embedded';
+
   return (
     <div
       className={cn(
-        "px-6 pb-6 pt-2 w-full max-w-5xl mx-auto transition-all duration-300"
+        'w-full transition-all duration-300',
+        isEmbedded ? 'px-0 pb-0 pt-0' : 'mx-auto max-w-5xl px-6 pb-6 pt-2',
+        className,
       )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -437,15 +462,18 @@ export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending =
         {/* 单壳：附件缩略图与输入区同在一个圆角边框内（与 memory-center-web 助手输入一致） */}
         <div
           className={cn(
-            'relative overflow-visible rounded-2xl border bg-white shadow-[0_4px_14px_rgba(99,102,241,0.05)] transition-[box-shadow,border-color,ring-width,ring-color] duration-200 dark:bg-[#131a24]',
+            // sto-design: Grey-4 默认描边；Brand-3 悬停边、Brand-5/6 聚焦与拖拽（与 hub 顶栏 hover:border-[#FFC17A] 一致）
+            'relative overflow-visible rounded-2xl border bg-white transition-[box-shadow,border-color,ring-width,ring-color] duration-200 dark:bg-[#131a24]',
+            'border-[#E5E6EB] shadow-[0_4px_14px_rgba(29,33,41,0.05)] ring-1 ring-transparent dark:border-border dark:shadow-[0_4px_14px_rgba(0,0,0,0.22)]',
             dragOver
-              ? 'border-primary/60 ring-2 ring-primary/18'
+              ? 'border-[#FFC17A] ring-2 ring-[#FFC17A]/35 dark:border-[#FFC17A] dark:ring-[#FFC17A]/30'
               : [
-                  'border-primary/40 ring-1 ring-primary/18 dark:border-primary/30 dark:ring-primary/12',
-                  'focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/22',
-                  'focus-within:shadow-[0_0_0_1px_rgba(56,189,248,0.06),0_0_20px_rgba(56,189,248,0.12),0_0_48px_rgba(56,189,248,0.06)]',
-                  'dark:focus-within:border-primary/40 dark:focus-within:ring-primary/28',
-                  'dark:focus-within:shadow-[0_0_0_1px_rgba(125,211,252,0.08),0_0_24px_rgba(56,189,248,0.16),0_0_56px_rgba(56,189,248,0.08)]',
+                  'hover:border-[#FFC17A] hover:shadow-[0_4px_20px_rgba(255,183,140,0.14)]',
+                  'dark:hover:border-[#FFC17A]/90 dark:hover:shadow-[0_4px_20px_rgba(255,183,140,0.1)]',
+                  'focus-within:border-[#FF8D2A] focus-within:ring-2 focus-within:ring-[#FF6F00]/22',
+                  'focus-within:shadow-[0_0_0_1px_rgba(255,141,42,0.4),0_4px_20px_rgba(255,111,0,0.1)]',
+                  'dark:focus-within:border-[#FF8D2A] dark:focus-within:ring-[#FF6F00]/28',
+                  'dark:focus-within:shadow-[0_0_0_1px_rgba(255,141,42,0.28),0_4px_24px_rgba(255,111,0,0.14)]',
                 ],
           )}
         >
@@ -471,7 +499,7 @@ export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending =
               <button
                 type="button"
                 onClick={() => setTargetAgentId(null)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-primary/6 px-3 py-1 text-[13px] font-medium text-foreground transition-colors hover:bg-primary/10"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-primary/6 px-3 py-1 text-[13px] font-medium text-foreground transition-colors hover:bg-primary/10"
                 title={t('composer.clearTarget')}
               >
                 <span>{t('composer.targetChip', { agent: selectedTarget.name })}</span>
@@ -562,7 +590,7 @@ export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending =
                 size="icon"
                 className={cn(
                   'h-9 w-9 shrink-0 rounded-full border transition-all',
-                  'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(59,130,246,0.22)]',
+                  'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(255,111,0,0.22)]',
                 )}
                 variant="ghost"
                 title={t('composer.send')}
@@ -579,7 +607,7 @@ export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending =
                   sending
                     ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-white/90'
                     : canSend
-                      ? 'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(59,130,246,0.22)]'
+                      ? 'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(255,111,0,0.22)]'
                       : 'border-black/8 bg-black/5 text-muted-foreground/55 dark:border-white/10 dark:bg-white/[0.06]'
                 )}
                 variant="ghost"
@@ -594,46 +622,62 @@ export function ChatInput({ onSend, onStop, onQueue, disabled = false, sending =
             )}
           </div>
         </div>
-        <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px] text-muted-foreground/60 px-4">
-          <div className="flex items-center gap-1.5">
-            <div className={cn("w-1.5 h-1.5 rounded-full", gatewayStatus.state === 'running' ? "bg-green-500/80" : "bg-red-500/80")} />
-            <span>
-              {t('composer.gatewayStatus', {
-                state: gatewayStatus.state === 'running'
-                  ? t('composer.gatewayConnected')
-                  : gatewayStatus.state,
-                port: gatewayStatus.port,
-                pid: gatewayStatus.pid ? `| pid: ${gatewayStatus.pid}` : '',
-              })}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            {dailyTokenQuotaText ? (
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 text-[11px]",
-                  dailyTokenQuotaAlert ? "text-red-500" : "text-amber-500/95",
-                )}
-              >
-                {dailyTokenQuotaAlert ? <AlertCircle className="h-3.5 w-3.5" /> : null}
-                {dailyTokenQuotaText}
+        {!isEmbedded ? (
+          <div className="mt-2.5 flex items-center justify-between gap-2 px-4 text-[11px] text-muted-foreground/60">
+            <div className="flex items-center gap-1.5">
+              <div className={cn("w-1.5 h-1.5 rounded-full", gatewayStatus.state === 'running' ? "bg-green-500/80" : "bg-red-500/80")} />
+              <span>
+                {t('composer.gatewayStatus', {
+                  state: gatewayStatus.state === 'running'
+                    ? t('composer.gatewayConnected')
+                    : gatewayStatus.state,
+                  port: gatewayStatus.port,
+                  pid: gatewayStatus.pid ? `| pid: ${gatewayStatus.pid}` : '',
+                })}
               </span>
-            ) : null}
-            {hasFailedAttachments && (
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto p-0 text-[11px]"
-                onClick={() => {
-                  setAttachments((prev) => prev.filter((att) => att.status !== 'error'));
-                  void pickFiles();
-                }}
-              >
-                {t('composer.retryFailedAttachments')}
-              </Button>
-            )}
+            </div>
+            <div className="flex items-center gap-3">
+              {dailyTokenQuotaText ? (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 text-[11px]",
+                    dailyTokenQuotaAlert ? "text-red-500" : "text-amber-500/95",
+                  )}
+                >
+                  {dailyTokenQuotaAlert ? <AlertCircle className="h-3.5 w-3.5" /> : null}
+                  {dailyTokenQuotaText}
+                </span>
+              ) : null}
+              {hasFailedAttachments && (
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-[11px]"
+                  onClick={() => {
+                    setAttachments((prev) => prev.filter((att) => att.status !== 'error'));
+                    void pickFiles();
+                  }}
+                >
+                  {t('composer.retryFailedAttachments')}
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
+        ) : hasFailedAttachments ? (
+          <div className="mt-2 flex justify-end px-4">
+            <Button
+              variant="link"
+              size="sm"
+              className="h-auto p-0 text-[11px] text-muted-foreground/80"
+              onClick={() => {
+                setAttachments((prev) => prev.filter((att) => att.status !== 'error'));
+                void pickFiles();
+              }}
+            >
+              {t('composer.retryFailedAttachments')}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

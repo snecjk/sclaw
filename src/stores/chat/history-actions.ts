@@ -1,5 +1,7 @@
 import { invokeIpc } from '@/lib/api-client';
+import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
+import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
 import {
   clearHistoryPoll,
   enrichWithCachedImages,
@@ -10,11 +12,16 @@ import {
   loadMissingPreviews,
   toMs,
 } from './helpers';
-import { buildCronSessionHistoryPath, isCronSessionKey } from './cron-session-utils';
+import {
+  buildCronSessionHistoryPath,
+  buildScheduledTaskSessionHistoryPath,
+  isCronSessionKey,
+  isScheduledTaskSessionKey,
+} from './cron-session-utils';
 import type { RawMessage } from './types';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 
-async function loadCronFallbackMessages(sessionKey: string, limit = 200): Promise<RawMessage[]> {
+async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
   if (!isCronSessionKey(sessionKey)) return [];
   try {
     const response = await hostApiFetch<{ messages?: RawMessage[] }>(
@@ -23,6 +30,19 @@ async function loadCronFallbackMessages(sessionKey: string, limit = 200): Promis
     return Array.isArray(response.messages) ? response.messages : [];
   } catch (error) {
     console.warn('Failed to load cron fallback history:', error);
+    return [];
+  }
+}
+
+async function loadScheduledTaskFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
+  if (!isScheduledTaskSessionKey(sessionKey)) return [];
+  try {
+    const response = await hostApiFetch<{ messages?: RawMessage[] }>(
+      buildScheduledTaskSessionHistoryPath(sessionKey, limit),
+    );
+    return Array.isArray(response.messages) ? response.messages : [];
+  } catch (error) {
+    console.warn('Failed to load scheduled task fallback history:', error);
     return [];
   }
 }
@@ -143,31 +163,47 @@ export function createHistoryActions(
       };
 
       try {
+        // Gateway chat.history does not support offset; load up to the hard max in one call.
+        let thinkingLevel: string | null = null;
         const result = await invokeIpc(
           'gateway:rpc',
           'chat.history',
-          { sessionKey: currentSessionKey, limit: 200 }
+          { sessionKey: currentSessionKey, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT }
         ) as { success: boolean; result?: Record<string, unknown>; error?: string };
 
-        if (result.success && result.result) {
-          const data = result.result;
-          let rawMessages = Array.isArray(data.messages) ? data.messages as RawMessage[] : [];
-          const thinkingLevel = data.thinkingLevel ? String(data.thinkingLevel) : null;
-          if (rawMessages.length === 0 && isCronSessionKey(currentSessionKey)) {
-            rawMessages = await loadCronFallbackMessages(currentSessionKey, 200);
-          }
-          applyLoadedMessages(rawMessages, thinkingLevel);
-        } else {
-          const fallbackMessages = await loadCronFallbackMessages(currentSessionKey, 200);
-          if (fallbackMessages.length > 0) {
-            applyLoadedMessages(fallbackMessages, null);
-          } else {
-            set({ messages: [], loading: false });
-          }
+        if (!result.success || !result.result) {
+          throw new Error(result.error || 'Gateway RPC failed: chat.history');
         }
+
+        const data = result.result;
+        const allMessages: RawMessage[] = Array.isArray(data.messages)
+          ? data.messages as RawMessage[]
+          : [];
+        if (data.thinkingLevel) {
+          thinkingLevel = String(data.thinkingLevel);
+        }
+
+        if (allMessages.length >= CHAT_HISTORY_LENGTH_MAX_LIMIT) {
+          toast.info('会话消息已达上限', {
+            description: '当前会话历史记录较多，建议开启新会话以获得更好的体验。',
+            duration: 5000,
+          });
+        }
+
+        let rawMessages = allMessages;
+        if (rawMessages.length === 0 && isCronSessionKey(currentSessionKey)) {
+          rawMessages = await loadCronFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
+        }
+        if (rawMessages.length === 0 && isScheduledTaskSessionKey(currentSessionKey)) {
+          rawMessages = await loadScheduledTaskFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
+        }
+        applyLoadedMessages(rawMessages, thinkingLevel);
       } catch (err) {
         console.warn('Failed to load chat history:', err);
-        const fallbackMessages = await loadCronFallbackMessages(currentSessionKey, 200);
+        let fallbackMessages = await loadCronFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
+        if (fallbackMessages.length === 0) {
+          fallbackMessages = await loadScheduledTaskFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
+        }
         if (fallbackMessages.length > 0) {
           applyLoadedMessages(fallbackMessages, null);
         } else {

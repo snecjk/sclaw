@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron';
 import renderer from 'vite-plugin-electron-renderer';
@@ -6,13 +6,13 @@ import { resolve } from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Vite loads .env.[mode] before config resolution, so VITE_APP_ENV is
-  // available in process.env here. We must explicitly inject it into the
-  // electron sub-builds (main / preload) via `define`, because
-  // vite-plugin-electron does not auto-propagate VITE_* env vars.
-  const appEnv = process.env.VITE_APP_ENV || (mode === 'development' ? 'development' : 'production');
+  // 含 .env.development.local；electron 子构建需通过 define 注入，否则读不到
+  const env = loadEnv(mode, process.cwd(), '');
+  const appEnv = env.VITE_APP_ENV || process.env.VITE_APP_ENV || (mode === 'development' ? 'development' : 'production');
+  const stoMemoryCenterBaseUrl = (env.STO_MEMORY_CENTER_BASE_URL || process.env.STO_MEMORY_CENTER_BASE_URL || '').trim();
   const envDefine = {
     'import.meta.env.VITE_APP_ENV': JSON.stringify(appEnv),
+    'process.env.STO_MEMORY_CENTER_BASE_URL': JSON.stringify(stoMemoryCenterBaseUrl),
   };
 
   return {

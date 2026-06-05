@@ -5,7 +5,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'http';
 import { app } from 'electron';
-import { getAuthState, setAuthUser, clearAuthUser, getSsoEnvironment, setSsoEnvironment, getStoToken, syncSsoAuthToOpenClaw, removeSsoAuthFromOpenClaw } from '../../utils/auth-store';
+import { getAuthState, setAuthUser, clearAuthUser, getSsoEnvironment, setSsoEnvironment, getStoToken, removeSsoAuthFromOpenClaw } from '../../utils/auth-store';
 import type { SsoEnvironment } from '../../utils/auth-store';
 import { getBaseUrl, signOut } from '../../utils/sso-service';
 import { SsoLoginManager } from '../../utils/sso-login';
@@ -13,10 +13,20 @@ import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { logger } from '../../utils/logger';
 import { getStoModelSyncService } from '../../services/providers/sto-model-sync';
+import { runAuthenticatedSetup } from '../../services/auth-setup-orchestrator';
 import { runPendingInstallReport } from '../../services/client-update-platform';
-import { syncStoDynamicRoutePluginToOpenClaw, removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-auth';
+import { removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-auth';
+import { getStoPolicyReportApiHost } from '../../../shared/env-config';
+import { computeCrmWeekReportSurfaceAllowed } from '../../../shared/crm-week-report-policy';
+import { proxyAwareFetch } from '../../utils/proxy-fetch';
+import { loadSiteDepartmentTypes } from '../../services/sto-apollo-config-service';
 
 const ssoLoginManager = new SsoLoginManager();
+
+const CRM_WEEK_REPORT_POLICY_PATH =
+  '/sto-policy/api/v1/base/getReportAuthUserIgnoreLogin?reportType=POLICY_CRM_WEEK_REPORT';
+
+const CRM_POLICY_FETCH_TIMEOUT_MS = 15_000;
 
 export async function handleAuthRoutes(
   req: IncomingMessage,
@@ -70,33 +80,37 @@ export async function handleAuthRoutes(
 
       const user = await ssoLoginManager.startLogin(env, ctx.mainWindow);
       await setAuthUser(user);
-      void syncSsoAuthToOpenClaw(user);
-      void syncStoDynamicRoutePluginToOpenClaw().catch((err) =>
-        logger.warn('Post-login STO dynamic route plugin config failed:', err),
+
+      // Load site department types from Apollo config for site-user detection
+      void loadSiteDepartmentTypes().catch((err) =>
+        logger.warn('Post-login site department types load failed:', err),
       );
+
+      // Ensure SAI CLI is installed so the synced token can be used by commands
+      try {
+        const { autoInstallSaiCliIfNeeded } = await import('../../utils/sai-cli');
+        await autoInstallSaiCliIfNeeded();
+      } catch (err) {
+        logger.warn('SAI CLI auto-install on login failed:', err);
+      }
+
+      const setup = await runAuthenticatedSetup({
+        user,
+        gatewayManager: ctx.gatewayManager,
+        source: 'login',
+      });
+
+      const stoSync = getStoModelSyncService();
+      stoSync.startPeriodicSync();
 
       void runPendingInstallReport(app.getVersion(), process.platform);
 
-      // Trigger STO model sync after successful login (fire-and-forget)
-      const stoSync = getStoModelSyncService();
-      if (ctx.gatewayManager) {
-        stoSync.setGatewayManager(ctx.gatewayManager);
-      }
-      void stoSync.syncModels().catch((err) =>
-        logger.warn('Post-login STO model sync failed:', err),
-      );
-      stoSync.startPeriodicSync();
-
-      // Auto-create department biz agents after login (fire-and-forget)
-      import('../../services/sto-biz-agent-sync').then(({ getStoBizAgentSyncService }) => {
-        const bizAgentSync = getStoBizAgentSyncService();
-        bizAgentSync.setGatewayManager(ctx.gatewayManager);
-        void bizAgentSync.syncAgents().catch((err) =>
-          logger.warn('Post-login STO biz-agent sync failed:', err),
-        );
-      }).catch((err) => logger.warn('Failed to load sto-biz-agent-sync module:', err));
-
-      sendJson(res, 200, { success: true, user });
+      sendJson(res, 200, {
+        success: true,
+        user,
+        stoSync: setup.stoSync,
+        bizAgentSync: setup.bizAgentSync,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message === 'SSO_LOGIN_CANCELLED') {
@@ -134,7 +148,7 @@ export async function handleAuthRoutes(
       );
 
       sendJson(res, 200, { success: true });
-    } catch (error) {
+    } catch {
       // Always clear local auth even if SSO signOut fails
       await clearAuthUser().catch(() => {});
       void removeSsoAuthFromOpenClaw();
@@ -160,6 +174,65 @@ export async function handleAuthRoutes(
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  // GET /api/auth/site-department-types — 返回 Apollo 配置中的网点类别列表
+  if (url.pathname === '/api/auth/site-department-types' && req.method === 'GET') {
+    try {
+      const types = await loadSiteDepartmentTypes();
+      sendJson(res, 200, { success: true, types: Array.from(types) });
+    } catch (error) {
+      logger.warn('Site department types fetch failed:', error);
+      sendJson(res, 200, { success: false, types: [] });
+    }
+    return true;
+  }
+
+  // GET /api/auth/crm-week-report-policy — CRM 周报策略白名单（Main 代理，fail-closed）
+  if (url.pathname === '/api/auth/crm-week-report-policy' && req.method === 'GET') {
+    try {
+      const state = await getAuthState();
+      if (!state.isAuthenticated || !state.user?.userName?.trim()) {
+        sendJson(res, 200, { allowed: false });
+        return true;
+      }
+
+      const host = getStoPolicyReportApiHost();
+      const policyUrl = `https://${host}${CRM_WEEK_REPORT_POLICY_PATH}`;
+      const signal = AbortSignal.timeout(CRM_POLICY_FETCH_TIMEOUT_MS);
+
+      const response = await proxyAwareFetch(policyUrl, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        signal,
+      });
+
+      if (!response.ok) {
+        logger.warn(`CRM week report policy: HTTP ${response.status} (host ${host})`);
+        sendJson(res, 200, { allowed: false });
+        return true;
+      }
+
+      let json: unknown;
+      try {
+        json = await response.json() as unknown;
+      } catch {
+        logger.warn('CRM week report policy: response body is not valid JSON');
+        sendJson(res, 200, { allowed: false });
+        return true;
+      }
+
+      const allowed = computeCrmWeekReportSurfaceAllowed(
+        state.user.code,
+        state.user.userName,
+        json,
+      );
+      sendJson(res, 200, { allowed });
+    } catch (error) {
+      logger.warn('CRM week report policy fetch failed:', error);
+      sendJson(res, 200, { allowed: false });
     }
     return true;
   }

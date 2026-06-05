@@ -97,8 +97,11 @@ function loadManifest() {
     throw new Error('Invalid preinstalled-skills manifest format');
   }
   for (const item of parsed.skills) {
-    if (!item.slug || !item.repo || !item.repoPath) {
+    if (!item.slug) {
       throw new Error(`Invalid manifest entry: ${JSON.stringify(item)}`);
+    }
+    if (!item.local && (!item.repo || !item.repoPath)) {
+      throw new Error(`Invalid manifest entry (remote skill requires repo and repoPath): ${JSON.stringify(item)}`);
     }
   }
   return parsed.skills;
@@ -206,7 +209,9 @@ const lock = {
   skills: [],
 };
 
-const groups = groupByRepoRef(manifestSkills);
+const localSkills = manifestSkills.filter((s) => s.local);
+const remoteSkills = manifestSkills.filter((s) => !s.local);
+const groups = groupByRepoRef(remoteSkills);
 for (const group of groups) {
   const repoDir = join(TMP_ROOT, createRepoDirName(group.repo, group.ref));
   const sparsePaths = [...new Set(group.entries.map((entry) => entry.repoPath))];
@@ -246,6 +251,38 @@ for (const group of groups) {
 
     echo`   OK ${entry.slug}`;
   }
+}
+
+// Copy local skills
+const LOCAL_SKILLS_ROOT = join(ROOT, 'resources', 'skills');
+for (const entry of localSkills) {
+  const sourceDir = join(LOCAL_SKILLS_ROOT, entry.slug);
+  const targetDir = join(OUTPUT_ROOT, entry.slug);
+  const sourceManifest = join(sourceDir, 'SKILL.md');
+
+  if (!existsSync(sourceManifest)) {
+    throw new Error(`Local skill source missing SKILL.md: ${sourceDir}`);
+  }
+
+  rmSync(targetDir, { recursive: true, force: true });
+  cpSync(sourceDir, targetDir, { recursive: true, dereference: true, filter: shouldCopySkillFile });
+
+  const skillManifest = join(targetDir, 'SKILL.md');
+  if (!existsSync(skillManifest)) {
+    throw new Error(`Local skill ${entry.slug} is missing SKILL.md after copy`);
+  }
+
+  const hash = createHash('sha256');
+  hash.update(readFileSync(sourceManifest, 'utf8'));
+  const version = hash.digest('hex').substring(0, 16);
+
+  lock.skills.push({
+    slug: entry.slug,
+    version,
+    local: true,
+  });
+
+  echo`   OK ${entry.slug} (local)`;
 }
 
 writeFileSync(join(OUTPUT_ROOT, '.preinstalled-lock.json'), `${JSON.stringify(lock, null, 2)}\n`, 'utf8');

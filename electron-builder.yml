@@ -54,7 +54,7 @@ npmRebuild: false
 # Fallback: GitHub Releases (backup, used when OSS is unavailable)
 publish:
   - provider: generic
-    url: https://ali-sto-wisdom-star.aliyuncs.com/latest
+    url: https://ali-sto-wisdom-star.oss-cn-shanghai.aliyuncs.com/stoclaw/releases/latest
     useMultipleRangeRequest: false
   - provider: github
     owner: ValueCell-ai
@@ -65,8 +65,6 @@ mac:
   extraResources:
     - from: resources/bin/darwin-${arch}
       to: bin
-    - from: resources/cli/posix/
-      to: cli/
   category: public.app-category.productivity
   icon: resources/icons/icon.icns
   target:
@@ -112,8 +110,6 @@ win:
   extraResources:
     - from: resources/bin/win32-${arch}
       to: bin
-    - from: resources/cli/win32/
-      to: cli/
   icon: resources/icons/icon.ico
   target:
     - target: nsis
@@ -142,8 +138,6 @@ linux:
   extraResources:
     - from: resources/bin/linux-${arch}
       to: bin
-    - from: resources/cli/posix/
-      to: cli/
   icon: resources/icons
   target:
     - target: AppImage

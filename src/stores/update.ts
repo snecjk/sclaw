@@ -20,13 +20,15 @@ export interface ProgressInfo {
   bytesPerSecond: number;
 }
 
-export type UpdateStatus = 
+export type UpdateStatus =
   | 'idle'
   | 'checking'
   | 'available'
   | 'not-available'
   | 'downloading'
   | 'downloaded'
+  | 'installing'
+  | 'installed'
   | 'error';
 
 interface UpdateState {
@@ -40,12 +42,16 @@ interface UpdateState {
   isInitialized: boolean;
   /** Seconds remaining before auto-install, or null if inactive. */
   autoInstallCountdown: number | null;
+  /** Seconds remaining before auto-restart after a successful manualInstall, or null. */
+  restartCountdown: number | null;
 
   // Actions
   init: () => Promise<void>;
   checkForUpdates: () => Promise<void>;
   downloadUpdate: () => Promise<void>;
-  installUpdate: () => void;
+  installUpdate: () => Promise<void>;
+  restartApp: () => Promise<void>;
+  cancelRestartCountdown: () => Promise<void>;
   cancelAutoInstall: () => Promise<void>;
   setChannel: (channel: 'stable' | 'beta' | 'dev') => Promise<void>;
   setAutoDownload: (enable: boolean) => Promise<void>;
@@ -61,13 +67,28 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   policyBlocked: false,
   isInitialized: false,
   autoInstallCountdown: null,
+  restartCountdown: null,
 
   init: async () => {
     if (get().isInitialized) return;
 
+    // 给 IPC 调用加超时保护，避免 main 进程 handler 未注册 / 卡死时 UI 永远停在 Loading。
+    const withTimeout = <T,>(p: Promise<T>, ms: number, label: string): Promise<T> => {
+      return Promise.race([
+        p,
+        new Promise<T>((_, reject) =>
+          setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
+        ),
+      ]);
+    };
+
     // Get current version
     try {
-      const version = await invokeIpc<string>('update:version');
+      const version = await withTimeout(
+        invokeIpc<string>('update:version'),
+        8000,
+        'update:version',
+      );
       set({ currentVersion: version as string });
     } catch (error) {
       console.error('Failed to get version:', error);
@@ -75,13 +96,17 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
 
     // Get current status
     try {
-      const status = await invokeIpc<{
-        status: UpdateStatus;
-        info?: UpdateInfo;
-        progress?: ProgressInfo;
-        error?: string;
-        policyBlocked?: boolean;
-      }>('update:status');
+      const status = await withTimeout(
+        invokeIpc<{
+          status: UpdateStatus;
+          info?: UpdateInfo;
+          progress?: ProgressInfo;
+          error?: string;
+          policyBlocked?: boolean;
+        }>('update:status'),
+        8000,
+        'update:status',
+      );
       set({
         status: status.status,
         updateInfo: status.info || null,
@@ -118,6 +143,11 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
       set({ autoInstallCountdown: cancelled ? null : seconds });
     });
 
+    window.electron.ipcRenderer.on('update:restart-countdown', (data) => {
+      const { seconds, cancelled } = data as { seconds: number; cancelled?: boolean };
+      set({ restartCountdown: cancelled ? null : seconds });
+    });
+
     set({ isInitialized: true });
 
     // Apply persisted settings from the settings store
@@ -130,12 +160,16 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   },
 
   checkForUpdates: async () => {
+    const { status } = get();
+    // 防重入：已在检查中时不再触发
+    if (status === 'checking') return;
+
     set({ status: 'checking', error: null, policyBlocked: false });
     
     try {
       const result = await Promise.race([
         invokeIpc('update:check'),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Update check timed out')), 30000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('检查更新超时，请检查网络后重试')), 60000))
       ]) as {
         success: boolean;
         error?: string;
@@ -171,8 +205,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
       const currentStatus = get().status;
       if (currentStatus === 'checking' || currentStatus === 'idle') {
         set({
-          status: 'error',
-          error: 'Update check completed without a result. This usually means the app is running in dev mode.',
+          status: 'not-available',
           policyBlocked: false,
         });
       }
@@ -196,8 +229,33 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     }
   },
 
-  installUpdate: () => {
-    void invokeIpc('update:install');
+  installUpdate: async () => {
+    set({ status: 'installing', error: null });
+    try {
+      const result = await invokeIpc<{ success: boolean; error?: string }>('update:install');
+      if (!result.success) {
+        set({ status: 'error', error: result.error || 'Failed to install update' });
+      }
+      // 成功时，主进程会通过 'update:status-changed' 推送 status: 'installed'
+    } catch (error) {
+      set({ status: 'error', error: String(error) });
+    }
+  },
+
+  restartApp: async () => {
+    try {
+      await invokeIpc('update:restart');
+    } catch (error) {
+      console.error('Failed to restart app:', error);
+    }
+  },
+
+  cancelRestartCountdown: async () => {
+    try {
+      await invokeIpc('update:cancelRestartCountdown');
+    } catch (error) {
+      console.error('Failed to cancel restart countdown:', error);
+    }
   },
 
   cancelAutoInstall: async () => {

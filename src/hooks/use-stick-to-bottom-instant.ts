@@ -14,7 +14,10 @@ export function useStickToBottomInstant(resetKey?: string) {
 
   const result = useStickToBottom({
     initial: "instant",
-    resize: "smooth",
+    // Smooth resize runs a spring on every content growth tick (streaming +
+    // ResizeObserver) and can make the adjacent preview column look like it
+    // is shaking; instant keeps scroll jumps in sync without rAF churn.
+    resize: "instant",
   });
 
   const { scrollRef } = result;
@@ -56,3 +59,5 @@ export function useStickToBottomInstant(resetKey?: string) {
 
   return result;
 }
+
+export type { StickToBottomInstance } from "use-stick-to-bottom";

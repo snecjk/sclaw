@@ -37,7 +37,7 @@ export function TitleBar() {
   if (platform === 'darwin') {
     // macOS: logo on left, drag region in middle, traffic lights are native
     return (
-      <div className="drag-region flex h-10 shrink-0 items-center border-b glass pl-20">
+      <div className="drag-region flex h-10 shrink-0 items-center border-b glass-chrome pl-20">
         <div className="no-drag">
           <BrandLogo />
         </div>
@@ -80,7 +80,7 @@ function WindowsTitleBar() {
   };
 
   return (
-    <div className="drag-region flex h-10 shrink-0 items-center justify-between border-b glass">
+    <div className="drag-region flex h-10 shrink-0 items-center justify-between border-b glass-chrome">
       {/* Left: Brand Logo */}
       <div className="no-drag">
         <BrandLogo />

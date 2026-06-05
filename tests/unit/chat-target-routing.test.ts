@@ -36,8 +36,8 @@ describe('chat target routing', () => {
         isDefault: true,
         modelDisplay: 'MiniMax',
         inheritedModel: true,
-        workspace: '~/.openclaw/workspace',
-        agentDir: '~/.openclaw/agents/main/agent',
+        workspace: '~/.stoclaw/openclaw/workspace',
+        agentDir: '~/.stoclaw/openclaw/agents/main/agent',
         mainSessionKey: 'agent:main:main',
         channelTypes: [],
       },
@@ -47,8 +47,8 @@ describe('chat target routing', () => {
         isDefault: false,
         modelDisplay: 'Claude',
         inheritedModel: false,
-        workspace: '~/.openclaw/workspace-research',
-        agentDir: '~/.openclaw/agents/research/agent',
+        workspace: '~/.stoclaw/openclaw/workspace-research',
+        agentDir: '~/.stoclaw/openclaw/agents/research/agent',
         mainSessionKey: 'agent:research:desk',
         channelTypes: [],
       },
@@ -132,7 +132,7 @@ describe('chat target routing', () => {
     const historyCall = invokeIpcMock.mock.calls.find(
       ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.history',
     );
-    expect(historyCall?.[2]).toEqual({ sessionKey: 'agent:research:desk', limit: 200 });
+    expect(historyCall?.[2]).toEqual({ sessionKey: 'agent:research:desk', limit: 1000 });
 
     const sendCall = invokeIpcMock.mock.calls.find(
       ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.send',

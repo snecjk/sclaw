@@ -66,3 +66,6 @@ docs/pr-session-notes-
 .cursor/
 .pnpm-store/
 nul
+.claude/
+.kilo/
+/.codegraph/

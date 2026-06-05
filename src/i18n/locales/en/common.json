@@ -1,8 +1,16 @@
 {
     "sidebar": {
+        "home": "Home",
+        "myData": "My data",
+        "workspace": "Workspace",
+        "sessionList": "Conversations",
+        "toggleSidebarCollapse": "Collapse sidebar",
+        "toggleSidebarExpand": "Expand sidebar",
+        "appVersionLabel": "v {{version}}",
+        "enterpriseTag": "Enterprise",
         "chat": "Chat",
         "newChat": "New Chat",
-        "cronTasks": "Cron Tasks",
+        "cronTasks": "Scheduled tasks",
         "skills": "Skills",
         "agents": "Agents",
         "channels": "Channels",
@@ -17,7 +25,12 @@
         "emptyChatHistory": "No conversations yet",
         "expandHistoryPanel": "Show conversation history",
         "collapseHistoryPanel": "Hide conversation history",
-        "subscriptions": "Subscriptions"
+        "subscriptions": "Subscriptions",
+        "taskList": "Task list",
+        "taskHqReconciliation": "Weekly meeting materials",
+        "toggleTaskListSection": "Expand or collapse task list",
+        "toggleWorkspaceSection": "Expand or collapse workspace",
+        "compactAccountMenu": "Account and settings"
     },
     "actions": {
         "save": "Save",

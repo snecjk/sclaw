@@ -1,6 +1,11 @@
 {
   "skills": [
     {
+      "slug": "sai-cli",
+      "local": true,
+      "autoEnable": true
+    },
+    {
       "slug": "pdf",
       "repo": "anthropics/skills",
       "repoPath": "skills/pdf",
@@ -33,27 +38,33 @@
       "autoEnable": true
     },
     {
-      "slug": "find-skills-skill",
-      "repo": "openclaw/skills",
-      "repoPath": "skills/fangkelvin/find-skills-skill",
-      "ref": "main",
-      "version": "main",
+      "slug": "ppt-generator",
+      "local": true,
       "autoEnable": true
     },
     {
-      "slug": "browser-automation",
-      "repo": "openclaw/skills",
-      "repoPath": "skills/peytoncasper/browser-automation",
-      "ref": "main",
-      "version": "main",
+      "slug": "cli-report-generator",
+      "local": true,
       "autoEnable": true
     },
     {
-      "slug": "data-visualization",
-      "repo": "openclaw/skills",
-      "repoPath": "skills/okaris/data-visualization-2",
-      "ref": "main",
-      "version": "main",
+      "slug": "claw-render-base",
+      "local": true,
+      "autoEnable": true
+    },
+    {
+      "slug": "claw-editable",
+      "local": true,
+      "autoEnable": true
+    },
+    {
+      "slug": "claw-archiver",
+      "local": true,
+      "autoEnable": true
+    },
+    {
+      "slug": "long-output-saver",
+      "local": true,
       "autoEnable": true
     }
   ]

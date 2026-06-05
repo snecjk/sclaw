@@ -119,10 +119,10 @@ export function Agents() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
-      <header className="shrink-0 border-b border-primary/10 pb-6">
+      <header className="shrink-0 border-b border-border pb-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(56,189,248,0.12)]">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(255,111,0,0.10)]">
               <Bot className="h-5 w-5" strokeWidth={2} />
             </div>
             <div className="min-w-0">
@@ -263,9 +263,9 @@ function AgentCard({
   return (
     <div
       className={cn(
-        'group relative flex items-center gap-4 rounded-md border border-primary/10 px-4 py-3 text-left transition-all duration-200',
+        'group relative flex items-center gap-4 rounded-md border border-border px-4 py-3 text-left transition-all duration-200',
         glassNestedCard,
-        'hover:border-primary/18 hover:shadow-md',
+        'hover:border-border hover:shadow-md',
       )}
     >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-primary/[0.06] text-primary shadow-sm dark:border-white/10">
@@ -320,7 +320,7 @@ function AgentCard({
   );
 }
 
-const inputClasses = 'h-[44px] rounded-md font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-glass border-glass-border focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40';
+const inputClasses = 'h-[44px] rounded-md font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-glass border-glass-border focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-ring shadow-sm transition-all text-foreground placeholder:text-foreground/40';
 const labelClasses = 'text-[14px] text-foreground/80 font-bold';
 
 function AddAgentDialog({

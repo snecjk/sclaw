@@ -1,20 +1,21 @@
 /**
  * Skill Config Utilities
- * Direct read/write access to skill configuration in ~/.openclaw/openclaw.json
+ * Direct read/write access to skill configuration in ~/.stoclaw/openclaw/openclaw.json
  * This bypasses the Gateway RPC for faster and more reliable config updates.
  *
  * All file I/O uses async fs/promises to avoid blocking the main thread.
  */
 import { readFile, writeFile, access, cp, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync, cpSync, rmSync } from 'fs';
 import { constants } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { getOpenClawDir, getResourcesDir } from './paths';
+import { createHash } from 'node:crypto';
+import { getOpenClawDir, getResourcesDir, getOpenClawConfigDir, ensureDir } from './paths';
 import { logger } from './logger';
 import { withConfigLock } from './config-mutex';
 
-const OPENCLAW_CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw.json');
+const OPENCLAW_CONFIG_PATH = join(getOpenClawConfigDir(), 'openclaw.json');
 
 interface SkillEntry {
     enabled?: boolean;
@@ -34,6 +35,7 @@ interface PreinstalledSkillSpec {
     slug: string;
     version?: string;
     autoEnable?: boolean;
+    local?: boolean;
 }
 
 interface PreinstalledManifest {
@@ -84,7 +86,7 @@ async function writeConfig(config: OpenClawConfig): Promise<void> {
     await writeFile(OPENCLAW_CONFIG_PATH, json, 'utf-8');
 }
 
-async function setSkillsEnabled(skillKeys: string[], enabled: boolean): Promise<void> {
+export async function setSkillsEnabled(skillKeys: string[], enabled: boolean): Promise<void> {
     if (skillKeys.length === 0) {
         return;
     }
@@ -188,19 +190,19 @@ export async function getAllSkillConfigs(): Promise<Record<string, SkillEntry>> 
 
 /**
  * Built-in skills bundled with StoClaw that should be pre-deployed to
- * ~/.openclaw/skills/ on first launch.  These come from the openclaw package's
+ * ~/.stoclaw/openclaw/skills/ on first launch.  These come from the openclaw package's
  * extensions directory and are available in both dev and packaged builds.
  */
 const BUILTIN_SKILLS = [] as const;
 
 /**
- * Ensure built-in skills are deployed to ~/.openclaw/skills/<slug>/.
+ * Ensure built-in skills are deployed to ~/.stoclaw/openclaw/skills/<slug>/.
  * Skips any skill that already has a SKILL.md present (idempotent).
  * Runs at app startup; all errors are logged and swallowed so they never
  * block the normal startup flow.
  */
 export async function ensureBuiltinSkillsInstalled(): Promise<void> {
-    const skillsRoot = join(homedir(), '.openclaw', 'skills');
+    const skillsRoot = join(getOpenClawConfigDir(), 'skills');
 
     for (const { slug, sourceExtension } of BUILTIN_SKILLS) {
         const targetDir = join(skillsRoot, slug);
@@ -260,10 +262,24 @@ function resolvePreinstalledSkillsSourceRoot(): string | null {
         join(getResourcesDir(), 'preinstalled-skills'),
         join(process.cwd(), 'build', 'preinstalled-skills'),
         join(__dirname, '../../build/preinstalled-skills'),
+        // Dev fallback: local skills live directly under resources/skills/
+        // when the bundle script hasn't generated build/preinstalled-skills yet.
+        join(process.cwd(), 'resources', 'skills'),
+        join(__dirname, '../../resources/skills'),
     ];
 
     const root = candidates.find((dir) => existsSync(dir));
     return root || null;
+}
+
+/** Compute a short SHA-256 hash of a file's contents (sync). */
+function hashFileSync(filePath: string): string {
+    try {
+        const content = readFileSync(filePath, 'utf-8');
+        return createHash('sha256').update(content).digest('hex').substring(0, 16);
+    } catch {
+        return 'unknown';
+    }
 }
 
 async function readPreinstalledLockVersions(sourceRoot: string): Promise<Map<string, string>> {
@@ -307,13 +323,14 @@ async function tryReadMarker(markerPath: string): Promise<PreinstalledMarker | n
 
 /**
  * Ensure third-party preinstalled skills (bundled in app resources) are
- * deployed to ~/.openclaw/skills/<slug>/ as full directories.
+ * deployed to ~/.stoclaw/openclaw/skills/<slug>/ as full directories.
  *
  * Policy:
- * - If skill is missing locally, install it.
- * - If local skill exists without our marker, treat as user-managed and never overwrite.
- * - If marker exists with same version, skip.
- * - If marker exists with a different version, skip by default to avoid overwriting edits.
+ * - Local built-in skills ("local": true) are ALWAYS copied over the local
+ *   copy so the app-shipped version takes precedence.  Their version is derived
+ *   from the sha256 hash of the bundled SKILL.md so edits are picked up.
+ * - Remote skills follow the conservative rules: never overwrite user-managed
+ *   skills, skip if the version already matches.
  */
 export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
     const skills = await readPreinstalledManifest();
@@ -328,7 +345,7 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
     }
     const lockVersions = await readPreinstalledLockVersions(sourceRoot);
 
-    const targetRoot = join(homedir(), '.openclaw', 'skills');
+    const targetRoot = join(getOpenClawConfigDir(), 'skills');
     await mkdir(targetRoot, { recursive: true });
     const toEnable: string[] = [];
 
@@ -343,21 +360,36 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
         const targetDir = join(targetRoot, spec.slug);
         const targetManifest = join(targetDir, 'SKILL.md');
         const markerPath = join(targetDir, PREINSTALLED_MARKER_NAME);
-        const desiredVersion = lockVersions.get(spec.slug)
-            || (spec.version || 'unknown').trim()
-            || 'unknown';
+
+        // Local built-in skills use a content hash so they upgrade automatically
+        // when the bundled SKILL.md changes, even without a lock file.
+        const desiredVersion = spec.local
+            ? hashFileSync(sourceManifest)
+            : lockVersions.get(spec.slug)
+                || (spec.version || 'unknown').trim()
+                || 'unknown';
         const marker = await tryReadMarker(markerPath);
 
         if (existsSync(targetManifest)) {
-            if (!marker) {
-                logger.info(`Skipping user-managed skill: ${spec.slug}`);
+            if (spec.local) {
+                // Built-in local skill: overwrite the user's copy so the app
+                // version is always authoritative.
+                if (marker && marker.version === desiredVersion) {
+                    continue; // already up to date
+                }
+                logger.info(`Replacing built-in local skill: ${spec.slug} (version ${desiredVersion})`);
+            } else {
+                // Remote skill: conservative, don't overwrite user-managed copies.
+                if (!marker) {
+                    logger.info(`Skipping user-managed skill: ${spec.slug}`);
+                    continue;
+                }
+                if (marker.version === desiredVersion) {
+                    continue;
+                }
+                logger.info(`Skipping preinstalled skill update for ${spec.slug} (local marker version=${marker.version}, desired=${desiredVersion})`);
                 continue;
             }
-            if (marker.version === desiredVersion) {
-                continue;
-            }
-            logger.info(`Skipping preinstalled skill update for ${spec.slug} (local marker version=${marker.version}, desired=${desiredVersion})`);
-            continue;
         }
 
         try {
@@ -374,6 +406,19 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
                 toEnable.push(spec.slug);
             }
             logger.info(`Installed preinstalled skill: ${spec.slug} -> ${targetDir}`);
+
+            // Also sync local built-in skills into OpenClaw's bundled skills directory
+            // so the Gateway marks them as bundled (shows in the "Built-in" tab).
+            if (spec.local) {
+                const openclawSkillsDir = join(getOpenClawDir(), 'skills');
+                ensureDir(openclawSkillsDir);
+                const bundledTarget = join(openclawSkillsDir, spec.slug);
+                if (existsSync(bundledTarget)) {
+                    rmSync(bundledTarget, { recursive: true, force: true });
+                }
+                cpSync(sourceDir, bundledTarget, { recursive: true, dereference: true });
+                logger.info(`Synced built-in skill to OpenClaw bundled dir: ${bundledTarget}`);
+            }
         } catch (error) {
             logger.warn(`Failed to install preinstalled skill ${spec.slug}:`, error);
         }

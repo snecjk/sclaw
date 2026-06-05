@@ -57,7 +57,7 @@ interface ChannelConfigModalProps {
   onChannelSaved?: (channelType: ChannelType) => void | Promise<void>;
 }
 
-const inputClasses = 'h-[44px] rounded-xl font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-glass border-glass-border focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:border-blue-500 shadow-sm transition-all text-foreground placeholder:text-foreground/40';
+const inputClasses = 'h-[44px] rounded-xl font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] backdrop-blur-glass border-glass-border focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-ring shadow-sm transition-all text-foreground placeholder:text-foreground/40';
 const labelClasses = 'text-[14px] text-foreground/80 font-bold';
 const outlineButtonClasses = 'h-9 text-[13px] font-medium rounded-full px-4 border-black/10 dark:border-white/10 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 shadow-none text-foreground/80 hover:text-foreground';
 const primaryButtonClasses = 'h-9 text-[13px] font-medium rounded-full px-4 shadow-none';
@@ -94,6 +94,7 @@ export function ChannelConfigModal({
   const [loadingConfig, setLoadingConfig] = useState(false);
   const [isExistingConfig, setIsExistingConfig] = useState(false);
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const qrConnectedRef = useRef(false);
   const [validationResult, setValidationResult] = useState<{
     valid: boolean;
     errors: string[];
@@ -207,6 +208,7 @@ export function ChannelConfigModal({
 
   const finishSaveRef = useRef(finishSave);
   const onCloseRef = useRef(onClose);
+  const onChannelSavedRef = useRef(onChannelSaved);
   const translateRef = useRef(t);
 
   useEffect(() => {
@@ -216,6 +218,10 @@ export function ChannelConfigModal({
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
+
+  useEffect(() => {
+    onChannelSavedRef.current = onChannelSaved;
+  }, [onChannelSaved]);
 
   useEffect(() => {
     translateRef.current = t;
@@ -241,6 +247,7 @@ export function ChannelConfigModal({
   useEffect(() => {
     if (!selectedType || meta?.connectionType !== 'qr') return;
     const channelType = selectedType;
+    qrConnectedRef.current = false;
 
     const onQr = (...args: unknown[]) => {
       const data = args[0] as { qr?: string; raw?: string };
@@ -253,6 +260,7 @@ export function ChannelConfigModal({
     const onSuccess = async (...args: unknown[]) => {
       const data = args[0] as { accountId?: string } | undefined;
       void data?.accountId;
+      qrConnectedRef.current = true;
       toast.success(translateRef.current('toast.qrConnected', { name: CHANNEL_NAMES[channelType] }));
       try {
         if (channelType === 'whatsapp') {
@@ -271,7 +279,12 @@ export function ChannelConfigModal({
           toast.warning(translateRef.current('toast.savedButRefreshFailed'));
           console.warn('Channel saved but post-save refresh failed:', postSaveError);
         }
-        onCloseRef.current();
+
+        if (onChannelSavedRef.current) {
+          await onChannelSavedRef.current(channelType);
+        } else {
+          onCloseRef.current();
+        }
       } catch (error) {
         toast.error(translateRef.current('toast.configFailed', { error: String(error) }));
         setConnecting(false);
@@ -295,6 +308,9 @@ export function ChannelConfigModal({
       removeQrListener();
       removeSuccessListener();
       removeErrorListener();
+      if (qrConnectedRef.current) {
+        return;
+      }
       hostApiFetch(`/api/channels/${encodeURIComponent(channelType)}/cancel`, {
         method: 'POST',
         body: JSON.stringify(resolvedAccountId ? { accountId: resolvedAccountId } : {}),
@@ -594,7 +610,7 @@ export function ChannelConfigModal({
           ) : (
             <div className="space-y-6">
               {isExistingConfig && (
-                <div className="bg-blue-500/10 text-blue-600 dark:text-blue-400 p-4 rounded-2xl text-[13.5px] flex items-center gap-2 border border-blue-500/20">
+                <div className="rounded-2xl border border-[hsl(var(--link)/0.2)] bg-link-muted p-4 text-[13.5px] flex items-center gap-2 text-link dark:text-[hsl(var(--link))]">
                   <CheckCircle className="h-4 w-4 shrink-0" />
                   <span>{t('dialog.existingHint')}</span>
                 </div>

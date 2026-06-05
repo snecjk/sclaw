@@ -6,6 +6,7 @@ import {
   normalizeAppError,
 } from './error-model';
 export { AppError } from './error-model';
+import { getBlockedRpcErrorMessage } from '../../shared/gateway-security';
 
 export type TransportKind = 'ipc' | 'ws' | 'http';
 export type GatewayTransportPreference = 'ws-first';
@@ -72,6 +73,9 @@ const UNIFIED_CHANNELS = new Set<string>([
   'update:check',
   'update:download',
   'update:install',
+  'update:installViaSquirrel',
+  'update:restart',
+  'update:cancelRestartCountdown',
   'update:setChannel',
   'update:setAutoDownload',
   'update:cancelAutoInstall',
@@ -83,6 +87,12 @@ const UNIFIED_CHANNELS = new Set<string>([
   'cron:trigger',
   'usage:recentTokenHistory',
   'question:split',
+  'sai:checkInstalled',
+  'sai:version',
+  'sai:whoami',
+  'sai:discover',
+  'sai:list',
+  'sai:execute',
 ]);
 
 const customInvokers = new Map<Exclude<TransportKind, 'ipc'>, TransportInvoker>();
@@ -329,7 +339,15 @@ async function invokeViaIpc<T>(channel: string, args: unknown[]): Promise<T> {
       return response.data as T;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('APP_REQUEST_UNSUPPORTED:') || message.includes('Invalid IPC channel: app:request')) {
+      // 三种情况都视为"app:request 不可用，回退到 legacy IPC"：
+      //  1) 主进程主动返回 UNSUPPORTED（unified 路由不识别这个 module/action）
+      //  2) preload 白名单不允许 'app:request' channel
+      //  3) 主进程根本没注册 'app:request' handler（Electron 抛 No handler registered for）
+      if (
+        message.includes('APP_REQUEST_UNSUPPORTED:') ||
+        message.includes('Invalid IPC channel: app:request') ||
+        message.includes("No handler registered for 'app:request'")
+      ) {
         // Fallback to legacy channel handlers.
       } else {
         throw normalizeAppError(err, { transport: 'ipc', channel, source: 'app:request' });
@@ -891,6 +909,11 @@ export function createGatewayWsTransportInvoker(options: GatewayWsTransportOptio
 }
 
 function validateGatewayRpcParams(method: string, params: unknown): void {
+  const blockedMsg = getBlockedRpcErrorMessage(method);
+  if (blockedMsg) {
+    throw new Error(blockedMsg);
+  }
+
   if (method !== 'config.patch') return;
   if (!params || typeof params !== 'object' || Array.isArray(params)) {
     throw new Error('gateway:rpc config.patch requires object params');

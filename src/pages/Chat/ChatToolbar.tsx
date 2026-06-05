@@ -18,7 +18,11 @@ import { useAgentsStore } from '@/stores/agents';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { buildProviderListItems } from '@/lib/provider-accounts';
-import { HIDDEN_PROVIDER_IDS } from '@/lib/providers';
+import {
+  buildChatModelOptions,
+  getWorkspaceDefaultModelId,
+  resolveChatToolbarModelId,
+} from '@/lib/chat-model-options';
 import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 import { hostApiFetch } from '@/lib/host-api';
@@ -26,7 +30,7 @@ import { toast } from 'sonner';
 
 // ── shared pill style ────────────────────────────────────────────────────────
 const pillBase = cn(
-  'flex min-w-0 max-w-[min(100vw-11rem,260px)] flex-1 items-stretch rounded-full border border-primary/10',
+  'flex min-w-0 max-w-[min(100vw-11rem,260px)] flex-1 items-stretch rounded-full border border-border',
   'bg-[linear-gradient(180deg,rgba(255,255,255,0.10),transparent),rgba(255,255,255,0.24)]',
   'shadow-[0_8px_18px_rgba(15,23,42,0.06)]',
   'dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent),rgba(255,255,255,0.04)]',
@@ -39,46 +43,6 @@ const pillBtn = cn(
   'disabled:pointer-events-none disabled:opacity-60',
 );
 
-// ── Model option type (mirrors AgentDetailPage) ───────────────────────────────
-interface ModelOption {
-  key: string;
-  modelId: string;
-  accountId: string;
-  displayName: string;
-  subLabel: string;
-  isBuiltin: boolean;  // true = STO AI built-in, false = user custom
-}
-
-function buildChatModelOptions(
-  providerItems: ReturnType<typeof buildProviderListItems>,
-): ModelOption[] {
-  const options: ModelOption[] = [];
-  for (const { account, vendor } of providerItems) {
-    if (HIDDEN_PROVIDER_IDS.has(account.id) || HIDDEN_PROVIDER_IDS.has(account.vendorId)) continue;
-    const subLabel = account.label || vendor?.name || account.vendorId;
-    const isBuiltin = account.vendorId === 'sto';
-    const customModels = account.metadata?.customModels as string[] | undefined;
-    if (customModels && customModels.length > 0) {
-      for (const modelId of customModels) {
-        if (HIDDEN_PROVIDER_IDS.has(modelId)) continue;
-        options.push({ key: `${account.id}::${modelId}`, modelId, accountId: account.id, displayName: modelId, subLabel, isBuiltin });
-      }
-    } else if (account.model) {
-      if (!HIDDEN_PROVIDER_IDS.has(account.model)) {
-        options.push({
-          key: `${account.id}::${account.model}`,
-          modelId: account.model,
-          accountId: account.id,
-          displayName: account.label || account.model,
-          subLabel: account.model,
-          isBuiltin,
-        });
-      }
-    }
-  }
-  return options;
-}
-
 export function ChatToolbar() {
   const refresh = useChatStore((s) => s.refresh);
   const loading = useChatStore((s) => s.loading);
@@ -86,9 +50,11 @@ export function ChatToolbar() {
   const showThinking = useChatStore((s) => s.showThinking);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const sessions = useChatStore((s) => s.sessions);
+  const loadSessions = useChatStore((s) => s.loadSessions);
   const switchToAgentMainSession = useChatStore((s) => s.switchToAgentMainSession);
   const agents = useAgentsStore((s) => s.agents);
-  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
   const { t } = useTranslation('chat');
@@ -107,6 +73,11 @@ export function ChatToolbar() {
   const currentAgent = useMemo(
     () => (agents ?? []).find((a) => a.id === currentAgentId),
     [agents, currentAgentId],
+  );
+
+  const currentSession = useMemo(
+    () => sessions.find((s) => s.key === currentSessionKey),
+    [sessions, currentSessionKey],
   );
 
   const agentRows = useMemo(() => {
@@ -144,14 +115,39 @@ export function ChatToolbar() {
   );
   const modelOptions = useMemo(() => buildChatModelOptions(providerItems), [providerItems]);
 
-  // Sync selectedModelId from the agent store whenever the current agent or its model changes.
-  // Guard: don't override while a save is in-flight (optimistic update already applied).
+  const workspaceDefaultModelId = useMemo(
+    () => getWorkspaceDefaultModelId(accounts, defaultAccountId),
+    [accounts, defaultAccountId],
+  );
+
+  const stoCatalogModelIds = useMemo(() => {
+    const sto = accounts.find((a) => a.vendorId === 'sto');
+    return (sto?.metadata?.customModels as string[] | undefined) ?? [];
+  }, [accounts]);
+
+  // session override → agent default → workspace default (Settings 页默认模型)
   useEffect(() => {
-    if (!modelSaving && currentAgent?.modelDisplay) {
-      setSelectedModelId(currentAgent.modelDisplay);
+    if (modelSaving) return;
+    const resolved = resolveChatToolbarModelId({
+      sessionModel: currentSession?.model,
+      agentModelDisplay: currentAgent?.modelDisplay,
+      agentInheritedModel: currentAgent?.inheritedModel,
+      workspaceDefaultModel: workspaceDefaultModelId,
+      stoCatalogModelIds,
+    });
+    if (resolved) {
+      setSelectedModelId(resolved);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentAgentId, currentAgent?.modelDisplay]);
+  }, [
+    modelSaving,
+    currentSessionKey,
+    currentSession?.model,
+    currentAgentId,
+    currentAgent?.modelDisplay,
+    currentAgent?.inheritedModel,
+    workspaceDefaultModelId,
+    stoCatalogModelIds,
+  ]);
 
   const selectedModel = useMemo(
     () => modelOptions.find((o) => o.modelId === selectedModelId),
@@ -159,20 +155,31 @@ export function ChatToolbar() {
   );
 
   const handleModelSwitch = async (modelId: string) => {
-    if (!currentAgentId || modelId === selectedModelId) return;
-    setSelectedModelId(modelId); // optimistic
+    if (!currentSessionKey || modelId === selectedModelId) return;
+    const opt = modelOptions.find((o) => o.modelId === modelId);
+    setSelectedModelId(modelId);
     setModelSaving(true);
     try {
-      await hostApiFetch(`/api/agents/${encodeURIComponent(currentAgentId)}/model`, {
-        method: 'PUT',
-        body: JSON.stringify({ model: modelId }),
+      await hostApiFetch('/api/sessions/model', {
+        method: 'POST',
+        body: JSON.stringify({
+          sessionKey: currentSessionKey,
+          model: modelId,
+          accountId: opt?.accountId,
+          agentId: currentAgentId || undefined,
+        }),
       });
-      // Refresh agents store so other pages (e.g. Agent detail model tab) reflect the change
-      void fetchAgents();
+      void loadSessions();
     } catch (err) {
-      toast.error(`切换模型失败: ${String(err)}`);
-      // Revert to agent's stored model on failure
-      if (currentAgent?.modelDisplay) setSelectedModelId(currentAgent.modelDisplay);
+      toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));
+      const resolved = resolveChatToolbarModelId({
+        sessionModel: currentSession?.model,
+        agentModelDisplay: currentAgent?.modelDisplay,
+        agentInheritedModel: currentAgent?.inheritedModel,
+        workspaceDefaultModel: workspaceDefaultModelId,
+        stoCatalogModelIds,
+      });
+      if (resolved) setSelectedModelId(resolved);
     } finally {
       setModelSaving(false);
     }
@@ -250,7 +257,7 @@ export function ChatToolbar() {
                   <span className={cn(
                     'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
                     selectedModel.isBuiltin
-                      ? 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-400'
+                      ? 'bg-link-muted text-link dark:bg-[hsl(231_35%_18%)] dark:text-[hsl(var(--link))]'
                       : 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
                   )}>
                     {selectedModel.isBuiltin ? t('toolbar.modelTagBuiltin') : t('toolbar.modelTagCustom')}
@@ -280,7 +287,7 @@ export function ChatToolbar() {
                   <span className={cn(
                     'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
                     opt.isBuiltin
-                      ? 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-400'
+                      ? 'bg-link-muted text-link dark:bg-[hsl(231_35%_18%)] dark:text-[hsl(var(--link))]'
                       : 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
                   )}>
                     {opt.isBuiltin ? t('toolbar.modelTagBuiltin') : t('toolbar.modelTagCustom')}
@@ -297,7 +304,7 @@ export function ChatToolbar() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-full border border-primary/10 bg-primary/[0.04] hover:bg-primary/[0.08]"
+              className="h-8 w-8 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]"
               onClick={() => refresh()}
               disabled={loading}
             >
@@ -314,7 +321,7 @@ export function ChatToolbar() {
               variant="ghost"
               size="icon"
               className={cn(
-                'h-8 w-8 rounded-full border border-primary/10 bg-primary/[0.04] hover:bg-primary/[0.08]',
+                'h-8 w-8 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]',
                 showThinking && 'bg-primary/12 text-primary',
               )}
               onClick={toggleThinking}

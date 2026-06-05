@@ -20,6 +20,16 @@ export const PORTS = {
   OPENCLAW_GATEWAY: 18789,
 } as const;
 
+/** Network timeout configuration (milliseconds) */
+export const TIMEOUTS = {
+  /** Default proxyAwareFetch timeout */
+  DEFAULT_FETCH: 15_000,
+  /** Skill ZIP download + extract (plaza / sto-skills / clawhub install) */
+  SKILL_INSTALL: 180_000,
+  /** SSO login flow */
+  AUTH_LOGIN: 300_000,
+} as const;
+
 /**
  * Get port from environment or default
  */
@@ -34,7 +44,7 @@ export function getPort(key: keyof typeof PORTS): number {
  */
 export const APP_PATHS = {
   /** OpenClaw configuration directory */
-  OPENCLAW_CONFIG: '~/.openclaw',
+  OPENCLAW_CONFIG: '~/.stoclaw/openclaw',
   
   /** StoClaw configuration directory */
   CLAWX_CONFIG: '~/.stoclaw',

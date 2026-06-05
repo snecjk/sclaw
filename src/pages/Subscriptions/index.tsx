@@ -208,10 +208,10 @@ export function Subscriptions() {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
       {/* Header */}
-      <header className="shrink-0 border-b border-primary/10 pb-6">
+      <header className="shrink-0 border-b border-border pb-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary/15 bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(56,189,248,0.12)]">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(255,111,0,0.10)]">
               <Bookmark className="h-5 w-5" strokeWidth={2} />
             </div>
             <div className="min-w-0">
@@ -229,7 +229,7 @@ export function Subscriptions() {
       <div className="flex flex-col gap-6">
         <section className={glassSectionSurface}>
           {/* Category tab bar */}
-          <div className="-mx-6 -mt-6 mb-6 flex items-stretch border-b border-primary/10 px-2 pt-1">
+          <div className="-mx-6 -mt-6 mb-6 flex items-stretch border-b border-border px-2 pt-1">
             {([
               { key: 'all' as const, label: t('filter.all', { count: categoryStats.all }) },
               ...ALL_CATEGORIES.map((cat) => ({
@@ -254,9 +254,9 @@ export function Subscriptions() {
           </div>
 
           {/* Search + refresh bar */}
-          <div className="flex flex-col gap-4 border-b border-primary/10 pb-4 mb-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-4 border-b border-border pb-4 mb-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center flex-wrap gap-4 text-[14px]">
-              <div className="group relative mr-2 flex items-center rounded-md border border-transparent bg-black/5 px-3 py-1.5 transition-colors focus-within:border-primary/15 focus-within:bg-[hsl(var(--glass-bg)/0.25)] dark:bg-white/5 dark:focus-within:bg-white/10">
+              <div className="group relative mr-2 flex items-center rounded-md border border-transparent bg-black/5 px-3 py-1.5 transition-colors focus-within:border-border focus-within:bg-[hsl(var(--glass-bg)/0.25)] dark:bg-white/5 dark:focus-within:bg-white/10">
                 <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <input
                   placeholder={t('search')}
@@ -304,7 +304,7 @@ export function Subscriptions() {
                     <div
                       key={feature.id}
                       className={cn(
-                        'group flex flex-col cursor-pointer rounded-md border border-primary/10 p-4 transition-all duration-200 hover:border-primary/18 hover:shadow-md',
+                        'group flex flex-col cursor-pointer rounded-md border border-border p-4 transition-all duration-200 hover:border-border hover:shadow-md',
                         glassNestedCard,
                       )}
                       onClick={() => setSelectedFeature(feature)}

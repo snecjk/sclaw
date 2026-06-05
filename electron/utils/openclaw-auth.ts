@@ -11,7 +11,6 @@
 import { access, mkdir, readFile, writeFile } from 'fs/promises';
 import { constants } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
 import { listConfiguredAgentIds } from './agent-config';
 import {
   getProviderEnvVar,
@@ -25,6 +24,7 @@ import {
 } from './provider-keys';
 import { withConfigLock } from './config-mutex';
 import { resolveStoBaseUrl } from './sto-domain';
+import { getOpenClawConfigDir } from './paths';
 
 const AUTH_STORE_VERSION = 1;
 const AUTH_PROFILE_FILENAME = 'auth-profiles.json';
@@ -97,7 +97,7 @@ interface AuthProfilesStore {
 // ── Auth Profiles I/O ────────────────────────────────────────────
 
 function getAuthProfilesPath(agentId = 'main'): string {
-  return join(homedir(), '.openclaw', 'agents', agentId, 'agent', AUTH_PROFILE_FILENAME);
+  return join(getOpenClawConfigDir(), 'agents', agentId, 'agent', AUTH_PROFILE_FILENAME);
 }
 
 async function readAuthProfiles(agentId = 'main'): Promise<AuthProfilesStore> {
@@ -120,7 +120,7 @@ async function writeAuthProfiles(store: AuthProfilesStore, agentId = 'main'): Pr
 // ── Agent Discovery ──────────────────────────────────────────────
 
 async function discoverAgentIds(): Promise<string[]> {
-  const agentsDir = join(homedir(), '.openclaw', 'agents');
+  const agentsDir = join(getOpenClawConfigDir(), 'agents');
   try {
     if (!(await fileExists(agentsDir))) return ['main'];
     return await listConfiguredAgentIds();
@@ -131,7 +131,7 @@ async function discoverAgentIds(): Promise<string[]> {
 
 // ── OpenClaw Config Helpers ──────────────────────────────────────
 
-const OPENCLAW_CONFIG_PATH = join(homedir(), '.openclaw', 'openclaw.json');
+const OPENCLAW_CONFIG_PATH = join(getOpenClawConfigDir(), 'openclaw.json');
 const VALID_COMPACTION_MODES = new Set(['default', 'safeguard']);
 
 async function readOpenClawJson(): Promise<Record<string, unknown>> {
@@ -160,8 +160,31 @@ function normalizeAgentsDefaultsCompactionMode(config: Record<string, unknown>):
   }
 }
 
+function sanitizeModelsProviders(config: Record<string, unknown>): void {
+  const models = (
+    config.models && typeof config.models === 'object'
+      ? (config.models as Record<string, unknown>)
+      : null
+  );
+  if (!models) return;
+
+  const providers = (
+    models.providers && typeof models.providers === 'object'
+      ? (models.providers as Record<string, unknown>)
+      : null
+  );
+  if (!providers) return;
+
+  for (const entry of Object.values(providers)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const provider = entry as Record<string, unknown>;
+    delete provider.request;
+  }
+}
+
 async function writeOpenClawJson(config: Record<string, unknown>): Promise<void> {
   normalizeAgentsDefaultsCompactionMode(config);
+  sanitizeModelsProviders(config);
 
   // Ensure SIGUSR1 graceful reload is authorized by OpenClaw config.
   const commands = (
@@ -331,7 +354,7 @@ export async function removeProviderFromOpenClaw(provider: string): Promise<void
 
   // 2. Remove from models.json (per-agent model registry used by pi-ai directly)
   for (const id of agentIds) {
-    const modelsPath = join(homedir(), '.openclaw', 'agents', id, 'agent', 'models.json');
+    const modelsPath = join(getOpenClawConfigDir(), 'agents', id, 'agent', 'models.json');
     try {
       if (await fileExists(modelsPath)) {
         const raw = await readFile(modelsPath, 'utf-8');
@@ -399,7 +422,7 @@ export function buildProviderEnvVars(providers: Array<{ type: string; apiKey: st
 
 /**
  * Update the OpenClaw config to use the given provider and model
- * Writes to ~/.openclaw/openclaw.json
+ * Writes to ~/.stoclaw/openclaw/openclaw.json
  */
 export async function setOpenClawDefaultModel(
   provider: string,
@@ -428,6 +451,7 @@ export async function setOpenClawDefaultModel(
     };
     agents.defaults = defaults;
     config.agents = agents;
+    syncMainAgentListModelIfBare(config, model);
 
     // Configure models.providers for providers that need explicit registration.
     const providerCfg = getProviderConfig(provider);
@@ -491,6 +515,33 @@ function normalizeModelRef(provider: string, modelOverride?: string): string | u
   const rawModel = modelOverride || getProviderDefaultModel(provider);
   if (!rawModel) return undefined;
   return rawModel.startsWith(`${provider}/`) ? rawModel : `${provider}/${rawModel}`;
+}
+
+/**
+ * OpenClaw resolves bare model ids on agents.list (e.g. "qwen3.5-plus") to the wrong
+ * provider (e.g. anthropic/qwen3.5-plus), then model-fallback may land on cursor-local.
+ * When we set agents.defaults.model.primary to a qualified ref, align main agent's
+ * string model to the same ref if it is still unqualified.
+ */
+function syncMainAgentListModelIfBare(config: Record<string, unknown>, primaryRef: string): void {
+  const agents = config.agents as Record<string, unknown> | undefined;
+  if (!agents || typeof agents !== 'object') return;
+  const list = agents.list;
+  if (!Array.isArray(list)) return;
+
+  agents.list = list.map((entry) => {
+    if (!entry || typeof entry !== 'object') return entry;
+    const e = entry as Record<string, unknown>;
+    if (e.id !== 'main') return entry;
+    const m = e.model;
+    if (typeof m !== 'string' || !m.trim()) return entry;
+    const trimmed = m.trim();
+    if (!trimmed.includes('/')) {
+      return { ...e, model: primaryRef };
+    }
+    return entry;
+  });
+  config.agents = agents;
 }
 
 function extractModelId(provider: string, modelRef: string): string {
@@ -682,6 +733,7 @@ export async function setOpenClawDefaultModelWithOverride(
     };
     agents.defaults = defaults;
     config.agents = agents;
+    syncMainAgentListModelIfBare(config, model);
 
     if (override.baseUrl && override.api) {
       upsertOpenClawProviderEntry(config, provider, {
@@ -804,7 +856,7 @@ export async function getOpenClawProvidersConfig(): Promise<{
 }
 
 /**
- * Write the StoClaw gateway token into ~/.openclaw/openclaw.json.
+ * Write the StoClaw gateway token into ~/.stoclaw/openclaw/openclaw.json.
  */
 export async function syncGatewayTokenToConfig(token: string): Promise<void> {
   return withConfigLock(async () => {
@@ -850,7 +902,7 @@ export async function syncGatewayTokenToConfig(token: string): Promise<void> {
 }
 
 /**
- * Ensure browser automation is enabled in ~/.openclaw/openclaw.json.
+ * Ensure browser automation is enabled in ~/.stoclaw/openclaw/openclaw.json.
  */
 export async function syncBrowserConfigToOpenClaw(): Promise<void> {
   return withConfigLock(async () => {
@@ -883,7 +935,7 @@ export async function syncBrowserConfigToOpenClaw(): Promise<void> {
 }
 
 /**
- * Ensure session idle-reset is configured in ~/.openclaw/openclaw.json.
+ * Ensure session idle-reset is configured in ~/.stoclaw/openclaw/openclaw.json.
  *
  * By default OpenClaw resets the "main" session daily at 04:00 local time,
  * which means conversations disappear after roughly one day.  StoClaw sets
@@ -937,7 +989,7 @@ export async function updateAgentModelProvider(
 ): Promise<void> {
   const agentIds = await discoverAgentIds();
   for (const agentId of agentIds) {
-    const modelsPath = join(homedir(), '.openclaw', 'agents', agentId, 'agent', 'models.json');
+    const modelsPath = join(getOpenClawConfigDir(), 'agents', agentId, 'agent', 'models.json');
     let data: Record<string, unknown> = {};
     try {
       data = (await readJsonFile<Record<string, unknown>>(modelsPath)) ?? {};
@@ -982,7 +1034,7 @@ export async function updateAgentModelProvider(
 }
 
 /**
- * Sanitize ~/.openclaw/openclaw.json before Gateway start.
+ * Sanitize ~/.stoclaw/openclaw/openclaw.json before Gateway start.
  *
  * Removes known-invalid keys that cause OpenClaw's strict Zod validation
  * to reject the entire config on startup.  Uses a conservative **blocklist**
@@ -1083,6 +1135,27 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
           }
         }
       }
+    }
+
+    // ── heartbeat section ──────────────────────────────────────────
+    // Disable heartbeat by default for new installations to avoid
+    // periodic automatic agent turns and API token consumption.
+    const agents = (
+      config.agents && typeof config.agents === 'object'
+        ? { ...(config.agents as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    const defaults = (
+      agents.defaults && typeof agents.defaults === 'object'
+        ? { ...(agents.defaults as Record<string, unknown>) }
+        : {}
+    ) as Record<string, unknown>;
+    if (!defaults.heartbeat) {
+      defaults.heartbeat = { every: '0m' };
+      agents.defaults = defaults;
+      config.agents = agents;
+      modified = true;
+      console.log('[sanitize] Disabling heartbeat by default (agents.defaults.heartbeat.every = 0m)');
     }
 
     // ── commands section ───────────────────────────────────────────
@@ -1232,15 +1305,13 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
 }
 
 /**
- * Configure the sto-dynamic-agent-route plugin in openclaw.json after SSO login.
- * Adds models.providers entry and plugins.allow/entries with environment-specific URLs.
+ * Configure STO plugins in a single openclaw.json write (avoids multiple hot-reload cycles).
  */
-export async function syncStoDynamicRoutePluginToOpenClaw(): Promise<void> {
+export async function syncStoPluginsToOpenClaw(): Promise<void> {
   return withConfigLock(async () => {
     const stoBaseUrl = await resolveStoBaseUrl();
     const config = await readOpenClawJson();
 
-    // 1. Upsert models.providers.sto-dynamic-agent-route
     upsertOpenClawProviderEntry(config, 'sto-dynamic-agent-route', {
       baseUrl: `${stoBaseUrl}/agent/v1/biz-agent`,
       api: 'openai-completions',
@@ -1249,14 +1320,16 @@ export async function syncStoDynamicRoutePluginToOpenClaw(): Promise<void> {
       defaultModelInput: ['text', 'image'],
     });
 
-    // 2. Configure plugins section
     const plugins = (config.plugins || {}) as Record<string, unknown>;
     plugins.enabled = true;
 
     const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
-    if (!allow.includes('sto-dynamic-agent-route')) {
-      allow.push('sto-dynamic-agent-route');
+    for (const pluginId of ['sto-dynamic-agent-route', 'sto-agent-telemetry', 'sto-scheduled-task-tool', 'sto-skill-call-monitor']) {
+      if (!allow.includes(pluginId)) {
+        allow.push(pluginId);
+      }
     }
+    // sto-scheduled-task-tool is temporarily disabled; cloud scheduled tasks are not live this release
     plugins.allow = allow;
 
     const entries = (plugins.entries || {}) as Record<string, unknown>;
@@ -1267,12 +1340,70 @@ export async function syncStoDynamicRoutePluginToOpenClaw(): Promise<void> {
         providerBaseUrl: `${stoBaseUrl}/agent/v1/biz-agent`,
       },
     };
+    entries['sto-agent-telemetry'] = {
+      enabled: true,
+      config: {
+        enabled: true,
+        ingestUrl: `${stoBaseUrl}/agent/v1/agent-telemetry/events`,
+        timeoutMs: 5000,
+        ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
+        conversationSyncEnabled: false,
+        hooks: {
+          beforeToolCall: true,
+          afterToolCall: true,
+          modelCallStarted: true,
+          modelCallEnded: true,
+          agentEnd: true,
+        },
+      },
+    };
+    // sto-scheduled-task-tool disabled: cloud scheduled tasks not live this release
+    if (entries['sto-scheduled-task-tool']) {
+      delete entries['sto-scheduled-task-tool'];
+    }
+    entries['sto-skill-call-monitor'] = {
+      enabled: true,
+      config: {
+        reportApiUrl: `${stoBaseUrl}/agent/v1/skills/usage-report`,
+        ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
+        timeoutMs: 5000,
+      },
+    };
     plugins.entries = entries;
     config.plugins = plugins;
 
+    // Deny create_scheduled_task so natural-language requests do not route to the cloud flow.
+    // The built-in "cron" tool is left available for local scheduled jobs if the runtime provides it.
+    const tools = (config.tools || {}) as Record<string, unknown>;
+    const deny = Array.isArray(tools.deny) ? [...(tools.deny as string[])] : [];
+    if (!deny.includes('create_scheduled_task')) {
+      deny.push('create_scheduled_task');
+    }
+    // Remove the old 'cron' deny so local cron creation is possible again
+    tools.deny = deny.filter((t) => t !== 'cron');
+    config.tools = tools;
+
     await writeOpenClawJson(config);
-    console.log(`Configured sto-dynamic-agent-route plugin (baseUrl=${stoBaseUrl}/agent/v1/biz-agent)`);
+    console.log(
+      `Configured STO plugins in one write (baseUrl=${stoBaseUrl}/agent/v1/biz-agent, telemetry ingest enabled)`,
+    );
   });
+}
+
+/**
+ * Configure the sto-dynamic-agent-route plugin in openclaw.json after SSO login.
+ * Adds models.providers entry and plugins.allow/entries with environment-specific URLs.
+ */
+export async function syncStoDynamicRoutePluginToOpenClaw(): Promise<void> {
+  return syncStoPluginsToOpenClaw();
+}
+
+/**
+ * Configure the sto-agent-telemetry plugin in openclaw.json after SSO login.
+ * Writes ingest URL and SSO auth path into plugins.entries.
+ */
+export async function syncStoAgentTelemetryPluginToOpenClaw(): Promise<void> {
+  return syncStoPluginsToOpenClaw();
 }
 
 /**
@@ -1303,6 +1434,28 @@ export async function removeStoDynamicRoutePluginFromOpenClaw(): Promise<void> {
     if (modified) {
       await writeOpenClawJson(config);
       console.log('Disabled sto-dynamic-agent-route plugin config');
+    }
+  });
+}
+
+/**
+ * Disable the sto-agent-telemetry plugin in openclaw.json on logout or token expiry.
+ */
+export async function removeStoAgentTelemetryPluginFromOpenClaw(): Promise<void> {
+  return withConfigLock(async () => {
+    const config = await readOpenClawJson();
+    let modified = false;
+
+    const plugins = config.plugins as Record<string, unknown> | undefined;
+    const entries = (plugins?.entries ?? {}) as Record<string, Record<string, unknown>>;
+    if (entries['sto-agent-telemetry']) {
+      entries['sto-agent-telemetry'].enabled = false;
+      modified = true;
+    }
+
+    if (modified) {
+      await writeOpenClawJson(config);
+      console.log('Disabled sto-agent-telemetry plugin config');
     }
   });
 }

@@ -66,6 +66,11 @@ export interface StoSyncResult {
   error?: string;
 }
 
+export type StoSyncOptions = {
+  /** When true, skip per-step Gateway reload; caller should reload once after batching. */
+  deferGatewayRefresh?: boolean;
+};
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -105,11 +110,20 @@ export class StoModelSyncService {
     token: string,
   ): Promise<StoRemoteModel[]> {
     const url = `${domain}${STO_MODEL_LIST_PATH}`;
-    logger.info(`[sto-sync] Fetching remote models: url=${url}`);
+    const headers = buildStoMemoryCenterAuthHeaders(token);
+    logger.info(`[sto-sync] >>> fetchRemoteModels url=${url}`);
+    logger.info(`[sto-sync] >>> fetchRemoteModels headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
 
-    const response = await fetch(url, {
-      headers: buildStoMemoryCenterAuthHeaders(token),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    let response: Response;
+    try {
+      response = await fetch(url, { headers, signal: controller.signal });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    const bodyText = await response.text();
+    logger.info(`[sto-sync] <<< fetchRemoteModels status=${response.status} body=${bodyText.slice(0, 500)}`);
 
     if (!response.ok) {
       throw new Error(
@@ -117,7 +131,7 @@ export class StoModelSyncService {
       );
     }
 
-    const data = (await response.json()) as {
+    const data = JSON.parse(bodyText) as {
       data?: StoRemoteModel[];
       models?: StoRemoteModel[];
     };
@@ -132,11 +146,11 @@ export class StoModelSyncService {
    * Run a full reconciliation cycle.  Safe to call concurrently — if a sync
    * is already in progress the caller gets the same promise back.
    */
-  async syncModels(): Promise<StoSyncResult> {
+  async syncModels(options?: StoSyncOptions): Promise<StoSyncResult> {
     if (this.currentSync) {
       return this.currentSync;
     }
-    this.currentSync = this.doSync();
+    this.currentSync = this.doSync(options);
     try {
       return await this.currentSync;
     } finally {
@@ -144,7 +158,10 @@ export class StoModelSyncService {
     }
   }
 
-  private async doSync(): Promise<StoSyncResult> {
+  private async doSync(options?: StoSyncOptions): Promise<StoSyncResult> {
+    const runtimeGateway = options?.deferGatewayRefresh
+      ? undefined
+      : (this.gatewayManager ?? undefined);
     const result: StoSyncResult = {
       created: [],
       deleted: [],
@@ -176,7 +193,8 @@ export class StoModelSyncService {
     const remoteModelIds = remoteModels.map((m) => m.id);
 
     if (remoteModelIds.length === 0) {
-      logger.info('[sto-sync] Remote model list is empty, skipping sync');
+      logger.warn('[sto-sync] Remote model list is empty');
+      result.error = 'empty-model-list';
       return result;
     }
 
@@ -202,7 +220,7 @@ export class StoModelSyncService {
           await syncDeletedProviderToRuntime(
             config,
             account.id,
-            this.gatewayManager ?? undefined,
+            runtimeGateway,
           );
           result.deleted.push(account.id);
         } catch (err) {
@@ -247,7 +265,7 @@ export class StoModelSyncService {
         await syncSavedProviderToRuntime(
           providerAccountToConfig(account),
           token,
-          this.gatewayManager ?? undefined,
+          runtimeGateway,
         );
         result.created.push(STO_ACCOUNT_ID);
       } catch (err) {
@@ -289,7 +307,7 @@ export class StoModelSyncService {
           await syncSavedProviderToRuntime(
             providerAccountToConfig(updatedAccount),
             token,
-            this.gatewayManager ?? undefined,
+            runtimeGateway,
           );
           result.updated.push(STO_ACCOUNT_ID);
         } catch (err) {
@@ -320,7 +338,7 @@ export class StoModelSyncService {
         await providerService.setDefaultAccount(STO_ACCOUNT_ID);
         await syncDefaultProviderToRuntime(
           STO_ACCOUNT_ID,
-          this.gatewayManager ?? undefined,
+          runtimeGateway,
         );
         result.defaultSet = STO_ACCOUNT_ID;
       } catch (err) {

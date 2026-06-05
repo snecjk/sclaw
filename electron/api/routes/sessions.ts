@@ -1,6 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { join } from 'node:path';
 import { getOpenClawConfigDir } from '../../utils/paths';
+import {
+  qualifyChatModelRef,
+  setSessionModelViaGateway,
+} from '../../utils/openclaw-model';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -8,8 +12,53 @@ export async function handleSessionRoutes(
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
-  _ctx: HostApiContext,
+  ctx: HostApiContext,
 ): Promise<boolean> {
+  // POST /api/sessions/model — session-scoped model override (does not change agent default)
+  if (url.pathname === '/api/sessions/model' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{
+        sessionKey: string;
+        model: string;
+        accountId?: string;
+        agentId?: string;
+      }>(req);
+      const sessionKey = (body.sessionKey ?? '').trim();
+      const rawModel = (body.model ?? '').trim();
+      if (!sessionKey || !sessionKey.startsWith('agent:')) {
+        sendJson(res, 400, { success: false, error: 'Invalid sessionKey' });
+        return true;
+      }
+      if (!rawModel) {
+        sendJson(res, 400, { success: false, error: 'model is required' });
+        return true;
+      }
+
+      const qualifiedModel = await qualifyChatModelRef(rawModel, body.accountId);
+      const result = await setSessionModelViaGateway(ctx.gatewayManager, {
+        sessionKey,
+        model: qualifiedModel,
+        agentId: body.agentId?.trim() || undefined,
+      });
+
+      if (!result.ok) {
+        sendJson(res, 503, { success: false, error: result.error ?? 'Failed to set session model' });
+        return true;
+      }
+
+      sendJson(res, 200, {
+        success: true,
+        sessionKey,
+        model: result.model ?? qualifiedModel,
+        modelOverride: result.modelOverride,
+        changedModel: result.changedModel,
+      });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/sessions/delete' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ sessionKey: string }>(req);

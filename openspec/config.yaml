@@ -1,0 +1,76 @@
+schema: spec-driven
+
+context: |
+  StoClaw is a cross-platform Electron desktop app (React 19 + Vite + TypeScript) providing a GUI for the OpenClaw AI agent runtime.
+
+  Tech stack:
+  - Electron (Main + Renderer)
+  - React 19, Vite, TypeScript
+  - pnpm (pinned version in packageManager field)
+  - Tailwind CSS, shadcn/ui components
+  - Zustand for state management (src/stores/)
+  - Vitest for unit tests, Playwright for E2E
+
+  Key directories:
+  - src/pages/: Page-level components (Home, Agents, Channels, Chat, Cron, FloatIcon, Login, Models, Settings, Setup, Skills, Sprite, Subscriptions)
+  - src/components/: Shared components (channels, common, layout, settings, ui)
+  - src/stores/: Zustand stores (agents, auth, channels, chat, cron, gateway, message-queue, providers, settings, skills, subscriptions, update)
+  - src/hooks/: Custom React hooks
+  - src/lib/: Host API and API client (single entry for backend calls)
+  - electron/main/: Main process code (window management, IPC, tray, updater, proxy)
+  - electron/services/: Main process services (client-update-platform, providers, secrets, sto-biz-agent-sync, sto-skill-service, sto-subscription-service, sto-token-quota-service, provider-migration, provider-runtime-sync, provider-service, provider-store, provider-validation, sto-model-sync, store-instance, secret-store)
+  - electron/preload/: Preload scripts
+  - electron/shared/: Shared types between Main and Renderer
+  - electron/api/: API definitions
+  - openspec/: OpenSpec change management
+  - docs/sto-design.md: STO UI theme constitution — brand, functional, neutral colors, token naming (Foundation→Property→Modifier); single source of truth for page/shell theming in specs and implementation.
+
+  Business module mapping (capability naming reference):
+  - Chat page → chat-* (e.g., chat-message-sync, chat-file-attachment)
+  - Channels page → channels-* (e.g., channels-list, channels-message-sync)
+  - Agents page → agents-* (e.g., agents-list, agents-config)
+  - Settings page → settings-* (e.g., settings-ai-provider, settings-appearance)
+  - Models page → models-* (e.g., models-usage-chart, models-filter)
+  - Skills page → skills-* (e.g., skills-marketplace, skills-install)
+  - Subscriptions page → subscriptions-* (e.g., subscriptions-plan, subscriptions-billing)
+  - Login page → login-* (e.g., login-oauth, login-qr)
+  - Cron page → cron-* (e.g., cron-schedule, cron-history)
+  - Setup page → setup-* (e.g., setup-wizard, setup-onboarding)
+  - FloatIcon → float-icon-* (e.g., float-icon-position, float-icon-animation)
+  - Sprite → sprite-* (e.g., sprite-animation, sprite-interaction)
+  - Main process services → service-* (e.g., service-provider-sync, service-secret-store)
+  - IPC/Host API → host-api-* (e.g., host-api-proxy, host-api-auth)
+  - Cross-cutting concerns → semantic names (e.g., realtime-message-delivery, auth-session-management, provider-model-sync)
+
+  Domain: AI agent runtime GUI with multi-provider support, real-time messaging, skills marketplace, subscription management.
+
+rules:
+  proposal:
+    - Capabilities MUST use business-module-aligned kebab-case names (e.g., `chat-message-sync`, NOT `frontend-chat-component`)
+    - Cross-cutting capabilities MUST use semantic concern names (e.g., `realtime-message-delivery`, NOT `chat-and-channels-update`)
+    - Keep proposals under 2 pages; focus on WHY not HOW
+    - Always include explicit New Capabilities and Modified Capabilities lists
+    - If the change materially affects user-visible page or shell theming, the proposal SHOULD note alignment with docs/sto-design.md (STO theme constitution)
+
+  design:
+    - Every key decision MUST include rationale and at least one alternative considered
+    - Document risks with [Risk] → Mitigation format
+    - Keep design focused on architecture, not line-by-line implementation
+    - UI or shell appearance decisions (colors, emphasis, status hues, typography contrast) MUST align with docs/sto-design.md; cite that document or its token names (e.g., Brand-6, Grey-10) instead of ad-hoc hex-only descriptions
+
+  specs:
+    - Every requirement MUST use SHALL or MUST for normative statements
+    - Every requirement MUST have at least one scenario with exactly four hashtags (`#### Scenario:`)
+    - Renderer-visible theming requirements (page chrome, primary actions, success/warning/danger/info semantics) MUST be stated in terms consistent with docs/sto-design.md (semantic tokens / Property categories); arbitrary hex in requirements is discouraged except when quoting the canonical palette from that doc
+    - Scenarios MUST use `- **WHEN**` and `- **THEN**` format
+    - For MODIFIED requirements, copy the ENTIRE requirement block from the existing spec before editing
+    - DO NOT add direct `window.electron.ipcRenderer.invoke(...)` calls in pages/components; use host-api instead
+    - DO NOT call Gateway HTTP endpoints directly from renderer; use Main-process proxy channels (`hostapi:fetch`, `gateway:httpProxy`)
+    - Transport policy is Main-owned and fixed as `WS -> HTTP -> IPC fallback`; renderer MUST NOT implement protocol switching logic
+
+  tasks:
+    - Each task MUST reference the corresponding `### Requirement:` name from spec.md for traceability
+    - For communication-related changes (gateway events, runtime send/receive, delivery, fallback), run `pnpm run comms:replay` and `pnpm run comms:compare`
+    - After functional changes, review `README.md`, `README.zh-CN.md`, and `README.ja-JP.md` for required updates; update docs in the same PR/commit
+    - Tasks MUST be grouped under numbered headings (e.g., `## 1. Group Name`)
+    - Each task MUST use checkbox format (markdown list items like "- [ ] X.Y Task description")

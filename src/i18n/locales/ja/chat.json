@@ -19,7 +19,8 @@
         "conversationTargetLabel": "会話相手",
         "switchAgentAria": "会話 Agent を切り替え",
         "switchAgentTitle": "その Agent のメインセッションに切り替えます。新規チャットもこの Agent 配下になります",
-        "defaultAgentMark": "（既定）"
+        "defaultAgentMark": "（既定）",
+        "modelSwitchFailed": "モデルの切り替えに失敗しました：{{message}}"
     },
     "composer": {
         "attachFiles": "ファイルを添付",
@@ -36,6 +37,11 @@
         "retryFailedAttachments": "失敗した添付を再試行"
     },
     "streaming": {
+        "connectingModel": "モデルに接続中...",
+        "thinkingProcessTitle": "思考過程",
+        "toolCallLabel": "ツール呼び出し {{index}}",
+        "processMessageLabel": "過程メッセージ {{count}}",
+        "generatingWithTool": "{{tool}} で応答を生成中...",
         "respondingBadge": "AI 応答中",
         "thinkingBadge": "AI 思考中",
         "thinkingTitle": "回答を組み立てています",
