@@ -2638,13 +2638,15 @@ function registerFileHandlers(): void {
 
   ipcMain.handle('media:getThumbnails', async (_, paths: Array<{ filePath: string; mimeType: string }>) => {
     const fsP = await import('fs/promises');
+    const { expandPath } = await import('../utils/paths');
     const results: Record<string, { preview: string | null; fileSize: number }> = {};
     for (const { filePath, mimeType } of paths) {
       try {
-        const s = await fsP.stat(filePath);
+        const resolvedPath = expandPath(filePath);
+        const s = await fsP.stat(resolvedPath);
         let preview: string | null = null;
         if (mimeType.startsWith('image/')) {
-          preview = await generateImagePreview(filePath, mimeType);
+          preview = await generateImagePreview(resolvedPath, mimeType);
         }
         results[filePath] = { preview, fileSize: s.size };
       } catch {

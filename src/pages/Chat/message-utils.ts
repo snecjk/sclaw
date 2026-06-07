@@ -260,22 +260,40 @@ export function extractToolUse(message: RawMessage | unknown): Array<{ id: strin
 
 /**
  * Determine if an attached file is previewable in the side panel.
+ * Covers: text, code, data, Office docs (fallback/external-open).
  */
 const PREVIEWABLE_MIME_PREFIXES = [
   'text/html',
   'text/plain',
   'application/json',
   'text/csv',
+  'text/tab-separated-values',
+  'application/pdf',
+  'text/markdown',
+  // Office docs — currently shown as "open externally" placeholder,
+  // but listed so users can click them in the product panel.
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-powerpoint',
 ];
 
 export function isPreviewableFile(file: { mimeType: string; filePath?: string }): boolean {
   if (!file.filePath) return false;
+  const filePath = file.filePath;
   // Web URLs (http/https) are excluded from built-in preview because they may have
   // anti-hotlink / X-Frame-Options / CSP blocking, and should open in external browser.
-  if (file.filePath.startsWith('http://') || file.filePath.startsWith('https://')) return false;
-  return PREVIEWABLE_MIME_PREFIXES.some((prefix) =>
+  if (filePath.startsWith('http://') || filePath.startsWith('https://')) return false;
+  const ext = filePath.split('.').pop()?.toLowerCase() || '';
+  const matched = PREVIEWABLE_MIME_PREFIXES.some((prefix) =>
     prefix.endsWith('/') ? file.mimeType.startsWith(prefix) : file.mimeType === prefix,
   );
+  if (matched) return true;
+  // Fallback: known extensions whose MIME may be application/octet-stream
+  return ['html', 'htm', 'pdf', 'md', 'txt', 'json', 'csv', 'tsv',
+    'xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt'].includes(ext);
 }
 
 function extToMimeType(ext: string): string {
@@ -301,7 +319,7 @@ function extToMimeType(ext: string): string {
     yaml: 'text/plain', yml: 'text/plain', xml: 'text/plain', toml: 'text/plain',
     ini: 'text/plain', conf: 'text/plain', properties: 'text/plain', env: 'text/plain',
     // Data/Log files
-    log: 'text/plain', tsv: 'text/plain',
+    log: 'text/plain', tsv: 'text/tab-separated-values',
     // Web files
     css: 'text/plain', scss: 'text/plain', less: 'text/plain',
     // Shell scripts
@@ -313,7 +331,7 @@ function extToMimeType(ext: string): string {
 
 /** Shared extension list for previewable local file paths (used by extractPreviewableRefs and preprocessTextForPreviewLinks). */
 export const PREVIEWABLE_FILE_EXTS =
-  'html?|sql|py|js|ts|jsx|tsx|java|go|rs|cpp|c|h|cs|rb|php|swift|kt|scala|r|m|mm|json|yaml|yml|xml|toml|ini|conf|properties|env|md|txt|csv|tsv|log|css|scss|less|sh|bash|zsh|fish|ps1|bat|cmd|pdf';
+  'properties|swift|scala|bash|fish|html?|java|jsx|tsx|cpp|php|toml|conf|scss|less|zsh|yaml|json|sql|xml|csv|tsv|txt|log|ini|env|md|htm|py|go|rs|cs|rb|mm|bat|cmd|pdf|kt|css|yml|ts|js|sh|c|h|r|m';
 
 /** Remove fenced code blocks from text so paths inside them are not matched.
  *  Inline code (`path`) is preserved — it often contains actual file paths the user/AI wants to preview.

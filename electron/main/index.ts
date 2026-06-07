@@ -392,6 +392,16 @@ async function initialize(): Promise<void> {
   // Warm up network optimization (non-blocking)
   void warmupNetworkOptimization();
 
+  // Apply persisted proxy settings in parallel with heavy module loading.
+  // Proxy affects network calls but does not depend on those modules.
+  sendStartupProgress('Loading settings...');
+  const proxyPromise = applyProxySettings().catch((error) => {
+    logger.warn('Failed to apply proxy settings:', error);
+  });
+
+  // Sync launch-at-startup setting (fast, uses electron-store)
+  void syncLaunchAtStartupSettingFromStore();
+
   // ── Lazy-load heavy modules in parallel while splash screen is displayed ──
   // These were previously static imports that blocked process startup with
   // heavy dependency chains (Baileys, posthog-node, electron-updater, etc.).
@@ -463,16 +473,7 @@ async function initialize(): Promise<void> {
     logger.warn('Telemetry initialization failed:', error);
   });
 
-  // Apply persisted proxy settings before network requests.
-  sendStartupProgress('Loading settings...');
-  const proxyPromise = applyProxySettings().catch((error) => {
-    logger.warn('Failed to apply proxy settings:', error);
-  });
-
-  // Sync launch-at-startup setting (fast, uses electron-store)
-  void syncLaunchAtStartupSettingFromStore();
-
-  // Wait for critical initialization (proxy affects network calls)
+  // Wait for proxy settings (already started earlier, likely finished during imports)
   await proxyPromise;
 
   // Create sprite window (hidden by default, toggled via tray)

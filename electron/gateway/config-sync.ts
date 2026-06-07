@@ -49,7 +49,7 @@ const CHANNEL_PLUGIN_MAP: Record<string, { dirName: string; npmName: string }> =
   'openclaw-weixin': { dirName: 'openclaw-weixin', npmName: '@tencent-weixin/openclaw-weixin' },
 };
 
-function readPluginVersion(pkgJsonPath: string): string | null {
+function _readPluginVersion(pkgJsonPath: string): string | null {
   try {
     const raw = readFileSync(fsPath(pkgJsonPath), 'utf-8');
     const parsed = JSON.parse(raw) as { version?: string };
@@ -77,57 +77,72 @@ function buildBundledPluginSources(pluginDirName: string): string[] {
  * - Packaged mode: uses bundled plugins from resources/ (includes deps)
  * - Dev mode: falls back to node_modules/ with pnpm-aware dep collection
  */
-function ensureConfiguredPluginsUpgraded(configuredChannels: string[]): void {
-  for (const channelType of configuredChannels) {
-    const pluginInfo = CHANNEL_PLUGIN_MAP[channelType];
-    if (!pluginInfo) continue;
-    const { dirName, npmName } = pluginInfo;
+async function readPluginVersionAsync(pkgJsonPath: string): Promise<string | null> {
+  try {
+    const { readFile } = await import('fs/promises');
+    const raw = await readFile(fsPath(pkgJsonPath), 'utf-8');
+    const parsed = JSON.parse(raw) as { version?: string };
+    return parsed.version ?? null;
+  } catch {
+    return null;
+  }
+}
 
-    const targetDir = join(getOpenClawConfigDir(), 'extensions', dirName);
-    const targetManifest = join(targetDir, 'openclaw.plugin.json');
-    const isInstalled = existsSync(fsPath(targetManifest));
-    const installedVersion = isInstalled ? readPluginVersion(join(targetDir, 'package.json')) : null;
+async function ensureConfiguredPluginsUpgraded(configuredChannels: string[]): Promise<void> {
+  await Promise.all(
+    configuredChannels.map(async (channelType) => {
+      const pluginInfo = CHANNEL_PLUGIN_MAP[channelType];
+      if (!pluginInfo) return;
+      const { dirName, npmName } = pluginInfo;
 
-    // Try bundled sources first (packaged mode or if bundle-plugins was run)
-    const bundledSources = buildBundledPluginSources(dirName);
-    const bundledDir = bundledSources.find((dir) => existsSync(fsPath(join(dir, 'openclaw.plugin.json'))));
+      const targetDir = join(getOpenClawConfigDir(), 'extensions', dirName);
+      const targetManifest = join(targetDir, 'openclaw.plugin.json');
+      const isInstalled = existsSync(fsPath(targetManifest));
+      const installedVersion = isInstalled
+        ? await readPluginVersionAsync(join(targetDir, 'package.json'))
+        : null;
 
-    if (bundledDir) {
-      const sourceVersion = readPluginVersion(join(bundledDir, 'package.json'));
-      // Install or upgrade if version differs or plugin not installed
-      if (!isInstalled || (sourceVersion && installedVersion && sourceVersion !== installedVersion)) {
-        logger.info(`[plugin] ${isInstalled ? 'Auto-upgrading' : 'Installing'} ${channelType} plugin${isInstalled ? `: ${installedVersion} → ${sourceVersion}` : `: ${sourceVersion}`} (bundled)`);
+      // Try bundled sources first (packaged mode or if bundle-plugins was run)
+      const bundledSources = buildBundledPluginSources(dirName);
+      const bundledDir = bundledSources.find((dir) => existsSync(fsPath(join(dir, 'openclaw.plugin.json'))));
+
+      if (bundledDir) {
+        const sourceVersion = await readPluginVersionAsync(join(bundledDir, 'package.json'));
+        // Install or upgrade if version differs or plugin not installed
+        if (!isInstalled || (sourceVersion && installedVersion && sourceVersion !== installedVersion)) {
+          logger.info(`[plugin] ${isInstalled ? 'Auto-upgrading' : 'Installing'} ${channelType} plugin${isInstalled ? `: ${installedVersion} → ${sourceVersion}` : `: ${sourceVersion}`} (bundled)`);
+          try {
+            mkdirSync(fsPath(join(getOpenClawConfigDir(), 'extensions')), { recursive: true });
+            rmSync(fsPath(targetDir), { recursive: true, force: true });
+            cpSync(fsPath(bundledDir), fsPath(targetDir), { recursive: true, dereference: true });
+            fixupPluginManifest(targetDir);
+          } catch (err) {
+            logger.warn(`[plugin] Failed to ${isInstalled ? 'auto-upgrade' : 'install'} ${channelType} plugin:`, err);
+          }
+        }
+        return;
+      }
+
+      // Dev mode fallback: copy from node_modules/ with pnpm dep resolution
+      if (!app.isPackaged) {
+        const npmPkgPath = join(process.cwd(), 'node_modules', ...npmName.split('/'));
+        if (!existsSync(fsPath(join(npmPkgPath, 'openclaw.plugin.json')))) return;
+        const sourceVersion = await readPluginVersionAsync(join(npmPkgPath, 'package.json'));
+        if (!sourceVersion) return;
+        // Skip only if installed AND same version
+        if (isInstalled && installedVersion && sourceVersion === installedVersion) return;
+
+        logger.info(`[plugin] ${isInstalled ? 'Auto-upgrading' : 'Installing'} ${channelType} plugin${isInstalled ? `: ${installedVersion} → ${sourceVersion}` : `: ${sourceVersion}`} (dev/node_modules)`);
         try {
           mkdirSync(fsPath(join(getOpenClawConfigDir(), 'extensions')), { recursive: true });
-          rmSync(fsPath(targetDir), { recursive: true, force: true });
-          cpSync(fsPath(bundledDir), fsPath(targetDir), { recursive: true, dereference: true });
+          copyPluginFromNodeModules(npmPkgPath, targetDir, npmName);
           fixupPluginManifest(targetDir);
         } catch (err) {
-          logger.warn(`[plugin] Failed to ${isInstalled ? 'auto-upgrade' : 'install'} ${channelType} plugin:`, err);
+          logger.warn(`[plugin] Failed to ${isInstalled ? 'auto-upgrade' : 'install'} ${channelType} plugin from node_modules:`, err);
         }
       }
-      continue;
-    }
-
-    // Dev mode fallback: copy from node_modules/ with pnpm dep resolution
-    if (!app.isPackaged) {
-      const npmPkgPath = join(process.cwd(), 'node_modules', ...npmName.split('/'));
-      if (!existsSync(fsPath(join(npmPkgPath, 'openclaw.plugin.json')))) continue;
-      const sourceVersion = readPluginVersion(join(npmPkgPath, 'package.json'));
-      if (!sourceVersion) continue;
-      // Skip only if installed AND same version
-      if (isInstalled && installedVersion && sourceVersion === installedVersion) continue;
-
-      logger.info(`[plugin] ${isInstalled ? 'Auto-upgrading' : 'Installing'} ${channelType} plugin${isInstalled ? `: ${installedVersion} → ${sourceVersion}` : `: ${sourceVersion}`} (dev/node_modules)`);
-      try {
-        mkdirSync(fsPath(join(getOpenClawConfigDir(), 'extensions')), { recursive: true });
-        copyPluginFromNodeModules(npmPkgPath, targetDir, npmName);
-        fixupPluginManifest(targetDir);
-      } catch (err) {
-        logger.warn(`[plugin] Failed to ${isInstalled ? 'auto-upgrade' : 'install'} ${channelType} plugin from node_modules:`, err);
-      }
-    }
-  }
+    })
+  );
 }
 
 // ── Pre-launch sync ──────────────────────────────────────────────
@@ -135,54 +150,43 @@ function ensureConfiguredPluginsUpgraded(configuredChannels: string[]): void {
 export async function syncGatewayConfigBeforeLaunch(
   appSettings: Awaited<ReturnType<typeof getAllSettings>>,
 ): Promise<void> {
-  await syncProxyConfigToOpenClaw(appSettings, { preserveExistingWhenDisabled: true });
+  // Group 1: independent config syncs that can run in parallel
+  await Promise.all([
+    syncProxyConfigToOpenClaw(appSettings, { preserveExistingWhenDisabled: true }),
+    sanitizeOpenClawConfig().catch((err) => {
+      logger.warn('Failed to sanitize openclaw.json:', err);
+    }),
+    cleanupDanglingWeChatPluginState().catch((err) => {
+      logger.warn('Failed to clean dangling WeChat plugin state before launch:', err);
+    }),
+  ]);
 
-  try {
-    await sanitizeOpenClawConfig();
-  } catch (err) {
-    logger.warn('Failed to sanitize openclaw.json:', err);
-  }
-
-  try {
-    await cleanupDanglingWeChatPluginState();
-  } catch (err) {
-    logger.warn('Failed to clean dangling WeChat plugin state before launch:', err);
-  }
-
-  // Auto-upgrade installed plugins before Gateway starts so that
-  // the plugin manifest ID matches what sanitize wrote to the config.
+  // Group 2: plugin auto-upgrade (needs channel list)
   try {
     const configuredChannels = await listConfiguredChannels();
-    ensureConfiguredPluginsUpgraded(configuredChannels);
+    await ensureConfiguredPluginsUpgraded(configuredChannels);
   } catch (err) {
     logger.warn('Failed to auto-upgrade plugins:', err);
   }
 
-  try {
-    await syncGatewayTokenToConfig(appSettings.gatewayToken);
-  } catch (err) {
-    logger.warn('Failed to sync gateway token to openclaw.json:', err);
-  }
+  // Group 3: independent token / browser / idle syncs
+  await Promise.all([
+    syncGatewayTokenToConfig(appSettings.gatewayToken).catch((err) => {
+      logger.warn('Failed to sync gateway token to openclaw.json:', err);
+    }),
+    syncBrowserConfigToOpenClaw().catch((err) => {
+      logger.warn('Failed to sync browser config to openclaw.json:', err);
+    }),
+    syncSessionIdleMinutesToOpenClaw().catch((err) => {
+      logger.warn('Failed to sync session idle minutes to openclaw.json:', err);
+    }),
+  ]);
 
-  try {
-    await syncBrowserConfigToOpenClaw();
-  } catch (err) {
-    logger.warn('Failed to sync browser config to openclaw.json:', err);
-  }
-
-  try {
-    await syncSessionIdleMinutesToOpenClaw();
-  } catch (err) {
-    logger.warn('Failed to sync session idle minutes to openclaw.json:', err);
-  }
-
-  // SSO / STO plugins / models — must land on disk before the Gateway process starts,
-  // otherwise OpenClaw hot-reloads and StoClaw schedules a second debouncedRestart.
+  // Group 4: authenticated setup
   try {
     const { getAuthState, getStoToken } = await import('../utils/auth-store');
     const { runAuthenticatedSetup } = await import('../services/auth-setup-orchestrator');
-    const authState = await getAuthState();
-    const token = await getStoToken();
+    const [authState, token] = await Promise.all([getAuthState(), getStoToken()]);
     if (authState.isAuthenticated && token) {
       await runAuthenticatedSetup({
         source: 'startup',

@@ -1,5 +1,5 @@
 import { app, utilityProcess } from 'electron';
-import { existsSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 import type { GatewayLaunchContext } from './config-sync';
 import type { GatewayLifecycleState } from './process-policy';
@@ -175,6 +175,12 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
 function ensureGatewayFetchPreload(): string {
   const dest = path.join(app.getPath('userData'), 'gateway-fetch-preload.cjs');
   try {
+    if (existsSync(dest)) {
+      const existing = readFileSync(dest, 'utf-8');
+      if (existing === GATEWAY_FETCH_PRELOAD_SOURCE) {
+        return dest; // content unchanged, skip write
+      }
+    }
     writeFileSync(dest, GATEWAY_FETCH_PRELOAD_SOURCE, 'utf-8');
   } catch {
     // best-effort

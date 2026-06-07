@@ -56,10 +56,13 @@ function mimeToExt(mimeType: string): string {
 
 const OUTBOUND_DIR = join(getOpenClawConfigDir(), 'media', 'outbound');
 
-/** Resolve a relative path starting with ./ to the main agent workspace. */
+/** Resolve a relative path starting with ./ to the main agent workspace, or expand ~ to home. */
 function resolveWorkspaceFilePath(filePath: string): string {
   if (filePath.startsWith('./')) {
     return expandPath(join(getOpenClawConfigDir(), 'workspace', filePath));
+  }
+  if (filePath.startsWith('~')) {
+    return expandPath(filePath);
   }
   return filePath;
 }

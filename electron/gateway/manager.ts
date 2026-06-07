@@ -336,6 +336,15 @@ export class GatewayManager extends EventEmitter {
     // Fire-and-forget: only needs to run once, not on every retry.
     warmupManagedPythonReadiness();
 
+    // Clean up stale session lock files left by previous crashes.
+    // This mitigates the Windows lock-recovery defect in openclaw.
+    try {
+      const { cleanupStaleSessionLocks } = await import('../utils/session-lock-cleanup');
+      await cleanupStaleSessionLocks();
+    } catch (err) {
+      logger.warn('Failed to clean up stale session lock files:', err);
+    }
+
     // If the default port is occupied by another process, auto-increment
     // to avoid killing an unrelated OpenClaw / StoClaw gateway.
     try {
