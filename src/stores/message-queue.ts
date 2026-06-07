@@ -16,6 +16,7 @@ export interface QueuedMessage {
   text: string;
   attachments?: FileAttachment[];
   targetAgentId?: string | null;
+  workflowId?: string | null;
   queuedAt: number;
 }
 
@@ -26,7 +27,7 @@ interface SessionQueue {
 
 interface MessageQueueState {
   queues: Map<string, SessionQueue>; // keyed by sessionKey
-  enqueue: (sessionKey: string, text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => void;
+  enqueue: (sessionKey: string, text: string, attachments?: FileAttachment[], targetAgentId?: string | null, workflowId?: string | null) => void;
   remove: (sessionKey: string, id: string) => void;
   moveUp: (sessionKey: string, id: string) => void;
   moveDown: (sessionKey: string, id: string) => void;
@@ -48,7 +49,7 @@ function getOrCreateSessionQueue(queues: Map<string, SessionQueue>, sessionKey: 
 export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   queues: new Map(),
 
-  enqueue: (sessionKey, text, attachments, targetAgentId) => {
+  enqueue: (sessionKey, text, attachments, targetAgentId, workflowId) => {
     const { queues } = get();
     const session = getOrCreateSessionQueue(queues, sessionKey);
     if (session.queue.length >= QUEUE_MAX_PER_SESSION) return;
@@ -57,6 +58,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       text,
       attachments,
       targetAgentId,
+      workflowId,
       queuedAt: Date.now(),
     };
     session.queue.push(item);
@@ -176,6 +178,48 @@ export function createAutoSendWatcher(
         const msg = useMessageQueueStore.getState().dequeueFirst(currentSessionKey);
         if (!msg) return;
 
+        // If this queued message has a workflowId, process it through the workflow flow
+        if (msg.workflowId) {
+          console.log('[message-queue] auto-sending workflow message: workflowId=', msg.workflowId);
+          const { sendWithWorkflow } = require('@/hooks/use-workflow-send') as typeof import('@/hooks/use-workflow-send');
+          sendWithWorkflow(
+            msg.text,
+            msg.workflowId,
+            { sessionKey: currentSessionKey, agentId: chatState.currentAgentId },
+            async (text, runId, wfId) => {
+              chatState.sendMessage(
+                text,
+                msg.attachments?.map((a) => ({
+                  fileName: a.fileName,
+                  mimeType: a.mimeType,
+                  fileSize: a.fileSize,
+                  stagedPath: a.stagedPath,
+                  preview: a.preview,
+                })),
+                msg.targetAgentId,
+                wfId,
+                runId,
+              );
+            },
+          ).catch((err: unknown) => {
+            console.error('[message-queue] workflow auto-send failed:', err);
+            // Fall back to normal send so the message isn't lost
+            chatState.sendMessage(
+              msg.text,
+              msg.attachments?.map((a) => ({
+                fileName: a.fileName,
+                mimeType: a.mimeType,
+                fileSize: a.fileSize,
+                stagedPath: a.stagedPath,
+                preview: a.preview,
+              })),
+              msg.targetAgentId,
+              undefined,
+            );
+          });
+          return;
+        }
+
         onAutoSend?.();
         chatState.sendMessage(
           msg.text,
@@ -187,6 +231,7 @@ export function createAutoSendWatcher(
             preview: a.preview,
           })),
           msg.targetAgentId,
+          msg.workflowId,
         );
       }, 150);
     } else {

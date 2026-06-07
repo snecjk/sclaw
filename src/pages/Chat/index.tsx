@@ -251,23 +251,64 @@ export function Chat() {
     targetAgentId?: Parameters<typeof sendMessage>[2],
     workflowId?: string | null,
   ) => {
+    console.log('[Chat.handleSend] workflowId=', workflowId, 'text=', text);
     beginSendScroll();
 
-    // Workflow flow: form → create → execute → send
+    const chatState = useChatStore.getState();
+
+    // ── Pending workflow: user is providing parameters in conversation ──
+    const pending = chatState.pendingWorkflow;
+    if (pending && !workflowId) {
+      const { createAndStartWorkflow } = await import('@/hooks/use-workflow-send');
+      // Try to extract parameters from user text
+      const inputs: Record<string, unknown> = {};
+      for (const field of pending.schema.fields) {
+        if (field.extractable && field.extractPattern && text) {
+          try {
+            const match = text.match(new RegExp(field.extractPattern));
+            if (match) {
+              inputs[field.key] = match[1] ?? match[0];
+            }
+          } catch {
+            // Invalid regex, ignore
+          }
+        }
+      }
+      // If all required fields are present, create and start the workflow
+      const requiredFields = pending.schema.fields.filter((f) => f.required);
+      const allRequiredFilled = requiredFields.every((f) => inputs[f.key] !== undefined);
+      if (allRequiredFilled) {
+        const ok = await createAndStartWorkflow(
+          pending.templateId,
+          inputs,
+          { sessionKey: chatState.currentSessionKey, agentId: chatState.currentAgentId },
+          async (msg, runId, wfId) => {
+            await sendMessage(msg, attachments, targetAgentId, wfId, runId);
+          },
+          text,
+        );
+        if (ok) return;
+        // If creation failed, fall through to normal send so AI can guide again
+      }
+    }
+
+    // ── Fresh workflow selection: first time user sends with a workflowId ──
     if (workflowId) {
       const { currentSessionKey, currentAgentId } = useChatStore.getState();
       const { sendWithWorkflow } = await import('@/hooks/use-workflow-send');
       const ok = await sendWithWorkflow(text, workflowId, {
         sessionKey: currentSessionKey,
         agentId: currentAgentId,
-      }, async (msg, runId, wfId) => {
-        await sendMessage(msg, attachments, targetAgentId, wfId, runId);
+      }, async (msg) => {
+        // Gateway chat.send doesn't support workflowId/runId params yet.
+        // Workflow state is tracked via SSE + main process polling.
+        await sendMessage(msg, attachments, targetAgentId);
       });
       if (!ok) return;
       return;
     }
 
-    // Call question-split API (silent fallback on failure)
+    // ── Normal chat flow ──
     setSplitting(true);
     let parts: Array<{ type: string; context: string }> | null = null;
     try {
@@ -297,9 +338,10 @@ export function Chat() {
     text: string,
     attachments?: FileAttachment[],
     targetAgentId?: string | null,
+    workflowId?: string | null,
   ) => {
     const { currentSessionKey } = useChatStore.getState();
-    useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId);
+    useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, workflowId);
   }, []);
 
   // ── Resizable panel logic ──

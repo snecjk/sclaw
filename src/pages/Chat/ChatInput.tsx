@@ -402,7 +402,9 @@ export function ChatInput({
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    if (sending && onQueue) {
+    // Workflow messages should always go through onSend (not queued),
+    // because onQueue doesn't handle the workflow creation flow.
+    if (sending && onQueue && !workflowIdToSend) {
       onQueue(textToSend, attachmentsToSend, targetAgentId, workflowIdToSend);
     } else {
       onSend(textToSend, attachmentsToSend, targetAgentId, workflowIdToSend);

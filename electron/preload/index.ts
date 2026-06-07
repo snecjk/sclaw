@@ -161,6 +161,10 @@ const electronAPI = {
         'form:response',
         'form:isShowing',
         'form:hide',
+        // Workflow
+        'workflow:startTracking',
+        'workflow:stopTracking',
+        'workflow:sync-state',
       ];
 
       if (validChannels.includes(channel)) {

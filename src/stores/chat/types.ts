@@ -104,6 +104,14 @@ export interface ChatState {
   // Workflow
   workflowCardStates: Record<string, WorkflowExecutionState>;
   setWorkflowCardState: (runId: string, state: WorkflowExecutionState) => void;
+  pendingWorkflow: {
+    templateId: string;
+    templateName: string;
+    schema: import('@/types/workflow').WorkflowSchema;
+    schemaHash: string;
+  } | null;
+  setPendingWorkflow: (pending: ChatState['pendingWorkflow']) => void;
+  clearPendingWorkflow: () => void;
 
   // Actions
   loadSessions: () => Promise<void>;

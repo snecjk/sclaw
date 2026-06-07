@@ -1099,6 +1099,10 @@ export const useChatStore = create<ChatState>()(
     }));
   },
 
+  pendingWorkflow: null,
+  setPendingWorkflow: (pending) => set({ pendingWorkflow: pending }),
+  clearPendingWorkflow: () => set({ pendingWorkflow: null }),
+
   // ── Load sessions via sessions.list ──
 
   loadSessions: async () => {

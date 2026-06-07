@@ -67,11 +67,13 @@ export async function searchWorkflowTemplates(query: string, limit = 3): Promise
 // ── 2. Get startup schema ───────────────────────────────────────
 
 export async function getStartupSchema(templateId: string): Promise<StartupSchemaResponse> {
+  console.log('[getStartupSchema] templateId=', templateId);
   const data = await unwrap(
     hostApiFetch<ApiResponse<StartupSchemaResponse>>(`/agent/v1/workflow-templates/${templateId}/startup-schema`, {
       headers: authHeaders(),
     }),
   );
+  console.log('[getStartupSchema] response=', JSON.stringify(data, null, 2));
   return data;
 }
 

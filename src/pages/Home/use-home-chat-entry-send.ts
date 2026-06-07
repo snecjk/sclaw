@@ -20,19 +20,39 @@ export function useHomeChatEntrySend() {
   const newSession = useChatStore((s) => s.newSession);
 
   const handleHubQueue = useCallback(
-    (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
+    (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, workflowId?: string | null) => {
       const { currentSessionKey } = useChatStore.getState();
-      useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId);
+      useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, workflowId);
     },
     [],
   );
 
   const handleHubSend = useCallback(
-    async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
+    async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, workflowId?: string | null) => {
       if (!isGatewayRunning) {
         toast.error(t('assistant.gatewayRequired'));
         return;
       }
+
+      // Handle workflow: same logic as Chat/index.tsx
+      if (workflowId) {
+        const { sendWithWorkflow } = await import('@/hooks/use-workflow-send');
+        const { currentSessionKey, currentAgentId } = useChatStore.getState();
+        if (currentSessionKey === DEFAULT_SESSION_KEY) {
+          newSession();
+        }
+        const ok = await sendWithWorkflow(text, workflowId, {
+          sessionKey: currentSessionKey,
+          agentId: currentAgentId,
+        }, async (msg) => {
+          // Gateway chat.send doesn't support workflowId/runId params yet.
+          // Workflow state is tracked via SSE + main process polling.
+          await sendMessage(msg, attachments, targetAgentId);
+        });
+        if (!ok) return;
+        return;
+      }
+
       const { currentSessionKey } = useChatStore.getState();
       if (currentSessionKey === DEFAULT_SESSION_KEY) {
         newSession();
