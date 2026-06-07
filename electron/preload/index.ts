@@ -23,6 +23,10 @@ const electronAPI = {
         'gateway:rpc',
         'gateway:httpProxy',
         'hostapi:fetch',
+        // Workflow
+        'workflow:startTracking',
+        'workflow:stopTracking',
+        'workflow:sync-state',
         'gateway:health',
         'gateway:getControlUiUrl',
         // OpenClaw

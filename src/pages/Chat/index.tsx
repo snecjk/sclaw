@@ -20,7 +20,7 @@ import { PendingQueuePanel } from './PendingQueuePanel';
 import { ChatPreviewPanel } from './ChatPreviewPanel';
 import { extractText, usePreviewableFiles } from './message-utils';
 import { useMessageQueueStore, createAutoSendWatcher } from '@/stores/message-queue';
-import { invokeApi } from '@/lib/api-client';
+import { invokeApi, invokeIpc } from '@/lib/api-client';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
@@ -82,6 +82,77 @@ export function Chat() {
   useEffect(() => {
     void fetchAgents();
   }, [fetchAgents]);
+
+  // ── Workflow execution status listener ──
+  useEffect(() => {
+    const handler = (payload: unknown) => {
+      const data = payload as Record<string, unknown>;
+      if (data.sessionKey !== currentSessionKey) return;
+      useChatStore.getState().setWorkflowCardState(
+        String(data.runId),
+        data as unknown as import('@/types/workflow').WorkflowExecutionState,
+      );
+    };
+    const unsubscribe = window.electron.ipcRenderer.on('workflow:status-update', handler);
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [currentSessionKey]);
+
+  // ── Workflow card state sync on page load ──
+  useEffect(() => {
+    const syncStates = async () => {
+      const { messages: currentMessages, setWorkflowCardState } = useChatStore.getState();
+      const runIds = new Set<string>();
+      for (const msg of currentMessages) {
+        if (msg.role !== 'assistant') continue;
+        const content = msg.content as Array<{ type?: string; runId?: string }> | undefined;
+        if (!Array.isArray(content)) continue;
+        for (const block of content) {
+          if (block.type === 'workflow_card' && block.runId) {
+            runIds.add(block.runId);
+          }
+        }
+      }
+
+      for (const id of runIds) {
+        try {
+          const state = await invokeIpc<import('@/types/workflow').WorkflowExecutionState | null>('workflow:sync-state', { runId: id });
+          if (state) {
+            setWorkflowCardState(id, state);
+          } else {
+            // Tracker cleaned up → fallback to backend query
+            const { fetchWorkflowStatus } = await import('@/lib/workflow-api');
+            const finalState = await fetchWorkflowStatus(id);
+            if (finalState?.status === 'completed' || finalState?.status === 'failed') {
+              setWorkflowCardState(id, finalState);
+            } else {
+              setWorkflowCardState(id, {
+                runId: id,
+                workflowId: '',
+                status: 'unknown',
+                progress: 0,
+                steps: [],
+                error: '执行状态已过期',
+              });
+            }
+          }
+        } catch {
+          setWorkflowCardState(id, {
+            runId: id,
+            workflowId: '',
+            status: 'unknown',
+            progress: 0,
+            steps: [],
+            error: '无法获取执行状态',
+          });
+        }
+      }
+    };
+
+    void syncStates();
+   
+  }, []);
 
   // Update timestamp when sending starts
   useEffect(() => {
@@ -178,8 +249,23 @@ export function Chat() {
     text: string,
     attachments?: Parameters<typeof sendMessage>[1],
     targetAgentId?: Parameters<typeof sendMessage>[2],
+    workflowId?: string | null,
   ) => {
     beginSendScroll();
+
+    // Workflow flow: form → create → execute → send
+    if (workflowId) {
+      const { currentSessionKey, currentAgentId } = useChatStore.getState();
+      const { sendWithWorkflow } = await import('@/hooks/use-workflow-send');
+      const ok = await sendWithWorkflow(text, workflowId, {
+        sessionKey: currentSessionKey,
+        agentId: currentAgentId,
+      }, async (msg, runId, wfId) => {
+        await sendMessage(msg, attachments, targetAgentId, wfId, runId);
+      });
+      if (!ok) return;
+      return;
+    }
 
     // Call question-split API (silent fallback on failure)
     setSplitting(true);
@@ -198,12 +284,12 @@ export function Chat() {
     }
 
     if (parts && parts.length > 1) {
-      sendMessage(parts[0].context, attachments, targetAgentId);
+      sendMessage(parts[0].context, attachments, targetAgentId, workflowId);
       for (let i = 1; i < parts.length; i++) {
         useMessageQueueStore.getState().enqueue(currentSessionKey, parts[i].context, undefined, targetAgentId);
       }
     } else {
-      sendMessage(text, attachments, targetAgentId);
+      sendMessage(text, attachments, targetAgentId, workflowId);
     }
   }, [beginSendScroll, sendMessage, currentSessionKey]);
 

@@ -15,7 +15,8 @@ import { cn } from '@/lib/utils';
 import { assistantChatCardBg, assistantChatCardBgStreaming } from '@/lib/surfaces';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
-import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS } from './message-utils';
+import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard } from './message-utils';
+import { WorkflowCard } from '@/components/workflow/WorkflowCard';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
 
 interface ChatMessageProps {
@@ -73,6 +74,7 @@ export const ChatMessage = memo(function ChatMessage({
 
   const attachedFiles = message._attachedFiles || [];
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
+  const workflowCard = !isUser ? extractWorkflowCard(message) : null;
 
   // Extract previewable refs from message text
   const extractedRefs = extractPreviewableRefs(text)
@@ -250,6 +252,11 @@ export const ChatMessage = memo(function ChatMessage({
             completedBadge={t('streaming.completedBadge')}
             onPreviewFile={onPreviewFile}
           />
+        )}
+
+        {/* Workflow execution card */}
+        {workflowCard && (
+          <WorkflowCard runId={workflowCard.runId} templateName={workflowCard.templateName} />
         )}
 
         {/* Images from content blocks — assistant messages (below text) */}
@@ -502,7 +509,7 @@ function MessageBubble({
                 );
               },
               a({ href: url, children }) {
-                const href: any = url || children;
+                const href: string | undefined = typeof url === 'string' ? url : typeof children === 'string' ? children : undefined;
                 if (href?.startsWith('preview://') && onPreviewFile) {
                   const target = href.slice('preview://'.length);
                   const fileName = target.split('/').pop() || '';

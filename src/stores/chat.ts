@@ -24,6 +24,7 @@ import {
   type RawMessage,
   type ToolStatus,
 } from './chat/types';
+import type { WorkflowExecutionState } from '@/types/workflow';
 
 export type {
   AttachedFileMeta,
@@ -1091,6 +1092,13 @@ export const useChatStore = create<ChatState>()(
   showThinking: true,
   thinkingLevel: null,
 
+  workflowCardStates: {},
+  setWorkflowCardState: (runId: string, state: WorkflowExecutionState) => {
+    set((s) => ({
+      workflowCardStates: { ...s.workflowCardStates, [runId]: state },
+    }));
+  },
+
   // ── Load sessions via sessions.list ──
 
   loadSessions: async () => {
@@ -1593,6 +1601,8 @@ export const useChatStore = create<ChatState>()(
     text: string,
     attachments?: Array<{ fileName: string; mimeType: string; fileSize: number; stagedPath: string; preview: string | null }>,
     targetAgentId?: string | null,
+    workflowId?: string | null,
+    runId?: string | null,
   ) => {
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
@@ -1760,6 +1770,8 @@ export const useChatStore = create<ChatState>()(
             message: trimmed,
             deliver: false,
             idempotencyKey,
+            workflowId,
+            runId,
           },
           CHAT_SEND_TIMEOUT_MS,
         );

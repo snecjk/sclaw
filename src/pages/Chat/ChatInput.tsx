@@ -7,7 +7,7 @@
  * are sent with the message (no base64 over WebSocket).
  */
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { SendHorizontal, Square, X, Paperclip, FileText, Film, Music, FileArchive, File, Loader2, AtSign, AlertCircle } from 'lucide-react';
+import { SendHorizontal, Square, X, Paperclip, FileText, Film, Music, FileArchive, File, Loader2, AtSign, AlertCircle, Workflow } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { hostApiFetch } from '@/lib/host-api';
@@ -18,6 +18,9 @@ import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import type { AgentSummary } from '@/types/agent';
 import { useTranslation } from 'react-i18next';
+import { WorkflowPicker } from '@/components/workflow/WorkflowPicker';
+import { WorkflowChip } from '@/components/workflow/WorkflowChip';
+import { useWorkflowsStore } from '@/stores/workflows';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -33,9 +36,9 @@ export interface FileAttachment {
 }
 
 interface ChatInputProps {
-  onSend: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => void;
+  onSend: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, workflowId?: string | null) => void;
   onStop?: () => void;
-  onQueue?: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => void;
+  onQueue?: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, workflowId?: string | null) => void;
   disabled?: boolean;
   sending?: boolean;
   isEmpty?: boolean;
@@ -123,8 +126,11 @@ export function ChatInput({
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const [targetAgentId, setTargetAgentId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [workflowPickerOpen, setWorkflowPickerOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const workflowPickerRef = useRef<HTMLDivElement>(null);
+  const workflowButtonRef = useRef<HTMLButtonElement>(null);
   const isComposingRef = useRef(false);
   const seedAppliedRef = useRef(false);
   const gatewayStatus = useGatewayStore((s) => s.status);
@@ -144,6 +150,12 @@ export function ChatInput({
     [agents, targetAgentId],
   );
   const showAgentPicker = mentionableAgents.length > 0;
+
+  const { templates, selectedWorkflowId, selectWorkflow, clearSelection, loadTemplates } = useWorkflowsStore();
+  const selectedWorkflow = useMemo(
+    () => templates.find((w) => w.id === selectedWorkflowId) ?? null,
+    [templates, selectedWorkflowId],
+  );
   const composerPlaceholder = disabled
     ? t('composer.gatewayDisconnectedPlaceholder')
     : t('composer.messagePlaceholder', { agent: currentAgentName });
@@ -219,6 +231,30 @@ export function ChatInput({
       document.removeEventListener('mousedown', handlePointerDown);
     };
   }, [pickerOpen]);
+
+  useEffect(() => {
+    if (!workflowPickerOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        !workflowPickerRef.current?.contains(target) &&
+        !workflowButtonRef.current?.contains(target)
+      ) {
+        setWorkflowPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [workflowPickerOpen]);
+
+  // Load workflow templates on first open
+  useEffect(() => {
+    if (workflowPickerOpen && templates.length === 0) {
+      void loadTemplates();
+    }
+  }, [workflowPickerOpen, templates.length, loadTemplates]);
 
   // ── File staging via native dialog ─────────────────────────────
 
@@ -349,30 +385,33 @@ export function ChatInput({
 
   const allReady = attachments.length === 0 || attachments.every(a => a.status === 'ready');
   const hasFailedAttachments = attachments.some((a) => a.status === 'error');
-  const canSend = (input.trim() || attachments.length > 0) && allReady && !disabled;
+  const hasWorkflow = !!selectedWorkflowId;
+  const inputTrimmed = input.trim();
+  // When workflow is selected, input must not be empty
+  const canSend = (hasWorkflow ? !!inputTrimmed : (inputTrimmed || attachments.length > 0)) && allReady && !disabled;
   const canStop = sending && !disabled && !!onStop;
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
     const readyAttachments = attachments.filter(a => a.status === 'ready');
-    // Capture values before clearing — clear input immediately for snappy UX,
-    // but keep attachments available for the async send
     const textToSend = input.trim();
     const attachmentsToSend = readyAttachments.length > 0 ? readyAttachments : undefined;
+    const workflowIdToSend = selectedWorkflowId;
     setInput('');
     setAttachments([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    // When AI is responding and queue callback is available, add to queue instead of sending directly
     if (sending && onQueue) {
-      onQueue(textToSend, attachmentsToSend, targetAgentId);
+      onQueue(textToSend, attachmentsToSend, targetAgentId, workflowIdToSend);
     } else {
-      onSend(textToSend, attachmentsToSend, targetAgentId);
+      onSend(textToSend, attachmentsToSend, targetAgentId, workflowIdToSend);
     }
     setTargetAgentId(null);
     setPickerOpen(false);
-  }, [input, attachments, canSend, onSend, onQueue, sending, targetAgentId]);
+    setWorkflowPickerOpen(false);
+    clearSelection();
+  }, [input, attachments, canSend, onSend, onQueue, sending, targetAgentId, selectedWorkflowId, clearSelection]);
 
   const handleStop = useCallback(() => {
     if (!canStop) return;
@@ -381,9 +420,15 @@ export function ChatInput({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Backspace' && !input && targetAgentId) {
-        setTargetAgentId(null);
-        return;
+      if (e.key === 'Backspace' && !input) {
+        if (targetAgentId) {
+          setTargetAgentId(null);
+          return;
+        }
+        if (selectedWorkflowId) {
+          clearSelection();
+          return;
+        }
       }
       if (e.key === 'Enter' && !e.shiftKey) {
         const nativeEvent = e.nativeEvent as KeyboardEvent;
@@ -394,7 +439,7 @@ export function ChatInput({
         handleSend();
       }
     },
-    [handleSend, input, targetAgentId],
+    [handleSend, input, targetAgentId, selectedWorkflowId, clearSelection],
   );
 
   // Handle paste (Ctrl/Cmd+V with files)
@@ -477,6 +522,23 @@ export function ChatInput({
                 ],
           )}
         >
+          <WorkflowPicker
+            ref={workflowPickerRef}
+            open={workflowPickerOpen}
+            onClose={() => setWorkflowPickerOpen(false)}
+            onSelect={async (id) => {
+              selectWorkflow(id);
+              setWorkflowPickerOpen(false);
+              textareaRef.current?.focus();
+              // Pre-fetch startup schema immediately after selection
+              try {
+                const { getStartupSchema } = await import('@/lib/workflow-api');
+                await getStartupSchema(id);
+              } catch {
+                // Silent pre-fetch failure; will retry on send
+              }
+            }}
+          />
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
               {attachments.map((att) => (
@@ -508,12 +570,33 @@ export function ChatInput({
             </div>
           )}
 
-          <div className={cn('px-4', attachments.length > 0 ? 'pt-1.5' : 'pt-2.5')}>
+          {selectedWorkflow && (
+            <div
+              className={cn(
+                'px-4 pb-1',
+                attachments.length > 0 || selectedTarget ? 'pt-2' : 'pt-3',
+              )}
+            >
+              <WorkflowChip
+                name={selectedWorkflow.label}
+                onRemove={clearSelection}
+              />
+            </div>
+          )}
+
+          <div className={cn('px-4', attachments.length > 0 || selectedTarget || selectedWorkflow ? 'pt-1.5' : 'pt-2.5')}>
             <div className="flex-1 relative">
               <Textarea
                 ref={textareaRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setInput(val);
+                  // Trigger workflow picker when typing /
+                  if (val === '/' && !workflowPickerOpen && !selectedWorkflowId) {
+                    setWorkflowPickerOpen(true);
+                  }
+                }}
                 onKeyDown={handleKeyDown}
                 onCompositionStart={() => {
                   isComposingRef.current = true;
@@ -581,6 +664,21 @@ export function ChatInput({
                   )}
                 </div>
               )}
+
+              <Button
+                ref={workflowButtonRef}
+                variant="ghost"
+                type="button"
+                className={cn(
+                  'h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
+                  (workflowPickerOpen || selectedWorkflow) && 'bg-primary/10 text-primary hover:bg-primary/12'
+                )}
+                onClick={() => setWorkflowPickerOpen((open) => !open)}
+                disabled={disabled}
+                title={t('composer.pickWorkflow')}
+              >
+                <Workflow className="h-3.5 w-3.5" />
+              </Button>
             </div>
 
             {/* When sending: show Send (to queue) if there's input, otherwise show Stop */}

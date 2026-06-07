@@ -20,6 +20,7 @@ import { handleScheduledTaskRoutes } from './routes/scheduled-tasks';
 import { handleStoSyncRoutes } from './routes/sto-sync';
 import { handleTokenQuotaRoutes } from './routes/token-quota';
 import { handleSubscriptionRoutes } from './routes/subscriptions';
+import { handleWorkflowRoutes } from './routes/workflows';
 import { sendJson } from './route-utils';
 
 type RouteHandler = (
@@ -48,14 +49,18 @@ const routeHandlers: RouteHandler[] = [
   handleScheduledTaskRoutes,
   handleLogRoutes,
   handleUsageRoutes,
+  handleWorkflowRoutes,
 ];
 
 export function startHostApiServer(ctx: HostApiContext, port = PORTS.CLAWX_HOST_API): Server {
   const server = createServer(async (req, res) => {
     try {
       const requestUrl = new URL(req.url || '/', `http://127.0.0.1:${port}`);
+      logger.info(`[HostApi] ${req.method} ${requestUrl.pathname} — routing...`);
       for (const handler of routeHandlers) {
-        if (await handler(req, res, requestUrl, ctx)) {
+        const handled = await handler(req, res, requestUrl, ctx);
+        logger.info(`[HostApi]   ${handler.name} => ${handled}`);
+        if (handled) {
           return;
         }
       }

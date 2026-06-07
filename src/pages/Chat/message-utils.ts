@@ -31,6 +31,27 @@ function cleanUserText(text: string): string {
  * Handles both string content and array-of-blocks content.
  * For user messages, strips Gateway-injected metadata.
  */
+/**
+ * Extract workflow_card block from a message's content field.
+ */
+export function extractWorkflowCard(message: RawMessage | unknown): { runId: string; templateName: string } | null {
+  if (!message || typeof message !== 'object') return null;
+  const msg = message as Record<string, unknown>;
+  const content = msg.content;
+
+  if (!Array.isArray(content)) return null;
+
+  for (const block of content as import('@/stores/chat').ContentBlock[]) {
+    if (block.type === 'workflow_card' && block.runId) {
+      return {
+        runId: block.runId,
+        templateName: block.templateName ?? '工作流',
+      };
+    }
+  }
+  return null;
+}
+
 export function extractText(message: RawMessage | unknown): string {
   if (!message || typeof message !== 'object') return '';
   const msg = message as Record<string, unknown>;

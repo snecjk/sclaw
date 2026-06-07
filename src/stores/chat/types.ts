@@ -1,3 +1,5 @@
+import type { WorkflowExecutionState } from '@/types/workflow';
+
 /** Metadata for locally-attached files (not from Gateway) */
 export interface AttachedFileMeta {
   fileName: string;
@@ -23,7 +25,7 @@ export interface RawMessage {
 
 /** Content block inside a message */
 export interface ContentBlock {
-  type: 'text' | 'image' | 'thinking' | 'tool_use' | 'tool_result' | 'toolCall' | 'toolResult';
+  type: 'text' | 'image' | 'thinking' | 'tool_use' | 'tool_result' | 'toolCall' | 'toolResult' | 'workflow_card';
   text?: string;
   thinking?: string;
   source?: { type: string; media_type?: string; data?: string; url?: string };
@@ -35,6 +37,9 @@ export interface ContentBlock {
   input?: unknown;
   arguments?: unknown;
   content?: unknown;
+  /** Workflow execution card reference */
+  runId?: string;
+  templateName?: string;
 }
 
 /** Session from sessions.list */
@@ -96,6 +101,10 @@ export interface ChatState {
   showThinking: boolean;
   thinkingLevel: string | null;
 
+  // Workflow
+  workflowCardStates: Record<string, WorkflowExecutionState>;
+  setWorkflowCardState: (runId: string, state: WorkflowExecutionState) => void;
+
   // Actions
   loadSessions: () => Promise<void>;
   switchSession: (key: string) => void;
@@ -115,6 +124,8 @@ export interface ChatState {
       preview: string | null;
     }>,
     targetAgentId?: string | null,
+    workflowId?: string | null,
+    runId?: string | null,
   ) => Promise<void>;
   abortRun: () => Promise<void>;
   handleChatEvent: (event: Record<string, unknown>) => void;

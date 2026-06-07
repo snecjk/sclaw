@@ -39,7 +39,13 @@
         "stop": "停止",
         "gatewayConnected": "已连接",
         "gatewayStatus": "gateway {{state}} | port: {{port}} {{pid}}",
-        "retryFailedAttachments": "重试失败的附件"
+        "retryFailedAttachments": "重试失败的附件",
+        "pickWorkflow": "选择工作流",
+        "workflowPlaceholder": "搜索工作流模板...",
+        "workflowLoading": "加载中...",
+        "workflowNoResults": "未找到匹配模板",
+        "workflowNoTemplates": "暂无工作流模板",
+        "workflowClear": "清除工作流"
     },
     "streaming": {
         "connectingModel": "连接模型中...",
@@ -77,6 +83,14 @@
         "fileCount": "{{count}} 个文件",
     "queueFull": "队列已满（最多 {{max}} 条）"
   },
+    "workflow": {
+        "statusPending": "待运行",
+        "statusRunning": "执行中",
+        "statusCompleted": "执行完成",
+        "statusFailed": "执行失败",
+        "statusTimeout": "执行超时",
+        "statusUnknown": "状态未知"
+    },
     "splitting": "正在分析问题...",
     "systemNotice": {
         "label": "系统提示",
