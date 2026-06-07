@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { X, Play, Download, Users, ArrowDownToLine } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
+import { useChatStore } from '@/stores/chat';
 import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -26,6 +27,8 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
   if (!liveSkill) return null;
 
   const handleUse = () => {
+    // Start a new session so the Gateway picks up any newly installed skills
+    useChatStore.getState().newSession();
     const prompt = encodeURIComponent(liveSkill.defaultPrompt || liveSkill.title);
     onClose();
     navigate(`/?q=${prompt}`);
