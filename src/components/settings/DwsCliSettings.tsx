@@ -15,6 +15,10 @@ import {
 } from '@/lib/host-api';
 import { cn } from '@/lib/utils';
 
+/** 右侧操作按钮统一尺寸，保证高度与内边距一致，宽度随文案自适应。 */
+const DWS_CLI_ACTION_BTN =
+  'h-9 shrink-0 whitespace-nowrap justify-center rounded-md px-3 text-[13px]';
+
 export function DwsCliSettings() {
   const { t } = useTranslation('settings');
   const [status, setStatus] = useState<DingTalkStatusResponse | null>(null);
@@ -98,7 +102,10 @@ export function DwsCliSettings() {
         <Button
           variant="outline"
           size="sm"
-          className="h-9 shrink-0 rounded-md border-glass-border bg-transparent px-4 hover:bg-[hsl(var(--glass-bg)/0.35)]"
+          className={cn(
+            DWS_CLI_ACTION_BTN,
+            'border-glass-border bg-transparent hover:bg-[hsl(var(--glass-bg)/0.35)]',
+          )}
           onClick={() => void refreshStatus()}
           disabled={loading || installing || loggingIn}
         >
@@ -139,10 +146,10 @@ export function DwsCliSettings() {
               )}
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex shrink-0 flex-col items-end gap-2">
             <Button
               size="sm"
-              className="h-9 rounded-md px-4"
+              className={DWS_CLI_ACTION_BTN}
               onClick={() => void handleInstall()}
               disabled={loading || installing || loggingIn}
             >
@@ -159,7 +166,7 @@ export function DwsCliSettings() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 rounded-md border-glass-border px-4"
+                className={cn(DWS_CLI_ACTION_BTN, 'border-glass-border')}
                 onClick={() => void handleLogin()}
                 disabled={loading || installing || loggingIn}
               >
@@ -171,20 +178,33 @@ export function DwsCliSettings() {
 
         {installed && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <Label className="text-[15px] font-medium text-foreground">{t('dwsCli.auth')}</Label>
-                <p className="mt-1 text-[13px] text-muted-foreground">
-                  {authenticated ? t('dwsCli.authenticated') : t('dwsCli.notAuthenticated')}
-                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      'rounded-full px-2.5 py-0.5 text-[12px] font-medium',
+                      authenticated
+                        ? 'border-green-500/20 bg-green-500/10 text-green-700 dark:text-green-400'
+                        : 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+                    )}
+                  >
+                    {authenticated ? t('dwsCli.authenticated') : t('dwsCli.notAuthenticated')}
+                  </Badge>
+                </div>
               </div>
               {authenticated && (
-                <Badge
+                <Button
                   variant="outline"
-                  className="rounded-full border-green-500/20 bg-green-500/10 px-2.5 py-0.5 text-[12px] font-medium text-green-700 dark:text-green-400"
+                  size="sm"
+                  className={cn(DWS_CLI_ACTION_BTN, 'border-glass-border')}
+                  onClick={() => void handleLogin()}
+                  disabled={loading || installing || loggingIn}
                 >
-                  {t('dwsCli.authenticated')}
-                </Badge>
+                  {loggingIn ? t('dwsCli.loggingIn') : t('dwsCli.relogin')}
+                </Button>
               )}
             </div>
 
@@ -199,17 +219,6 @@ export function DwsCliSettings() {
               </div>
             )}
 
-            {installed && authenticated && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 rounded-md border-glass-border px-4"
-                onClick={() => void handleLogin()}
-                disabled={loading || installing || loggingIn}
-              >
-                {loggingIn ? t('dwsCli.loggingIn') : t('dwsCli.relogin')}
-              </Button>
-            )}
           </div>
         )}
 

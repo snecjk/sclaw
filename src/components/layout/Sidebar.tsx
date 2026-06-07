@@ -77,7 +77,7 @@ const SIDEBAR_COLLAPSED_TOOLTIP_SURFACE =
 const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS = 'w-48 rounded-[12px] border-0 shadow-lg';
 const SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS = 'rounded-[12px] border-0 shadow-lg';
 const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
-  'hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7]';
+  'hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7] dark:hover:bg-muted dark:focus:bg-muted dark:data-[highlighted]:bg-muted dark:data-[state=open]:bg-muted';
 
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   if (!activityMs || activityMs <= 0) return 'older';
