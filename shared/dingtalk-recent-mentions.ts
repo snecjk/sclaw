@@ -1,5 +1,5 @@
 /**
- * 最近 @ 提及列表：从 dws list-all / unread 响应映射为 MentionSearchItem 形状。
+ * 最近 @ 提及列表：从 dws list-unread-conversations 响应映射为 MentionSearchItem 形状。
  */
 
 export interface RecentMentionRow {
@@ -27,6 +27,22 @@ function pickString(record: Record<string, unknown>, keys: string[]): string | u
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return undefined;
+}
+
+/** dws 未读会话项里的未读条数字段（常见为 unreadPoint）。 */
+export function pickUnreadCount(record: Record<string, unknown>): number | null {
+  for (const key of ['unreadCount', 'unreadNum', 'unreadMessageCount', 'unreadPoint', 'redPoint', 'unReadCount']) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+      return Math.trunc(value);
+    }
+  }
+  return null;
+}
+
+export function formatUnreadSubtitle(unreadCount: number | null, kind: 'user' | 'group'): string {
+  if (unreadCount !== null) return `${unreadCount} 条未读`;
+  return kind === 'user' ? '单聊' : '群聊';
 }
 
 /** 从 dws JSON 中提取会话行（list-all / unread / top）。 */
@@ -107,25 +123,23 @@ export function mapUnreadConversationItem(raw: unknown): RecentMentionRow | null
   const title = pickString(record, ['title', 'name', 'conversationName', 'groupName', 'nick']);
   if (!openConversationId || !title) return null;
 
+  const unreadCount = pickUnreadCount(record);
+
   if (record.singleChat === true) {
     const userId = pickString(record, ['userId', 'peerUserId', 'userOpenId', 'openDingtalkId', 'openDingTalkId']);
     return {
       type: 'user',
       id: userId ?? '',
       title,
-      subtitle: '单聊',
+      subtitle: formatUnreadSubtitle(unreadCount, 'user'),
     };
   }
 
-  const unreadPoint = record.unreadPoint ?? record.memberCount ?? record.userCount;
-  const subtitle = typeof unreadPoint === 'number' && unreadPoint > 0
-    ? `${unreadPoint}人`
-    : '群聊';
   return {
     type: 'group',
     id: openConversationId,
     title,
-    subtitle,
+    subtitle: formatUnreadSubtitle(unreadCount, 'group'),
   };
 }
 

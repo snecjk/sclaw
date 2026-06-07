@@ -5,6 +5,7 @@ import {
   extractListAllPagination,
   mapListAllConversationItem,
   mapUnreadConversationItem,
+  pickUnreadCount,
 } from '../../shared/dingtalk-recent-mentions';
 
 describe('dingtalk recent mentions', () => {
@@ -63,6 +64,28 @@ describe('dingtalk recent mentions', () => {
       title: '张三',
       subtitle: '单聊',
     });
+  });
+
+  it('maps unread count from unreadPoint', () => {
+    expect(pickUnreadCount({ unreadPoint: 5 })).toBe(5);
+    expect(mapUnreadConversationItem({
+      singleChat: false,
+      title: '项目群',
+      openConversationId: 'cid-group',
+      unreadPoint: 5,
+    })).toEqual({
+      type: 'group',
+      id: 'cid-group',
+      title: '项目群',
+      subtitle: '5 条未读',
+    });
+  });
+
+  it('extracts unread conversations from result array payload', () => {
+    const payload = {
+      result: [{ title: 'A', openConversationId: '1', singleChat: false, unreadCount: 2 }],
+    };
+    expect(extractConversationRows(payload)).toHaveLength(1);
   });
 
   it('dedupes rows by type and id/title', () => {

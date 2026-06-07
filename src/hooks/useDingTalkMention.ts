@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { loginDingTalk, searchDingTalkMentions } from '@/lib/host-api';
+import { installDwsCli, loginDingTalk, searchDingTalkMentions } from '@/lib/host-api';
 import type { ActiveMentionTrigger } from '@/lib/dingtalk-mention-composer';
 import type { MentionSearchItem } from '@/types/dingtalk-mention';
 
@@ -31,6 +31,7 @@ export function useDingTalkMention(trigger: ActiveMentionTrigger | null, enabled
   const [needsInstall, setNeedsInstall] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [loggingIn, setLoggingIn] = useState(false);
+  const [installing, setInstalling] = useState(false);
   const [recent, setRecent] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -143,6 +144,24 @@ export function useDingTalkMention(trigger: ActiveMentionTrigger | null, enabled
     }
   }, []);
 
+  const install = useCallback(async () => {
+    setInstalling(true);
+    setError(null);
+    try {
+      const result = await installDwsCli();
+      if (!result.success) {
+        throw new Error(result.error || 'dws install failed');
+      }
+      setNeedsInstall(false);
+      setSearchNonce((value) => value + 1);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+    } finally {
+      setInstalling(false);
+    }
+  }, []);
+
   const moveActive = useCallback((delta: number) => {
     setActiveIndex((prev) => {
       if (items.length === 0) return 0;
@@ -176,5 +195,7 @@ export function useDingTalkMention(trigger: ActiveMentionTrigger | null, enabled
     close,
     login,
     loggingIn,
+    install,
+    installing,
   };
 }

@@ -32,6 +32,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { useGatewayStore } from '@/stores/gateway';
 import { useUpdateStore } from '@/stores/update';
 import { UpdateSettings } from '@/components/settings/UpdateSettings';
+import { DwsCliSettings } from '@/components/settings/DwsCliSettings';
 import {
   getGatewayWsDiagnosticEnabled,
   invokeIpc,
@@ -778,6 +779,8 @@ export function Settings() {
 
             </div>
           </section>
+
+          <DwsCliSettings />
       </div>
     </div>
         )}

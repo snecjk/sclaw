@@ -732,11 +732,22 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             break;
           }
           if (request.action === 'install') {
-            data = await import('../utils/dws-cli').then((m) =>
-              m.autoInstallDwsCliIfNeeded((path) => {
+            data = await import('../utils/dws-cli').then(async (m) => {
+              const result = await m.autoInstallDwsCliIfNeeded((path) => {
                 BrowserWindow.getAllWindows()[0]?.webContents.send('dws:cli-installed', path);
-              }),
-            );
+              });
+              if (result.success) {
+                const { promptGatewayRestartAfterDwsInstall } = await import('../utils/dws-install-notify');
+                await promptGatewayRestartAfterDwsInstall(
+                  gatewayManager,
+                  BrowserWindow.getFocusedWindow()
+                    ?? BrowserWindow.getAllWindows().find((win) => !win.isDestroyed())
+                    ?? null,
+                  result,
+                );
+              }
+              return result;
+            });
             break;
           }
           if (request.action === 'authStatus') {

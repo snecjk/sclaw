@@ -277,3 +277,18 @@ export async function loginDingTalk(): Promise<{ success: boolean; authenticated
     body: JSON.stringify({}),
   });
 }
+
+export interface DwsInstallResponse {
+  success: boolean;
+  path?: string | null;
+  version?: string | null;
+  updated?: boolean;
+  error?: string;
+}
+
+export async function installDwsCli(): Promise<DwsInstallResponse> {
+  return hostApiFetch<DwsInstallResponse>('/api/dingtalk/install', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}

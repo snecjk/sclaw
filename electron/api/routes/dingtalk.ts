@@ -8,17 +8,16 @@ import { parseJsonBody, sendJson } from '../route-utils';
 import {
   dwsAuthStatus,
   dwsCheckInstalled,
+  installOrUpdateDwsCli,
   runDws,
 } from '../../utils/dws-cli';
+import { promptGatewayRestartAfterDwsInstall } from '../../utils/dws-install-notify';
 import { fetchDingTalkAvatar } from '../../utils/dingtalk-avatar';
 import { getSetting } from '../../utils/store';
 import {
   dedupeRecentMentionRows,
   extractConversationRows,
-  extractListAllPagination,
-  mapListAllConversationItem,
   mapUnreadConversationItem,
-  recentMentionWindow,
   type RecentMentionRow,
 } from '../../../shared/dingtalk-recent-mentions';
 
@@ -39,10 +38,6 @@ interface MentionSearchItem {
 }
 
 const RECENT_MENTION_PAGE_SIZE = 10;
-const RECENT_MENTION_LOOKBACK_DAYS = 30;
-/** dws list-all 的 limit 是会话批大小，10 往往只返回 4～5 条，需放大才能凑满首屏。 */
-const LIST_ALL_DWS_FETCH_LIMIT = 50;
-const RECENT_INITIAL_MAX_ROUNDS = 3;
 
 function extractDwsRows(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
@@ -313,101 +308,41 @@ async function enrichRecentSingleChatUsers(items: MentionSearchItem[]): Promise<
   return enriched.filter((item) => item.type !== 'user' || !!item.id.trim());
 }
 
-async function fetchListAllConversationBatch(cursor: string): Promise<{
-  rows: RecentMentionRow[];
-  hasMore: boolean;
-  nextCursor: string | null;
-}> {
-  const { start, end } = recentMentionWindow(RECENT_MENTION_LOOKBACK_DAYS);
-  const result = await runDws([
-    'chat', 'message', 'list-all',
-    '--start', start,
-    '--end', end,
-    '--limit', String(LIST_ALL_DWS_FETCH_LIMIT),
-    '--cursor', cursor,
-    '--format', 'json',
-  ], 12_000);
-  if (!result.ok) {
-    return { rows: [], hasMore: false, nextCursor: null };
-  }
-
-  const rows = dedupeRecentMentionRows(
-    extractConversationRows(result.data)
-      .map(mapListAllConversationItem)
-      .filter((item): item is RecentMentionRow => item !== null),
-  );
-  const pagination = extractListAllPagination(result.data);
-  return {
-    rows,
-    hasMore: pagination.hasMore,
-    nextCursor: pagination.nextCursor,
-  };
-}
-
-async function listRecentMentionsFromListAll(
+async function listRecentMentionsFromUnread(
   limit: number,
   cursor?: string,
 ): Promise<{ items: MentionSearchItem[]; hasMore: boolean; nextCursor: string | null }> {
-  const isContinuation = !!cursor?.trim();
-  let mergedRows: RecentMentionRow[] = [];
-  let pageCursor = cursor?.trim() || '0';
-  let hasMore = true;
-  let nextCursor: string | null = null;
-  const maxRounds = isContinuation ? 1 : RECENT_INITIAL_MAX_ROUNDS;
-
-  for (let round = 0; round < maxRounds && mergedRows.length < limit && hasMore; round += 1) {
-    const batch = await fetchListAllConversationBatch(pageCursor);
-    mergedRows = dedupeRecentMentionRows([...mergedRows, ...batch.rows]);
-    hasMore = batch.hasMore;
-    nextCursor = batch.nextCursor;
-    if (!hasMore || !nextCursor) break;
-    pageCursor = nextCursor;
+  const offset = Math.max(0, Number.parseInt(cursor?.trim() || '0', 10) || 0);
+  const fetchCount = offset + limit + 1;
+  const result = await runDws([
+    'chat', 'message', 'list-unread-conversations',
+    '--count', String(fetchCount),
+    '--format', 'json',
+  ], 8_000);
+  if (!result.ok) {
+    return { items: [], hasMore: false, nextCursor: null };
   }
 
-  const rowsToShow = isContinuation
-    ? mergedRows
-    : mergedRows.slice(0, limit);
-  const items = await enrichRecentSingleChatUsers(rowsToShow.map(toMentionSearchItem));
+  const allRows = dedupeRecentMentionRows(
+    extractConversationRows(result.data)
+      .map(mapUnreadConversationItem)
+      .filter((item): item is RecentMentionRow => item !== null),
+  );
+  const pageRows = allRows.slice(offset, offset + limit);
+  const hasMore = allRows.length > offset + limit;
+  const items = await enrichRecentSingleChatUsers(pageRows.map(toMentionSearchItem));
   return {
     items,
     hasMore,
-    nextCursor,
+    nextCursor: hasMore ? String(offset + limit) : null,
   };
-}
-
-async function listRecentMentionsFallback(limit: number): Promise<MentionSearchItem[]> {
-  const attempts: string[][] = [
-    ['chat', 'message', 'list-unread-conversations', '--count', String(limit), '--format', 'json'],
-    ['chat', 'list-top-conversations', '--limit', String(limit), '--format', 'json'],
-  ];
-
-  for (const args of attempts) {
-    const result = await runDws(args, 8_000);
-    if (!result.ok) continue;
-    const rows = extractConversationRows(result.data);
-    const mapped = dedupeRecentMentionRows(
-      rows
-        .map((row) => mapUnreadConversationItem(row) ?? mapListAllConversationItem(row))
-        .filter((item): item is RecentMentionRow => item !== null),
-    );
-    if (mapped.length > 0) {
-      const items = await enrichRecentSingleChatUsers(mapped.map(toMentionSearchItem));
-      return items.slice(0, limit);
-    }
-  }
-  return [];
 }
 
 async function listRecentMentions(
   limit: number,
   cursor?: string,
 ): Promise<{ items: MentionSearchItem[]; hasMore: boolean; nextCursor: string | null }> {
-  const primary = await listRecentMentionsFromListAll(limit, cursor);
-  if (primary.items.length > 0 || cursor?.trim()) {
-    return primary;
-  }
-  const fallback = await listRecentMentionsFallback(limit);
-  return { items: fallback, hasMore: false, nextCursor: null };
+  return listRecentMentionsFromUnread(limit, cursor);
 }
 
 async function isDwsAuthenticated(): Promise<boolean> {
@@ -463,6 +398,34 @@ export async function handleDingTalkRoutes(
       }
       const authenticated = await isDwsAuthenticated();
       sendJson(res, 200, { success: true, authenticated });
+      return true;
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+      return true;
+    }
+  }
+
+  if (url.pathname === '/api/dingtalk/install' && req.method === 'POST') {
+    try {
+      const result = await installOrUpdateDwsCli((path) => {
+        if (_ctx.mainWindow && !_ctx.mainWindow.isDestroyed()) {
+          _ctx.mainWindow.webContents.send('dws:cli-installed', path);
+        }
+      });
+      if (!result.success) {
+        sendJson(res, 500, {
+          success: false,
+          error: result.error ?? 'dws install failed',
+        });
+        return true;
+      }
+      await promptGatewayRestartAfterDwsInstall(_ctx.gatewayManager, _ctx.mainWindow, result);
+      sendJson(res, 200, {
+        success: true,
+        path: result.path ?? null,
+        version: result.version ?? null,
+        updated: result.updated ?? false,
+      });
       return true;
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

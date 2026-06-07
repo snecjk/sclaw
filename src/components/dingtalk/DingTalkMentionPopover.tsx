@@ -75,6 +75,7 @@ interface DingTalkMentionPopoverProps {
   loadingMore?: boolean;
   hasMore?: boolean;
   loggingIn?: boolean;
+  installing?: boolean;
   error?: string | null;
   needsAuth?: boolean;
   needsInstall?: boolean;
@@ -82,6 +83,7 @@ interface DingTalkMentionPopoverProps {
   onHoverIndex: (index: number) => void;
   onSelect: (item: MentionSearchItem) => void;
   onLogin?: () => void;
+  onInstall?: () => void;
   onLoadMore?: () => void;
 }
 
@@ -94,6 +96,7 @@ export function DingTalkMentionPopover({
   loadingMore = false,
   hasMore = false,
   loggingIn = false,
+  installing = false,
   error,
   needsAuth = false,
   needsInstall = false,
@@ -101,6 +104,7 @@ export function DingTalkMentionPopover({
   onHoverIndex,
   onSelect,
   onLogin,
+  onInstall,
   onLoadMore,
 }: DingTalkMentionPopoverProps) {
   const { t } = useTranslation('chat');
@@ -139,8 +143,24 @@ export function DingTalkMentionPopover({
       </div>
 
       {needsInstall && (
-        <div className="px-3 py-2 text-sm text-muted-foreground">
-          {t('composer.dingtalkNeedsInstall')}
+        <div className="space-y-2 px-3 py-2">
+          <div className="text-sm text-muted-foreground">
+            {t('composer.dingtalkNeedsInstall')}
+          </div>
+          {onInstall && (
+            <button
+              type="button"
+              className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={onInstall}
+              disabled={installing}
+            >
+              {installing ? t('composer.dingtalkInstalling') : t('composer.dingtalkInstall')}
+            </button>
+          )}
+          {error && (
+            <div className="text-sm text-destructive">{error}</div>
+          )}
         </div>
       )}
 

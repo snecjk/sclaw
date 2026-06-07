@@ -58,7 +58,11 @@ export interface DwsLocalManifest {
   bundledByStoClawVersion?: string;
 }
 
-const DWS_BIN_DIR = join(homedir(), '.stoclaw', 'bin');
+export const DWS_BIN_DIR = join(homedir(), '.stoclaw', 'bin');
+
+export function getDwsBinDir(): string {
+  return DWS_BIN_DIR;
+}
 const DWS_STATE_DIR = join(homedir(), '.stoclaw', 'dws');
 const LOCAL_MANIFEST_PATH = join(DWS_STATE_DIR, 'manifest.json');
 
@@ -83,8 +87,8 @@ function resolveBundledManifestPath(): string {
 }
 
 function compareSemver(a: string, b: string): number {
-  const pa = a.replace(/^v/i, '').split('.').map((part) => Number.parseInt(part, 10) || 0);
-  const pb = b.replace(/^v/i, '').split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const pa = normalizeDwsVersion(a).split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const pb = normalizeDwsVersion(b).split('.').map((part) => Number.parseInt(part, 10) || 0);
   const len = Math.max(pa.length, pb.length);
   for (let i = 0; i < len; i += 1) {
     const da = pa[i] ?? 0;
@@ -92,6 +96,11 @@ function compareSemver(a: string, b: string): number {
     if (da !== db) return da > db ? 1 : -1;
   }
   return 0;
+}
+
+/** dws CLI 返回的 version 常带 v 前缀，统一去掉后再展示/比较。 */
+export function normalizeDwsVersion(version: string): string {
+  return version.trim().replace(/^v+/i, '');
 }
 
 export function resolveDwsBinary(): string | null {
@@ -297,6 +306,27 @@ function clearMacQuarantine(binaryPath: string): void {
   }
 }
 
+async function dwsSupportsSkillSetup(): Promise<boolean> {
+  const help = await runDws(['skill', '--help'], 5_000);
+  if (!help.ok) return false;
+  const text = typeof help.data === 'string'
+    ? help.data
+    : (help.error ?? '');
+  return /\bsetup\b/.test(text);
+}
+
+async function setupDwsSkills(mode: string): Promise<void> {
+  if (!(await dwsSupportsSkillSetup())) {
+    logger.warn('dws skill setup not supported by current binary; skipping skill install');
+    return;
+  }
+
+  const skillResult = await runDws(['skill', 'setup', '--mode', mode, '-y'], 120_000);
+  if (!skillResult.ok) {
+    throw new Error(skillResult.error || 'dws skill setup failed');
+  }
+}
+
 async function installBinaryFromManifest(
   bundled: DwsBundledManifest,
   notify?: (path: string) => void,
@@ -345,10 +375,7 @@ async function installBinaryFromManifest(
     }
     clearMacQuarantine(target);
 
-    const skillResult = await runDws(['skill', 'setup', '--mode', bundled.skillMode || 'mono', '-y'], 120_000);
-    if (!skillResult.ok) {
-      throw new Error(skillResult.error || 'dws skill setup failed');
-    }
+    await setupDwsSkills(bundled.skillMode || 'mono');
 
     writeLocalManifest({
       dwsVersion: bundled.dwsVersion,
@@ -362,7 +389,7 @@ async function installBinaryFromManifest(
     ensureDwsBinInPath();
     logger.info(`dws installed: ${target} -> v${bundled.dwsVersion}`);
     notify?.(target);
-    return { success: true, path: target, version: bundled.dwsVersion };
+    return { success: true, path: target, version: normalizeDwsVersion(bundled.dwsVersion) };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     logger.error('dws install failed:', msg);
@@ -429,9 +456,10 @@ export async function dwsCheckInstalled(): Promise<{
   }
 
   const local = readLocalManifest();
+  const rawVersion = versionStr ?? local?.dwsVersion;
   return {
     installed: true,
-    version: versionStr ?? local?.dwsVersion,
+    version: rawVersion ? normalizeDwsVersion(rawVersion) : undefined,
     path: target,
     skillMode: local?.skillMode,
     localManifest: local,
@@ -462,7 +490,7 @@ export async function installOrUpdateDwsCli(
     && local.skillsRevision === bundled.skillsRevision
   ) {
     ensureDwsBinInPath();
-    return { success: true, path: target, version: local.dwsVersion, updated: false };
+    return { success: true, path: target, version: normalizeDwsVersion(local.dwsVersion), updated: false };
   }
 
   return installBinaryFromManifest(bundled, notify);
@@ -470,11 +498,12 @@ export async function installOrUpdateDwsCli(
 
 export async function autoInstallDwsCliIfNeeded(
   notify?: (path: string) => void,
-): Promise<{ success: boolean; path?: string; error?: string }> {
+): Promise<{ success: boolean; path?: string; updated?: boolean; error?: string }> {
   const result = await installOrUpdateDwsCli(notify);
   return {
     success: result.success,
     path: result.path,
+    updated: result.updated,
     error: result.error,
   };
 }
@@ -527,25 +556,53 @@ function ensureDwsBinInWindowsPath(): void {
   }
 }
 
-function ensureDwsBinInUnixPath(): void {
-  const rcFiles = [
-    join(homedir(), '.zshrc'),
-    join(homedir(), '.bashrc'),
-    join(homedir(), '.bash_profile'),
-    join(homedir(), '.profile'),
-  ];
-
-  const exportLine = `export PATH="${DWS_BIN_DIR}:\$PATH"`;
-
-  for (const rcFile of rcFiles) {
-    try {
-      if (!existsSync(rcFile)) continue;
+function appendDwsPathToRcFile(rcFile: string, exportLine: string): boolean {
+  try {
+    if (existsSync(rcFile)) {
       const content = readFileSync(rcFile, 'utf-8');
-      if (content.includes(DWS_BIN_DIR)) continue;
+      if (content.includes(DWS_BIN_DIR)) return true;
       appendFileSync(rcFile, `\n# Added by STO Claw (dws)\n${exportLine}\n`);
       logger.info(`Added ${DWS_BIN_DIR} to ${rcFile}`);
-    } catch (err) {
-      logger.warn(`Failed to update ${rcFile} for dws:`, err);
+      return true;
     }
+
+    // macOS 默认 zsh，很多用户没有 ~/.zshrc；创建以便新终端全局可用。
+    if (process.platform === 'darwin' && rcFile.endsWith('.zshrc')) {
+      writeFileSync(rcFile, `# Added by STO Claw (dws)\n${exportLine}\n`, 'utf-8');
+      logger.info(`Created ${rcFile} with ${DWS_BIN_DIR}`);
+      return true;
+    }
+  } catch (err) {
+    logger.warn(`Failed to update ${rcFile} for dws:`, err);
+  }
+  return false;
+}
+
+function ensureDwsBinInUnixPath(): void {
+  const exportLine = `export PATH="${DWS_BIN_DIR}:\$PATH"`;
+  const rcFiles = process.platform === 'darwin'
+    ? [
+      join(homedir(), '.zshrc'),
+      join(homedir(), '.zprofile'),
+      join(homedir(), '.bash_profile'),
+      join(homedir(), '.bashrc'),
+      join(homedir(), '.profile'),
+    ]
+    : [
+      join(homedir(), '.zshrc'),
+      join(homedir(), '.bashrc'),
+      join(homedir(), '.bash_profile'),
+      join(homedir(), '.profile'),
+    ];
+
+  let persisted = false;
+  for (const rcFile of rcFiles) {
+    if (appendDwsPathToRcFile(rcFile, exportLine)) {
+      persisted = true;
+    }
+  }
+
+  if (!persisted && process.platform === 'darwin') {
+    appendDwsPathToRcFile(join(homedir(), '.zshrc'), exportLine);
   }
 }

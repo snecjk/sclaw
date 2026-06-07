@@ -596,6 +596,11 @@ async function initialize(): Promise<void> {
     });
     await autoInstallDwsCliIfNeeded((installedPath) => {
       mainWindow?.webContents.send('dws:cli-installed', installedPath);
+    }).then(async (result) => {
+      if (result.success) {
+        const { promptGatewayRestartAfterDwsInstall } = await import('../utils/dws-install-notify');
+        await promptGatewayRestartAfterDwsInstall(gm, mainWindow, result);
+      }
     }).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn('dws auto-install failed:', message);

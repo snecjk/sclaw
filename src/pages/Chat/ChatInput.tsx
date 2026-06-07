@@ -182,6 +182,8 @@ export function ChatInput({
     close: closeDingTalkMention,
     login: loginDingTalkMention,
     loggingIn: dingTalkLoggingIn,
+    install: installDingTalkMention,
+    installing: dingTalkInstalling,
   } = useDingTalkMention(mentionTrigger);
   const composerPlaceholder = disabled
     ? t('composer.gatewayDisconnectedPlaceholder')
@@ -581,6 +583,7 @@ export function ChatInput({
                 loadingMore={dingTalkLoadingMore}
                 hasMore={dingTalkHasMore}
                 loggingIn={dingTalkLoggingIn}
+                installing={dingTalkInstalling}
                 error={dingTalkError}
                 needsAuth={dingTalkNeedsAuth}
                 needsInstall={dingTalkNeedsInstall}
@@ -588,6 +591,7 @@ export function ChatInput({
                 onHoverIndex={setDingTalkActiveIndex}
                 onSelect={applyDingTalkMention}
                 onLogin={loginDingTalkMention}
+                onInstall={installDingTalkMention}
                 onLoadMore={loadMoreDingTalkMentions}
               />
               <DingTalkMentionEditor
