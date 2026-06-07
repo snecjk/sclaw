@@ -39,7 +39,21 @@
         "stop": "停止",
         "gatewayConnected": "已连接",
         "gatewayStatus": "gateway {{state}} | port: {{port}} {{pid}}",
-        "retryFailedAttachments": "重试失败的附件"
+        "retryFailedAttachments": "重试失败的附件",
+        "dingtalkMentionTitle": "选择钉钉联系人或群",
+        "dingtalkMentionSearchTitle": "搜索「{{query}}」",
+        "dingtalkRecentTitle": "未读会话",
+        "dingtalkMentionChip": "@{{name}}",
+        "dingtalkSearching": "搜索中…",
+        "dingtalkLoadingMore": "加载更多…",
+        "dingtalkLoadMore": "加载更多",
+        "dingtalkNoResults": "未找到匹配结果",
+        "dingtalkNeedsInstall": "使用 @ 提及钉钉联系人需要先安装 CLI",
+        "dingtalkInstall": "安装钉钉 CLI",
+        "dingtalkInstalling": "安装中…",
+        "dingtalkNeedsAuth": "需要登录钉钉后才能搜索联系人",
+        "dingtalkLogin": "登录钉钉",
+        "dingtalkLoggingIn": "登录中…"
     },
     "streaming": {
         "connectingModel": "连接模型中...",

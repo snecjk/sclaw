@@ -226,3 +226,69 @@ export function createHostEventSource(path = '/api/events'): EventSource {
 export function getHostApiBase(): string {
   return HOST_API_BASE;
 }
+
+export interface DingTalkMentionSearchResponse {
+  items: Array<{
+    type: 'user' | 'group';
+    id: string;
+    title: string;
+    subtitle?: string | null;
+    avatar?: string | null;
+    corpId?: string | null;
+  }>;
+  needsAuth?: boolean;
+  needsInstall?: boolean;
+  recent?: boolean;
+  hasMore?: boolean;
+  nextCursor?: string | null;
+}
+
+export interface DingTalkStatusResponse {
+  installed: boolean;
+  version: string | null;
+  binaryPath: string | null;
+  authenticated: boolean;
+  skillMode: string | null;
+}
+
+export async function searchDingTalkMentions(
+  query: string,
+  limit = query.trim() ? 20 : 10,
+  cursor?: string,
+): Promise<DingTalkMentionSearchResponse> {
+  return hostApiFetch<DingTalkMentionSearchResponse>('/api/dingtalk/mention-search', {
+    method: 'POST',
+    body: JSON.stringify({
+      query,
+      limit,
+      cursor: cursor?.trim() || undefined,
+      types: ['user', 'conversation'],
+    }),
+  });
+}
+
+export async function fetchDingTalkStatus(): Promise<DingTalkStatusResponse> {
+  return hostApiFetch<DingTalkStatusResponse>('/api/dingtalk/status');
+}
+
+export async function loginDingTalk(): Promise<{ success: boolean; authenticated?: boolean }> {
+  return hostApiFetch<{ success: boolean; authenticated?: boolean }>('/api/dingtalk/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export interface DwsInstallResponse {
+  success: boolean;
+  path?: string | null;
+  version?: string | null;
+  updated?: boolean;
+  error?: string;
+}
+
+export async function installDwsCli(): Promise<DwsInstallResponse> {
+  return hostApiFetch<DwsInstallResponse>('/api/dingtalk/install', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}

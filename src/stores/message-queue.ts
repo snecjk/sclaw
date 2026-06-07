@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { useChatStore } from './chat';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
+import type { DingTalkMention } from '@/types/dingtalk-mention';
 
 const QUEUE_MAX_PER_SESSION = 10;
 
@@ -16,6 +17,7 @@ export interface QueuedMessage {
   text: string;
   attachments?: FileAttachment[];
   targetAgentId?: string | null;
+  dingTalkMentions?: DingTalkMention[];
   queuedAt: number;
 }
 
@@ -26,7 +28,13 @@ interface SessionQueue {
 
 interface MessageQueueState {
   queues: Map<string, SessionQueue>; // keyed by sessionKey
-  enqueue: (sessionKey: string, text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => void;
+  enqueue: (
+    sessionKey: string,
+    text: string,
+    attachments?: FileAttachment[],
+    targetAgentId?: string | null,
+    dingTalkMentions?: DingTalkMention[],
+  ) => void;
   remove: (sessionKey: string, id: string) => void;
   moveUp: (sessionKey: string, id: string) => void;
   moveDown: (sessionKey: string, id: string) => void;
@@ -48,7 +56,7 @@ function getOrCreateSessionQueue(queues: Map<string, SessionQueue>, sessionKey: 
 export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   queues: new Map(),
 
-  enqueue: (sessionKey, text, attachments, targetAgentId) => {
+  enqueue: (sessionKey, text, attachments, targetAgentId, dingTalkMentions) => {
     const { queues } = get();
     const session = getOrCreateSessionQueue(queues, sessionKey);
     if (session.queue.length >= QUEUE_MAX_PER_SESSION) return;
@@ -57,6 +65,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       text,
       attachments,
       targetAgentId,
+      dingTalkMentions,
       queuedAt: Date.now(),
     };
     session.queue.push(item);
@@ -187,6 +196,7 @@ export function createAutoSendWatcher(
             preview: a.preview,
           })),
           msg.targetAgentId,
+          msg.dingTalkMentions,
         );
       }, 150);
     } else {

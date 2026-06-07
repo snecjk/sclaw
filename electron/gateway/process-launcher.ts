@@ -23,16 +23,18 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
     /\\bupgrade\\b/i,
     /\\binstall\\b.*\\bopenclaw\\b/i,
     /\\binstall\\b.*\\bsai[- ]?cli\\b/i,
+    /\\binstall\\b.*\\bdws\\b/i,
     /\\bopenclaw\\b.*\\b(update|upgrade|install)\\b/i,
     /\\bsai[- ]?cli\\b.*\\b(update|upgrade|install)\\b/i,
+    /\\bdws\\b.*\\b(update|upgrade|install)\\b/i,
     /api\\/v1\\/cli\\/(update|download)/i
   ];
 
-  var BLOCKED_BINARIES = /^(openclaw|sai-cli|sai\\.exe)$/i;
+  var BLOCKED_BINARIES = /^(openclaw|sai-cli|sai\\.exe|dws|dws\\.exe)$/i;
   var PKG_MANAGERS = /^(npm|pnpm|yarn|npx)$/i;
   var DOWNLOAD_TOOLS = /^(curl|wget|aria2c)$/i;
   var PYTHON_PKGS = /^(pip|pip3|uv)$/i;
-  var PYTHON_BLOCKED_ARGS = /\\bopenclaw\\b|\\bsai[- ]?cli\\b/i;
+  var PYTHON_BLOCKED_ARGS = /\\bopenclaw\\b|\\bsai[- ]?cli\\b|\\bdws\\b/i;
 
   function isBlockedCommand(cmd, argsList) {
     var c = typeof cmd === 'string' ? cmd.trim() : '';
@@ -40,6 +42,9 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
     // Allow sai-cli update/upgrade (standalone binary); block install/uninstall/remove only
     if (/^sai-cli$/i.test(c) || /^sai\.exe$/i.test(c)) {
       return /\binstall\b/i.test(a) || /\buninstall\b/i.test(a) || /\bremove\b/i.test(a);
+    }
+    if (/^dws$/i.test(c) || /^dws\.exe$/i.test(c)) {
+      return /\b(upgrade|install|uninstall|remove)\b/i.test(a);
     }
     if (BLOCKED_BINARIES.test(c)) {
       for (var i = 0; i < UPGRADE_ARG_PATTERNS.length; i++) {

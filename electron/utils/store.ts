@@ -58,6 +58,9 @@ export interface AppSettings {
   selectedBundles: string[];
   enabledSkills: string[];
   disabledSkills: string[];
+
+  // DingTalk dws
+  dingTalkDwsEnabled: boolean;
 }
 
 /**
@@ -111,6 +114,9 @@ function createDefaultSettings(): AppSettings {
     selectedBundles: ['productivity', 'developer'],
     enabledSkills: [],
     disabledSkills: [],
+
+    // DingTalk dws
+    dingTalkDwsEnabled: true,
   };
 }
 

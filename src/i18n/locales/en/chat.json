@@ -34,7 +34,21 @@
         "stop": "Stop",
         "gatewayConnected": "connected",
         "gatewayStatus": "gateway {{state}} | port: {{port}} {{pid}}",
-        "retryFailedAttachments": "Retry failed attachments"
+        "retryFailedAttachments": "Retry failed attachments",
+        "dingtalkMentionTitle": "Mention a DingTalk contact or group",
+        "dingtalkMentionSearchTitle": "Search for “{{query}}”",
+        "dingtalkRecentTitle": "Unread conversations",
+        "dingtalkMentionChip": "@{{name}}",
+        "dingtalkSearching": "Searching…",
+        "dingtalkLoadingMore": "Loading more…",
+        "dingtalkLoadMore": "Load more",
+        "dingtalkNoResults": "No matches found",
+        "dingtalkNeedsInstall": "Install DingTalk CLI to mention contacts",
+        "dingtalkInstall": "Install DingTalk CLI",
+        "dingtalkInstalling": "Installing…",
+        "dingtalkNeedsAuth": "Sign in to DingTalk to search contacts",
+        "dingtalkLogin": "Sign in to DingTalk",
+        "dingtalkLoggingIn": "Signing in…"
     },
     "streaming": {
         "connectingModel": "Connecting to model...",

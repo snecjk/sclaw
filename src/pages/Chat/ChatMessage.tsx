@@ -16,6 +16,7 @@ import { assistantChatCardBg, assistantChatCardBgStreaming } from '@/lib/surface
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS } from './message-utils';
+import { AtMentionText, highlightAtMentionsInChildren } from '@/lib/at-mention-highlight';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
 
 interface ChatMessageProps {
@@ -477,12 +478,21 @@ function MessageBubble({
       )}
 
       {isUser ? (
-        <p className="whitespace-pre-wrap break-words break-all text-sm">{text}</p>
+        <AtMentionText
+          text={text}
+          className="whitespace-pre-wrap break-words break-all text-sm"
+        />
       ) : (
         <div className="prose prose-sm max-w-none break-words break-all text-sm leading-normal dark:prose-invert">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
+              p({ children }) {
+                return <p>{highlightAtMentionsInChildren(children)}</p>;
+              },
+              li({ children }) {
+                return <li>{highlightAtMentionsInChildren(children)}</li>;
+              },
               code({ className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || '');
                 const isInline = !match && !className;
