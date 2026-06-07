@@ -11,6 +11,7 @@ import { invokeIpc } from '@/lib/api-client';
 // @ts-ignore — highlight.js v10 ships without bundled .d.ts
 import hljs from 'highlight.js';
 
+
 // Install the real packages to enable Excel / Word previews:
 //   pnpm add xlsx mammoth
 
@@ -79,7 +80,7 @@ function isOfficeFile(mimeType: string, filePath: string): { type: 'excel' | 'wo
 type OfficeData =
   | { type: 'excel'; data: unknown[][] }
   | { type: 'word'; html: string }
-  | { type: 'ppt'; slides: Array<{ slide: number; texts: string[] }> };
+  | { type: 'ppt'; buffer: Uint8Array };
 
 export function FilePreviewViewer({
   filePath,
@@ -247,27 +248,7 @@ export function FilePreviewViewer({
             throw new Error('Word 预览库未安装（pnpm add mammoth）');
           }
         } else if (office.type === 'ppt') {
-          const JSZip = (await import('jszip')).default;
-          const zip = await JSZip.loadAsync(buffer);
-          const slideFiles = Object.keys(zip.files)
-            .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
-            .sort((a, b) => {
-              const na = parseInt(a.match(/\d+/)?.[0] || '0', 10);
-              const nb = parseInt(b.match(/\d+/)?.[0] || '0', 10);
-              return na - nb;
-            });
-          const slides: Array<{ slide: number; texts: string[] }> = [];
-          for (const fileName of slideFiles) {
-            const xml = await zip.files[fileName].async('text');
-            const texts: string[] = [];
-            const matches = xml.matchAll(/<a:t>([^<]*)<\/a:t>/g);
-            for (const match of matches) {
-              if (match[1]) texts.push(match[1]);
-            }
-            const slideNum = parseInt(fileName.match(/\d+/)?.[0] || '0', 10);
-            slides.push({ slide: slideNum, texts });
-          }
-          if (!cancelled) setOfficeData({ type: 'ppt', slides });
+          if (!cancelled) setOfficeData({ type: 'ppt', buffer });
         }
       } catch (e) {
         if (!cancelled) {
@@ -520,12 +501,18 @@ img{max-width:100%}
 
       if (officeError) {
         const isMissingLib = officeError.includes('未安装');
+        let friendlyError = officeError;
+        if (officeError.includes('EPERM') || officeError.includes('EACCES')) {
+          friendlyError = '文件被系统锁定，暂时无法预览';
+        } else if (officeError.includes('ENOENT')) {
+          friendlyError = '文件不存在或路径有误';
+        }
         return (
           <div className={cn('flex h-full flex-col items-center justify-center gap-4 px-6 text-sm text-muted-foreground', className)}>
             <Icon className="h-12 w-12 opacity-40" />
             <div className="text-center">
               <p className="font-medium text-foreground">{fileName}</p>
-              <p className="mt-1 text-xs text-destructive">{officeError}</p>
+              <p className="mt-1 text-xs text-destructive">{friendlyError}</p>
               {isMissingLib && (
                 <p className="mt-1 text-xs">安装依赖后可预览：{office.type === 'excel' ? 'pnpm add xlsx' : 'pnpm add mammoth'}</p>
               )}
@@ -600,28 +587,7 @@ img{max-width:100%}
       }
 
       if (officeData?.type === 'ppt') {
-        return (
-          <div className={cn('h-full overflow-auto bg-white dark:bg-[#0d1117] p-6', className)}>
-            <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
-              <Presentation className="h-4 w-4" />
-              <span>{officeData.slides.length} 张幻灯片</span>
-            </div>
-            <div className="space-y-4">
-              {officeData.slides.map((slide) => (
-                <div key={slide.slide} className="rounded-lg border border-border bg-card p-4">
-                  <div className="mb-2 text-xs font-medium text-muted-foreground">幻灯片 {slide.slide}</div>
-                  <div className="space-y-1 text-sm text-foreground">
-                    {slide.texts.length > 0 ? (
-                      slide.texts.map((t, i) => <p key={i}>{t}</p>)
-                    ) : (
-                      <p className="text-muted-foreground italic">（无文本内容）</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
+        return <PptxPreviewPanel buffer={officeData.buffer} className={className} />;
       }
     }
 
@@ -651,6 +617,54 @@ img{max-width:100%}
       </button>
     </div>
   );
+}
+
+function PptxPreviewPanel({ buffer, className }: { buffer: Uint8Array; className?: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const previewerRef = useRef<any>(null);
+  const [error, setError] = useState<string>('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setError('');
+
+    void (async () => {
+      try {
+        // @ts-ignore
+        const { init } = await import(/* @vite-ignore */ 'pptx-preview');
+        if (cancelled) return;
+
+        if (containerRef.current && !previewerRef.current) {
+          previewerRef.current = init(containerRef.current, {
+            width: 960,
+            height: 540,
+          });
+        }
+
+        previewerRef.current?.preview(buffer.buffer);
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'PPT 预览失败');
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [buffer]);
+
+  if (error) {
+    return (
+      <div className={cn('flex h-full flex-col items-center justify-center gap-4 px-6 text-sm text-muted-foreground', className)}>
+        <Presentation className="h-12 w-12 opacity-40" />
+        <p className="text-destructive">{error}</p>
+        <p className="text-xs">pptx-preview 库未安装（pnpm add pptx-preview）</p>
+      </div>
+    );
+  }
+
+  return <div ref={containerRef} className={cn('h-full w-full', className)} />;
 }
 
 function OpenExternalButton({ filePath }: { filePath: string }) {
