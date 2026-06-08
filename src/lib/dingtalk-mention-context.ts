@@ -8,5 +8,6 @@ export {
   messageHasDingTalkRecipientContext,
   shouldIncludeDingTalkFileSendWorkflow,
   stripDingTalkMentionContextForDisplay,
+  stripDingTalkAgentSendDisclaimerForDisplay,
 } from '../../shared/dingtalk-mention-context';
 export type { DingTalkAttachedFileHint, DingTalkMentionContextOptions } from '../../shared/dingtalk-mention-context';

@@ -29,7 +29,7 @@
         "targetChip": "@{{agent}}",
         "agentPickerTitle": "次のメッセージを別の Agent に直接送信します",
         "gatewayDisconnectedPlaceholder": "ゲートウェイ未接続...",
-        "messagePlaceholder": "{{agent}} にメッセージを送信",
+        "messagePlaceholder": "{{agent}} に送信 — @ で連絡先またはグループを検索",
         "send": "送信",
         "stop": "停止",
         "gatewayConnected": "接続済み",
@@ -48,7 +48,10 @@
         "dingtalkInstalling": "インストール中…",
         "dingtalkNeedsAuth": "連絡先を検索するには钉钉へのログインが必要です",
         "dingtalkLogin": "钉钉にログイン",
-        "dingtalkLoggingIn": "ログイン中…"
+        "dingtalkLoggingIn": "ログイン中…",
+        "dingtalkSentPreviewTitle": "{{name}} に送信済み",
+        "dingtalkSentPreviewTitleGroup": "グループ {{name}} に送信済み",
+        "dingtalkSentPreviewMessageTitle": "タイトル：{{title}}"
     },
     "streaming": {
         "connectingModel": "モデルに接続中...",

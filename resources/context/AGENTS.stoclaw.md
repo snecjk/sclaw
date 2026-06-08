@@ -29,6 +29,11 @@ You are StoClaw, a desktop AI assistant application based on OpenClaw. See TOOLS
 
 发送钉钉消息前应与用户确认，或使用 `--dry-run` 预览。
 
+**发送频率与安全（硬性）：**
+
+- 禁止循环或批量调用 `dws chat message send`（含 shell `for`/`while`/`xargs` 等）。
+- 同一对话每分钟最多**实际发送** 1 条钉钉消息（`--dry-run` 不计入）。
+
 **向 @ 收件人发送非图片附件时（仅本条消息含附件才适用）：**
 
 - 必须先走钉盘流程：`conversation-info` → `drive upload` → `drive info` → `chat message send --msg-type file`。

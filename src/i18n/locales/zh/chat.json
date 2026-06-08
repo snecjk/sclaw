@@ -34,7 +34,7 @@
         "targetChip": "@{{agent}}",
         "agentPickerTitle": "将下一条消息直接发送给其他 Agent",
         "gatewayDisconnectedPlaceholder": "网关未连接...",
-        "messagePlaceholder": "给 {{agent}} 发送消息",
+        "messagePlaceholder": "给 {{agent}} 发送消息，输入 @ 搜索钉钉联系人或群",
         "send": "发送",
         "stop": "停止",
         "gatewayConnected": "已连接",
@@ -53,7 +53,10 @@
         "dingtalkInstalling": "安装中…",
         "dingtalkNeedsAuth": "需要登录钉钉后才能搜索联系人",
         "dingtalkLogin": "登录钉钉",
-        "dingtalkLoggingIn": "登录中…"
+        "dingtalkLoggingIn": "登录中…",
+        "dingtalkSentPreviewTitle": "已发送至 {{name}}",
+        "dingtalkSentPreviewTitleGroup": "已发送至群聊 {{name}}",
+        "dingtalkSentPreviewMessageTitle": "消息标题：{{title}}"
     },
     "streaming": {
         "connectingModel": "连接模型中...",

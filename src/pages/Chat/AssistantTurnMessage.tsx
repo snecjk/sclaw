@@ -3,7 +3,9 @@ import { Sparkles } from 'lucide-react';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { ChatMessage } from './ChatMessage';
 import { mergeThinkingTimelines, pickAssistantReplyMessage } from './chat-display';
-import { extractText } from './message-utils';
+import { extractDingTalkSentPreviews } from '../../../shared/dingtalk-sent-display';
+import { extractAtMentionDisplayNames, extractRawMessageText, extractText } from './message-utils';
+import { DingTalkSentPreview } from './DingTalkSentPreview';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
 
 type StreamingTool = {
@@ -25,6 +27,8 @@ export interface ActiveTurnStream {
 
 interface AssistantTurnMessageProps {
   turnMessages: RawMessage[];
+  turnToolResults?: RawMessage[];
+  precedingUserMessage?: RawMessage | null;
   showThinking: boolean;
   activeStream?: ActiveTurnStream | null;
   onPreviewFile?: (file: AttachedFileMeta) => void;
@@ -32,6 +36,8 @@ interface AssistantTurnMessageProps {
 
 export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   turnMessages,
+  turnToolResults = [],
+  precedingUserMessage = null,
   showThinking,
   activeStream = null,
   onPreviewFile,
@@ -78,7 +84,30 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
   const replyHasText = replyMessage ? extractText(replyMessage).trim().length > 0 : false;
 
-  if (!showThinkingPanel && !replyHasText) return null;
+  const mentionHints = useMemo(() => {
+    if (!precedingUserMessage) return [];
+    return extractAtMentionDisplayNames(extractText(precedingUserMessage));
+  }, [precedingUserMessage]);
+
+  const userMessageRaw = useMemo(
+    () => (precedingUserMessage ? extractRawMessageText(precedingUserMessage) : undefined),
+    [precedingUserMessage],
+  );
+
+  const assistantReplyText = replyMessage ? extractText(replyMessage) : undefined;
+
+  const dingTalkSentPreviews = useMemo(() => {
+    if (isStreaming) return [];
+    return extractDingTalkSentPreviews(turnMessages, turnToolResults, {
+      mentionHints,
+      userMessageRaw,
+      assistantReplyText,
+    });
+  }, [isStreaming, turnMessages, turnToolResults, mentionHints, userMessageRaw, assistantReplyText]);
+
+  const hasDingTalkSentPreview = dingTalkSentPreviews.length > 0;
+
+  if (!showThinkingPanel && !replyHasText && !hasDingTalkSentPreview) return null;
 
   const avatar = (
     <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,#FFF5E6,#FFE8CC)] text-primary shadow-[0_8px_20px_rgba(255,111,0,0.12)]">
@@ -100,6 +129,9 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
               streamingTools={streamingTools}
             />
           ) : null}
+          {hasDingTalkSentPreview ? (
+            <DingTalkSentPreview previews={dingTalkSentPreviews} />
+          ) : null}
           <ChatMessage
             message={replyMessage}
             showThinking={false}
@@ -114,7 +146,27 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     );
   }
 
-  if (!showThinkingPanel) return null;
+  if (!showThinkingPanel && !hasDingTalkSentPreview) return null;
+
+  if (hasDingTalkSentPreview) {
+    return (
+      <div className="group flex flex-row gap-3" data-chat-message-role="assistant">
+        {avatar}
+        <div className="flex w-full min-w-0 max-w-[80%] flex-col items-start space-y-2">
+          {showThinkingPanel ? (
+            <ThinkingProcessPanel
+              timeline={mergedTimeline}
+              isStreaming={isStreaming}
+              isConnecting={isConnecting}
+              isProcessing={isProcessing}
+              streamingTools={streamingTools}
+            />
+          ) : null}
+          <DingTalkSentPreview previews={dingTalkSentPreviews} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="group flex flex-row gap-3" data-chat-message-role="assistant">
