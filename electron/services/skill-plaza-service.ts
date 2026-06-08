@@ -17,6 +17,7 @@ import {
   resolveInstalledVersionForCompare,
 } from '../utils/skill-version';
 import { PREINSTALLED_MARKER_NAME } from './sto-skill-service';
+import { parseSkillFrontmatter, readSkillMdFrontmatter } from '../utils/skill-frontmatter';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -306,18 +307,8 @@ function isPreinstalledSkill(skillDir: string): boolean {
 }
 
 function readSkillMdVersion(skillDir: string): string | null {
-  try {
-    const skillMdPath = path.join(skillDir, 'SKILL.md');
-    if (!fs.existsSync(skillMdPath)) return null;
-    const raw = fs.readFileSync(skillMdPath, 'utf8');
-    const frontmatterMatch = raw.match(/^---\s*\n([\s\S]*?)\n---/);
-    if (!frontmatterMatch) return null;
-    const versionMatch = frontmatterMatch[1].match(/^\s*version\s*:\s*["']?([^"'\n]+)["']?\s*$/m);
-    if (!versionMatch) return null;
-    return versionMatch[1].trim() || null;
-  } catch {
-    return null;
-  }
+  const fm = readSkillMdFrontmatter(skillDir);
+  return fm?.version ?? null;
 }
 
 function resolveSkillDirForSlug(skillsDir: string, disabledDir: string, slug: string): string | null {
@@ -379,20 +370,10 @@ function readLocalSkillSummary(skillsDir: string, slug: string): Partial<SkillSu
   const skillMdPath = path.join(skillDir, 'SKILL.md');
   if (fs.existsSync(skillMdPath)) {
     try {
-      const content = fs.readFileSync(skillMdPath, 'utf8');
+      const content = fs.readFileSync(skillMdPath, 'utf8').replace(/\r\n/g, '\n');
       const frontMatterMatch = content.match(/^---\n([\s\S]*?)\n---\n/);
       if (frontMatterMatch) {
-        const frontMatter = frontMatterMatch[1];
-        const lines = frontMatter.split('\n');
-        const meta: Record<string, string> = {};
-        for (const line of lines) {
-          const colonIdx = line.indexOf(':');
-          if (colonIdx > 0) {
-            const key = line.slice(0, colonIdx).trim();
-            const value = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, '');
-            meta[key] = value;
-          }
-        }
+        const meta = parseSkillFrontmatter(frontMatterMatch[1]);
         // front matter 里优先取 title，没有 title 再取 name
         let title = meta.title || meta.name || '';
         if (!title) {

@@ -16,6 +16,7 @@ import { logger } from '../utils/logger';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { TIMEOUTS } from '../utils/config';
 import { normalizeSkillVersion } from '../utils/skill-version';
+import { readSkillMdFrontmatter } from '../utils/skill-frontmatter';
 
 export const PREINSTALLED_MARKER_NAME = '.stoclaw-preinstalled.json';
 
@@ -408,19 +409,8 @@ export class StoSkillService {
 
   /** Read version from SKILL.md YAML frontmatter. */
   readSkillMdVersion(skillDir: string): string | null {
-    try {
-      const skillMdPath = path.join(skillDir, 'SKILL.md');
-      if (!fs.existsSync(skillMdPath)) return null;
-      const raw = fs.readFileSync(skillMdPath, 'utf8');
-      const frontmatterMatch = raw.match(/^---\s*\n([\s\S]*?)\n---/);
-      if (!frontmatterMatch) return null;
-      const versionMatch = frontmatterMatch[1].match(/^\s*version\s*:\s*["']?([^"'\n]+)["']?\s*$/m);
-      if (!versionMatch) return null;
-      const version = versionMatch[1].trim();
-      return version || null;
-    } catch {
-      return null;
-    }
+    const fm = readSkillMdFrontmatter(skillDir);
+    return fm?.version ?? null;
   }
 
   /**
@@ -509,18 +499,8 @@ export class StoSkillService {
 
   /** Read description from SKILL.md YAML frontmatter. */
   readSkillMdDescription(skillDir: string): string | null {
-    try {
-      const skillMdPath = path.join(skillDir, 'SKILL.md');
-      if (!fs.existsSync(skillMdPath)) return null;
-      const raw = fs.readFileSync(skillMdPath, 'utf8');
-      const frontmatterMatch = raw.match(/^---\s*\n([\s\S]*?)\n---/);
-      if (!frontmatterMatch) return null;
-      const descMatch = frontmatterMatch[1].match(/^\s*description\s*:\s*["']?([^"'\n]+)["']?\s*$/m);
-      if (!descMatch) return null;
-      return descMatch[1].trim() || null;
-    } catch {
-      return null;
-    }
+    const fm = readSkillMdFrontmatter(skillDir);
+    return fm?.description ?? null;
   }
 
   // -----------------------------------------------------------------------
@@ -546,16 +526,12 @@ export class StoSkillService {
 
     // 2. Try SKILL.md frontmatter: ---\nname: xxx\n---
     try {
-      const skillMdPath = path.join(skillDir, 'SKILL.md');
-      const raw = fs.readFileSync(skillMdPath, 'utf8');
-
-      const frontmatterMatch = raw.match(/^---\s*\n([\s\S]*?)\n---/);
-      if (frontmatterMatch) {
-        const nameMatch = frontmatterMatch[1].match(/^\s*name\s*:\s*["']?([^"'\n]+)["']?\s*$/m);
-        if (nameMatch) return nameMatch[1].trim();
-      }
+      const fm = readSkillMdFrontmatter(skillDir);
+      if (fm?.name) return fm.name;
 
       // 3. Fallback: first H1 heading
+      const skillMdPath = path.join(skillDir, 'SKILL.md');
+      const raw = fs.readFileSync(skillMdPath, 'utf8').replace(/\r\n/g, '\n');
       const h1Match = raw.match(/^#\s+(.+)$/m);
       if (h1Match) return h1Match[1].trim();
     } catch {
@@ -587,7 +563,7 @@ export class StoSkillService {
     const gatewayName = slug.toLowerCase();
 
     try {
-      const raw = fs.readFileSync(skillMdPath, 'utf8');
+      const raw = fs.readFileSync(skillMdPath, 'utf8').replace(/\r\n/g, '\n');
       const hasFrontmatter = /^---\s*\n/.test(raw);
 
       if (hasFrontmatter) {
