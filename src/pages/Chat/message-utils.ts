@@ -5,6 +5,7 @@
  */
 import { useMemo } from 'react';
 import type { RawMessage, ContentBlock } from '@/stores/chat';
+import { stripDingTalkMentionContextForDisplay } from '@/lib/dingtalk-mention-context';
 
 /**
  * Clean Gateway metadata from user message text for display.
@@ -12,7 +13,7 @@ import type { RawMessage, ContentBlock } from '@/stores/chat';
  * and the timestamp prefix [Day Date Time Timezone].
  */
 function cleanUserText(text: string): string {
-  return text
+  const cleaned = text
     // Remove [media attached: path (mime) | path] references
     .replace(/\s*\[media attached:[^\]]*\]/g, '')
     // Remove [message_id: uuid]
@@ -24,6 +25,32 @@ function cleanUserText(text: string): string {
     // Remove Gateway timestamp prefix like [Fri 2026-02-13 22:39 GMT+8]
     .replace(/^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+[^\]]+\]\s*/i, '')
     .trim();
+  return stripDingTalkMentionContextForDisplay(cleaned);
+}
+
+/** Strip dws send metadata that agents should not surface to end users. */
+const DWS_SEND_METADATA_PATTERN =
+  /[,，]?\s*(?:\*\*)?(?:任务\s*ID|openTaskId|processQueryKey)(?:\*\*)?\s*[：:]\s*[A-Za-z0-9+/=_-]+(?:\*\*)?/gi;
+
+export function stripDwsSendMetadataForDisplay(text: string): string {
+  let cleaned = text
+    .replace(DWS_SEND_METADATA_PATTERN, '')
+    .replace(/^\s*(?:\*\*)?(?:任务\s*ID|openTaskId|processQueryKey)(?:\*\*)?\s*[：:]\s*[A-Za-z0-9+/=_-]+(?:\*\*)?\s*$/gim, '')
+    .replace(/\*{4,}/g, '**');
+
+  cleaned = cleaned
+    .replace(/，\s*([。！？\n]|$)/g, '$1')
+    .replace(/,\s*([.!?\n]|$)/g, '$1');
+
+  return cleaned.trim();
+}
+
+function cleanAssistantText(text: string): string {
+  return stripDwsSendMetadataForDisplay(text);
+}
+
+function cleanThinkingText(text: string): string {
+  return stripDwsSendMetadataForDisplay(text);
 }
 
 /**
@@ -78,9 +105,15 @@ export function extractText(message: RawMessage | unknown): string {
     result = msg.text.trim().length > 0 ? msg.text : '';
   }
 
+  const role = typeof msg.role === 'string' ? msg.role.toLowerCase() : '';
+
   // Strip Gateway metadata from user messages for clean display
   if (isUser && result) {
     result = cleanUserText(result);
+  }
+
+  if (role === 'assistant' && result) {
+    result = cleanAssistantText(result);
   }
 
   return result;
@@ -100,7 +133,7 @@ export function extractThinking(message: RawMessage | unknown): string | null {
   const parts: string[] = [];
   for (const block of content as ContentBlock[]) {
     if (block.type === 'thinking' && block.thinking) {
-      const cleaned = block.thinking.trim();
+      const cleaned = cleanThinkingText(block.thinking.trim());
       if (cleaned) {
         parts.push(cleaned);
       }
@@ -129,7 +162,7 @@ export function extractThinkingTimeline(message: RawMessage | unknown): Thinking
   if (Array.isArray(content)) {
     for (const block of content as ContentBlock[]) {
       if (block.type === 'thinking' && block.thinking) {
-        const cleaned = block.thinking.trim();
+        const cleaned = cleanThinkingText(block.thinking.trim());
         if (cleaned) {
           items.push({ type: 'thinking', content: cleaned });
         }

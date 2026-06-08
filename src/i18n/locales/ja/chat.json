@@ -35,6 +35,20 @@
         "gatewayConnected": "接続済み",
         "gatewayStatus": "ゲートウェイ {{state}} | ポート: {{port}} {{pid}}",
         "retryFailedAttachments": "失敗した添付を再試行",
+        "dingtalkMentionTitle": "钉钉の連絡先またはグループを選択",
+        "dingtalkMentionSearchTitle": "「{{query}}」を検索",
+        "dingtalkRecentTitle": "未読セッション",
+        "dingtalkMentionChip": "@{{name}}",
+        "dingtalkSearching": "検索中…",
+        "dingtalkLoadingMore": "さらに読み込み中…",
+        "dingtalkLoadMore": "さらに表示",
+        "dingtalkNoResults": "一致する結果がありません",
+        "dingtalkNeedsInstall": "@ 指定には钉钉 CLI のインストールが必要です",
+        "dingtalkInstall": "钉钉 CLI をインストール",
+        "dingtalkInstalling": "インストール中…",
+        "dingtalkNeedsAuth": "連絡先を検索するには钉钉へのログインが必要です",
+        "dingtalkLogin": "钉钉にログイン",
+        "dingtalkLoggingIn": "ログイン中…",
         "pickWorkflow": "ワークフローを選択",
         "workflowPlaceholder": "ワークフローテンプレートを検索...",
         "workflowLoading": "読み込み中...",
@@ -77,14 +91,6 @@
         "moveDown": "下へ移動",
         "fileCount": "{{count}} 件のファイル",
         "queueFull": "キューが満杯です（最大 {{max}} 件）"
-    },
-    "workflow": {
-        "statusPending": "待機中",
-        "statusRunning": "実行中",
-        "statusCompleted": "完了",
-        "statusFailed": "失敗",
-        "statusTimeout": "タイムアウト",
-        "statusUnknown": "不明"
     },
     "splitting": "質問を分析中..."
 }

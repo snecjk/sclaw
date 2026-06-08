@@ -1602,12 +1602,9 @@ export const useChatStore = create<ChatState>()(
   // ── Send message ──
 
   sendMessage: async (
-    text: string,
-    attachments?: Array<{ fileName: string; mimeType: string; fileSize: number; stagedPath: string; preview: string | null }>,
-    targetAgentId?: string | null,
-    workflowId?: string | null,
-    runId?: string | null,
+    options: import('./chat/types').SendMessageOptions,
   ) => {
+    const { text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId: _workflowId, runId: _runId } = options;
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
 
@@ -1774,8 +1771,8 @@ export const useChatStore = create<ChatState>()(
             message: trimmed,
             deliver: false,
             idempotencyKey,
-            workflowId,
-            runId,
+            workflowId: _workflowId,
+            runId: _runId,
           },
           CHAT_SEND_TIMEOUT_MS,
         );

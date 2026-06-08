@@ -19,7 +19,7 @@ export function HomeAssistant({
 }: {
   className?: string;
   seedText?: string;
-  onSend?: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, workflowId?: string | null) => void;
+  onSend?: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[], workflowId?: string | null) => void;
 }) {
   const { t } = useTranslation('home');
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);

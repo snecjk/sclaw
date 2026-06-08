@@ -15,8 +15,8 @@ export function WorkflowChip({ name, onRemove }: WorkflowChipProps) {
       onClick={onRemove}
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full border border-border',
-        'bg-primary/8 px-3 py-1 text-[13px] font-medium text-foreground',
-        'transition-colors hover:bg-primary/12',
+        'bg-primary/6 px-3 py-1 text-[13px] font-medium text-foreground',
+        'transition-colors hover:bg-primary/10',
       )}
       title={t('composer.workflowClear')}
     >

@@ -7,6 +7,7 @@ import { useMessageQueueStore } from '@/stores/message-queue';
 import { invokeApi } from '@/lib/api-client';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
+import type { DingTalkMention } from '@/types/dingtalk-mention';
 
 /**
  * 首页入口（省区工作台 / Agent Hub）与聊天页保持一致：
@@ -20,15 +21,15 @@ export function useHomeChatEntrySend() {
   const newSession = useChatStore((s) => s.newSession);
 
   const handleHubQueue = useCallback(
-    (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, workflowId?: string | null) => {
+    (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, _dingTalkMentions?: DingTalkMention[], workflowId?: string | null) => {
       const { currentSessionKey } = useChatStore.getState();
-      useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, workflowId);
+      useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, _dingTalkMentions, workflowId);
     },
     [],
   );
 
   const handleHubSend = useCallback(
-    async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, workflowId?: string | null) => {
+    async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, _dingTalkMentions?: DingTalkMention[], workflowId?: string | null) => {
       if (!isGatewayRunning) {
         toast.error(t('assistant.gatewayRequired'));
         return;
@@ -47,7 +48,7 @@ export function useHomeChatEntrySend() {
         }, async (msg) => {
           // Gateway chat.send doesn't support workflowId/runId params yet.
           // Workflow state is tracked via SSE + main process polling.
-          await sendMessage(msg, attachments, targetAgentId);
+          await sendMessage({ text: msg, attachments, targetAgentId });
         });
         if (!ok) return;
         return;
@@ -73,7 +74,7 @@ export function useHomeChatEntrySend() {
       const failed = () => Boolean(useChatStore.getState().error);
 
       if (parts && parts.length > 1) {
-        await sendMessage(parts[0].context, attachments, targetAgentId);
+        await sendMessage({ text: parts[0].context, attachments, targetAgentId });
         if (failed()) {
           toast.error(t('assistant.sendFailed'));
           return;
@@ -83,7 +84,7 @@ export function useHomeChatEntrySend() {
           useMessageQueueStore.getState().enqueue(sessionKey, parts[i].context, undefined, targetAgentId);
         }
       } else {
-        await sendMessage(text, attachments, targetAgentId);
+        await sendMessage({ text, attachments, targetAgentId });
         if (failed()) {
           toast.error(t('assistant.sendFailed'));
           return;

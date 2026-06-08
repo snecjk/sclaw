@@ -247,8 +247,9 @@ export function Chat() {
 
   const handleSend = useCallback(async (
     text: string,
-    attachments?: Parameters<typeof sendMessage>[1],
-    targetAgentId?: Parameters<typeof sendMessage>[2],
+    attachments?: FileAttachment[],
+    targetAgentId?: string | null,
+    _dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[],
     workflowId?: string | null,
   ) => {
     console.log('[Chat.handleSend] workflowId=', workflowId, 'text=', text);
@@ -283,7 +284,7 @@ export function Chat() {
           inputs,
           { sessionKey: chatState.currentSessionKey, agentId: chatState.currentAgentId },
           async (msg, runId, wfId) => {
-            await sendMessage(msg, attachments, targetAgentId, wfId, runId);
+            await sendMessage({ text: msg, attachments, targetAgentId, workflowId: wfId, runId });
           },
           text,
         );
@@ -302,7 +303,7 @@ export function Chat() {
       }, async (msg) => {
         // Gateway chat.send doesn't support workflowId/runId params yet.
         // Workflow state is tracked via SSE + main process polling.
-        await sendMessage(msg, attachments, targetAgentId);
+        await sendMessage({ text: msg, attachments, targetAgentId });
       });
       if (!ok) return;
       return;
@@ -325,12 +326,12 @@ export function Chat() {
     }
 
     if (parts && parts.length > 1) {
-      sendMessage(parts[0].context, attachments, targetAgentId, workflowId);
+      sendMessage({ text: parts[0].context, attachments, targetAgentId, workflowId });
       for (let i = 1; i < parts.length; i++) {
         useMessageQueueStore.getState().enqueue(currentSessionKey, parts[i].context, undefined, targetAgentId);
       }
     } else {
-      sendMessage(text, attachments, targetAgentId, workflowId);
+      sendMessage({ text, attachments, targetAgentId, workflowId });
     }
   }, [beginSendScroll, sendMessage, currentSessionKey]);
 
@@ -338,10 +339,11 @@ export function Chat() {
     text: string,
     attachments?: FileAttachment[],
     targetAgentId?: string | null,
+    dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[],
     workflowId?: string | null,
   ) => {
     const { currentSessionKey } = useChatStore.getState();
-    useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, workflowId);
+    useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, dingTalkMentions, workflowId);
   }, []);
 
   // ── Resizable panel logic ──

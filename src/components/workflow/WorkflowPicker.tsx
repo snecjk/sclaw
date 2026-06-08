@@ -39,7 +39,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
       <div
         ref={ref}
         className={cn(
-          'absolute left-0 top-[-15px] z-50 mb-3 w-[50%] -translate-y-full overflow-hidden rounded-2xl border border-glass-border glass p-2',
+          'absolute left-0 bottom-full z-50 mb-2 w-80 overflow-hidden rounded-2xl border border-glass-border glass p-2',
           className,
         )}
       >

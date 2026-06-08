@@ -66,7 +66,7 @@ function enhanceMessage(text: string, templateName: string, schema: WorkflowSche
 export async function sendWithWorkflow(
   text: string,
   templateId: string,
-  context: WorkflowSendContext,
+  _context: WorkflowSendContext,
   sendMessage: (text: string, runId?: string | null, workflowId?: string | null) => Promise<void>,
 ): Promise<boolean> {
   if (!canStartWorkflow()) {

@@ -1,4 +1,20 @@
 import type { WorkflowExecutionState } from '@/types/workflow';
+import type { DingTalkMention } from '@/types/dingtalk-mention';
+
+export interface SendMessageOptions {
+  text: string;
+  attachments?: Array<{
+    fileName: string;
+    mimeType: string;
+    fileSize: number;
+    stagedPath: string;
+    preview: string | null;
+  }>;
+  targetAgentId?: string | null;
+  dingTalkMentions?: DingTalkMention[];
+  workflowId?: string | null;
+  runId?: string | null;
+}
 
 /** Metadata for locally-attached files (not from Gateway) */
 export interface AttachedFileMeta {
@@ -122,19 +138,7 @@ export interface ChatState {
   deleteSession: (key: string) => Promise<void>;
   cleanupEmptySession: () => void;
   loadHistory: (quiet?: boolean) => Promise<void>;
-  sendMessage: (
-    text: string,
-    attachments?: Array<{
-      fileName: string;
-      mimeType: string;
-      fileSize: number;
-      stagedPath: string;
-      preview: string | null;
-    }>,
-    targetAgentId?: string | null,
-    workflowId?: string | null,
-    runId?: string | null,
-  ) => Promise<void>;
+  sendMessage: (options: SendMessageOptions) => Promise<void>;
   abortRun: () => Promise<void>;
   handleChatEvent: (event: Record<string, unknown>) => void;
   toggleThinking: () => void;

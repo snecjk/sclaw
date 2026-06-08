@@ -1,6 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { readFile, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
 
 const PROVIDER_ID = "sto-dynamic-agent-route";
@@ -49,6 +49,170 @@ function resolveTildePath(filePath: string): string {
 		return resolve(homedir(), filePath.slice(2));
 	}
 	return resolve(filePath);
+}
+
+type DingTalkMentionPendingPayload = {
+	sessionKey: string;
+	mentions: Array<{
+		type: "user" | "group";
+		displayName: string;
+		userId?: string;
+		openConversationId?: string;
+		corpId?: string;
+	}>;
+	userText: string;
+	writtenAt: number;
+	sendFileIntent?: boolean;
+	attachedFiles?: Array<{
+		fileName: string;
+		filePath: string;
+		mimeType: string;
+		fileSize?: number;
+	}>;
+};
+
+function pendingMentionCachePath(sessionKey: string): string {
+	const safeName = Buffer.from(sessionKey, "utf8").toString("base64url");
+	return join(homedir(), ".stoclaw", "cache", "dingtalk-mention-pending", `${safeName}.json`);
+}
+
+const DINGTALK_MENTION_PENDING_TTL_MS = 5 * 60 * 1000;
+
+async function readDingTalkMentionPending(
+	sessionKey: string,
+): Promise<DingTalkMentionPendingPayload | null> {
+	const cachePath = pendingMentionCachePath(sessionKey);
+	try {
+		const raw = await readFile(cachePath, "utf-8");
+		const parsed = JSON.parse(raw) as DingTalkMentionPendingPayload;
+		if (parsed.sessionKey !== sessionKey || !Array.isArray(parsed.mentions) || parsed.mentions.length === 0) {
+			await unlink(cachePath).catch(() => undefined);
+			return null;
+		}
+		if (Date.now() - parsed.writtenAt > DINGTALK_MENTION_PENDING_TTL_MS) {
+			await unlink(cachePath).catch(() => undefined);
+			return null;
+		}
+		return parsed;
+	} catch {
+		return null;
+	}
+}
+
+async function clearDingTalkMentionPending(sessionKey: string): Promise<void> {
+	await unlink(pendingMentionCachePath(sessionKey)).catch(() => undefined);
+}
+
+function buildDingTalkFileSendWorkflowContext(
+	mentions: DingTalkMentionPendingPayload["mentions"],
+	attachedFiles?: DingTalkMentionPendingPayload["attachedFiles"],
+): string {
+	const conversationInfoHints = mentions.flatMap((mention) => {
+		if (mention.type === "group" && mention.openConversationId) {
+			return [
+				`- ${mention.displayName}: dws chat conversation-info --group ${mention.openConversationId} --format json`,
+			];
+		}
+		if (mention.type === "user" && mention.userId) {
+			return [
+				`- ${mention.displayName}: dws chat conversation-info --user ${mention.userId} --format json`,
+			];
+		}
+		return [];
+	});
+	const fileLines = attachedFiles?.map(
+		(file) => `- ${file.fileName}（${file.mimeType}）→ ${file.filePath}`,
+	) ?? [];
+	return [
+		"",
+		"## StoClaw DingTalk 文件发送（钉盘流程，本条含非图片附件）",
+		"",
+		"**仅当需要把附件发给上述 @ 收件人时启用**；纯文字消息仍用 `--text`，不要套用本流程。",
+		"",
+		"非图片文件（pdf/doc/js/zip 等）**必须**按顺序执行，禁止猜测 dentryId/spaceId：",
+		"1. `dws chat conversation-info` 取 `newCSpaceIdIM` 作为 `--space-id`（群用 `--group`，单聊用 `--user`）",
+		"2. `dws drive upload --file <本地路径> --space-id <spaceId> -y --format json` → 取 `fileId`",
+		"3. `dws drive info --node <fileId> --format json` → 取 `dentryId`（发送 file 消息必需）",
+		"4. `dws chat message send --group|--user <收件人ID> --msg-type file --dentry-id <dentryId> --space-id <spaceId> --file-name \"<名>\" --file-type \"<扩展名>\" --file-path \"/<名>\" --file-size <字节> --format json`",
+		"",
+		"预查会话共享空间：",
+		...conversationInfoHints,
+		"",
+		...(fileLines.length > 0
+			? ["本条附件：", ...fileLines]
+			: ["附件本地路径见消息末尾 `[media attached: <path> ...]` 行。"]),
+		"",
+		"图片附件走 image/mediaId 路径，**不要**对图片套用钉盘 file 流程。",
+	].join("\n");
+}
+
+function buildDingTalkMentionSystemContext(
+	mentions: DingTalkMentionPendingPayload["mentions"],
+	options?: {
+		sendFileIntent?: boolean;
+		attachedFiles?: DingTalkMentionPendingPayload["attachedFiles"];
+	},
+): string {
+	const recipients = mentions.map((mention) => {
+		if (mention.type === "user") {
+			return {
+				type: "user",
+				displayName: mention.displayName,
+				userId: mention.userId,
+				corpId: mention.corpId,
+			};
+		}
+		return {
+			type: "group",
+			displayName: mention.displayName,
+			openConversationId: mention.openConversationId,
+			corpId: mention.corpId,
+		};
+	});
+	const sendCommandHints = mentions.flatMap((mention) => {
+		if (mention.type === "user" && mention.userId) {
+			return [
+				`- ${mention.displayName}: dws chat message send --user ${mention.userId} --text "<MESSAGE>" --format json`,
+			];
+		}
+		if (mention.type === "group" && mention.openConversationId) {
+			return [
+				`- ${mention.displayName}: dws chat message send --group ${mention.openConversationId} --text "<MESSAGE>" --format json`,
+			];
+		}
+		return [];
+	});
+	const jsonBlock = JSON.stringify(
+		{
+			version: 1,
+			source: "stoclaw-input-mention",
+			recipients,
+		},
+		null,
+		2,
+	);
+	return [
+		"[STOCLAW:DINGTALK_RECIPIENTS:v1]",
+		"```json",
+		jsonBlock,
+		"```",
+		"",
+		"## StoClaw DingTalk Recipients（输入框 @ 已选定）",
+		"",
+		"以上 JSON 中的 userId / openConversationId 由用户在 StoClaw 输入框通过 @ 搜索并**手动选定**，与显示名一一对应，可直接用于发送。",
+		"",
+		"**必须遵守：**",
+		"1. **禁止**对 JSON 内收件人执行 `dws contact user search`、`dws aisearch person` 或任何搜人/搜群命令",
+		"2. **禁止**使用 OpenClaw `message` 工具（channel=dingtalk）或把 displayName 当作 target",
+		"3. **必须**使用 `dws chat message send`，收件人参数只能取自 JSON（`--user` / `--group`）",
+		"4. 发送前可与用户确认正文，或使用 `--dry-run`",
+		"",
+		"预填命令（将 `<MESSAGE>` 替换为实际正文后执行）：",
+		...sendCommandHints,
+		...(options?.sendFileIntent
+			? [buildDingTalkFileSendWorkflowContext(mentions, options.attachedFiles)]
+			: []),
+	].join("\n");
 }
 
 async function readSsoAuth(ssoAuthPath: string): Promise<SsoAuthInfo> {
@@ -297,31 +461,46 @@ export default definePluginEntry({
 					`[${TAG}] before_prompt_build: fired — agentId=${ctx.agentId ?? "(none)"}, sessionKey=${ctx.sessionKey ?? "(none)"}`,
 				);
 
+				const appendBlocks: string[] = [];
+
+				if (ctx.sessionKey) {
+					const pendingMentions = await readDingTalkMentionPending(ctx.sessionKey);
+					if (pendingMentions) {
+						appendBlocks.push(buildDingTalkMentionSystemContext(pendingMentions.mentions, {
+							sendFileIntent: pendingMentions.sendFileIntent,
+							attachedFiles: pendingMentions.attachedFiles,
+						}));
+						await clearDingTalkMentionPending(ctx.sessionKey);
+						api.logger.debug?.(
+							`[${TAG}] before_prompt_build: injected DingTalk mention context (${pendingMentions.mentions.length} recipients)`,
+						);
+					}
+				}
+
 				try {
 					const ssoAuth = await readSsoAuth(ssoAuthPath);
-					if (!ssoAuth.userName) {
-						api.logger.debug?.(`[${TAG}] before_prompt_build: no SSO auth found, skipping context injection`);
-						return undefined;
+					if (ssoAuth.userName) {
+						const lines: string[] = [];
+						lines.push("当前登录用户信息（已认证）：");
+						if (ssoAuth.userName) lines.push(`- 用户名：${ssoAuth.userName}`);
+						if (ssoAuth.realName) lines.push(`- 真实姓名：${ssoAuth.realName}`);
+						if (ssoAuth.companyCode) lines.push(`- 网点编码（companyCode）：${ssoAuth.companyCode}`);
+						if (ssoAuth.companyName) lines.push(`- 网点名称（companyName）：${ssoAuth.companyName}`);
+						if (ssoAuth.departmentCode) lines.push(`- 组织编码（departmentCode）：${ssoAuth.departmentCode}`);
+						if (ssoAuth.departmentName) lines.push(`- 组织名称（departmentName）：${ssoAuth.departmentName}`);
+						lines.push("");
+						lines.push("当用户查询涉及网点、组织的数据时，如果用户未指定具体的网点编码或组织编码，默认使用上述当前登录用户的信息，不需要再向用户询问。");
+						appendBlocks.push(lines.join("\n"));
+						api.logger.debug?.(`[${TAG}] before_prompt_build: injected SSO user context for ${ssoAuth.userName}`);
+					} else {
+						api.logger.debug?.(`[${TAG}] before_prompt_build: no SSO auth found, skipping SSO context injection`);
 					}
-
-					const lines: string[] = [];
-					lines.push("当前登录用户信息（已认证）：");
-					if (ssoAuth.userName) lines.push(`- 用户名：${ssoAuth.userName}`);
-					if (ssoAuth.realName) lines.push(`- 真实姓名：${ssoAuth.realName}`);
-					if (ssoAuth.companyCode) lines.push(`- 网点编码（companyCode）：${ssoAuth.companyCode}`);
-					if (ssoAuth.companyName) lines.push(`- 网点名称（companyName）：${ssoAuth.companyName}`);
-					if (ssoAuth.departmentCode) lines.push(`- 组织编码（departmentCode）：${ssoAuth.departmentCode}`);
-					if (ssoAuth.departmentName) lines.push(`- 组织名称（departmentName）：${ssoAuth.departmentName}`);
-					lines.push("");
-					lines.push("当用户查询涉及网点、组织的数据时，如果用户未指定具体的网点编码或组织编码，默认使用上述当前登录用户的信息，不需要再向用户询问。");
-
-					const appendSystemContext = lines.join("\n");
-					api.logger.debug?.(`[${TAG}] before_prompt_build: injected SSO user context for ${ssoAuth.userName}`);
-					return { appendSystemContext };
 				} catch (err) {
-					api.logger.warn?.(`[${TAG}] before_prompt_build: failed to read SSO auth (${String(err)}), skipping context injection`);
-					return undefined;
+					api.logger.warn?.(`[${TAG}] before_prompt_build: failed to read SSO auth (${String(err)}), skipping SSO context injection`);
 				}
+
+				if (appendBlocks.length === 0) return undefined;
+				return { appendSystemContext: appendBlocks.join("\n\n") };
 			});
 
 		api.logger.info?.(`[${TAG}] plugin registered successfully`);

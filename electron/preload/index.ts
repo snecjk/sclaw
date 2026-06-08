@@ -210,6 +210,8 @@ const electronAPI = {
         'scheduled-task:new-result',
         'openclaw:cli-installed',
         'sai:cli-install-failed',
+        'dws:cli-installed',
+        'dws:cli-install-failed',
         'startup-progress',
         'auth:token-expired',
       ];

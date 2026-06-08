@@ -46,7 +46,7 @@ export function useStoTaskSubitemChatSend() {
       const failed = () => Boolean(useChatStore.getState().error);
 
       if (parts && parts.length > 1) {
-        await sendMessage(parts[0].context, attachments, targetAgentId);
+        await sendMessage({ text: parts[0].context, attachments, targetAgentId });
         if (failed()) {
           toast.error(t('assistant.sendFailed'));
           return;
@@ -56,7 +56,7 @@ export function useStoTaskSubitemChatSend() {
           useMessageQueueStore.getState().enqueue(currentSessionKey, parts[i].context, undefined, targetAgentId);
         }
       } else {
-        await sendMessage(text, attachments, targetAgentId);
+        await sendMessage({ text, attachments, targetAgentId });
         if (failed()) {
           toast.error(t('assistant.sendFailed'));
           return;

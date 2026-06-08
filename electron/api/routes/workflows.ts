@@ -143,7 +143,34 @@ export async function handleWorkflowRoutes(
   if (pathname === '/agent/v1/workflow-templates/search' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ query: string; limit?: number }>(req);
-      await proxyWorkflowRequest(req, res, '/agent/v1/workflow-templates/search', body);
+      logger.info('[WorkflowRoutes] search request body:', JSON.stringify(body));
+
+      // Capture response for logging
+      const baseUrl = await resolveStoBaseUrl();
+      const headers = extractWorkflowHeaders(req);
+      const bodyStr = JSON.stringify(body);
+
+      const response = await proxyAwareFetch(`${baseUrl}/agent/v1/workflow-templates/search`, {
+        method: 'POST',
+        headers,
+        body: bodyStr,
+        timeoutMs: 30_000,
+      });
+
+      const contentType = response.headers.get('content-type') || 'application/json; charset=utf-8';
+      const responseBody = await response.text();
+
+      logger.info('[WorkflowRoutes] search response status:', response.status);
+      logger.info('[WorkflowRoutes] search response body:', responseBody);
+
+      res.statusCode = response.status;
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Type', contentType);
+      const responseTraceId = response.headers.get('x-trace-id');
+      if (responseTraceId) {
+        res.setHeader('X-Trace-Id', responseTraceId);
+      }
+      res.end(responseBody);
     } catch (error) {
       logger.error('[WorkflowRoutes] search failed:', error);
       res.statusCode = 500;

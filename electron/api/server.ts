@@ -17,6 +17,7 @@ import { handleFileRoutes } from './routes/files';
 import { handleSessionRoutes } from './routes/sessions';
 import { handleCronRoutes } from './routes/cron';
 import { handleScheduledTaskRoutes } from './routes/scheduled-tasks';
+import { handleDingTalkRoutes } from './routes/dingtalk';
 import { handleStoSyncRoutes } from './routes/sto-sync';
 import { handleTokenQuotaRoutes } from './routes/token-quota';
 import { handleSubscriptionRoutes } from './routes/subscriptions';
@@ -47,6 +48,7 @@ const routeHandlers: RouteHandler[] = [
   handleSessionRoutes,
   handleCronRoutes,
   handleScheduledTaskRoutes,
+  handleDingTalkRoutes,
   handleLogRoutes,
   handleUsageRoutes,
   handleWorkflowRoutes,
