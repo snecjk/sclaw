@@ -15,6 +15,7 @@ import { logger } from '../../utils/logger';
 import { getStoModelSyncService } from '../../services/providers/sto-model-sync';
 import { runAuthenticatedSetup } from '../../services/auth-setup-orchestrator';
 import { runPendingInstallReport } from '../../services/client-update-platform';
+import { activateUserWorkspace, getCurrentActiveUserCode } from '../../services/user-skill-workspace';
 import { removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-auth';
 import { getStoPolicyReportApiHost } from '../../../shared/env-config';
 import { computeCrmWeekReportSurfaceAllowed } from '../../../shared/crm-week-report-policy';
@@ -80,6 +81,19 @@ export async function handleAuthRoutes(
 
       const user = await ssoLoginManager.startLogin(env, ctx.mainWindow);
       await setAuthUser(user);
+
+      // Activate user skill workspace and sync with cloud installed list
+      try {
+        const previousUserCode = await getCurrentActiveUserCode();
+        const workspaceResult = await activateUserWorkspace(user.code);
+        if (workspaceResult.userChanged && previousUserCode) {
+          logger.info(`[auth] User changed from ${previousUserCode} to ${user.code}, restarting Gateway`);
+          await ctx.gatewayManager.restart();
+        }
+      } catch (err) {
+        logger.warn('[auth] Failed to activate user skill workspace on login:', err);
+        // Non-fatal: do not block login if workspace sync fails
+      }
 
       // Load site department types from Apollo config for site-user detection
       void loadSiteDepartmentTypes().catch((err) =>
