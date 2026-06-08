@@ -6,6 +6,7 @@
  */
 import type { UserFormConfig, FormField } from '@/types/user-form';
 import type { WorkflowSchemaField, WorkflowSchema, WorkflowStartupPayload } from '@/types/workflow';
+import type { WorkflowContextBlock } from '@/stores/chat/types';
 
 const COMPONENT_MAPPING: Record<string, FormField['type']> = {
   single_select: 'select',
@@ -20,6 +21,7 @@ const COMPONENT_MAPPING: Record<string, FormField['type']> = {
   radio: 'radio',
   checkbox: 'checkbox',
   date_range: 'text',
+  editable_list: 'editable_list',
 };
 
 function mapComponentToType(component: string): FormField['type'] {
@@ -100,48 +102,71 @@ export function buildWorkflowFormConfig(
     schema.steps.filter((s) => s.mode === 'confirm').map((s) => s.id),
   );
 
-  const fields = schema.fields
+  const confirmFields = schema.fields
     .filter((f) => confirmStepIds.has(f.group))
-    .sort((a, b) => a.order - b.order)
-    .map((f) => {
-      const mapped = mapField(f);
+    .sort((a, b) => a.order - b.order);
 
-      // Override defaultValue with preset/default values if available
-      if (defaultValues && f.key in defaultValues) {
-        mapped.defaultValue = defaultValues[f.key];
-      }
+  const fields = confirmFields.map((f) => {
+    const mapped = mapField(f);
 
-      // Attempt to extract value from user input text if extractable
-      if (f.extractable && f.extractPattern && userInputText) {
-        try {
-          const match = userInputText.match(new RegExp(f.extractPattern));
-          if (match) {
-            mapped.defaultValue = match[1] ?? match[0];
-          }
-        } catch {
-          // Invalid regex, ignore extraction
+    // Override defaultValue with preset/default values if available
+    if (defaultValues && f.key in defaultValues) {
+      mapped.defaultValue = defaultValues[f.key];
+    }
+
+    // Attempt to extract value from user input text if extractable
+    if (f.extractable && f.extractPattern && userInputText) {
+      try {
+        const match = userInputText.match(new RegExp(f.extractPattern));
+        if (match) {
+          mapped.defaultValue = match[1] ?? match[0];
         }
+      } catch {
+        // Invalid regex, ignore extraction
       }
+    }
 
-      // Add pattern validation for date_range mapped to text
-      if (f.component === 'date_range' && mapped.type === 'text') {
-        mapped.validation = {
-          ...mapped.validation,
-          pattern: '^\\d{4}-\\d{2}-\\d{2}~\\d{4}-\\d{2}-\\d{2}$',
-        };
-        if (!mapped.description?.includes('格式')) {
-          mapped.description = [mapped.description, '格式：YYYY-MM-DD~YYYY-MM-DD'].filter(Boolean).join('，');
-        }
+    // Add pattern validation for date_range mapped to text
+    if (f.component === 'date_range' && mapped.type === 'text') {
+      mapped.validation = {
+        ...mapped.validation,
+        pattern: '^\\d{4}-\\d{2}-\\d{2}~\\d{4}-\\d{2}-\\d{2}$',
+      };
+      if (!mapped.description?.includes('格式')) {
+        mapped.description = [mapped.description, '格式：YYYY-MM-DD~YYYY-MM-DD'].filter(Boolean).join('，');
       }
+    }
 
-      return mapped;
-    });
+    return mapped;
+  });
+
+  // Build wizard steps from confirm-mode step groups
+  const steps: import('@/types/user-form').FormStep[] = [];
+  const stepMap = new Map<string, import('@/types/user-form').FormStep>();
+  for (const f of confirmFields) {
+    if (!stepMap.has(f.group)) {
+      const stepInfo = schema.steps.find((s) => s.id === f.group);
+      stepMap.set(f.group, {
+        id: f.group,
+        title: f.groupTitle ?? stepInfo?.title ?? f.label,
+        description: stepInfo ? `请确认${stepInfo.title}` : undefined,
+        fieldNames: [],
+      });
+    }
+    stepMap.get(f.group)!.fieldNames!.push(f.key);
+  }
+  for (const step of schema.steps) {
+    if (confirmStepIds.has(step.id) && stepMap.has(step.id)) {
+      steps.push(stepMap.get(step.id)!);
+    }
+  }
 
   return {
     id: `workflow-${schema.nodeId}-${Date.now()}`,
     title: schema.steps.find((s) => confirmStepIds.has(s.id))?.title ?? '工作流参数',
     description: '请填写以下工作流参数',
     fields,
+    steps: steps.length > 0 ? steps : undefined,
     confirmLabel: '确认并执行',
     cancelLabel: '取消',
   };
@@ -178,4 +203,83 @@ export function buildWorkflowValues(
   }
 
   return result;
+}
+
+/**
+ * Build natural language guidance text for AI from workflow schema.
+ * This text is injected into the conversation context so the AI can guide
+ * the user to confirm parameters naturally.
+ */
+export function buildWorkflowGuidanceText(
+  templateName: string,
+  schema: WorkflowSchema,
+): string {
+  const confirmStepIds = new Set(
+    schema.steps.filter((s) => s.mode === 'confirm').map((s) => s.id),
+  );
+
+  const confirmFields = schema.fields
+    .filter((f) => confirmStepIds.has(f.group))
+    .sort((a, b) => a.order - b.order);
+
+  const lines: string[] = [
+    `接下来运行【${templateName}】工作流，执行前请先确认以下参数：`,
+    '',
+  ];
+
+  for (let i = 0; i < confirmFields.length; i++) {
+    const f = confirmFields[i];
+    const required = f.required ? '（必填）' : '（可选）';
+    lines.push(`${i + 1}. **${f.label}** ${required}`);
+    if (f.description) {
+      lines.push(`   ${f.description}`);
+    }
+    if (f.options && f.options.length > 0) {
+      const opts = f.options.map((o) => `${o.label}(${o.value})`).join('、');
+      lines.push(`   可选值：${opts}`);
+    }
+    if (f.defaultValue !== undefined) {
+      lines.push(`   默认值：${JSON.stringify(f.defaultValue)}`);
+    }
+    lines.push('');
+  }
+
+  lines.push('请逐项确认或修改上述参数。');
+
+  return lines.join('\n');
+}
+
+/**
+ * Build a compact schema summary suitable for hidden context injection.
+ */
+export function buildWorkflowContextSummary(
+  templateId: string,
+  templateName: string,
+  schemaHash: string,
+  schema: WorkflowSchema,
+): WorkflowContextBlock {
+  const confirmStepIds = new Set(
+    schema.steps.filter((s) => s.mode === 'confirm').map((s) => s.id),
+  );
+
+  const confirmFields = schema.fields
+    .filter((f) => confirmStepIds.has(f.group))
+    .sort((a, b) => a.order - b.order);
+
+  const fieldsSummary = confirmFields.map((f) => ({
+    key: f.key,
+    label: f.label,
+    component: f.component,
+    required: f.required,
+    options: f.options?.map((o) => ({ value: o.value, label: o.label })),
+    defaultValue: f.defaultValue,
+  }));
+
+  return {
+    type: 'workflow_context',
+    templateId,
+    templateName,
+    schemaHash,
+    fields: fieldsSummary,
+  };
 }

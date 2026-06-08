@@ -61,6 +61,30 @@ export function useHomeChatEntrySend() {
         return;
       }
 
+      // ── Natural language workflow intent detection ──
+      const { pendingWorkflow } = useChatStore.getState();
+      if (!pendingWorkflow && !workflowId) {
+        const { detectWorkflowIntent, resolveTemplateFromText } = await import('@/hooks/use-workflow-intent');
+        if (detectWorkflowIntent(text)) {
+          const intent = await resolveTemplateFromText(text);
+          if (intent.confidence === 'high' && intent.bestMatch) {
+            const { currentSessionKey, currentAgentId } = useChatStore.getState();
+            if (currentSessionKey === DEFAULT_SESSION_KEY) {
+              newSession();
+            }
+            const { sendWithWorkflow } = await import('@/hooks/use-workflow-send');
+            const ok = await sendWithWorkflow(text, intent.bestMatch.id, {
+              sessionKey: currentSessionKey,
+              agentId: currentAgentId,
+            }, async (msg) => {
+              await sendMessage({ text: msg, attachments, targetAgentId });
+            });
+            if (!ok) return;
+            return;
+          }
+        }
+      }
+
       const { currentSessionKey } = useChatStore.getState();
       if (currentSessionKey === DEFAULT_SESSION_KEY) {
         newSession();

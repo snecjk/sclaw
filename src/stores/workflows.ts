@@ -30,9 +30,7 @@ export const useWorkflowsStore = create<WorkflowsState>((set) => ({
     set({ loading: true, error: null });
     try {
       const result = await searchWorkflowTemplates(query || '工作流', 10);
-      console.log('[WorkflowsStore] loadTemplates result:', JSON.stringify(result, null, 2));
       const templates = [...(result.matchedItems ?? []), ...(result.recommendedItems ?? [])];
-      console.log('[WorkflowsStore] templates count:', templates.length);
       set({ templates, loading: false });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

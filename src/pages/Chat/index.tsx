@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
+import { useWorkflowCompletion } from '@/hooks/use-workflow-completion';
 
 export function Chat() {
   const { t } = useTranslation('chat');
@@ -161,6 +162,9 @@ export function Chat() {
     }
   }, [sending, streamingTimestamp]);
 
+  // Listen for workflow completion and trigger AI summary
+  useWorkflowCompletion(currentSessionKey);
+
   // Gateway not running block has been completely removed so the UI always renders.
 
   const streamMsg = streamingMessage && typeof streamingMessage === 'object'
@@ -249,15 +253,22 @@ export function Chat() {
     _dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[],
     workflowId?: string | null,
   ) => {
-    console.log('[Chat.handleSend] workflowId=', workflowId, 'text=', text);
+    const chatState = useChatStore.getState();
+    const pending = chatState.pendingWorkflow;
+    console.log('[workflow-trace] handleSend input="%s" workflowId=%s pendingTemplate=%s', text, workflowId ?? 'null', pending?.templateId ?? 'null');
     beginSendScroll();
 
-    const chatState = useChatStore.getState();
+    // ── Cancel intent during workflow configuration ──
+    if (pending && !workflowId) {
+      const { isWorkflowCancelIntent } = await import('@/hooks/use-workflow-intent');
+      if (isWorkflowCancelIntent(text)) {
+        chatState.clearPendingWorkflow();
+        // Let the user message go through as normal chat
+        // (fall through to normal send flow)
+      }
+    }
 
     // ── Pending workflow: user is providing parameters in conversation ──
-    const pending = chatState.pendingWorkflow;
-    console.log('[Chat.handleSend] pendingWorkflow=', pending ? pending.templateId : null, 'text=', text, 'workflowId=', workflowId);
-
     if (pending && !workflowId) {
       // No workflowId in message — user is still providing parameters
       const { tryResolvePendingWorkflow } = await import('@/hooks/use-workflow-send');
@@ -288,18 +299,41 @@ export function Chat() {
     // ── Fresh workflow selection: first time user sends with a workflowId ──
     if (workflowId) {
       const { currentSessionKey, currentAgentId } = useChatStore.getState();
-      const { createAndStartWorkflowDirect } = await import('@/hooks/use-workflow-send');
-      const ok = await createAndStartWorkflowDirect(
-        workflowId,
-        {},
-        { sessionKey: currentSessionKey, agentId: currentAgentId },
-        async (msg, runId, wfId) => {
-          await sendMessage({ text: msg, attachments, targetAgentId, workflowId: wfId, runId });
-        },
+      const { sendWithWorkflow } = await import('@/hooks/use-workflow-send');
+      const ok = await sendWithWorkflow(
         text,
+        workflowId,
+        { sessionKey: currentSessionKey, agentId: currentAgentId },
+        async (msg, runId, wfId, workflowContext) => {
+          await sendMessage({ text: msg, attachments, targetAgentId, workflowId: wfId, runId, workflowContext: workflowContext as import('@/stores/chat').WorkflowContextBlock | null | undefined });
+        },
       );
       if (!ok) return;
       return;
+    }
+
+    // ── Natural language workflow intent detection ──
+    if (!pending && !workflowId) {
+      const { detectWorkflowIntent, resolveTemplateFromText } = await import('@/hooks/use-workflow-intent');
+      if (detectWorkflowIntent(text)) {
+        const intent = await resolveTemplateFromText(text);
+        console.log('[workflow-trace] intent result query="%s" bestMatch=%s matchScore=%s confidence=%s', text, intent.bestMatch?.id ?? 'null', intent.bestMatch?.matchScore ?? 'N/A', intent.confidence);
+        if (intent.confidence === 'high' && intent.bestMatch) {
+          const { currentSessionKey, currentAgentId } = useChatStore.getState();
+          const { sendWithWorkflow } = await import('@/hooks/use-workflow-send');
+          const ok = await sendWithWorkflow(
+            text,
+            intent.bestMatch.id,
+            { sessionKey: currentSessionKey, agentId: currentAgentId },
+            async (msg, runId, wfId, workflowContext) => {
+              await sendMessage({ text: msg, attachments, targetAgentId, workflowId: wfId, runId, workflowContext: workflowContext as import('@/stores/chat').WorkflowContextBlock | null | undefined });
+            },
+          );
+          if (!ok) return;
+          return;
+        }
+        // Medium/low confidence: fall through to normal chat, AI may guide user
+      }
     }
 
     // ── Normal chat flow ──

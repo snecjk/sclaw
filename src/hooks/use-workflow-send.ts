@@ -20,6 +20,7 @@ import {
 import { invokeIpc } from '@/lib/api-client';
 import { canStartWorkflow, useWorkflowsStore } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
+import { saveWorkflowRecord, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
 import type { WorkflowSchema, WorkflowSchemaField } from '@/types/workflow';
 
 export interface WorkflowSendContext {
@@ -30,44 +31,15 @@ export interface WorkflowSendContext {
 /** Cached startup schema per template */
 const schemaCache = new Map<string, { schema: WorkflowSchema; schemaHash: string }>();
 
-function buildSchemaPrompt(schema: WorkflowSchema): string {
-  const lines = schema.fields.map((f) => {
-    const req = f.required ? '（必填）' : '（可选）';
-    const desc = f.description ? `：${f.description}` : '';
-    let typeHint = '';
-    if (f.component === 'file') typeHint = '【请上传文件】';
-    else if (f.component === 'single_select') {
-      typeHint = `【单选：${f.options?.map((o) => `${o.label}(${o.value})`).join(' / ') || '无'}】`;
-    }
-    else if (f.component === 'multi_select') {
-      typeHint = `【多选：${f.options?.map((o) => `${o.label}(${o.value})`).join(' / ') || '无'}】`;
-    }
-    else if (f.component === 'date') typeHint = '【日期格式】';
-    else if (f.component === 'editable_list') {
-      const defaultStr = f.defaultValue ? `，默认：${Array.isArray(f.defaultValue) ? f.defaultValue.join('、') : String(f.defaultValue)}` : '';
-      typeHint = `【可编辑列表${defaultStr}】`;
-    }
-    const defaultStr = f.defaultValue && !f.component.includes('select') && !f.component.includes('list') ? `，默认值：${JSON.stringify(f.defaultValue)}` : '';
-    return `- **${f.label}**（键：\`${f.key}\`）${req}${desc}${typeHint}${defaultStr}`;
-  });
-  return lines.join('\n');
-}
-
 /**
- * Enhance user message with workflow schema so the model can guide
- * parameter collection within the conversation.
+ * Phase 1: Send the user's message with workflow schema context so the AI
+ * can guide parameter confirmation naturally. Does NOT create the workflow yet.
  */
-function enhanceMessage(text: string, templateName: string, schema: WorkflowSchema): string {
-  const schemaDesc = buildSchemaPrompt(schema);
-  const stepInfo = schema.steps.map((s, i) => `${i + 1}. ${s.title}`).join('，');
-  return `${text}\n\n【工作流：${templateName}】\n\n该工作流包含 ${schema.steps.length} 个步骤：${stepInfo}\n\n请依次引导用户提供以下参数：\n${schemaDesc}\n\n引导规则：\n1. 每次只问一个步骤的参数\n2. 等用户回复后再问下一个\n3. 所有必填参数收集完毕后，回复"✅ 参数已收集完成，即将为您执行【${templateName}】工作流"\n4. 如果用户回复包含"确认"、"执行"、"开始"等词，且所有必填参数已填写，则执行工作流`;
-}
-
 export async function sendWithWorkflow(
   text: string,
   templateId: string,
   _context: WorkflowSendContext,
-  sendMessage: (text: string, runId?: string | null, workflowId?: string | null) => Promise<void>,
+  sendMessage: (text: string, runId?: string | null, workflowId?: string | null, workflowContext?: unknown) => Promise<void>,
 ): Promise<boolean> {
   if (!canStartWorkflow()) {
     toast.error('当前会话已有过多执行中的工作流，请等待完成后再试');
@@ -88,11 +60,11 @@ export async function sendWithWorkflow(
     // 2. Get template name from store
     const templateName = useWorkflowsStore.getState().templates.find((t) => t.id === templateId)?.label ?? templateId;
 
-    // 3. Enhance message with schema context
-    const enhancedText = enhanceMessage(text, templateName, schema);
-    console.log('[sendWithWorkflow] enhancedText=', enhancedText);
+    // 3. Build hidden workflow context for AI guidance
+    const { buildWorkflowContextSummary } = await import('@/lib/workflow-form-utils');
+    const workflowContext = buildWorkflowContextSummary(templateId, templateName, schemaHash, schema);
 
-    // 4. Persist pending workflow state in chat store for later creation & start
+    // 4. Set pending workflow so subsequent user replies are interpreted as parameter input
     useChatStore.getState().setPendingWorkflow({
       templateId,
       templateName,
@@ -101,29 +73,34 @@ export async function sendWithWorkflow(
       collectedInputs: {},
     });
 
-    // 5. Send enhanced message to the model (workflow creation happens after params are collected)
-    await sendMessage(enhancedText, null, null);
+    // 5. Send user message to Gateway with hidden workflow context.
+    //    The AI will receive the context and generate natural language guidance.
+    await sendMessage(text, null, null, workflowContext);
 
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    toast.error(`工作流创建失败: ${message}`);
+    toast.error(`工作流准备失败: ${message}`);
     return false;
   }
 }
 
 /**
- * Create and start a workflow directly on first selection
- * (skips the parameter guidance phase).
+ * Phase 2: Create and start the workflow after parameters have been collected.
+ * Handles both form submission and natural language parameter confirmation paths.
  */
 export async function createAndStartWorkflowDirect(
   templateId: string,
   inputs: Record<string, unknown>,
   context: WorkflowSendContext,
-  sendMessage: (text: string, runId?: string | null, workflowId?: string | null) => Promise<void>,
-  originalText: string,
+  _sendMessage: (text: string, runId?: string | null, workflowId?: string | null) => Promise<void>,
+  _originalText: string,
 ): Promise<boolean> {
-  console.log('[createAndStartWorkflowDirect] called templateId=', templateId, 'inputs=', inputs);
+  if (!canStartWorkflow()) {
+    toast.error('当前会话已有过多执行中的工作流，请等待完成后再试');
+    return false;
+  }
+
   try {
     // 1. Fetch startup schema (use cache if available)
     let cached = schemaCache.get(templateId);
@@ -142,11 +119,41 @@ export async function createAndStartWorkflowDirect(
       startup: buildStartupPreset(inputs, schemaHash),
       idempotencyKey: `create-wf-${templateId}-${Date.now()}`,
     });
+
+    const templateName = useWorkflowsStore.getState().templates.find((t) => t.id === templateId)?.label ?? templateId;
+
+    // Persist to local memory for later recovery (e.g. "帮我执行" next day)
+    saveWorkflowRecord(context.sessionKey, {
+      workflowId: created.workflowId,
+      templateId,
+      templateName,
+      schemaHash,
+      collectedInputs: inputs,
+      createdAt: Date.now(),
+    });
+
     const run = await startWorkflow(created.workflowId, {
       inputs,
       idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
     });
-    await sendMessage(originalText, run.id, created.workflowId);
+
+    // Insert assistant message with workflow_card locally
+    const chatStore = useChatStore;
+    const now = Date.now() / 1000;
+    chatStore.setState((s) => ({
+      messages: [
+        ...s.messages,
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: '参数已确认，正在分析并执行工作流...' },
+            { type: 'workflow_card', runId: run.id, templateName },
+          ],
+          timestamp: now,
+          id: crypto.randomUUID(),
+        } as import('@/stores/chat').RawMessage,
+      ],
+    }));
 
     await invokeIpc('workflow:startTracking', {
       runId: run.id,
@@ -154,6 +161,9 @@ export async function createAndStartWorkflowDirect(
       sessionKey: context.sessionKey,
       agentId: context.agentId,
     });
+
+    // Clear pending state
+    useChatStore.getState().clearPendingWorkflow();
 
     return true;
   } catch (err) {
@@ -165,7 +175,7 @@ export async function createAndStartWorkflowDirect(
 }
 
 /**
- * Start an already-created workflow (used when createWorkflow was called earlier in sendWithWorkflow).
+ * Start an already-created workflow (used for re-execution from memory).
  */
 export async function startExistingWorkflow(
   workflowId: string,
@@ -173,8 +183,13 @@ export async function startExistingWorkflow(
   context: WorkflowSendContext,
   sendMessage: (text: string, runId?: string | null, workflowId?: string | null) => Promise<void>,
   originalText: string,
+  _templateName?: string,
 ): Promise<boolean> {
-  console.log('[startExistingWorkflow] called workflowId=', workflowId, 'inputs=', inputs);
+  if (!canStartWorkflow()) {
+    toast.error('当前会话已有过多执行中的工作流，请等待完成后再试');
+    return false;
+  }
+
   try {
     const run = await startWorkflow(workflowId, {
       inputs,
@@ -188,6 +203,12 @@ export async function startExistingWorkflow(
       workflowId,
       sessionKey: context.sessionKey,
       agentId: context.agentId,
+    });
+
+    // Update memory with latest run metadata
+    updateWorkflowRunMetadata(context.sessionKey, workflowId, {
+      lastRunId: run.id,
+      lastStatus: 'running',
     });
 
     // Clear pending state
@@ -289,27 +310,99 @@ export async function tryResolvePendingWorkflow(
   sendMessage: (msg: string, runId?: string | null, workflowId?: string | null) => Promise<void>,
 ): Promise<boolean> {
   const chatState = useChatStore.getState();
-  const pending = chatState.pendingWorkflow;
-  console.log('[tryResolvePendingWorkflow] pending=', pending ? pending.templateId : null, 'text=', text);
+  let pending = chatState.pendingWorkflow;
+
+  // Memory-based recovery for re-execution intents like "执行刚才的" / "再跑一遍"
+  if (!pending) {
+    const { isReExecutionIntent } = await import('@/hooks/use-workflow-intent');
+    if (isReExecutionIntent(text)) {
+      const { getLatestWorkflow } = await import('@/stores/workflow-memory');
+      const latest = getLatestWorkflow(chatState.currentSessionKey);
+      if (latest) {
+        // Check for expired memory (30 days)
+        const ageMs = Date.now() - latest.createdAt;
+        const RECORD_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+        if (ageMs > RECORD_TTL_MS) {
+          toast.info('之前的工作流记录已过期（超过30天），请重新创建工作流');
+          return false;
+        }
+
+        // Fetch the latest startup schema so parameter extraction / override works
+        let restoredSchema: WorkflowSchema = { fields: [], steps: [], nodeId: '', enabled: false };
+        let restoredSchemaHash = latest.schemaHash;
+        try {
+          const startup = await getStartupSchema(latest.templateId);
+          restoredSchema = startup.schema;
+          restoredSchemaHash = startup.schemaHash;
+          schemaCache.set(latest.templateId, { schema: startup.schema, schemaHash: startup.schemaHash });
+        } catch (err) {
+          console.warn('[tryResolvePendingWorkflow] failed to fetch schema for remembered workflow:', err);
+          toast.info('无法加载之前工作流的参数模板，将使用已保存的参数直接执行');
+        }
+
+        pending = {
+          templateId: latest.templateId,
+          templateName: latest.templateName,
+          schemaHash: restoredSchemaHash,
+          workflowId: latest.workflowId,
+          collectedInputs: { ...(latest.collectedInputs ?? {}) },
+          schema: restoredSchema,
+        };
+        chatState.setPendingWorkflow(pending);
+      } else {
+        toast.info('未找到可重新执行的工作流记录');
+        return false;
+      }
+    }
+  }
+
   if (!pending) return false;
 
-  // Start with previously collected inputs
-  let inputs: Record<string, unknown> = { ...(pending.collectedInputs ?? {}) };
-  // Try to extract parameters from current user text
-  for (const field of pending.schema.fields) {
-    if (inputs[field.key] !== undefined) continue;
-    const value = extractFieldValue(text, field);
-    if (value !== undefined) {
-      inputs[field.key] = value;
-    }
+  // Detect cancellation first
+  const { isWorkflowCancelIntent } = await import('@/hooks/use-workflow-intent');
+  if (isWorkflowCancelIntent(text)) {
+    chatState.clearPendingWorkflow();
+    return false; // let the message fall through to normal chat
   }
 
   // Detect confirmation / execution intent
   const isConfirmIntent = /(?:确认|执行|开始|帮我执行|启动|运行|好|是的|可以|行|没问题|提交|保存)/i.test(text);
-  // Also treat short replies as confirm intent when all params are already filled
   const isShortReply = text.length <= 10;
 
-  // Check required fields, considering defaults
+  // For re-execution from memory, attempt to extract parameter overrides from natural language
+  let inputs: Record<string, unknown> = { ...(pending.collectedInputs ?? {}) };
+  const hasSchemaFields = pending.schema.fields.length > 0;
+
+  if (hasSchemaFields) {
+    for (const field of pending.schema.fields) {
+      const value = extractFieldValue(text, field);
+      if (value !== undefined) {
+        inputs[field.key] = value;
+      }
+    }
+  }
+
+  // If pending has a workflowId (from memory re-execution) and user confirms, execute directly
+  if (pending.workflowId && (isConfirmIntent || isShortReply)) {
+    // If we don't have schema fields but need to extract overrides, there's nothing to override;
+    // just run with saved inputs.
+    const ok = await startExistingWorkflow(
+      pending.workflowId,
+      inputs,
+      { sessionKey: chatState.currentSessionKey, agentId: chatState.currentAgentId },
+      sendMessage,
+      text,
+      pending.templateName,
+    );
+    return ok;
+  }
+
+  if (!hasSchemaFields) {
+    // Restored from memory but no schema loaded yet, and user didn't confirm — fall through
+    return false;
+  }
+
+  // Normal flow: parameter collection and execution
   const requiredFields = pending.schema.fields.filter((f) => f.required);
   let allRequiredFilled = requiredFields.every((f) => {
     if (inputs[f.key] !== undefined) return true;
@@ -326,7 +419,6 @@ export async function tryResolvePendingWorkflow(
       if (f.defaultValue !== undefined) return true;
       return false;
     });
-    console.log('[tryResolvePendingWorkflow] backfilled from history inputs=', inputs, 'allRequiredFilled=', allRequiredFilled);
   }
 
   // Persist updated collected inputs
@@ -336,7 +428,7 @@ export async function tryResolvePendingWorkflow(
   });
 
   const shouldExecute = allRequiredFilled && (isConfirmIntent || isShortReply);
-  console.log('[tryResolvePendingWorkflow] inputs=', inputs, 'allRequiredFilled=', allRequiredFilled, 'isConfirmIntent=', isConfirmIntent, 'isShortReply=', isShortReply, 'shouldExecute=', shouldExecute, 'workflowId=', pending.workflowId);
+
   if (shouldExecute) {
     const mergedInputs = { ...inputs };
     for (const field of pending.schema.fields) {
@@ -345,111 +437,61 @@ export async function tryResolvePendingWorkflow(
       }
     }
 
-    // If workflowId already exists (created in sendWithWorkflow), just start it
-    if (pending.workflowId) {
-      console.log('[tryResolvePendingWorkflow] workflow already created, calling startWorkflow only');
-      const ok = await startExistingWorkflow(
-        pending.workflowId,
-        mergedInputs,
-        { sessionKey: chatState.currentSessionKey, agentId: chatState.currentAgentId },
-        sendMessage,
-        text,
-      );
-      console.log('[tryResolvePendingWorkflow] result=', ok);
-      return ok;
-    }
-
-    // Fallback: create and start (legacy path)
-    console.log('[tryResolvePendingWorkflow] calling createAndStartWorkflow');
-    const ok = await createAndStartWorkflow(
+    const ok = await createAndStartWorkflowDirect(
       pending.templateId,
       mergedInputs,
       { sessionKey: chatState.currentSessionKey, agentId: chatState.currentAgentId },
       sendMessage,
       text,
     );
-    console.log('[tryResolvePendingWorkflow] result=', ok);
     return ok;
   }
-  return false;
-}
 
-/**
- * Create and start a workflow after parameters have been collected
- * in the conversation. This is meant to be called later (e.g. when
- * the user confirms or when the model signals params are ready).
- */
-export async function createAndStartWorkflow(
-  templateId: string,
-  inputs: Record<string, unknown>,
-  context: WorkflowSendContext,
-  _sendMessage: (text: string, runId?: string | null, workflowId?: string | null) => Promise<void>,
-  originalText: string,
-): Promise<boolean> {
-  console.log('[createAndStartWorkflow] called templateId=', templateId, 'inputs=', inputs);
-  try {
-    const cached = schemaCache.get(templateId);
-    if (!cached) {
-      toast.error('工作流 schema 已过期，请重新选择工作流');
-      return false;
+  // Not ready to execute yet: if we extracted any values, update the form by re-inserting
+  // an assistant message with guidance + parameter_form. This gives the user feedback
+  // on what was understood and what remains.
+  if (hasSchemaFields) {
+    const extractedAny = Object.keys(inputs).some((k) => inputs[k] !== pending?.collectedInputs?.[k]);
+    if (extractedAny) {
+      const { buildWorkflowFormConfig } = await import('@/lib/workflow-form-utils');
+      const formConfig = buildWorkflowFormConfig(pending.schema, text, inputs);
+      const formId = `workflow-form-${pending.templateId}-${Date.now()}`;
+      const now = Date.now() / 1000;
+      const { registerParameterFormHandler } = await import('@/components/parameter-form/form-handlers');
+      useChatStore.setState((s) => ({
+        messages: [
+          ...s.messages,
+          {
+            role: 'assistant',
+            content: [
+              { type: 'text', text: `已识别到部分参数，请继续确认或补充剩余参数：` },
+              {
+                type: 'parameter_form',
+                formId,
+                formConfig,
+                formContext: { source: 'workflow', sourceId: pending.templateId, schemaHash: pending.schemaHash },
+              },
+            ],
+            timestamp: now,
+            id: crypto.randomUUID(),
+          } as import('@/stores/chat').RawMessage,
+        ],
+      }));
+      registerParameterFormHandler(formId, async (values) => {
+        const ok = await createAndStartWorkflowDirect(
+          pending.templateId,
+          values,
+          { sessionKey: chatState.currentSessionKey, agentId: chatState.currentAgentId },
+          sendMessage,
+          text,
+        );
+        if (!ok) {
+          console.error('[tryResolvePendingWorkflow] handler failed to start workflow');
+        }
+      });
+      return true;
     }
-
-    const { schemaHash } = cached;
-
-    const { buildStartupPreset } = await import('@/lib/workflow-form-utils');
-
-    const created = await createWorkflow({
-      templateId,
-      startup: buildStartupPreset(inputs, schemaHash),
-      idempotencyKey: `create-wf-${templateId}-${Date.now()}`,
-    });
-    const run = await startWorkflow(created.workflowId, {
-      inputs,
-      idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
-    });
-
-    // Insert user message + assistant workflow card locally instead of sending
-    // to Gateway (which would trigger the AI to execute via sai-cli again).
-    const chatStore = useChatStore;
-    const pending = chatStore.getState().pendingWorkflow;
-    const templateName = pending?.templateName ?? '工作流';
-    const now = Date.now() / 1000;
-    chatStore.setState((s) => ({
-      messages: [
-        ...s.messages,
-        {
-          role: 'user',
-          content: originalText,
-          timestamp: now,
-          id: crypto.randomUUID(),
-        } as import('@/stores/chat').RawMessage,
-        {
-          role: 'assistant',
-          content: [
-            { type: 'text', text: `✅ 已确认参数并启动【${templateName}】工作流` },
-            { type: 'workflow_card', runId: run.id, templateName },
-          ],
-          timestamp: now,
-          id: crypto.randomUUID(),
-        } as import('@/stores/chat').RawMessage,
-      ],
-    }));
-
-    await invokeIpc('workflow:startTracking', {
-      runId: run.id,
-      workflowId: created.workflowId,
-      sessionKey: context.sessionKey,
-      agentId: context.agentId,
-    });
-
-    // Clear pending state
-    useChatStore.getState().clearPendingWorkflow();
-
-    return true;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[createAndStartWorkflow] error', err);
-    toast.error(`工作流启动失败: ${message}`);
-    return false;
   }
+
+  return false;
 }

@@ -998,3 +998,150 @@ qianwen3.7 的《工作流执行状态推送技术方案》设计了 **Main Proc
 ---
 
 **文档结束**
+
+
+---
+
+## 十四、自然语言触发与 AI 引导流程（v2.0 新增）
+
+### 14.1 目标
+
+在 v1.0 的斜杠命令触发基础上，新增自然语言触发和 AI 引导确认能力：
+
+- 用户无需输入 `/`，直接说"帮我创建结算对账工作流"即可触发
+- AI 参与参数引导、执行状态告知、结果总结
+- `/` 命令降级为 UI 快捷入口，选择模板后仍走自然语言链路
+- 支持基于历史工作流的跨会话恢复和再次执行
+
+### 14.2 整体流程
+
+```
+用户输入自然语言 / 选择 / 命令模板
+    │
+    ▼
+detectWorkflowIntent() → resolveTemplateFromText()
+    │
+    ├── 高置信度（matchScore >= 0.85）
+    │       │
+    │       ▼
+    │   sendWithWorkflow() Phase 1
+    │       │
+    │       ▼
+    │   获取 startup-schema + 构建 workflowContext
+    │   设置 chatStore.pendingWorkflow
+    │   发送带隐藏上下文的 user message 给 Gateway
+    │       │
+    │       ▼
+    │   AI 生成自然语言参数引导
+    │       │
+    │       ▼
+    │   handleChatEvent(final) 检测到 pendingWorkflow
+    │   自动在 assistant message 中追加 parameter_form
+    │       │
+    │       ▼
+    │   用户填写表单 / 自然语言回复补充参数
+    │       │
+    │       ▼
+    │   createAndStartWorkflowDirect() Phase 2
+    │   创建 → 启动 → 插入 workflow_card → 启动 Tracker
+    │
+    ├── 中置信度（0.60 <= matchScore < 0.85）
+    │       │
+    │       ▼
+    │   向用户展示 Top 3 匹配模板供手动选择
+    │
+    └── 低置信度 / 无匹配
+            │
+            ▼
+        走普通聊天流程
+
+WorkflowExecutionTracker 轮询
+    │
+    ▼
+completed / failed 状态
+    │
+    ▼
+useWorkflowCompletion 触发
+    │
+    ▼
+构造 [workflow:complete] 结构化 user message
+发送给 Gateway → AI 生成结果总结
+```
+
+### 14.3 关键实现文件
+
+| 文件 | 说明 |
+|------|------|
+| `src/hooks/use-workflow-intent.ts` | 自然语言意图识别：关键词检测、模板搜索、置信度分级 |
+| `src/hooks/use-workflow-send.ts` | 两阶段工作流发送：Phase 1 AI 引导，Phase 2 创建执行 |
+| `src/hooks/use-workflow-completion.ts` | 监听 workflow 完成，触发 AI 结果总结 |
+| `src/lib/workflow-context.ts` | 构建并注入隐藏 workflow 上下文到 user message |
+| `src/stores/chat.ts` | sendMessage 支持 workflowContext；handleChatEvent 自动追加 parameter_form |
+| `src/stores/workflow-memory.ts` | 持久化 workflow 元数据，支持 30 天 TTL 和跨会话恢复 |
+
+### 14.4 隐藏上下文注入
+
+为了避免修改 Gateway 协议，前端将 workflow schema 以隐藏上下文形式附加到 user message 文本中：
+
+```
+<!-- StoClaw-Workflow-Context -->
+```json
+{
+  "version": 1,
+  "source": "stoclaw-workflow-context",
+  "templateId": "...",
+  "templateName": "...",
+  "schemaHash": "...",
+  "fields": [...]
+}
+```
+## 工作流参数上下文：...
+...
+用户原始消息如下：
+---
+<用户原始消息>
+<!-- StoClaw-Workflow-Context -->
+```
+
+`message-utils.ts` 和 `workflow-context.ts` 负责在 UI 显示前剥离该块，确保用户无感知。
+
+### 14.5 参数表单自动渲染
+
+当 Gateway 返回 AI 引导消息时，`chat.ts` 的 `handleChatEvent(final)` 检测到 `pendingWorkflow` 存在，会自动在该 assistant 消息的内容数组末尾追加一个 `parameter_form` block。`ChatMessage.tsx` 按常规逻辑渲染该表单，无需感知 workflow 上下文。
+
+表单提交 handler 由 `chat.ts` 内的 `maybeAppendWorkflowParameterForm()` 注册，提交后调用 `createWorkflow` + `startWorkflow`，并插入本地 assistant 消息展示 `workflow_card`。
+
+### 14.6 执行完成 AI 总结
+
+`useWorkflowCompletion(sessionKey)` 在 `Chat/index.tsx` 中挂载，监听 `workflow:status-update` IPC 事件：
+
+- 仅处理 `status === 'completed' || status === 'failed'` 的事件
+- 调用 `getWorkflowRun(runId)` 获取完整结果
+- 构造带 `[workflow:complete]` 标签的结构化 user message
+- 通过 `chatStore.sendMessage()` 发送给 Gateway，触发 AI 生成自然语言总结
+- 总结 prompt 包含：执行状态、起止时间、核心指标、异常信息、产物列表
+
+### 14.7 长记忆与恢复
+
+`workflow-memory.ts` 在 localStorage 中按 sessionKey 存储工作流记录：
+
+```typescript
+interface WorkflowMemoryRecord {
+  workflowId: string;
+  templateId: string;
+  templateName: string;
+  schemaHash: string;
+  collectedInputs: Record<string, unknown>;
+  createdAt: number;
+  lastRunId?: string;
+  lastStatus?: 'pending' | 'running' | 'completed' | 'failed' | 'timeout' | 'unknown';
+  completedAt?: number;
+}
+```
+
+当用户输入"执行刚才的"、"再跑一遍"等复跑意图时，`tryResolvePendingWorkflow()` 从 memory 恢复最近记录并直接调用 `startExistingWorkflow()`。超过 30 天 TTL 的记录会提示用户重新创建。
+
+### 14.8 取消与并发控制
+
+- 用户在参数收集阶段发送"取消"、"不执行了"等，`isWorkflowCancelIntent()` 返回 true，`chat.ts` 清除 `pendingWorkflow` 并降级为普通聊天
+- 工作流创建/启动前统一检查 `canStartWorkflow()`，当前会话最多允许 5 个 pending/running 状态的工作流

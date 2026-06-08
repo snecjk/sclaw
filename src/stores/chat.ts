@@ -25,6 +25,8 @@ import {
   type ToolStatus,
 } from './chat/types';
 import type { WorkflowExecutionState } from '@/types/workflow';
+import { buildWorkflowFormConfig, buildStartupPreset } from '@/lib/workflow-form-utils';
+import { registerParameterFormHandler } from '@/components/parameter-form/form-handlers';
 
 export type {
   AttachedFileMeta,
@@ -32,6 +34,7 @@ export type {
   ContentBlock,
   RawMessage,
   ToolStatus,
+  WorkflowContextBlock,
 } from './chat/types';
 
 // Module-level timestamp tracking the last chat event received.
@@ -857,6 +860,115 @@ function extractTextFromContent(content: unknown): string {
   return parts.join('\n');
 }
 
+/**
+ * If a workflow guidance phase is pending, append a parameter_form block to
+ * the assistant message so the user can confirm parameters interactively.
+ * The form is registered with a handler that creates and starts the workflow.
+ */
+function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
+  const pending = useChatStore.getState().pendingWorkflow;
+  if (!pending) return message;
+  if (message.role !== 'assistant') return message;
+  if (!pending.schema || pending.schema.fields.length === 0) return message;
+
+  // Avoid double-injecting if the message already carries a parameter_form
+  const content = message.content;
+  if (Array.isArray(content)) {
+    if ((content as ContentBlock[]).some((b) => b.type === 'parameter_form')) {
+      return message;
+    }
+  }
+
+  // buildWorkflowFormConfig, buildStartupPreset and registerParameterFormHandler are
+  // imported at the top of the file. They do not transitively depend on chat.ts.
+
+  const MAX_CONCURRENT_WORKFLOWS = 5;
+  function canStartWorkflowLocal(): boolean {
+    const activeCount = Object.values(useChatStore.getState().workflowCardStates).filter(
+      (s) => s.status === 'pending' || s.status === 'running',
+    ).length;
+    return activeCount < MAX_CONCURRENT_WORKFLOWS;
+  }
+
+  const formId = `workflow-form-${pending.templateId}-${Date.now()}`;
+  const formConfig = buildWorkflowFormConfig(pending.schema, '', pending.collectedInputs);
+
+  registerParameterFormHandler(formId, async (values: Record<string, unknown>) => {
+    const chatState = useChatStore.getState();
+    if (!canStartWorkflowLocal()) {
+      const { toast } = await import('sonner');
+      toast.error('当前会话已有过多执行中的工作流，请等待完成后再试');
+      return;
+    }
+
+    try {
+      const { createWorkflow, startWorkflow } = await import('@/lib/workflow-api');
+      const { saveWorkflowRecord, updateWorkflowRunMetadata } = await import('@/stores/workflow-memory');
+      const { invokeIpc } = await import('@/lib/api-client');
+
+      const created = await createWorkflow({
+        templateId: pending.templateId,
+        startup: buildStartupPreset(values, pending.schemaHash),
+        idempotencyKey: `create-wf-${pending.templateId}-${Date.now()}`,
+      });
+
+      saveWorkflowRecord(chatState.currentSessionKey, {
+        workflowId: created.workflowId,
+        templateId: pending.templateId,
+        templateName: pending.templateName,
+        schemaHash: pending.schemaHash,
+        collectedInputs: values,
+        createdAt: Date.now(),
+      });
+
+      const run = await startWorkflow(created.workflowId, {
+        inputs: values,
+        idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
+      });
+
+      await chatState.sendMessage({
+        text: '参数已确认，正在分析并执行工作流...',
+        workflowId: created.workflowId,
+        runId: run.id,
+      });
+
+      await invokeIpc('workflow:startTracking', {
+        runId: run.id,
+        workflowId: created.workflowId,
+        sessionKey: chatState.currentSessionKey,
+        agentId: chatState.currentAgentId,
+      });
+
+      updateWorkflowRunMetadata(chatState.currentSessionKey, created.workflowId, {
+        lastRunId: run.id,
+        lastStatus: 'running',
+      });
+
+      chatState.clearPendingWorkflow();
+    } catch (err) {
+      const messageErr = err instanceof Error ? err.message : String(err);
+      console.error('[parameterFormHandler] error', err);
+      const { toast } = await import('sonner');
+      toast.error(`工作流启动失败: ${messageErr}`);
+    }
+  });
+
+  const newBlock: ContentBlock = {
+    type: 'parameter_form',
+    formId,
+    formConfig,
+    formContext: { source: 'workflow', sourceId: pending.templateId, schemaHash: pending.schemaHash },
+  };
+
+  if (Array.isArray(message.content)) {
+    return { ...message, content: [...message.content, newBlock] };
+  }
+  if (typeof message.content === 'string' && message.content.trim()) {
+    return { ...message, content: [{ type: 'text', text: message.content }, newBlock] };
+  }
+  return { ...message, content: [newBlock] };
+}
+
 function summarizeToolOutput(text: string): string | undefined {
   const trimmed = text.trim();
   if (!trimmed) return undefined;
@@ -1604,9 +1716,14 @@ export const useChatStore = create<ChatState>()(
   sendMessage: async (
     options: import('./chat/types').SendMessageOptions,
   ) => {
-    const { text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId: _workflowId, runId: _runId } = options;
+    const { text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
+
+    // Inject hidden workflow context into the outgoing message for AI guidance
+    const { appendWorkflowContext, stripWorkflowContextForDisplay } = await import('@/lib/workflow-context');
+    const messageWithContext = appendWorkflowContext(trimmed, workflowContext);
+    const displayText = stripWorkflowContextForDisplay(messageWithContext);
 
     const targetSessionKey = resolveMainSessionKeyForAgent(targetAgentId) ?? get().currentSessionKey;
 
@@ -1640,7 +1757,7 @@ export const useChatStore = create<ChatState>()(
     const nowMs = Date.now();
     const userMsg: RawMessage = {
       role: 'user',
-      content: trimmed || (attachments?.length ? '(file attached)' : ''),
+      content: displayText || (attachments?.length ? '(file attached)' : ''),
       timestamp: nowMs / 1000,
       id: crypto.randomUUID(),
       _attachedFiles: attachments?.map(a => ({
@@ -1665,8 +1782,8 @@ export const useChatStore = create<ChatState>()(
     // Update session label with first user message text as soon as it's sent
     const { sessionLabels, messages } = get();
     const isFirstMessage = !messages.slice(0, -1).some((m) => m.role === 'user');
-    if (!currentSessionKey.endsWith(':main') && isFirstMessage && !sessionLabels[currentSessionKey] && trimmed) {
-      const truncated = trimmed.length > 50 ? `${trimmed.slice(0, 50)}…` : trimmed;
+    if (!currentSessionKey.endsWith(':main') && isFirstMessage && !sessionLabels[currentSessionKey] && displayText) {
+      const truncated = displayText.length > 50 ? `${displayText.slice(0, 50)}…` : displayText;
       set((s) => ({ sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated } }));
     }
 
@@ -1752,7 +1869,7 @@ export const useChatStore = create<ChatState>()(
             method: 'POST',
             body: JSON.stringify({
               sessionKey: currentSessionKey,
-              message: trimmed || 'Process the attached file(s).',
+              message: messageWithContext || 'Process the attached file(s).',
               deliver: false,
               idempotencyKey,
               media: attachments.map((a) => ({
@@ -1768,7 +1885,7 @@ export const useChatStore = create<ChatState>()(
           'chat.send',
           {
             sessionKey: currentSessionKey,
-            message: trimmed,
+            message: messageWithContext,
             deliver: false,
             idempotencyKey,
             // NOTE: workflowId/runId are not forwarded to Gateway chat.send yet
@@ -1978,7 +2095,7 @@ export const useChatStore = create<ChatState>()(
 
             // Attach any images collected from preceding tool results
             const pendingImgs = s.pendingToolImages;
-            const msgWithImages: RawMessage = pendingImgs.length > 0
+            let msgWithImages: RawMessage = pendingImgs.length > 0
               ? {
                 ...finalMsg,
                 role: (finalMsg.role || 'assistant') as RawMessage['role'],
@@ -1986,6 +2103,11 @@ export const useChatStore = create<ChatState>()(
                 _attachedFiles: [...(finalMsg._attachedFiles || []), ...pendingImgs],
               }
               : { ...finalMsg, role: (finalMsg.role || 'assistant') as RawMessage['role'], id: msgId };
+
+            // If we are in a workflow guidance phase, append an interactive
+            // parameter_form block to the assistant message for the user.
+            msgWithImages = maybeAppendWorkflowParameterForm(msgWithImages);
+
             const clearPendingImages = { pendingToolImages: [] as AttachedFileMeta[] };
 
             // Check if message already exists (prevent duplicates)

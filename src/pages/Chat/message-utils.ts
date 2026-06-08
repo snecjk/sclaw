@@ -6,6 +6,7 @@
 import { useMemo } from 'react';
 import type { RawMessage, ContentBlock } from '@/stores/chat';
 import { stripDingTalkMentionContextForDisplay } from '@/lib/dingtalk-mention-context';
+import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay } from '@/lib/workflow-context';
 
 /**
  * Clean Gateway metadata from user message text for display.
@@ -25,7 +26,7 @@ function cleanUserText(text: string): string {
     // Remove Gateway timestamp prefix like [Fri 2026-02-13 22:39 GMT+8]
     .replace(/^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+[^\]]+\]\s*/i, '')
     .trim();
-  return stripDingTalkMentionContextForDisplay(cleaned);
+  return stripWorkflowCompleteForDisplay(stripWorkflowContextForDisplay(stripDingTalkMentionContextForDisplay(cleaned)));
 }
 
 /** Strip dws send metadata that agents should not surface to end users. */
@@ -58,6 +59,41 @@ function cleanThinkingText(text: string): string {
  * Handles both string content and array-of-blocks content.
  * For user messages, strips Gateway-injected metadata.
  */
+/**
+ * Extract parameter_form block from a message's content field.
+ */
+export function extractParameterForm(message: RawMessage | unknown): {
+  formId: string;
+  formConfig: import('@/types/user-form').UserFormConfig;
+  formContext: { source: 'workflow' | 'tool' | 'skill'; sourceId: string; schemaHash?: string };
+} | null {
+  if (!message || typeof message !== 'object') return null;
+  const msg = message as Record<string, unknown>;
+  const content = msg.content;
+
+  if (!Array.isArray(content)) return null;
+
+  for (const block of content as import('@/stores/chat').ContentBlock[]) {
+    if (
+      block.type === 'parameter_form' &&
+      block.formId &&
+      block.formConfig &&
+      block.formContext
+    ) {
+      return {
+        formId: block.formId,
+        formConfig: block.formConfig as import('@/types/user-form').UserFormConfig,
+        formContext: block.formContext as {
+          source: 'workflow' | 'tool' | 'skill';
+          sourceId: string;
+          schemaHash?: string;
+        },
+      };
+    }
+  }
+  return null;
+}
+
 /**
  * Extract workflow_card block from a message's content field.
  */

@@ -14,6 +14,24 @@ export interface SendMessageOptions {
   dingTalkMentions?: DingTalkMention[];
   workflowId?: string | null;
   runId?: string | null;
+  /** Hidden workflow schema context injected into the user message for AI guidance */
+  workflowContext?: WorkflowContextBlock | null;
+}
+
+/** Hidden context block describing a workflow for AI parameter guidance */
+export interface WorkflowContextBlock {
+  type: 'workflow_context';
+  templateId: string;
+  templateName: string;
+  schemaHash: string;
+  fields: Array<{
+    key: string;
+    label: string;
+    component: string;
+    required?: boolean;
+    options?: Array<{ value: string; label: string }>;
+    defaultValue?: unknown;
+  }>;
 }
 
 /** Metadata for locally-attached files (not from Gateway) */
@@ -41,7 +59,7 @@ export interface RawMessage {
 
 /** Content block inside a message */
 export interface ContentBlock {
-  type: 'text' | 'image' | 'thinking' | 'tool_use' | 'tool_result' | 'toolCall' | 'toolResult' | 'workflow_card';
+  type: 'text' | 'image' | 'thinking' | 'tool_use' | 'tool_result' | 'toolCall' | 'toolResult' | 'workflow_card' | 'parameter_form' | 'workflow_context';
   text?: string;
   thinking?: string;
   source?: { type: string; media_type?: string; data?: string; url?: string };
@@ -55,7 +73,27 @@ export interface ContentBlock {
   content?: unknown;
   /** Workflow execution card reference */
   runId?: string;
+  /** Shared by workflow_card and workflow_context blocks */
   templateName?: string;
+  /** Parameter form block fields */
+  formId?: string;
+  formConfig?: import('@/types/user-form').UserFormConfig;
+  formContext?: {
+    source: 'workflow' | 'tool' | 'skill';
+    sourceId: string;
+    schemaHash?: string;
+  };
+  /** Workflow context block fields (hidden from user, used for AI guidance) */
+  templateId?: string;
+  schemaHash?: string;
+  fields?: Array<{
+    key: string;
+    label: string;
+    component: string;
+    required?: boolean;
+    options?: Array<{ value: string; label: string }>;
+    defaultValue?: unknown;
+  }>;
 }
 
 /** Session from sessions.list */
