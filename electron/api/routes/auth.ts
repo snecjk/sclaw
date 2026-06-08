@@ -21,8 +21,31 @@ import { getStoPolicyReportApiHost } from '../../../shared/env-config';
 import { computeCrmWeekReportSurfaceAllowed } from '../../../shared/crm-week-report-policy';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { loadSiteDepartmentTypes } from '../../services/sto-apollo-config-service';
+import { getClientSiteAccessService } from '../../services/client-site-access-service';
+import type { ClientSiteAccessCheckResult } from '../../../shared/client-site-access';
 
 const ssoLoginManager = new SsoLoginManager();
+
+const CLIENT_SITE_ACCESS_DENIED_MESSAGE = '您的所属组织无权使用 StoClaw';
+
+function toAccessCheckPayload(result: ClientSiteAccessCheckResult) {
+  const clientCode = result.clientCode;
+  return {
+    allowed: result.allowed,
+    client_code: clientCode,
+    clientCode,
+    categoryCode: result.categoryCode ?? null,
+    companyCode: result.companyCode ?? null,
+    errCode: result.errCode,
+    errMessage: result.errMessage,
+  };
+}
+
+async function clearAuthAfterAccessDenied(): Promise<void> {
+  await clearAuthUser();
+  void removeSsoAuthFromOpenClaw();
+  void removeStoDynamicRoutePluginFromOpenClaw();
+}
 
 const CRM_WEEK_REPORT_POLICY_PATH =
   '/sto-policy/api/v1/base/getReportAuthUserIgnoreLogin?reportType=POLICY_CRM_WEEK_REPORT';
@@ -45,14 +68,32 @@ export async function handleAuthRoutes(
       if (state.isAuthenticated) {
         const token = await getStoToken();
         if (!token) {
-          await clearAuthUser();
-          void removeSsoAuthFromOpenClaw();
-          void removeStoDynamicRoutePluginFromOpenClaw();
+          await clearAuthAfterAccessDenied();
           logger.info('Auth status: stoToken expired or missing, clearing auth state to force re-login');
           sendJson(res, 200, {
             isAuthenticated: false,
             user: null,
             ssoEnvironment: state.ssoEnvironment,
+          });
+          return true;
+        }
+
+        const accessCheck = await getClientSiteAccessService().checkAccess(token);
+        if (!accessCheck.allowed) {
+          await clearAuthAfterAccessDenied();
+          logger.info(
+            '[auth] Client site access denied on status check: category=%s company=%s err=%s',
+            accessCheck.categoryCode,
+            accessCheck.companyCode,
+            accessCheck.errMessage,
+          );
+          sendJson(res, 200, {
+            isAuthenticated: false,
+            user: null,
+            ssoEnvironment: state.ssoEnvironment,
+            accessDenied: true,
+            error: accessCheck.errMessage || CLIENT_SITE_ACCESS_DENIED_MESSAGE,
+            accessCheck: toAccessCheckPayload(accessCheck),
           });
           return true;
         }
@@ -80,6 +121,25 @@ export async function handleAuthRoutes(
       }
 
       const user = await ssoLoginManager.startLogin(env, ctx.mainWindow);
+
+      const accessCheck = await getClientSiteAccessService().checkAccess(user.stoToken ?? '');
+      if (!accessCheck.allowed) {
+        logger.info(
+          '[auth] Client site access denied on login: user=%s category=%s company=%s err=%s',
+          user.code,
+          accessCheck.categoryCode,
+          accessCheck.companyCode,
+          accessCheck.errMessage,
+        );
+        sendJson(res, 200, {
+          success: false,
+          accessDenied: true,
+          error: accessCheck.errMessage || CLIENT_SITE_ACCESS_DENIED_MESSAGE,
+          accessCheck: toAccessCheckPayload(accessCheck),
+        });
+        return true;
+      }
+
       await setAuthUser(user);
 
       // Activate user skill workspace and sync with cloud installed list

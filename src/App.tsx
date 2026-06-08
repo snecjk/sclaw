@@ -107,6 +107,7 @@ function App() {
   const initProviders = useProviderStore((state) => state.init);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isAuthInitialized = useAuthStore((state) => state.isInitialized);
+  const accessDenied = useAuthStore((state) => state.accessDenied);
   const initAuth = useAuthStore((state) => state.init);
 
   useEffect(() => {
@@ -138,6 +139,10 @@ function App() {
   useEffect(() => {
     if (location.pathname === '/sprite' || location.pathname === '/float-icon') return;
     if (!isAuthInitialized) return;
+    if (accessDenied && !location.pathname.startsWith('/login')) {
+      navigate('/login');
+      return;
+    }
     if (!isAuthenticated && !location.pathname.startsWith('/login')) {
       navigate('/login');
     } else if (isAuthenticated && location.pathname.startsWith('/login')) {
@@ -146,7 +151,7 @@ function App() {
     } else if (isAuthenticated && !setupComplete && !location.pathname.startsWith('/setup')) {
       navigate('/setup');
     }
-  }, [isAuthenticated, isAuthInitialized, setupComplete, location.pathname, navigate]);
+  }, [isAuthenticated, isAuthInitialized, accessDenied, setupComplete, location.pathname, navigate]);
 
   // Listen for navigation events from main process
   useEffect(() => {
