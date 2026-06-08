@@ -1,8 +1,7 @@
-import { getAgentPreferredModel, getAgentWorkspacePath, listAgentsSnapshot } from '../utils/agent-config';
+import { listAgentsSnapshot } from '../utils/agent-config';
 import { claudeAdapter } from './claude-adapter';
 import { openClawAdapter } from './openclaw-adapter';
-import { getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, upsertEngineSessionRegistryEntry } from './session-registry';
-import type { AgentEngineType, EngineAdapter, EngineAdapterContext, EngineSessionSummary } from './types';
+import type { AgentEngineType, EngineAdapter, EngineAdapterContext } from './types';
 
 function getAgentIdFromSessionKey(sessionKey: string): string {
   if (!sessionKey.startsWith('agent:')) return 'main';
@@ -26,7 +25,6 @@ export async function getAdapterForSession(sessionKey: string): Promise<EngineAd
 }
 
 export async function listEngineSessions(ctx: EngineAdapterContext): Promise<Array<Record<string, unknown>>> {
-  const snapshot = await listAgentsSnapshot();
   const sessionsByKey = new Map<string, Record<string, unknown>>();
 
   const openClawSessions = await openClawAdapter.listSessions(ctx);
@@ -41,47 +39,16 @@ export async function listEngineSessions(ctx: EngineAdapterContext): Promise<Arr
     }
   }
 
-  const claudeEntries = await listEngineSessionRegistryEntries('claude');
-  for (const entry of claudeEntries) {
-      sessionsByKey.set(entry.sessionKey, {
-        key: entry.sessionKey,
-        label: entry.title,
-        displayName: entry.title,
-        updatedAt: entry.updatedAt,
-        model: entry.model,
-        engineType: 'claude',
+  const claudeSessions = await claudeAdapter.listSessions(ctx);
+  if (claudeSessions.success && claudeSessions.result?.sessions) {
+    for (const session of claudeSessions.result.sessions) {
+      const sessionKey = String(session.key || '');
+      if (!sessionKey) continue;
+      sessionsByKey.set(sessionKey, {
+        ...session,
+        engineType: session.engineType || 'claude',
       });
     }
-
-  for (const agent of snapshot.agents) {
-    if (agent.engineType !== 'claude') continue;
-    const mainSessionKey = agent.mainSessionKey;
-    const existing = await getEngineSessionRegistryEntry(mainSessionKey);
-    if (!existing) {
-      const workspacePath = await getAgentWorkspacePath(agent.id);
-      const preferredModel = await getAgentPreferredModel(agent.id);
-      if (workspacePath) {
-        await upsertEngineSessionRegistryEntry({
-          sessionKey: mainSessionKey,
-          engineType: 'claude',
-          agentId: agent.id,
-          cwd: workspacePath,
-          updatedAt: Date.now(),
-          title: agent.name,
-          model: preferredModel.model,
-          accountId: preferredModel.accountId,
-        });
-      }
-    }
-    if (sessionsByKey.has(mainSessionKey)) continue;
-    const syntheticSession: EngineSessionSummary = {
-      key: mainSessionKey,
-      label: agent.name,
-      displayName: agent.name,
-      model: existing?.model,
-      engineType: 'claude',
-    };
-    sessionsByKey.set(mainSessionKey, syntheticSession as unknown as Record<string, unknown>);
   }
 
   return [...sessionsByKey.values()];

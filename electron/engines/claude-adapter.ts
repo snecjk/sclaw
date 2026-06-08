@@ -1,8 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { dirname, relative, resolve, sep } from 'node:path';
+import { constants } from 'node:fs';
+import { access, copyFile, cp, mkdir, readdir, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { syncClaudeSkillsForAgent } from '../services/claude-skill-bridge';
 import { getAgentPreferredModel, getAgentWorkspacePath } from '../utils/agent-config';
 import { logger } from '../utils/logger';
+import { getClawXConfigDir } from '../utils/paths';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, upsertEngineSessionRegistryEntry } from './session-registry';
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EngineSessionSummary } from './types';
 
@@ -22,6 +26,132 @@ const liveClaudeMessages = new Map<string, Array<{
   isError?: boolean;
   receivedAt: number;
 }>>();
+let claudeConfigEnvQueue: Promise<void> = Promise.resolve();
+let claudeConfigBootstrapPromise: Promise<void> | null = null;
+const CLAUDE_BOOTSTRAP_MARKER_FILE = '.stoclaw-bootstrap.json';
+
+function getClaudeConfigDir(): string {
+  return join(getClawXConfigDir(), '.claude');
+}
+
+function getLegacyClaudeConfigDir(): string {
+  return join(homedir(), '.claude');
+}
+
+function getClaudeProcessEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
+  };
+}
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await access(targetPath, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function directoryHasEntries(dirPath: string): Promise<boolean> {
+  try {
+    const entries = await readdir(dirPath);
+    return entries.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function copyFileIfMissing(sourcePath: string, targetPath: string): Promise<void> {
+  if (!(await pathExists(sourcePath)) || (await pathExists(targetPath))) {
+    return;
+  }
+  await mkdir(dirname(targetPath), { recursive: true });
+  await copyFile(sourcePath, targetPath);
+}
+
+async function copyDirectoryContentsIfTargetEmpty(sourceDir: string, targetDir: string): Promise<void> {
+  if (!(await pathExists(sourceDir))) return;
+  const targetHasEntries = await directoryHasEntries(targetDir);
+  if (targetHasEntries) return;
+  await mkdir(targetDir, { recursive: true });
+  const entries = await readdir(sourceDir);
+  await Promise.all(entries.map(async (entry) => {
+    await cp(join(sourceDir, entry), join(targetDir, entry), { recursive: true, force: false });
+  }));
+}
+
+async function ensureClaudeConfigBootstrap(): Promise<void> {
+  if (claudeConfigBootstrapPromise) {
+    await claudeConfigBootstrapPromise;
+    return;
+  }
+
+  claudeConfigBootstrapPromise = (async () => {
+    const targetRoot = getClaudeConfigDir();
+    const legacyRoot = getLegacyClaudeConfigDir();
+    await mkdir(targetRoot, { recursive: true });
+    const markerPath = join(targetRoot, CLAUDE_BOOTSTRAP_MARKER_FILE);
+    if (await pathExists(markerPath)) {
+      return;
+    }
+
+    await Promise.all([
+      copyFileIfMissing(join(legacyRoot, 'settings.json'), join(targetRoot, 'settings.json')),
+      copyFileIfMissing(join(legacyRoot, '.claude.json'), join(targetRoot, '.claude.json')),
+    ]);
+
+    await Promise.all([
+      copyDirectoryContentsIfTargetEmpty(join(legacyRoot, 'sessions'), join(targetRoot, 'sessions')),
+      copyDirectoryContentsIfTargetEmpty(join(legacyRoot, 'session-env'), join(targetRoot, 'session-env')),
+      copyDirectoryContentsIfTargetEmpty(join(legacyRoot, 'plugins'), join(targetRoot, 'plugins')),
+    ]);
+
+    await writeFile(markerPath, JSON.stringify({
+      bootstrappedAt: new Date().toISOString(),
+      source: legacyRoot,
+    }, null, 2), 'utf8');
+  })().catch((error) => {
+    logger.warn('Failed to bootstrap Claude config directory from legacy root:', error);
+  });
+
+  await claudeConfigBootstrapPromise;
+}
+
+async function withClaudeConfigDirEnv<T>(configDir: string, task: () => Promise<T>): Promise<T> {
+  const next = claudeConfigEnvQueue.then(async () => {
+    const previous = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = configDir;
+    try {
+      return await task();
+    } finally {
+      if (typeof previous === 'string') {
+        process.env.CLAUDE_CONFIG_DIR = previous;
+      } else {
+        delete process.env.CLAUDE_CONFIG_DIR;
+      }
+    }
+  });
+
+  claudeConfigEnvQueue = next.then(() => undefined, () => undefined);
+  return next;
+}
+
+async function resolveClaudeSessionConfigDir(
+  cwd: string,
+  sessionId: string,
+): Promise<string | null> {
+  await ensureClaudeConfigBootstrap();
+  const sdk = await import('@anthropic-ai/claude-agent-sdk');
+  for (const configDir of [getClaudeConfigDir(), getLegacyClaudeConfigDir()]) {
+    const info = await withClaudeConfigDirEnv(configDir, async () => (
+      sdk.getSessionInfo(sessionId, { dir: cwd })
+    )).catch(() => undefined);
+    if (info) return configDir;
+  }
+  return null;
+}
 
 function toEpochMs(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -171,7 +301,10 @@ function shouldHideClaudeUserMessage(
 
 async function buildHistory(sessionKey: string, sessionId: string, cwd: string): Promise<EngineHistoryResult> {
   const sdk = await import('@anthropic-ai/claude-agent-sdk');
-  const sessionMessages = await sdk.getSessionMessages(sessionId, { dir: cwd, includeSystemMessages: false });
+  const configDir = await resolveClaudeSessionConfigDir(cwd, sessionId) ?? getClaudeConfigDir();
+  const sessionMessages = await withClaudeConfigDirEnv(configDir, async () => (
+    sdk.getSessionMessages(sessionId, { dir: cwd, includeSystemMessages: false })
+  ));
   const persistedMessages = sessionMessages
     .filter((entry) => {
       if (entry.type === 'assistant') return true;
@@ -219,7 +352,11 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
     updatedAt: Date.now(),
   });
 
-  return { messages: mergedMessages, thinkingLevel: null };
+  return {
+    messages: mergedMessages,
+    thinkingLevel: null,
+    isRunning: activeClaudeQueries.has(sessionKey),
+  };
 }
 
 function extractAgentId(sessionKey: string): string {
@@ -317,6 +454,7 @@ async function startClaudeQuery(
   },
 ): Promise<{ success: boolean; result?: { runId: string }; error?: string }> {
   try {
+    await ensureClaudeConfigBootstrap();
     const sdk = await import('@anthropic-ai/claude-agent-sdk');
     const existing = await ensureClaudeRegistryEntry(sessionKey);
     const cwd = existing?.cwd;
@@ -344,6 +482,7 @@ async function startClaudeQuery(
       options: existing?.sessionId
         ? {
           cwd,
+          env: getClaudeProcessEnv(),
           resume: existing.sessionId,
           permissionMode: 'bypassPermissions',
           allowDangerouslySkipPermissions: true,
@@ -354,6 +493,7 @@ async function startClaudeQuery(
         }
         : {
           cwd,
+          env: getClaudeProcessEnv(),
           sessionId,
           permissionMode: 'bypassPermissions',
           allowDangerouslySkipPermissions: true,
@@ -405,6 +545,7 @@ async function startClaudeQuery(
 }
 
 export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void> {
+  await ensureClaudeConfigBootstrap();
   const entry = await getEngineSessionRegistryEntry(sessionKey);
   liveClaudeMessages.delete(sessionKey);
   if (!entry?.sessionId) {
@@ -413,7 +554,10 @@ export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void
   }
 
   const sdk = await import('@anthropic-ai/claude-agent-sdk');
-  await sdk.deleteSession(entry.sessionId, { dir: entry.cwd });
+  const configDir = await resolveClaudeSessionConfigDir(entry.cwd, entry.sessionId) ?? getClaudeConfigDir();
+  await withClaudeConfigDirEnv(configDir, async () => {
+    await sdk.deleteSession(entry.sessionId!, { dir: entry.cwd });
+  });
   await deleteEngineSessionRegistryEntry(sessionKey);
 }
 
@@ -421,19 +565,29 @@ export const claudeAdapter: EngineAdapter = {
   type: 'claude',
 
   async listSessions() {
+    await ensureClaudeConfigBootstrap();
     const entries = await listEngineSessionRegistryEntries('claude');
-    const sessions: EngineSessionSummary[] = entries.map((entry) => ({
-      key: entry.sessionKey,
-      label: entry.title,
-      displayName: entry.title,
-      updatedAt: entry.updatedAt,
-      engineType: 'claude',
-    }));
+    const sessions: EngineSessionSummary[] = [];
+    for (const entry of entries) {
+      if (entry.sessionId) {
+        const configDir = await resolveClaudeSessionConfigDir(entry.cwd, entry.sessionId);
+        if (!configDir) {
+          continue;
+        }
+      }
+      sessions.push({
+        key: entry.sessionKey,
+        label: entry.title,
+        displayName: entry.title,
+        updatedAt: entry.updatedAt,
+        engineType: 'claude',
+      });
+    }
     return { success: true, result: { sessions } };
   },
 
   async getHistory(_ctx, params) {
-    const entry = await ensureClaudeRegistryEntry(params.sessionKey);
+    const entry = await getEngineSessionRegistryEntry(params.sessionKey);
     if (!entry?.sessionId) {
       return { success: true, result: { messages: [], thinkingLevel: null } };
     }

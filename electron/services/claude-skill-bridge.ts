@@ -35,7 +35,7 @@ async function listSkillDirectories(baseDir: string, scope: SkillSource['scope']
     return [];
   }
 
-  let entries: Array<import('node:fs').Dirent> = [];
+  let entries: Array<import('node:fs').Dirent>;
   try {
     entries = await readdir(baseDir, { withFileTypes: true });
   } catch (error) {
@@ -122,7 +122,7 @@ export async function syncClaudeSkillsForAgent(
     mirrored.push(slug);
   }
 
-  let targetEntries: Array<import('node:fs').Dirent> = [];
+  let targetEntries: Array<import('node:fs').Dirent>;
   try {
     targetEntries = await readdir(targetRoot, { withFileTypes: true });
   } catch {
@@ -147,7 +147,7 @@ export async function listClaudeBridgedSkillNames(workspacePath: string): Promis
     return [];
   }
 
-  let entries: Array<import('node:fs').Dirent> = [];
+  let entries: Array<import('node:fs').Dirent>;
   try {
     entries = await readdir(targetRoot, { withFileTypes: true });
   } catch {

@@ -15,6 +15,7 @@ export interface EngineSessionSummary {
 export interface EngineHistoryResult {
   messages: unknown[];
   thinkingLevel?: string | null;
+  isRunning?: boolean;
 }
 
 export interface EngineSendParams {

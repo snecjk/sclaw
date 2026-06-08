@@ -8,7 +8,6 @@ import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
 import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-to-chat';
 import { hostApiFetch } from '@/lib/host-api';
-import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
@@ -1063,6 +1062,11 @@ function hasAssistantTextOutput(message: RawMessage | undefined): boolean {
   return false;
 }
 
+function hasAssistantTerminalOutput(message: RawMessage | undefined): boolean {
+  if (!hasAssistantTextOutput(message)) return false;
+  return collectToolUpdates(message, 'final').length === 0 && !isToolOnlyMessage(message);
+}
+
 // ── Store ────────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>()(
@@ -1412,7 +1416,11 @@ export const useChatStore = create<ChatState>()(
     }, 15_000);
 
     const loadPromise = (async () => {
-      const applyLoadedMessages = (rawMessages: RawMessage[], thinkingLevel: string | null) => {
+      const applyLoadedMessages = (
+        rawMessages: RawMessage[],
+        thinkingLevel: string | null,
+        isEngineRunActive = false,
+      ) => {
       if (get().currentSessionKey !== targetSessionKey) return;
 
       // Before filtering: attach images/files from tool_result messages to the next assistant message
@@ -1508,23 +1516,46 @@ export const useChatStore = create<ChatState>()(
       });
       const recentAssistant = [...filteredMessages].reverse().find((msg) => {
         if (msg.role !== 'assistant') return false;
-        // Use hasAssistantTextOutput (not hasNonToolAssistantContent) so that
-        // intermediate thinking+tool_use turns don't prematurely end the run.
-        if (!hasAssistantTextOutput(msg)) return false;
+        if (!hasAssistantTerminalOutput(msg)) return false;
         return isAfterUserMsg(msg);
+      });
+      const recentProcessAssistant = [...filteredMessages].reverse().find((msg) => {
+        if (msg.role !== 'assistant') return false;
+        if (!isAfterUserMsg(msg)) return false;
+        if (hasAssistantTerminalOutput(msg)) return false;
+        return hasNonToolAssistantContent(msg)
+          || isToolOnlyMessage(msg)
+          || collectToolUpdates(msg, 'final').length > 0;
       });
       const currentRecentAssistant = [...get().messages].reverse().find((msg) => {
         if (msg.role !== 'assistant') return false;
-        if (!hasAssistantTextOutput(msg)) return false;
+        if (!hasAssistantTerminalOutput(msg)) return false;
         return isAfterUserMsg(msg);
       });
 
       if (get().currentSessionKey !== targetSessionKey) return;
 
-      if (recentAssistant || currentRecentAssistant) {
+      if (!isEngineRunActive && (recentAssistant || currentRecentAssistant)) {
         clearHistoryPoll();
-        set({ sending: false, activeRunId: null, pendingFinal: false });
-      } else if (hasRecentAssistantActivity && !pendingFinal) {
+        set({
+          sending: false,
+          activeRunId: null,
+          pendingFinal: false,
+          streamingMessage: null,
+          streamingText: '',
+          streamingTools: [],
+        });
+      } else if (recentProcessAssistant) {
+        const processUpdates = collectToolUpdates(recentProcessAssistant, 'final');
+        set((s) => ({
+          pendingFinal: true,
+          streamingMessage: recentProcessAssistant,
+          streamingText: '',
+          streamingTools: processUpdates.length > 0
+            ? upsertToolStatuses(s.streamingTools, processUpdates)
+            : s.streamingTools,
+        }));
+      } else if ((isEngineRunActive || hasRecentAssistantActivity) && !pendingFinal) {
         set({ pendingFinal: true });
       }
       };
@@ -1534,7 +1565,7 @@ export const useChatStore = create<ChatState>()(
         let thinkingLevel: string | null = null;
         const data = await hostApiFetch<{
           success?: boolean;
-          result?: { messages?: RawMessage[]; thinkingLevel?: string | null };
+          result?: { messages?: RawMessage[]; thinkingLevel?: string | null; isRunning?: boolean };
         }>(`/api/chat/history?sessionKey=${encodeURIComponent(targetSessionKey)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`);
         if (get().currentSessionKey !== targetSessionKey) return;
 
@@ -1558,7 +1589,7 @@ export const useChatStore = create<ChatState>()(
         }
 
         if (get().currentSessionKey !== targetSessionKey) return;
-        applyLoadedMessages(rawMessages, thinkingLevel);
+        applyLoadedMessages(rawMessages, thinkingLevel, data.result?.isRunning === true);
       } catch (err) {
         console.warn('Failed to load chat history:', err);
         if (get().currentSessionKey !== targetSessionKey) return;
@@ -1677,7 +1708,10 @@ export const useChatStore = create<ChatState>()(
     const pollHistory = () => {
       const state = get();
       if (!state.sending) { clearHistoryPoll(); return; }
-      if (state.streamingMessage) {
+      const activeStreamHasFinalOutput = hasAssistantTerminalOutput(
+        (state.streamingMessage as RawMessage | null | undefined) ?? undefined,
+      );
+      if (state.streamingMessage && activeStreamHasFinalOutput) {
         _historyPollTimer = setTimeout(pollHistory, POLL_INTERVAL);
         return;
       }
@@ -1694,7 +1728,10 @@ export const useChatStore = create<ChatState>()(
     const checkStuck = () => {
       const state = get();
       if (!state.sending) return;
-      if (state.streamingMessage || state.streamingText) return;
+      const activeStreamHasFinalOutput = hasAssistantTerminalOutput(
+        (state.streamingMessage as RawMessage | null | undefined) ?? undefined,
+      );
+      if (state.streamingText || (state.streamingMessage && activeStreamHasFinalOutput)) return;
       if (state.pendingFinal) {
         setTimeout(checkStuck, 10_000);
         return;

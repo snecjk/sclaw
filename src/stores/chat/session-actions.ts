@@ -89,7 +89,7 @@ export function createSessionActions(
           return true;
         });
 
-        const { currentSessionKey } = get();
+        const { currentSessionKey, sessions: localSessions, sessionLastActivity, sessionLabels } = get();
         let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
         if (!nextSessionKey.startsWith('agent:')) {
           const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
@@ -105,7 +105,14 @@ export function createSessionActions(
           }
         }
 
-        const sessionsWithCurrent = !dedupedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
+        const hasLocalPendingSession = localSessions.some((session) => session.key === nextSessionKey);
+        const hasLocalSessionActivity = Boolean(sessionLastActivity[nextSessionKey] || sessionLabels[nextSessionKey]);
+        const shouldAppendCurrentSession = Boolean(
+          nextSessionKey
+          && !dedupedSessions.find((s) => s.key === nextSessionKey)
+          && (hasLocalPendingSession || hasLocalSessionActivity),
+        );
+        const sessionsWithCurrent = shouldAppendCurrentSession
           ? [...dedupedSessions, { key: nextSessionKey }]
           : dedupedSessions;
 
