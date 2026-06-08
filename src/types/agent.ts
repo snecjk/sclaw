@@ -3,12 +3,14 @@ export interface AgentSummary {
   name: string;
   isDefault: boolean;
   modelDisplay: string;
+  modelAccountId?: string;
   inheritedModel: boolean;
   workspace: string;
   agentDir: string;
   mainSessionKey: string;
   channelTypes: string[];
   fileTransformByOSS?: boolean;
+  engineType?: 'openclaw' | 'claude';
 }
 
 export interface AgentsSnapshot {

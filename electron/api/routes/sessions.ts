@@ -1,6 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { join } from 'node:path';
 import { getOpenClawConfigDir } from '../../utils/paths';
+import { resolveAgentEngineType } from '../../engines/manager';
+import { deleteClaudeSessionByKey } from '../../engines/claude-adapter';
+import { getEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry } from '../../engines/session-registry';
+import { getAgentPreferredModel, getAgentWorkspacePath } from '../../utils/agent-config';
 import {
   qualifyChatModelRef,
   setSessionModelViaGateway,
@@ -31,6 +35,36 @@ export async function handleSessionRoutes(
       }
       if (!rawModel) {
         sendJson(res, 400, { success: false, error: 'model is required' });
+        return true;
+      }
+      const agentEngineType = await resolveAgentEngineType(body.agentId?.trim() || sessionKey.split(':')[1] || 'main');
+      if (agentEngineType === 'claude') {
+        const agentId = body.agentId?.trim() || sessionKey.split(':')[1] || 'main';
+        const existing = await getEngineSessionRegistryEntry(sessionKey);
+        const preferredModel = await getAgentPreferredModel(agentId);
+        const cwd = existing?.cwd || await getAgentWorkspacePath(agentId);
+        if (!cwd) {
+          sendJson(res, 404, { success: false, error: `Agent '${agentId}' workspace not found` });
+          return true;
+        }
+        await upsertEngineSessionRegistryEntry({
+          sessionKey,
+          sessionId: existing?.sessionId,
+          cwd,
+          agentId,
+          engineType: 'claude',
+          updatedAt: Date.now(),
+          title: existing?.title,
+          model: rawModel,
+          accountId: body.accountId?.trim() || existing?.accountId || preferredModel.accountId,
+        });
+        sendJson(res, 200, {
+          success: true,
+          sessionKey,
+          model: rawModel,
+          modelOverride: rawModel,
+          changedModel: true,
+        });
         return true;
       }
 
@@ -73,6 +107,12 @@ export async function handleSessionRoutes(
         return true;
       }
       const agentId = parts[1];
+      const agentEngineType = await resolveAgentEngineType(agentId);
+      if (agentEngineType === 'claude') {
+        await deleteClaudeSessionByKey(sessionKey);
+        sendJson(res, 200, { success: true });
+        return true;
+      }
       const sessionsDir = join(getOpenClawConfigDir(), 'agents', agentId, 'sessions');
       const sessionsJsonPath = join(sessionsDir, 'sessions.json');
       const fsP = await import('node:fs/promises');

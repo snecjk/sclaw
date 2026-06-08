@@ -1,4 +1,3 @@
-import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
 import {
@@ -37,17 +36,9 @@ export function createSessionActions(
   return {
     loadSessions: async () => {
       try {
-        const result = await invokeIpc(
-          'gateway:rpc',
-          'sessions.list',
-          {}
-        ) as { success: boolean; result?: Record<string, unknown>; error?: string };
-
         let rawSessions: Record<string, unknown>[] = [];
-        if (result.success && result.result) {
-          const data = result.result;
-          rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
-        }
+        const result = await hostApiFetch<{ success?: boolean; sessions?: Record<string, unknown>[] }>('/api/chat/sessions');
+        rawSessions = Array.isArray(result.sessions) ? result.sessions : [];
 
         // Also load scheduled task sessions from local filesystem
         try {
@@ -63,6 +54,7 @@ export function createSessionActions(
 
         const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
           const key = String(s.key || '');
+          const engineType: ChatSession['engineType'] = s.engineType === 'claude' ? 'claude' : 'openclaw';
           return {
             key,
             label: s.label ? String(s.label) : undefined,
@@ -73,8 +65,9 @@ export function createSessionActions(
             thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
             model: s.model ? String(s.model) : undefined,
             updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
+            engineType,
           };
-        }).filter((s: ChatSession) => s.key);
+        }).filter((s) => Boolean(s.key)) as ChatSession[];
 
         const canonicalBySuffix = new Map<string, string>();
         for (const session of sessions) {
@@ -226,13 +219,10 @@ export function createSessionActions(
           void Promise.all(
             sessionsToLabel.map(async (session) => {
               try {
-                const r = await invokeIpc(
-                  'gateway:rpc',
-                  'chat.history',
-                  { sessionKey: session.key, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
-                ) as { success: boolean; result?: Record<string, unknown> };
-                if (!r.success || !r.result) return;
-                const msgs = Array.isArray(r.result.messages) ? r.result.messages as RawMessage[] : [];
+                const history = await hostApiFetch<{ success?: boolean; result?: { messages?: RawMessage[] } }>(
+                  `/api/chat/history?sessionKey=${encodeURIComponent(session.key)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`,
+                );
+                const msgs = Array.isArray(history.result?.messages) ? history.result.messages : [];
                 const firstUser = msgs.find((m) => m.role === 'user');
                 const lastMsg = msgs[msgs.length - 1];
                 set((s) => {
@@ -308,15 +298,19 @@ export function createSessionActions(
       // The main process renames <suffix>.jsonl → <suffix>.deleted.jsonl so that
       // sessions.list skips it automatically.
       try {
-        const result = await invokeIpc('session:delete', key) as {
+        const result = await hostApiFetch<{ success: boolean; error?: string }>('/api/sessions/delete', {
+          method: 'POST',
+          body: JSON.stringify({ sessionKey: key }),
+        });
+        const typedResult = result as {
           success: boolean;
           error?: string;
         };
-        if (!result.success) {
-          console.warn(`[deleteSession] IPC reported failure for ${key}:`, result.error);
+        if (!typedResult.success) {
+          console.warn(`[deleteSession] API reported failure for ${key}:`, typedResult.error);
         }
       } catch (err) {
-        console.warn(`[deleteSession] IPC call failed for ${key}:`, err);
+        console.warn(`[deleteSession] API call failed for ${key}:`, err);
       }
 
       const { currentSessionKey, sessions } = get();

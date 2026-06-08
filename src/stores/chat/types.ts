@@ -45,6 +45,7 @@ export interface ChatSession {
   thinkingLevel?: string;
   model?: string;
   updatedAt?: number;
+  engineType?: 'openclaw' | 'claude';
 }
 
 export interface ToolStatus {

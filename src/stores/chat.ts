@@ -1105,7 +1105,10 @@ export const useChatStore = create<ChatState>()(
 
     _loadSessionsInFlight = (async () => {
       try {
-        const data = await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.list', {});
+        const payload = await hostApiFetch<{ success?: boolean; sessions?: Record<string, unknown>[] }>('/api/chat/sessions');
+        const data = {
+          sessions: Array.isArray(payload?.sessions) ? payload.sessions : [],
+        };
         if (data) {
           const rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
           const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
@@ -1191,11 +1194,11 @@ export const useChatStore = create<ChatState>()(
             void Promise.all(
               sessionsToLabel.map(async (session) => {
                 try {
-                  const r = await useGatewayStore.getState().rpc<Record<string, unknown>>(
-                    'chat.history',
-                    { sessionKey: session.key, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
-                  );
-                  const msgs = Array.isArray(r.messages) ? r.messages as RawMessage[] : [];
+                  const r = await hostApiFetch<{
+                    success?: boolean;
+                    result?: { messages?: RawMessage[]; thinkingLevel?: string | null };
+                  }>(`/api/chat/history?sessionKey=${encodeURIComponent(session.key)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`);
+                  const msgs = Array.isArray(r.result?.messages) ? r.result.messages as RawMessage[] : [];
                   const firstUser = msgs.find((m) => m.role === 'user');
                   const lastMsg = msgs[msgs.length - 1];
                   set((s) => {
@@ -1529,17 +1532,17 @@ export const useChatStore = create<ChatState>()(
       try {
         // Gateway chat.history does not support offset; load up to the hard max in one call.
         let thinkingLevel: string | null = null;
-        const data = await useGatewayStore.getState().rpc<Record<string, unknown>>(
-          'chat.history',
-          { sessionKey: targetSessionKey, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
-        );
+        const data = await hostApiFetch<{
+          success?: boolean;
+          result?: { messages?: RawMessage[]; thinkingLevel?: string | null };
+        }>(`/api/chat/history?sessionKey=${encodeURIComponent(targetSessionKey)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`);
         if (get().currentSessionKey !== targetSessionKey) return;
 
-        const allMessages: RawMessage[] = Array.isArray(data.messages)
-          ? data.messages as RawMessage[]
+        const allMessages: RawMessage[] = Array.isArray(data.result?.messages)
+          ? data.result.messages as RawMessage[]
           : [];
-        if (data.thinkingLevel) {
-          thinkingLevel = String(data.thinkingLevel);
+        if (data.result?.thinkingLevel) {
+          thinkingLevel = String(data.result.thinkingLevel);
         }
 
         if (allMessages.length >= CHAT_HISTORY_LENGTH_MAX_LIMIT) {
@@ -1731,9 +1734,6 @@ export const useChatStore = create<ChatState>()(
 
       let result: { success: boolean; result?: { runId?: string }; error?: string };
 
-      // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
-      const CHAT_SEND_TIMEOUT_MS = 120_000;
-
       if (hasMedia) {
         result = await hostApiFetch<{ success: boolean; result?: { runId?: string }; error?: string }>(
           '/api/chat/send-with-media',
@@ -1753,17 +1753,18 @@ export const useChatStore = create<ChatState>()(
           },
         );
       } else {
-        const rpcResult = await useGatewayStore.getState().rpc<{ runId?: string }>(
-          'chat.send',
+        result = await hostApiFetch<{ success: boolean; result?: { runId?: string }; error?: string }>(
+          '/api/chat/send',
           {
-            sessionKey: currentSessionKey,
-            message: trimmed,
-            deliver: false,
-            idempotencyKey,
+            method: 'POST',
+            body: JSON.stringify({
+              sessionKey: currentSessionKey,
+              message: trimmed,
+              deliver: false,
+              idempotencyKey,
+            }),
           },
-          CHAT_SEND_TIMEOUT_MS,
         );
-        result = { success: true, result: rpcResult };
       }
 
 
@@ -1789,10 +1790,10 @@ export const useChatStore = create<ChatState>()(
     set({ streamingTools: [] });
 
     try {
-      await useGatewayStore.getState().rpc(
-        'chat.abort',
-        { sessionKey: currentSessionKey },
-      );
+      await hostApiFetch<{ success?: boolean; error?: string }>('/api/chat/abort', {
+        method: 'POST',
+        body: JSON.stringify({ sessionKey: currentSessionKey }),
+      });
     } catch (err) {
       set({ error: String(err) });
     }

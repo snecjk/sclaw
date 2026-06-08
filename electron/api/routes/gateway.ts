@@ -7,6 +7,7 @@ import { buildStoMemoryCenterAuthHeaders } from '../../utils/sto-memory-api-auth
 import { resolveStoBaseUrl } from '../../utils/sto-domain';
 import { listAgentsSnapshot } from '../../utils/agent-config';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
+import { getAdapterForSession, listEngineSessions } from '../../engines/manager';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -122,6 +123,83 @@ export async function handleGatewayRoutes(
     return true;
   }
 
+  if (url.pathname === '/api/chat/sessions' && req.method === 'GET') {
+    try {
+      const sessions = await listEngineSessions({ gatewayManager: ctx.gatewayManager });
+      sendJson(res, 200, { success: true, sessions });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/chat/history' && req.method === 'GET') {
+    try {
+      const sessionKey = (url.searchParams.get('sessionKey') ?? '').trim();
+      const limit = Number(url.searchParams.get('limit') ?? '1000');
+      if (!sessionKey) {
+        sendJson(res, 400, { success: false, error: 'sessionKey is required' });
+        return true;
+      }
+      const adapter = await getAdapterForSession(sessionKey);
+      const result = await adapter.getHistory(
+        { gatewayManager: ctx.gatewayManager },
+        { sessionKey, limit: Number.isFinite(limit) && limit > 0 ? limit : 1000 },
+      );
+      if (!result.success) {
+        sendJson(res, 500, result);
+        return true;
+      }
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/chat/send' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{
+        sessionKey: string;
+        message: string;
+        deliver?: boolean;
+        idempotencyKey: string;
+      }>(req);
+      const adapter = await getAdapterForSession(body.sessionKey);
+      const result = await adapter.sendMessage(
+        { gatewayManager: ctx.gatewayManager },
+        body,
+      );
+      if (!result.success) {
+        sendJson(res, 500, result);
+        return true;
+      }
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/chat/abort' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ sessionKey: string }>(req);
+      const adapter = await getAdapterForSession(body.sessionKey);
+      const result = await adapter.abortRun(
+        { gatewayManager: ctx.gatewayManager },
+        body,
+      );
+      if (!result.success) {
+        sendJson(res, 500, result);
+        return true;
+      }
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/chat/send-with-media' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{
@@ -142,6 +220,19 @@ export async function handleGatewayRoutes(
       const imageAttachments: Array<{ content: string; mimeType: string; fileName: string }> = [];
       const fileReferences: string[] = [];
       const transformByOSS = await shouldTransformAttachmentsByOSS(body.sessionKey);
+      const adapter = await getAdapterForSession(body.sessionKey);
+      if (adapter.type !== 'openclaw') {
+        const result = await adapter.sendMessageWithMedia(
+          { gatewayManager: ctx.gatewayManager },
+          body,
+        );
+        if (!result.success) {
+          sendJson(res, 500, result);
+          return true;
+        }
+        sendJson(res, 200, result);
+        return true;
+      }
       if (body.media && body.media.length > 0) {
         const fsP = await import('node:fs/promises');
         for (const m of body.media) {
@@ -174,8 +265,15 @@ export async function handleGatewayRoutes(
       if (imageAttachments.length > 0) {
         rpcParams.attachments = imageAttachments;
       }
-      const result = await ctx.gatewayManager.rpc('chat.send', rpcParams, 120000);
-      sendJson(res, 200, { success: true, result });
+      const result = await adapter.sendMessage(
+        { gatewayManager: ctx.gatewayManager },
+        rpcParams as { sessionKey: string; message: string; deliver?: boolean; idempotencyKey: string },
+      );
+      if (!result.success) {
+        sendJson(res, 500, result);
+        return true;
+      }
+      sendJson(res, 200, result);
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

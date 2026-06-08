@@ -1,4 +1,3 @@
-import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { useAgentsStore } from '@/stores/agents';
 import {
@@ -240,35 +239,36 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
 
         let result: { success: boolean; result?: { runId?: string }; error?: string };
 
-        // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
-        const CHAT_SEND_TIMEOUT_MS = 120_000;
-
         if (hasMedia) {
-          result = await invokeIpc(
-            'chat:sendWithMedia',
+          result = await hostApiFetch(
+            '/api/chat/send-with-media',
             {
-              sessionKey: currentSessionKey,
-              message: trimmed || 'Process the attached file(s).',
-              deliver: false,
-              idempotencyKey,
-              media: attachments.map((a) => ({
-                filePath: a.stagedPath,
-                mimeType: a.mimeType,
-                fileName: a.fileName,
-              })),
+              method: 'POST',
+              body: JSON.stringify({
+                sessionKey: currentSessionKey,
+                message: trimmed || 'Process the attached file(s).',
+                deliver: false,
+                idempotencyKey,
+                media: attachments.map((a) => ({
+                  filePath: a.stagedPath,
+                  mimeType: a.mimeType,
+                  fileName: a.fileName,
+                })),
+              }),
             },
           ) as { success: boolean; result?: { runId?: string }; error?: string };
         } else {
-          result = await invokeIpc(
-            'gateway:rpc',
-            'chat.send',
+          result = await hostApiFetch(
+            '/api/chat/send',
             {
-              sessionKey: currentSessionKey,
-              message: trimmed,
-              deliver: false,
-              idempotencyKey,
+              method: 'POST',
+              body: JSON.stringify({
+                sessionKey: currentSessionKey,
+                message: trimmed,
+                deliver: false,
+                idempotencyKey,
+              }),
             },
-            CHAT_SEND_TIMEOUT_MS,
           ) as { success: boolean; result?: { runId?: string }; error?: string };
         }
 
@@ -295,11 +295,10 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       set({ streamingTools: [] });
 
       try {
-        await invokeIpc(
-          'gateway:rpc',
-          'chat.abort',
-          { sessionKey: currentSessionKey },
-        );
+        await hostApiFetch<{ success?: boolean; error?: string }>('/api/chat/abort', {
+          method: 'POST',
+          body: JSON.stringify({ sessionKey: currentSessionKey }),
+        });
       } catch (err) {
         set({ error: String(err) });
       }

@@ -245,9 +245,10 @@ const DEFAULT_TEMPLATES: Record<ConstraintFile, string> = {
 // ── Info Tab ──────────────────────────────────────────────────────────────────
 function InfoTab({ agent }: { agent: AgentSummary }) {
   const { t } = useTranslation('agents');
-  const { updateAgent } = useAgentsStore();
+  const { updateAgent, fetchAgents } = useAgentsStore();
   const [name, setName] = useState(agent.name);
   const [savingName, setSavingName] = useState(false);
+  const [savingEngine, setSavingEngine] = useState(false);
   const [activeFile, setActiveFile] = useState<ConstraintFile>(CONSTRAINT_FILES[0]);
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
   const [fileLoadState, setFileLoadState] = useState<Record<string, 'idle' | 'loading' | 'loaded' | 'error'>>({});
@@ -292,6 +293,23 @@ function InfoTab({ agent }: { agent: AgentSummary }) {
     } catch (err) {
       toast.error(t('toast.agentUpdateFailed', { error: String(err) }));
     } finally { setSavingName(false); }
+  };
+
+  const handleSetEngine = async (engineType: 'openclaw' | 'claude') => {
+    if ((agent.engineType ?? 'openclaw') === engineType) return;
+    setSavingEngine(true);
+    try {
+      await hostApiFetch(`/api/agents/${encodeURIComponent(agent.id)}/engine`, {
+        method: 'PUT',
+        body: JSON.stringify({ engineType }),
+      });
+      await fetchAgents();
+      toast.success(`已切换到 ${engineType === 'claude' ? 'Claude Agent' : 'OpenClaw'} 引擎`);
+    } catch (err) {
+      toast.error(`切换引擎失败: ${String(err)}`);
+    } finally {
+      setSavingEngine(false);
+    }
   };
 
   const handleSaveFile = async (filename: string) => {
@@ -347,6 +365,32 @@ function InfoTab({ agent }: { agent: AgentSummary }) {
               {agent.modelDisplay}{agent.inheritedModel ? ` (${t('inherited')})` : ''}
             </p>
           </div>
+        </div>
+        <div className="space-y-2.5">
+          <Label className={labelCls}>Execution Engine</Label>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant={(agent.engineType ?? 'openclaw') === 'openclaw' ? 'default' : 'outline'}
+              disabled={savingEngine}
+              onClick={() => void handleSetEngine('openclaw')}
+              className="h-9 rounded-md px-4 text-[13px]"
+            >
+              OpenClaw
+            </Button>
+            <Button
+              type="button"
+              variant={(agent.engineType ?? 'openclaw') === 'claude' ? 'default' : 'outline'}
+              disabled={savingEngine}
+              onClick={() => void handleSetEngine('claude')}
+              className="h-9 rounded-md px-4 text-[13px]"
+            >
+              Claude Agent
+            </Button>
+          </div>
+          <p className="text-[12px] text-muted-foreground">
+            Claude 适配器骨架已接入；当前仓库策略禁止我自动安装 SDK，切到 Claude 后需要你手动补依赖再完成 adapter。
+          </p>
         </div>
       </div>
 
@@ -515,6 +559,7 @@ function ModelTab({ agent }: { agent: AgentSummary }) {
   const { accounts, statuses, vendors, defaultAccountId, init } = useProviderStore();
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
+  const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>(agent.modelAccountId);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { void init(); }, [init]);
@@ -528,17 +573,24 @@ function ModelTab({ agent }: { agent: AgentSummary }) {
   useEffect(() => {
     if (!saving && agent.modelDisplay) {
       setSelectedModelId(agent.modelDisplay);
+      setSelectedAccountId(agent.modelAccountId);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agent.id, agent.modelDisplay]);
+  }, [agent.id, agent.modelDisplay, agent.modelAccountId]);
 
   const handleSave = async () => {
     if (!selectedModelId) return;
+    const selectedOption = modelOptions.find((opt) => (
+      opt.modelId === selectedModelId && (!selectedAccountId || opt.accountId === selectedAccountId)
+    )) ?? modelOptions.find((opt) => opt.modelId === selectedModelId);
     setSaving(true);
     try {
       await hostApiFetch(`/api/agents/${encodeURIComponent(agent.id)}/model`, {
         method: 'PUT',
-        body: JSON.stringify({ model: selectedModelId }),
+        body: JSON.stringify({
+          model: selectedModelId,
+          accountId: selectedOption?.accountId,
+        }),
       });
       toast.success(t('detail.modelSaved'));
       // Refresh agents store so Chat toolbar and other views reflect the change
@@ -575,11 +627,15 @@ function ModelTab({ agent }: { agent: AgentSummary }) {
         ) : (
           <div className="space-y-2">
             {modelOptions.map((opt) => {
-              const isSelected = selectedModelId === opt.modelId;
+              const isSelected = selectedModelId === opt.modelId
+                && (selectedAccountId ? selectedAccountId === opt.accountId : true);
               return (
                 <button
                   key={opt.key}
-                  onClick={() => setSelectedModelId(opt.modelId)}
+                  onClick={() => {
+                    setSelectedModelId(opt.modelId);
+                    setSelectedAccountId(opt.accountId);
+                  }}
                   className={cn(
                     'w-full flex items-center gap-3 rounded-xl border p-4 text-left transition-colors',
                     isSelected

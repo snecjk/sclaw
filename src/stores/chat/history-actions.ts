@@ -1,4 +1,3 @@
-import { invokeIpc } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
@@ -165,13 +164,13 @@ export function createHistoryActions(
       try {
         // Gateway chat.history does not support offset; load up to the hard max in one call.
         let thinkingLevel: string | null = null;
-        const result = await invokeIpc(
-          'gateway:rpc',
-          'chat.history',
-          { sessionKey: currentSessionKey, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT }
-        ) as { success: boolean; result?: Record<string, unknown>; error?: string };
+        const result = await hostApiFetch<{
+          success?: boolean;
+          result?: Record<string, unknown>;
+          error?: string;
+        }>(`/api/chat/history?sessionKey=${encodeURIComponent(currentSessionKey)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`);
 
-        if (!result.success || !result.result) {
+        if (result.success === false || !result.result) {
           throw new Error(result.error || 'Gateway RPC failed: chat.history');
         }
 

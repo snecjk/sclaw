@@ -4,7 +4,7 @@
  * Rendered in the Header when on the Chat page.
  */
 import { useMemo, useEffect, useState } from 'react';
-import { RefreshCw, Brain, Bot, ChevronDown, Cpu } from 'lucide-react';
+import { RefreshCw, Brain, Bot, ChevronDown, Cpu, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -55,6 +55,7 @@ export function ChatToolbar() {
   const loadSessions = useChatStore((s) => s.loadSessions);
   const switchToAgentMainSession = useChatStore((s) => s.switchToAgentMainSession);
   const agents = useAgentsStore((s) => s.agents);
+  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
   const { t } = useTranslation('chat');
@@ -62,6 +63,7 @@ export function ChatToolbar() {
   const { accounts, statuses, vendors, defaultAccountId, init } = useProviderStore();
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [modelSaving, setModelSaving] = useState(false);
+  const [engineSaving, setEngineSaving] = useState(false);
 
   useEffect(() => { void init(); }, [init]);
 
@@ -154,6 +156,9 @@ export function ChatToolbar() {
     [modelOptions, selectedModelId],
   );
 
+  const currentEngineType = currentAgent?.engineType ?? 'openclaw';
+  const currentEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
+
   const handleModelSwitch = async (modelId: string) => {
     if (!currentSessionKey || modelId === selectedModelId) return;
     const opt = modelOptions.find((o) => o.modelId === modelId);
@@ -185,8 +190,28 @@ export function ChatToolbar() {
     }
   };
 
+  const handleEngineSwitch = async (engineType: 'openclaw' | 'claude') => {
+    if (!currentAgentId || engineType === currentEngineType) return;
+    setEngineSaving(true);
+    try {
+      await hostApiFetch(`/api/agents/${encodeURIComponent(currentAgentId)}/engine`, {
+        method: 'PUT',
+        body: JSON.stringify({ engineType }),
+      });
+      await fetchAgents();
+      await loadSessions();
+      await refresh();
+      toast.success(`已切换到 ${engineType === 'claude' ? 'Claude Agent' : 'OpenClaw'} 引擎`);
+    } catch (err) {
+      toast.error(`切换引擎失败: ${String(err)}`);
+    } finally {
+      setEngineSaving(false);
+    }
+  };
+
   const agentSelectDisabled = !isGatewayRunning || sending || agentRows.length === 0;
   const modelSelectDisabled = !isGatewayRunning || sending || modelOptions.length === 0;
+  const engineSelectDisabled = !isGatewayRunning || sending || !currentAgentId;
 
   return (
     <div className="flex w-full items-center justify-between">
@@ -237,6 +262,47 @@ export function ChatToolbar() {
 
       {/* RIGHT: Model selector + actions */}
       <div className="flex items-center gap-2">
+        <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-muted-foreground sm:text-[12px]">
+          引擎
+        </span>
+        <DropdownMenu>
+          <div className={cn(pillBase, 'max-w-[min(100vw-11rem,220px)]')}>
+            <DropdownMenuTrigger asChild disabled={engineSelectDisabled || engineSaving}>
+              <button
+                type="button"
+                title="切换执行引擎"
+                className={cn(pillBtn, engineSaving && 'opacity-60 pointer-events-none')}
+              >
+                <Bot className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground/90">
+                  {currentEngineLabel}
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
+              </button>
+            </DropdownMenuTrigger>
+          </div>
+          <DropdownMenuContent
+            align="end"
+            side="bottom"
+            className="min-w-[12rem] max-w-[min(100vw-2rem,300px)]"
+          >
+            {(['openclaw', 'claude'] as const).map((engineType) => {
+              const label = engineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
+              const isSelected = currentEngineType === engineType;
+              return (
+                <DropdownMenuItem
+                  key={engineType}
+                  className={cn('flex items-center gap-2', isSelected && 'bg-primary/8 font-medium')}
+                  onSelect={() => void handleEngineSwitch(engineType)}
+                >
+                  <span className="min-w-0 flex-1 truncate text-[13px]">{label}</span>
+                  {isSelected ? <Check className="h-4 w-4 shrink-0 text-primary" /> : null}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         {/* Model selector */}
         <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-muted-foreground sm:text-[12px]">
           {t('toolbar.currentModel')}
