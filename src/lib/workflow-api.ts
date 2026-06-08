@@ -4,7 +4,7 @@
  * Aligned with Agent Workflow Client API v1.
  * All endpoints return { success, data, traceId } and require stoToken header.
  */
-import { hostApiFetch, hostApiFetchStream } from '@/lib/host-api';
+import { hostApiFetch, hostApiFetchStream, getHostApiBase } from '@/lib/host-api';
 import type {
   ApiResponse,
   WorkflowTemplateSearchResponse,
@@ -79,14 +79,26 @@ export async function getStartupSchema(templateId: string): Promise<StartupSchem
 
 // ── 3. Create workflow ──────────────────────────────────────────
 
+function logCurl(path: string, init?: RequestInit) {
+  const base = getHostApiBase();
+  const method = init?.method || 'GET';
+  const headers = init?.headers ? Object.entries(init.headers as Record<string, string>).map(([k, v]) => `-H '${k}: ${v}'`).join(' ') : '';
+  const body = init?.body ? `-d '${init.body}'` : '';
+  console.log(`[workflow-api] curl -X ${method} ${headers} ${body} ${base}${path}`);
+}
+
 export async function createWorkflow(params: CreateWorkflowRequest): Promise<CreateWorkflowResponse> {
+  alert(123)
+  const init: RequestInit = {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(params),
+  };
+  logCurl('/agent/v1/workflows', init);
   const data = await unwrap(
-    hostApiFetch<ApiResponse<CreateWorkflowResponse>>('/agent/v1/workflows', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(params),
-    }),
+    hostApiFetch<ApiResponse<CreateWorkflowResponse>>('/agent/v1/workflows', init),
   );
+  console.log('[workflow-api] createWorkflow response:', JSON.stringify(data, null, 2));
   return data;
 }
 
@@ -96,13 +108,16 @@ export async function startWorkflow(
   workflowId: string,
   params: StartWorkflowRequest,
 ): Promise<WorkflowRunResponse> {
+  const init: RequestInit = {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(params),
+  };
+  logCurl(`/agent/v1/workflows/${workflowId}/start`, init);
   const data = await unwrap(
-    hostApiFetch<ApiResponse<WorkflowRunResponse>>(`/agent/v1/workflows/${workflowId}/start`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(params),
-    }),
+    hostApiFetch<ApiResponse<WorkflowRunResponse>>(`/agent/v1/workflows/${workflowId}/start`, init),
   );
+  console.log('[workflow-api] startWorkflow response:', JSON.stringify(data, null, 2));
   return data;
 }
 

@@ -91,53 +91,32 @@ export interface StartupPreset {
   schemaHash: string;
 }
 
-export interface CreateWorkflowRequest {
-  name?: string;
-  description?: string;
-  templateId: string;
-  category?: string;
-  startupPreset: StartupPreset;
-  idempotencyKey?: string;
-  sourceClient?: string;
-}
-
-export interface WorkflowSummary {
-  id: string;
-  schemaVersion?: string;
-  name: string;
-  description?: string;
-  version: number;
-  nodes?: unknown[];
-  edges?: unknown[];
-  startupSchema: WorkflowSchema;
-}
-
-export interface WorkflowPreset {
-  id: string;
-  name: string;
-  workflowId: string;
-  workflowVersionId: number;
-  ownerUserId?: string;
-  values: Record<string, unknown>;
+export interface WorkflowStartupPayload {
   schemaHash: string;
-  isDefault: boolean;
-  status?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  values: Record<string, unknown>;
+}
+
+export interface CreateWorkflowRequest {
+  displayName?: string;
+  templateId: string;
+  startup: WorkflowStartupPayload;
+  idempotencyKey?: string;
 }
 
 export interface CreateWorkflowResponse {
-  workflow: WorkflowSummary;
-  defaultPreset: WorkflowPreset;
+  workflowId: string;
+  workflowName: string;
+  defaultPresetId: string;
+  schemaHash: string;
+  startupValues: Record<string, unknown>;
 }
 
 // ── Workflow Start ──────────────────────────────────────────────
 
 export interface StartWorkflowRequest {
   inputs?: Record<string, unknown>;
-  presetId?: string;
   agentContext?: Record<string, unknown>;
-  idempotencyKey?: string;
+  idempotencyKey: string;
 }
 
 // ── Run / Execution ─────────────────────────────────────────────

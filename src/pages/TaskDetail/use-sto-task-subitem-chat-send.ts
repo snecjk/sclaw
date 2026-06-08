@@ -25,9 +25,44 @@ export function useStoTaskSubitemChatSend() {
   );
 
   const handleSend = useCallback(
-    async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
+    async (
+      text: string,
+      attachments?: FileAttachment[],
+      targetAgentId?: string | null,
+      _dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[],
+      workflowId?: string | null,
+    ) => {
       if (!isGatewayRunning) {
         toast.error(t('assistant.gatewayRequired'));
+        return;
+      }
+
+      const chatState = useChatStore.getState();
+      const pending = chatState.pendingWorkflow;
+
+      // Handle pending workflow confirmation
+      if (pending && !workflowId) {
+        const { tryResolvePendingWorkflow } = await import('@/hooks/use-workflow-send');
+        const resolved = await tryResolvePendingWorkflow(text, async (msg, runId, wfId) => {
+          await sendMessage({ text: msg, attachments, targetAgentId, workflowId: wfId, runId });
+        });
+        if (resolved) return;
+      }
+
+      // If workflow already created in sendWithWorkflow — just start it
+      if (pending?.workflowId && workflowId === pending.workflowId) {
+        const { startExistingWorkflow } = await import('@/hooks/use-workflow-send');
+        const inputs = pending.collectedInputs ?? {};
+        const ok = await startExistingWorkflow(
+          pending.workflowId,
+          inputs,
+          { sessionKey: chatState.currentSessionKey, agentId: chatState.currentAgentId },
+          async (msg, runId, wfId) => {
+            await sendMessage({ text: msg, attachments, targetAgentId, workflowId: wfId, runId });
+          },
+          text,
+        );
+        if (!ok) return;
         return;
       }
 

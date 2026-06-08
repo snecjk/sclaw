@@ -35,6 +35,13 @@ export function useHomeChatEntrySend() {
         return;
       }
 
+      // Handle pending workflow confirmation (before fresh workflow selection)
+      const { tryResolvePendingWorkflow } = await import('@/hooks/use-workflow-send');
+      const resolved = await tryResolvePendingWorkflow(text, async (msg, runId, wfId) => {
+        await sendMessage({ text: msg, attachments, targetAgentId, workflowId: wfId, runId });
+      });
+      if (resolved) return;
+
       // Handle workflow: same logic as Chat/index.tsx
       if (workflowId) {
         const { sendWithWorkflow } = await import('@/hooks/use-workflow-send');

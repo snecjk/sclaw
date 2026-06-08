@@ -1771,8 +1771,9 @@ export const useChatStore = create<ChatState>()(
             message: trimmed,
             deliver: false,
             idempotencyKey,
-            workflowId: _workflowId,
-            runId: _runId,
+            // NOTE: workflowId/runId are not forwarded to Gateway chat.send yet
+            // because the Gateway schema does not accept them. Workflow state
+            // is tracked via SSE + main process polling instead.
           },
           CHAT_SEND_TIMEOUT_MS,
         );

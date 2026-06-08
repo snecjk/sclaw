@@ -125,6 +125,8 @@ export interface ChatState {
     templateName: string;
     schema: import('@/types/workflow').WorkflowSchema;
     schemaHash: string;
+    workflowId?: string;
+    collectedInputs?: Record<string, unknown>;
   } | null;
   setPendingWorkflow: (pending: ChatState['pendingWorkflow']) => void;
   clearPendingWorkflow: () => void;

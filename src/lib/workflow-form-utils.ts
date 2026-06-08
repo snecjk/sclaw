@@ -5,7 +5,7 @@
  * Aligned with Agent Workflow Client API v1.
  */
 import type { UserFormConfig, FormField } from '@/types/user-form';
-import type { WorkflowSchemaField, WorkflowSchema, StartupPreset } from '@/types/workflow';
+import type { WorkflowSchemaField, WorkflowSchema, WorkflowStartupPayload } from '@/types/workflow';
 
 const COMPONENT_MAPPING: Record<string, FormField['type']> = {
   single_select: 'select',
@@ -148,17 +148,16 @@ export function buildWorkflowFormConfig(
 }
 
 /**
- * Build startup preset from form response values and schema hash
+ * Build workflow startup payload from form response values and schema hash
+ * Aligned with Agent Workflow Client API v1.
  */
 export function buildStartupPreset(
   formValues: Record<string, unknown>,
   schemaHash: string,
-): StartupPreset {
+): WorkflowStartupPayload {
   return {
-    name: '默认启动配置',
-    values: formValues,
-    isDefault: true,
     schemaHash,
+    values: formValues,
   };
 }
 
