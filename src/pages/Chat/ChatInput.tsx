@@ -117,7 +117,7 @@ export function ChatInput({
   disabled = false,
   sending = false,
   isEmpty: _isEmpty = false,
-  engineType = 'openclaw',
+  engineType,
   statusText,
   statusTone = 'warning',
   variant = 'default',

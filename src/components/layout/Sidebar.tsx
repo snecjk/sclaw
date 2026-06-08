@@ -603,16 +603,13 @@ export function Sidebar() {
   const sidebarVis = useMemo(() => getSidebarVisibility(getSidebarLayoutVariant()), []);
 
   useEffect(() => {
-    if (!isGatewayRunning) return;
     let cancelled = false;
     (async () => {
       await loadSessions();
       if (cancelled) return;
 
-      const hasExistingMessages = useChatStore.getState().messages.length > 0;
-      await loadHistory(hasExistingMessages);
-
-      // 刷新后如果在首页路由，重置到首页初始状态，避免同时高亮首页和会话项
+      // 首页只需要会话列表用于侧边栏展示，不需要在启动时尝试恢复当前历史，
+      // 否则会把默认 main 会话继续绑定到 OpenClaw 启动态。
       if (window.location.pathname === '/') {
         const state = useChatStore.getState();
         if (state.currentSessionKey !== DEFAULT_SESSION_KEY || state.messages.length > 0) {
@@ -630,7 +627,18 @@ export function Sidebar() {
             pendingToolImages: [],
           });
         }
+        return;
       }
+
+      const state = useChatStore.getState();
+      const currentSession = state.sessions.find((session) => session.key === state.currentSessionKey);
+      const shouldLoadHistory = isGatewayRunning || currentSession?.engineType === 'claude';
+      if (!shouldLoadHistory) {
+        return;
+      }
+
+      const hasExistingMessages = state.messages.length > 0;
+      await loadHistory(hasExistingMessages);
     })();
     return () => {
       cancelled = true;

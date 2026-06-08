@@ -1,7 +1,7 @@
 /**
  * 无 CRM 周报策略权限时的首页：Hero + 能力卡片 + 底部输入（色板对齐 docs/sto-design.md）。
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Bot, Cpu, Repeat2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAgentsStore } from '@/stores/agents';
@@ -37,6 +37,7 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
 
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const agents = useAgentsStore((s) => s.agents);
+  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
   const abortRun = useChatStore((s) => s.abortRun);
@@ -46,9 +47,13 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
     () => agents.find((agent) => agent.id === currentAgentId),
     [agents, currentAgentId],
   );
-  const currentEngineType = currentAgent?.engineType ?? 'openclaw';
-  const composerRequiresGateway = currentEngineType !== 'claude';
+  const currentEngineType = currentAgent?.engineType;
+  const composerRequiresGateway = currentEngineType === 'openclaw';
   const composerDisabled = composerRequiresGateway && !isGatewayRunning;
+
+  useEffect(() => {
+    void fetchAgents();
+  }, [fetchAgents]);
 
   const gatewayLine = useMemo(() => {
     const port = gatewayStatus.port ?? 18789;

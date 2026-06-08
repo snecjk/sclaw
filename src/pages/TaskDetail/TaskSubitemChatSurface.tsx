@@ -499,10 +499,10 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
           onSend={onSend}
           onStop={() => void abortRun()}
           onQueue={handleQueue}
-          disabled={(currentAgent?.engineType ?? 'openclaw') !== 'claude' && !isGatewayRunning}
+          disabled={currentAgent?.engineType === 'openclaw' && !isGatewayRunning}
           sending={sending}
           isEmpty={isEmpty}
-          engineType={currentAgent?.engineType ?? 'openclaw'}
+          engineType={currentAgent?.engineType}
         />
       </div>
 

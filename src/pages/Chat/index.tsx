@@ -76,8 +76,8 @@ export function Chat() {
     () => agents.find((agent) => agent.id === currentAgentId),
     [agents, currentAgentId],
   );
-  const currentEngineType = currentAgent?.engineType ?? currentSession?.engineType ?? 'openclaw';
-  const composerRequiresGateway = currentEngineType !== 'claude';
+  const currentEngineType = currentAgent?.engineType ?? currentSession?.engineType;
+  const composerRequiresGateway = currentEngineType === 'openclaw';
   const composerDisabled = composerRequiresGateway && !isGatewayRunning;
   const composerStatusText = currentEngineType === 'claude'
     ? 'Claude Agent 直连可用，不受 OpenClaw 网关启动状态限制'

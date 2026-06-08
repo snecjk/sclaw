@@ -35,8 +35,8 @@ export function HomeAssistant({
     () => agents.find((agent) => agent.id === currentAgentId),
     [agents, currentAgentId],
   );
-  const currentEngineType = currentAgent?.engineType ?? 'openclaw';
-  const composerDisabled = currentEngineType !== 'claude' && !isGatewayRunning;
+  const currentEngineType = currentAgent?.engineType;
+  const composerDisabled = currentEngineType === 'openclaw' && !isGatewayRunning;
 
   useEffect(() => {
     void fetchAgents();

@@ -174,8 +174,8 @@ export function ChatToolbar() {
     }
   };
 
-  const modelSelectDisabled = !isGatewayRunning || sending || modelOptions.length === 0;
-  const engineSelectDisabled = !isGatewayRunning || sending || !currentAgentId;
+  const modelSelectDisabled = (currentEngineType === 'openclaw' && !isGatewayRunning) || sending || modelOptions.length === 0;
+  const engineSelectDisabled = sending || !currentAgentId;
 
   return (
     <div className="flex w-full items-center justify-between gap-3">
