@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { useSkillsStore } from '@/stores/skills';
 import type { ThinkingTimelineItem } from './message-utils';
 
 type StreamingTool = {
@@ -57,6 +58,14 @@ function buildCollapsedSummary(
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
+function resolveSkillDisplayName(name: string, skills: { id: string; slug?: string; name: string; title?: string }[]): string {
+  if (!name) return name;
+  const skill = skills.find(
+    (s) => s.id === name || s.slug === name || s.id.toLowerCase() === name.toLowerCase() || s.slug?.toLowerCase() === name.toLowerCase(),
+  );
+  return skill?.title || skill?.name || name;
+}
+
 export function ThinkingProcessPanel({
   timeline,
   isStreaming = false,
@@ -67,6 +76,8 @@ export function ThinkingProcessPanel({
 }: ThinkingProcessPanelProps) {
   const { t } = useTranslation('chat');
   const [expanded, setExpanded] = useState(isStreaming);
+  const skills = useSkillsStore((state) => state.skills);
+  const fetchSkills = useSkillsStore((state) => state.fetchSkills);
 
   useEffect(() => {
     if (isStreaming || isConnecting || isProcessing) {
@@ -77,6 +88,12 @@ export function ThinkingProcessPanel({
       setExpanded(false);
     }
   }, [isStreaming, isConnecting, isProcessing, timeline.length]);
+
+  useEffect(() => {
+    if (skills.length === 0) {
+      void fetchSkills();
+    }
+  }, [skills.length, fetchSkills]);
 
   const mergedTimeline = useMemo(() => {
     if (streamingTools.length === 0) return timeline;
@@ -169,7 +186,7 @@ export function ThinkingProcessPanel({
               <ToolCallRow
                 key={key}
                 index={item.index}
-                name={item.name}
+                name={resolveSkillDisplayName(item.name, skills)}
                 input={item.input}
                 status={streamingStatusByKey.get(key)}
               />
@@ -190,7 +207,7 @@ export function ThinkingProcessPanel({
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin opacity-70" aria-hidden />
               <span>
                 {t('streaming.generatingWithTool', {
-                  tool: runningTool.summary || runningTool.name,
+                  tool: runningTool.summary || resolveSkillDisplayName(runningTool.name, skills),
                 })}
               </span>
             </div>

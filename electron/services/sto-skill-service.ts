@@ -419,6 +419,7 @@ export class StoSkillService {
   listInstalled(): Array<{
     slug: string;
     name: string;
+    title?: string;
     version: string;
     source: string;
     baseDir: string;
@@ -428,6 +429,7 @@ export class StoSkillService {
     const results: Array<{
       slug: string;
       name: string;
+      title?: string;
       version: string;
       source: string;
       baseDir: string;
@@ -471,20 +473,19 @@ export class StoSkillService {
         seen.add(entry.name);
 
         const lockInfo = lockSkills[entry.name];
-        // Only include STO-marketplace sourced skills
-        if (lockInfo?.source === 'sto-marketplace') {
-          // Prefer name from lock.json (saved from search results), fallback to file scan
-          const name = lockInfo.name || this.readSkillName(skillDir) || entry.name;
-          results.push({
-            slug: entry.name,
-            name,
-            version: lockInfo.version || 'unknown',
-            source: 'sto-marketplace',
-            baseDir: skillDir,
-            description: lockInfo.description,
-            author: lockInfo.author,
-          });
-        }
+        // Include all skills with a valid SKILL.md manifest
+        const name = lockInfo?.name || this.readSkillName(skillDir) || entry.name;
+        const title = this.readSkillTitle(skillDir) || undefined;
+        results.push({
+          slug: entry.name,
+          name,
+          title,
+          version: lockInfo?.version || this.readSkillMdVersion(skillDir) || 'unknown',
+          source: lockInfo?.source || 'local',
+          baseDir: skillDir,
+          description: lockInfo?.description,
+          author: lockInfo?.author,
+        });
       }
     };
 
@@ -625,6 +626,20 @@ export class StoSkillService {
       // ignore
     }
 
+    return null;
+  }
+
+  /**
+   * Read the human-readable skill title from SKILL.md frontmatter.
+   * Priority: SKILL.md frontmatter title → null
+   */
+  private readSkillTitle(skillDir: string): string | null {
+    try {
+      const fm = readSkillMdFrontmatter(skillDir);
+      if (fm?.title) return fm.title;
+    } catch {
+      // ignore
+    }
     return null;
   }
 
