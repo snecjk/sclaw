@@ -8,6 +8,7 @@ import { resolveStoBaseUrl } from '../../utils/sto-domain';
 import { listAgentsSnapshot } from '../../utils/agent-config';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { getAdapterForSession, listEngineSessions } from '../../engines/manager';
+import type { AgentEngineType } from '../../engines/types';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -17,6 +18,9 @@ export async function handleGatewayRoutes(
   url: URL,
   ctx: HostApiContext,
 ): Promise<boolean> {
+  const parseEngineType = (value: string | null | undefined): AgentEngineType | undefined => (
+    value === 'claude' || value === 'openclaw' ? value : undefined
+  );
   const BIZ_AGENT_TEMP_UPLOAD_PATH = '/agent/v1/biz-agent/attachments/upload';
   const getAgentIdFromSessionKey = (sessionKey: string): string => {
     if (!sessionKey.startsWith('agent:')) return 'main';
@@ -141,7 +145,7 @@ export async function handleGatewayRoutes(
         sendJson(res, 400, { success: false, error: 'sessionKey is required' });
         return true;
       }
-      const adapter = await getAdapterForSession(sessionKey);
+      const adapter = await getAdapterForSession(sessionKey, parseEngineType(url.searchParams.get('engineType')));
       const result = await adapter.getHistory(
         { gatewayManager: ctx.gatewayManager },
         { sessionKey, limit: Number.isFinite(limit) && limit > 0 ? limit : 1000 },
@@ -164,11 +168,17 @@ export async function handleGatewayRoutes(
         message: string;
         deliver?: boolean;
         idempotencyKey: string;
+        engineType?: AgentEngineType;
       }>(req);
-      const adapter = await getAdapterForSession(body.sessionKey);
+      const adapter = await getAdapterForSession(body.sessionKey, parseEngineType(body.engineType));
       const result = await adapter.sendMessage(
         { gatewayManager: ctx.gatewayManager },
-        body,
+        {
+          sessionKey: body.sessionKey,
+          message: body.message,
+          deliver: body.deliver,
+          idempotencyKey: body.idempotencyKey,
+        },
       );
       if (!result.success) {
         sendJson(res, 500, result);
@@ -183,11 +193,11 @@ export async function handleGatewayRoutes(
 
   if (url.pathname === '/api/chat/abort' && req.method === 'POST') {
     try {
-      const body = await parseJsonBody<{ sessionKey: string }>(req);
-      const adapter = await getAdapterForSession(body.sessionKey);
+      const body = await parseJsonBody<{ sessionKey: string; engineType?: AgentEngineType }>(req);
+      const adapter = await getAdapterForSession(body.sessionKey, parseEngineType(body.engineType));
       const result = await adapter.abortRun(
         { gatewayManager: ctx.gatewayManager },
-        body,
+        { sessionKey: body.sessionKey },
       );
       if (!result.success) {
         sendJson(res, 500, result);
@@ -207,6 +217,7 @@ export async function handleGatewayRoutes(
         message: string;
         deliver?: boolean;
         idempotencyKey: string;
+        engineType?: AgentEngineType;
         media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
       }>(req);
       const VISION_MIME_TYPES = new Set([
@@ -220,11 +231,17 @@ export async function handleGatewayRoutes(
       const imageAttachments: Array<{ content: string; mimeType: string; fileName: string }> = [];
       const fileReferences: string[] = [];
       const transformByOSS = await shouldTransformAttachmentsByOSS(body.sessionKey);
-      const adapter = await getAdapterForSession(body.sessionKey);
+      const adapter = await getAdapterForSession(body.sessionKey, parseEngineType(body.engineType));
       if (adapter.type !== 'openclaw') {
         const result = await adapter.sendMessageWithMedia(
           { gatewayManager: ctx.gatewayManager },
-          body,
+          {
+            sessionKey: body.sessionKey,
+            message: body.message,
+            deliver: body.deliver,
+            idempotencyKey: body.idempotencyKey,
+            media: body.media,
+          },
         );
         if (!result.success) {
           sendJson(res, 500, result);

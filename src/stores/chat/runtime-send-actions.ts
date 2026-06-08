@@ -39,6 +39,10 @@ function ensureSessionEntry(sessions: ChatSession[], sessionKey: string): ChatSe
   return [...sessions, { key: sessionKey }];
 }
 
+function getSessionEngineType(sessions: ChatSession[], sessionKey: string): ChatSession['engineType'] | undefined {
+  return sessions.find((session) => session.key === sessionKey)?.engineType;
+}
+
 type TokenQuotaCheckResult = {
   success: boolean;
   data?: {
@@ -118,6 +122,7 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       }
 
       const currentSessionKey = targetSessionKey;
+      const currentSessionEngineType = getSessionEngineType(get().sessions, currentSessionKey);
 
       const quotaCheck = await checkDailyTokenQuota();
       if (quotaCheck) {
@@ -249,6 +254,7 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
                 message: trimmed || 'Process the attached file(s).',
                 deliver: false,
                 idempotencyKey,
+                engineType: currentSessionEngineType,
                 media: attachments.map((a) => ({
                   filePath: a.stagedPath,
                   mimeType: a.mimeType,
@@ -267,6 +273,7 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
                 message: trimmed,
                 deliver: false,
                 idempotencyKey,
+                engineType: currentSessionEngineType,
               }),
             },
           ) as { success: boolean; result?: { runId?: string }; error?: string };
@@ -297,7 +304,10 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       try {
         await hostApiFetch<{ success?: boolean; error?: string }>('/api/chat/abort', {
           method: 'POST',
-          body: JSON.stringify({ sessionKey: currentSessionKey }),
+          body: JSON.stringify({
+            sessionKey: currentSessionKey,
+            engineType: getSessionEngineType(get().sessions, currentSessionKey),
+          }),
         });
       } catch (err) {
         set({ error: String(err) });

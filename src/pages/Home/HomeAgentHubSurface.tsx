@@ -4,6 +4,7 @@
 import { useMemo } from 'react';
 import { Bot, Cpu, Repeat2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
@@ -34,11 +35,20 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
   const { t } = useTranslation('home');
   const showConversation = useHomeConversationActive();
 
+  const currentAgentId = useChatStore((s) => s.currentAgentId);
+  const agents = useAgentsStore((s) => s.agents);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
   const abortRun = useChatStore((s) => s.abortRun);
   const sending = useChatStore((s) => s.sending);
   const error = useChatStore((s) => s.error);
+  const currentAgent = useMemo(
+    () => agents.find((agent) => agent.id === currentAgentId),
+    [agents, currentAgentId],
+  );
+  const currentEngineType = currentAgent?.engineType ?? 'openclaw';
+  const composerRequiresGateway = currentEngineType !== 'claude';
+  const composerDisabled = composerRequiresGateway && !isGatewayRunning;
 
   const gatewayLine = useMemo(() => {
     const port = gatewayStatus.port ?? 18789;
@@ -139,17 +149,20 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
               onSend={handleHubSend}
               onStop={() => void abortRun()}
               onQueue={handleHubQueue}
-              disabled={!isGatewayRunning}
+              disabled={composerDisabled}
               sending={sending}
               seedText={seedText}
+              engineType={currentEngineType}
             />
             {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
           </section>
           <div className={cn('mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-t pt-4 text-xs', BORDER_DEFAULT, TEXT_SECONDARY)}>
-            <span className="flex items-center gap-2">
-              <span className={cn('h-2 w-2 shrink-0 rounded-full', isGatewayRunning ? DOT_SUCCESS : 'bg-[#FAAD14]')} aria-hidden />
-              {gatewayLine}
-            </span>
+            {currentEngineType === 'openclaw' ? (
+              <span className="flex items-center gap-2">
+                <span className={cn('h-2 w-2 shrink-0 rounded-full', isGatewayRunning ? DOT_SUCCESS : 'bg-[#FAAD14]')} aria-hidden />
+                {gatewayLine}
+              </span>
+            ) : <span />}
             <span className="text-center">{t('assistant.footerDisclaimer')}</span>
             <span className="justify-self-end tabular-nums text-right text-[#4E5969] dark:text-muted-foreground">{t('agentHub.usageHint')}</span>
           </div>

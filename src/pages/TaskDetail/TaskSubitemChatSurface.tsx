@@ -65,7 +65,13 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const isGatewayRunning = gatewayStatus.state === 'running';
 
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
+  const agents = useAgentsStore((s) => s.agents);
+  const currentAgentId = useChatStore((s) => s.currentAgentId);
   const { handleSend, handleQueue } = useStoTaskSubitemChatSend();
+  const currentAgent = useMemo(
+    () => agents.find((agent) => agent.id === currentAgentId),
+    [agents, currentAgentId],
+  );
 
   // const queue = useMessageQueueStore((s) => s.getQueue(sessionKey));
   // const queueRemove = useCallback((id: string) => useMessageQueueStore.getState().remove(sessionKey, id), [sessionKey]);
@@ -493,9 +499,10 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
           onSend={onSend}
           onStop={() => void abortRun()}
           onQueue={handleQueue}
-          disabled={!isGatewayRunning}
+          disabled={(currentAgent?.engineType ?? 'openclaw') !== 'claude' && !isGatewayRunning}
           sending={sending}
           isEmpty={isEmpty}
+          engineType={currentAgent?.engineType ?? 'openclaw'}
         />
       </div>
 

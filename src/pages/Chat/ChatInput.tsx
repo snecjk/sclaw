@@ -39,6 +39,9 @@ interface ChatInputProps {
   disabled?: boolean;
   sending?: boolean;
   isEmpty?: boolean;
+  engineType?: AgentSummary['engineType'];
+  statusText?: string;
+  statusTone?: 'ready' | 'warning';
   /** Full-width embed (e.g. home agent hub): no page gutters, hide gateway/quota footer row. */
   variant?: 'default' | 'embedded';
   /** One-time seed into the textarea (e.g. task subitem default prompt). */
@@ -114,6 +117,9 @@ export function ChatInput({
   disabled = false,
   sending = false,
   isEmpty: _isEmpty = false,
+  engineType = 'openclaw',
+  statusText,
+  statusTone = 'warning',
   variant = 'default',
   seedText,
   className,
@@ -144,7 +150,7 @@ export function ChatInput({
     [agents, targetAgentId],
   );
   const showAgentPicker = mentionableAgents.length > 0;
-  const composerPlaceholder = disabled
+  const composerPlaceholder = disabled && engineType === 'openclaw'
     ? t('composer.gatewayDisconnectedPlaceholder')
     : t('composer.messagePlaceholder', { agent: currentAgentName });
   const dailyTokenQuotaText = useMemo(() => {
@@ -624,18 +630,25 @@ export function ChatInput({
         </div>
         {!isEmbedded ? (
           <div className="mt-2.5 flex items-center justify-between gap-2 px-4 text-[11px] text-muted-foreground/60">
-            <div className="flex items-center gap-1.5">
-              <div className={cn("w-1.5 h-1.5 rounded-full", gatewayStatus.state === 'running' ? "bg-green-500/80" : "bg-red-500/80")} />
-              <span>
-                {t('composer.gatewayStatus', {
-                  state: gatewayStatus.state === 'running'
-                    ? t('composer.gatewayConnected')
-                    : gatewayStatus.state,
-                  port: gatewayStatus.port,
-                  pid: gatewayStatus.pid ? `| pid: ${gatewayStatus.pid}` : '',
-                })}
-              </span>
-            </div>
+            {engineType === 'openclaw' ? (
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={cn(
+                    'h-1.5 w-1.5 rounded-full',
+                    statusTone === 'ready' ? 'bg-green-500/80' : 'bg-red-500/80',
+                  )}
+                />
+                <span>
+                  {statusText ?? t('composer.gatewayStatus', {
+                    state: gatewayStatus.state === 'running'
+                      ? t('composer.gatewayConnected')
+                      : gatewayStatus.state,
+                    port: gatewayStatus.port,
+                    pid: gatewayStatus.pid ? `| pid: ${gatewayStatus.pid}` : '',
+                  })}
+                </span>
+              </div>
+            ) : <div />}
             <div className="flex items-center gap-3">
               {dailyTokenQuotaText ? (
                 <span

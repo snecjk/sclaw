@@ -34,6 +34,8 @@ export function Chat() {
 
   const messages = useChatStore((s) => s.messages);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const currentAgentId = useChatStore((s) => s.currentAgentId);
+  const sessions = useChatStore((s) => s.sessions);
   const loading = useChatStore((s) => s.loading);
   const sending = useChatStore((s) => s.sending);
   const error = useChatStore((s) => s.error);
@@ -45,6 +47,7 @@ export function Chat() {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
+  const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
@@ -65,6 +68,27 @@ export function Chat() {
   const previewPanelRef = useRef<HTMLDivElement>(null);
   const minLoading = useMinLoading(loading && messages.length > 0);
   const { contentRef, scrollRef, scrollToBottom, stopScroll } = useStickToBottomInstant(currentSessionKey);
+  const currentSession = useMemo(
+    () => sessions.find((session) => session.key === currentSessionKey),
+    [sessions, currentSessionKey],
+  );
+  const currentAgent = useMemo(
+    () => agents.find((agent) => agent.id === currentAgentId),
+    [agents, currentAgentId],
+  );
+  const currentEngineType = currentAgent?.engineType ?? currentSession?.engineType ?? 'openclaw';
+  const composerRequiresGateway = currentEngineType !== 'claude';
+  const composerDisabled = composerRequiresGateway && !isGatewayRunning;
+  const composerStatusText = currentEngineType === 'claude'
+    ? 'Claude Agent 直连可用，不受 OpenClaw 网关启动状态限制'
+    : t('composer.gatewayStatus', {
+        state: gatewayStatus.state === 'running'
+          ? t('composer.gatewayConnected')
+          : gatewayStatus.state,
+        port: gatewayStatus.port,
+        pid: gatewayStatus.pid ? `| pid: ${gatewayStatus.pid}` : '',
+      });
+  const composerStatusTone = currentEngineType === 'claude' || isGatewayRunning ? 'ready' : 'warning';
 
   // Load data when gateway is running.
   // When the store already holds messages for this session (i.e. the user
@@ -445,9 +469,12 @@ export function Chat() {
         onSend={handleSend}
         onStop={abortRun}
         onQueue={handleQueue}
-        disabled={!isGatewayRunning}
+        disabled={composerDisabled}
         sending={sending}
         isEmpty={isEmpty}
+        engineType={currentEngineType}
+        statusText={composerStatusText}
+        statusTone={composerStatusTone}
       />
 
       {/* Transparent loading overlay */}

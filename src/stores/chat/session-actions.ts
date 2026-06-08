@@ -1,4 +1,5 @@
 import { hostApiFetch } from '@/lib/host-api';
+import { useAgentsStore } from '@/stores/agents';
 import { CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
 import {
   getCanonicalPrefixFromSessions,
@@ -27,6 +28,29 @@ function parseSessionUpdatedAtMs(value: unknown): number | undefined {
     }
   }
   return undefined;
+}
+
+async function ensureSessionEngineSelected(session: ChatSession | undefined): Promise<void> {
+  if (!session?.key?.startsWith('agent:')) return;
+  const targetEngine = session.engineType;
+  if (!targetEngine) return;
+
+  const agentId = getAgentIdFromSessionKey(session.key);
+  const agentsStore = useAgentsStore.getState();
+  let currentAgent = agentsStore.agents.find((agent) => agent.id === agentId);
+  if (!currentAgent) {
+    await agentsStore.fetchAgents();
+    currentAgent = useAgentsStore.getState().agents.find((agent) => agent.id === agentId);
+  }
+
+  const currentEngine = currentAgent?.engineType ?? 'openclaw';
+  if (currentEngine === targetEngine) return;
+
+  await hostApiFetch(`/api/agents/${encodeURIComponent(agentId)}/engine`, {
+    method: 'PUT',
+    body: JSON.stringify({ engineType: targetEngine }),
+  });
+  await useAgentsStore.getState().fetchAgents();
 }
 
 export function createSessionActions(
@@ -205,6 +229,8 @@ export function createSessionActions(
           }
         }
 
+        const nextSession = sessionsWithCurrent.find((session) => session.key === nextSessionKey);
+
         set((state) => ({
           sessions: sessionsWithCurrent,
           currentSessionKey: nextSessionKey,
@@ -216,7 +242,8 @@ export function createSessionActions(
         }));
 
         if (currentSessionKey !== nextSessionKey) {
-          get().loadHistory();
+          await ensureSessionEngineSelected(nextSession);
+          await get().loadHistory();
         }
 
         // Background: fetch first user message for every non-main session to populate labels upfront.
@@ -259,6 +286,7 @@ export function createSessionActions(
 
     switchSession: (key: string) => {
       const { currentSessionKey, messages, sessionLastActivity, sessionLabels } = get();
+      const targetSession = get().sessions.find((session) => session.key === key);
       // 仅将没有任何历史记录且无活动时间的会话视为空会话。
       // 单纯依赖 messages.length 是不可靠的，因为 switchSession 会在真正调用 loadHistory 前抢先清空当前 messages，
       // 造成竞争条件，使得带有真实历史的会话被判定为空并从侧边栏移除。
@@ -288,7 +316,10 @@ export function createSessionActions(
           ),
         } : {}),
       }));
-      get().loadHistory();
+      void (async () => {
+        await ensureSessionEngineSelected(targetSession);
+        await get().loadHistory();
+      })();
     },
 
     // ── Delete session ──
@@ -343,7 +374,8 @@ export function createSessionActions(
           currentAgentId: getAgentIdFromSessionKey(next?.key ?? DEFAULT_SESSION_KEY),
         }));
         if (next) {
-          get().loadHistory();
+          await ensureSessionEngineSelected(next);
+          await get().loadHistory();
         }
       } else {
         set((s) => ({

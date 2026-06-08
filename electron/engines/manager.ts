@@ -19,8 +19,11 @@ export function getAdapter(engineType: AgentEngineType): EngineAdapter {
   return engineType === 'claude' ? claudeAdapter : openClawAdapter;
 }
 
-export async function getAdapterForSession(sessionKey: string): Promise<EngineAdapter> {
-  const engineType = await resolveAgentEngineType(getAgentIdFromSessionKey(sessionKey));
+export async function getAdapterForSession(
+  sessionKey: string,
+  preferredEngineType?: AgentEngineType,
+): Promise<EngineAdapter> {
+  const engineType = preferredEngineType ?? await resolveAgentEngineType(getAgentIdFromSessionKey(sessionKey));
   return getAdapter(engineType);
 }
 

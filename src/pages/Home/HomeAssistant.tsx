@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
@@ -23,12 +23,20 @@ export function HomeAssistant({
 }) {
   const { t } = useTranslation('home');
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
+  const agents = useAgentsStore((s) => s.agents);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
+  const currentAgentId = useChatStore((s) => s.currentAgentId);
   const sending = useChatStore((s) => s.sending);
   const error = useChatStore((s) => s.error);
   const abortRun = useChatStore((s) => s.abortRun);
   const { handleHubSend, handleHubQueue } = useHomeChatEntrySend();
+  const currentAgent = useMemo(
+    () => agents.find((agent) => agent.id === currentAgentId),
+    [agents, currentAgentId],
+  );
+  const currentEngineType = currentAgent?.engineType ?? 'openclaw';
+  const composerDisabled = currentEngineType !== 'claude' && !isGatewayRunning;
 
   useEffect(() => {
     void fetchAgents();
@@ -42,9 +50,10 @@ export function HomeAssistant({
           onSend={onSend || handleHubSend}
           onStop={() => void abortRun()}
           onQueue={handleHubQueue}
-          disabled={!isGatewayRunning}
+          disabled={composerDisabled}
           sending={sending}
           seedText={seedText}
+          engineType={currentEngineType}
         />
         {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
       </section>

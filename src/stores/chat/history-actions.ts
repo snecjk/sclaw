@@ -52,7 +52,8 @@ export function createHistoryActions(
 ): Pick<SessionHistoryActions, 'loadHistory'> {
   return {
     loadHistory: async (quiet = false) => {
-      const { currentSessionKey } = get();
+      const { currentSessionKey, sessions } = get();
+      const currentSession = sessions.find((session) => session.key === currentSessionKey);
       if (!quiet) set({ loading: true, error: null });
 
       const applyLoadedMessages = (rawMessages: RawMessage[], thinkingLevel: string | null) => {
@@ -168,7 +169,10 @@ export function createHistoryActions(
           success?: boolean;
           result?: Record<string, unknown>;
           error?: string;
-        }>(`/api/chat/history?sessionKey=${encodeURIComponent(currentSessionKey)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`);
+        }>(
+          `/api/chat/history?sessionKey=${encodeURIComponent(currentSessionKey)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`
+          + (currentSession?.engineType ? `&engineType=${encodeURIComponent(currentSession.engineType)}` : ''),
+        );
 
         if (result.success === false || !result.result) {
           throw new Error(result.error || 'Gateway RPC failed: chat.history');

@@ -50,6 +50,33 @@ function toNumberIfFinite(value: unknown): number | undefined {
   return value;
 }
 
+function getSessionEngineType(sessions: ChatSession[], sessionKey: string): ChatSession['engineType'] | undefined {
+  return sessions.find((session) => session.key === sessionKey)?.engineType;
+}
+
+async function ensureSessionEngineSelected(session: ChatSession | undefined): Promise<void> {
+  if (!session?.key?.startsWith('agent:')) return;
+  const targetEngine = session.engineType;
+  if (!targetEngine) return;
+
+  const agentId = getAgentIdFromSessionKey(session.key);
+  const agentsStore = useAgentsStore.getState();
+  let currentAgent = agentsStore.agents.find((agent) => agent.id === agentId);
+  if (!currentAgent) {
+    await agentsStore.fetchAgents();
+    currentAgent = useAgentsStore.getState().agents.find((agent) => agent.id === agentId);
+  }
+
+  const currentEngine = currentAgent?.engineType ?? 'openclaw';
+  if (currentEngine === targetEngine) return;
+
+  await hostApiFetch(`/api/agents/${encodeURIComponent(agentId)}/engine`, {
+    method: 'PUT',
+    body: JSON.stringify({ engineType: targetEngine }),
+  });
+  await useAgentsStore.getState().fetchAgents();
+}
+
 // Timer for fallback history polling during active sends.
 // If no streaming events arrive within a few seconds, we periodically
 // poll chat.history to surface intermediate tool-call turns.
@@ -1117,6 +1144,7 @@ export const useChatStore = create<ChatState>()(
           const rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
           const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
             const key = String(s.key || '');
+            const engineType: ChatSession['engineType'] = s.engineType === 'claude' ? 'claude' : 'openclaw';
             return {
               key,
               label: s.label ? String(s.label) : undefined,
@@ -1127,6 +1155,7 @@ export const useChatStore = create<ChatState>()(
               thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
               model: s.model ? String(s.model) : undefined,
               updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
+              engineType,
             };
           }).filter((s: ChatSession) => s.key);
 
@@ -1188,7 +1217,11 @@ export const useChatStore = create<ChatState>()(
           }));
 
           if (currentSessionKey !== nextSessionKey) {
-            void get().loadHistory();
+            const nextSession = sessionsWithCurrent.find((session) => session.key === nextSessionKey);
+            void (async () => {
+              await ensureSessionEngineSelected(nextSession);
+              await get().loadHistory();
+            })();
           }
 
           // Background: fetch first user message for every non-main session to populate labels upfront.
@@ -1201,7 +1234,10 @@ export const useChatStore = create<ChatState>()(
                   const r = await hostApiFetch<{
                     success?: boolean;
                     result?: { messages?: RawMessage[]; thinkingLevel?: string | null };
-                  }>(`/api/chat/history?sessionKey=${encodeURIComponent(session.key)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`);
+                  }>(
+                    `/api/chat/history?sessionKey=${encodeURIComponent(session.key)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`
+                    + (session.engineType ? `&engineType=${encodeURIComponent(session.engineType)}` : ''),
+                  );
                   const msgs = Array.isArray(r.result?.messages) ? r.result.messages as RawMessage[] : [];
                   const firstUser = msgs.find((m) => m.role === 'user');
                   const lastMsg = msgs[msgs.length - 1];
@@ -1243,9 +1279,16 @@ export const useChatStore = create<ChatState>()(
   // ── Switch session ──
 
   switchSession: (key: string) => {
-    if (key === get().currentSessionKey) return;
+    if (key === get().currentSessionKey) {
+      void get().loadHistory();
+      return;
+    }
+    const targetSession = get().sessions.find((session) => session.key === key);
     set((s) => buildSessionSwitchPatch(s, key));
-    get().loadHistory();
+    void (async () => {
+      await ensureSessionEngineSelected(targetSession);
+      await get().loadHistory();
+    })();
   },
 
   switchToAgentMainSession: (agentId: string) => {
@@ -1305,7 +1348,10 @@ export const useChatStore = create<ChatState>()(
         currentAgentId: getAgentIdFromSessionKey(next?.key ?? DEFAULT_SESSION_KEY),
       }));
       if (next) {
-        get().loadHistory();
+        void (async () => {
+          await ensureSessionEngineSelected(next);
+          await get().loadHistory();
+        })();
       }
     } else {
       set((s) => ({
@@ -1391,6 +1437,7 @@ export const useChatStore = create<ChatState>()(
 
   loadHistory: async (quiet = false) => {
     const targetSessionKey = get().currentSessionKey;
+    const targetSession = get().sessions.find((session) => session.key === targetSessionKey);
     const existingLoad = _historyLoadInFlight.get(targetSessionKey);
     if (existingLoad) {
       await existingLoad;
@@ -1566,7 +1613,10 @@ export const useChatStore = create<ChatState>()(
         const data = await hostApiFetch<{
           success?: boolean;
           result?: { messages?: RawMessage[]; thinkingLevel?: string | null; isRunning?: boolean };
-        }>(`/api/chat/history?sessionKey=${encodeURIComponent(targetSessionKey)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`);
+        }>(
+          `/api/chat/history?sessionKey=${encodeURIComponent(targetSessionKey)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`
+          + (targetSession?.engineType ? `&engineType=${encodeURIComponent(targetSession.engineType)}` : ''),
+        );
         if (get().currentSessionKey !== targetSessionKey) return;
 
         const allMessages: RawMessage[] = Array.isArray(data.result?.messages)
@@ -1639,6 +1689,7 @@ export const useChatStore = create<ChatState>()(
     }
 
     const currentSessionKey = targetSessionKey;
+    const currentSessionEngineType = getSessionEngineType(get().sessions, currentSessionKey);
 
     const quotaCheck = await checkDailyTokenQuota();
     if (quotaCheck) {
@@ -1781,6 +1832,7 @@ export const useChatStore = create<ChatState>()(
               message: trimmed || 'Process the attached file(s).',
               deliver: false,
               idempotencyKey,
+              engineType: currentSessionEngineType,
               media: attachments.map((a) => ({
                 filePath: a.stagedPath,
                 mimeType: a.mimeType,
@@ -1799,6 +1851,7 @@ export const useChatStore = create<ChatState>()(
               message: trimmed,
               deliver: false,
               idempotencyKey,
+              engineType: currentSessionEngineType,
             }),
           },
         );
@@ -1829,7 +1882,10 @@ export const useChatStore = create<ChatState>()(
     try {
       await hostApiFetch<{ success?: boolean; error?: string }>('/api/chat/abort', {
         method: 'POST',
-        body: JSON.stringify({ sessionKey: currentSessionKey }),
+        body: JSON.stringify({
+          sessionKey: currentSessionKey,
+          engineType: getSessionEngineType(get().sessions, currentSessionKey),
+        }),
       });
     } catch (err) {
       set({ error: String(err) });

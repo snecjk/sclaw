@@ -59,7 +59,12 @@ export const openClawAdapter: EngineAdapter = {
 
   async sendMessage(ctx: EngineAdapterContext, params) {
     try {
-      const result = await ctx.gatewayManager.rpc<{ runId?: string }>('chat.send', params, 120000);
+      const result = await ctx.gatewayManager.rpc<{ runId?: string }>('chat.send', {
+        sessionKey: params.sessionKey,
+        message: params.message,
+        deliver: params.deliver,
+        idempotencyKey: params.idempotencyKey,
+      }, 120000);
       return { success: true, result };
     } catch (error) {
       return { success: false, error: String(error) };
