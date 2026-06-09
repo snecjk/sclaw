@@ -66,6 +66,38 @@ function resolveSkillDisplayName(name: string, skills: { id: string; slug?: stri
   return skill?.title || skill?.name || name;
 }
 
+function resolveSkillNamesInThinking(
+  text: string,
+  skills: { id: string; slug?: string; name: string; title?: string }[],
+): string {
+  if (!text || skills.length === 0) return text;
+
+  // Build a map of name/slug/id -> title, longest keys first to avoid partial matches
+  const replacements = new Map<string, string>();
+  for (const s of skills) {
+    const title = s.title?.trim();
+    if (!title) continue;
+    if (s.name && s.name !== title) replacements.set(s.name, title);
+    if (s.slug && s.slug !== title) replacements.set(s.slug, title);
+    if (s.id && s.id !== title) replacements.set(s.id, title);
+  }
+
+  const sortedKeys = Array.from(replacements.keys()).sort((a, b) => b.length - a.length);
+  if (sortedKeys.length === 0) return text;
+
+  // Escape regex special chars and match only when surrounded by word boundaries
+  // (start/end of string, whitespace, or punctuation). Skill names often contain
+  // hyphens, so we treat hyphens as part of the word.
+  let result = text;
+  for (const key of sortedKeys) {
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Match key when not preceded/followed by [A-Za-z0-9_\-]
+    const regex = new RegExp(`(?<![A-Za-z0-9_\\-])${escaped}(?![A-Za-z0-9_\\-])`, 'g');
+    result = result.replace(regex, replacements.get(key)!);
+  }
+  return result;
+}
+
 export function ThinkingProcessPanel({
   timeline,
   isStreaming = false,
@@ -171,12 +203,13 @@ export function ThinkingProcessPanel({
         <div className="space-y-3 px-3 pb-3">
           {mergedTimeline.map((item, i) => {
             if (item.type === 'thinking') {
+              const thinkingContent = resolveSkillNamesInThinking(item.content, skills);
               return (
                 <div
                   key={`thinking-${i}`}
                   className="prose prose-sm max-w-none text-sm leading-relaxed text-foreground dark:prose-invert"
                 >
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinkingContent}</ReactMarkdown>
                 </div>
               );
             }
