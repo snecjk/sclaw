@@ -117,31 +117,27 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
   const [loadingSchema, setLoadingSchema] = useState(false);
 
   useEffect(() => {
-    if (Object.keys(config).length === 0 && context.source === 'workflow' && context.sourceId) {
-      setLoadingSchema(true);
-      import('@/stores/workflow-memory').then(({ getLatestWorkflow }) => {
-        import('@/stores/chat').then(({ useChatStore }) => {
-          const currentSessionKey = useChatStore.getState().currentSessionKey;
-          const latest = getLatestWorkflow(currentSessionKey);
-          if (latest && latest.templateId === context.sourceId) {
-            import('@/lib/workflow-api').then(({ getStartupSchema }) => {
-              getStartupSchema(context.sourceId).then(({ schema }) => {
-                setSchema(schema);
-              }).catch(() => {
-                setSchema(null);
-                setLoadingSchema(false);
-              });
-            });
-          } else {
-            setSchema(null);
-            setLoadingSchema(false);
-          }
-        });
-      }).catch(() => {
-        setSchema(null);
-        setLoadingSchema(false);
-      });
-    }
+    const needsSchema =
+      context.source === 'workflow'
+      && context.sourceId
+      && (Object.keys(config).length === 0 || !config.fields?.length);
+    if (!needsSchema) return;
+
+    let cancelled = false;
+    setLoadingSchema(true);
+    import('@/lib/workflow-api').then(({ getStartupSchema }) =>
+      getStartupSchema(context.sourceId).then(({ schema }) => {
+        if (!cancelled) setSchema(schema);
+      }),
+    ).catch(() => {
+      if (!cancelled) setSchema(null);
+    }).finally(() => {
+      if (!cancelled) setLoadingSchema(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [config, context.source, context.sourceId]);
 
   useEffect(() => {
@@ -154,8 +150,11 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
     }
   }, [schema, loadedConfig]);
 
-  // Only use effectiveConfig if it has fields, otherwise we're still loading
-  const hasValidConfig = Object.keys(config).length > 0 || loadedConfig !== null;
+  // Config with title/confirmLabel but zero fields (e.g. 合同审核) is still valid.
+  const hasValidConfig =
+    (config.fields && config.fields.length > 0)
+    || (config.title != null && config.confirmLabel != null)
+    || loadedConfig !== null;
   const effectiveConfig = hasValidConfig ? (loadedConfig || config) : null;
 
   // ALL hooks must be called unconditionally before any early returns

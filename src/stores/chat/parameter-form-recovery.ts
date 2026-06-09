@@ -6,6 +6,7 @@
 import { toast } from 'sonner';
 import { registerParameterFormHandler, hasParameterFormHandler } from '@/components/parameter-form/form-handlers';
 import { buildWorkflowFormConfig, buildStartupPreset, buildWorkflowValuesSummary } from '@/lib/workflow-form-utils';
+import { sessionHasWorkflowExecution } from '@/stores/workflow-memory';
 import type { WorkflowSchema } from '@/types/workflow';
 import type { ContentBlock, RawMessage } from './types';
 import type { ChatGet, ChatSet } from './store-api';
@@ -134,6 +135,7 @@ function registerWorkflowSubmitHandler(
 function findLastAssistantWithMarker(
   messages: RawMessage[],
   getMessageText: (content: unknown) => string,
+  sessionKey?: string,
 ): { index: number; message: RawMessage; templateId: string; schemaHash: string } | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
@@ -144,11 +146,90 @@ function findLastAssistantWithMarker(
       ? (m.content as ContentBlock[]).some((b) => b.type === 'parameter_form')
       : false;
     if (match && !hasFormBlock) {
-      return { index: i, message: m, templateId: match[1], schemaHash: match[2] };
+      const templateId = match[1];
+      if (sessionKey && sessionHasWorkflowExecution(sessionKey, templateId)) continue;
+      return { index: i, message: m, templateId, schemaHash: match[2] };
     }
-    break;
   }
   return null;
+}
+
+async function recoverFormForAssistantMarker(
+  marker: { index: number; message: RawMessage; templateId: string; schemaHash: string },
+  messages: RawMessage[],
+  options: {
+    sessionKey: string;
+    get: ChatGet;
+    getMessageText: (content: unknown) => string;
+    collectedInputs?: Record<string, unknown>;
+    templateName?: string;
+  },
+): Promise<RawMessage[]> {
+  const { sessionKey, get, getMessageText, collectedInputs = {}, templateName } = options;
+  const { getStartupSchema } = await import('@/lib/workflow-api');
+  const { getLatestWorkflow, getPendingWorkflowDraft } = await import('@/stores/workflow-memory');
+  const startup = await getStartupSchema(marker.templateId);
+  const draft = getPendingWorkflowDraft(sessionKey, marker.templateId);
+  const latest = getLatestWorkflow(sessionKey);
+  const resolvedName =
+    templateName
+    ?? draft?.templateName
+    ?? latest?.templateName
+    ?? marker.templateId;
+  const inputs = collectedInputs ?? draft?.collectedInputs ?? latest?.collectedInputs ?? {};
+
+  const formId = `workflow-form-${marker.templateId}-${Date.now()}`;
+  const formConfig = buildWorkflowFormConfig(startup.schema, '', inputs);
+
+  registerWorkflowSubmitHandler(formId, {
+    templateId: marker.templateId,
+    templateName: resolvedName,
+    schemaHash: startup.schemaHash,
+    schema: startup.schema,
+    get,
+  });
+
+  const recoveredMessages = [...messages];
+  recoveredMessages[marker.index] = {
+    ...marker.message,
+    content: injectFormBlock(
+      marker.message,
+      formId,
+      formConfig,
+      { source: 'workflow', sourceId: marker.templateId, schemaHash: startup.schemaHash },
+      getMessageText,
+    ),
+  };
+  return recoveredMessages;
+}
+
+/** Register submit handler when message only has a ParameterForm text marker. */
+export function ensureWorkflowParameterFormHandler(
+  formId: string,
+  templateId: string,
+  schemaHash: string,
+  get: ChatGet,
+): void {
+  if (hasParameterFormHandler(formId)) return;
+  void (async () => {
+    try {
+      const { getStartupSchema } = await import('@/lib/workflow-api');
+      const { getLatestWorkflow, getPendingWorkflowDraft } = await import('@/stores/workflow-memory');
+      const sessionKey = get().currentSessionKey;
+      const startup = await getStartupSchema(templateId);
+      const draft = getPendingWorkflowDraft(sessionKey, templateId);
+      const latest = getLatestWorkflow(sessionKey);
+      registerWorkflowSubmitHandler(formId, {
+        templateId,
+        templateName: draft?.templateName ?? latest?.templateName ?? templateId,
+        schemaHash,
+        schema: startup.schema,
+        get,
+      });
+    } catch (err) {
+      console.error('[parameter-form-recovery] ensure handler failed:', err);
+    }
+  })();
 }
 
 function injectFormBlock(
@@ -198,21 +279,17 @@ function recoverHandlerForExistingFormBlock(
     if (!target) return;
 
     try {
-      const { getLatestWorkflow, findWorkflowById } = await import('@/stores/workflow-memory');
-      let workflowRecord = findWorkflowById(target.formContext.sourceId);
-      if (!workflowRecord) {
-        const latest = getLatestWorkflow(sessionKey);
-        if (latest) {
-          workflowRecord = { sessionKey, record: latest };
-        }
-      }
-      if (!workflowRecord) return;
+      const templateId = target.formContext.sourceId;
+      if (sessionHasWorkflowExecution(sessionKey, templateId)) return;
 
+      const { getSessionWorkflows } = await import('@/stores/workflow-memory');
       const { getStartupSchema } = await import('@/lib/workflow-api');
-      const startup = await getStartupSchema(workflowRecord.record.templateId);
+      const sessionWorkflow = getSessionWorkflows(sessionKey).find((w) => w.templateId === templateId);
+      const templateName = sessionWorkflow?.templateName ?? templateId;
+      const startup = await getStartupSchema(templateId);
       registerWorkflowSubmitHandler(target.formId, {
-        templateId: workflowRecord.record.templateId,
-        templateName: workflowRecord.record.templateName,
+        templateId,
+        templateName,
         schemaHash: target.formContext.schemaHash,
         schema: startup.schema,
         get,
@@ -235,47 +312,20 @@ export function recoverParameterFormsOnHistoryLoad(
   let finalMessages = inputMessages;
   const { pendingWorkflow } = get();
 
-  const lastAssistantWithMarker = findLastAssistantWithMarker(finalMessages, getMessageText);
+  const lastAssistantWithMarker = findLastAssistantWithMarker(finalMessages, getMessageText, sessionKey);
 
   if (
     lastAssistantWithMarker
-    && (!pendingWorkflow || !pendingWorkflow.schema || pendingWorkflow.schema.fields.length === 0)
+    && (!pendingWorkflow || !pendingWorkflow.schema)
+    && !sessionHasWorkflowExecution(sessionKey, lastAssistantWithMarker.templateId)
   ) {
     void (async () => {
       try {
-        const { getLatestWorkflow } = await import('@/stores/workflow-memory');
-        const latest = getLatestWorkflow(sessionKey);
-        if (!latest) {
-          if (get().currentSessionKey === sessionKey) {
-            set({ loading: false });
-          }
-          return;
-        }
-
-        const { getStartupSchema } = await import('@/lib/workflow-api');
-        const startup = await getStartupSchema(latest.templateId);
-        const formId = `workflow-form-${latest.templateId}-${Date.now()}`;
-        const formConfig = buildWorkflowFormConfig(startup.schema, '', latest.collectedInputs || {});
-
-        registerWorkflowSubmitHandler(formId, {
-          templateId: latest.templateId,
-          templateName: latest.templateName,
-          schemaHash: startup.schemaHash,
-          schema: startup.schema,
-          get,
-        });
-
-        const recoveredMessages = [...finalMessages];
-        recoveredMessages[lastAssistantWithMarker.index] = {
-          ...lastAssistantWithMarker.message,
-          content: injectFormBlock(
-            lastAssistantWithMarker.message,
-            formId,
-            formConfig,
-            { source: 'workflow', sourceId: latest.templateId, schemaHash: startup.schemaHash },
-            getMessageText,
-          ),
-        };
+        const recoveredMessages = await recoverFormForAssistantMarker(
+          lastAssistantWithMarker,
+          finalMessages,
+          { sessionKey, get, getMessageText },
+        );
         if (get().currentSessionKey === sessionKey) {
           set({ messages: recoveredMessages, thinkingLevel, loading: false });
         }
@@ -297,7 +347,7 @@ export function recoverParameterFormsOnHistoryLoad(
     lastAssistantWithMarker
     && pendingWorkflow
     && pendingWorkflow.schema
-    && pendingWorkflow.schema.fields.length > 0
+    && !sessionHasWorkflowExecution(sessionKey, pendingWorkflow.templateId)
   ) {
     const formId = `workflow-form-${pendingWorkflow.templateId}-${Date.now()}`;
     const formConfig = buildWorkflowFormConfig(

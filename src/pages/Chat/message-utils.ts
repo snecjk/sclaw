@@ -5,6 +5,7 @@
  */
 import { useMemo } from 'react';
 import { useChatStore } from '@/stores/chat';
+import { sessionHasWorkflowExecution } from '@/stores/workflow-memory';
 import { buildWorkflowFormConfig } from '@/lib/workflow-form-utils';
 import { resolveParameterFormId } from '@/components/parameter-form/form-handlers';
 import type { RawMessage, ContentBlock } from '@/stores/chat';
@@ -226,15 +227,15 @@ export function extractParameterForm(message: RawMessage | unknown): {
       if (match) {
         const templateId = match[1];
         const schemaHash = match[2];
-        console.log('[extractParameterForm] found marker in text block:', { templateId, schemaHash });
+        const sessionKey = useChatStore.getState().currentSessionKey;
+        if (sessionHasWorkflowExecution(sessionKey, templateId)) {
+          return null;
+        }
 
-        // Try to get schema from pendingWorkflow to build complete formConfig
         const pendingWorkflow = useChatStore.getState().pendingWorkflow;
-        console.log('[extractParameterForm] pendingWorkflow:', pendingWorkflow ? { templateId: pendingWorkflow.templateId } : null);
         let formConfig: import('@/types/user-form').UserFormConfig = {} as import('@/types/user-form').UserFormConfig;
 
-        if (pendingWorkflow && pendingWorkflow.templateId === templateId && pendingWorkflow.schema && pendingWorkflow.schema.fields.length > 0) {
-          console.log('[extractParameterForm] building formConfig from pendingWorkflow');
+        if (pendingWorkflow && pendingWorkflow.templateId === templateId && pendingWorkflow.schema) {
           formConfig = buildWorkflowFormConfig(pendingWorkflow.schema, '', pendingWorkflow.collectedInputs);
         }
 
@@ -250,7 +251,6 @@ export function extractParameterForm(message: RawMessage | unknown): {
       }
     }
   }
-  console.log('[extractParameterForm] no parameter form found');
   return null;
 }
 

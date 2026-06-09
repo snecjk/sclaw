@@ -16,7 +16,9 @@ import { cn } from '@/lib/utils';
 import { assistantChatCardBg, assistantChatCardBgStreaming } from '@/lib/surfaces';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
+import { useChatStore } from '@/stores/chat';
 import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm } from './message-utils';
+import { ensureWorkflowParameterFormHandler } from '@/stores/chat/parameter-form-recovery';
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
 import { submitParameterForm } from '@/components/parameter-form/form-handlers';
@@ -79,9 +81,16 @@ export const ChatMessage = memo(function ChatMessage({
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
   const workflowCard = !isUser ? extractWorkflowCard(message) : null;
   const parameterForm = !isUser ? extractParameterForm(message) : null;
-  if (!isUser) {
-    console.log('[ChatMessage] parameterForm:', JSON.stringify(message), extractParameterForm(message));
-  }
+
+  useEffect(() => {
+    if (!parameterForm || parameterForm.formContext.source !== 'workflow') return;
+    ensureWorkflowParameterFormHandler(
+      parameterForm.formId,
+      parameterForm.formContext.sourceId,
+      parameterForm.formContext.schemaHash ?? '',
+      useChatStore.getState,
+    );
+  }, [parameterForm]);
   // Extract previewable refs from message text
   const extractedRefs = extractPreviewableRefs(text)
     .filter((ref) => !attachedFiles.some((f) => f.filePath === ref.filePath))

@@ -28,7 +28,8 @@ import {
 import type { WorkflowExecutionState } from '@/types/workflow';
 import { buildWorkflowFormConfig, buildStartupPreset, buildWorkflowValuesSummary } from '@/lib/workflow-form-utils';
 import { registerParameterFormHandler } from '@/components/parameter-form/form-handlers';
-import { mergeLocalWorkflowTurnsFromCurrent } from '@/lib/workflow-local-turn';
+import { mergeLocalWorkflowTurnsFromCurrent, mergeWorkflowTurnsFromMemory } from '@/lib/workflow-local-turn';
+import { buildWorkflowCardStatesForSession } from '@/stores/workflow-memory';
 import {
   mergeParameterFormBlocksFromCurrent,
   recoverParameterFormsOnHistoryLoad,
@@ -879,7 +880,7 @@ function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
   console.log('[maybeAppendWorkflowParameterForm] called, pending:', pending ? { templateId: pending.templateId, hasSchema: !!pending.schema } : null);
   if (!pending) { console.log('[maybeAppendWorkflowParameterForm] no pending workflow, returning'); return message; }
   if (message.role !== 'assistant') { console.log('[maybeAppendWorkflowParameterForm] not assistant role, returning'); return message; }
-  if (!pending.schema || pending.schema.fields.length === 0) { console.log('[maybeAppendWorkflowParameterForm] no schema or empty fields, returning'); return message; }
+  if (!pending.schema) { console.log('[maybeAppendWorkflowParameterForm] no schema, returning'); return message; }
 
   // If the frontend has already inserted an inline parameter_form (e.g. via
   // sendWithWorkflow), skip injecting so we don't show duplicate forms.
@@ -1291,8 +1292,29 @@ export const useChatStore = create<ChatState>()(
   },
 
   pendingWorkflow: null,
-  setPendingWorkflow: (pending) => set({ pendingWorkflow: pending }),
-  clearPendingWorkflow: () => set({ pendingWorkflow: null }),
+  setPendingWorkflow: (pending) => {
+    set({ pendingWorkflow: pending });
+    const sessionKey = get().currentSessionKey;
+    if (pending) {
+      void import('@/stores/workflow-memory').then(({ savePendingWorkflowDraft }) => {
+        savePendingWorkflowDraft(sessionKey, {
+          templateId: pending.templateId,
+          templateName: pending.templateName,
+          schemaHash: pending.schemaHash,
+          collectedInputs: pending.collectedInputs,
+          modelGuidanceSent: pending.modelGuidanceSent,
+        });
+      });
+    }
+  },
+  clearPendingWorkflow: () => {
+    const sessionKey = get().currentSessionKey;
+    const templateId = get().pendingWorkflow?.templateId;
+    set({ pendingWorkflow: null });
+    void import('@/stores/workflow-memory').then(({ clearPendingWorkflowDraft }) => {
+      clearPendingWorkflowDraft(sessionKey, templateId);
+    });
+  },
 
   pendingTemplateSelection: null,
   setPendingTemplateSelection: (pending) => set({ pendingTemplateSelection: pending }),
@@ -1655,6 +1677,8 @@ export const useChatStore = create<ChatState>()(
         getMessageText,
       );
       finalMessages = mergeLocalWorkflowTurnsFromCurrent(finalMessages, get().messages);
+      finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
+      const restoredCardStates = buildWorkflowCardStatesForSession(targetSessionKey);
       const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
         sessionKey: targetSessionKey,
         get,
@@ -1663,12 +1687,47 @@ export const useChatStore = create<ChatState>()(
         thinkingLevel,
       });
       if (formRecovery.deferSet) {
-        set({ messages: formRecovery.messages, thinkingLevel, loading: false });
+        set({
+          messages: formRecovery.messages,
+          thinkingLevel,
+          loading: false,
+          workflowCardStates: restoredCardStates,
+        });
         return;
       }
       finalMessages = formRecovery.messages;
 
-      set({ messages: finalMessages, thinkingLevel, loading: false });
+      set({
+        messages: finalMessages,
+        thinkingLevel,
+        loading: false,
+        workflowCardStates: restoredCardStates,
+      });
+
+      // Restore in-memory pending workflow from local draft (survives page refresh).
+      if (!get().pendingWorkflow) {
+        void import('@/stores/workflow-memory').then(({ getPendingWorkflowDraft, sessionHasWorkflowExecution, clearPendingWorkflowDraft }) => {
+          const draft = getPendingWorkflowDraft(targetSessionKey);
+          if (!draft) return;
+          if (sessionHasWorkflowExecution(targetSessionKey, draft.templateId)) {
+            clearPendingWorkflowDraft(targetSessionKey, draft.templateId);
+            return;
+          }
+          void import('@/lib/workflow-api').then(({ getStartupSchema }) => {
+            getStartupSchema(draft.templateId).then((startup) => {
+              if (get().currentSessionKey !== targetSessionKey) return;
+              get().setPendingWorkflow({
+                templateId: draft.templateId,
+                templateName: draft.templateName,
+                schema: startup.schema,
+                schemaHash: startup.schemaHash,
+                collectedInputs: draft.collectedInputs ?? {},
+                modelGuidanceSent: draft.modelGuidanceSent,
+              });
+            }).catch(() => {});
+          });
+        });
+      }
 
       // Extract first user message text as a session label for display in the toolbar.
       // Only set when there is no existing label so manual renames are preserved.
