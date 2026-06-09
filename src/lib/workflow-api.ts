@@ -176,15 +176,7 @@ export async function getWorkflowRun(runId: string): Promise<WorkflowRunResponse
       headers: authHeaders(),
     }),
   );
-  console.log(
-    '[workflow-trace] GET /agent/v1/runs/%s apiStatus=%s uiStatus=%s completedAt=%s hasResult=%s artifactCount=%d',
-    runId,
-    data.status,
-    normalizeWorkflowRunStatus(data.status),
-    data.completedAt ?? 'null',
-    Boolean(data.result?.summary || data.result?.title || data.output),
-    data.artifacts?.length ?? 0,
-  );
+  console.log(`[workflow-trace] GET /agent/v1/runs/${runId} response body:`, data);
   return data;
 }
 
@@ -410,7 +402,8 @@ export async function fetchWorkflowStatus(runId: string): Promise<WorkflowExecut
   try {
     const run = await getWorkflowRun(runId);
     return runToExecutionState(run);
-  } catch {
+  } catch (err) {
+    console.warn('[workflow-trace] fetchWorkflowStatus failed runId=%s error=%s', runId, String(err));
     return null;
   }
 }

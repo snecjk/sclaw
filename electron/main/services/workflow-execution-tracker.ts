@@ -19,6 +19,17 @@ const POLL_INTERVAL_MS = 2_000;
 const MAX_POLL_DURATION_MS = 600_000; // 10 minutes
 const MAX_TRACKED_EXECUTIONS = 50;
 const COMPLETED_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const POLL_TRACE_JSON_MAX = 8_000;
+
+function stringifyForPollTrace(value: unknown): string {
+  try {
+    const text = JSON.stringify(value);
+    if (text.length <= POLL_TRACE_JSON_MAX) return text;
+    return `${text.slice(0, POLL_TRACE_JSON_MAX)}…(truncated ${text.length - POLL_TRACE_JSON_MAX} chars)`;
+  } catch {
+    return String(value);
+  }
+}
 
 interface ExecutionSession {
   runId: string;
@@ -60,8 +71,16 @@ class WorkflowExecutionTracker {
   }
 
   startTracking(runId: string, sessionKey: string, agentId: string, workflowId: string) {
-    if (this.sessions.has(runId)) {
-      logger.warn(`[Tracker] Run ${runId} is already being tracked`);
+    const existing = this.sessions.get(runId);
+    if (existing) {
+      // Resume polling when session exists but timer was cleared (e.g. after HMR / terminal edge cases).
+      const isActive = existing.state.status === 'pending' || existing.state.status === 'running';
+      if (isActive && !existing.pollTimer && !existing.stopRequested) {
+        logger.info(`[workflow-trace] resume polling runId=${runId} status=${existing.state.status}`);
+        void this.bootstrapTracking(existing);
+        return;
+      }
+      logger.warn(`[Tracker] Run ${runId} is already being tracked (status=${existing.state.status}, timer=${existing.pollTimer ? 'on' : 'off'})`);
       return;
     }
 
@@ -106,6 +125,7 @@ class WorkflowExecutionTracker {
     if (session.pollTimer) {
       clearInterval(session.pollTimer);
       session.pollTimer = null;
+      logger.info(`[workflow-trace] poll interval stopped runId=${runId} reason=stopTracking`);
     }
     this.sessions.delete(runId);
     logger.info(`[Tracker] Stopped tracking run ${runId}`);
@@ -131,10 +151,11 @@ class WorkflowExecutionTracker {
 
     const status = session.state.status;
     if (status === 'completed' || status === 'failed' || status === 'timeout') {
-      logger.info(`[Tracker] Run ${session.runId} already terminal (${status}), skip polling`);
+      logger.info(`[workflow-trace] poll interval skipped runId=${session.runId} reason=terminal uiStatus=${status}`);
       return;
     }
 
+    logger.info(`[workflow-trace] poll interval started runId=${session.runId} everyMs=${POLL_INTERVAL_MS}`);
     this.beginPollingInterval(session);
   }
 
@@ -163,6 +184,11 @@ class WorkflowExecutionTracker {
   }
 
   private async poll(session: ExecutionSession) {
+    session.pollCount += 1;
+    const pollNum = session.pollCount;
+    const pollPath = `/agent/v1/runs/${session.runId}`;
+    logger.info(`[workflow-trace] poll #${pollNum} starting GET ${pollPath} runId=${session.runId}`);
+
     try {
       let data: WorkflowExecutionState;
 
@@ -171,14 +197,11 @@ class WorkflowExecutionTracker {
         'X-Trace-Id': `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`,
       };
       if (token) headers.stoToken = token;
-
-      session.pollCount += 1;
-      const pollPath = `/agent/v1/runs/${session.runId}`;
       const res = await proxyAwareFetch(
         `http://127.0.0.1:${PORTS.CLAWX_HOST_API}${pollPath}`,
         { timeoutMs: 10_000, headers },
       );
-      if (session.pollCount === 1) {
+      if (pollNum === 1) {
         logger.info(`[workflow-trace] GET ${pollPath} poll #1 status=${res.status}`);
       }
 
@@ -203,9 +226,14 @@ class WorkflowExecutionTracker {
       }
       const run = apiRes.data;
       const status = normalizeWorkflowRunStatus(run.status);
+      const progressDone = run.nodeRuns.filter((n) => normalizeWorkflowStepStatus(n.status) === 'completed').length;
+      const progressTotal = run.nodeRuns.length || 1;
+
       logger.info(
-        `[workflow-trace] GET ${pollPath} poll #${session.pollCount} runId=${session.runId} apiStatus=${run.status} uiStatus=${status} progress=${run.nodeRuns.filter((n) => normalizeWorkflowStepStatus(n.status) === 'completed').length}/${run.nodeRuns.length || 1} completedAt=${run.completedAt ?? 'null'} hasResult=${Boolean(run.result?.summary || run.result?.title)} artifactCount=${run.artifacts?.length ?? 0}`,
+        `[workflow-trace] GET ${pollPath} poll #${pollNum} runId=${session.runId} apiStatus=${run.status} uiStatus=${status} progress=${progressDone}/${progressTotal} completedAt=${run.completedAt ?? 'null'}`,
       );
+      logger.info(`[workflow-trace] poll #${pollNum} response=${stringifyForPollTrace(run)}`);
+      this.broadcastPollTrace(session, run, status);
       const totalNodes = run.nodeRuns.length || 1;
       const completedNodes = run.nodeRuns.filter(
         (n) => normalizeWorkflowStepStatus(n.status) === 'completed',
@@ -259,6 +287,7 @@ class WorkflowExecutionTracker {
       this.handleStateChange(session, data);
     } catch (err) {
       const errStr = String(err);
+      logger.error(`[workflow-trace] poll #${pollNum} failed runId=${session.runId} error=${errStr}`);
       session.failCount++;
 
       // 404 → immediate fail
@@ -323,14 +352,35 @@ class WorkflowExecutionTracker {
       this.broadcastState(session);
     }
 
-    // Terminal states → stop tracking after a short delay
+    // Terminal states → stop interval polling (keep session for sync-state)
     if (newState.status === 'completed' || newState.status === 'failed' || newState.status === 'timeout') {
       if (session.pollTimer) {
         clearInterval(session.pollTimer);
         session.pollTimer = null;
+        logger.info(
+          `[workflow-trace] poll interval stopped runId=${session.runId} reason=terminal uiStatus=${newState.status}`,
+        );
       }
-      // Keep in Map for sync-state, cleanup timer will remove later
       logger.info(`[Tracker] Run ${session.runId} finished with status: ${newState.status}`);
+    }
+  }
+
+  private broadcastPollTrace(
+    session: ExecutionSession,
+    rawRun: Record<string, unknown>,
+    uiStatus: WorkflowExecutionState['status'],
+  ): void {
+    const payload = {
+      runId: session.runId,
+      sessionKey: session.sessionKey,
+      pollCount: session.pollCount,
+      apiStatus: rawRun.status,
+      uiStatus,
+      data: rawRun,
+    };
+
+    for (const wc of webContents.getAllWebContents()) {
+      wc.send('workflow:poll-trace', payload);
     }
   }
 

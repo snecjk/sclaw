@@ -90,6 +90,13 @@ async function proxyWorkflowStreamRequest(
   }
 }
 
+const RUN_TRACE_JSON_MAX = 8_000;
+
+function truncateForRunTrace(text: string): string {
+  if (text.length <= RUN_TRACE_JSON_MAX) return text;
+  return `${text.slice(0, RUN_TRACE_JSON_MAX)}…(truncated ${text.length - RUN_TRACE_JSON_MAX} chars)`;
+}
+
 function extractWorkflowHeaders(req: IncomingMessage): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -132,10 +139,14 @@ async function proxyWorkflowRequest(
 
   if (backendPath.includes('/startup-schema')) {
     logger.info(
-      '[workflow-trace] GET %s status=%d response=%s',
-      backendPath,
-      response.status,
-      responseBody,
+      `[workflow-trace] GET ${backendPath} status=${response.status} response=${truncateForRunTrace(responseBody)}`,
+    );
+  }
+
+  const runStatusMatch = backendPath.match(/^\/agent\/v1\/runs\/([^/]+)$/);
+  if (runStatusMatch) {
+    logger.info(
+      `[workflow-trace] GET ${backendPath} status=${response.status} response=${truncateForRunTrace(responseBody)}`,
     );
   }
 
@@ -240,7 +251,7 @@ export async function handleWorkflowRoutes(
   const workflowDetailMatch = pathname.match(/^\/agent\/v1\/workflows\/([^/]+)$/);
   if (workflowDetailMatch && req.method === 'GET') {
     try {
-      logger.info('[workflow-trace] GET %s', pathname);
+      logger.info(`[workflow-trace] GET ${pathname}`);
       await proxyWorkflowRequest(req, res, pathname);
     } catch (error) {
       logger.error('[WorkflowRoutes] get workflow detail failed:', error);

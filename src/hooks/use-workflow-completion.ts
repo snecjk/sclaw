@@ -22,9 +22,32 @@ interface WorkflowStatusPayload {
 
 export function useWorkflowCompletion(sessionKey: string) {
   useEffect(() => {
+    const pollTraceHandler = (payload: unknown) => {
+      const data = payload as {
+        runId: string;
+        sessionKey: string;
+        pollCount: number;
+        apiStatus: string;
+        uiStatus: string;
+        data: unknown;
+      };
+      if (data.sessionKey !== sessionKey) return;
+      console.log(
+        `[workflow-trace] poll #${data.pollCount} runId=${data.runId} apiStatus=${data.apiStatus} uiStatus=${data.uiStatus}`,
+        data.data,
+      );
+    };
+
+    const unsubPollTrace = window.electron.ipcRenderer.on(
+      'workflow:poll-trace',
+      pollTraceHandler as (payload: unknown) => void,
+    );
+
     const handler = async (payload: unknown) => {
       const data = payload as WorkflowStatusPayload;
       if (data.sessionKey !== sessionKey) return;
+
+      console.log('[workflow-trace] status-update runId=%s status=%s', data.runId, data.status, data);
 
       const chatState = useChatStore.getState();
       const currentState = chatState.workflowCardStates[data.runId];
@@ -61,6 +84,7 @@ export function useWorkflowCompletion(sessionKey: string) {
       handler as (payload: unknown) => void,
     );
     return () => {
+      if (typeof unsubPollTrace === 'function') unsubPollTrace();
       if (typeof unsubscribe === 'function') unsubscribe();
     };
   }, [sessionKey]);

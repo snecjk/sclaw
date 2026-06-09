@@ -7,7 +7,7 @@ import { fetchWorkflowStatus, beginWorkflowRunSseTrace } from '@/lib/workflow-ap
 import { isActiveWorkflowRunStatus, isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import { deliverWorkflowCompletionIfNeeded } from '@/lib/workflow-completion-delivery';
 import { useChatStore, type RawMessage } from '@/stores/chat';
-import { getExecutionByRunId, updateExecutionStatus } from '@/stores/workflow-memory';
+import { getExecutionByRunId, listSessionExecutions, updateExecutionStatus } from '@/stores/workflow-memory';
 import type { ContentBlock } from '@/stores/chat/types';
 
 const hydrateInFlight = new Set<string>();
@@ -34,8 +34,12 @@ export async function hydrateWorkflowRun(
 
   hydrateInFlight.add(runId);
   try {
+    console.log('[workflow-trace] hydrateWorkflowRun start runId=%s sessionKey=%s', runId, ctx.sessionKey);
     const state = await fetchWorkflowStatus(runId);
-    if (!state) return;
+    if (!state) {
+      console.warn('[workflow-trace] hydrateWorkflowRun failed runId=%s (GET run returned null)', runId);
+      return;
+    }
 
     if (useChatStore.getState().currentSessionKey !== ctx.sessionKey) return;
 
@@ -45,8 +49,21 @@ export async function hydrateWorkflowRun(
     if (isActiveWorkflowRunStatus(state.status)) {
       const exec = getExecutionByRunId(runId, ctx.sessionKey);
       const workflowId = state.workflowId || exec?.workflowId;
-      if (!workflowId) return;
+      if (!workflowId) {
+        console.warn(
+          '[workflow-trace] hydrateWorkflowRun skip startTracking runId=%s reason=missing workflowId apiStatus=%s',
+          runId,
+          state.status,
+        );
+        return;
+      }
 
+      console.log(
+        '[workflow-trace] hydrateWorkflowRun startTracking runId=%s workflowId=%s uiStatus=%s',
+        runId,
+        workflowId,
+        state.status,
+      );
       await invokeIpc('workflow:startTracking', {
         runId,
         workflowId,
@@ -71,6 +88,9 @@ export async function hydrateSessionWorkflowCards(
   messages: RawMessage[],
   ctx: { sessionKey: string; agentId: string },
 ): Promise<void> {
-  const runIds = collectWorkflowRunIds(messages);
-  await Promise.all(runIds.map((runId) => hydrateWorkflowRun(runId, ctx)));
+  const runIds = new Set(collectWorkflowRunIds(messages));
+  for (const exec of listSessionExecutions(ctx.sessionKey)) {
+    runIds.add(exec.runId);
+  }
+  await Promise.all([...runIds].map((runId) => hydrateWorkflowRun(runId, ctx)));
 }

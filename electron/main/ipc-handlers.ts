@@ -2876,6 +2876,7 @@ function registerSessionHandlers(): void {
 
   // ── Workflow Execution Tracker ──
   ipcMain.handle('workflow:startTracking', async (_, { runId, sessionKey, agentId, workflowId }: { runId: string; sessionKey: string; agentId: string; workflowId: string }) => {
+    logger.info(`[workflow-trace] IPC workflow:startTracking runId=${runId} workflowId=${workflowId} sessionKey=${sessionKey}`);
     getWorkflowExecutionTracker().startTracking(runId, sessionKey, agentId, workflowId);
   });
 

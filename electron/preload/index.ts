@@ -219,6 +219,7 @@ const electronAPI = {
         'startup-progress',
         'auth:token-expired',
         'workflow:status-update',
+        'workflow:poll-trace',
         'workflow:stream:event',
         'workflow:stream:error',
       ];
