@@ -99,6 +99,7 @@ const PLUGINS = [
   { type: 'local', localDir: 'sto-agent-telemetry', pluginId: 'sto-agent-telemetry' },
   { type: 'local', localDir: 'sto-scheduled-task-tool', pluginId: 'sto-scheduled-task-tool' },
   { type: 'local', localDir: 'sto-skill-call-monitor', pluginId: 'sto-skill-call-monitor' },
+  { type: 'local', localDir: 'sto-dingtalk-send-guard', pluginId: 'sto-dingtalk-send-guard' },
 ];
 
 // Filter for excluding test files and unnecessary dirs when copying local plugins.

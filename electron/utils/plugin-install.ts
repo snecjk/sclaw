@@ -183,6 +183,7 @@ const LOCAL_PLUGIN_DIRS: Record<string, string> = {
   'sto-agent-telemetry': 'sto-agent-telemetry',
   'sto-scheduled-task-tool': 'sto-scheduled-task-tool',
   'sto-skill-call-monitor': 'sto-skill-call-monitor',
+  'sto-dingtalk-send-guard': 'sto-dingtalk-send-guard',
 };
 
 // ── Version helper ───────────────────────────────────────────────────────────
@@ -571,6 +572,14 @@ export function ensureStoSkillCallMonitorPluginInstalled(): { installed: boolean
   );
 }
 
+export function ensureStoDingTalkSendGuardPluginInstalled(): { installed: boolean; warning?: string } {
+  return ensurePluginInstalled(
+    'sto-dingtalk-send-guard',
+    buildCandidateSources('sto-dingtalk-send-guard'),
+    'STO DingTalk Send Guard',
+  );
+}
+
 // ── Bulk startup installer ───────────────────────────────────────────────────
 
 /**
@@ -585,6 +594,7 @@ const ALL_BUNDLED_PLUGINS = [
   { fn: ensureStoAgentTelemetryPluginInstalled, label: 'STO Agent Telemetry' },
   { fn: ensureStoScheduledTaskToolPluginInstalled, label: 'STO Scheduled Task Tool' },
   { fn: ensureStoSkillCallMonitorPluginInstalled, label: 'STO Skill Call Monitor' },
+  { fn: ensureStoDingTalkSendGuardPluginInstalled, label: 'STO DingTalk Send Guard' },
 ] as const;
 
 async function ensurePluginInstalledAsync(
@@ -697,6 +707,7 @@ export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
     { dirName: 'sto-agent-telemetry', label: 'STO Agent Telemetry' },
     { dirName: 'sto-scheduled-task-tool', label: 'STO Scheduled Task Tool' },
     { dirName: 'sto-skill-call-monitor', label: 'STO Skill Call Monitor' },
+    { dirName: 'sto-dingtalk-send-guard', label: 'STO DingTalk Send Guard' },
   ] as const;
 
   for (const { dirName, label } of pluginSpecs) {

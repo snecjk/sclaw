@@ -574,7 +574,6 @@ export function Sidebar() {
 
   const authUser = useAuthStore((s) => s.user);
   const authLogout = useAuthStore((s) => s.logout);
-  const crmWeekReportSurfaceAllowed = useAuthStore((s) => s.crmWeekReportSurfaceAllowed);
 
   const language = useSettingsStore((s) => s.language);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
@@ -883,7 +882,7 @@ export function Sidebar() {
 })}
         </div>
 
-        {!sidebarCollapsed && crmWeekReportSurfaceAllowed ? (
+        {!sidebarCollapsed ? (
           <SidebarCollapsibleSectionLabel
             open={taskListSectionOpen}
             onToggle={() => setTaskListSectionOpen((o) => !o)}
@@ -891,7 +890,7 @@ export function Sidebar() {
             toggleAriaLabel={t('common:sidebar.toggleTaskListSection')}
           />
         ) : null}
-        {!sidebarCollapsed && crmWeekReportSurfaceAllowed && taskListSectionOpen ? (
+        {!sidebarCollapsed && taskListSectionOpen ? (
           <div className="mt-1 flex flex-col gap-0.5">
             {STO_TASK_NAV.map((item) => (
               <SidebarTaskGroup

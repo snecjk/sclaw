@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Clock, MoreHorizontal, Play, Pencil, Trash2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 
+import { stripInstructionFromTaskMessage } from '@/lib/scheduled-task-recipients';
 import type { CronJob } from '@/types/cron';
 
 interface TaskCardProps {
@@ -80,6 +81,7 @@ export function TaskCard({ job, onToggle, onEdit, onDelete, onTrigger }: TaskCar
 
   const scheduleStr = typeof job.schedule === 'string' ? job.schedule : '';
   const scheduleLabel = parseScheduleToLabel(scheduleStr);
+  const displayMessage = stripInstructionFromTaskMessage(job.message || '');
 
   return (
     <article className="task-card group relative flex flex-col rounded-xl border border-border bg-background p-5 shadow-sm transition-all hover:shadow-md hover:border-primary/30">
@@ -109,7 +111,7 @@ export function TaskCard({ job, onToggle, onEdit, onDelete, onTrigger }: TaskCar
 
       {/* Description */}
       <p className="text-[13px] text-muted-foreground leading-relaxed mb-4 line-clamp-2">
-        {job.message || '暂无描述'}
+        {displayMessage || '暂无描述'}
       </p>
 
       {/* Footer */}

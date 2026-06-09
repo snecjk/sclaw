@@ -11,8 +11,11 @@ import {
   clearMentionEditor,
   detectActiveMentionTrigger,
   insertMentionAtTrigger,
+  MENTION_SPAN_SELECTOR,
   removeMentionBeforeCaret,
+  removeMentionSpan,
   serializeMentionEditor,
+  setMentionEditorMentions,
   setMentionEditorPlainText,
   type ActiveMentionTrigger,
   type MentionComposerSnapshot,
@@ -22,6 +25,7 @@ export interface DingTalkMentionEditorHandle {
   focus: () => void;
   clear: () => void;
   getSnapshot: () => MentionComposerSnapshot;
+  setMentions: (mentions: DingTalkMention[]) => void;
   insertMention: (mention: DingTalkMention, trigger: ActiveMentionTrigger) => void;
 }
 
@@ -36,6 +40,8 @@ interface DingTalkMentionEditorProps {
   onCompositionStart?: () => void;
   onCompositionEnd?: () => void;
   seedText?: string;
+  /** 为 @ 标签显示删除按钮（用于定时任务发送对象等场景） */
+  removableMentions?: boolean;
 }
 
 export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, DingTalkMentionEditorProps>(
@@ -51,6 +57,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       onCompositionStart,
       onCompositionEnd,
       seedText,
+      removableMentions = false,
     },
     ref,
   ) {
@@ -99,15 +106,22 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         if (!root) return { plainText: '', mentions: [], isEmpty: true };
         return serializeMentionEditor(root);
       },
+      setMentions: (mentions) => {
+        const root = editorRef.current;
+        if (!root) return;
+        setMentionEditorMentions(root, mentions, { removable: removableMentions });
+        resizeEditor();
+        syncFromDom(false);
+      },
       insertMention: (mention, trigger) => {
         const root = editorRef.current;
         if (!root) return;
-        insertMentionAtTrigger(root, trigger, mention);
+        insertMentionAtTrigger(root, trigger, mention, { removable: removableMentions });
         resizeEditor();
         syncFromDom();
         onTriggerChange?.(null);
       },
-    }), [onTriggerChange, resizeEditor, syncFromDom]);
+    }), [onTriggerChange, removableMentions, resizeEditor, syncFromDom]);
 
     useEffect(() => {
       const trimmed = seedText?.trim();
@@ -134,6 +148,23 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
     const handleInput = useCallback(() => {
       resizeEditor();
       syncFromDom();
+    }, [resizeEditor, syncFromDom]);
+
+    const handleMentionRemove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('[data-mention-remove]')) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const root = editorRef.current;
+      const span = target.closest(MENTION_SPAN_SELECTOR);
+      if (!root || !(span instanceof HTMLSpanElement)) return;
+
+      removeMentionSpan(root, span);
+      resizeEditor();
+      syncFromDom();
+      root.focus();
     }, [resizeEditor, syncFromDom]);
 
     const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -166,8 +197,9 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         onPaste={onPaste}
-        onClick={syncFromDom}
-        onKeyUp={syncFromDom}
+        onMouseDown={removableMentions ? handleMentionRemove : undefined}
+        onClick={() => syncFromDom()}
+        onKeyUp={() => syncFromDom()}
         onCompositionStart={() => {
           isComposingRef.current = true;
           onCompositionStart?.();
