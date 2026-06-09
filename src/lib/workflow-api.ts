@@ -18,11 +18,7 @@ import type {
   WorkflowRunResponse,
   WorkflowExecutionState,
 } from '@/types/workflow';
-import {
-  extractRunResult,
-  normalizeWorkflowRunStatus,
-  normalizeWorkflowStepStatus,
-} from '@/lib/workflow-run-status';
+import { workflowRunResponseToExecutionState } from '@/lib/workflow-run-status';
 
 /** Extract stoToken from auth store (sync read) */
 function getStoToken(): string | undefined {
@@ -176,39 +172,14 @@ export async function getWorkflowRun(runId: string): Promise<WorkflowRunResponse
       headers: authHeaders(),
     }),
   );
-  console.log(`[workflow-trace] GET /agent/v1/runs/${runId} response body:`, data);
+  console.log(`[workflow-trace] GET /agent/v1/runs/${runId} response body:`, JSON.stringify(data, null, 2));
   return data;
 }
 
 // ── Helper: convert WorkflowRunResponse to UI execution state ───
 
 export function runToExecutionState(run: WorkflowRunResponse): WorkflowExecutionState {
-  const status = normalizeWorkflowRunStatus(run.status);
-  const totalNodes = run.nodeRuns.length || 1;
-  const completedNodes = run.nodeRuns.filter(
-    (n) => normalizeWorkflowStepStatus(n.status) === 'completed',
-  ).length;
-  const progress = status === 'completed' ? 100 : Math.min(99, Math.floor((completedNodes / totalNodes) * 100));
-
-  return {
-    runId: run.id,
-    workflowId: run.workflowId,
-    status,
-    progress,
-    currentStep: run.nodeRuns.find((n) => normalizeWorkflowStepStatus(n.status) === 'running')?.nodeId,
-    startedAt: run.startedAt,
-    completedAt: run.completedAt ?? undefined,
-    steps: run.nodeRuns.map((n) => ({
-      name: n.nodeId,
-      status: normalizeWorkflowStepStatus(n.status),
-      duration: n.startedAt && n.completedAt
-        ? new Date(n.completedAt).getTime() - new Date(n.startedAt).getTime()
-        : undefined,
-      error: n.error,
-    })),
-    result: extractRunResult(run),
-    error: run.error ?? undefined,
-  };
+  return workflowRunResponseToExecutionState(run);
 }
 
 // ── 7. Subscribe to run stream (SSE) ────────────────────────────

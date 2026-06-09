@@ -16,22 +16,30 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
     const { t } = useTranslation('chat');
     const [query, setQuery] = useState('');
 
-    const { templates, loading } = useWorkflowsStore();
-
-    // Note: intentionally not auto-focusing to avoid disrupting user flow
+    const { templates, loading, loadTemplates } = useWorkflowsStore();
 
     useEffect(() => {
       if (!open) {
-        // Defer state reset to avoid cascading renders
         const timer = setTimeout(() => setQuery(''), 0);
         return () => clearTimeout(timer);
       }
+      return undefined;
     }, [open]);
 
-    const filtered = templates.filter((t) =>
-      t.label.toLowerCase().includes(query.toLowerCase()) ||
-      (t.description ?? '').toLowerCase().includes(query.toLowerCase()),
-    );
+    useEffect(() => {
+      if (!open) return undefined;
+
+      const trimmed = query.trim();
+      const timer = window.setTimeout(() => {
+        if (trimmed) {
+          void loadTemplates(trimmed, { force: true, catalog: false });
+        } else {
+          void loadTemplates('', { force: true, catalog: true });
+        }
+      }, trimmed ? 300 : 0);
+
+      return () => window.clearTimeout(timer);
+    }, [open, query, loadTemplates]);
 
     if (!open) return null;
 
@@ -59,7 +67,10 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
           {loading && (
             <div className="px-3 py-2 text-[12px] text-muted-foreground">{t('composer.workflowLoading')}</div>
           )}
-          {filtered.map((template) => (
+          {!loading && templates.length === 0 && (
+            <div className="px-3 py-2 text-[12px] text-muted-foreground">{t('composer.workflowNoTemplates')}</div>
+          )}
+          {!loading && templates.map((template) => (
             <button
               key={template.id}
               type="button"

@@ -7,6 +7,13 @@ import { searchWorkflowTemplates } from '@/lib/workflow-api';
 import { useChatStore } from '@/stores/chat';
 import type { WorkflowTemplateSearchItem } from '@/types/workflow';
 
+export interface LoadTemplatesOptions {
+  /** Skip prefetch TTL and reload from API. */
+  force?: boolean;
+  /** Merge several broad searches for picker default list (not NL intent). */
+  catalog?: boolean;
+}
+
 export interface WorkflowsState {
   templates: WorkflowTemplateSearchItem[];
   loading: boolean;
@@ -14,7 +21,7 @@ export interface WorkflowsState {
   selectedWorkflowId: string | null;
   lastFetchedAt: number | null;
 
-  loadTemplates: (query?: string) => Promise<void>;
+  loadTemplates: (query?: string, options?: LoadTemplatesOptions) => Promise<void>;
   /** Preload top templates for picker / bare "创建工作流" — deduped with TTL. */
   prefetchTemplates: (query?: string) => Promise<void>;
   selectWorkflow: (id: string) => void;
@@ -22,9 +29,38 @@ export interface WorkflowsState {
 }
 
 const PREFETCH_TTL_MS = 5 * 60 * 1000;
+const PICKER_SEARCH_LIMIT = 20;
+/** Broad queries merged for picker catalog — single "工作流" search is non-deterministic. */
+const PICKER_CATALOG_QUERIES = ['工作流', '流程模板', '模板'];
 let prefetchInFlight: Promise<void> | null = null;
+let loadInFlight: Promise<void> | null = null;
 
 const MAX_CONCURRENT_WORKFLOWS = 5;
+
+export function mergeWorkflowTemplateItems(
+  ...groups: Array<WorkflowTemplateSearchItem[] | undefined | null>
+): WorkflowTemplateSearchItem[] {
+  const byId = new Map<string, WorkflowTemplateSearchItem>();
+  for (const group of groups) {
+    if (!group) continue;
+    for (const item of group) {
+      const prev = byId.get(item.id);
+      if (!prev || (item.matchScore ?? 0) > (prev.matchScore ?? 0)) {
+        byId.set(item.id, item);
+      }
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'));
+}
+
+async function fetchTemplateCatalog(): Promise<WorkflowTemplateSearchItem[]> {
+  const results = await Promise.all(
+    PICKER_CATALOG_QUERIES.map((q) => searchWorkflowTemplates(q, PICKER_SEARCH_LIMIT)),
+  );
+  return mergeWorkflowTemplateItems(
+    ...results.map((r) => [...(r.matchedItems ?? []), ...(r.recommendedItems ?? [])]),
+  );
+}
 
 export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
   templates: [],
@@ -33,20 +69,43 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
   selectedWorkflowId: null,
   lastFetchedAt: null,
 
-  loadTemplates: async (query = '') => {
-    set({ loading: true, error: null });
-    try {
-      const result = await searchWorkflowTemplates(query || '工作流', 10);
-      const templates = [...(result.matchedItems ?? []), ...(result.recommendedItems ?? [])];
-      set({ templates, loading: false, lastFetchedAt: Date.now() });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      set({ error: message, loading: false });
-      console.error('[WorkflowsStore] loadTemplates failed:', message);
+  loadTemplates: async (query = '', options = {}) => {
+    const trimmed = query.trim();
+    const useCatalog = options.catalog ?? !trimmed;
+
+    if (loadInFlight && !options.force) {
+      await loadInFlight;
+      return;
     }
+
+    set({ loading: true, error: null });
+    const run = (async () => {
+      try {
+        let templates: WorkflowTemplateSearchItem[];
+        if (useCatalog) {
+          templates = await fetchTemplateCatalog();
+        } else {
+          const result = await searchWorkflowTemplates(trimmed, PICKER_SEARCH_LIMIT);
+          templates = mergeWorkflowTemplateItems(
+            result.matchedItems,
+            result.recommendedItems,
+          );
+        }
+        set({ templates, loading: false, lastFetchedAt: Date.now() });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        set({ error: message, loading: false });
+        console.error('[WorkflowsStore] loadTemplates failed:', message);
+      }
+    })();
+
+    loadInFlight = run.finally(() => {
+      loadInFlight = null;
+    });
+    await loadInFlight;
   },
 
-  prefetchTemplates: async (query = '') => {
+  prefetchTemplates: async () => {
     const { templates, lastFetchedAt } = get();
     if (
       templates.length > 0 &&
@@ -60,7 +119,7 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
       return;
     }
     prefetchInFlight = get()
-      .loadTemplates(query)
+      .loadTemplates('', { catalog: true })
       .finally(() => {
         prefetchInFlight = null;
       });

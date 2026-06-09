@@ -9,11 +9,11 @@ import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { logger } from '../../utils/logger';
 import { PORTS } from '../../utils/config';
 import { getStoToken } from '../../utils/auth-store';
-import type { WorkflowExecutionState } from '../../src/types/workflow';
+import type { WorkflowExecutionState } from '../../../src/types/workflow';
 import {
-  normalizeWorkflowRunStatus,
-  normalizeWorkflowStepStatus,
-} from '../../src/lib/workflow-run-status';
+  workflowRunResponseToExecutionState,
+  type WorkflowRunApiPayload,
+} from '../../../shared/workflow-run-status';
 
 const POLL_INTERVAL_MS = 2_000;
 const MAX_POLL_DURATION_MS = 600_000; // 10 minutes
@@ -190,8 +190,6 @@ class WorkflowExecutionTracker {
     logger.info(`[workflow-trace] poll #${pollNum} starting GET ${pollPath} runId=${session.runId}`);
 
     try {
-      let data: WorkflowExecutionState;
-
       const token = await getStoToken();
       const headers: Record<string, string> = {
         'X-Trace-Id': `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`,
@@ -209,67 +207,33 @@ class WorkflowExecutionTracker {
         throw new Error(`HTTP ${res.status}`);
       }
 
-      const apiRes = (await res.json()) as { success: boolean; data?: {
-        id: string;
-        workflowId: string;
-        status: string;
-        nodeRuns: Array<{ id: string; nodeId: string; status: string; startedAt?: string; completedAt?: string; error?: string }>;
-        artifacts: Array<{ id: string; name: string; type: string; url: string; size?: number }>;
-        output?: unknown;
-        result?: { title?: string | null; summary?: string | null };
-        error?: string | null;
-        startedAt: string;
-        completedAt?: string | null;
-      } };
+      const responseBody = await res.text();
+      logger.info(
+        `[workflow-trace] poll #${pollNum} raw response status=${res.status} body=${stringifyForPollTrace(responseBody)}`,
+      );
+
+      let apiRes: { success: boolean; data?: WorkflowRunApiPayload };
+      try {
+        apiRes = JSON.parse(responseBody) as typeof apiRes;
+      } catch (parseErr) {
+        throw new Error(`Invalid JSON: ${String(parseErr)}`);
+      }
+
       if (!apiRes.success || !apiRes.data) {
+        logger.error(
+          `[workflow-trace] poll #${pollNum} API envelope error runId=${session.runId} body=${stringifyForPollTrace(apiRes)}`,
+        );
         throw new Error('API error');
       }
+
       const run = apiRes.data;
-      const status = normalizeWorkflowRunStatus(run.status);
-      const progressDone = run.nodeRuns.filter((n) => normalizeWorkflowStepStatus(n.status) === 'completed').length;
-      const progressTotal = run.nodeRuns.length || 1;
+      const data = workflowRunResponseToExecutionState(run);
 
       logger.info(
-        `[workflow-trace] GET ${pollPath} poll #${pollNum} runId=${session.runId} apiStatus=${run.status} uiStatus=${status} progress=${progressDone}/${progressTotal} completedAt=${run.completedAt ?? 'null'}`,
+        `[workflow-trace] GET ${pollPath} poll #${pollNum} runId=${session.runId} apiStatus=${run.status ?? 'null'} uiStatus=${data.status} progress=${data.progress} completedAt=${run.completedAt ?? 'null'}`,
       );
-      logger.info(`[workflow-trace] poll #${pollNum} response=${stringifyForPollTrace(run)}`);
-      this.broadcastPollTrace(session, run, status);
-      const totalNodes = run.nodeRuns.length || 1;
-      const completedNodes = run.nodeRuns.filter(
-        (n) => normalizeWorkflowStepStatus(n.status) === 'completed',
-      ).length;
-      const progress = status === 'completed' ? 100 : Math.min(99, Math.floor((completedNodes / totalNodes) * 100));
-      const artifacts = run.artifacts.map((a) => ({
-        id: a.id,
-        name: a.name,
-        type: a.type,
-        url: a.url,
-        size: a.size,
-      }));
-      const summary = run.result?.summary ?? run.result?.title
-        ?? (typeof run.output === 'string' ? run.output : undefined);
-
-      data = {
-        runId: run.id,
-        workflowId: run.workflowId,
-        status,
-        progress,
-        currentStep: run.nodeRuns.find((n) => normalizeWorkflowStepStatus(n.status) === 'running')?.nodeId,
-        startedAt: run.startedAt,
-        completedAt: run.completedAt ?? undefined,
-        steps: run.nodeRuns.map((n) => ({
-          name: n.nodeId,
-          status: normalizeWorkflowStepStatus(n.status),
-          duration: n.startedAt && n.completedAt
-            ? new Date(n.completedAt).getTime() - new Date(n.startedAt).getTime()
-            : undefined,
-          error: n.error,
-        })),
-        result: summary || artifacts.length > 0
-          ? { summary, artifacts: artifacts.length > 0 ? artifacts : undefined }
-          : undefined,
-        error: run.error ?? undefined,
-      };
+      logger.info(`[workflow-trace] poll #${pollNum} mapped state=${stringifyForPollTrace(data)}`);
+      this.broadcastPollTrace(session, run, data.status);
 
       session.failCount = 0;
 
@@ -289,6 +253,9 @@ class WorkflowExecutionTracker {
       const errStr = String(err);
       logger.error(`[workflow-trace] poll #${pollNum} failed runId=${session.runId} error=${errStr}`);
       session.failCount++;
+
+      // Client-side parse/mapping errors — retry but do not treat as backend workflow failure yet.
+      const isClientParseError = /ReferenceError|TypeError|SyntaxError|Invalid JSON/i.test(errStr);
 
       // 404 → immediate fail
       if (errStr.includes('404') || (err as { status?: number }).status === 404) {
@@ -322,7 +289,9 @@ class WorkflowExecutionTracker {
       this.handleStateChange(session, {
         ...session.state,
         status: 'failed',
-        error: toUserFriendlyError(errStr),
+        error: isClientParseError
+          ? '客户端解析运行状态失败，请重启应用后重试'
+          : toUserFriendlyError(errStr),
       });
       this.stopTracking(session.runId);
     }
@@ -367,7 +336,7 @@ class WorkflowExecutionTracker {
 
   private broadcastPollTrace(
     session: ExecutionSession,
-    rawRun: Record<string, unknown>,
+    rawRun: WorkflowRunApiPayload,
     uiStatus: WorkflowExecutionState['status'],
   ): void {
     const payload = {
@@ -386,9 +355,9 @@ class WorkflowExecutionTracker {
 
   private broadcastState(session: ExecutionSession) {
     const payload = {
+      ...session.state,
       runId: session.runId,
       sessionKey: session.sessionKey,
-      ...session.state,
     };
 
     for (const wc of webContents.getAllWebContents()) {

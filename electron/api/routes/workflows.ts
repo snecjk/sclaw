@@ -175,7 +175,6 @@ export async function handleWorkflowRoutes(
       const body = await parseJsonBody<{ query: string; limit?: number }>(req);
       logger.info('[WorkflowRoutes] search request body:', JSON.stringify(body));
 
-      // Capture response for logging
       const baseUrl = await resolveStoBaseUrl();
       const headers = extractWorkflowHeaders(req);
       const bodyStr = JSON.stringify(body);

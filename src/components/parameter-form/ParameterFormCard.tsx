@@ -10,6 +10,7 @@ import { ChevronLeft, ChevronRight, Check, ChevronUp, Loader2 } from 'lucide-rea
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { FormFieldRenderer } from './FormFieldRenderer';
+import { normalizeWorkflowFieldValue } from '@/lib/workflow-form-utils';
 import type { UserFormConfig, FormResult, FormField } from '@/types/user-form';
 
 export interface ParameterFormContext {
@@ -52,11 +53,71 @@ function buildWizardSteps(config: UserFormConfig): WizardStep[] {
   }];
 }
 
+type TitledGroupItem = {
+  fieldKey: string;
+  defaultValue?: string;
+};
+
+function isPresetDisplayField(field: FormField): boolean {
+  return Boolean(
+    field.disabled ||
+    /仅展示|不可修改|系统预置/.test(field.description ?? ''),
+  );
+}
+
+function getTitledGroupItems(field: FormField): TitledGroupItem[] | undefined {
+  return (field as { _titledGroupItems?: TitledGroupItem[] })._titledGroupItems;
+}
+
+function buildTitledGroupDefaultValue(field: FormField): string {
+  const record: Record<string, unknown> = {};
+  if (field.defaultValue !== undefined) {
+    const parsed = normalizeWorkflowFieldValue(field.defaultValue);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      Object.assign(record, parsed as Record<string, unknown>);
+    }
+  }
+  for (const item of getTitledGroupItems(field) ?? []) {
+    if (item.defaultValue !== undefined && item.defaultValue !== '') {
+      record[item.fieldKey] = item.defaultValue;
+    }
+  }
+  return JSON.stringify(record);
+}
+
+function buildSelectDefaultValue(field: FormField): unknown {
+  if (field.defaultValue !== undefined) {
+    return field.defaultValue;
+  }
+  if (!isPresetDisplayField(field) || !('options' in field)) {
+    return undefined;
+  }
+  const options = field.options ?? [];
+  if (field.type === 'multiselect') {
+    return options.map((option) => option.value);
+  }
+  if (field.type === 'select' || field.type === 'radio') {
+    return options.length === 1 ? options[0]?.value : undefined;
+  }
+  return undefined;
+}
+
 /** Build initial values from config defaults */
 function buildInitialValues(config: UserFormConfig): FormResult {
   const initial: FormResult = {};
   if (!config.fields) return initial;
   for (const field of config.fields) {
+    if (field.type === 'titled_group' || (getTitledGroupItems(field)?.length ?? 0) > 0) {
+      initial[field.name] = buildTitledGroupDefaultValue(field);
+      continue;
+    }
+    if (field.type === 'select' || field.type === 'multiselect' || field.type === 'radio') {
+      const preset = buildSelectDefaultValue(field);
+      if (preset !== undefined) {
+        initial[field.name] = preset;
+        continue;
+      }
+    }
     if (field.defaultValue !== undefined) {
       initial[field.name] = field.defaultValue;
     } else if (field.type === 'checkbox' && !('options' in field && (field as { options?: unknown }).options)) {
@@ -68,6 +129,31 @@ function buildInitialValues(config: UserFormConfig): FormResult {
     }
   }
   return initial;
+}
+
+/** Merge visible defaults into submitted values — UI may show fallbacks not yet in state. */
+function mergeFormValuesWithDefaults(config: UserFormConfig, values: FormResult): FormResult {
+  const defaults = buildInitialValues(config);
+  const merged: FormResult = { ...defaults, ...values };
+
+  for (const field of config.fields ?? []) {
+    if (field.type !== 'titled_group' && !(getTitledGroupItems(field)?.length ?? 0)) {
+      continue;
+    }
+    const defaultRecord = normalizeWorkflowFieldValue(defaults[field.name]);
+    const valueRecord = normalizeWorkflowFieldValue(values[field.name]);
+    const base =
+      typeof defaultRecord === 'object' && defaultRecord !== null && !Array.isArray(defaultRecord)
+        ? (defaultRecord as Record<string, unknown>)
+        : {};
+    const overlay =
+      typeof valueRecord === 'object' && valueRecord !== null && !Array.isArray(valueRecord)
+        ? (valueRecord as Record<string, unknown>)
+        : {};
+    merged[field.name] = JSON.stringify({ ...base, ...overlay });
+  }
+
+  return merged;
 }
 
 /** Validate a single field */
@@ -164,6 +250,11 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (!loadedConfig?.fields?.length) return;
+    setValues(buildInitialValues(loadedConfig));
+  }, [loadedConfig]);
+
   // Compute steps even if effectiveConfig is null (will be empty array)
   const steps = useMemo(() => effectiveConfig ? buildWizardSteps(effectiveConfig) : [], [effectiveConfig]);
 
@@ -211,6 +302,8 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
   }, [isFirst]);
 
   const handleSubmit = useCallback(async () => {
+    const formConfig = effectiveConfig;
+    if (!formConfig) return;
     if (!validateStep()) return;
     // Validate all steps for final submission
     const allErrors: Record<string, string> = {};
@@ -232,15 +325,15 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
     }
     setSubmitting(true);
     try {
-      console.log('context', context, values);
-      const result = onSubmit(values, context);
+      const payload = mergeFormValuesWithDefaults(formConfig, values);
+      const result = onSubmit(payload, context);
       if (result instanceof Promise) {
         await result;
       }
     } finally {
       setSubmitting(false);
     }
-  }, [validateStep, steps, values, context, onSubmit]);
+  }, [validateStep, steps, values, context, onSubmit, effectiveConfig]);
 
 
   const stepFooterHint = useMemo(() => {

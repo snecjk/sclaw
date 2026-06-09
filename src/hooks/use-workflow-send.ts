@@ -796,7 +796,7 @@ export async function tryNaturalLanguageWorkflowSend(
   if (unspecified) {
     // Bare "创建工作流" — show prefetched list, never auto-pick (e.g. blank template).
     const { useWorkflowsStore } = await import('@/stores/workflows');
-    await useWorkflowsStore.getState().prefetchTemplates();
+    await useWorkflowsStore.getState().loadTemplates('', { force: true, catalog: true });
     const cached = useWorkflowsStore.getState().templates;
     intent = cached.length > 0
       ? {

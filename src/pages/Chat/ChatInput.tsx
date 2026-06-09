@@ -193,7 +193,7 @@ export function ChatInput({
     install: installDingTalkMention,
     installing: dingTalkInstalling,
   } = useDingTalkMention(mentionTrigger);
-  const { templates, loadTemplates, prefetchTemplates } = useWorkflowsStore();
+  const { templates, prefetchTemplates } = useWorkflowsStore();
   const composerPlaceholder = disabled
     ? t('composer.gatewayDisconnectedPlaceholder')
     : t('composer.messagePlaceholder', { agent: currentAgentName });
@@ -267,12 +267,6 @@ export function ChatInput({
   useEffect(() => {
     void prefetchTemplates();
   }, [prefetchTemplates]);
-
-  useEffect(() => {
-    if (workflowPickerOpen && templates.length === 0 && !useWorkflowsStore.getState().loading) {
-      void loadTemplates();
-    }
-  }, [workflowPickerOpen, templates.length, loadTemplates]);
 
   const applyDingTalkMention = useCallback((item: MentionSearchItem) => {
     if (!dingTalkTrigger) return;
