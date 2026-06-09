@@ -62,7 +62,7 @@
         "enabled": "タスクを有効にしました",
         "paused": "タスクを停止しました",
         "deleted": "タスクを削除しました",
-        "triggered": "タスクを正常にトリガーしました",
+        "triggered": "タスクを開始しました。完了後はタスク一覧で確認できます。",
         "failedTrigger": "タスクの実行に失敗しました: {{error}}",
         "failedUpdate": "タスクの更新に失敗しました",
         "failedDelete": "タスクの削除に失敗しました",

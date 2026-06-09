@@ -4,6 +4,11 @@ import {
   type DingTalkAttachedFileHint,
 } from './dingtalk-file-send';
 import {
+  appendDingTalkAgentSendDisclaimer,
+  DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER,
+} from './dingtalk-disclaimer';
+import { shellQuoteDwsSendTextForBash } from './dws-send-text';
+import {
   DINGTALK_RECIPIENTS_MARKER,
   hasResolvedDingTalkMentions,
   type DingTalkMention,
@@ -15,20 +20,18 @@ export { shouldIncludeDingTalkFileSendWorkflow };
 export { DINGTALK_RECIPIENTS_MARKER, hasResolvedDingTalkMentions };
 export type { DingTalkMention };
 
-/**
- * 代发说明底栏：分隔线 + 灰色字（仅 color，勿加 size，避免客户端乱版）。
- * 正文其余部分仍用 Markdown，勿在正文里混用 HTML。
- */
-export const DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER =
-  '<font color="#999999">本消息由 STO Claw 代为发送，非本人实时回复。</font>';
+export {
+  appendDingTalkAgentSendDisclaimer,
+  DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER,
+  ensureDingTalkAgentSendDisclaimerFormat,
+  hasDingTalkDisclaimerDivider,
+} from './dingtalk-disclaimer';
 
 /** @deprecated 使用 DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER */
 export const DINGTALK_AGENT_SEND_DISCLAIMER_HTML = DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER;
 
 /** @deprecated 使用 DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER */
 export const DINGTALK_AGENT_SEND_DISCLAIMER_MARKDOWN = DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER;
-
-const DINGTALK_AGENT_SEND_DISCLAIMER_MARKER = 'STO Claw 代为发送';
 
 /** 从 StoClaw 对话展示中移除钉钉代发底栏（实际发送仍保留）。 */
 export function stripDingTalkAgentSendDisclaimerForDisplay(text: string): string {
@@ -41,14 +44,6 @@ export function stripDingTalkAgentSendDisclaimerForDisplay(text: string): string
     .replace(/\n*>\s*\*?[^*\n]*STO Claw[^*\n]*代为发送[^*\n]*\*?\s*/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-}
-
-/** 在 dws `chat message send --text` 正文末尾附加固定代发说明。 */
-export function appendDingTalkAgentSendDisclaimer(body: string): string {
-  const trimmed = body.trim();
-  if (!trimmed) return DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER;
-  if (trimmed.includes(DINGTALK_AGENT_SEND_DISCLAIMER_MARKER)) return trimmed;
-  return `${trimmed}\n\n---\n\n${DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER}`;
 }
 
 function buildDingTalkSendTextExample(userBody = '你好'): string {
@@ -79,12 +74,12 @@ function buildSendCommandHints(mentions: DingTalkMention[]): string[] {
   return mentions.flatMap((mention) => {
     if (mention.type === 'user' && mention.userId) {
       return [
-        `- ${mention.displayName}: dws chat message send --user ${mention.userId} --title "消息" --text ${JSON.stringify(textExample)} --format json`,
+        `- ${mention.displayName}: dws chat message send --user ${mention.userId} --title "消息" --text ${shellQuoteDwsSendTextForBash(textExample)} --format json`,
       ];
     }
     if (mention.type === 'group' && mention.openConversationId) {
       return [
-        `- ${mention.displayName}: dws chat message send --group ${mention.openConversationId} --title "消息" --text ${JSON.stringify(textExample)} --format json`,
+        `- ${mention.displayName}: dws chat message send --group ${mention.openConversationId} --title "消息" --text ${shellQuoteDwsSendTextForBash(textExample)} --format json`,
       ];
     }
     return [];
@@ -152,7 +147,7 @@ export function buildDingTalkMentionSystemContext(
     '3. **必须**使用 `dws chat message send`，收件人参数只能取自 JSON（`--user` / `--group`）',
     '4. 发送前可与用户确认正文，或使用 `--dry-run`',
     '5. **`--title` 必填**（单聊/群聊均需）；无特定标题时用 `消息`',
-    '6. **正文**用钉钉 IM Markdown：`###` 标题、`**加粗**`、`-` 列表等；段落之间用空行 `\\n\\n`；正文内**禁止** HTML（`<font>`/`<br>` 等会乱版）',
+    '6. **正文**用钉钉 IM Markdown：`###` 标题、`**加粗**`、`-` 列表等；段落之间用**真实换行**（空一行）；**禁止**在 `--text` 里写字面量 `\\n` 两个字符；正文内**禁止** HTML（`<br>` 等会乱版，代发说明行的 `<font color>` 除外）',
     '7. **正文末尾必须附加代发说明**（`---` 分隔线 + 灰色说明，固定格式；说明行仅此一处可用 `<font color>`，**禁止** `size` 属性）：',
     '   ```',
     '   {用户正文}',
@@ -163,7 +158,7 @@ export function buildDingTalkMentionSystemContext(
     '   ```',
     '   将 `{用户正文}` 替换为实际内容；分隔线与说明文案不得改写或省略。',
     '8. 发送成功后，最终回复可简短确认即可；**完整发送正文**会在 StoClaw 对话卡片中自动展示，无需在回复里重复粘贴全文。',
-    '9. **安全**：禁止循环/批量调用 `dws chat message send`（含 shell `for`/`while`）；同一对话 **每分钟最多实际发送 1 条**（`--dry-run` 不计入）。',
+    '9. **安全**：禁止循环/批量调用 `dws chat message send`（含 shell `for`/`while`）；同一对话内 **文字** 与 **图片/文件** 分别限流：各 **每 20 秒最多成功发送 1 条**（仅 `dws` 返回成功才计入；`--dry-run` 不计入）。',
     '',
     '预填命令示例（`--text` 已含代发说明，发送时把示例中的「你好」换成实际正文）：',
     ...sendCommandHints,

@@ -4,6 +4,7 @@ import { useAgentsStore } from '@/stores/agents';
 import {
   clearErrorRecoveryTimer,
   clearHistoryPoll,
+  formatChatRuntimeError,
   getLastChatEventAt,
   setHistoryPollTimer,
   setLastChatEventAt,
@@ -241,6 +242,7 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
 
         // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
         const CHAT_SEND_TIMEOUT_MS = 120_000;
+        const MEDIA_SEND_TIMEOUT_MS = 120_000;
 
         if (hasMedia) {
           result = await invokeIpc(
@@ -256,6 +258,7 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
                 fileName: a.fileName,
               })),
             },
+            MEDIA_SEND_TIMEOUT_MS,
           ) as { success: boolean; result?: { runId?: string }; error?: string };
         } else {
           result = await invokeIpc(
@@ -274,13 +277,33 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
         
         if (!result.success) {
           clearHistoryPoll();
-          set({ error: result.error || 'Failed to send message', sending: false });
+          set((s) => ({
+            messages: s.messages.map((message, index, arr) => (
+              index === arr.length - 1 && message.role === 'user'
+                ? { ...message, isError: true }
+                : message
+            )),
+            error: formatChatRuntimeError(result.error || 'Failed to send message'),
+            sending: false,
+            activeRunId: null,
+            pendingFinal: false,
+          }));
         } else if (result.result?.runId) {
           set({ activeRunId: result.result.runId });
         }
       } catch (err) {
         clearHistoryPoll();
-        set({ error: String(err), sending: false });
+        set((s) => ({
+          messages: s.messages.map((message, index, arr) => (
+            index === arr.length - 1 && message.role === 'user'
+              ? { ...message, isError: true }
+              : message
+          )),
+          error: formatChatRuntimeError(String(err)),
+          sending: false,
+          activeRunId: null,
+          pendingFinal: false,
+        }));
       }
     },
 

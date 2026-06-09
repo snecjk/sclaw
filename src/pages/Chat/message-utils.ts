@@ -49,6 +49,9 @@ function cleanUserText(text: string): string {
     .replace(/^Conversation info\s*\([^)]*\):\s*\{[\s\S]*?\}\s*/i, '')
     // Remove Gateway timestamp prefix like [Fri 2026-02-13 22:39 GMT+8]
     .replace(/^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+[^\]]+\]\s*/i, '')
+    // OpenClaw cron jobs append "Current time: ..." (+ optional "Reference UTC: ...") to the prompt
+    .replace(/\n*Current time:\s*[^\n]+/gi, '')
+    .replace(/\n*Reference UTC:\s*[^\n]+/gi, '')
     .trim();
   return stripDingTalkMentionContextForDisplay(
     stripWorkflowCompleteForDisplay(
@@ -707,7 +710,15 @@ export function usePreviewableFiles(
       for (const state of Object.values(workflowCardStates)) {
         for (const artifact of state.result?.artifacts ?? []) {
           if (!isPreviewableArtifactUrl(artifact.url, artifact.type)) continue;
-          addItem(artifactToPreviewFile(artifact));
+          const previewFile = artifactToPreviewFile(artifact);
+          if (!previewFile.filePath) continue;
+          addItem({
+            mimeType: previewFile.mimeType,
+            filePath: previewFile.filePath,
+            fileName: previewFile.fileName,
+            fileSize: previewFile.fileSize,
+            preview: previewFile.preview,
+          });
         }
       }
     }

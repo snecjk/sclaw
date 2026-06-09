@@ -1,4 +1,5 @@
 import { messageHasDingTalkRecipientContext } from './dingtalk-mention-context';
+import { unescapeLiteralDwsSendText } from './dws-send-text';
 
 export interface DingTalkSentDisplayMessage {
   role?: string;
@@ -162,7 +163,8 @@ function parseTextFlag(command: string): string | undefined {
   let rest = match[1].trim();
   rest = rest.replace(/\s+--(?:format|uuid|dry-run)\b[\s\S]*$/i, '').trim();
   if (!rest) return undefined;
-  return parseQuotedValue(rest) ?? rest;
+  const parsed = parseQuotedValue(rest) ?? rest;
+  return unescapeLiteralDwsSendText(parsed);
 }
 
 function inferRecipient(

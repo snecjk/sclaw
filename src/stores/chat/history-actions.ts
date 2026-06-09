@@ -75,19 +75,18 @@ export function createHistoryActions(
         // until the run completes, causing it to flash out of the UI.
         let finalMessages = enrichedMessages;
         const userMsgAt = get().lastUserMessageAt;
-        if (get().sending && userMsgAt) {
+        if (userMsgAt) {
           const userMsMs = toMs(userMsgAt);
           const hasRecentUser = enrichedMessages.some(
             (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000,
           );
-          if (!hasRecentUser) {
-            const currentMsgs = get().messages;
-            const optimistic = [...currentMsgs].reverse().find(
-              (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000,
-            );
-            if (optimistic) {
-              finalMessages = [...enrichedMessages, optimistic];
-            }
+          const currentMsgs = get().messages;
+          const optimistic = [...currentMsgs].reverse().find(
+            (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000,
+          );
+          const shouldPreserveOptimistic = !!optimistic && (get().sending || optimistic.isError);
+          if (!hasRecentUser && shouldPreserveOptimistic && optimistic) {
+            finalMessages = [...enrichedMessages, optimistic];
           }
         }
 

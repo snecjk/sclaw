@@ -222,19 +222,45 @@ export function detectActiveMentionTrigger(root: HTMLElement): ActiveMentionTrig
   };
 }
 
-export function createMentionSpan(mention: DingTalkMention): HTMLSpanElement {
+export interface MentionSpanOptions {
+  removable?: boolean;
+}
+
+const MENTION_SPAN_BASE_CLASS = [
+  MENTION_SPAN_CLASS,
+  'rounded-[3px]',
+  'bg-[#E8F3FF]',
+  'text-[#1677FF]',
+  'font-medium',
+  'dark:bg-[#1677FF]/15',
+  'dark:text-[#4C9BFF]',
+].join(' ');
+
+const MENTION_REMOVE_BTN_CLASS = [
+  'mention-remove-btn',
+  'inline-flex',
+  'h-3.5',
+  'w-3.5',
+  'shrink-0',
+  'items-center',
+  'justify-center',
+  'rounded-full',
+  'text-[11px]',
+  'leading-none',
+  'text-[#1677FF]/70',
+  'transition-colors',
+  'hover:bg-[#1677FF]/10',
+  'hover:text-[#1677FF]',
+  'dark:text-[#4C9BFF]/70',
+  'dark:hover:bg-[#4C9BFF]/15',
+  'dark:hover:text-[#4C9BFF]',
+].join(' ');
+
+export function createMentionSpan(mention: DingTalkMention, options?: MentionSpanOptions): HTMLSpanElement {
   const span = document.createElement('span');
-  span.className = [
-    MENTION_SPAN_CLASS,
-    'inline',
-    'rounded-[3px]',
-    'bg-[#E8F3FF]',
-    'px-0.5',
-    'text-[#1677FF]',
-    'font-medium',
-    'dark:bg-[#1677FF]/15',
-    'dark:text-[#4C9BFF]',
-  ].join(' ');
+  span.className = options?.removable
+    ? `${MENTION_SPAN_BASE_CLASS} inline-flex items-center gap-0.5 px-1 py-px`
+    : `${MENTION_SPAN_BASE_CLASS} inline px-0.5`;
   span.contentEditable = 'false';
   span.dataset.mentionType = mention.type;
   span.dataset.mentionName = mention.displayName;
@@ -245,7 +271,19 @@ export function createMentionSpan(mention: DingTalkMention): HTMLSpanElement {
   if (mention.type === 'group' && mention.openConversationId) {
     span.dataset.openConversationId = mention.openConversationId;
   }
-  span.textContent = `@${mention.displayName}`;
+
+  span.appendChild(document.createTextNode(`@${mention.displayName}`));
+
+  if (options?.removable) {
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.dataset.mentionRemove = 'true';
+    removeBtn.setAttribute('aria-label', '移除');
+    removeBtn.className = MENTION_REMOVE_BTN_CLASS;
+    removeBtn.textContent = '×';
+    span.appendChild(removeBtn);
+  }
+
   return span;
 }
 
@@ -263,17 +301,31 @@ export function createWorkflowSpan(workflowId: string, name: string): HTMLSpanEl
   return span;
 }
 
+export function removeMentionSpan(root: HTMLElement, span: HTMLSpanElement): void {
+  if (!root.contains(span)) return;
+
+  const next = span.nextSibling;
+  span.remove();
+  if (next?.nodeType === Node.TEXT_NODE) {
+    const text = next.textContent ?? '';
+    if (text === '\u00A0' || text === ' ') {
+      next.remove();
+    }
+  }
+}
+
 export function insertMentionAtTrigger(
   root: HTMLElement,
   trigger: ActiveMentionTrigger,
   mention: DingTalkMention,
+  options?: MentionSpanOptions,
 ): void {
   const selection = window.getSelection();
   const triggerRange = buildRangeFromPlainTextOffsets(root, trigger.startOffset, trigger.endOffset);
   if (!triggerRange) return;
   triggerRange.deleteContents();
 
-  const mentionSpan = createMentionSpan(mention);
+  const mentionSpan = createMentionSpan(mention, options);
   const space = document.createTextNode('\u00A0');
   const fragment = document.createDocumentFragment();
   fragment.append(mentionSpan, space);
@@ -370,6 +422,22 @@ export function clearMentionEditor(root: HTMLElement): void {
 
 export function setMentionEditorPlainText(root: HTMLElement, text: string): void {
   root.textContent = text;
+}
+
+export function setMentionEditorMentions(
+  root: HTMLElement,
+  mentions: DingTalkMention[],
+  options?: MentionSpanOptions,
+): void {
+  root.innerHTML = '';
+  if (mentions.length === 0) return;
+
+  const fragment = document.createDocumentFragment();
+  mentions.forEach((mention) => {
+    fragment.appendChild(createMentionSpan(mention, options));
+    fragment.appendChild(document.createTextNode('\u00A0'));
+  });
+  root.appendChild(fragment);
 }
 
 export function isCaretInsideMentionSpan(_root: HTMLElement): boolean {

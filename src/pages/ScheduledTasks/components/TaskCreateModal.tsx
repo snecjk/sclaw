@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { DingTalkRecipientField } from '@/components/dingtalk/DingTalkRecipientField';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
+import { resolveScheduledTaskMentions, stripInstructionFromTaskMessage } from '@/lib/scheduled-task-recipients';
 import { cn } from '@/lib/utils';
 import type { CronJob, CronJobCreateInput } from '@/types/cron';
+import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { ScheduledTask } from '@/types/scheduled-task';
 
 export type TaskCreateInputWithRun = CronJobCreateInput;
 
 interface TaskCreateModalProps {
   job?: CronJob | null;
+  sourceTask?: ScheduledTask | null;
   open: boolean;
   onClose: () => void;
   onSave: (input: TaskCreateInputWithRun) => Promise<void>;
@@ -70,10 +75,11 @@ function cronToScheduleValue(cron: string | unknown): ScheduleValue {
   return { frequency: 'daily', time, weekDays: [1, 2, 3, 4, 5] };
 }
 
-export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: TaskCreateModalProps) {
+export function TaskCreateModal({ job, sourceTask, open, onClose, onSave, initialValues }: TaskCreateModalProps) {
   const [name, setName] = useState('');
   const [instructions, setInstructions] = useState('');
   const [schedule, setSchedule] = useState<ScheduleValue>(defaultScheduleValue());
+  const [recipients, setRecipients] = useState<DingTalkMention[]>([]);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; instructions?: string }>({});
 
@@ -83,21 +89,24 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
     if (open) {
       if (job) {
         setName(job.name || '');
-        setInstructions(job.message || '');
+        setInstructions(stripInstructionFromTaskMessage(job.message || ''));
+        setRecipients(resolveScheduledTaskMentions(sourceTask?.description || job.message || '', sourceTask));
         setSchedule(cronToScheduleValue(job.schedule));
       } else if (initialValues) {
         setName(initialValues.name || '');
         setInstructions(initialValues.message || '');
+        setRecipients([]);
         setSchedule(initialValues.schedule ? cronToScheduleValue(initialValues.schedule) : defaultScheduleValue());
       } else {
         setName('');
         setInstructions('');
+        setRecipients([]);
         setSchedule(defaultScheduleValue());
       }
       setErrors({});
       setSaving(false);
     }
-  }, [open, job, initialValues]);
+  }, [open, job, initialValues, sourceTask]);
 
   const handleSubmit = async () => {
     const newErrors: typeof errors = {};
@@ -115,6 +124,7 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
         message: instructions.trim(),
         schedule: scheduleValueToCron(schedule),
         enabled: true,
+        dingTalkMentions: recipients.length > 0 ? recipients : undefined,
       });
       onClose();
     } catch (err) {
@@ -224,6 +234,14 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
               计划时间
             </label>
             <SchedulePicker value={schedule} onChange={setSchedule} />
+          </div>
+
+          {/* Recipients */}
+          <div>
+            <label className="block text-[13.5px] font-medium text-foreground mb-1.5">
+              发送对象
+            </label>
+            <DingTalkRecipientField value={recipients} onChange={setRecipients} />
           </div>
         </div>
 

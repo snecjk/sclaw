@@ -1,8 +1,12 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import {
+  classifyDwsChatMessageSendCategory,
   evaluateDingTalkSendGuard,
+  handleDingTalkSendGuardAfter,
   isBatchDwsChatMessageSend,
   isBlockedDwsSendSpamCommand,
+  isSuccessfulDwsChatMessageSendResult,
+  rememberPendingDingTalkSend,
   resetDingTalkSendRateLimitForTests,
 } from '../../sto-plugin/sto-dingtalk-send-guard/dingtalk-send-guard';
 
@@ -25,22 +29,119 @@ describe('isBatchDwsChatMessageSend', () => {
   });
 });
 
+describe('classifyDwsChatMessageSendCategory', () => {
+  it('classifies text sends', () => {
+    const cmd = 'dws chat message send --user u1 --title "消息" --text hello --format json';
+    expect(classifyDwsChatMessageSendCategory(cmd)).toBe('text');
+  });
+
+  it('classifies image sends', () => {
+    const cmd = 'dws chat message send --user u1 --msg-type image --media-id mid1 --format json';
+    expect(classifyDwsChatMessageSendCategory(cmd)).toBe('image');
+  });
+
+  it('classifies file sends as image bucket', () => {
+    const cmd =
+      'dws chat message send --user u1 --msg-type file --dentry-id d1 --space-id s1 --file-name "a.pdf" --format json';
+    expect(classifyDwsChatMessageSendCategory(cmd)).toBe('image');
+  });
+});
+
+describe('isSuccessfulDwsChatMessageSendResult', () => {
+  it('accepts ok:true json', () => {
+    expect(isSuccessfulDwsChatMessageSendResult(undefined, '{"ok":true,"openTaskId":"t1"}')).toBe(true);
+  });
+
+  it('rejects explicit errors', () => {
+    expect(isSuccessfulDwsChatMessageSendResult('exec failed', '{"ok":false}')).toBe(false);
+  });
+
+  it('rejects empty output', () => {
+    expect(isSuccessfulDwsChatMessageSendResult(undefined, '')).toBe(false);
+  });
+});
+
 describe('evaluateDingTalkSendGuard', () => {
   beforeEach(() => {
     resetDingTalkSendRateLimitForTests();
   });
 
-  it('blocks the second send within one minute', () => {
+  it('allows two text sends before any succeeds', () => {
     const params = {
       command: 'dws chat message send --user u1 --title "消息" --text hello --format json',
     };
     const first = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
     const second = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
     expect(first.allowed).toBe(true);
+    expect(second.allowed).toBe(true);
+  });
+
+  it('blocks the second text send after one succeeds', () => {
+    const params = {
+      command: 'dws chat message send --user u1 --title "消息" --text hello --format json',
+    };
+    const toolCallId = 'call-text-1';
+    const first = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
+    expect(first.allowed).toBe(true);
+    rememberPendingDingTalkSend(toolCallId, 'sess-1', 'text');
+    handleDingTalkSendGuardAfter({
+      toolName: 'exec',
+      params,
+      sessionKey: 'sess-1',
+      toolCallId,
+      result: '{"ok":true}',
+    });
+
+    const second = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
     expect(second.allowed).toBe(false);
     if (!second.allowed) {
-      expect(second.reason).toContain('每分钟最多 1 条');
+      expect(second.reason).toContain('文字');
     }
+  });
+
+  it('allows text and image sends in the same minute when both succeed once', () => {
+    const textParams = {
+      command: 'dws chat message send --user u1 --title "消息" --text hello --format json',
+    };
+    const imageParams = {
+      command: 'dws chat message send --user u1 --msg-type image --media-id m1 --format json',
+    };
+
+    evaluateDingTalkSendGuard({ toolName: 'exec', params: textParams, sessionKey: 'sess-1' });
+    rememberPendingDingTalkSend('call-text', 'sess-1', 'text');
+    handleDingTalkSendGuardAfter({
+      toolName: 'exec',
+      params: textParams,
+      sessionKey: 'sess-1',
+      toolCallId: 'call-text',
+      result: '{"ok":true}',
+    });
+
+    const imageDecision = evaluateDingTalkSendGuard({
+      toolName: 'exec',
+      params: imageParams,
+      sessionKey: 'sess-1',
+    });
+    expect(imageDecision.allowed).toBe(true);
+  });
+
+  it('does not count failed sends toward rate limit', () => {
+    const params = {
+      command: 'dws chat message send --user u1 --title "消息" --text hello --format json',
+    };
+    evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
+    rememberPendingDingTalkSend('call-fail', 'sess-1', 'text');
+    handleDingTalkSendGuardAfter({
+      toolName: 'exec',
+      params,
+      sessionKey: 'sess-1',
+      toolCallId: 'call-fail',
+      error: 'exit 1',
+      result: '{"ok":false,"error":"rate limited"}',
+    });
+
+    const retry = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
+    expect(retry.allowed).toBe(true);
   });
 
   it('blocks batch send before rate limit applies', () => {

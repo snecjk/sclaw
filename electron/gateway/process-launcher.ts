@@ -49,6 +49,103 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
     return false;
   }
 
+  function unescapeLiteralDwsSendText(text) {
+    if (!text || typeof text !== 'string' || !/[\\\\][ntr]/.test(text)) return text;
+    return text.replace(/\\\\n/g, '\\n').replace(/\\\\t/g, '\\t').replace(/\\\\r/g, '\\r');
+  }
+
+  function shellQuoteDwsSendTextForBash(text) {
+    var escaped = String(text)
+      .replace(/\\\\/g, '\\\\\\\\')
+      .replace(/'/g, "\\\\'")
+      .replace(/\\n/g, '\\\\n')
+      .replace(/\\r/g, '\\\\r')
+      .replace(/\\t/g, '\\\\t');
+    return "$'" + escaped + "'";
+  }
+
+  var DINGTALK_DISCLAIMER_FOOTER = '<font color="#999999">本消息由 STO Claw 代为发送，非本人实时回复。</font>';
+  var DINGTALK_DISCLAIMER_MARKER = 'STO Claw 代为发送';
+
+  function ensureDingTalkDisclaimerFormat(body) {
+    var trimmed = String(body || '').trim();
+    if (!trimmed) return DINGTALK_DISCLAIMER_FOOTER;
+    if (trimmed.indexOf(DINGTALK_DISCLAIMER_MARKER) < 0) {
+      return trimmed + '\\n\\n---\\n\\n' + DINGTALK_DISCLAIMER_FOOTER;
+    }
+    if (/\\n---\\n[\\s\\S]*STO Claw 代为发送/i.test(trimmed)) return trimmed;
+    var htmlMatch = trimmed.match(/^([\\s\\S]*?)(\\n*)\\s*(<font color="#999999">[\\s\\S]*?STO Claw 代为发送[\\s\\S]*?<\\/font>)\\s*$/i);
+    if (htmlMatch) {
+      return htmlMatch[1].replace(/\\s+$/, '') + '\\n\\n---\\n\\n' + htmlMatch[3];
+    }
+    var plainMatch = trimmed.match(/^([\\s\\S]*?)(\\n*)([^\\n<]*STO Claw 代为发送[^\\n<]*)\\s*$/i);
+    if (plainMatch) {
+      return plainMatch[1].replace(/\\s+$/, '') + '\\n\\n---\\n\\n' + DINGTALK_DISCLAIMER_FOOTER;
+    }
+    return trimmed;
+  }
+
+  function normalizeDwsChatMessageSendText(text) {
+    return ensureDingTalkDisclaimerFormat(unescapeLiteralDwsSendText(text));
+  }
+
+  function fixDwsChatMessageSendShellScript(script) {
+    if (!DWS_CHAT_MSG_SEND.test(script) || !/--text\\s+/i.test(script)) return script;
+    return script.replace(/--text\\s+("(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*')/gi, function(full, quoted) {
+      if (!quoted) return full;
+      var inner = quoted.slice(1, -1);
+      var parsed = inner.replace(/\\\\(.)/g, function(_, ch) {
+        if (ch === 'n') return '\\n';
+        if (ch === 't') return '\\t';
+        if (ch === 'r') return '\\r';
+        return ch;
+      });
+      var normalized = normalizeDwsChatMessageSendText(parsed);
+      if (normalized === parsed) return full;
+      return '--text ' + shellQuoteDwsSendTextForBash(normalized);
+    });
+  }
+
+  function fixDwsChatMessageSendArgv(argsList) {
+    if (!Array.isArray(argsList)) return argsList;
+    var textIdx = -1;
+    for (var i = 0; i < argsList.length; i++) {
+      if (argsList[i] === '--text') { textIdx = i; break; }
+    }
+    if (textIdx < 0 || textIdx + 1 >= argsList.length) return argsList;
+    var next = argsList[textIdx + 1];
+    if (typeof next !== 'string') return argsList;
+    var fixed = normalizeDwsChatMessageSendText(next);
+    if (fixed === next) return argsList;
+    var copy = argsList.slice();
+    copy[textIdx + 1] = fixed;
+    return copy;
+  }
+
+  function normalizeDwsSendInvocation(cmd, argsList) {
+    var c = typeof cmd === 'string' ? cmd.trim() : '';
+    var args = Array.isArray(argsList) ? argsList : [];
+    if (/^dws(\\.exe)?$/i.test(c)) {
+      return fixDwsChatMessageSendArgv(args);
+    }
+    if (/bash|sh|zsh|dash/i.test(c) || /\\\\bash$|\\\\sh$/.test(c)) {
+      var cIdx = args.indexOf('-c');
+      if (cIdx < 0) cIdx = args.indexOf('/c');
+      if (cIdx >= 0 && cIdx + 1 < args.length && typeof args[cIdx + 1] === 'string') {
+        var script = args[cIdx + 1];
+        if (DWS_CHAT_MSG_SEND.test(script)) {
+          var fixedScript = fixDwsChatMessageSendShellScript(script);
+          if (fixedScript !== script) {
+            var shellCopy = args.slice();
+            shellCopy[cIdx + 1] = fixedScript;
+            return shellCopy;
+          }
+        }
+      }
+    }
+    return args;
+  }
+
   function isBlockedUpgradeCommand(cmd, argsList) {
     var c = typeof cmd === 'string' ? cmd.trim() : '';
     var a = Array.isArray(argsList) ? argsList.join(' ') : '';
@@ -158,6 +255,15 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
           var args = Array.prototype.slice.call(arguments);
           var cmd = typeof args[0] === 'string' ? args[0] : '';
           var cmdArgs = Array.isArray(args[1]) ? args[1] : [];
+          if (m === 'exec' || m === 'execFile') {
+            if (typeof args[0] === 'string' && DWS_CHAT_MSG_SEND.test(args[0])) {
+              args[0] = fixDwsChatMessageSendShellScript(args[0]);
+              cmd = args[0];
+            }
+          } else if (Array.isArray(args[1])) {
+            args[1] = normalizeDwsSendInvocation(cmd, cmdArgs);
+            cmdArgs = args[1];
+          }
           var blockedErr = resolveBlockedSpawnError(cmd, cmdArgs);
           if (blockedErr) {
             for (var i = args.length - 1; i >= 1; i--) {
@@ -189,6 +295,15 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
           var args = Array.prototype.slice.call(arguments);
           var cmd = typeof args[0] === 'string' ? args[0] : '';
           var cmdArgs = Array.isArray(args[1]) ? args[1] : [];
+          if (m === 'execSync' || m === 'execFileSync') {
+            if (typeof args[0] === 'string' && DWS_CHAT_MSG_SEND.test(args[0])) {
+              args[0] = fixDwsChatMessageSendShellScript(args[0]);
+              cmd = args[0];
+            }
+          } else if (Array.isArray(args[1])) {
+            args[1] = normalizeDwsSendInvocation(cmd, cmdArgs);
+            cmdArgs = args[1];
+          }
           var blockedSyncErr = resolveBlockedSpawnError(cmd, cmdArgs);
           if (blockedSyncErr) throw blockedSyncErr;
           var optIdx = -1;
