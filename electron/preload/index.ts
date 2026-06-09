@@ -27,6 +27,8 @@ const electronAPI = {
         'workflow:startTracking',
         'workflow:stopTracking',
         'workflow:sync-state',
+        'workflow:stream:subscribe',
+        'workflow:stream:unsubscribe',
         'gateway:health',
         'gateway:getControlUiUrl',
         // OpenClaw
@@ -165,6 +167,8 @@ const electronAPI = {
         'workflow:startTracking',
         'workflow:stopTracking',
         'workflow:sync-state',
+        'workflow:stream:subscribe',
+        'workflow:stream:unsubscribe',
       ];
 
       if (validChannels.includes(channel)) {
@@ -214,6 +218,9 @@ const electronAPI = {
         'dws:cli-install-failed',
         'startup-progress',
         'auth:token-expired',
+        'workflow:status-update',
+        'workflow:stream:event',
+        'workflow:stream:error',
       ];
 
       if (validChannels.includes(channel)) {

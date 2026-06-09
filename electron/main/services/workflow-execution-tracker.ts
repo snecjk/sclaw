@@ -29,6 +29,7 @@ interface ExecutionSession {
   lastStepSignature: string;
   lastStepChangeAt: number;
   stopRequested: boolean;
+  pollCount: number;
 }
 
 const USER_FRIENDLY_ERRORS: Array<{ pattern: RegExp; message: string }> = [
@@ -84,10 +85,12 @@ class WorkflowExecutionTracker {
       lastStepSignature: '',
       lastStepChangeAt: now,
       stopRequested: false,
+      pollCount: 0,
     };
 
     this.sessions.set(runId, session);
     this.beginPolling(session);
+    logger.info(`[workflow-trace] workflow:startTracking runId=${runId} workflowId=${workflowId} sessionKey=${sessionKey}`);
     logger.info(`[Tracker] Started tracking run ${runId}`);
   }
 
@@ -151,10 +154,15 @@ class WorkflowExecutionTracker {
       };
       if (token) headers.stoToken = token;
 
+      session.pollCount += 1;
+      const pollPath = `/agent/v1/runs/${session.runId}`;
       const res = await proxyAwareFetch(
-        `http://127.0.0.1:${PORTS.CLAWX_HOST_API}/agent/v1/runs/${session.runId}`,
+        `http://127.0.0.1:${PORTS.CLAWX_HOST_API}${pollPath}`,
         { timeoutMs: 10_000, headers },
       );
+      if (session.pollCount === 1) {
+        logger.info(`[workflow-trace] GET ${pollPath} poll #1 status=${res.status}`);
+      }
 
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
@@ -268,6 +276,12 @@ class WorkflowExecutionTracker {
     const significantProgress =
       newState.status === 'running' &&
       Math.floor(newState.progress / 10) !== Math.floor(prevProgress / 10);
+
+    if (statusChanged) {
+      logger.info(
+        `[workflow-trace] run status change runId=${session.runId} ${prevStatus} -> ${newState.status} progress=${newState.progress}`,
+      );
+    }
 
     if (statusChanged || stepChanged || significantProgress || newState.status === 'completed' || newState.status === 'failed') {
       this.broadcastState(session);

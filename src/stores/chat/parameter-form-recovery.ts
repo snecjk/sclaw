@@ -78,7 +78,7 @@ function registerWorkflowSubmitHandler(
     const chatState = get();
     const summaryText = buildWorkflowValuesSummary(schema, values);
     try {
-      const { createWorkflow, startWorkflow } = await import('@/lib/workflow-api');
+      const { createWorkflow, startWorkflow, beginWorkflowRunSseTrace } = await import('@/lib/workflow-api');
       const { saveWorkflowExecution } = await import('@/stores/workflow-memory');
       const { invokeIpc } = await import('@/lib/api-client');
       const created = await createWorkflow({
@@ -90,20 +90,22 @@ function registerWorkflowSubmitHandler(
         inputs: values,
         idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
       });
-      await chatState.sendMessage({
-        text: `${summaryText}\n\n工作流 ID: ${created.workflowId}`,
-        workflowId: created.workflowId,
-        runId: run.id,
+      const { appendWorkflowStartedLocalTurn } = await import('@/lib/workflow-local-turn');
+      appendWorkflowStartedLocalTurn({
+        userText: `${summaryText}\n\n工作流 ID: ${created.workflowId}`,
+        templateName,
+        runId: run.runId,
       });
       await invokeIpc('workflow:startTracking', {
-        runId: run.id,
+        runId: run.runId,
         workflowId: created.workflowId,
         sessionKey: chatState.currentSessionKey,
         agentId: chatState.currentAgentId,
       });
+      beginWorkflowRunSseTrace(run.runId);
       saveWorkflowExecution({
         workflowId: created.workflowId,
-        runId: run.id,
+        runId: run.runId,
         templateId,
         templateName,
         status: 'running',
@@ -111,8 +113,8 @@ function registerWorkflowSubmitHandler(
         updatedAt: Date.now(),
         collectedInputs: values,
       });
-      chatState.setWorkflowCardState(run.id, {
-        runId: run.id,
+      chatState.setWorkflowCardState(run.runId, {
+        runId: run.runId,
         workflowId: created.workflowId,
         status: 'running',
         progress: 0,

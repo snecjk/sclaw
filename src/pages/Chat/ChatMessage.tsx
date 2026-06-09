@@ -261,9 +261,9 @@ export const ChatMessage = memo(function ChatMessage({
         )}
 
         {/* Workflow execution card */}
-        {workflowCard && (
+        {/* {workflowCard && (
           <WorkflowCard runId={workflowCard.runId} templateName={workflowCard.templateName} />
-        )}
+        )} */}
 
         {/* Parameter form card */}
         {parameterForm && (

@@ -28,6 +28,7 @@ import {
 import type { WorkflowExecutionState } from '@/types/workflow';
 import { buildWorkflowFormConfig, buildStartupPreset, buildWorkflowValuesSummary } from '@/lib/workflow-form-utils';
 import { registerParameterFormHandler } from '@/components/parameter-form/form-handlers';
+import { mergeLocalWorkflowTurnsFromCurrent } from '@/lib/workflow-local-turn';
 import {
   mergeParameterFormBlocksFromCurrent,
   recoverParameterFormsOnHistoryLoad,
@@ -946,7 +947,7 @@ function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
       : '参数已确认';
 
     try {
-      const { createWorkflow, startWorkflow } = await import('@/lib/workflow-api');
+      const { createWorkflow, startWorkflow, beginWorkflowRunSseTrace } = await import('@/lib/workflow-api');
       const { saveWorkflowRecord, updateWorkflowRunMetadata, saveWorkflowExecution } = await import('@/stores/workflow-memory');
       const { invokeIpc } = await import('@/lib/api-client');
 
@@ -970,29 +971,30 @@ function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
         idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
       });
 
-      // Send the parameter summary as user message to the model, include workflowId
-      await chatState.sendMessage({
-        text: `${summaryText}\n\n工作流 ID: ${created.workflowId}`,
-        workflowId: created.workflowId,
-        runId: run.id,
+      const { appendWorkflowStartedLocalTurn } = await import('@/lib/workflow-local-turn');
+      appendWorkflowStartedLocalTurn({
+        userText: `${summaryText}\n\n工作流 ID: ${created.workflowId}`,
+        templateName: pending.templateName,
+        runId: run.runId,
       });
 
       await invokeIpc('workflow:startTracking', {
-        runId: run.id,
+        runId: run.runId,
         workflowId: created.workflowId,
         sessionKey: chatState.currentSessionKey,
         agentId: chatState.currentAgentId,
       });
+      beginWorkflowRunSseTrace(run.runId);
 
       updateWorkflowRunMetadata(chatState.currentSessionKey, created.workflowId, {
-        lastRunId: run.id,
+        lastRunId: run.runId,
         lastStatus: 'running',
       });
 
       // Save execution record for SSE tracking and future lookup
       saveWorkflowExecution({
         workflowId: created.workflowId,
-        runId: run.id,
+        runId: run.runId,
         templateId: pending.templateId,
         templateName: pending.templateName,
         status: 'running',
@@ -1002,8 +1004,8 @@ function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
       });
 
       // Initialize workflowCardStates for immediate UI display
-      chatState.setWorkflowCardState(run.id, {
-        runId: run.id,
+      chatState.setWorkflowCardState(run.runId, {
+        runId: run.runId,
         workflowId: created.workflowId,
         status: 'running',
         progress: 0,
@@ -1643,6 +1645,7 @@ export const useChatStore = create<ChatState>()(
         get().messages,
         getMessageText,
       );
+      finalMessages = mergeLocalWorkflowTurnsFromCurrent(finalMessages, get().messages);
       const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
         sessionKey: targetSessionKey,
         get,

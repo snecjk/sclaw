@@ -54,6 +54,13 @@ export interface WorkflowSchemaField {
   sourceNodes?: string[];
   extractable?: boolean;
   extractPattern?: string;
+  /** titled_group 子项定义 */
+  items?: Array<{
+    fieldKey: string;
+    label: string;
+    description?: string;
+    defaultValue?: string;
+  }>;
 }
 
 export interface WorkflowFieldOption {
@@ -162,6 +169,16 @@ export interface StartWorkflowRequest {
   inputs?: Record<string, unknown>;
   agentContext?: Record<string, unknown>;
   idempotencyKey: string;
+}
+
+/** POST /agent/v1/workflows/{workflowId}/start — lightweight launch confirmation */
+export interface StartWorkflowResponse {
+  runId: string;
+  workflowId: string;
+  status: WorkflowRunStatus;
+  startedAt: string;
+  queryUrl?: string | null;
+  streamUrl?: string | null;
 }
 
 // ── Run / Execution ─────────────────────────────────────────────

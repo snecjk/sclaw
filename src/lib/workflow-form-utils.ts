@@ -271,12 +271,63 @@ export function normalizeWorkflowFieldValue(value: unknown): unknown {
   return value;
 }
 
+function parseWorkflowObjectValue(value: unknown): Record<string, unknown> | null {
+  const normalized = normalizeWorkflowFieldValue(value);
+  if (typeof normalized === 'object' && normalized !== null && !Array.isArray(normalized)) {
+    return normalized as Record<string, unknown>;
+  }
+  if (typeof normalized === 'string') {
+    const trimmed = normalized.trim();
+    if (trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+      } catch {
+        // keep as plain string
+      }
+    }
+  }
+  return null;
+}
+
+/** Expand object / titled_group values into readable sub-lines. */
+export function formatWorkflowObjectLines(
+  value: unknown,
+  field?: WorkflowSchemaField,
+): string[] {
+  const record = parseWorkflowObjectValue(value);
+  if (!record) return [];
+
+  const items = field?.items;
+  if (items?.length) {
+    return items
+      .map((item) => {
+        const v = record[item.fieldKey];
+        if (v === undefined || v === null || v === '') return null;
+        const unit = item.description ? `（${item.description}）` : '';
+        return `${item.label}：${v}${unit}`;
+      })
+      .filter((line): line is string => Boolean(line));
+  }
+
+  return Object.entries(record)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => `${k}：${v}`);
+}
+
 /** Human-readable display for a single workflow field value in chat summaries. */
 export function formatWorkflowValueForDisplay(
   value: unknown,
   field?: WorkflowSchemaField,
 ): string {
   if (value === undefined || value === null || value === '') return '';
+
+  const objectLines = formatWorkflowObjectLines(value, field);
+  if (objectLines.length > 0) {
+    return objectLines.join('；');
+  }
 
   const normalized = normalizeWorkflowFieldValue(value);
 
@@ -292,32 +343,14 @@ export function formatWorkflowValueForDisplay(
     return normalized.map(String).join('、');
   }
 
-  if (typeof normalized === 'object' && normalized !== null) {
-    const items = (field as WorkflowSchemaField & { items?: Array<{ fieldKey: string; label: string }> })
-      .items;
-    if (items?.length) {
-      const record = normalized as Record<string, unknown>;
-      return items
-        .map((item) => {
-          const v = record[item.fieldKey];
-          if (v === undefined || v === null || v === '') return null;
-          return `${item.label} ${v}`;
-        })
-        .filter(Boolean)
-        .join('；');
-    }
-    return Object.entries(normalized as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined && v !== null && v !== '')
-      .map(([k, v]) => `${k}: ${v}`)
-      .join('；');
-  }
-
   if (field?.options?.length) {
     const opt = field.options.find((o) => String(o.value) === String(normalized));
     if (opt) return opt.label;
   }
 
-  return String(normalized);
+  const text = String(normalized);
+  if (text.startsWith('{') && text.includes(':')) return '';
+  return text;
 }
 
 /** Build user-facing summary after parameter form submission. */
@@ -336,13 +369,23 @@ export function buildWorkflowValuesSummary(
   for (const field of fields) {
     const val = values[field.key];
     if (val === undefined || val === null || val === '') continue;
+
+    const objectLines = formatWorkflowObjectLines(val, field);
+    if (objectLines.length > 1) {
+      lines.push(`${field.label}：`);
+      for (const sub of objectLines) {
+        lines.push(`  · ${sub}`);
+      }
+      continue;
+    }
+
     const display = formatWorkflowValueForDisplay(val, field);
     if (!display) continue;
-    lines.push(`${field.label}: ${display}`);
+    lines.push(`${field.label}：${display}`);
   }
 
   if (lines.length === 0) return '参数已确认';
-  return `已确认以下参数：\n${lines.map((l) => `- ${l}`).join('\n')}`;
+  return `已确认以下参数：\n${lines.map((l) => (l.startsWith('  ·') ? l : `- ${l}`)).join('\n')}`;
 }
 
 /**

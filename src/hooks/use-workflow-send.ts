@@ -16,10 +16,12 @@ import {
   getStartupSchema,
   createWorkflow,
   startWorkflow,
+  beginWorkflowRunSseTrace,
 } from '@/lib/workflow-api';
 import { invokeIpc } from '@/lib/api-client';
 import { canStartWorkflow, useWorkflowsStore } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
+import { appendWorkflowStartedLocalTurn } from '@/lib/workflow-local-turn';
 import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
 import type { WorkflowSchema, WorkflowSchemaField } from '@/types/workflow';
 
@@ -143,6 +145,11 @@ export async function createAndStartWorkflowDirect(
       startup: buildStartupPreset(inputs, schemaHash),
       idempotencyKey: `create-wf-${templateId}-${Date.now()}`,
     });
+    console.log(
+      '[workflow-trace] createAndStartWorkflowDirect created workflowId=%s templateId=%s',
+      created.workflowId,
+      templateId,
+    );
 
     const templateName = useWorkflowsStore.getState().templates.find((t) => t.id === templateId)?.label ?? templateId;
 
@@ -161,44 +168,31 @@ export async function createAndStartWorkflowDirect(
       idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
     });
 
-    // Notify Gateway so the confirmation message is persisted in session history.
-    await _sendMessage('参数已确认，正在分析并执行工作流...', run.id, created.workflowId);
-
-    // Insert assistant message with workflow_card locally for immediate feedback.
-    // The text above is already sent to Gateway; the workflow_card is a local UI
-    // artifact that will be lost on refresh but can be recovered via run tracking.
-    const chatStore = useChatStore;
-    const now = Date.now() / 1000;
-    chatStore.setState((s) => ({
-      messages: [
-        ...s.messages,
-        {
-          role: 'assistant',
-          content: [
-            { type: 'text', text: '参数已确认，正在分析并执行工作流...' },
-            { type: 'workflow_card', runId: run.id, templateName },
-          ],
-          timestamp: now,
-          id: crypto.randomUUID(),
-        } as import('@/stores/chat').RawMessage,
-      ],
-    }));
+    const { buildWorkflowValuesSummary } = await import('@/lib/workflow-form-utils');
+    const { schema } = cached;
+    const summaryText = buildWorkflowValuesSummary(schema, inputs);
+    appendWorkflowStartedLocalTurn({
+      userText: `${summaryText}\n\n工作流 ID: ${created.workflowId}`,
+      templateName,
+      runId: run.runId,
+    });
 
     await invokeIpc('workflow:startTracking', {
-      runId: run.id,
+      runId: run.runId,
       workflowId: created.workflowId,
       sessionKey: context.sessionKey,
       agentId: context.agentId,
     });
+    beginWorkflowRunSseTrace(run.runId);
 
     updateWorkflowRunMetadata(context.sessionKey, created.workflowId, {
-      lastRunId: run.id,
+      lastRunId: run.runId,
       lastStatus: 'running',
     });
 
     saveWorkflowExecution({
       workflowId: created.workflowId,
-      runId: run.id,
+      runId: run.runId,
       templateId,
       templateName,
       status: 'running',
@@ -207,8 +201,8 @@ export async function createAndStartWorkflowDirect(
       collectedInputs: inputs,
     });
 
-    useChatStore.getState().setWorkflowCardState(run.id, {
-      runId: run.id,
+    useChatStore.getState().setWorkflowCardState(run.runId, {
+      runId: run.runId,
       workflowId: created.workflowId,
       status: 'running',
       progress: 0,
@@ -235,7 +229,7 @@ export async function startExistingWorkflow(
   workflowId: string,
   inputs: Record<string, unknown>,
   context: WorkflowSendContext,
-  sendMessage: (text: string, runId?: string | null, workflowId?: string | null) => Promise<void>,
+  _sendMessage: (text: string, runId?: string | null, workflowId?: string | null) => Promise<void>,
   originalText: string,
   _templateName?: string,
 ): Promise<boolean> {
@@ -244,29 +238,45 @@ export async function startExistingWorkflow(
     return false;
   }
 
+  const idempotencyKey = `start-wf-${workflowId}-${Date.now()}`;
+  console.log(
+    '[workflow-trace] startExistingWorkflow workflowId=%s templateName=%s inputKeys=%o text=%s',
+    workflowId,
+    _templateName ?? '',
+    Object.keys(inputs),
+    originalText,
+  );
+
   try {
     const run = await startWorkflow(workflowId, {
       inputs,
-      idempotencyKey: `start-wf-${workflowId}-${Date.now()}`,
+      idempotencyKey,
     });
 
-    await sendMessage(originalText, run.id, workflowId);
+    const displayName = _templateName ?? '工作流';
+    appendWorkflowStartedLocalTurn({
+      userText: originalText,
+      templateName: displayName,
+      runId: run.runId,
+      assistantText: `正在启动工作流「${displayName}」…`,
+    });
 
     await invokeIpc('workflow:startTracking', {
-      runId: run.id,
+      runId: run.runId,
       workflowId,
       sessionKey: context.sessionKey,
       agentId: context.agentId,
     });
+    beginWorkflowRunSseTrace(run.runId);
 
     updateWorkflowRunMetadata(context.sessionKey, workflowId, {
-      lastRunId: run.id,
+      lastRunId: run.runId,
       lastStatus: 'running',
     });
 
     saveWorkflowExecution({
       workflowId,
-      runId: run.id,
+      runId: run.runId,
       templateId: '',
       templateName: _templateName ?? workflowId,
       status: 'running',
@@ -276,31 +286,14 @@ export async function startExistingWorkflow(
     });
 
     const chatStore = useChatStore.getState();
-    chatStore.setWorkflowCardState(run.id, {
-      runId: run.id,
+    chatStore.setWorkflowCardState(run.runId, {
+      runId: run.runId,
       workflowId,
       status: 'running',
       progress: 0,
       steps: [],
       startedAt: new Date().toISOString(),
     });
-
-    const now = Date.now() / 1000;
-    const displayName = _templateName ?? '工作流';
-    useChatStore.setState((s) => ({
-      messages: [
-        ...s.messages,
-        {
-          role: 'assistant',
-          content: [
-            { type: 'text', text: `正在启动工作流「${displayName}」…` },
-            { type: 'workflow_card', runId: run.id, templateName: displayName },
-          ],
-          timestamp: now,
-          id: crypto.randomUUID(),
-        } as import('@/stores/chat').RawMessage,
-      ],
-    }));
 
     chatStore.clearPendingWorkflow();
 
@@ -456,7 +449,10 @@ export async function tryResolvePendingWorkflow(
   }
 
   // Detect confirmation / execution intent
-  const isConfirmIntent = /(?:确认|执行|开始|帮我执行|启动|运行|好|是的|可以|行|没问题|提交|保存)/i.test(text);
+  const { isImmediateExecutionIntent } = await import('@/hooks/use-workflow-intent');
+  const isConfirmIntent =
+    isImmediateExecutionIntent(text) ||
+    /(?:确认|执行|开始|帮我执行|启动|运行|好|是的|可以|行|没问题|提交|保存)/i.test(text);
   const isShortReply = text.length <= 10;
 
   // For re-execution from memory, attempt to extract parameter overrides from natural language
@@ -474,8 +470,11 @@ export async function tryResolvePendingWorkflow(
 
   // If pending has a workflowId (from memory re-execution) and user confirms, execute directly
   if (pending.workflowId && (isConfirmIntent || isShortReply)) {
-    // If we don't have schema fields but need to extract overrides, there's nothing to override;
-    // just run with saved inputs.
+    console.log(
+      '[workflow-trace] tryResolvePendingWorkflow → startExistingWorkflow workflowId=%s text=%s',
+      pending.workflowId,
+      text,
+    );
     const ok = await startExistingWorkflow(
       pending.workflowId,
       inputs,
@@ -527,6 +526,11 @@ export async function tryResolvePendingWorkflow(
       }
     }
 
+    console.log(
+      '[workflow-trace] tryResolvePendingWorkflow → createAndStartWorkflowDirect templateId=%s text=%s',
+      pending.templateId,
+      text,
+    );
     const ok = await createAndStartWorkflowDirect(
       pending.templateId,
       mergedInputs,
@@ -630,10 +634,14 @@ export async function tryStartRememberedWorkflowSend(
   const trimmed = text.trim();
   if (!trimmed) return false;
 
-  const { isWorkflowStartIntent, buildWorkflowStartUnavailablePrompt } = await import(
-    '@/hooks/use-workflow-intent'
-  );
-  if (!isWorkflowStartIntent(trimmed)) return false;
+  const {
+    isWorkflowStartIntent,
+    isImmediateExecutionIntent,
+    buildWorkflowStartUnavailablePrompt,
+  } = await import('@/hooks/use-workflow-intent');
+
+  const wantsStart = isWorkflowStartIntent(trimmed) || isImmediateExecutionIntent(trimmed);
+  if (!wantsStart) return false;
 
   const chatState = useChatStore.getState();
   const pending = chatState.pendingWorkflow;
@@ -653,9 +661,23 @@ export async function tryStartRememberedWorkflowSend(
   }
 
   if (!workflowId) {
+    if (isImmediateExecutionIntent(trimmed)) {
+      console.log(
+        '[workflow-trace] immediate execution deferred — no workflowId yet, try pending/create path text=%s',
+        trimmed,
+      );
+      return false;
+    }
     appendLocalConversationTurn(trimmed, buildWorkflowStartUnavailablePrompt());
     return true;
   }
+
+  console.log(
+    '[workflow-trace] tryStartRememberedWorkflowSend workflowId=%s immediate=%s text=%s',
+    workflowId,
+    isImmediateExecutionIntent(trimmed),
+    trimmed,
+  );
 
   chatState.clearPendingTemplateSelection();
 
@@ -698,9 +720,11 @@ export async function tryNaturalLanguageWorkflowSend(
     shouldSearchWorkflowTemplates,
     resolveTemplateFromText,
     isWorkflowCancelIntent,
+    isUnspecifiedWorkflowCreation,
     buildTemplateSelectionPrompt,
     buildWorkflowClarificationPrompt,
     resolveTemplateSelectionFromText,
+    TEMPLATE_LIST_LIMIT,
   } = await import('@/hooks/use-workflow-intent');
 
   // User is picking a template from a previous clarification prompt
@@ -734,18 +758,51 @@ export async function tryNaturalLanguageWorkflowSend(
   // Search templates via POST /agent/v1/workflow-templates/search (not hard-coded ID).
   if (!shouldSearchWorkflowTemplates(trimmed)) return false;
 
-  const intent = await resolveTemplateFromText(trimmed);
+  const unspecified = isUnspecifiedWorkflowCreation(trimmed);
+  let intent: import('@/hooks/use-workflow-intent').WorkflowIntentResult;
 
-  if (intent.confidence === 'high' && intent.bestMatch) {
+  if (unspecified) {
+    // Bare "创建工作流" — show prefetched list, never auto-pick (e.g. blank template).
+    const { useWorkflowsStore } = await import('@/stores/workflows');
+    await useWorkflowsStore.getState().prefetchTemplates();
+    const cached = useWorkflowsStore.getState().templates;
+    intent = cached.length > 0
+      ? {
+          hasIntent: true,
+          templates: cached.slice(0, TEMPLATE_LIST_LIMIT),
+          bestMatch: null,
+          confidence: 'low',
+        }
+      : await resolveTemplateFromText('工作流', TEMPLATE_LIST_LIMIT);
+  } else {
+    intent = await resolveTemplateFromText(trimmed, TEMPLATE_LIST_LIMIT);
+  }
+
+  // Named creation intent (e.g. "异常客户跟踪 创建工作流") → always let the model guide
+  // parameter confirmation, even when template search confidence is low.
+  if (!unspecified && intent.bestMatch) {
+    console.log(
+      '[workflow-trace] tryNaturalLanguageWorkflowSend → sendWithWorkflow templateId=%s confidence=%s score=%s',
+      intent.bestMatch.id,
+      intent.confidence,
+      intent.bestMatch.matchScore ?? 0,
+    );
     await sendWithWorkflow(trimmed, intent.bestMatch.id, context, sendMessage);
-    // Handled — do not fall through to normal AI chat even if schema fetch fails.
     return true;
   }
 
+  // Bare "创建工作流" with no subject — local picker only (user must choose template).
   if (intent.templates.length > 0) {
-    const candidates = intent.templates.slice(0, 3);
+    console.log(
+      '[workflow-trace] tryNaturalLanguageWorkflowSend → local template list count=%d (no model until user picks)',
+      intent.templates.length,
+    );
+    const candidates = intent.templates.slice(0, TEMPLATE_LIST_LIMIT);
     chatState.setPendingTemplateSelection({ templates: candidates, originalText: trimmed });
-    appendLocalConversationTurn(trimmed, buildTemplateSelectionPrompt(candidates));
+    appendLocalConversationTurn(
+      trimmed,
+      buildTemplateSelectionPrompt(candidates, { unspecified }),
+    );
     return true;
   }
 

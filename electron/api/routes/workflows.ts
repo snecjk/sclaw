@@ -10,6 +10,7 @@ async function proxyWorkflowStreamRequest(
   res: ServerResponse,
   backendPath: string,
 ): Promise<void> {
+  logger.info('[workflow-trace] SSE proxy start %s', backendPath);
   const baseUrl = await resolveStoBaseUrl();
   const headers: Record<string, string> = {
     'Content-Type': 'text/event-stream',
@@ -32,16 +33,18 @@ async function proxyWorkflowStreamRequest(
       method: 'GET',
       headers,
       signal: controller.signal,
-      timeoutMs: Infinity, // No timeout for SSE streams
+      timeoutMs: 0, // No timeout for SSE streams
     });
 
     if (!response.ok) {
+      logger.warn('[workflow-trace] SSE proxy backend error %s status=%s', backendPath, response.status);
       res.statusCode = response.status;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.end(JSON.stringify({ success: false, error: `Backend returned ${response.status}` }));
       return;
     }
 
+    logger.info('[workflow-trace] SSE proxy connected %s status=%s', backendPath, response.status);
     res.statusCode = 200;
     res.setHeader('Content-Type', response.headers.get('content-type') || 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -58,19 +61,26 @@ async function proxyWorkflowStreamRequest(
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
 
+    let chunkCount = 0;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      chunkCount += 1;
+      if (chunkCount === 1 || chunkCount % 10 === 0) {
+        logger.info('[workflow-trace] SSE proxy chunk #%d %s bytes=%d', chunkCount, backendPath, value?.length ?? 0);
+      }
       res.write(decoder.decode(value, { stream: true }));
     }
 
+    logger.info('[workflow-trace] SSE proxy end %s chunks=%d', backendPath, chunkCount);
     res.end();
   } catch (err) {
     const errStr = String(err);
     if (errStr.includes('AbortError') || errStr.includes('aborted')) {
-      // Client disconnected, no error needed
+      logger.info('[workflow-trace] SSE proxy aborted %s', backendPath);
       return;
     }
+    logger.error('[workflow-trace] SSE proxy failed %s:', backendPath, err);
     logger.error('[WorkflowRoutes] Stream proxy failed:', err);
     if (!res.headersSent) {
       res.statusCode = 502;
@@ -198,6 +208,11 @@ export async function handleWorkflowRoutes(
   if (pathname === '/agent/v1/workflows' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<Record<string, unknown>>(req);
+      logger.info(
+        '[workflow-trace] POST /agent/v1/workflows templateId=%s idempotencyKey=%s',
+        body.templateId,
+        body.idempotencyKey,
+      );
       await proxyWorkflowRequest(req, res, '/agent/v1/workflows', body);
     } catch (error) {
       logger.error('[WorkflowRoutes] create workflow failed:', error);
@@ -208,11 +223,32 @@ export async function handleWorkflowRoutes(
     return true;
   }
 
-  // 4. POST /agent/v1/workflows/:workflowId/start
+  // 4. GET /agent/v1/workflows/:workflowId
+  const workflowDetailMatch = pathname.match(/^\/agent\/v1\/workflows\/([^/]+)$/);
+  if (workflowDetailMatch && req.method === 'GET') {
+    try {
+      logger.info('[workflow-trace] GET %s', pathname);
+      await proxyWorkflowRequest(req, res, pathname);
+    } catch (error) {
+      logger.error('[WorkflowRoutes] get workflow detail failed:', error);
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ success: false, error: String(error) }));
+    }
+    return true;
+  }
+
+  // 5. POST /agent/v1/workflows/:workflowId/start
   const startMatch = pathname.match(/^\/agent\/v1\/workflows\/([^/]+)\/start$/);
   if (startMatch && req.method === 'POST') {
     try {
       const body = await parseJsonBody<Record<string, unknown>>(req);
+      logger.info(
+        '[workflow-trace] POST %s idempotencyKey=%s inputKeys=%o',
+        pathname,
+        body.idempotencyKey,
+        Object.keys((body.inputs as Record<string, unknown> | undefined) ?? {}),
+      );
       await proxyWorkflowRequest(req, res, pathname, body);
     } catch (error) {
       logger.error('[WorkflowRoutes] start workflow failed:', error);
@@ -223,7 +259,7 @@ export async function handleWorkflowRoutes(
     return true;
   }
 
-  // 5. GET /agent/v1/runs/:runId/stream (SSE)
+  // 6. GET /agent/v1/runs/:runId/stream (SSE)
   const runStreamMatch = pathname.match(/^\/agent\/v1\/runs\/([^/]+)\/stream$/);
   if (runStreamMatch && req.method === 'GET') {
     // SSE stream: no try/catch wrapper — proxyWorkflowStreamRequest handles its own errors

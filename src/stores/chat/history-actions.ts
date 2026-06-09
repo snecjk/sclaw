@@ -2,6 +2,7 @@ import { invokeIpc } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
 import { stripWorkflowContextForDisplay } from '@/lib/workflow-context';
+import { mergeLocalWorkflowTurnsFromCurrent } from '@/lib/workflow-local-turn';
 import {
   mergeParameterFormBlocksFromCurrent,
   recoverParameterFormsOnHistoryLoad,
@@ -95,6 +96,7 @@ export function createHistoryActions(
           get().messages,
           getMessageText,
         );
+        finalMessages = mergeLocalWorkflowTurnsFromCurrent(finalMessages, get().messages);
         const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
           sessionKey: currentSessionKey,
           get,

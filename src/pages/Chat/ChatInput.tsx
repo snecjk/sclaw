@@ -193,7 +193,7 @@ export function ChatInput({
     install: installDingTalkMention,
     installing: dingTalkInstalling,
   } = useDingTalkMention(mentionTrigger);
-  const { templates, loadTemplates } = useWorkflowsStore();
+  const { templates, loadTemplates, prefetchTemplates } = useWorkflowsStore();
   const composerPlaceholder = disabled
     ? t('composer.gatewayDisconnectedPlaceholder')
     : t('composer.messagePlaceholder', { agent: currentAgentName });
@@ -263,9 +263,13 @@ export function ChatInput({
     };
   }, [workflowPickerOpen]);
 
-  // Load workflow templates on first open
+  // Preload top templates so picker and NL "创建工作流" respond quickly.
   useEffect(() => {
-    if (workflowPickerOpen && templates.length === 0) {
+    void prefetchTemplates();
+  }, [prefetchTemplates]);
+
+  useEffect(() => {
+    if (workflowPickerOpen && templates.length === 0 && !useWorkflowsStore.getState().loading) {
       void loadTemplates();
     }
   }, [workflowPickerOpen, templates.length, loadTemplates]);

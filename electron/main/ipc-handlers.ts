@@ -65,6 +65,7 @@ import {
 import { validateApiKeyWithProvider } from '../services/providers/provider-validation';
 import { appUpdater } from './updater';
 import { registerHostApiProxyHandlers } from './ipc/host-api-proxy';
+import { registerWorkflowStreamHandlers } from './ipc/workflow-stream-proxy';
 import { getWorkflowExecutionTracker } from './services/workflow-execution-tracker';
 import {
   isLaunchAtStartupKey,
@@ -89,6 +90,7 @@ export function registerIpcHandlers(
 
   // Host API proxy handlers
   registerHostApiProxyHandlers();
+  registerWorkflowStreamHandlers();
 
   // Gateway handlers
   registerGatewayHandlers(gatewayManager, mainWindow, getSpriteWindow, getFloatIconWindow);

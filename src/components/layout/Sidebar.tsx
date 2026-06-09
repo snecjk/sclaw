@@ -612,26 +612,6 @@ export function Sidebar() {
 
       const hasExistingMessages = useChatStore.getState().messages.length > 0;
       await loadHistory(hasExistingMessages);
-
-      // 刷新后如果在首页路由，重置到首页初始状态，避免同时高亮首页和会话项
-      if (window.location.pathname === '/') {
-        const state = useChatStore.getState();
-        if (state.currentSessionKey !== DEFAULT_SESSION_KEY || state.messages.length > 0) {
-          useChatStore.setState({
-            currentSessionKey: DEFAULT_SESSION_KEY,
-            currentAgentId: 'main',
-            messages: [],
-            streamingText: '',
-            streamingMessage: null,
-            streamingTools: [],
-            activeRunId: null,
-            error: null,
-            pendingFinal: false,
-            lastUserMessageAt: null,
-            pendingToolImages: [],
-          });
-        }
-      }
     })();
     return () => {
       cancelled = true;

@@ -85,8 +85,8 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
       },
     });
     if (nlHandled) return;
-    // Explicit creation intent should not fall through to normal AI chat.
-    return;
+    // Template search failed — fall through to pending resolve / secondary NL below.
+    console.warn('[workflow-trace] creation intent but NL handler returned false, falling through');
   }
 
   const chatState = useChatStore.getState();

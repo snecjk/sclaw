@@ -120,7 +120,22 @@ export function extractWorkflowSearchQuery(text: string): string {
   q = q.replace(/(?:创建|执行|运行|启动)\s*(?:一个|一份)?\s*(?:工作流|流程)/gi, '');
   q = q.replace(/(?:工作流|流程)\s*(?:创建|执行|运行|启动)/gi, '');
   q = q.replace(/\s+/g, ' ').trim();
-  return q || text.trim();
+  return q;
+}
+
+/**
+ * User wants to create a workflow but did not name a specific template
+ * (e.g. "创建工作流", "帮我创建一个工作流").
+ */
+export function isUnspecifiedWorkflowCreation(text: string): boolean {
+  if (!text?.trim()) return false;
+  const trimmed = text.trim();
+  const hasCreateIntent =
+    isNewWorkflowCreationIntent(trimmed) ||
+    /^(创建|新建|搭建)\s*(一个|一份)?\s*(工作流|流程)?$/i.test(trimmed);
+  if (!hasCreateIntent) return false;
+  const subject = extractWorkflowSearchQuery(trimmed);
+  return !subject || /^(工作流|流程|workflow)$/i.test(subject);
 }
 
 /**
@@ -199,20 +214,30 @@ export function buildWorkflowStartUnavailablePrompt(): string {
   ].join('\n');
 }
 
+const TEMPLATE_LIST_LIMIT = 10;
+
 /** Build assistant prompt listing candidate templates for user selection. */
-export function buildTemplateSelectionPrompt(templates: WorkflowTemplateSearchItem[]): string {
-  const lines = templates.slice(0, 3).map((t, i) => {
+export function buildTemplateSelectionPrompt(
+  templates: WorkflowTemplateSearchItem[],
+  options?: { unspecified?: boolean },
+): string {
+  const lines = templates.slice(0, TEMPLATE_LIST_LIMIT).map((t, i) => {
     const desc = t.description ? ` — ${t.description}` : '';
     return `${i + 1}. ${t.label}${desc}`;
   });
+  const header = options?.unspecified
+    ? '请选择一个工作流模板：'
+    : '检测到您想创建工作流，请确认要执行哪一个：';
   return [
-    '检测到您想创建工作流，请确认要执行哪一个：',
+    header,
     '',
     ...lines,
     '',
-    '请回复序号（如 1）或工作流名称；也可输入 / 打开工作流选择器。',
+    '请回复序号（如 1）或工作流名称；也可点击输入框中的「选择工作流」或输入 / 打开列表。',
   ].join('\n');
 }
+
+export { TEMPLATE_LIST_LIMIT };
 
 /** Prompt when workflow intent is detected but no template matched confidently. */
 export function buildWorkflowClarificationPrompt(): string {
