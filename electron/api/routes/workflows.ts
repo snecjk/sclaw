@@ -150,6 +150,13 @@ async function proxyWorkflowRequest(
     );
   }
 
+  const workflowDetailMatch = backendPath.match(/^\/agent\/v1\/workflows\/([^/]+)$/);
+  if (workflowDetailMatch) {
+    logger.info(
+      `[workflow-trace] GET ${backendPath} status=${response.status} response=${truncateForRunTrace(responseBody)}`,
+    );
+  }
+
   res.statusCode = response.status;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', contentType);
@@ -250,7 +257,7 @@ export async function handleWorkflowRoutes(
   const workflowDetailMatch = pathname.match(/^\/agent\/v1\/workflows\/([^/]+)$/);
   if (workflowDetailMatch && req.method === 'GET') {
     try {
-      logger.info(`[workflow-trace] GET ${pathname}`);
+      logger.info('[workflow-trace] GET %s (proxy) workflowId=%s', pathname, workflowDetailMatch[1]);
       await proxyWorkflowRequest(req, res, pathname);
     } catch (error) {
       logger.error('[WorkflowRoutes] get workflow detail failed:', error);

@@ -15,6 +15,14 @@ import {
 } from '@/lib/dingtalk-mention-context';
 import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
 import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay } from '@/lib/workflow-context';
+import {
+  artifactToPreviewFile,
+  extractPreviewableHttpUrls,
+  isHttpUrl,
+  isPreviewableArtifactUrl,
+  isPreviewableRemoteUrl,
+} from '@/lib/preview-url';
+import type { WorkflowExecutionState } from '@/types/workflow';
 
 /** OpenClaw injects queued system events as `System: [timestamp] ...` lines before user text. */
 const GATEWAY_SYSTEM_EVENT_LINE =
@@ -523,11 +531,12 @@ const PREVIEWABLE_MIME_PREFIXES = [
   'text/csv',
 ];
 
-export function isPreviewableFile(file: { mimeType: string; filePath?: string }): boolean {
+export function isPreviewableFile(file: { mimeType: string; filePath?: string; type?: string }): boolean {
   if (!file.filePath) return false;
-  // Web URLs (http/https) are excluded from built-in preview because they may have
-  // anti-hotlink / X-Frame-Options / CSP blocking, and should open in external browser.
-  if (file.filePath.startsWith('http://') || file.filePath.startsWith('https://')) return false;
+  if (isHttpUrl(file.filePath)) {
+    return isPreviewableRemoteUrl(file.filePath, file.type ?? file.mimeType);
+  }
+  if (file.filePath.startsWith('artifact://')) return false;
   return PREVIEWABLE_MIME_PREFIXES.some((prefix) =>
     prefix.endsWith('/') ? file.mimeType.startsWith(prefix) : file.mimeType === prefix,
   );
@@ -612,13 +621,18 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
     addIfNotImage(filePath, fileName, ext);
   }
 
-  // Localhost URLs only (previewable in side panel)
+  // Localhost URLs (previewable in side panel)
   const urlRegex = /(https?:\/\/localhost:[^\s)\]"',;<>]+)/g;
   while ((match = urlRegex.exec(cleanText)) !== null) {
     const url = match[1];
     const fileName = url.split('/').pop() || 'index.html';
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     addIfNotImage(url, fileName, ext);
+  }
+
+  // OSS / CDN http(s) links with previewable extensions
+  for (const ref of extractPreviewableHttpUrls(cleanText)) {
+    addIfNotImage(ref.filePath, ref.fileName, ref.fileName.split('.').pop()?.toLowerCase() || '');
   }
 
   // File paths (relative ./, absolute /, and Windows C:\) — support code, config, doc, and web files
@@ -641,7 +655,10 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
  * Extract previewable files from an array of messages.
  * Includes both _attachedFiles and references found in message text.
  */
-export function usePreviewableFiles(messages: Array<unknown & { _attachedFiles?: Array<{ mimeType: string; filePath?: string; fileName: string }>; content?: unknown; role?: string }>) {
+export function usePreviewableFiles(
+  messages: Array<unknown & { _attachedFiles?: Array<{ mimeType: string; filePath?: string; fileName: string }>; content?: unknown; role?: string }>,
+  workflowCardStates?: Record<string, WorkflowExecutionState>,
+) {
   return useMemo(() => {
     const seen = new Set<string>();
     const result: Array<{ mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }> = [];
@@ -686,8 +703,17 @@ export function usePreviewableFiles(messages: Array<unknown & { _attachedFiles?:
       }
     }
 
+    if (workflowCardStates) {
+      for (const state of Object.values(workflowCardStates)) {
+        for (const artifact of state.result?.artifacts ?? []) {
+          if (!isPreviewableArtifactUrl(artifact.url, artifact.type)) continue;
+          addItem(artifactToPreviewFile(artifact));
+        }
+      }
+    }
+
     return result;
-  }, [messages]);
+  }, [messages, workflowCardStates]);
 }
 
 /**

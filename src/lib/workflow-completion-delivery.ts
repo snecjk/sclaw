@@ -40,6 +40,8 @@ function buildCompletionPrompt(
     `运行 ID：${runId}`,
   ];
 
+  if (state.workflowId) lines.push(`工作流 ID：${state.workflowId}`);
+
   if (state.startedAt) lines.push(`开始时间：${state.startedAt}`);
   if (state.completedAt) lines.push(`完成时间：${state.completedAt}`);
 

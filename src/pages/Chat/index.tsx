@@ -7,8 +7,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowDown, Bot, Cpu, Loader2, Orbit, Sparkles, Workflow } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useChatStore, type AttachedFileMeta, type RawMessage } from '@/stores/chat';
-import { useSessionWorkflowPreview } from '@/hooks/use-session-workflow-preview';
+import { useChatStore, type RawMessage } from '@/stores/chat';
+import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAgentsStore } from '@/stores/agents';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
@@ -19,7 +19,7 @@ import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatToolbar } from './ChatToolbar';
 import { PendingQueuePanel } from './PendingQueuePanel';
 import { ChatPreviewPanel } from './ChatPreviewPanel';
-import { extractText, usePreviewableFiles } from './message-utils';
+import { extractText } from './message-utils';
 import { useMessageQueueStore, createAutoSendWatcher } from '@/stores/message-queue';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { useTranslation } from 'react-i18next';
@@ -58,8 +58,6 @@ export function Chat() {
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [splitting, setSplitting] = useState(false);
-  const [showPreviewPanel, setShowPreviewPanel] = useState(false);
-  const [activePreviewFilePath, setActivePreviewFilePath] = useState<string | null>(null);
   const [previewPanelWidth, setPreviewPanelWidth] = useState(480);
   const [isResizing, setIsResizing] = useState(false);
   const previewPanelRef = useRef<HTMLDivElement>(null);
@@ -266,22 +264,31 @@ export function Chat() {
 
   // Collect previewable files from messages and streaming message
   const allMessagesForPreview = useMemo(() => {
-    const arr = [...messages] as Array<{ _attachedFiles?: AttachedFileMeta[]; role?: string }>;
+    const arr = [...messages] as RawMessage[];
     if (streamMsg) {
-      arr.push(streamMsg as unknown as { _attachedFiles?: AttachedFileMeta[]; role?: string });
+      arr.push(streamMsg as unknown as RawMessage);
     }
     return arr;
   }, [messages, streamMsg]);
-  const previewableFiles = usePreviewableFiles(allMessagesForPreview);
-  const hasPreviewableFiles = previewableFiles.length > 0;
 
   const {
-    workflowId: sessionWorkflowId,
+    showPreviewPanel,
+    setShowPreviewPanel,
+    activePreviewFilePath,
+    setActivePreviewFilePath,
+    previewActiveTab,
+    setPreviewActiveTab,
+    previewableFiles,
+    canShowPreviewPanel,
+    openArtifactPreview,
+    openWorkflowPreview,
+    closePreviewPanel,
     showWorkflowTab,
-    detail: workflowDetail,
-    loading: workflowLoading,
-    error: workflowError,
-  } = useSessionWorkflowPreview(allMessagesForPreview as RawMessage[]);
+    workflowId: sessionWorkflowId,
+    workflowDetail,
+    workflowLoading,
+    workflowError,
+  } = useChatPreviewPanel(allMessagesForPreview);
 
 
 
@@ -321,12 +328,6 @@ export function Chat() {
           ) : (
             <>
               {staticItems.map((item) => {
-                const onPreviewFile = (file: AttachedFileMeta) => {
-                  if (file.filePath) {
-                    setActivePreviewFilePath(file.filePath);
-                    setShowPreviewPanel(true);
-                  }
-                };
                 if (item.type === 'assistant-turn') {
                   return (
                     <AssistantTurnMessage
@@ -335,7 +336,8 @@ export function Chat() {
                       turnToolResults={item.toolResults}
                       precedingUserMessage={item.precedingUserMessage}
                       showThinking={showThinking}
-                      onPreviewFile={onPreviewFile}
+                      onPreviewFile={openArtifactPreview}
+                      onViewWorkflow={openWorkflowPreview}
                     />
                   );
                 }
@@ -344,7 +346,8 @@ export function Chat() {
                     key={item.key}
                     message={item.message}
                     showThinking={showThinking}
-                    onPreviewFile={onPreviewFile}
+                    onPreviewFile={openArtifactPreview}
+                    onViewWorkflow={openWorkflowPreview}
                   />
                 );
               })}
@@ -357,12 +360,8 @@ export function Chat() {
                   precedingUserMessage={activeTurn.precedingUserMessage}
                   showThinking={showThinking}
                   activeStream={activeTurn.activeStream}
-                  onPreviewFile={(file) => {
-                    if (file.filePath) {
-                      setActivePreviewFilePath(file.filePath);
-                      setShowPreviewPanel(true);
-                    }
-                  }}
+                  onPreviewFile={openArtifactPreview}
+                  onViewWorkflow={openWorkflowPreview}
                 />
               ) : null}
             </>
@@ -461,7 +460,7 @@ export function Chat() {
       )}
       </div>
       {/* Resizer */}
-      {hasPreviewableFiles && showPreviewPanel && (
+      {canShowPreviewPanel && showPreviewPanel && (
         <div
           onMouseDown={startResize}
           className={cn(
@@ -476,7 +475,7 @@ export function Chat() {
 
       {/* Right: Preview Panel */}
       <AnimatePresence>
-        {hasPreviewableFiles && showPreviewPanel && (
+        {canShowPreviewPanel && showPreviewPanel && (
           <motion.div
             ref={previewPanelRef}
             layout={false}
@@ -492,28 +491,32 @@ export function Chat() {
               files={previewableFiles}
               activeFilePath={activePreviewFilePath}
               onSelectFile={setActivePreviewFilePath}
-              onClose={() => setShowPreviewPanel(false)}
+              onClose={closePreviewPanel}
               className="h-full w-full"
               showWorkflowTab={showWorkflowTab}
               workflowId={sessionWorkflowId}
               workflowDetail={workflowDetail}
               workflowLoading={workflowLoading}
               workflowError={workflowError}
+              activeTab={previewActiveTab}
+              onActiveTabChange={setPreviewActiveTab}
             />
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Floating toggle button when panel is hidden but files exist */}
-      {hasPreviewableFiles && !showPreviewPanel && (
+      {canShowPreviewPanel && !showPreviewPanel && (
         <button
           onClick={() => setShowPreviewPanel(true)}
           className="absolute right-4 top-4 z-20 inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-white/60 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white/80 dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
         >
-          <span>预览产物</span>
-          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] text-primary">
-            {previewableFiles.length}
-          </span>
+          <span>{showWorkflowTab ? '预览' : '预览产物'}</span>
+          {previewableFiles.length > 0 && (
+            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] text-primary">
+              {previewableFiles.length}
+            </span>
+          )}
         </button>
       )}
     </div>

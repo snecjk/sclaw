@@ -20,6 +20,8 @@ import { useChatStore } from '@/stores/chat';
 import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm } from './message-utils';
 import { ensureWorkflowParameterFormHandler } from '@/stores/chat/parameter-form-recovery';
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
+import { WorkflowCompletionActions, extractWorkflowCompletionRunId } from '@/components/workflow/WorkflowCompletionActions';
+import { isPreviewableRemoteUrl } from '@/lib/preview-url';
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
 import { submitParameterForm } from '@/components/parameter-form/form-handlers';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
@@ -37,6 +39,7 @@ interface ChatMessageProps {
     summary?: string;
   }>;
   onPreviewFile?: (file: AttachedFileMeta) => void;
+  onViewWorkflow?: (workflowId: string) => void;
   /** Used when rendered inside AssistantTurnMessage */
   hideAvatar?: boolean;
   hideThinkingPanel?: boolean;
@@ -57,6 +60,7 @@ export const ChatMessage = memo(function ChatMessage({
   isStreaming = false,
   streamingTools = [],
   onPreviewFile,
+  onViewWorkflow,
   hideAvatar = false,
   hideThinkingPanel = false,
 }: ChatMessageProps) {
@@ -80,6 +84,7 @@ export const ChatMessage = memo(function ChatMessage({
   const attachedFiles = message._attachedFiles || [];
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
   const workflowCard = !isUser ? extractWorkflowCard(message) : null;
+  const completionRunId = !isUser && !isStreaming ? extractWorkflowCompletionRunId(text) : null;
   const parameterForm = !isUser ? extractParameterForm(message) : null;
 
   useEffect(() => {
@@ -271,7 +276,20 @@ export const ChatMessage = memo(function ChatMessage({
 
         {/* Workflow execution card */}
         {workflowCard && (
-          <WorkflowCard runId={workflowCard.runId} templateName={workflowCard.templateName} />
+          <WorkflowCard
+            runId={workflowCard.runId}
+            templateName={workflowCard.templateName}
+            onPreviewArtifact={onPreviewFile}
+            onViewWorkflow={onViewWorkflow}
+          />
+        )}
+
+        {completionRunId && (
+          <WorkflowCompletionActions
+            runId={completionRunId}
+            onPreviewArtifact={onPreviewFile}
+            onViewWorkflow={onViewWorkflow}
+          />
         )}
 
         {/* Parameter form card */}
@@ -644,11 +662,14 @@ function preprocessTextForPreviewLinks(text: string): string {
   // For local file targets, rewrite to preview://; for external URLs, leave intact.
   const mdLinks: string[] = [];
   text = text.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (match, linkText, href) => {
-    // If the href is a local file path (not http/https), convert to preview:// link
-    if (!href.startsWith('http://') && !href.startsWith('https://')) {
-      mdLinks.push(`[${linkText}](preview://${href})`);
+    if (href.startsWith('http://') || href.startsWith('https://')) {
+      if (isPreviewableRemoteUrl(href)) {
+        mdLinks.push(`[${linkText}](preview://${href})`);
+      } else {
+        mdLinks.push(match);
+      }
     } else {
-      mdLinks.push(match);
+      mdLinks.push(`[${linkText}](preview://${href})`);
     }
     return `__MD_LINK_${mdLinks.length - 1}__`;
   });
@@ -675,6 +696,16 @@ function preprocessTextForPreviewLinks(text: string): string {
   text = text.replace(
     /(https?:\/\/localhost:[^\s)\]"',;<>]+)/g,
     '[$1](preview://$1)',
+  );
+
+  // Replace OSS/CDN http(s) URLs with previewable extensions
+  text = text.replace(
+    /(https?:\/\/[^\s)\]"',;<>]+\.(?:html?|pdf|json|md|txt|csv)(?:\?[^\s)\]"',;<>]*)?)/gi,
+    (url) => {
+      if (!isPreviewableRemoteUrl(url)) return url;
+      const label = decodeURIComponent(url.split('/').pop()?.split('?')[0] || '查看预览');
+      return `[${label}](preview://${url})`;
+    },
   );
 
   // Replace file paths (relative ./, absolute /, and Windows C:\)

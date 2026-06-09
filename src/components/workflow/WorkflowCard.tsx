@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Circle, Loader2, Workflow, XCircle, Clock, FileText } from 'lucide-react';
+import { CheckCircle2, Circle, Loader2, Workflow, XCircle, Clock, FileText, GitBranch } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
   breakdownWorkflowDurationMs,
   getWorkflowDurationMs,
 } from '@/lib/format-workflow-duration';
-import { useChatStore } from '@/stores/chat';
+import { artifactToPreviewFile, isPreviewableArtifactUrl } from '@/lib/preview-url';
+import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
 import { getExecutionByRunId } from '@/stores/workflow-memory';
 import { hydrateWorkflowRun } from '@/lib/workflow-run-hydration';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
@@ -15,6 +16,8 @@ import type { WorkflowExecutionState, WorkflowRunStatus } from '@/types/workflow
 interface WorkflowCardProps {
   runId: string;
   templateName: string;
+  onPreviewArtifact?: (file: AttachedFileMeta) => void;
+  onViewWorkflow?: (workflowId: string) => void;
 }
 
 interface StatusTheme {
@@ -133,7 +136,12 @@ function useDurationLabel(
   }, [startedAt, completedAt, isRunning, now, t]);
 }
 
-export function WorkflowCard({ runId, templateName }: WorkflowCardProps) {
+export function WorkflowCard({
+  runId,
+  templateName,
+  onPreviewArtifact,
+  onViewWorkflow,
+}: WorkflowCardProps) {
   const { t } = useTranslation('chat');
   const sessionKey = useChatStore((s) => s.currentSessionKey);
   const agentId = useChatStore((s) => s.currentAgentId);
@@ -170,8 +178,13 @@ export function WorkflowCard({ runId, templateName }: WorkflowCardProps) {
   const theme = STATUS_THEMES[statusKey];
   const StatusIcon = theme.icon;
   const isRunning = display.status === 'running';
+  const isTerminal = isTerminalWorkflowRunStatus(display.status);
   const durationLabel = useDurationLabel(display.startedAt, display.completedAt, isRunning);
   const showProgress = isRunning && display.progress > 0;
+  const previewableArtifacts = (display.result?.artifacts ?? []).filter(
+    (artifact) => isPreviewableArtifactUrl(artifact.url, artifact.type),
+  );
+  const primaryArtifact = previewableArtifacts[0] ?? display.result?.artifacts?.[0];
 
   return (
     <div
@@ -236,19 +249,64 @@ export function WorkflowCard({ runId, templateName }: WorkflowCardProps) {
         )}
 
         {display.result?.artifacts && display.result.artifacts.length > 0 && (
-          <div className="mt-2.5 space-y-1 pl-12">
-            {display.result.artifacts.map((artifact) => (
-              <a
-                key={artifact.id}
-                href={artifact.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs text-[#4760FE] hover:underline"
-              >
-                <FileText className="h-3.5 w-3.5" />
-                {artifact.name}
-              </a>
-            ))}
+          <div className="mt-3 space-y-2 pl-12">
+            {primaryArtifact && (
+              <div className="flex items-center gap-3 rounded-xl border border-[#E5E6EB] bg-white px-3.5 py-2.5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#FFF5E6]">
+                  <FileText className="h-4 w-4 text-[#FF6F00]" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-semibold text-[#1D2129]">{primaryArtifact.name}</p>
+                  <p className="truncate text-[11px] text-[#86909C]">
+                    {primaryArtifact.type || 'output'}
+                  </p>
+                </div>
+                {onPreviewArtifact && isPreviewableArtifactUrl(primaryArtifact.url, primaryArtifact.type) ? (
+                  <button
+                    type="button"
+                    onClick={() => onPreviewArtifact(artifactToPreviewFile(primaryArtifact))}
+                    className="shrink-0 rounded-full border border-[#FF6F00]/30 px-3 py-1 text-[12px] font-medium text-[#FF6F00] transition-colors hover:bg-[#FFF5E6]"
+                  >
+                    查看预览
+                  </button>
+                ) : primaryArtifact.url && !primaryArtifact.url.startsWith('artifact://') ? (
+                  <a
+                    href={primaryArtifact.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 text-[12px] font-medium text-[#4760FE] hover:underline"
+                  >
+                    打开链接
+                  </a>
+                ) : null}
+              </div>
+            )}
+
+            {isTerminal && display.workflowId && onViewWorkflow && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => onViewWorkflow(display.workflowId)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E6EB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#1D2129] transition-colors hover:border-[#FFD7A3] hover:bg-[#FFFBF5]"
+                >
+                  <GitBranch className="h-3.5 w-3.5 text-[#FF6F00]" />
+                  查看工作流
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isTerminal && display.workflowId && onViewWorkflow && (!display.result?.artifacts || display.result.artifacts.length === 0) && (
+          <div className="mt-3 pl-12">
+            <button
+              type="button"
+              onClick={() => onViewWorkflow(display.workflowId)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E6EB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#1D2129] transition-colors hover:border-[#FFD7A3] hover:bg-[#FFFBF5]"
+            >
+              <GitBranch className="h-3.5 w-3.5 text-[#FF6F00]" />
+              查看工作流
+            </button>
           </div>
         )}
       </div>

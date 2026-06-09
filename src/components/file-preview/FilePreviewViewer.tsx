@@ -8,6 +8,7 @@ import { ExternalLink, FileText, RefreshCw, Maximize, Minimize } from 'lucide-re
 import { cn } from '@/lib/utils';
 import { hostApiFetch, getHostApiBase } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
+import { isHttpUrl } from '@/lib/preview-url';
 
 interface FilePreviewViewerProps {
   filePath: string;
@@ -55,10 +56,12 @@ export function FilePreviewViewer({
   }, []);
 
   useEffect(() => {
-    if (mimeType !== 'text/markdown') {
-      setMdContent('');
-      setMdError('');
-      setMdLoading(false);
+    if (mimeType !== 'text/markdown' || isHttpUrl(filePath)) {
+      if (!isHttpUrl(filePath)) {
+        setMdContent('');
+        setMdError('');
+        setMdLoading(false);
+      }
       return;
     }
 
@@ -92,7 +95,8 @@ export function FilePreviewViewer({
 
   // Load plain text / code / json files
   useEffect(() => {
-    const isTextFile = mimeType === 'text/plain' || mimeType === 'application/json' || mimeType === 'text/csv';
+    const isTextFile = !isHttpUrl(filePath)
+      && (mimeType === 'text/plain' || mimeType === 'application/json' || mimeType === 'text/csv');
     if (!isTextFile) {
       setTextContent('');
       setTextError('');
@@ -128,11 +132,130 @@ export function FilePreviewViewer({
     };
   }, [filePath, mimeType]);
 
+  // Load remote text/json from http(s) URLs (OSS/CDN)
+  useEffect(() => {
+    const isRemoteTextFile = isHttpUrl(filePath)
+      && (mimeType === 'text/plain' || mimeType === 'application/json' || mimeType === 'text/csv' || mimeType === 'text/markdown');
+    if (!isRemoteTextFile) {
+      setTextContent('');
+      setTextError('');
+      setTextLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setTextContent('');
+    setTextError('');
+    setTextLoading(true);
+
+    void (async () => {
+      try {
+        const response = await fetch(filePath);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const content = await response.text();
+        if (cancelled) return;
+        setTextContent(content);
+      } catch (e) {
+        if (!cancelled) {
+          setTextError(e instanceof Error ? e.message : '加载远程文件失败');
+        }
+      } finally {
+        if (!cancelled) setTextLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filePath, mimeType]);
+
   const content = (() => {
-  // Web URLs (http/https) are no longer routed through the built-in preview viewer
-  // because many sites have anti-hotlink / X-Frame-Options / CSP blocking.
-  // They are opened directly in the external browser instead.
-  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+  if (isHttpUrl(filePath)) {
+    const isHtmlFile = mimeType === 'text/html' || (() => {
+      const ext = fileName.split('.').pop()?.toLowerCase();
+      return ext === 'html' || ext === 'htm';
+    })();
+
+    if (isHtmlFile || mimeType === 'application/pdf') {
+      return (
+        <iframe
+          key={filePath}
+          src={filePath}
+          title={fileName}
+          className={cn('h-full min-w-0 w-full border-0', className)}
+          sandbox="allow-scripts allow-same-origin allow-popups"
+        />
+      );
+    }
+
+    if (mimeType === 'text/markdown') {
+      if (textLoading) {
+        return (
+          <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
+            <RefreshCw className="h-5 w-5 animate-spin" />
+            正在加载预览…
+          </div>
+        );
+      }
+      if (textError) {
+        return (
+          <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm', className)}>
+            <p className="text-destructive">{textError}</p>
+            <OpenExternalButton filePath={filePath} />
+          </div>
+        );
+      }
+      if (textContent) {
+        const srcDoc = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;max-width:800px;margin:40px auto;padding:0 20px;color:#333;background:#fff}
+code{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:0.9em}
+pre{background:#f4f4f4;padding:16px;border-radius:6px;overflow-x:auto}
+</style>
+</head>
+<body>${textContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</body>
+</html>`;
+        return (
+          <iframe
+            key={filePath}
+            srcDoc={srcDoc}
+            title={fileName}
+            className={cn('h-full min-w-0 w-full border-0', className)}
+            sandbox="allow-scripts"
+          />
+        );
+      }
+    }
+
+    if (mimeType === 'text/plain' || mimeType === 'application/json' || mimeType === 'text/csv') {
+      if (textLoading) {
+        return (
+          <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
+            <RefreshCw className="h-5 w-5 animate-spin" />
+            正在加载文件…
+          </div>
+        );
+      }
+      if (textError) {
+        return (
+          <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm', className)}>
+            <p className="text-destructive">{textError}</p>
+            <OpenExternalButton filePath={filePath} />
+          </div>
+        );
+      }
+      if (textContent) {
+        return (
+          <div className={cn('h-full overflow-auto bg-[#1e1e1e] text-[#d4d4d4] p-4', className)}>
+            <pre className="text-sm font-mono whitespace-pre-wrap break-words">{textContent}</pre>
+          </div>
+        );
+      }
+    }
+
     return (
       <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm text-muted-foreground', className)}>
         <FileText className="h-10 w-10 opacity-40" />
@@ -142,7 +265,7 @@ export function FilePreviewViewer({
     );
   }
 
-  // PDF preview
+  // Web URLs handled above; legacy branch removed.
   if (mimeType === 'application/pdf') {
     return (
       <iframe

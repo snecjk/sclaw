@@ -39,6 +39,8 @@ interface ChatPreviewPanelProps {
   workflowDetail?: WorkflowDetailResponse | null;
   workflowLoading?: boolean;
   workflowError?: string | null;
+  activeTab?: PreviewTab;
+  onActiveTabChange?: (tab: PreviewTab) => void;
 }
 
 type PreviewTab = 'product' | 'workflow';
@@ -68,8 +70,12 @@ export function ChatPreviewPanel({
   workflowDetail = null,
   workflowLoading = false,
   workflowError = null,
+  activeTab: controlledTab,
+  onActiveTabChange,
 }: ChatPreviewPanelProps) {
-  const [activeTab, setActiveTab] = useState<PreviewTab>('product');
+  const [internalTab, setInternalTab] = useState<PreviewTab>('product');
+  const activeTab = controlledTab ?? internalTab;
+  const setActiveTab = onActiveTabChange ?? setInternalTab;
   const [showFileList, setShowFileList] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -104,6 +110,10 @@ export function ChatPreviewPanel({
 
   const handleDownload = useCallback(async () => {
     if (!activeFile?.filePath) return;
+    if (activeFile.filePath.startsWith('http://') || activeFile.filePath.startsWith('https://')) {
+      window.electron.openExternal(activeFile.filePath);
+      return;
+    }
     try {
       const res = await hostApiFetch<{ content: string; encoding: string }>('/api/files/read', {
         method: 'POST',
@@ -125,7 +135,7 @@ export function ChatPreviewPanel({
     }
   }, [activeFile, handleOpenExternal]);
 
-  if (files.length === 0) return null;
+  if (files.length === 0 && !showWorkflowTab) return null;
 
   return (
     <div

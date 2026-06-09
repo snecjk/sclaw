@@ -271,6 +271,14 @@ export function normalizeWorkflowFieldValue(value: unknown): unknown {
   return value;
 }
 
+/** Preview row for workflow detail panel (supports titled_group sub-fields). */
+export interface WorkflowFieldPreviewRow {
+  key: string;
+  label: string;
+  display: string;
+  description?: string;
+}
+
 function parseWorkflowObjectValue(value: unknown): Record<string, unknown> | null {
   const normalized = normalizeWorkflowFieldValue(value);
   if (typeof normalized === 'object' && normalized !== null && !Array.isArray(normalized)) {
@@ -290,6 +298,53 @@ function parseWorkflowObjectValue(value: unknown): Record<string, unknown> | nul
     }
   }
   return null;
+}
+
+/** Expand a schema field + preset value into zero or more preview rows (dynamic, API-driven). */
+export function buildWorkflowFieldPreviewRows(
+  field: WorkflowSchemaField,
+  values: Record<string, unknown>,
+): WorkflowFieldPreviewRow[] {
+  const value = values[field.key];
+  const headerLabel = field.groupTitle?.trim() || field.label;
+
+  if (value === undefined || value === null || value === '') {
+    if (field.description?.trim()) {
+      return [{
+        key: field.key,
+        label: headerLabel,
+        display: '',
+        description: field.description,
+      }];
+    }
+    return [];
+  }
+
+  const record = parseWorkflowObjectValue(value);
+  if (record && field.items?.length) {
+    const rows: WorkflowFieldPreviewRow[] = [];
+    for (const item of field.items) {
+      const itemValue = record[item.fieldKey];
+      if (itemValue === undefined || itemValue === null || itemValue === '') continue;
+      rows.push({
+        key: `${field.key}.${item.fieldKey}`,
+        label: item.label,
+        display: String(itemValue),
+        description: item.description,
+      });
+    }
+    return rows;
+  }
+
+  const display = formatWorkflowValueForDisplay(value, field);
+  if (!display && !field.description?.trim()) return [];
+
+  return [{
+    key: field.key,
+    label: headerLabel,
+    display,
+    description: field.description,
+  }];
 }
 
 /** Expand object / titled_group values into readable sub-lines. */

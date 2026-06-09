@@ -124,12 +124,37 @@ export async function createWorkflow(params: CreateWorkflowRequest): Promise<Cre
 // ── 4. Get workflow detail ──────────────────────────────────────
 
 export async function getWorkflowDetail(workflowId: string): Promise<WorkflowDetailResponse> {
-  const data = await unwrap(
-    hostApiFetch<ApiResponse<WorkflowDetailResponse>>(`/agent/v1/workflows/${workflowId}`, {
-      headers: authHeaders(),
-    }),
-  );
-  return data;
+  console.log('[workflow-trace] GET /agent/v1/workflows/%s', workflowId);
+  try {
+    const data = await unwrap(
+      hostApiFetch<ApiResponse<WorkflowDetailResponse>>(`/agent/v1/workflows/${workflowId}`, {
+        headers: authHeaders(),
+      }),
+    );
+    console.log(
+      '[workflow-trace] GET /agent/v1/workflows/%s ok name=%s nodes=%d edges=%d steps=%d fields=%d preset=%s',
+      workflowId,
+      data.workflowName,
+      data.nodes?.length ?? 0,
+      data.edges?.length ?? 0,
+      data.startup?.schema?.steps?.length ?? 0,
+      data.startup?.schema?.fields?.length ?? 0,
+      data.startup?.defaultPreset ? 'yes' : 'no',
+    );
+    console.log(
+      '[workflow-trace] GET /agent/v1/workflows/%s response=%s',
+      workflowId,
+      JSON.stringify(data),
+    );
+    return data;
+  } catch (err) {
+    console.error(
+      '[workflow-trace] GET /agent/v1/workflows/%s failed error=%s',
+      workflowId,
+      err instanceof Error ? err.message : String(err),
+    );
+    throw err;
+  }
 }
 
 // ── 5. Start workflow ───────────────────────────────────────────

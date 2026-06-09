@@ -124,6 +124,8 @@ export interface WorkflowGraphNode {
   id: string;
   type: string;
   name: string;
+  description?: string;
+  config?: Record<string, unknown>;
 }
 
 export interface WorkflowGraphEdge {
