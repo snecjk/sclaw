@@ -209,6 +209,7 @@ export async function createAndStartWorkflowDirect(
     });
 
     saveWorkflowExecution({
+      sessionKey: context.sessionKey,
       workflowId: created.workflowId,
       runId: run.runId,
       templateId,
@@ -293,6 +294,7 @@ export async function startExistingWorkflow(
     });
 
     saveWorkflowExecution({
+      sessionKey: context.sessionKey,
       workflowId,
       runId: run.runId,
       templateId: '',

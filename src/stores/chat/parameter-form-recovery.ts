@@ -104,6 +104,7 @@ function registerWorkflowSubmitHandler(
       });
       beginWorkflowRunSseTrace(run.runId);
       saveWorkflowExecution({
+        sessionKey: chatState.currentSessionKey,
         workflowId: created.workflowId,
         runId: run.runId,
         templateId,
@@ -244,7 +245,12 @@ export function recoverParameterFormsOnHistoryLoad(
       try {
         const { getLatestWorkflow } = await import('@/stores/workflow-memory');
         const latest = getLatestWorkflow(sessionKey);
-        if (!latest) return;
+        if (!latest) {
+          if (get().currentSessionKey === sessionKey) {
+            set({ loading: false });
+          }
+          return;
+        }
 
         const { getStartupSchema } = await import('@/lib/workflow-api');
         const startup = await getStartupSchema(latest.templateId);
@@ -275,6 +281,9 @@ export function recoverParameterFormsOnHistoryLoad(
         }
       } catch (err) {
         console.error('[parameter-form-recovery] async recovery failed:', err);
+        if (get().currentSessionKey === sessionKey) {
+          set({ loading: false });
+        }
       }
     })();
 

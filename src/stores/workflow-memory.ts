@@ -5,8 +5,9 @@
  * "帮我执行" (help me execute) can recover the workflow even
  * after page refresh or app restart.
  *
- * Storage key: stoclaw:session-workflows
- * Format: Record<sessionKey, WorkflowMemoryRecord[]>
+ * Storage keys (both scoped by sessionKey):
+ * - stoclaw:session-workflows  → Record<sessionKey, WorkflowMemoryRecord[]>
+ * - stoclaw:workflow-executions → Record<sessionKey, WorkflowExecutionRecord[]>
  */
 
 export interface WorkflowMemoryRecord {
@@ -29,6 +30,7 @@ export interface WorkflowMemoryRecord {
  * Stores the complete lifecycle from creation to execution.
  */
 export interface WorkflowExecutionRecord {
+  sessionKey: string;
   workflowId: string;       // ID returned from createWorkflow
   runId: string;            // ID returned from startWorkflow
   templateId: string;
@@ -142,86 +144,180 @@ export function findWorkflowById(
   return undefined;
 }
 
-// ── Workflow Execution Records ───────────────────────────────────────
+// ── Workflow Execution Records (session-scoped) ───────────────────────
 
-const MAX_EXECUTIONS = 50;
+const MAX_EXECUTIONS_PER_SESSION = 20;
 const EXECUTION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours for active tracking
 
-function loadExecutions(): WorkflowExecutionRecord[] {
+type ExecutionStore = Record<string, WorkflowExecutionRecord[]>;
+
+/** Legacy flat array before session scoping was added. */
+type LegacyExecutionRecord = Omit<WorkflowExecutionRecord, 'sessionKey'> & { sessionKey?: string };
+
+function pruneExpiredExecutions(records: WorkflowExecutionRecord[]): WorkflowExecutionRecord[] {
+  const now = Date.now();
+  return records.filter((e) => now - e.createdAt < EXECUTION_TTL_MS);
+}
+
+function resolveSessionKeyForLegacyExecution(record: LegacyExecutionRecord): string | null {
+  if (record.sessionKey) return record.sessionKey;
+  const found = findWorkflowById(record.workflowId);
+  return found?.sessionKey ?? null;
+}
+
+function migrateLegacyExecutions(parsed: LegacyExecutionRecord[]): ExecutionStore {
+  const store: ExecutionStore = {};
+  for (const raw of parsed) {
+    const sessionKey = resolveSessionKeyForLegacyExecution(raw);
+    if (!sessionKey) continue;
+    const record: WorkflowExecutionRecord = {
+      sessionKey,
+      workflowId: raw.workflowId,
+      runId: raw.runId,
+      templateId: raw.templateId,
+      templateName: raw.templateName,
+      status: raw.status,
+      createdAt: raw.createdAt,
+      updatedAt: raw.updatedAt,
+      collectedInputs: raw.collectedInputs ?? {},
+    };
+    if (!store[sessionKey]) store[sessionKey] = [];
+    if (!store[sessionKey].some((e) => e.runId === record.runId)) {
+      store[sessionKey].push(record);
+    }
+  }
+  for (const key of Object.keys(store)) {
+    store[key] = pruneExpiredExecutions(store[key]).slice(0, MAX_EXECUTIONS_PER_SESSION);
+  }
+  return store;
+}
+
+function loadExecutions(): ExecutionStore {
   try {
     const raw = localStorage.getItem(EXECUTIONS_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as WorkflowExecutionRecord[];
-      const now = Date.now();
-      return parsed.filter((e) => now - e.createdAt < EXECUTION_TTL_MS);
+    if (!raw) return {};
+
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      const migrated = migrateLegacyExecutions(parsed as LegacyExecutionRecord[]);
+      saveExecutionsStore(migrated);
+      return migrated;
+    }
+
+    if (parsed && typeof parsed === 'object') {
+      const store = parsed as ExecutionStore;
+      let changed = false;
+      for (const sessionKey of Object.keys(store)) {
+        const pruned = pruneExpiredExecutions(store[sessionKey] ?? []);
+        if (pruned.length !== (store[sessionKey]?.length ?? 0)) {
+          store[sessionKey] = pruned;
+          changed = true;
+        }
+        if (pruned.length === 0) {
+          delete store[sessionKey];
+          changed = true;
+        }
+      }
+      if (changed) saveExecutionsStore(store);
+      return store;
     }
   } catch {
     // ignore
   }
-  return [];
+  return {};
 }
 
-function saveExecutions(executions: WorkflowExecutionRecord[]): void {
+function saveExecutionsStore(store: ExecutionStore): void {
   try {
-    localStorage.setItem(EXECUTIONS_STORAGE_KEY, JSON.stringify(executions));
+    localStorage.setItem(EXECUTIONS_STORAGE_KEY, JSON.stringify(store));
   } catch {
     // ignore
   }
 }
 
-/**
- * Save a workflow execution record (workflowId + runId).
- */
-export function saveWorkflowExecution(record: WorkflowExecutionRecord): void {
-  const executions = loadExecutions();
-  // Remove existing record with same runId if any
-  const filtered = executions.filter((e) => e.runId !== record.runId);
-  filtered.unshift(record); // newest first
-  if (filtered.length > MAX_EXECUTIONS) {
-    filtered.length = MAX_EXECUTIONS;
-  }
-  saveExecutions(filtered);
+function getSessionExecutions(sessionKey: string): WorkflowExecutionRecord[] {
+  const store = loadExecutions();
+  return pruneExpiredExecutions(store[sessionKey] ?? []);
 }
 
 /**
- * Update execution status.
+ * Save a workflow execution record (workflowId + runId) for a session.
+ */
+export function saveWorkflowExecution(record: WorkflowExecutionRecord): void {
+  const store = loadExecutions();
+  const sessionKey = record.sessionKey;
+  const sessionRecords = pruneExpiredExecutions(store[sessionKey] ?? []);
+  const filtered = sessionRecords.filter((e) => e.runId !== record.runId);
+  filtered.unshift(record);
+  if (filtered.length > MAX_EXECUTIONS_PER_SESSION) {
+    filtered.length = MAX_EXECUTIONS_PER_SESSION;
+  }
+  store[sessionKey] = filtered;
+  saveExecutionsStore(store);
+}
+
+/**
+ * Update execution status within its session.
  */
 export function updateExecutionStatus(
   runId: string,
   status: WorkflowExecutionRecord['status'],
+  sessionKey?: string,
 ): void {
-  const executions = loadExecutions();
-  const idx = executions.findIndex((e) => e.runId === runId);
-  if (idx >= 0) {
-    executions[idx] = { ...executions[idx], status, updatedAt: Date.now() };
-    saveExecutions(executions);
+  const store = loadExecutions();
+  const sessionKeys = sessionKey ? [sessionKey] : Object.keys(store);
+  for (const key of sessionKeys) {
+    const records = store[key];
+    if (!records) continue;
+    const idx = records.findIndex((e) => e.runId === runId);
+    if (idx >= 0) {
+      records[idx] = { ...records[idx], status, updatedAt: Date.now() };
+      store[key] = records;
+      saveExecutionsStore(store);
+      return;
+    }
   }
 }
 
 /**
- * Get execution record by runId.
+ * Get execution record by runId (optionally scoped to session).
  */
 export function getExecutionByRunId(
   runId: string,
+  sessionKey?: string,
 ): WorkflowExecutionRecord | undefined {
-  return loadExecutions().find((e) => e.runId === runId);
+  if (sessionKey) {
+    return getSessionExecutions(sessionKey).find((e) => e.runId === runId);
+  }
+  for (const records of Object.values(loadExecutions())) {
+    const found = records.find((e) => e.runId === runId);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 /**
- * Get the most recent execution record.
+ * Get the most recent execution record for a session.
  */
-export function getLatestExecution(): WorkflowExecutionRecord | undefined {
-  const executions = loadExecutions();
-  return executions[0];
+export function getLatestExecution(sessionKey: string): WorkflowExecutionRecord | undefined {
+  return getSessionExecutions(sessionKey)[0];
 }
 
 /**
- * Find execution by workflowId.
+ * Find execution by workflowId within a session (or globally if session omitted).
  */
 export function findExecutionByWorkflowId(
   workflowId: string,
+  sessionKey?: string,
 ): WorkflowExecutionRecord | undefined {
-  return loadExecutions().find((e) => e.workflowId === workflowId);
+  if (sessionKey) {
+    return getSessionExecutions(sessionKey).find((e) => e.workflowId === workflowId);
+  }
+  for (const records of Object.values(loadExecutions())) {
+    const found = records.find((e) => e.workflowId === workflowId);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 /**
@@ -243,5 +339,22 @@ export function cleanupExpiredRecords(): void {
   }
   if (changed) {
     save(data);
+  }
+
+  const execStore = loadExecutions();
+  let execChanged = false;
+  for (const sessionKey of Object.keys(execStore)) {
+    const pruned = pruneExpiredExecutions(execStore[sessionKey] ?? []);
+    if (pruned.length !== (execStore[sessionKey]?.length ?? 0)) {
+      execStore[sessionKey] = pruned;
+      execChanged = true;
+    }
+    if (pruned.length === 0) {
+      delete execStore[sessionKey];
+      execChanged = true;
+    }
+  }
+  if (execChanged) {
+    saveExecutionsStore(execStore);
   }
 }

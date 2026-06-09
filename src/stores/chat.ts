@@ -792,6 +792,9 @@ function buildSessionSwitchPatch(
     pendingFinal: false,
     lastUserMessageAt: null,
     pendingToolImages: [],
+    workflowCardStates: {},
+    pendingWorkflow: null,
+    pendingTemplateSelection: null,
   };
 }
 
@@ -993,6 +996,7 @@ function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
 
       // Save execution record for SSE tracking and future lookup
       saveWorkflowExecution({
+        sessionKey: chatState.currentSessionKey,
         workflowId: created.workflowId,
         runId: run.runId,
         templateId: pending.templateId,
@@ -1658,7 +1662,10 @@ export const useChatStore = create<ChatState>()(
         getMessageText,
         thinkingLevel,
       });
-      if (formRecovery.deferSet) return;
+      if (formRecovery.deferSet) {
+        set({ messages: formRecovery.messages, thinkingLevel, loading: false });
+        return;
+      }
       finalMessages = formRecovery.messages;
 
       set({ messages: finalMessages, thinkingLevel, loading: false });
