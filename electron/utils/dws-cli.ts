@@ -2,6 +2,7 @@
  * DingTalk Workspace CLI (dws) bridge — download, install, PATH, spawn.
  *
  * Binary + skill are upgraded atomically from bundled manifest (GitHub Releases).
+ * Skill (mono) is installed to ~/.stoclaw/openclaw/skills/dws via release dws-skills.zip.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -9,10 +10,12 @@ import {
   existsSync,
   mkdirSync,
   chmodSync,
+  cpSync,
   readFileSync,
   writeFileSync,
   appendFileSync,
   renameSync,
+  rmSync,
   unlinkSync,
   readdirSync,
   statSync,
@@ -28,6 +31,7 @@ import { logger } from './logger';
 import { proxyAwareFetch } from './proxy-fetch';
 import { getSetting } from './store';
 import { getDwsLoginManager } from './dws-login';
+import { getOpenClawSkillsDir } from './paths';
 
 export interface DwsCliResult {
   ok: boolean;
@@ -41,6 +45,11 @@ export interface DwsBundledManifest {
   skillMode: 'mono' | 'multi';
   skillsRevision: string;
   mirrorBaseUrl?: string | null;
+  releaseUrl?: string | null;
+  skillsZip?: {
+    url?: string | null;
+    sha256?: string | null;
+  } | null;
   platforms: Record<string, {
     url: string;
     sha256?: string | null;
@@ -306,6 +315,62 @@ function clearMacQuarantine(binaryPath: string): void {
   }
 }
 
+function resolveDwsSkillsZipUrl(bundled: DwsBundledManifest): string {
+  if (bundled.skillsZip?.url) return bundled.skillsZip.url;
+
+  const platformSpec = bundled.platforms[getPlatformKey()];
+  if (platformSpec?.url) {
+    return platformSpec.url.replace(/\/[^/]+$/, '/dws-skills.zip');
+  }
+
+  if (bundled.releaseUrl) {
+    const version = normalizeDwsVersion(bundled.dwsVersion);
+    const repoBase = bundled.releaseUrl.replace(/\/releases\/tag\/v?[\d.]+.*$/i, '');
+    return `${repoBase}/releases/download/v${version}/dws-skills.zip`;
+  }
+
+  throw new Error('Cannot resolve dws-skills.zip URL from manifest');
+}
+
+function applyMirrorBaseUrl(url: string, mirrorBaseUrl?: string | null): string {
+  if (!mirrorBaseUrl) return url;
+  return url.replace(/^https?:\/\/[^/]+/, mirrorBaseUrl.replace(/\/$/, ''));
+}
+
+function getDwsOpenClawSkillDir(): string {
+  return join(getOpenClawSkillsDir(), 'dws');
+}
+
+async function installMonoDwsSkillFromReleaseZip(bundled: DwsBundledManifest): Promise<void> {
+  const skillsZipUrl = applyMirrorBaseUrl(resolveDwsSkillsZipUrl(bundled), bundled.mirrorBaseUrl);
+  const skillDir = getDwsOpenClawSkillDir();
+  const tmpDir = await mkdtemp(join(tmpdir(), 'stoclaw-dws-skill-'));
+  const zipPath = join(tmpDir, 'dws-skills.zip');
+  const extractDir = join(tmpDir, 'extract');
+
+  try {
+    await downloadFile(skillsZipUrl, zipPath, bundled.skillsZip?.sha256);
+    mkdirSync(extractDir, { recursive: true });
+    await extractArchive(zipPath, extractDir, 'zip');
+
+    mkdirSync(getOpenClawSkillsDir(), { recursive: true });
+    rmSync(skillDir, { recursive: true, force: true });
+    cpSync(extractDir, skillDir, { recursive: true });
+
+    if (!existsSync(join(skillDir, 'SKILL.md'))) {
+      throw new Error('dws skill install failed: SKILL.md missing after extract');
+    }
+
+    logger.info(`dws skill installed: ${skillDir}`);
+  } finally {
+    try {
+      await rm(tmpDir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  }
+}
+
 async function dwsSupportsSkillSetup(): Promise<boolean> {
   const help = await runDws(['skill', '--help'], 5_000);
   if (!help.ok) return false;
@@ -315,16 +380,21 @@ async function dwsSupportsSkillSetup(): Promise<boolean> {
   return /\bsetup\b/.test(text);
 }
 
-async function setupDwsSkills(mode: string): Promise<void> {
-  if (!(await dwsSupportsSkillSetup())) {
-    logger.warn('dws skill setup not supported by current binary; skipping skill install');
+async function installDwsSkillToOpenClawSkillsDir(bundled: DwsBundledManifest): Promise<void> {
+  if (bundled.skillMode === 'mono') {
+    await installMonoDwsSkillFromReleaseZip(bundled);
     return;
   }
 
-  const skillResult = await runDws(['skill', 'setup', '--mode', mode, '-y'], 120_000);
+  if (!(await dwsSupportsSkillSetup())) {
+    throw new Error('dws skillMode=multi requires dws skill setup, which is not supported by current binary');
+  }
+
+  const skillResult = await runDws(['skill', 'setup', '--mode', 'multi', '-y'], 120_000);
   if (!skillResult.ok) {
     throw new Error(skillResult.error || 'dws skill setup failed');
   }
+  logger.warn('dws skillMode=multi installed via dws skill setup; verify skills under ~/.stoclaw/openclaw/skills/');
 }
 
 async function installBinaryFromManifest(
@@ -375,7 +445,7 @@ async function installBinaryFromManifest(
     }
     clearMacQuarantine(target);
 
-    await setupDwsSkills(bundled.skillMode || 'mono');
+    await installDwsSkillToOpenClawSkillsDir(bundled);
 
     writeLocalManifest({
       dwsVersion: bundled.dwsVersion,
@@ -482,15 +552,48 @@ export async function installOrUpdateDwsCli(
   const target = getInstallTarget();
   const local = readLocalManifest();
   const binaryExists = existsSync(target);
+  const skillInstalled = existsSync(join(getDwsOpenClawSkillDir(), 'SKILL.md'));
+
+  if (
+    binaryExists
+    && local
+    && skillInstalled
+    && compareSemver(local.dwsVersion, bundled.dwsVersion) >= 0
+    && local.skillsRevision === bundled.skillsRevision
+  ) {
+    ensureDwsBinInPath();
+    return { success: true, path: target, version: normalizeDwsVersion(local.dwsVersion), updated: false };
+  }
 
   if (
     binaryExists
     && local
     && compareSemver(local.dwsVersion, bundled.dwsVersion) >= 0
     && local.skillsRevision === bundled.skillsRevision
+    && !skillInstalled
   ) {
-    ensureDwsBinInPath();
-    return { success: true, path: target, version: normalizeDwsVersion(local.dwsVersion), updated: false };
+    try {
+      await installDwsSkillToOpenClawSkillsDir(bundled);
+      writeLocalManifest({
+        ...local,
+        skillMode: bundled.skillMode,
+        skillsRevision: bundled.skillsRevision,
+        installedAt: new Date().toISOString(),
+        bundledByStoClawVersion: app.getVersion(),
+      });
+      ensureDwsBinInPath();
+      logger.info(`dws skill repaired under ${getDwsOpenClawSkillDir()}`);
+      return {
+        success: true,
+        path: target,
+        version: normalizeDwsVersion(local.dwsVersion),
+        updated: true,
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.error('dws skill repair failed:', msg);
+      return { success: false, error: msg };
+    }
   }
 
   return installBinaryFromManifest(bundled, notify);

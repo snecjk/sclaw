@@ -12,7 +12,7 @@ export interface DwsInstallOutcome {
 }
 
 /**
- * 钉钉 CLI 安装/升级成功后提示用户重启 Gateway，确认后立即重启。
+ * 钉钉插件安装/升级成功后提示用户重启网关，确认后立即重启。
  * 已是最新版本（updated === false）或 Gateway 未运行时跳过。
  */
 export async function promptGatewayRestartAfterDwsInstall(
@@ -28,9 +28,10 @@ export async function promptGatewayRestartAfterDwsInstall(
   try {
     await dialog.showMessageBox(window, {
       type: 'info',
-      title: '钉钉 CLI 安装完成',
-      message: '钉钉 CLI 已安装完成',
-      detail: '对话中的 Agent 需要重启 Gateway 后才能使用钉钉命令。请点击「确定」重启 Gateway。',
+      title: '钉钉插件安装完成',
+      message: '钉钉插件已安装完成',
+      detail:
+        '重启网关后即可使用钉钉能力。在对话输入框输入 @，可搜索联系人或群聊并分享内容。\n\n点击「确定」将立即重启网关。',
       buttons: ['确定'],
       defaultId: 0,
       noLink: true,

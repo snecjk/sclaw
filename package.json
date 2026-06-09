@@ -1,19 +1,29 @@
 {
-  "name": "stoclaw",
-  "version": "2026.6.7-GA.1",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@discordjs/opus",
-      "@whiskeysockets/baileys",
-      "electron",
-      "esbuild",
-      "koffi",
-      "protobufjs",
-      "sharp"
-    ],
-    "overrides": {
-      "isbinaryfile": "^5.0.0",
-      "https-proxy-agent": "7.0.6"
+    "name": "stoclaw",
+    "version": "2026.6.9-GA.1",
+    "pnpm": {
+        "onlyBuiltDependencies": [
+            "@discordjs/opus",
+            "@whiskeysockets/baileys",
+            "electron",
+            "esbuild",
+            "koffi",
+            "protobufjs",
+            "sharp"
+        ],
+        "overrides": {
+            "isbinaryfile": "^5.0.0",
+            "https-proxy-agent": "7.0.6"
+        },
+        "supportedArchitectures": {
+            "os": [
+                "current"
+            ],
+            "cpu": [
+                "x64",
+                "arm64"
+            ]
+        }
     },
     "supportedArchitectures": {
       "os": [
