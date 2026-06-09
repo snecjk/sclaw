@@ -243,6 +243,7 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
 
         // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
         const CHAT_SEND_TIMEOUT_MS = 120_000;
+        const MEDIA_SEND_TIMEOUT_MS = 120_000;
 
         if (hasMedia) {
           result = await invokeIpc(
@@ -258,6 +259,7 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
                 fileName: a.fileName,
               })),
             },
+            MEDIA_SEND_TIMEOUT_MS,
           ) as { success: boolean; result?: { runId?: string }; error?: string };
         } else {
           result = await invokeIpc(
