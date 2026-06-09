@@ -1,49 +1,51 @@
 /**
  * DingTalk 代发说明底栏：分隔线 + 灰色字（仅 color，勿加 size，避免客户端乱版）。
+ * 属性值用单引号，避免 shell `--text "..."` 被内部双引号截断。
  */
-
 export const DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER =
+  "<font color='#999999'>本消息由 STO Claw 代为发送，非本人实时回复。</font>";
+
+/** @deprecated 旧版双引号属性，规范化时会被替换 */
+export const DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER_LEGACY =
   '<font color="#999999">本消息由 STO Claw 代为发送，非本人实时回复。</font>';
 
 export const DINGTALK_AGENT_SEND_DISCLAIMER_MARKER = 'STO Claw 代为发送';
+
+const DISCLAIMER_FONT_BLOCK =
+  /<font\s+color=['"]#999999['"][^>]*>[\s\S]*?<\/font>/gi;
 
 /** 正文与代发说明之间已有 `---` 分隔线。 */
 export function hasDingTalkDisclaimerDivider(text: string): boolean {
   return /\n---\n[\s\S]*STO Claw 代为发送/i.test(text);
 }
 
+/** 去掉已有代发底栏（含破损 HTML、重复文案），只保留正文。 */
+export function stripDingTalkAgentSendDisclaimerBody(text: string): string {
+  if (!text) return '';
+
+  let result = text.replace(/\r\n/g, '\n').trim();
+  const dividerIdx = result.lastIndexOf('\n---\n');
+  if (dividerIdx >= 0) {
+    result = result.slice(0, dividerIdx).trimEnd();
+  }
+
+  return result
+    .replace(/\n*<font\s+color=[^\n>]*>[\s\S]*?<\/font>\s*$/gi, '')
+    .replace(/\n*<font\s+color=[^\n>]*\s*$/gi, '')
+    .replace(/\n*#999999>[^\n]*STO Claw 代为发送[^\n]*\s*$/gi, '')
+    .replace(/\n*[^\n<]*STO Claw 代为发送[^\n<]*\s*$/gi, '')
+    .replace(DISCLAIMER_FONT_BLOCK, '')
+    .trim();
+}
+
 /**
- * 确保钉钉发送正文末尾为「--- + 代发说明」标准格式。
- * 若已有说明但缺分隔线（定时任务等场景常见），自动补上。
+ * 确保钉钉发送正文末尾为「--- + 唯一代发说明」标准格式。
+ * 分割线下方只保留一句固定文案。
  */
 export function ensureDingTalkAgentSendDisclaimerFormat(body: string): string {
-  const trimmed = body.trim();
-  if (!trimmed) return DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER;
-
-  if (!trimmed.includes(DINGTALK_AGENT_SEND_DISCLAIMER_MARKER)) {
-    return `${trimmed}\n\n---\n\n${DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER}`;
-  }
-
-  if (hasDingTalkDisclaimerDivider(trimmed)) {
-    return trimmed;
-  }
-
-  const htmlFooterMatch = trimmed.match(
-    /^([\s\S]*?)(\n*)\s*(<font color="#999999">[\s\S]*?STO Claw 代为发送[\s\S]*?<\/font>)\s*$/i,
-  );
-  if (htmlFooterMatch) {
-    const bodyPart = htmlFooterMatch[1].trimEnd();
-    const footer = htmlFooterMatch[3];
-    return `${bodyPart}\n\n---\n\n${footer}`;
-  }
-
-  const plainMatch = trimmed.match(/^([\s\S]*?)(\n*)([^\n<]*STO Claw 代为发送[^\n<]*)\s*$/i);
-  if (plainMatch) {
-    const bodyPart = plainMatch[1].trimEnd();
-    return `${bodyPart}\n\n---\n\n${DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER}`;
-  }
-
-  return trimmed;
+  const bodyOnly = stripDingTalkAgentSendDisclaimerBody(body);
+  if (!bodyOnly) return DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER;
+  return `${bodyOnly}\n\n---\n\n${DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER}`;
 }
 
 /** 在 dws `chat message send --text` 正文末尾附加固定代发说明。 */

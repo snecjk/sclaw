@@ -39,8 +39,8 @@ export function stripDingTalkAgentSendDisclaimerForDisplay(text: string): string
 
   return text
     .replace(/\r\n/g, '\n')
-    .replace(/\n*---\n*\s*<font color="#999999">[\s\S]*?<\/font>\s*/gi, '')
-    .replace(/<font color="#999999">[\s\S]*?<\/font>/gi, '')
+    .replace(/\n*---\n*\s*<font color=['"]#999999['"]>[\s\S]*?<\/font>\s*/gi, '')
+    .replace(/<font color=['"]#999999['"]>[\s\S]*?<\/font>/gi, '')
     .replace(/\n*>\s*\*?[^*\n]*STO Claw[^*\n]*代为发送[^*\n]*\*?\s*/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -137,9 +137,9 @@ export function buildDingTalkMentionSystemContext(
     jsonBlock,
     '```',
     '',
-    '## StoClaw DingTalk Recipients（输入框 @ 已选定）',
+    '## StoClaw DingTalk Recipients（对话 @ 或定时任务已配置）',
     '',
-    '以上 JSON 中的 userId / openConversationId 由用户在 StoClaw 输入框通过 @ 搜索并**手动选定**，与显示名一一对应，可直接用于发送。',
+    '以上 JSON 中的 userId / openConversationId 由用户在 StoClaw（对话 @ 或定时任务收件人）中**手动选定**，与显示名一一对应，可直接用于发送。',
     '',
     '**必须遵守：**',
     '1. **禁止**对 JSON 内收件人执行 `dws contact user search`、`dws aisearch person` 或任何搜人/搜群命令',

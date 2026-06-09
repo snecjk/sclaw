@@ -1,10 +1,10 @@
 import type { DingTalkAttachedFileHint } from '../../shared/dingtalk-file-send';
 import {
-  ensureChatSendMessageWithDingTalkMentions,
   hasResolvedDingTalkMentions,
   shouldIncludeDingTalkFileSendWorkflow,
   type DingTalkMention,
 } from '../../shared/dingtalk-mention-context';
+import { prepareDingTalkAgentTurnMessage } from '../../shared/dingtalk-recipient-message';
 import { writeDingTalkMentionPending } from './dingtalk-mention-pending';
 
 type ChatSendParams = Record<string, unknown> & {
@@ -58,7 +58,7 @@ export async function preprocessChatSendParams(params: unknown): Promise<unknown
   delete chatParams.dingTalkAttachedFiles;
 
   if (sessionKey && hasResolvedDingTalkMentions(mentions)) {
-    chatParams.message = ensureChatSendMessageWithDingTalkMentions(message, mentions, {
+    chatParams.message = prepareDingTalkAgentTurnMessage(message, mentions, {
       sendFileIntent,
       attachedFiles: sendFileIntent ? attachedFiles : undefined,
     });

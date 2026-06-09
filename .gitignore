@@ -61,6 +61,8 @@ resources/bin
 *.key
 
 build/
+sto-plugin/*/shared/
+electron/gateway/gateway-fetch-preload.cjs
 artifacts/
 docs/pr-session-notes-
 .cursor/
