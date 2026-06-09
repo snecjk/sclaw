@@ -9,7 +9,6 @@ import {
   stripDingTalkAgentSendDisclaimerForDisplay,
   stripDingTalkMentionContextForDisplay,
 } from '@/lib/dingtalk-mention-context';
-import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
 
 /** OpenClaw injects queued system events as `System: [timestamp] ...` lines before user text. */
 const GATEWAY_SYSTEM_EVENT_LINE =
@@ -36,8 +35,11 @@ function cleanUserText(text: string): string {
     .replace(/^Conversation info\s*\([^)]*\):\s*\{[\s\S]*?\}\s*/i, '')
     // Remove Gateway timestamp prefix like [Fri 2026-02-13 22:39 GMT+8]
     .replace(/^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+[^\]]+\]\s*/i, '')
+    // OpenClaw cron jobs append "Current time: ..." (+ optional "Reference UTC: ...") to the prompt
+    .replace(/\n*Current time:\s*[^\n]+/gi, '')
+    .replace(/\n*Reference UTC:\s*[^\n]+/gi, '')
     .trim();
-  return stripDingTalkMentionContextForDisplay(stripCronTriggerTextForDisplay(cleaned));
+  return stripDingTalkMentionContextForDisplay(cleaned);
 }
 
 /** Strip dws send metadata that agents should not surface to end users. */

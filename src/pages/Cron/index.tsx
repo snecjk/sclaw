@@ -14,7 +14,6 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import type { CronJob, CronJobCreateInput } from '@/types/cron';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
-
 import { CronTaskHero } from './components/CronTaskHero';
 import { CronTaskCard } from './components/CronTaskCard';
 import { CronTaskCreateModal } from './components/CronTaskCreateModal';
@@ -55,7 +54,10 @@ export function Cron() {
     async (input: CronJobCreateInput) => {
       try {
         if (editingJob) {
-          await updateJob(editingJob.id, input);
+          await updateJob(editingJob.id, {
+            ...input,
+            agentId: editingJob.agentId ?? undefined,
+          });
           toast.success(t('toast.updated'));
         } else {
           await createJob(input);

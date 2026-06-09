@@ -2,6 +2,8 @@
  * Scheduled Task Types (STO Scheduled Tasks API)
  */
 
+import type { DingTalkMention } from './dingtalk-mention';
+
 export interface ScheduledTask {
   id: number;
   ownerUserId: string;
@@ -39,6 +41,7 @@ export interface ScheduledTaskCreateInput {
   dingdingGroupName?: string;
   dialogSessionKey?: string;
   openclawGatewayUrl?: string;
+  dingTalkMentions?: DingTalkMention[];
 }
 
 export interface ScheduledTaskUpdateInput {
@@ -48,6 +51,10 @@ export interface ScheduledTaskUpdateInput {
   description?: string;
   notifyMode?: string;
   enabled?: boolean;
+  dingdingId?: string;
+  dingdingGroupId?: string;
+  dingdingGroupName?: string;
+  dingTalkMentions?: DingTalkMention[];
 }
 
 export interface ScheduledTaskRun {

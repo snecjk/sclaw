@@ -57,6 +57,9 @@ export const useScheduledTasksStore = create<ScheduledTasksState>((set) => ({
     if (input.cronExpr !== undefined) body.cronExpr = input.cronExpr;
     if (input.description !== undefined) body.description = input.description;
     if (input.notifyMode !== undefined) body.notifyMode = input.notifyMode;
+    if (input.dingdingId !== undefined) body.dingdingId = input.dingdingId;
+    if (input.dingdingGroupId !== undefined) body.dingdingGroupId = input.dingdingGroupId;
+    if (input.dingdingGroupName !== undefined) body.dingdingGroupName = input.dingdingGroupName;
     if (input.enabled !== undefined) body.enabled = input.enabled;
 
     const updated = await hostApiFetch<ScheduledTask>(`/api/scheduled-tasks/${input.taskId}`, {

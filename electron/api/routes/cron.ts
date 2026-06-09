@@ -2,6 +2,11 @@ import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { join } from 'node:path';
 import { CHAT_HISTORY_LIMIT } from '../../../shared/chat-config';
+import {
+  appendDingTalkMentionContext,
+  hasResolvedDingTalkMentions,
+} from '../../../shared/dingtalk-mention-context';
+import type { DingTalkMention } from '../../../shared/dingtalk-mention';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { getOpenClawConfigDir } from '../../utils/paths';
@@ -307,15 +312,43 @@ function transformCronJob(job: GatewayCronJob) {
   };
 }
 
+interface CronDescriptionMeta {
+  agentId?: string;
+  dingTalkMentions?: DingTalkMention[];
+}
+
+/** Extract metadata stored in a job's description field. */
+function parseCronDescriptionMeta(description?: string): CronDescriptionMeta {
+  if (!description) return {};
+  try {
+    const meta = JSON.parse(description) as CronDescriptionMeta;
+    if (!meta || typeof meta !== 'object') return {};
+    return meta;
+  } catch {
+    return {};
+  }
+}
+
 /** Extract agentId from the JSON metadata stored in a job's description field. */
 function extractAgentIdFromDescription(description?: string): string | null {
-  if (!description) return null;
-  try {
-    const meta = JSON.parse(description) as Record<string, unknown>;
-    return typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null;
-  } catch {
-    return null;
-  }
+  const agentId = parseCronDescriptionMeta(description).agentId;
+  return typeof agentId === 'string' && agentId ? agentId : null;
+}
+
+function buildCronDescription(
+  agentId: string | null,
+  mentions?: DingTalkMention[],
+): string | undefined {
+  const meta: CronDescriptionMeta = {};
+  if (agentId) meta.agentId = agentId;
+  if (hasResolvedDingTalkMentions(mentions)) meta.dingTalkMentions = mentions;
+  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : undefined;
+}
+
+function buildCronMessage(message: string, mentions?: DingTalkMention[]): string {
+  const trimmed = message.trim();
+  if (!hasResolvedDingTalkMentions(mentions)) return trimmed;
+  return appendDingTalkMentionContext(trimmed, mentions);
 }
 
 export async function handleCronRoutes(
@@ -408,13 +441,21 @@ export async function handleCronRoutes(
 
   if (url.pathname === '/api/cron/jobs' && req.method === 'POST') {
     try {
-      const input = await parseJsonBody<{ name: string; message: string; schedule: string; enabled?: boolean; agentId?: string }>(req);
+      const input = await parseJsonBody<{
+        name: string;
+        message: string;
+        schedule: string;
+        enabled?: boolean;
+        agentId?: string;
+        dingTalkMentions?: DingTalkMention[];
+      }>(req);
       const agentId = input.agentId?.trim() || null;
-      const description = agentId ? JSON.stringify({ agentId }) : undefined;
+      const description = buildCronDescription(agentId, input.dingTalkMentions);
+      const message = buildCronMessage(input.message, input.dingTalkMentions);
       const result = await ctx.gatewayManager.rpc('cron.add', {
         name: input.name,
         schedule: { kind: 'cron', expr: input.schedule },
-        payload: { kind: 'agentTurn', message: input.message },
+        payload: { kind: 'agentTurn', message },
         enabled: input.enabled ?? true,
         wakeMode: 'next-heartbeat',
         sessionTarget: 'isolated',
@@ -431,14 +472,30 @@ export async function handleCronRoutes(
   if (url.pathname.startsWith('/api/cron/jobs/') && req.method === 'PUT') {
     try {
       const id = decodeURIComponent(url.pathname.slice('/api/cron/jobs/'.length));
-      const input = await parseJsonBody<Record<string, unknown>>(req);
+      const input = await parseJsonBody<Record<string, unknown> & {
+        message?: string;
+        schedule?: string;
+        agentId?: string;
+        dingTalkMentions?: DingTalkMention[];
+      }>(req);
       const patch = { ...input };
       if (typeof patch.schedule === 'string') {
         patch.schedule = { kind: 'cron', expr: patch.schedule };
       }
       if (typeof patch.message === 'string') {
-        patch.payload = { kind: 'agentTurn', message: patch.message };
+        patch.payload = {
+          kind: 'agentTurn',
+          message: buildCronMessage(patch.message, patch.dingTalkMentions),
+        };
         delete patch.message;
+      }
+      if (patch.dingTalkMentions !== undefined || patch.agentId !== undefined) {
+        const agentId = typeof patch.agentId === 'string' ? patch.agentId.trim() || null : null;
+        const mentions = Array.isArray(patch.dingTalkMentions) ? patch.dingTalkMentions as DingTalkMention[] : undefined;
+        const description = buildCronDescription(agentId, mentions);
+        if (description) patch.description = description;
+        delete patch.agentId;
+        delete patch.dingTalkMentions;
       }
       sendJson(res, 200, await ctx.gatewayManager.rpc('cron.update', { jobId: id, patch }));
     } catch (error) {
