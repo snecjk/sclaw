@@ -5,7 +5,7 @@
  * Used for workflow startup, tool confirmation, and other scenarios requiring
  * user parameter input.
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -31,17 +31,145 @@ interface WizardStep {
   fields: FormField[];
 }
 
+/** Build wizard steps from config */
+function buildWizardSteps(config: UserFormConfig): WizardStep[] {
+  if (config.steps && config.steps.length > 0) {
+    return config.steps.map((s) => ({
+      id: s.id,
+      title: s.title,
+      description: s.description,
+      fields: (s.fieldNames ?? config.fields.map((f) => f.name)).map((name) => {
+        const field = config.fields.find((f) => f.name === name);
+        return field!;
+      }).filter(Boolean),
+    }));
+  }
+  return [{
+    id: 'default',
+    title: config.title ?? '参数确认',
+    description: config.description,
+    fields: config.fields,
+  }];
+}
+
+/** Build initial values from config defaults */
+function buildInitialValues(config: UserFormConfig): FormResult {
+  const initial: FormResult = {};
+  if (!config.fields) return initial;
+  for (const field of config.fields) {
+    if (field.defaultValue !== undefined) {
+      initial[field.name] = field.defaultValue;
+    } else if (field.type === 'checkbox' && !('options' in field && (field as { options?: unknown }).options)) {
+      initial[field.name] = false;
+    } else if (field.type === 'multiselect') {
+      initial[field.name] = [];
+    } else if (field.type === 'editable_list') {
+      initial[field.name] = (field as { defaultValue?: string[] }).defaultValue ?? [];
+    }
+  }
+  return initial;
+}
+
+/** Validate a single field */
+function validateField(field: FormField, value: unknown): string | null {
+  const validation = field.validation;
+  if (!validation) return null;
+
+  if (validation.required) {
+    if (value === undefined || value === null || value === '') {
+      return `${field.label}是必填项`;
+    }
+    if (Array.isArray(value) && value.length === 0) {
+      return `${field.label}至少选择一个选项`;
+    }
+  }
+
+  if (validation.pattern) {
+    const str = String(value ?? '');
+    if (!new RegExp(validation.pattern).test(str)) {
+      return `${field.label}格式不正确`;
+    }
+  }
+
+  if (validation.minLength != null && String(value ?? '').length < validation.minLength) {
+    return `${field.label}长度不能少于${validation.minLength}个字符`;
+  }
+
+  if (validation.maxLength != null && String(value ?? '').length > validation.maxLength) {
+    return `${field.label}长度不能超过${validation.maxLength}个字符`;
+  }
+
+  if (validation.min != null && typeof value === 'number' && value < validation.min) {
+    return `${field.label}不能小于${validation.min}`;
+  }
+
+  if (validation.max != null && typeof value === 'number' && value > validation.max) {
+    return `${field.label}不能大于${validation.max}`;
+  }
+
+  return null;
+}
+
 export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCardProps) {
+  // If config is empty (from text marker), try to load from workflow memory
+  const [schema, setSchema] = useState<import('@/types/workflow').WorkflowSchema | null>(null);
+  const [loadedConfig, setLoadedConfig] = useState<UserFormConfig | null>(null);
+  const [loadingSchema, setLoadingSchema] = useState(false);
+
+  useEffect(() => {
+    if (Object.keys(config).length === 0 && context.source === 'workflow' && context.sourceId) {
+      setLoadingSchema(true);
+      import('@/stores/workflow-memory').then(({ getLatestWorkflow }) => {
+        import('@/stores/chat').then(({ useChatStore }) => {
+          const currentSessionKey = useChatStore.getState().currentSessionKey;
+          const latest = getLatestWorkflow(currentSessionKey);
+          if (latest && latest.templateId === context.sourceId) {
+            import('@/lib/workflow-api').then(({ getStartupSchema }) => {
+              getStartupSchema(context.sourceId).then(({ schema }) => {
+                setSchema(schema);
+              }).catch(() => {
+                setSchema(null);
+                setLoadingSchema(false);
+              });
+            });
+          } else {
+            setSchema(null);
+            setLoadingSchema(false);
+          }
+        });
+      }).catch(() => {
+        setSchema(null);
+        setLoadingSchema(false);
+      });
+    }
+  }, [config, context.source, context.sourceId]);
+
+  useEffect(() => {
+    if (schema && !loadedConfig) {
+      import('@/lib/workflow-form-utils').then(({ buildWorkflowFormConfig }) => {
+        const builtConfig = buildWorkflowFormConfig(schema, '');
+        setLoadedConfig(builtConfig);
+        setLoadingSchema(false);
+      });
+    }
+  }, [schema, loadedConfig]);
+
+  // Only use effectiveConfig if it has fields, otherwise we're still loading
+  const hasValidConfig = Object.keys(config).length > 0 || loadedConfig !== null;
+  const effectiveConfig = hasValidConfig ? (loadedConfig || config) : null;
+
+  // ALL hooks must be called unconditionally before any early returns
   const [currentStep, setCurrentStep] = useState(0);
-  const [values, setValues] = useState<FormResult>(() => buildInitialValues(config));
+  const [values, setValues] = useState<FormResult>(() => effectiveConfig ? buildInitialValues(effectiveConfig) : {});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
-  const steps = useMemo(() => buildWizardSteps(config), [config]);
+  // Compute steps even if effectiveConfig is null (will be empty array)
+  const steps = useMemo(() => effectiveConfig ? buildWizardSteps(effectiveConfig) : [], [effectiveConfig]);
 
   const step = steps[currentStep];
   const isFirst = currentStep === 0;
-  const isLast = currentStep === steps.length - 1;
+  const isLast = currentStep >= steps.length - 1;
 
   const updateValue = useCallback((name: string, value: unknown) => {
     setValues((prev) => ({ ...prev, [name]: value }));
@@ -54,9 +182,9 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
   }, []);
 
   const validateStep = useCallback((): boolean => {
+    if (!step || !step.fields) return false;
     const newErrors: Record<string, string> = {};
     let isValid = true;
-
     for (const field of step.fields) {
       if (field.hidden || field.type === 'hidden') continue;
       const error = validateField(field, values[field.name]);
@@ -65,7 +193,6 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
         isValid = false;
       }
     }
-
     setErrors(newErrors);
     return isValid;
   }, [step, values]);
@@ -85,7 +212,6 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
 
   const handleSubmit = useCallback(async () => {
     if (!validateStep()) return;
-
     // Validate all steps for final submission
     const allErrors: Record<string, string> = {};
     for (const s of steps) {
@@ -97,16 +223,16 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
         }
       }
     }
+
     if (Object.keys(allErrors).length > 0) {
       setErrors(allErrors);
-      // Jump to first step with error
       const firstErrorStep = steps.findIndex((s) => s.fields.some((f) => allErrors[f.name]));
       if (firstErrorStep >= 0) setCurrentStep(firstErrorStep);
       return;
     }
-
     setSubmitting(true);
     try {
+      console.log('context', context, values);
       const result = onSubmit(values, context);
       if (result instanceof Promise) {
         await result;
@@ -116,20 +242,10 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
     }
   }, [validateStep, steps, values, context, onSubmit]);
 
-  const handleSkip = useCallback(() => {
-    // Use all default values and submit
-    const defaultValues: FormResult = {};
-    for (const field of config.fields) {
-      if (field.defaultValue !== undefined) {
-        defaultValues[field.name] = field.defaultValue;
-      }
-    }
-    setValues(defaultValues);
-    onSubmit(defaultValues, context);
-  }, [config.fields, context, onSubmit]);
 
   // Compute default hint for current step
   const defaultHint = useMemo(() => {
+    if (!step || !step.fields) return null;
     const defaults: string[] = [];
     for (const field of step.fields) {
       if (field.defaultValue !== undefined && field.defaultValue !== '') {
@@ -146,6 +262,23 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
     return defaults.length > 0 ? `工作流默认：${defaults.join('、')}` : null;
   }, [step]);
 
+  // Loading state while fetching schema from memory
+  if (!hasValidConfig && loadingSchema) {
+    return (
+      <div className="w-full rounded-2xl border border-border bg-background shadow-sm overflow-hidden p-5">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Loading form configuration...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Guard: if effectiveConfig is null (still loading or failed), render nothing
+  if (!effectiveConfig) {
+    return null;
+  }
+
   return (
     <div className="w-full rounded-2xl border border-border bg-background shadow-sm overflow-hidden">
       {/* Header */}
@@ -153,9 +286,9 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-[15px] font-semibold text-foreground">
-              {step.title}
+              {step?.title ?? '参数确认'}
             </h3>
-            {step.description && (
+            {step?.description && (
               <p className="text-[12.5px] text-muted-foreground mt-0.5">{step.description}</p>
             )}
           </div>
@@ -200,7 +333,7 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
 
       {/* Fields */}
       <div className="px-5 py-4 space-y-4">
-        {step.fields.map((field) => (
+        {step?.fields.map((field) => (
           <FormFieldRenderer
             key={field.name}
             field={field}
@@ -211,23 +344,20 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
         ))}
       </div>
 
-      {/* Footer */}
-      <div className="px-5 py-3 border-t border-border bg-muted/20 flex items-center justify-between">
-        <div className="min-w-0">
-          {defaultHint && (
-            <p className="text-[11.5px] text-muted-foreground truncate">{defaultHint}</p>
-          )}
+      {/* Footer actions */}
+      <div className="px-5 py-3 border-t border-border flex items-center justify-between">
+        <div className="text-[12px] text-muted-foreground">
+          {/* {defaultHint} */}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2">
           {config.allowCancel !== false && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleSkip}
-              disabled={submitting}
-              className="text-[13px] h-8 px-3 text-muted-foreground hover:text-foreground"
+              onClick={() => {}}
+              className="text-muted-foreground"
             >
-              跳过
+              {config.cancelLabel ?? '取消'}
             </Button>
           )}
           {isLast ? (
@@ -235,154 +365,27 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
               size="sm"
               onClick={handleSubmit}
               disabled={submitting}
-              className="text-[13px] h-8 px-4 rounded-lg"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {submitting ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                  提交中…
-                </>
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
               ) : (
-                <>
-                  <Check className="h-3.5 w-3.5 mr-1.5" />
-                  {config.confirmLabel || '确认'}
-                </>
+                <Check className="h-4 w-4 mr-1" />
               )}
+              {config.confirmLabel ?? '确认并执行'}
             </Button>
           ) : (
             <Button
               size="sm"
               onClick={handleNext}
-              className="text-[13px] h-8 px-4 rounded-lg"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
-              继续
-              <ChevronRight className="h-3.5 w-3.5 ml-1" />
+              {config.confirmLabel ?? '继续'}
+              <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           )}
         </div>
       </div>
     </div>
   );
-}
-
-/** Build wizard steps from config */
-function buildWizardSteps(config: UserFormConfig): WizardStep[] {
-  // If explicit steps are provided, use them
-  if (config.steps && config.steps.length > 0) {
-    const fieldMap = new Map(config.fields.map((f) => [f.name, f]));
-    return config.steps.map((s) => ({
-      id: s.id,
-      title: s.title,
-      description: s.description,
-      fields:
-        s.fieldNames?.map((name) => fieldMap.get(name)).filter(Boolean) as FormField[] ??
-        config.fields.filter((f) => f.name.startsWith(s.id)),
-    }));
-  }
-
-  // Auto-group by field group property if available
-  const groups = new Map<string, FormField[]>();
-  const ungrouped: FormField[] = [];
-
-  for (const field of config.fields) {
-    // @ts-expect-error - group is not in base type but may exist on runtime fields
-    const group = field.group as string | undefined;
-    if (group) {
-      if (!groups.has(group)) groups.set(group, []);
-      groups.get(group)!.push(field);
-    } else {
-      ungrouped.push(field);
-    }
-  }
-
-  const steps: WizardStep[] = [];
-  for (const [id, fields] of groups) {
-    steps.push({
-      id,
-      title: fields[0]?.label ?? id,
-      description: fields[0]?.description,
-      fields,
-    });
-  }
-  if (ungrouped.length > 0) {
-    steps.push({
-      id: 'other',
-      title: '其他参数',
-      fields: ungrouped,
-    });
-  }
-
-  // If no groups at all, put everything in one step
-  if (steps.length === 0 && config.fields.length > 0) {
-    steps.push({
-      id: 'all',
-      title: config.title,
-      description: config.description,
-      fields: config.fields,
-    });
-  }
-
-  return steps;
-}
-
-/** Build initial values from config defaults */
-function buildInitialValues(config: UserFormConfig): FormResult {
-  const initial: FormResult = {};
-  for (const field of config.fields) {
-    if (field.defaultValue !== undefined) {
-      initial[field.name] = field.defaultValue;
-    } else if (field.type === 'checkbox' && !('options' in field && (field as { options?: unknown }).options)) {
-      initial[field.name] = false;
-    } else if (field.type === 'multiselect') {
-      initial[field.name] = [];
-    } else if (field.type === 'editable_list') {
-      initial[field.name] = (field as { defaultValue?: string[] }).defaultValue ?? [];
-    }
-  }
-  return initial;
-}
-
-/** Validate a single field */
-function validateField(field: FormField, value: unknown): string | null {
-  const validation = field.validation;
-  if (!validation) return null;
-
-  if (validation.required) {
-    if (value === undefined || value === null || value === '') {
-      return `${field.label}是必填项`;
-    }
-    if (Array.isArray(value) && value.length === 0) {
-      return `${field.label}至少选择一个选项`;
-    }
-  }
-
-  if (typeof value === 'string' && value) {
-    if (validation.minLength && value.length < validation.minLength) {
-      return `${field.label}至少需要${validation.minLength}个字符`;
-    }
-    if (validation.maxLength && value.length > validation.maxLength) {
-      return `${field.label}最多${validation.maxLength}个字符`;
-    }
-    if (validation.pattern) {
-      const regex = new RegExp(validation.pattern);
-      if (!regex.test(value)) {
-        return `${field.label}格式不正确`;
-      }
-    }
-  }
-
-  if (typeof value === 'number') {
-    if (validation.min !== undefined && value < validation.min) {
-      return `${field.label}最小值为${validation.min}`;
-    }
-    if (validation.max !== undefined && value > validation.max) {
-      return `${field.label}最大值为${validation.max}`;
-    }
-  }
-
-  if (validation.custom) {
-    return validation.custom(value);
-  }
-
-  return null;
 }

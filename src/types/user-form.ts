@@ -19,7 +19,8 @@ export type FormFieldType =
   | 'time'           // Time picker
   | 'toggle'         // Boolean toggle switch
   | 'hidden'         // Hidden field for passing data
-  | 'editable_list'; // Editable tag/list input
+  | 'editable_list'  // Editable tag/list input
+  | 'titled_group';  // Group of related fields with titles
 
 /** Option for select/radio/checkbox fields */
 export interface FormFieldOption {
@@ -120,6 +121,17 @@ export interface EditableListField extends FormFieldBase {
   placeholder?: string;
 }
 
+/** Titled group field with multiple related items */
+export interface TitledGroupField extends FormFieldBase {
+  type: 'titled_group';
+  _titledGroupItems?: Array<{
+    fieldKey: string;
+    label: string;
+    description?: string;
+    defaultValue: string;
+  }>;
+}
+
 /** Union type for all field types */
 export type FormField =
   | TextField
@@ -130,7 +142,8 @@ export type FormField =
   | DateTimeField
   | ToggleField
   | HiddenField
-  | EditableListField;
+  | EditableListField
+  | TitledGroupField;
 
 /** Wizard step for grouping fields in inline parameter form */
 export interface FormStep {

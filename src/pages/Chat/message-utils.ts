@@ -4,6 +4,9 @@
  * message content formats returned by the Gateway.
  */
 import { useMemo } from 'react';
+import { useChatStore } from '@/stores/chat';
+import { buildWorkflowFormConfig } from '@/lib/workflow-form-utils';
+import { resolveParameterFormId } from '@/components/parameter-form/form-handlers';
 import type { RawMessage, ContentBlock } from '@/stores/chat';
 import { stripDingTalkMentionContextForDisplay } from '@/lib/dingtalk-mention-context';
 import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay } from '@/lib/workflow-context';
@@ -62,6 +65,9 @@ function cleanThinkingText(text: string): string {
 /**
  * Extract parameter_form block from a message's content field.
  */
+// Regex to match <ParameterForm ... /> marker in text blocks
+const PARAM_FORM_REGEX = /<ParameterForm\s+templateId="([^"]+)"\s+schemaHash="([^"]+)"\s*\/>/i;
+
 export function extractParameterForm(message: RawMessage | unknown): {
   formId: string;
   formConfig: import('@/types/user-form').UserFormConfig;
@@ -74,23 +80,60 @@ export function extractParameterForm(message: RawMessage | unknown): {
   if (!Array.isArray(content)) return null;
 
   for (const block of content as import('@/stores/chat').ContentBlock[]) {
+    // First check for native parameter_form block type
     if (
       block.type === 'parameter_form' &&
-      block.formId &&
-      block.formConfig &&
-      block.formContext
+      (block as any).formId &&
+      (block as any).formConfig &&
+      (block as any).formContext
     ) {
+      const formId = (block as any).formId;
+      console.log('[extractParameterForm] found native parameter_form block, formId:', formId);
+      // Always return the form, let ParameterFormCard handle empty config
+      // Don't check hasParameterFormHandler here - the handler may have been
+      // registered but the form should still render for user to fill
       return {
-        formId: block.formId,
-        formConfig: block.formConfig as import('@/types/user-form').UserFormConfig,
-        formContext: block.formContext as {
+        formId,
+        formConfig: (block as any).formConfig as import('@/types/user-form').UserFormConfig,
+        formContext: (block as any).formContext as {
           source: 'workflow' | 'tool' | 'skill';
           sourceId: string;
           schemaHash?: string;
         },
       };
     }
+
+    // Check for <ParameterForm ... /> marker in text blocks
+    if (block.type === 'text' && typeof block.text === 'string') {
+      const match = block.text.match(PARAM_FORM_REGEX);
+      if (match) {
+        const templateId = match[1];
+        const schemaHash = match[2];
+        console.log('[extractParameterForm] found marker in text block:', { templateId, schemaHash });
+
+        // Try to get schema from pendingWorkflow to build complete formConfig
+        const pendingWorkflow = useChatStore.getState().pendingWorkflow;
+        console.log('[extractParameterForm] pendingWorkflow:', pendingWorkflow ? { templateId: pendingWorkflow.templateId } : null);
+        let formConfig: import('@/types/user-form').UserFormConfig = {} as import('@/types/user-form').UserFormConfig;
+
+        if (pendingWorkflow && pendingWorkflow.templateId === templateId && pendingWorkflow.schema && pendingWorkflow.schema.fields.length > 0) {
+          console.log('[extractParameterForm] building formConfig from pendingWorkflow');
+          formConfig = buildWorkflowFormConfig(pendingWorkflow.schema, '', pendingWorkflow.collectedInputs);
+        }
+
+        return {
+          formId: resolveParameterFormId(`workflow-form-${templateId}`),
+          formConfig,
+          formContext: {
+            source: 'workflow',
+            sourceId: templateId,
+            schemaHash,
+          },
+        };
+      }
+    }
   }
+  console.log('[extractParameterForm] no parameter form found');
   return null;
 }
 
@@ -142,6 +185,11 @@ export function extractText(message: RawMessage | unknown): string {
   }
 
   const role = typeof msg.role === 'string' ? msg.role.toLowerCase() : '';
+
+  // Strip <ParameterForm ... /> marker from text for clean display
+  if (result) {
+    result = result.replace(PARAM_FORM_REGEX, '').trim();
+  }
 
   // Strip Gateway metadata from user messages for clean display
   if (isUser && result) {

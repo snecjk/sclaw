@@ -32,7 +32,11 @@ function mapField(schemaField: WorkflowSchemaField): FormField {
   const name = schemaField.key;
   const label = schemaField.label;
   const description = schemaField.description;
-  const defaultValue = schemaField.defaultValue;
+  // Serialize object defaultValues to string for display
+  let defaultValue = schemaField.defaultValue;
+  if (defaultValue !== undefined && defaultValue !== null && typeof defaultValue === 'object') {
+    defaultValue = JSON.stringify(defaultValue);
+  }
   const validation = schemaField.required ? { required: true } : undefined;
 
   const type = mapComponentToType(schemaField.component);
@@ -82,9 +86,49 @@ function mapField(schemaField: WorkflowSchemaField): FormField {
       return { name, label, description, defaultValue, validation, type: 'checkbox' };
     case 'hidden':
       return { name, label, description, defaultValue: defaultValue as string | number | boolean, validation, type: 'hidden' };
+    case 'titled_group':
+      // Titled group: expand each item in schemaField.items as a separate field
+      const items = (schemaField as any).items as any[] | undefined;
+      if (!items || items.length === 0) {
+        return { name, label, description, defaultValue: JSON.stringify(defaultValue ?? {}), validation, type: 'textarea' as const };
+      }
+      return {
+        name,
+        label,
+        description,
+        defaultValue: JSON.stringify(defaultValue ?? {}),
+        validation,
+        type: 'titled_group' as const,
+        _titledGroupItems: items.map((item: any) => ({
+          fieldKey: item.fieldKey,
+          label: item.label,
+          description: item.description,
+          defaultValue: item.defaultValue,
+        })),
+      } as any;
     case 'text':
     case 'textarea':
     default:
+      // Handle titled_group as a special case in default fallback
+      if (schemaField.component === 'titled_group') {
+        const items = (schemaField as any).items as any[] | undefined;
+        if (items && items.length > 0) {
+          return {
+            name,
+            label,
+            description,
+            defaultValue: JSON.stringify(defaultValue ?? {}),
+            validation,
+            type: 'textarea' as const,
+            _titledGroupItems: items.map((item: any) => ({
+              fieldKey: item.fieldKey,
+              label: item.label,
+              description: item.description,
+              defaultValue: item.defaultValue,
+            })),
+          } as any;
+        }
+      }
       return { name, label, description, defaultValue, validation, type: type === 'textarea' ? 'textarea' : 'text' };
   }
 }

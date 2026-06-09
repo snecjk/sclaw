@@ -178,7 +178,8 @@ export function createAutoSendWatcher(
             msg.text,
             msg.workflowId!,
             { sessionKey: currentSessionKey, agentId: chatState.currentAgentId },
-            async (textToSend, runId, wfId) => {
+            async (textToSend, runId, wfId, ctx) => {
+              const wfCtx = ctx as import('@/stores/chat').WorkflowContextBlock | undefined;
               await chatState.sendMessage({
                 text: textToSend,
                 attachments: msg.attachments?.map((a) => ({
@@ -192,6 +193,7 @@ export function createAutoSendWatcher(
                 dingTalkMentions: msg.dingTalkMentions,
                 workflowId: wfId,
                 runId,
+                workflowContext: wfCtx,
               });
             },
           ).catch((err: unknown) => {

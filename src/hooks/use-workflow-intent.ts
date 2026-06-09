@@ -128,3 +128,49 @@ export function isReExecutionIntent(text: string): boolean {
   const reExecPatterns = /(?:执行刚才的|再跑一遍|再执行一次|重新执行|用上次参数|继续执行)/i;
   return reExecPatterns.test(text);
 }
+
+/** Build assistant prompt listing candidate templates for user selection. */
+export function buildTemplateSelectionPrompt(templates: WorkflowTemplateSearchItem[]): string {
+  const lines = templates.slice(0, 3).map((t, i) => {
+    const desc = t.description ? ` — ${t.description}` : '';
+    return `${i + 1}. ${t.label}${desc}`;
+  });
+  return [
+    '检测到您想创建工作流，请确认要执行哪一个：',
+    '',
+    ...lines,
+    '',
+    '请回复序号（如 1）或工作流名称；也可输入 / 打开工作流选择器。',
+  ].join('\n');
+}
+
+/** Prompt when workflow intent is detected but no template matched confidently. */
+export function buildWorkflowClarificationPrompt(): string {
+  return [
+    '未能识别您要创建的具体工作流。',
+    '请明确工作流名称（例如：「创建结算对账工作流」），或输入 / 从列表中选择。',
+  ].join('\n');
+}
+
+/**
+ * Resolve user's template selection from a numbered list or name match.
+ */
+export function resolveTemplateSelectionFromText(
+  text: string,
+  templates: WorkflowTemplateSearchItem[],
+): WorkflowTemplateSearchItem | null {
+  const trimmed = text.trim();
+  if (!trimmed || templates.length === 0) return null;
+
+  const numMatch = trimmed.match(/^(?:选|选择)?\s*([1-9])\s*$/);
+  if (numMatch) {
+    const idx = parseInt(numMatch[1], 10) - 1;
+    if (idx >= 0 && idx < templates.length) return templates[idx];
+  }
+
+  const lower = trimmed.toLowerCase();
+  const byLabel = templates.find((t) => lower.includes(t.label.toLowerCase()));
+  if (byLabel) return byLabel;
+
+  return templates.find((t) => lower.includes(t.id.toLowerCase())) ?? null;
+}

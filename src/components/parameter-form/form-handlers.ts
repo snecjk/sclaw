@@ -23,19 +23,34 @@ export function unregisterParameterFormHandler(formId: string): void {
   handlers.delete(formId);
 }
 
+/**
+ * Resolve a candidate formId to a registered handler key.
+ * Handles workflow-form-{templateId} → workflow-form-{templateId}-{timestamp}.
+ */
+export function resolveParameterFormId(formId: string): string {
+  if (handlers.has(formId)) return formId;
+  for (const key of handlers.keys()) {
+    if (key === formId || key.startsWith(`${formId}-`)) {
+      return key;
+    }
+  }
+  return formId;
+}
+
 /** Submit a parameter form by formId. Calls the registered handler if exists. */
 export async function submitParameterForm(formId: string, values: FormResult): Promise<boolean> {
-  const handler = handlers.get(formId);
+  const resolvedId = resolveParameterFormId(formId);
+  const handler = handlers.get(resolvedId);
   if (!handler) return false;
   try {
     await handler(values);
   } finally {
-    handlers.delete(formId);
+    handlers.delete(resolvedId);
   }
   return true;
 }
 
 /** Check if a handler is registered for a formId */
 export function hasParameterFormHandler(formId: string): boolean {
-  return handlers.has(formId);
+  return handlers.has(resolveParameterFormId(formId));
 }

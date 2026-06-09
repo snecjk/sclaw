@@ -98,9 +98,27 @@ export function useWorkflowCompletion(sessionKey: string) {
     const handler = async (payload: unknown) => {
       const data = payload as WorkflowStatusPayload;
       if (data.sessionKey !== sessionKey) return;
-      if (data.status !== 'completed' && data.status !== 'failed') return;
 
       const runId = data.runId;
+
+      // Update workflowCardStates with the latest execution state
+      const chatState = useChatStore.getState();
+      const currentState = chatState.workflowCardStates[runId];
+      const updatedState: import('@/types/workflow').WorkflowExecutionState = {
+        runId,
+        workflowId: currentState?.workflowId ?? '',
+        status: data.status,
+        progress: currentState?.progress ?? 0,
+        steps: currentState?.steps ?? [],
+        result: data.result,
+        error: data.error,
+        startedAt: currentState?.startedAt,
+        completedAt: data.status === 'completed' || data.status === 'failed' ? new Date().toISOString() : undefined,
+      };
+      chatState.setWorkflowCardState(runId, updatedState);
+
+      // Only process completion/failed for summary generation
+      if (data.status !== 'completed' && data.status !== 'failed') return;
       if (processedRuns.current.has(runId)) return;
       if (inFlightRef.current.has(runId)) return;
 

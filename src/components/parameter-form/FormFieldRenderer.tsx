@@ -17,6 +17,7 @@ import type {
   EditableListField,
 } from '@/types/user-form';
 import { X, Plus } from 'lucide-react';
+import { Minus } from 'lucide-react';
 
 interface FormFieldRendererProps {
   field: FormField;
@@ -39,6 +40,10 @@ export function FormFieldRenderer({ field, value, onChange, error }: FormFieldRe
     case 'text':
       return renderTextField(field as TextField, value, onChange, commonClasses, error);
     case 'textarea':
+      // If textarea has _titledGroupItems, render as titled group instead
+      if ((field as any)._titledGroupItems && (field as any)._titledGroupItems.length > 0) {
+        return renderTitledGroupField(field as any, value, onChange, error);
+      }
       return renderTextArea(field as TextField, value, onChange, commonClasses, error);
     case 'number':
       return renderNumberField(field as NumberField, value, onChange, commonClasses, error);
@@ -57,6 +62,8 @@ export function FormFieldRenderer({ field, value, onChange, error }: FormFieldRe
       return renderToggleField(field as ToggleField, value, onChange, error);
     case 'editable_list':
       return renderEditableListField(field as EditableListField, value, onChange, error);
+    case 'titled_group':
+      return renderTitledGroupField(field as any, value, onChange, error);
     default:
       return null;
   }
@@ -514,4 +521,98 @@ function renderEditableListField(
       {error && <p className="text-[12px] text-destructive mt-1">{error}</p>}
     </div>
   );
+}
+
+function renderTitledGroupField(
+  field: any,
+  value: unknown,
+  onChange: (v: unknown) => void,
+  error?: string
+) {
+  const items = field._titledGroupItems as Array<{
+    fieldKey: string;
+    label: string;
+    description?: string;
+    defaultValue: string;
+  }> | undefined;
+
+  if (!items || items.length === 0) return null;
+
+  // Parse current value as object
+  const parsedValue: Record<string, unknown> = typeof value === 'string' ? JSON.parse(value) : (value as Record<string, unknown>);
+
+  const updateField = (fieldKey: string, newValue: unknown) => {
+    const next = { ...parsedValue, [fieldKey]: newValue };
+    onChange(JSON.stringify(next));
+  };
+
+  return (
+    <div key={field.name}>
+      <label className="block text-[13.5px] font-medium text-foreground mb-3">
+        {field.label}
+      </label>
+      <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+        {items.map((item, index) => {
+          const itemValue = parsedValue[item.fieldKey] ?? item.defaultValue ?? '';
+          return (
+            <div key={item.fieldKey} className="flex items-center gap-3">
+              <span className="w-5 h-5 shrink-0 rounded-full bg-primary text-white text-[11px] font-bold flex items-center justify-center">
+                {index + 1}
+              </span>
+              <div className="flex-1">
+                <label className="text-[13px] font-medium text-foreground">{item.label}</label>
+                {item.description && (
+                  <p className="text-[11px] text-muted-foreground">{item.description}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const num = parseFloat(String(itemValue)) || 0;
+                    updateField(item.fieldKey, String(num - 1));
+                  }}
+                  className="h-8 w-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+                <input
+                  type="text"
+                  value={String(itemValue)}
+                  onChange={(e) => updateField(item.fieldKey, e.target.value)}
+                  className="w-16 px-2 py-1.5 text-[13px] text-center rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const num = parseFloat(String(itemValue)) || 0;
+                    updateField(item.fieldKey, String(num + 1));
+                  }}
+                  className="h-8 w-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+                {/* Extract unit from label (e.g., "天停发" → "天", "降量区间" → "") */}
+                {item.label && (
+                  <span className="text-[12px] text-muted-foreground ml-1">
+                    {extractUnit(item.label)}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {field.description && !error && (
+        <p className="text-[11.5px] text-muted-foreground mt-2">{field.description}</p>
+      )}
+      {error && <p className="text-[12px] text-destructive mt-1">{error}</p>}
+    </div>
+  );
+}
+
+function extractUnit(label: string): string {
+  // Try to extract unit from label like "天停发" → "天", "连续降量" → "", "降量区间" → ""
+  const unitMatch = label.match(/^([天次件%日周月])|天$/);
+  return unitMatch ? unitMatch[1] || '天' : '';
 }

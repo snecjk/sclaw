@@ -10,6 +10,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { assistantChatCardBg, assistantChatCardBgStreaming } from '@/lib/surfaces';
@@ -78,7 +79,9 @@ export const ChatMessage = memo(function ChatMessage({
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
   const workflowCard = !isUser ? extractWorkflowCard(message) : null;
   const parameterForm = !isUser ? extractParameterForm(message) : null;
-
+  if (!isUser) {
+    console.log('[ChatMessage] parameterForm:', JSON.stringify(message), extractParameterForm(message));
+  }
   // Extract previewable refs from message text
   const extractedRefs = extractPreviewableRefs(text)
     .filter((ref) => !attachedFiles.some((f) => f.filePath === ref.filePath))
@@ -91,7 +94,7 @@ export const ChatMessage = memo(function ChatMessage({
   if (isToolResult) return null;
 
   const hasStreamingToolStatus = isStreaming && streamingTools.length > 0;
-  if (!hasText && !showThinkingPanel && images.length === 0 && visibleTools.length === 0 && !hasRenderableFiles && extractedRefs.length === 0 && !hasStreamingToolStatus) return null;
+  if (!hasText && !showThinkingPanel && images.length === 0 && visibleTools.length === 0 && !hasRenderableFiles && extractedRefs.length === 0 && !hasStreamingToolStatus && !parameterForm) return null;
 
   if (isSystem) {
     const compactText = text.replace(/\s+/g, ' ').trim();
@@ -267,8 +270,11 @@ export const ChatMessage = memo(function ChatMessage({
           <ParameterFormCard
             config={parameterForm.formConfig}
             context={parameterForm.formContext}
-            onSubmit={(values) => {
-              void submitParameterForm(parameterForm.formId, values);
+            onSubmit={async (values) => {
+              const ok = await submitParameterForm(parameterForm.formId, values);
+              if (!ok) {
+                toast.error('表单提交失败，请刷新页面后重试');
+              }
             }}
           />
         )}

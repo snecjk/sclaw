@@ -165,9 +165,19 @@ export interface ChatState {
     schemaHash: string;
     workflowId?: string;
     collectedInputs?: Record<string, unknown>;
+    /** Set to true when the frontend has already inserted a parameter_form inline.
+     *  Prevents maybeAppendWorkflowParameterForm from double-injecting. */
+    frontendFormInserted?: boolean;
   } | null;
   setPendingWorkflow: (pending: ChatState['pendingWorkflow']) => void;
   clearPendingWorkflow: () => void;
+  /** Awaiting user to pick a template after NL search returned medium confidence. */
+  pendingTemplateSelection: {
+    templates: import('@/types/workflow').WorkflowTemplateSearchItem[];
+    originalText: string;
+  } | null;
+  setPendingTemplateSelection: (pending: ChatState['pendingTemplateSelection']) => void;
+  clearPendingTemplateSelection: () => void;
 
   // Actions
   loadSessions: () => Promise<void>;

@@ -24,7 +24,23 @@ export interface WorkflowMemoryRecord {
   completedAt?: number;
 }
 
+/**
+ * Workflow execution record for SSE state tracking.
+ * Stores the complete lifecycle from creation to execution.
+ */
+export interface WorkflowExecutionRecord {
+  workflowId: string;       // ID returned from createWorkflow
+  runId: string;            // ID returned from startWorkflow
+  templateId: string;
+  templateName: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'timeout' | 'unknown';
+  createdAt: number;        // When execution was started
+  updatedAt: number;        // Last status update
+  collectedInputs: Record<string, unknown>;  // User-filled parameters
+}
+
 const STORAGE_KEY = 'stoclaw:session-workflows';
+const EXECUTIONS_STORAGE_KEY = 'stoclaw:workflow-executions';
 const MAX_RECORDS_PER_SESSION = 20; // prevent unbounded growth
 const RECORD_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -124,6 +140,88 @@ export function findWorkflowById(
     }
   }
   return undefined;
+}
+
+// ── Workflow Execution Records ───────────────────────────────────────
+
+const MAX_EXECUTIONS = 50;
+const EXECUTION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours for active tracking
+
+function loadExecutions(): WorkflowExecutionRecord[] {
+  try {
+    const raw = localStorage.getItem(EXECUTIONS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as WorkflowExecutionRecord[];
+      const now = Date.now();
+      return parsed.filter((e) => now - e.createdAt < EXECUTION_TTL_MS);
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+function saveExecutions(executions: WorkflowExecutionRecord[]): void {
+  try {
+    localStorage.setItem(EXECUTIONS_STORAGE_KEY, JSON.stringify(executions));
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Save a workflow execution record (workflowId + runId).
+ */
+export function saveWorkflowExecution(record: WorkflowExecutionRecord): void {
+  const executions = loadExecutions();
+  // Remove existing record with same runId if any
+  const filtered = executions.filter((e) => e.runId !== record.runId);
+  filtered.unshift(record); // newest first
+  if (filtered.length > MAX_EXECUTIONS) {
+    filtered.length = MAX_EXECUTIONS;
+  }
+  saveExecutions(filtered);
+}
+
+/**
+ * Update execution status.
+ */
+export function updateExecutionStatus(
+  runId: string,
+  status: WorkflowExecutionRecord['status'],
+): void {
+  const executions = loadExecutions();
+  const idx = executions.findIndex((e) => e.runId === runId);
+  if (idx >= 0) {
+    executions[idx] = { ...executions[idx], status, updatedAt: Date.now() };
+    saveExecutions(executions);
+  }
+}
+
+/**
+ * Get execution record by runId.
+ */
+export function getExecutionByRunId(
+  runId: string,
+): WorkflowExecutionRecord | undefined {
+  return loadExecutions().find((e) => e.runId === runId);
+}
+
+/**
+ * Get the most recent execution record.
+ */
+export function getLatestExecution(): WorkflowExecutionRecord | undefined {
+  const executions = loadExecutions();
+  return executions[0];
+}
+
+/**
+ * Find execution by workflowId.
+ */
+export function findExecutionByWorkflowId(
+  workflowId: string,
+): WorkflowExecutionRecord | undefined {
+  return loadExecutions().find((e) => e.workflowId === workflowId);
 }
 
 /**

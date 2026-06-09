@@ -11,6 +11,7 @@ import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
+import { stripWorkflowContextForDisplay } from '@/lib/workflow-context';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
 import { buildCronSessionHistoryPath, isCronSessionKey } from './chat/cron-session-utils';
 import { sanitizeSessionDisplayField } from './chat/helpers';
@@ -27,6 +28,10 @@ import {
 import type { WorkflowExecutionState } from '@/types/workflow';
 import { buildWorkflowFormConfig, buildStartupPreset } from '@/lib/workflow-form-utils';
 import { registerParameterFormHandler } from '@/components/parameter-form/form-handlers';
+import {
+  mergeParameterFormBlocksFromCurrent,
+  recoverParameterFormsOnHistoryLoad,
+} from './chat/parameter-form-recovery';
 
 export type {
   AttachedFileMeta,
@@ -867,17 +872,52 @@ function extractTextFromContent(content: unknown): string {
  */
 function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
   const pending = useChatStore.getState().pendingWorkflow;
-  if (!pending) return message;
-  if (message.role !== 'assistant') return message;
-  if (!pending.schema || pending.schema.fields.length === 0) return message;
+  console.log('[maybeAppendWorkflowParameterForm] called, pending:', pending ? { templateId: pending.templateId, hasSchema: !!pending.schema } : null);
+  if (!pending) { console.log('[maybeAppendWorkflowParameterForm] no pending workflow, returning'); return message; }
+  if (message.role !== 'assistant') { console.log('[maybeAppendWorkflowParameterForm] not assistant role, returning'); return message; }
+  if (!pending.schema || pending.schema.fields.length === 0) { console.log('[maybeAppendWorkflowParameterForm] no schema or empty fields, returning'); return message; }
+
+  // If the frontend has already inserted an inline parameter_form (e.g. via
+  // sendWithWorkflow), skip injecting so we don't show duplicate forms.
+  if (pending.frontendFormInserted) {
+    console.log('[maybeAppendWorkflowParameterForm] frontendFormInserted=true, returning');
+    return message;
+  }
 
   // Avoid double-injecting if the message already carries a parameter_form
   const content = message.content;
   if (Array.isArray(content)) {
     if ((content as ContentBlock[]).some((b) => b.type === 'parameter_form')) {
+      console.log('[maybeAppendWorkflowParameterForm] already has parameter_form block, returning');
       return message;
     }
   }
+
+  // Check if model output contains <ParameterForm ... /> marker before injecting form
+  const messageText = getMessageText(message.content);
+  const paramFormRegex = /<ParameterForm\s+templateId="([^"]+)"\s+schemaHash="([^"]+)"\s*\/>/i;
+  const paramFormMatch = messageText.match(paramFormRegex);
+  console.log('[maybeAppendWorkflowParameterForm] messageText=%s, hasMarker=%s, pendingWorkflow=%s',
+    messageText.slice(0, 100), paramFormMatch ? 'yes' : 'no', pending ? 'yes' : 'no');
+  if (!paramFormMatch) {
+    return message;
+  }
+
+  // Extract templateId and schemaHash from the marker
+  const extractedTemplateId = paramFormMatch[1];
+  const extractedSchemaHash = paramFormMatch[2];
+  console.log('[maybeAppendWorkflowParameterForm] extracted templateId=%s, schemaHash=%s, pending.schemaFields=%d',
+    extractedTemplateId, extractedSchemaHash, pending.schema?.fields.length ?? 0);
+
+  // Strip the <ParameterForm ... /> marker from the message text for display
+  const strippedText = messageText.replace(paramFormRegex, '').trim();
+  const strippedContent = Array.isArray(message.content)
+    ? (message.content as ContentBlock[]).map((block) =>
+        block.type === 'text' ? { ...block, text: block.text?.replace(paramFormRegex, '').trim() } : block
+      )
+    : strippedText;
+
+  console.log('[maybeAppendWorkflowParameterForm] strippedText=%s', strippedText.slice(0, 100));
 
   // buildWorkflowFormConfig, buildStartupPreset and registerParameterFormHandler are
   // imported at the top of the file. They do not transitively depend on chat.ts.
@@ -901,9 +941,29 @@ function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
       return;
     }
 
+    // Build summary text from form values
+    const valueLines: string[] = [];
+    if (pending.schema && pending.schema.fields) {
+      for (const field of pending.schema.fields) {
+        const val = values[field.key];
+        if (val !== undefined && val !== null && val !== '') {
+          let displayVal: string;
+          if (typeof val === 'object') {
+            displayVal = JSON.stringify(val);
+          } else {
+            displayVal = String(val);
+          }
+          valueLines.push(`${field.label}: ${displayVal}`);
+        }
+      }
+    }
+    const summaryText = valueLines.length > 0
+      ? `已确认以下参数：\n${valueLines.map((l) => `- ${l}`).join('\n')}`
+      : '参数已确认';
+
     try {
       const { createWorkflow, startWorkflow } = await import('@/lib/workflow-api');
-      const { saveWorkflowRecord, updateWorkflowRunMetadata } = await import('@/stores/workflow-memory');
+      const { saveWorkflowRecord, updateWorkflowRunMetadata, saveWorkflowExecution } = await import('@/stores/workflow-memory');
       const { invokeIpc } = await import('@/lib/api-client');
 
       const created = await createWorkflow({
@@ -926,8 +986,9 @@ function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
         idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
       });
 
+      // Send the parameter summary as user message to the model, include workflowId
       await chatState.sendMessage({
-        text: '参数已确认，正在分析并执行工作流...',
+        text: `${summaryText}\n\n工作流 ID: ${created.workflowId}`,
         workflowId: created.workflowId,
         runId: run.id,
       });
@@ -942,6 +1003,28 @@ function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
       updateWorkflowRunMetadata(chatState.currentSessionKey, created.workflowId, {
         lastRunId: run.id,
         lastStatus: 'running',
+      });
+
+      // Save execution record for SSE tracking and future lookup
+      saveWorkflowExecution({
+        workflowId: created.workflowId,
+        runId: run.id,
+        templateId: pending.templateId,
+        templateName: pending.templateName,
+        status: 'running',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        collectedInputs: values,
+      });
+
+      // Initialize workflowCardStates for immediate UI display
+      chatState.setWorkflowCardState(run.id, {
+        runId: run.id,
+        workflowId: created.workflowId,
+        status: 'running',
+        progress: 0,
+        steps: [],
+        startedAt: new Date().toISOString(),
       });
 
       chatState.clearPendingWorkflow();
@@ -960,11 +1043,12 @@ function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
     formContext: { source: 'workflow', sourceId: pending.templateId, schemaHash: pending.schemaHash },
   };
 
+  // Use stripped content (without [parameter_form] marker)
   if (Array.isArray(message.content)) {
-    return { ...message, content: [...message.content, newBlock] };
+    return { ...message, content: [...strippedContent as ContentBlock[], newBlock] };
   }
   if (typeof message.content === 'string' && message.content.trim()) {
-    return { ...message, content: [{ type: 'text', text: message.content }, newBlock] };
+    return { ...message, content: [{ type: 'text', text: strippedText }, newBlock] };
   }
   return { ...message, content: [newBlock] };
 }
@@ -1215,6 +1299,10 @@ export const useChatStore = create<ChatState>()(
   setPendingWorkflow: (pending) => set({ pendingWorkflow: pending }),
   clearPendingWorkflow: () => set({ pendingWorkflow: null }),
 
+  pendingTemplateSelection: null,
+  setPendingTemplateSelection: (pending) => set({ pendingTemplateSelection: pending }),
+  clearPendingTemplateSelection: () => set({ pendingTemplateSelection: null }),
+
   // ── Load sessions via sessions.list ──
 
   loadSessions: async () => {
@@ -1325,7 +1413,8 @@ export const useChatStore = create<ChatState>()(
                   set((s) => {
                     const next: Partial<typeof s> = {};
                     if (firstUser && !s.sessionLabels[session.key]) {
-                      const labelText = getMessageText(firstUser.content).trim();
+                      const rawText = getMessageText(firstUser.content).trim();
+                      const labelText = stripWorkflowContextForDisplay(rawText);
                       if (labelText) {
                         const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
                         next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
@@ -1565,6 +1654,21 @@ export const useChatStore = create<ChatState>()(
 
       if (get().currentSessionKey !== targetSessionKey) return;
 
+      finalMessages = mergeParameterFormBlocksFromCurrent(
+        finalMessages,
+        get().messages,
+        getMessageText,
+      );
+      const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
+        sessionKey: targetSessionKey,
+        get,
+        set,
+        getMessageText,
+        thinkingLevel,
+      });
+      if (formRecovery.deferSet) return;
+      finalMessages = formRecovery.messages;
+
       set({ messages: finalMessages, thinkingLevel, loading: false });
 
       // Extract first user message text as a session label for display in the toolbar.
@@ -1575,7 +1679,8 @@ export const useChatStore = create<ChatState>()(
       if (!isMainSession && !get().sessionLabels[targetSessionKey]) {
         const firstUserMsg = finalMessages.find((m) => m.role === 'user');
         if (firstUserMsg) {
-          const labelText = getMessageText(firstUserMsg.content).trim();
+          const rawText = getMessageText(firstUserMsg.content).trim();
+          const labelText = stripWorkflowContextForDisplay(rawText);
           if (labelText) {
             const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
             set((s) => ({
@@ -1722,8 +1827,10 @@ export const useChatStore = create<ChatState>()(
 
     // Inject hidden workflow context into the outgoing message for AI guidance
     const { appendWorkflowContext, stripWorkflowContextForDisplay } = await import('@/lib/workflow-context');
+    console.log('[workflow-trace] sendMessage workflowContext=%s text=%s', workflowContext ? `templateId=${workflowContext.templateId} fields=${workflowContext.fields.length}` : 'null', trimmed.slice(0, 50));
     const messageWithContext = appendWorkflowContext(trimmed, workflowContext);
     const displayText = stripWorkflowContextForDisplay(messageWithContext);
+    console.log('[workflow-trace] sendMessage injected=%s finalLength=%d', workflowContext ? 'yes' : 'no', messageWithContext.length);
 
     const targetSessionKey = resolveMainSessionKeyForAgent(targetAgentId) ?? get().currentSessionKey;
 
@@ -2088,6 +2195,9 @@ export const useChatStore = create<ChatState>()(
           }
           const toolOnly = isToolOnlyMessage(finalMsg);
           const hasOutput = hasNonToolAssistantContent(finalMsg);
+          const pendingForDebug = get().pendingWorkflow;
+          console.log('[handleChatEvent:final] hasOutput=%s, pendingWorkflow=%s, msgContent=%s',
+            hasOutput, pendingForDebug ? 'yes' : 'no', typeof finalMsg.content);
           const msgId = finalMsg.id || (toolOnly ? `run-${runId}-tool-${Date.now()}` : `run-${runId}`);
           set((s) => {
             const nextTools = updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools;
@@ -2104,9 +2214,12 @@ export const useChatStore = create<ChatState>()(
               }
               : { ...finalMsg, role: (finalMsg.role || 'assistant') as RawMessage['role'], id: msgId };
 
-            // If we are in a workflow guidance phase, append an interactive
+            // If we are in a workflow guidance phase AND this is the final
+            // assistant output (hasOutput=true), append an interactive
             // parameter_form block to the assistant message for the user.
-            msgWithImages = maybeAppendWorkflowParameterForm(msgWithImages);
+            if (hasOutput) {
+              msgWithImages = maybeAppendWorkflowParameterForm(msgWithImages);
+            }
 
             const clearPendingImages = { pendingToolImages: [] as AttachedFileMeta[] };
 
@@ -2127,6 +2240,30 @@ export const useChatStore = create<ChatState>()(
                 && getMessageText(m.content).trim() === incomingText
               ));
             if (alreadyExists) {
+              // If message already exists but hasOutput, we still need to append
+              // the parameter_form to it. Update the existing message in messages[].
+              if (hasOutput && msgWithImages.content !== s.messages.find(m => m.id === msgId)?.content) {
+                const updatedMessages = s.messages.map(m =>
+                  m.id === msgId ? msgWithImages : m
+                );
+                return toolOnly ? {
+                  messages: updatedMessages,
+                  streamingText: '',
+                  streamingMessage: null,
+                  pendingFinal: true,
+                  streamingTools,
+                  ...clearPendingImages,
+                } : {
+                  messages: updatedMessages,
+                  streamingText: '',
+                  streamingMessage: null,
+                  sending: hasOutput ? false : s.sending,
+                  activeRunId: hasOutput ? null : s.activeRunId,
+                  pendingFinal: hasOutput ? false : true,
+                  streamingTools,
+                  ...clearPendingImages,
+                };
+              }
               return toolOnly ? {
                 streamingText: '',
                 streamingMessage: null,
@@ -2297,5 +2434,8 @@ export const useChatStore = create<ChatState>()(
   },
 }), {
   name: 'stoclaw-chat-session-labels',
-  partialize: (state) => ({ sessionLabels: state.sessionLabels }),
+  partialize: (state) => ({
+    sessionLabels: state.sessionLabels,
+    pendingWorkflow: state.pendingWorkflow,
+  }),
 }));

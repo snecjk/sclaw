@@ -1,6 +1,11 @@
 import { invokeIpc } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
+import { stripWorkflowContextForDisplay } from '@/lib/workflow-context';
+import {
+  mergeParameterFormBlocksFromCurrent,
+  recoverParameterFormsOnHistoryLoad,
+} from './parameter-form-recovery';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
 import {
   clearHistoryPoll,
@@ -53,6 +58,7 @@ export function createHistoryActions(
 ): Pick<SessionHistoryActions, 'loadHistory'> {
   return {
     loadHistory: async (quiet = false) => {
+      console.log('[loadHistory] called, quiet=%s', quiet);
       const { currentSessionKey } = get();
       if (!quiet) set({ loading: true, error: null });
 
@@ -84,6 +90,21 @@ export function createHistoryActions(
           }
         }
 
+        finalMessages = mergeParameterFormBlocksFromCurrent(
+          finalMessages,
+          get().messages,
+          getMessageText,
+        );
+        const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
+          sessionKey: currentSessionKey,
+          get,
+          set,
+          getMessageText,
+          thinkingLevel,
+        });
+        if (formRecovery.deferSet) return;
+        finalMessages = formRecovery.messages;
+
         set({ messages: finalMessages, thinkingLevel, loading: false });
 
         // Extract first user message text as a session label for display in the toolbar.
@@ -93,7 +114,8 @@ export function createHistoryActions(
         if (!isMainSession) {
           const firstUserMsg = finalMessages.find((m) => m.role === 'user');
           if (firstUserMsg) {
-            const labelText = getMessageText(firstUserMsg.content).trim();
+            const rawText = getMessageText(firstUserMsg.content).trim();
+            const labelText = stripWorkflowContextForDisplay(rawText);
             if (labelText) {
               const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
               set((s) => ({
@@ -127,6 +149,7 @@ export function createHistoryActions(
             });
           }
         });
+
         const { pendingFinal, lastUserMessageAt, sending: isSendingNow } = get();
 
         // If we're sending but haven't received streaming events, check

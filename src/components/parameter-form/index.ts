@@ -13,6 +13,7 @@ export {
   unregisterParameterFormHandler,
   submitParameterForm,
   hasParameterFormHandler,
+  resolveParameterFormId,
 } from './form-handlers';
 export type { ParameterFormHandler } from './form-handlers';
 export { showInlineParameterForm } from './show-inline-parameter-form';

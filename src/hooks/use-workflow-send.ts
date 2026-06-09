@@ -41,6 +41,7 @@ export async function sendWithWorkflow(
   _context: WorkflowSendContext,
   sendMessage: (text: string, runId?: string | null, workflowId?: string | null, workflowContext?: unknown) => Promise<void>,
 ): Promise<boolean> {
+  console.log('[workflow-trace] sendWithWorkflow start templateId=%s text=%s', templateId, text);
   if (!canStartWorkflow()) {
     toast.error('当前会话已有过多执行中的工作流，请等待完成后再试');
     return false;
@@ -48,6 +49,7 @@ export async function sendWithWorkflow(
 
   try {
     // 1. Fetch startup schema (use cache if available)
+    console.log('[workflow-trace] sendWithWorkflow fetching schema templateId=%s', templateId);
     let cached = schemaCache.get(templateId);
     if (!cached) {
       const startup = await getStartupSchema(templateId);
@@ -56,30 +58,52 @@ export async function sendWithWorkflow(
     }
 
     const { schema, schemaHash } = cached;
+    console.log('[workflow-trace] sendWithWorkflow schema loaded fields=%d steps=%d', schema.fields.length, schema.steps.length);
 
     // 2. Get template name from store
     const templateName = useWorkflowsStore.getState().templates.find((t) => t.id === templateId)?.label ?? templateId;
 
-    // 3. Build hidden workflow context for AI guidance
-    const { buildWorkflowContextSummary } = await import('@/lib/workflow-form-utils');
-    const workflowContext = buildWorkflowContextSummary(templateId, templateName, schemaHash, schema);
+    // 3. Build workflow context for AI model
+    const workflowContext: import('@/stores/chat').WorkflowContextBlock = {
+      type: 'workflow_context',
+      templateId,
+      templateName,
+      schemaHash,
+      fields: schema.fields
+        .filter((f) => {
+          const step = schema.steps.find((s) => s.id === f.group);
+          return f.group === 'confirm' || (step && step.mode === 'confirm');
+        })
+        .map((f) => ({
+          key: f.key,
+          label: f.label,
+          component: f.component,
+          required: f.required,
+          options: f.options?.map((o) => ({ value: String(o.value), label: o.label })),
+          defaultValue: f.defaultValue,
+        })),
+    };
 
-    // 4. Set pending workflow so subsequent user replies are interpreted as parameter input
+    // 4. Set pending workflow state (frontendFormInserted=false so model response triggers form).
     useChatStore.getState().setPendingWorkflow({
       templateId,
       templateName,
       schema,
       schemaHash,
       collectedInputs: {},
+      frontendFormInserted: false,
     });
 
-    // 5. Send user message to Gateway with hidden workflow context.
-    //    The AI will receive the context and generate natural language guidance.
+    // 5. Send user message to Gateway.
+    // The model will process the workflow context and respond.
+    // After the model responds, maybeAppendWorkflowParameterForm will inject the form.
     await sendMessage(text, null, null, workflowContext);
+    console.log('[workflow-trace] sendWithWorkflow sent message to Gateway, form will appear after model responds');
 
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    console.error('[workflow-trace] sendWithWorkflow failed:', message);
     toast.error(`工作流准备失败: ${message}`);
     return false;
   }
@@ -137,7 +161,12 @@ export async function createAndStartWorkflowDirect(
       idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
     });
 
-    // Insert assistant message with workflow_card locally
+    // Notify Gateway so the confirmation message is persisted in session history.
+    await _sendMessage('参数已确认，正在分析并执行工作流...', run.id, created.workflowId);
+
+    // Insert assistant message with workflow_card locally for immediate feedback.
+    // The text above is already sent to Gateway; the workflow_card is a local UI
+    // artifact that will be lost on refresh but can be recovered via run tracking.
     const chatStore = useChatStore;
     const now = Date.now() / 1000;
     chatStore.setState((s) => ({
@@ -494,4 +523,210 @@ export async function tryResolvePendingWorkflow(
   }
 
   return false;
+}
+
+function appendLocalConversationTurn(userText: string, assistantText: string): void {
+  const now = Date.now() / 1000;
+  useChatStore.setState((s) => ({
+    messages: [
+      ...s.messages,
+      {
+        role: 'user',
+        content: userText,
+        timestamp: now,
+        id: crypto.randomUUID(),
+      } as import('@/stores/chat').RawMessage,
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: assistantText }],
+        timestamp: now + 0.001,
+        id: crypto.randomUUID(),
+      } as import('@/stores/chat').RawMessage,
+    ],
+    lastUserMessageAt: Date.now(),
+  }));
+}
+
+export interface NaturalLanguageWorkflowSendOptions {
+  text: string;
+  context: WorkflowSendContext;
+  sendMessage: (
+    text: string,
+    runId?: string | null,
+    workflowId?: string | null,
+    workflowContext?: unknown,
+  ) => Promise<void>;
+}
+
+/**
+ * Detect natural-language workflow intent, resolve template, fetch schema and
+ * enter the workflow pipeline. Returns true when the message is handled and
+ * should not fall through to normal chat.
+ */
+export async function tryNaturalLanguageWorkflowSend(
+  options: NaturalLanguageWorkflowSendOptions,
+): Promise<boolean> {
+  const { text, context, sendMessage } = options;
+  const chatState = useChatStore.getState();
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  const {
+    detectWorkflowIntent,
+    resolveTemplateFromText,
+    isWorkflowCancelIntent,
+    buildTemplateSelectionPrompt,
+    buildWorkflowClarificationPrompt,
+    resolveTemplateSelectionFromText,
+  } = await import('@/hooks/use-workflow-intent');
+
+  // User is picking a template from a previous clarification prompt
+  const pendingSelection = chatState.pendingTemplateSelection;
+  if (pendingSelection) {
+    if (isWorkflowCancelIntent(trimmed)) {
+      chatState.clearPendingTemplateSelection();
+      appendLocalConversationTurn(trimmed, '已取消工作流创建，您可以继续正常对话。');
+      return true;
+    }
+
+    const selected = resolveTemplateSelectionFromText(trimmed, pendingSelection.templates);
+    if (!selected) {
+      appendLocalConversationTurn(
+        trimmed,
+        `未能识别您的选择。${buildTemplateSelectionPrompt(pendingSelection.templates)}`,
+      );
+      return true;
+    }
+
+    chatState.clearPendingTemplateSelection();
+    const ok = await sendWithWorkflow(
+      pendingSelection.originalText,
+      selected.id,
+      context,
+      sendMessage,
+    );
+    return ok;
+  }
+
+  if (!detectWorkflowIntent(trimmed)) return false;
+
+  const intent = await resolveTemplateFromText(trimmed);
+
+  if (intent.confidence === 'high' && intent.bestMatch) {
+    return sendWithWorkflow(trimmed, intent.bestMatch.id, context, sendMessage);
+  }
+
+  if (intent.confidence === 'medium' && intent.templates.length > 0) {
+    const candidates = intent.templates.slice(0, 3);
+    chatState.setPendingTemplateSelection({ templates: candidates, originalText: trimmed });
+    appendLocalConversationTurn(trimmed, buildTemplateSelectionPrompt(candidates));
+    return true;
+  }
+
+  // Workflow intent detected but no confident template match
+  appendLocalConversationTurn(trimmed, buildWorkflowClarificationPrompt());
+  return true;
+}
+
+function appendLocalConversationTurn(userText: string, assistantText: string): void {
+  const now = Date.now() / 1000;
+  useChatStore.setState((s) => ({
+    messages: [
+      ...s.messages,
+      {
+        role: 'user',
+        content: userText,
+        timestamp: now,
+        id: crypto.randomUUID(),
+      } as import('@/stores/chat').RawMessage,
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: assistantText }],
+        timestamp: now + 0.001,
+        id: crypto.randomUUID(),
+      } as import('@/stores/chat').RawMessage,
+    ],
+    lastUserMessageAt: Date.now(),
+  }));
+}
+
+export interface NaturalLanguageWorkflowSendOptions {
+  text: string;
+  context: WorkflowSendContext;
+  sendMessage: (
+    text: string,
+    runId?: string | null,
+    workflowId?: string | null,
+    workflowContext?: unknown,
+  ) => Promise<void>;
+}
+
+/**
+ * Detect natural-language workflow intent, resolve template, fetch schema and
+ * enter the workflow pipeline. Returns true when the message is handled and
+ * should not fall through to normal chat.
+ */
+export async function tryNaturalLanguageWorkflowSend(
+  options: NaturalLanguageWorkflowSendOptions,
+): Promise<boolean> {
+  const { text, context, sendMessage } = options;
+  const chatState = useChatStore.getState();
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  const {
+    detectWorkflowIntent,
+    resolveTemplateFromText,
+    isWorkflowCancelIntent,
+    buildTemplateSelectionPrompt,
+    buildWorkflowClarificationPrompt,
+    resolveTemplateSelectionFromText,
+  } = await import('@/hooks/use-workflow-intent');
+
+  // User is picking a template from a previous clarification prompt
+  const pendingSelection = chatState.pendingTemplateSelection;
+  if (pendingSelection) {
+    if (isWorkflowCancelIntent(trimmed)) {
+      chatState.clearPendingTemplateSelection();
+      appendLocalConversationTurn(trimmed, '已取消工作流创建，您可以继续正常对话。');
+      return true;
+    }
+
+    const selected = resolveTemplateSelectionFromText(trimmed, pendingSelection.templates);
+    if (!selected) {
+      appendLocalConversationTurn(
+        trimmed,
+        `未能识别您的选择。${buildTemplateSelectionPrompt(pendingSelection.templates)}`,
+      );
+      return true;
+    }
+
+    chatState.clearPendingTemplateSelection();
+    const ok = await sendWithWorkflow(
+      pendingSelection.originalText,
+      selected.id,
+      context,
+      sendMessage,
+    );
+    return ok;
+  }
+
+  if (!detectWorkflowIntent(trimmed)) return false;
+
+  const intent = await resolveTemplateFromText(trimmed);
+
+  if (intent.confidence === 'high' && intent.bestMatch) {
+    return sendWithWorkflow(trimmed, intent.bestMatch.id, context, sendMessage);
+  }
+
+  if (intent.confidence === 'medium' && intent.templates.length > 0) {
+    const candidates = intent.templates.slice(0, 3);
+    chatState.setPendingTemplateSelection({ templates: candidates, originalText: trimmed });
+    appendLocalConversationTurn(trimmed, buildTemplateSelectionPrompt(candidates));
+    return true;
+  }
+
+  // Workflow intent detected but no confident template match
+  appendLocalConversationTurn(trimmed, buildWorkflowClarificationPrompt());
+  return true;
 }

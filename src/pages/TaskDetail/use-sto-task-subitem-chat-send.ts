@@ -49,6 +49,30 @@ export function useStoTaskSubitemChatSend() {
         if (resolved) return;
       }
 
+      // Natural language workflow intent (same as home hub)
+      if (!pending && !workflowId) {
+        const { tryNaturalLanguageWorkflowSend } = await import('@/hooks/use-workflow-send');
+        const nlHandled = await tryNaturalLanguageWorkflowSend({
+          text,
+          context: {
+            sessionKey: chatState.currentSessionKey,
+            agentId: chatState.currentAgentId,
+          },
+          sendMessage: async (textToSend, runId, wfId, ctx) => {
+            const wfCtx = ctx as import('@/stores/chat').WorkflowContextBlock | undefined;
+            await sendMessage({
+              text: textToSend,
+              attachments,
+              targetAgentId,
+              workflowId: wfId || undefined,
+              runId: runId || undefined,
+              workflowContext: wfCtx,
+            });
+          },
+        });
+        if (nlHandled) return;
+      }
+
       // If workflow already created in sendWithWorkflow — just start it
       if (pending?.workflowId && workflowId === pending.workflowId) {
         const { startExistingWorkflow } = await import('@/hooks/use-workflow-send');

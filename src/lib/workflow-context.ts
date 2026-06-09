@@ -54,10 +54,15 @@ export function buildWorkflowContextText(context: WorkflowContextBlock): string 
     '',
     '当前用户希望运行上述工作流。请根据以下字段信息，用自然语言引导用户确认参数。如果用户询问参数含义，请使用 JSON 中的字段定义进行解释。',
     '',
-    fieldsDescription,
+    '⚠️ **重要指令：当前已处于前端工作流引导模式，前端已加载参数表单供用户交互确认。请直接引导用户确认上述参数，不要调用 sai-cli、read、exec 或任何其他工具来探索业务系统命令。所有参数定义已在上文 JSON 中提供，无需额外查询。**',
     '',
-    '用户原始消息如下：',
-    '---',
+    '⚠️ **重要指令：在你的回复末尾，必须输出一个结构化的工作流表单标记（单独一行），以便前端渲染参数表单。格式如下（必须完全一致）：**',
+    '',
+    '```',
+    '<ParameterForm templateId="' + context.templateId + '" schemaHash="' + context.schemaHash + '" />',
+    '```',
+    '',
+    fieldsDescription,
   ].join('\n');
 }
 
@@ -68,7 +73,9 @@ export function appendWorkflowContext(text: string, context?: WorkflowContextBlo
   if (!context) return text;
   if (messageHasWorkflowContext(text)) return text;
   const ctxText = buildWorkflowContextText(context);
-  return `${ctxText}\n${text}\n${WORKFLOW_CONTEXT_MARKER}`;
+  // Format: [context block]\n<!-- StoClaw-Workflow-Context -->\n[user original text]
+  // The user text is placed AFTER the closing marker so it survives stripWorkflowContextForDisplay.
+  return `${ctxText}\n${WORKFLOW_CONTEXT_MARKER}\n${text}`;
 }
 
 export const WORKFLOW_COMPLETE_TAG = '[workflow:complete]';
@@ -81,15 +88,14 @@ export function stripWorkflowContextForDisplay(message: string): string {
 
   const startMarker = WORKFLOW_CONTEXT_MARKER;
   const startIdx = message.indexOf(startMarker);
-  // The closing marker is always appended at the very end of the message by
-  // appendWorkflowContext. Use lastIndexOf to avoid mismatches if the user's
-  // original text happens to contain the same marker string.
+  // The closing marker is placed between the context block and user text by
+  // appendWorkflowContext. Use lastIndexOf to find the one just before user text.
   const endIdx = message.lastIndexOf(startMarker);
 
   if (startIdx >= 0 && endIdx > startIdx) {
-    const before = message.slice(0, startIdx).trim();
+    // Return only the text AFTER the closing marker (user's original message)
     const after = message.slice(endIdx + startMarker.length).trim();
-    return [before, after].filter(Boolean).join('\n');
+    return after;
   }
 
   // Fallback: remove everything from the first marker to the end if no closing marker
