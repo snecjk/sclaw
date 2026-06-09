@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
 import { getCurrentEnvConfig } from '../../shared/env-config';
 import { setSiteDepartmentTypes } from '../../shared/site-user-utils';
+import type { ClientSiteAccessCheckData } from '../../shared/client-site-access';
 
 interface StoSyncResponse {
   success?: boolean;
@@ -52,6 +53,15 @@ export { isSiteUser, setSiteDepartmentTypes, getSiteDepartmentTypes } from '../.
 
 export type CrmWeekReportPolicyStatus = 'idle' | 'loading' | 'ok' | 'error';
 
+export interface ClientSiteAccessDeniedInfo {
+  allowed: boolean;
+  clientCode?: string;
+  categoryCode?: string | null;
+  companyCode?: string | null;
+  errCode?: string;
+  errMessage?: string;
+}
+
 interface AuthState {
   isAuthenticated: boolean;
   /** True after init() has completed at least once. Used to prevent auth guard from firing before the main-process status check resolves. */
@@ -60,6 +70,9 @@ interface AuthState {
   ssoEnvironment: SsoEnvironment;
   isLoggingIn: boolean;
   error: string | null;
+  /** 客户端网点白名单校验未通过（登录或冷启动） */
+  accessDenied: boolean;
+  accessCheck: ClientSiteAccessDeniedInfo | null;
   /** CRM 周报首页 /tasks 表面：仅在为 true 时展示（策略白名单命中）；未登录或 fail-closed 时为 false。 */
   crmWeekReportSurfaceAllowed: boolean;
   crmWeekReportPolicyStatus: CrmWeekReportPolicyStatus;
@@ -70,6 +83,7 @@ interface AuthState {
   logout: () => Promise<void>;
   setSsoEnvironment: (env: SsoEnvironment) => Promise<void>;
   refreshCrmWeekReportPolicy: () => Promise<void>;
+  clearAccessDenied: () => void;
 }
 
 function showStoSyncErrorToasts(stoSync?: StoSyncResponse | null): void {
@@ -158,8 +172,14 @@ export const useAuthStore = create<AuthState>()(
       ssoEnvironment: getCurrentEnvConfig().ssoEnvironment as SsoEnvironment,
       isLoggingIn: false,
       error: null,
+      accessDenied: false,
+      accessCheck: null,
       crmWeekReportSurfaceAllowed: false,
       crmWeekReportPolicyStatus: 'idle',
+
+      clearAccessDenied: () => {
+        set({ accessDenied: false, accessCheck: null, error: null });
+      },
 
       refreshCrmWeekReportPolicy: async () => {
         const { isAuthenticated, user } = get();
@@ -193,12 +213,44 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: boolean;
             user: SsoUserInfo | null;
             ssoEnvironment: SsoEnvironment;
+            accessDenied?: boolean;
+            error?: string;
+            accessCheck?: ClientSiteAccessCheckData & {
+              clientCode?: string;
+              errCode?: string;
+              errMessage?: string;
+            };
           }>('/api/auth/status');
+          if (data.accessDenied) {
+            set({
+              isAuthenticated: false,
+              user: null,
+              ssoEnvironment: data.ssoEnvironment,
+              isInitialized: true,
+              accessDenied: true,
+              accessCheck: data.accessCheck
+                ? {
+                    allowed: data.accessCheck.allowed === true,
+                    clientCode: data.accessCheck.clientCode ?? data.accessCheck.client_code,
+                    categoryCode: data.accessCheck.categoryCode ?? null,
+                    companyCode: data.accessCheck.companyCode ?? null,
+                    errCode: data.accessCheck.errCode,
+                    errMessage: data.accessCheck.errMessage ?? data.error,
+                  }
+                : null,
+              error: data.error || '您的所属组织无权使用 StoClaw',
+              crmWeekReportSurfaceAllowed: false,
+              crmWeekReportPolicyStatus: 'idle',
+            });
+            return;
+          }
           set({
             isAuthenticated: data.isAuthenticated,
             user: data.user,
             ssoEnvironment: data.ssoEnvironment,
             isInitialized: true,
+            accessDenied: false,
+            accessCheck: null,
           });
           if (!data.isAuthenticated) {
             set({
@@ -238,13 +290,40 @@ export const useAuthStore = create<AuthState>()(
           const data = await hostApiFetch<{
             success: boolean;
             cancelled?: boolean;
+            accessDenied?: boolean;
             user?: SsoUserInfo;
             error?: string;
             stoSync?: StoSyncResponse;
+            accessCheck?: ClientSiteAccessCheckData & {
+              clientCode?: string;
+              errCode?: string;
+              errMessage?: string;
+            };
           }>('/api/auth/login', {
             method: 'POST',
             body: JSON.stringify({ environment: env }),
           });
+
+          if (data.accessDenied) {
+            set({
+              isAuthenticated: false,
+              user: null,
+              isLoggingIn: false,
+              accessDenied: true,
+              accessCheck: data.accessCheck
+                ? {
+                    allowed: data.accessCheck.allowed === true,
+                    clientCode: data.accessCheck.clientCode ?? data.accessCheck.client_code,
+                    categoryCode: data.accessCheck.categoryCode ?? null,
+                    companyCode: data.accessCheck.companyCode ?? null,
+                    errCode: data.accessCheck.errCode,
+                    errMessage: data.accessCheck.errMessage ?? data.error,
+                  }
+                : null,
+              error: data.error || '您的所属组织无权使用 StoClaw',
+            });
+            return;
+          }
 
           if (data.success && data.user) {
             set({
@@ -252,6 +331,8 @@ export const useAuthStore = create<AuthState>()(
               user: data.user,
               isLoggingIn: false,
               error: null,
+              accessDenied: false,
+              accessCheck: null,
             });
 
             showStoSyncErrorToasts(data.stoSync);
@@ -265,6 +346,8 @@ export const useAuthStore = create<AuthState>()(
           } else {
             set({
               isLoggingIn: false,
+              accessDenied: false,
+              accessCheck: null,
               error: data.cancelled ? 'SSO_LOGIN_CANCELLED' : (data.error || 'Login failed'),
             });
           }
@@ -286,6 +369,8 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: false,
           user: null,
           error: null,
+          accessDenied: false,
+          accessCheck: null,
           crmWeekReportSurfaceAllowed: false,
           crmWeekReportPolicyStatus: 'idle',
         });
