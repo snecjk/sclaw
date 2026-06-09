@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { RawMessage } from '@/stores/chat';
-import { buildChatDisplayItems, type ChatDisplayItem } from './chat-display';
+import { buildChatDisplayItems, findLastUserMessage, type ChatDisplayItem } from './chat-display';
 import type { ActiveTurnStream } from './AssistantTurnMessage';
 import { extractImages, extractThinking, extractToolUse } from './message-utils';
 
@@ -41,6 +41,8 @@ export function useChatDisplay(params: {
     if (!sending) {
       return { staticItems: displayItems, activeTurn: null as null | {
         turnMessages: RawMessage[];
+        turnToolResults: RawMessage[];
+        precedingUserMessage: RawMessage | null;
         activeStream: ActiveTurnStream;
       } };
     }
@@ -69,13 +71,23 @@ export function useChatDisplay(params: {
     if (last?.type === 'assistant-turn') {
       return {
         staticItems: displayItems.slice(0, -1),
-        activeTurn: { turnMessages: last.messages, activeStream },
+        activeTurn: {
+          turnMessages: last.messages,
+          turnToolResults: last.toolResults,
+          precedingUserMessage: last.precedingUserMessage ?? findLastUserMessage(messages),
+          activeStream,
+        },
       };
     }
 
     return {
       staticItems: displayItems,
-      activeTurn: { turnMessages: [], activeStream },
+      activeTurn: {
+        turnMessages: [],
+        turnToolResults: [],
+        precedingUserMessage: findLastUserMessage(messages),
+        activeStream,
+      },
     };
   }, [
     displayItems,

@@ -50,6 +50,22 @@ export interface WorkflowIntentResult {
  * Detect if user text contains workflow-related intent.
  * Returns true if keywords are present AND not a false positive.
  */
+/** Phrases that trigger template search / new workflow draft (POST create). */
+const WORKFLOW_CREATION_PATTERNS = [
+  /创建工作流/i,
+  /工作流.*创建/i,
+  /创建.+工作流/i,
+  /新建.+工作流/i,
+  /搭建.+工作流/i,
+];
+
+/** Phrases that trigger start on an existing workflowId (POST start). */
+const WORKFLOW_START_PATTERNS = [
+  /(?:帮我|请)?.*(?:运行|执行|启动|跑).*(?:这个|该|此|刚才|上次|已有|当前).*(?:工作流|流程)/i,
+  /(?:运行|执行|启动)(?:这个|该|此|刚才|上次)?(?:工作流|流程)/i,
+  /(?:再|重新)(?:运行|执行|启动)(?:一次)?/i,
+];
+
 export function detectWorkflowIntent(text: string): boolean {
   if (!text || typeof text !== 'string') return false;
 
@@ -58,8 +74,53 @@ export function detectWorkflowIntent(text: string): boolean {
     if (pattern.test(text)) return false;
   }
 
+  if (WORKFLOW_CREATION_PATTERNS.some((p) => p.test(text))) return true;
+
   const lower = text.toLowerCase();
   return WORKFLOW_KEYWORDS.some((kw) => lower.includes(kw.toLowerCase()));
+}
+
+/** Whether to call workflow template search API before normal chat. */
+export function shouldSearchWorkflowTemplates(text: string): boolean {
+  if (isWorkflowStartIntent(text)) return false;
+  return detectWorkflowIntent(text) || /工作流|workflow/i.test(text);
+}
+
+/**
+ * User wants to start/run an already-saved workflow (POST /workflows/{id}/start).
+ * Must be checked before creation intent — "运行这个工作流" is NOT template search.
+ */
+export function isWorkflowStartIntent(text: string): boolean {
+  if (!text?.trim()) return false;
+  if (isReExecutionIntent(text)) return true;
+  if (WORKFLOW_START_PATTERNS.some((p) => p.test(text))) return true;
+
+  const hasWorkflow = /工作流|流程|workflow/i.test(text);
+  const hasRunVerb = /运行|执行|启动|跑一遍/i.test(text);
+  const hasCreateVerb = /创建|新建|搭建|配置/i.test(text);
+
+  // "帮我运行工作流" without create verb → start if session has saved workflow
+  return hasWorkflow && hasRunVerb && !hasCreateVerb;
+}
+
+/**
+ * User is starting a fresh workflow draft (template search → form → POST create).
+ */
+export function isNewWorkflowCreationIntent(text: string): boolean {
+  if (!text?.trim()) return false;
+  if (isWorkflowStartIntent(text)) return false;
+  if (WORKFLOW_CREATION_PATTERNS.some((p) => p.test(text))) return true;
+  return /(?:帮我|请|想要|我要).*(?:创建|新建|搭建).*(?:工作流|流程)/i.test(text);
+}
+
+/** Strip command boilerplate so search focuses on the workflow subject. */
+export function extractWorkflowSearchQuery(text: string): string {
+  let q = text.trim();
+  q = q.replace(/(?:帮我|请|想要|我要)\s*/gi, '');
+  q = q.replace(/(?:创建|执行|运行|启动)\s*(?:一个|一份)?\s*(?:工作流|流程)/gi, '');
+  q = q.replace(/(?:工作流|流程)\s*(?:创建|执行|运行|启动)/gi, '');
+  q = q.replace(/\s+/g, ' ').trim();
+  return q || text.trim();
 }
 
 /**
@@ -71,7 +132,8 @@ export async function resolveTemplateFromText(
   limit = 5,
 ): Promise<WorkflowIntentResult> {
   try {
-    const result = await searchWorkflowTemplates(text, limit);
+    const query = extractWorkflowSearchQuery(text);
+    const result = await searchWorkflowTemplates(query, limit);
     const allItems = [
       ...(result.matchedItems ?? []),
       ...(result.recommendedItems ?? []),
@@ -125,8 +187,16 @@ export function isImmediateExecutionIntent(text: string): boolean {
  */
 export function isReExecutionIntent(text: string): boolean {
   if (!text) return false;
-  const reExecPatterns = /(?:执行刚才的|再跑一遍|再执行一次|重新执行|用上次参数|继续执行)/i;
+  const reExecPatterns = /(?:执行刚才的|再跑一遍|再执行一次|重新执行|用上次参数|继续执行|运行这个|执行这个|启动这个)/i;
   return reExecPatterns.test(text);
+}
+
+/** Prompt when user wants to run but no saved workflow exists in session. */
+export function buildWorkflowStartUnavailablePrompt(): string {
+  return [
+    '当前会话没有可运行的工作流记录。',
+    '请先通过「创建xxx工作流」完成参数配置，或输入 / 从列表中选择模板。',
+  ].join('\n');
 }
 
 /** Build assistant prompt listing candidate templates for user selection. */

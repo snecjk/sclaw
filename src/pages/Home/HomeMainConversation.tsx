@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowDown, Loader2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
+import { useChatStore, type AttachedFileMeta, type RawMessage } from '@/stores/chat';
+import { useSessionWorkflowPreview } from '@/hooks/use-session-workflow-preview';
 import { useAgentsStore } from '@/stores/agents';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
@@ -114,6 +115,14 @@ export function HomeMainConversation({ className }: { className?: string }) {
   const previewableFiles = usePreviewableFiles(allMessagesForPreview);
   const hasPreviewableFiles = previewableFiles.length > 0;
 
+  const {
+    workflowId: sessionWorkflowId,
+    showWorkflowTab,
+    detail: workflowDetail,
+    loading: workflowLoading,
+    error: workflowError,
+  } = useSessionWorkflowPreview(allMessagesForPreview as RawMessage[]);
+
   const handlePreviewFile = useCallback((file: AttachedFileMeta) => {
     if (file.filePath) {
       setActivePreviewFilePath(file.filePath);
@@ -206,6 +215,8 @@ export function HomeMainConversation({ className }: { className?: string }) {
                     <AssistantTurnMessage
                       key={item.key}
                       turnMessages={item.messages}
+                      turnToolResults={item.toolResults}
+                      precedingUserMessage={item.precedingUserMessage}
                       showThinking={showThinking}
                       onPreviewFile={handlePreviewFile}
                     />
@@ -224,6 +235,8 @@ export function HomeMainConversation({ className }: { className?: string }) {
                 <AssistantTurnMessage
                   key="active-turn"
                   turnMessages={activeTurn.turnMessages}
+                  turnToolResults={activeTurn.turnToolResults}
+                  precedingUserMessage={activeTurn.precedingUserMessage}
                   showThinking={showThinking}
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={handlePreviewFile}
@@ -316,6 +329,11 @@ export function HomeMainConversation({ className }: { className?: string }) {
             onSelectFile={setActivePreviewFilePath}
             onClose={() => setShowPreviewPanel(false)}
             className="h-full w-full"
+            showWorkflowTab={showWorkflowTab}
+            workflowId={sessionWorkflowId}
+            workflowDetail={workflowDetail}
+            workflowLoading={workflowLoading}
+            workflowError={workflowError}
           />
         </motion.div>
       )}

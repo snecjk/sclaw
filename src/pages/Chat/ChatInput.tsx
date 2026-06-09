@@ -724,14 +724,14 @@ export function ChatInput({
                   variant="ghost"
                   type="button"
                   className={cn(
-                    'h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
+                    'h-8  rounded-full p-4 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
                     workflowPickerOpen && 'bg-primary/10 text-primary hover:bg-primary/12'
                   )}
                   onClick={() => setWorkflowPickerOpen((open) => !open)}
                   disabled={disabled}
                   title={t('composer.pickWorkflow')}
                 >
-                  <span className="text-[13px] font-medium">/</span>
+                  <span className="text-[13px] font-medium">{t('composer.pickWorkflow')}</span>
                 </Button>
               </div>
             </div>

@@ -11,6 +11,7 @@ import type {
   StartupSchemaResponse,
   CreateWorkflowRequest,
   CreateWorkflowResponse,
+  WorkflowDetailResponse,
   StartWorkflowRequest,
   WorkflowRunResponse,
   WorkflowExecutionState,
@@ -89,7 +90,18 @@ export async function createWorkflow(params: CreateWorkflowRequest): Promise<Cre
   return data;
 }
 
-// ── 4. Start workflow ───────────────────────────────────────────
+// ── 4. Get workflow detail ──────────────────────────────────────
+
+export async function getWorkflowDetail(workflowId: string): Promise<WorkflowDetailResponse> {
+  const data = await unwrap(
+    hostApiFetch<ApiResponse<WorkflowDetailResponse>>(`/agent/v1/workflows/${workflowId}`, {
+      headers: authHeaders(),
+    }),
+  );
+  return data;
+}
+
+// ── 5. Start workflow ───────────────────────────────────────────
 
 export async function startWorkflow(
   workflowId: string,
@@ -106,7 +118,7 @@ export async function startWorkflow(
   return data;
 }
 
-// ── 5. Get run status ───────────────────────────────────────────
+// ── 6. Get run status ───────────────────────────────────────────
 
 export async function getWorkflowRun(runId: string): Promise<WorkflowRunResponse> {
   const data = await unwrap(
@@ -156,7 +168,7 @@ export function runToExecutionState(run: WorkflowRunResponse): WorkflowExecution
   };
 }
 
-// ── 6. Subscribe to run stream (SSE) ────────────────────────────
+// ── 7. Subscribe to run stream (SSE) ────────────────────────────
 
 /**
  * Subscribe to real-time workflow run updates via SSE.

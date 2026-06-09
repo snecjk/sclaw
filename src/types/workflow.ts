@@ -111,6 +111,51 @@ export interface CreateWorkflowResponse {
   startupValues: Record<string, unknown>;
 }
 
+// ── Workflow Detail ─────────────────────────────────────────────
+
+export interface WorkflowGraphNode {
+  id: string;
+  type: string;
+  name: string;
+}
+
+export interface WorkflowGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+}
+
+export interface WorkflowDefaultPreset {
+  id: string;
+  name: string;
+  workflowId: string;
+  workflowVersionId: number;
+  ownerUserId?: string;
+  values: Record<string, unknown>;
+  schemaHash: string;
+  isDefault: boolean;
+  status: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface WorkflowStartupDetail {
+  schemaHash: string;
+  schema: WorkflowSchema;
+  defaultPreset: WorkflowDefaultPreset | null;
+}
+
+export interface WorkflowDetailResponse {
+  workflowId: string;
+  workflowName: string;
+  description?: string | null;
+  schemaVersion?: string | null;
+  version: number;
+  nodes: WorkflowGraphNode[];
+  edges: WorkflowGraphEdge[];
+  startup: WorkflowStartupDetail;
+}
+
 // ── Workflow Start ──────────────────────────────────────────────
 
 export interface StartWorkflowRequest {

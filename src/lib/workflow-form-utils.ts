@@ -40,12 +40,14 @@ function mapField(schemaField: WorkflowSchemaField): FormField {
   const validation = schemaField.required ? { required: true } : undefined;
 
   const type = mapComponentToType(schemaField.component);
+  const readOnlyHint = /仅展示|不可修改|系统预置/.test(description ?? '');
 
   switch (type) {
     case 'select':
       return {
         name, label, description, defaultValue, validation,
         type: 'select',
+        disabled: readOnlyHint,
         options: schemaField.options?.map((o) => ({
           value: o.value,
           label: o.label,
@@ -56,6 +58,7 @@ function mapField(schemaField: WorkflowSchemaField): FormField {
       return {
         name, label, description, defaultValue, validation,
         type: 'multiselect',
+        disabled: readOnlyHint,
         options: schemaField.options?.map((o) => ({
           value: o.value,
           label: o.label,
@@ -212,8 +215,134 @@ export function buildWorkflowFormConfig(
     fields,
     steps: steps.length > 0 ? steps : undefined,
     confirmLabel: '确认并执行',
-    cancelLabel: '取消',
+    nextLabel: '继续',
+    prevLabel: '上一步',
+    allowCancel: false,
   };
+}
+
+/** Detect objects accidentally created by spreading a string (`{..."abc"}` → {0:"a",1:"b"}). */
+function isCharIndexObject(obj: Record<string, unknown>): boolean {
+  const keys = Object.keys(obj);
+  if (keys.length < 2) return false;
+  return keys.every((k, i) => k === String(i));
+}
+
+/** Normalize form values that may be JSON strings or corrupted char-index objects. */
+export function normalizeWorkflowFieldValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return value;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === 'object' && parsed !== null) {
+        if (!Array.isArray(parsed) && isCharIndexObject(parsed as Record<string, unknown>)) {
+          const reconstructed = Object.keys(parsed)
+            .sort((a, b) => Number(a) - Number(b))
+            .map((k) => String((parsed as Record<string, unknown>)[k]))
+            .join('');
+          try {
+            return JSON.parse(reconstructed);
+          } catch {
+            return reconstructed;
+          }
+        }
+        return parsed;
+      }
+    } catch {
+      // plain text
+    }
+    return value;
+  }
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    const obj = value as Record<string, unknown>;
+    if (isCharIndexObject(obj)) {
+      const reconstructed = Object.keys(obj)
+        .sort((a, b) => Number(a) - Number(b))
+        .map((k) => String(obj[k]))
+        .join('');
+      try {
+        return JSON.parse(reconstructed);
+      } catch {
+        return reconstructed;
+      }
+    }
+  }
+  return value;
+}
+
+/** Human-readable display for a single workflow field value in chat summaries. */
+export function formatWorkflowValueForDisplay(
+  value: unknown,
+  field?: WorkflowSchemaField,
+): string {
+  if (value === undefined || value === null || value === '') return '';
+
+  const normalized = normalizeWorkflowFieldValue(value);
+
+  if (Array.isArray(normalized)) {
+    if (field?.options?.length) {
+      return normalized
+        .map((v) => {
+          const opt = field.options!.find((o) => String(o.value) === String(v));
+          return opt?.label ?? String(v);
+        })
+        .join('、');
+    }
+    return normalized.map(String).join('、');
+  }
+
+  if (typeof normalized === 'object' && normalized !== null) {
+    const items = (field as WorkflowSchemaField & { items?: Array<{ fieldKey: string; label: string }> })
+      .items;
+    if (items?.length) {
+      const record = normalized as Record<string, unknown>;
+      return items
+        .map((item) => {
+          const v = record[item.fieldKey];
+          if (v === undefined || v === null || v === '') return null;
+          return `${item.label} ${v}`;
+        })
+        .filter(Boolean)
+        .join('；');
+    }
+    return Object.entries(normalized as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined && v !== null && v !== '')
+      .map(([k, v]) => `${k}: ${v}`)
+      .join('；');
+  }
+
+  if (field?.options?.length) {
+    const opt = field.options.find((o) => String(o.value) === String(normalized));
+    if (opt) return opt.label;
+  }
+
+  return String(normalized);
+}
+
+/** Build user-facing summary after parameter form submission. */
+export function buildWorkflowValuesSummary(
+  schema: WorkflowSchema,
+  values: Record<string, unknown>,
+): string {
+  const confirmStepIds = new Set(
+    schema.steps.filter((s) => s.mode === 'confirm').map((s) => s.id),
+  );
+  const fields = schema.fields
+    .filter((f) => confirmStepIds.has(f.group))
+    .sort((a, b) => a.order - b.order);
+
+  const lines: string[] = [];
+  for (const field of fields) {
+    const val = values[field.key];
+    if (val === undefined || val === null || val === '') continue;
+    const display = formatWorkflowValueForDisplay(val, field);
+    if (!display) continue;
+    lines.push(`${field.label}: ${display}`);
+  }
+
+  if (lines.length === 0) return '参数已确认';
+  return `已确认以下参数：\n${lines.map((l) => `- ${l}`).join('\n')}`;
 }
 
 /**

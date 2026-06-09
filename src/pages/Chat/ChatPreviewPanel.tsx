@@ -9,7 +9,6 @@ import {
   ExternalLink,
   RefreshCw,
   Download,
-  Maximize2,
   FileText,
   FileCode,
   File,
@@ -24,7 +23,9 @@ import { cn } from '@/lib/utils';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { FilePreviewViewer } from '@/components/file-preview/FilePreviewViewer';
+import { WorkflowPreviewPanel } from '@/components/workflow/WorkflowPreviewPanel';
 import type { AttachedFileMeta } from '@/stores/chat';
+import type { WorkflowDetailResponse } from '@/types/workflow';
 
 interface ChatPreviewPanelProps {
   files: AttachedFileMeta[];
@@ -32,6 +33,12 @@ interface ChatPreviewPanelProps {
   onSelectFile: (filePath: string) => void;
   onClose: () => void;
   className?: string;
+  /** When false, hide the workflow tab entirely. */
+  showWorkflowTab?: boolean;
+  workflowId?: string | null;
+  workflowDetail?: WorkflowDetailResponse | null;
+  workflowLoading?: boolean;
+  workflowError?: string | null;
 }
 
 type PreviewTab = 'product' | 'workflow';
@@ -56,6 +63,11 @@ export function ChatPreviewPanel({
   onSelectFile,
   onClose,
   className,
+  showWorkflowTab = false,
+  workflowId = null,
+  workflowDetail = null,
+  workflowLoading = false,
+  workflowError = null,
 }: ChatPreviewPanelProps) {
   const [activeTab, setActiveTab] = useState<PreviewTab>('product');
   const [showFileList, setShowFileList] = useState(false);
@@ -136,17 +148,19 @@ export function ChatPreviewPanel({
           >
             产物
           </button>
-          <button
-            onClick={() => setActiveTab('workflow')}
-            className={cn(
-              'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-              activeTab === 'workflow'
-                ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            工作流
-          </button>
+          {showWorkflowTab && (
+            <button
+              onClick={() => setActiveTab('workflow')}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                activeTab === 'workflow'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              工作流
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-1">
           {activeTab === 'product' && (
@@ -247,9 +261,14 @@ export function ChatPreviewPanel({
             <p>点击消息中的文件链接进行预览</p>
             <p className="text-xs opacity-50">或从上方下拉菜单选择文件</p>
           </div>
-        ) : (
-          <WorkflowPlaceholder />
-        )}
+        ) : showWorkflowTab ? (
+          <WorkflowPreviewPanel
+            detail={workflowDetail}
+            loading={workflowLoading}
+            error={workflowError}
+            workflowId={workflowId}
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -275,11 +294,3 @@ function ActionButton({
   );
 }
 
-function WorkflowPlaceholder() {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground px-6 text-center">
-      <Maximize2 className="h-8 w-8 opacity-30" />
-      <p>工作流预览即将推出</p>
-    </div>
-  );
-}

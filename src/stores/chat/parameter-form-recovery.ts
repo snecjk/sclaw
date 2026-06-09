@@ -5,7 +5,7 @@
  */
 import { toast } from 'sonner';
 import { registerParameterFormHandler, hasParameterFormHandler } from '@/components/parameter-form/form-handlers';
-import { buildWorkflowFormConfig, buildStartupPreset } from '@/lib/workflow-form-utils';
+import { buildWorkflowFormConfig, buildStartupPreset, buildWorkflowValuesSummary } from '@/lib/workflow-form-utils';
 import type { WorkflowSchema } from '@/types/workflow';
 import type { ContentBlock, RawMessage } from './types';
 import type { ChatGet, ChatSet } from './store-api';
@@ -63,22 +63,6 @@ export function mergeParameterFormBlocksFromCurrent(
   });
 }
 
-function buildValueSummary(schema: WorkflowSchema | undefined, values: Record<string, unknown>): string {
-  const valueLines: string[] = [];
-  if (schema?.fields) {
-    for (const field of schema.fields) {
-      const val = values[field.key];
-      if (val !== undefined && val !== null && val !== '') {
-        const displayVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
-        valueLines.push(`${field.label}: ${displayVal}`);
-      }
-    }
-  }
-  return valueLines.length > 0
-    ? `已确认以下参数：\n${valueLines.map((l) => `- ${l}`).join('\n')}`
-    : '参数已确认';
-}
-
 function registerWorkflowSubmitHandler(
   formId: string,
   params: {
@@ -92,7 +76,7 @@ function registerWorkflowSubmitHandler(
   const { templateId, templateName, schemaHash, schema, get } = params;
   registerParameterFormHandler(formId, async (values: Record<string, unknown>) => {
     const chatState = get();
-    const summaryText = buildValueSummary(schema, values);
+    const summaryText = buildWorkflowValuesSummary(schema, values);
     try {
       const { createWorkflow, startWorkflow } = await import('@/lib/workflow-api');
       const { saveWorkflowExecution } = await import('@/stores/workflow-memory');

@@ -26,7 +26,7 @@ import {
   type ToolStatus,
 } from './chat/types';
 import type { WorkflowExecutionState } from '@/types/workflow';
-import { buildWorkflowFormConfig, buildStartupPreset } from '@/lib/workflow-form-utils';
+import { buildWorkflowFormConfig, buildStartupPreset, buildWorkflowValuesSummary } from '@/lib/workflow-form-utils';
 import { registerParameterFormHandler } from '@/components/parameter-form/form-handlers';
 import {
   mergeParameterFormBlocksFromCurrent,
@@ -941,24 +941,8 @@ function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
       return;
     }
 
-    // Build summary text from form values
-    const valueLines: string[] = [];
-    if (pending.schema && pending.schema.fields) {
-      for (const field of pending.schema.fields) {
-        const val = values[field.key];
-        if (val !== undefined && val !== null && val !== '') {
-          let displayVal: string;
-          if (typeof val === 'object') {
-            displayVal = JSON.stringify(val);
-          } else {
-            displayVal = String(val);
-          }
-          valueLines.push(`${field.label}: ${displayVal}`);
-        }
-      }
-    }
-    const summaryText = valueLines.length > 0
-      ? `已确认以下参数：\n${valueLines.map((l) => `- ${l}`).join('\n')}`
+    const summaryText = pending.schema
+      ? buildWorkflowValuesSummary(pending.schema, values)
       : '参数已确认';
 
     try {

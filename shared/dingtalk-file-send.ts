@@ -45,7 +45,7 @@ export function buildDingTalkFileSendWorkflowContext(
     '',
     '## StoClaw DingTalk 文件发送（钉盘流程，本条含非图片附件）',
     '',
-    '**仅当需要把附件发给上述 @ 收件人时启用**；纯文字消息仍用 `--text`，不要套用本流程。',
+    '**仅当需要把附件发给上述 @ 收件人时启用**；纯文字消息仍用 `--text`（正文 Markdown + 底栏代发说明，见上文规则 6–7），不要套用本流程。',
     '',
     '非图片文件（pdf/doc/js/zip 等）**必须**按顺序执行，禁止猜测 dentryId/spaceId：',
     '1. `dws chat conversation-info` 取 `newCSpaceIdIM` 作为 `--space-id`（群用 `--group`，单聊用 `--user`）',

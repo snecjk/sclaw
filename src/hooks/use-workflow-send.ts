@@ -20,7 +20,7 @@ import {
 import { invokeIpc } from '@/lib/api-client';
 import { canStartWorkflow, useWorkflowsStore } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
-import { saveWorkflowRecord, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
+import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
 import type { WorkflowSchema, WorkflowSchemaField } from '@/types/workflow';
 
 export interface WorkflowSendContext {
@@ -191,6 +191,31 @@ export async function createAndStartWorkflowDirect(
       agentId: context.agentId,
     });
 
+    updateWorkflowRunMetadata(context.sessionKey, created.workflowId, {
+      lastRunId: run.id,
+      lastStatus: 'running',
+    });
+
+    saveWorkflowExecution({
+      workflowId: created.workflowId,
+      runId: run.id,
+      templateId,
+      templateName,
+      status: 'running',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      collectedInputs: inputs,
+    });
+
+    useChatStore.getState().setWorkflowCardState(run.id, {
+      runId: run.id,
+      workflowId: created.workflowId,
+      status: 'running',
+      progress: 0,
+      steps: [],
+      startedAt: new Date().toISOString(),
+    });
+
     // Clear pending state
     useChatStore.getState().clearPendingWorkflow();
 
@@ -234,14 +259,50 @@ export async function startExistingWorkflow(
       agentId: context.agentId,
     });
 
-    // Update memory with latest run metadata
     updateWorkflowRunMetadata(context.sessionKey, workflowId, {
       lastRunId: run.id,
       lastStatus: 'running',
     });
 
-    // Clear pending state
-    useChatStore.getState().clearPendingWorkflow();
+    saveWorkflowExecution({
+      workflowId,
+      runId: run.id,
+      templateId: '',
+      templateName: _templateName ?? workflowId,
+      status: 'running',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      collectedInputs: inputs,
+    });
+
+    const chatStore = useChatStore.getState();
+    chatStore.setWorkflowCardState(run.id, {
+      runId: run.id,
+      workflowId,
+      status: 'running',
+      progress: 0,
+      steps: [],
+      startedAt: new Date().toISOString(),
+    });
+
+    const now = Date.now() / 1000;
+    const displayName = _templateName ?? '工作流';
+    useChatStore.setState((s) => ({
+      messages: [
+        ...s.messages,
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: `正在启动工作流「${displayName}」…` },
+            { type: 'workflow_card', runId: run.id, templateName: displayName },
+          ],
+          timestamp: now,
+          id: crypto.randomUUID(),
+        } as import('@/stores/chat').RawMessage,
+      ],
+    }));
+
+    chatStore.clearPendingWorkflow();
 
     return true;
   } catch (err) {
@@ -547,7 +608,7 @@ function appendLocalConversationTurn(userText: string, assistantText: string): v
   }));
 }
 
-export interface NaturalLanguageWorkflowSendOptions {
+export interface StartRememberedWorkflowSendOptions {
   text: string;
   context: WorkflowSendContext;
   sendMessage: (
@@ -559,97 +620,56 @@ export interface NaturalLanguageWorkflowSendOptions {
 }
 
 /**
- * Detect natural-language workflow intent, resolve template, fetch schema and
- * enter the workflow pipeline. Returns true when the message is handled and
- * should not fall through to normal chat.
+ * Start a previously saved workflow via POST /agent/v1/workflows/{workflowId}/start.
+ * Used for "帮我运行这个工作流" — does NOT search templates or create a new draft.
  */
-export async function tryNaturalLanguageWorkflowSend(
-  options: NaturalLanguageWorkflowSendOptions,
+export async function tryStartRememberedWorkflowSend(
+  options: StartRememberedWorkflowSendOptions,
 ): Promise<boolean> {
   const { text, context, sendMessage } = options;
-  const chatState = useChatStore.getState();
   const trimmed = text.trim();
   if (!trimmed) return false;
 
-  const {
-    detectWorkflowIntent,
-    resolveTemplateFromText,
-    isWorkflowCancelIntent,
-    buildTemplateSelectionPrompt,
-    buildWorkflowClarificationPrompt,
-    resolveTemplateSelectionFromText,
-  } = await import('@/hooks/use-workflow-intent');
+  const { isWorkflowStartIntent, buildWorkflowStartUnavailablePrompt } = await import(
+    '@/hooks/use-workflow-intent'
+  );
+  if (!isWorkflowStartIntent(trimmed)) return false;
 
-  // User is picking a template from a previous clarification prompt
-  const pendingSelection = chatState.pendingTemplateSelection;
-  if (pendingSelection) {
-    if (isWorkflowCancelIntent(trimmed)) {
-      chatState.clearPendingTemplateSelection();
-      appendLocalConversationTurn(trimmed, '已取消工作流创建，您可以继续正常对话。');
-      return true;
+  const chatState = useChatStore.getState();
+  const pending = chatState.pendingWorkflow;
+
+  let workflowId = pending?.workflowId;
+  let inputs: Record<string, unknown> = pending?.collectedInputs ?? {};
+  let templateName = pending?.templateName;
+
+  if (!workflowId) {
+    const { getLatestWorkflow } = await import('@/stores/workflow-memory');
+    const latest = getLatestWorkflow(context.sessionKey);
+    if (latest) {
+      workflowId = latest.workflowId;
+      inputs = latest.collectedInputs ?? {};
+      templateName = latest.templateName;
     }
-
-    const selected = resolveTemplateSelectionFromText(trimmed, pendingSelection.templates);
-    if (!selected) {
-      appendLocalConversationTurn(
-        trimmed,
-        `未能识别您的选择。${buildTemplateSelectionPrompt(pendingSelection.templates)}`,
-      );
-      return true;
-    }
-
-    chatState.clearPendingTemplateSelection();
-    const ok = await sendWithWorkflow(
-      pendingSelection.originalText,
-      selected.id,
-      context,
-      sendMessage,
-    );
-    return ok;
   }
 
-  if (!detectWorkflowIntent(trimmed)) return false;
-
-  const intent = await resolveTemplateFromText(trimmed);
-
-  if (intent.confidence === 'high' && intent.bestMatch) {
-    return sendWithWorkflow(trimmed, intent.bestMatch.id, context, sendMessage);
-  }
-
-  if (intent.confidence === 'medium' && intent.templates.length > 0) {
-    const candidates = intent.templates.slice(0, 3);
-    chatState.setPendingTemplateSelection({ templates: candidates, originalText: trimmed });
-    appendLocalConversationTurn(trimmed, buildTemplateSelectionPrompt(candidates));
+  if (!workflowId) {
+    appendLocalConversationTurn(trimmed, buildWorkflowStartUnavailablePrompt());
     return true;
   }
 
-  // Workflow intent detected but no confident template match
-  appendLocalConversationTurn(trimmed, buildWorkflowClarificationPrompt());
+  chatState.clearPendingTemplateSelection();
+
+  await startExistingWorkflow(
+    workflowId,
+    inputs,
+    context,
+    sendMessage,
+    trimmed,
+    templateName,
+  );
   return true;
 }
 
-function appendLocalConversationTurn(userText: string, assistantText: string): void {
-  const now = Date.now() / 1000;
-  useChatStore.setState((s) => ({
-    messages: [
-      ...s.messages,
-      {
-        role: 'user',
-        content: userText,
-        timestamp: now,
-        id: crypto.randomUUID(),
-      } as import('@/stores/chat').RawMessage,
-      {
-        role: 'assistant',
-        content: [{ type: 'text', text: assistantText }],
-        timestamp: now + 0.001,
-        id: crypto.randomUUID(),
-      } as import('@/stores/chat').RawMessage,
-    ],
-    lastUserMessageAt: Date.now(),
-  }));
-}
-
 export interface NaturalLanguageWorkflowSendOptions {
   text: string;
   context: WorkflowSendContext;
@@ -675,7 +695,7 @@ export async function tryNaturalLanguageWorkflowSend(
   if (!trimmed) return false;
 
   const {
-    detectWorkflowIntent,
+    shouldSearchWorkflowTemplates,
     resolveTemplateFromText,
     isWorkflowCancelIntent,
     buildTemplateSelectionPrompt,
@@ -702,31 +722,33 @@ export async function tryNaturalLanguageWorkflowSend(
     }
 
     chatState.clearPendingTemplateSelection();
-    const ok = await sendWithWorkflow(
+    await sendWithWorkflow(
       pendingSelection.originalText,
       selected.id,
       context,
       sendMessage,
     );
-    return ok;
+    return true;
   }
 
-  if (!detectWorkflowIntent(trimmed)) return false;
+  // Search templates via POST /agent/v1/workflow-templates/search (not hard-coded ID).
+  if (!shouldSearchWorkflowTemplates(trimmed)) return false;
 
   const intent = await resolveTemplateFromText(trimmed);
 
   if (intent.confidence === 'high' && intent.bestMatch) {
-    return sendWithWorkflow(trimmed, intent.bestMatch.id, context, sendMessage);
+    await sendWithWorkflow(trimmed, intent.bestMatch.id, context, sendMessage);
+    // Handled — do not fall through to normal AI chat even if schema fetch fails.
+    return true;
   }
 
-  if (intent.confidence === 'medium' && intent.templates.length > 0) {
+  if (intent.templates.length > 0) {
     const candidates = intent.templates.slice(0, 3);
     chatState.setPendingTemplateSelection({ templates: candidates, originalText: trimmed });
     appendLocalConversationTurn(trimmed, buildTemplateSelectionPrompt(candidates));
     return true;
   }
 
-  // Workflow intent detected but no confident template match
   appendLocalConversationTurn(trimmed, buildWorkflowClarificationPrompt());
   return true;
 }

@@ -4,7 +4,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowDown, Loader2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentsStore } from '@/stores/agents';
-import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
+import { useChatStore, type AttachedFileMeta, type RawMessage } from '@/stores/chat';
+import { useSessionWorkflowPreview } from '@/hooks/use-session-workflow-preview';
 import { useGatewayStore } from '@/stores/gateway';
 import { createAutoSendWatcher, /* useMessageQueueStore */ } from '@/stores/message-queue';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
@@ -265,6 +266,14 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const previewableFiles = usePreviewableFiles(allMessagesForPreview);
   const hasPreviewableFiles = previewableFiles.length > 0;
 
+  const {
+    workflowId: sessionWorkflowId,
+    showWorkflowTab,
+    detail: workflowDetail,
+    loading: workflowLoading,
+    error: workflowError,
+  } = useSessionWorkflowPreview(allMessagesForPreview as RawMessage[]);
+
   // Auto-open newly-generated files in the preview panel
   const prevPreviewableFilesRef = useRef(previewableFiles);
   useEffect(() => {
@@ -422,6 +431,8 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
                       <AssistantTurnMessage
                         key={item.key}
                         turnMessages={item.messages}
+                        turnToolResults={item.toolResults}
+                        precedingUserMessage={item.precedingUserMessage}
                         showThinking={showThinking}
                         onPreviewFile={handlePreviewFile}
                       />
@@ -440,6 +451,8 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
                   <AssistantTurnMessage
                     key="active-turn"
                     turnMessages={activeTurn.turnMessages}
+                    turnToolResults={activeTurn.turnToolResults}
+                    precedingUserMessage={activeTurn.precedingUserMessage}
                     showThinking={showThinking}
                     activeStream={activeTurn.activeStream}
                     onPreviewFile={handlePreviewFile}
@@ -536,6 +549,11 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
               onSelectFile={setActivePreviewFilePath}
               onClose={() => setShowPreviewPanel(false)}
               className="h-full w-full"
+              showWorkflowTab={showWorkflowTab}
+              workflowId={sessionWorkflowId}
+              workflowDetail={workflowDetail}
+              workflowLoading={workflowLoading}
+              workflowError={workflowError}
             />
           </motion.div>
         )}

@@ -6,7 +6,7 @@
  * user parameter input.
  */
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Check, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, ChevronUp, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { FormFieldRenderer } from './FormFieldRenderer';
@@ -160,6 +160,7 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
 
   // ALL hooks must be called unconditionally before any early returns
   const [currentStep, setCurrentStep] = useState(0);
+  const [collapsed, setCollapsed] = useState(false);
   const [values, setValues] = useState<FormResult>(() => effectiveConfig ? buildInitialValues(effectiveConfig) : {});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -243,23 +244,14 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
   }, [validateStep, steps, values, context, onSubmit]);
 
 
-  // Compute default hint for current step
-  const defaultHint = useMemo(() => {
-    if (!step || !step.fields) return null;
-    const defaults: string[] = [];
+  const stepFooterHint = useMemo(() => {
+    if (!step?.fields?.length) return null;
     for (const field of step.fields) {
-      if (field.defaultValue !== undefined && field.defaultValue !== '') {
-        const label = String(field.label);
-        let valueText: string;
-        if (Array.isArray(field.defaultValue)) {
-          valueText = field.defaultValue.join('、');
-        } else {
-          valueText = String(field.defaultValue);
-        }
-        defaults.push(`${label}：${valueText}`);
+      if (field.description && /仅展示|不可修改|系统预置/.test(field.description)) {
+        return field.description;
       }
     }
-    return defaults.length > 0 ? `工作流默认：${defaults.join('、')}` : null;
+    return null;
   }, [step]);
 
   // Loading state while fetching schema from memory
@@ -280,112 +272,132 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
   }
 
   return (
-    <div className="w-full rounded-2xl border border-border bg-background shadow-sm overflow-hidden">
+    <div className="w-full overflow-hidden rounded-2xl border border-[#E5E6EB] bg-[#FAFBFC] shadow-[0_2px_8px_rgba(29,33,41,0.04)]">
       {/* Header */}
-      <div className="px-5 pt-4 pb-3 border-b border-border">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-[15px] font-semibold text-foreground">
+      <div className="border-b border-[#E5E6EB] bg-white px-5 py-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="truncate text-[15px] font-semibold text-[#1D2129]">
               {step?.title ?? '参数确认'}
             </h3>
             {step?.description && (
-              <p className="text-[12.5px] text-muted-foreground mt-0.5">{step.description}</p>
+              <p className="mt-0.5 truncate text-[12.5px] text-[#86909C]">{step.description}</p>
             )}
           </div>
-          <div className="flex items-center gap-1 text-[12px] text-muted-foreground">
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="flex items-center gap-0.5 rounded-lg border border-[#E5E6EB] bg-[#FAFBFC] px-1 py-0.5 text-[12px] text-[#4E5969]">
+              <button
+                type="button"
+                onClick={handlePrev}
+                disabled={isFirst}
+                className="rounded p-1 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+              <span className="min-w-[2.5rem] text-center tabular-nums">
+                {currentStep + 1}/{steps.length}
+              </span>
+              <button
+                type="button"
+                onClick={handleNext}
+                disabled={isLast}
+                className="rounded p-1 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
             <button
               type="button"
-              onClick={handlePrev}
-              disabled={isFirst}
-              className="p-1 rounded-md hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              onClick={() => setCollapsed((c) => !c)}
+              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] text-[#86909C] transition-colors hover:bg-[#F5F6F7] hover:text-[#4E5969]"
             >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="tabular-nums">
-              {currentStep + 1} / {steps.length}
-            </span>
-            <button
-              type="button"
-              onClick={handleNext}
-              disabled={isLast}
-              className="p-1 rounded-md hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronRight className="h-4 w-4" />
+              {collapsed ? '展开' : '收起'}
+              <ChevronUp className={cn('h-3.5 w-3.5 transition-transform', collapsed && 'rotate-180')} />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Step indicator dots */}
-      {steps.length > 1 && (
-        <div className="px-5 pt-3 flex items-center gap-1.5">
-          {steps.map((_, idx) => (
-            <div
-              key={idx}
-              className={cn(
-                'h-1 rounded-full transition-all duration-300',
-                idx === currentStep ? 'w-6 bg-primary' : idx < currentStep ? 'w-3 bg-primary/40' : 'w-3 bg-muted'
-              )}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Fields */}
-      <div className="px-5 py-4 space-y-4">
-        {step?.fields.map((field) => (
-          <FormFieldRenderer
-            key={field.name}
-            field={field}
-            value={values[field.name]}
-            onChange={(v) => updateValue(field.name, v)}
-            error={errors[field.name]}
-          />
-        ))}
-      </div>
-
-      {/* Footer actions */}
-      <div className="px-5 py-3 border-t border-border flex items-center justify-between">
-        <div className="text-[12px] text-muted-foreground">
-          {/* {defaultHint} */}
-        </div>
-        <div className="flex items-center gap-2">
-          {config.allowCancel !== false && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {}}
-              className="text-muted-foreground"
-            >
-              {config.cancelLabel ?? '取消'}
-            </Button>
+      {!collapsed && (
+        <>
+          {/* Step indicator */}
+          {steps.length > 1 && (
+            <div className="flex items-center gap-1.5 bg-white px-5 pb-3 pt-2">
+              {steps.map((_, idx) => (
+                <div
+                  key={idx}
+                  className={cn(
+                    'h-1 rounded-full transition-all duration-300',
+                    idx === currentStep
+                      ? 'w-6 bg-[var(--sto-brand-6)]'
+                      : idx < currentStep
+                        ? 'w-3 bg-[#FFD7A3]'
+                        : 'w-3 bg-[#E5E6EB]',
+                  )}
+                />
+              ))}
+            </div>
           )}
-          {isLast ? (
-            <Button
-              size="sm"
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              {submitting ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+
+          {/* Fields */}
+          <div className="space-y-5 px-5 py-4">
+            <div className="text-[14px] font-semibold text-[#1D2129]">
+              {currentStep + 1}. {step?.title ?? '参数确认'}
+            </div>
+            {step?.fields.map((field) => (
+              <FormFieldRenderer
+                key={field.name}
+                field={field}
+                value={values[field.name]}
+                onChange={(v) => updateValue(field.name, v)}
+                error={errors[field.name]}
+              />
+            ))}
+          </div>
+
+          {/* Footer actions */}
+          <div className="flex items-center justify-between gap-3 border-t border-[#E5E6EB] bg-white px-5 py-3.5">
+            <div className="min-w-0 text-[12px] text-[#86909C]">
+              {stepFooterHint}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {!isFirst && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handlePrev}
+                  className="text-[#86909C] hover:text-[#4E5969]"
+                >
+                  {config.prevLabel ?? '上一步'}
+                </Button>
+              )}
+              {isLast ? (
+                <Button
+                  size="sm"
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                  className="rounded-lg bg-[#1D2129] px-5 text-white hover:bg-[#4E5969]"
+                >
+                  {submitting ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="mr-1 h-4 w-4" />
+                  )}
+                  {config.confirmLabel ?? '确认并执行'}
+                </Button>
               ) : (
-                <Check className="h-4 w-4 mr-1" />
+                <Button
+                  size="sm"
+                  onClick={handleNext}
+                  className="rounded-lg bg-[#1D2129] px-5 text-white hover:bg-[#4E5969]"
+                >
+                  {config.nextLabel ?? '继续'}
+                </Button>
               )}
-              {config.confirmLabel ?? '确认并执行'}
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              onClick={handleNext}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              {config.confirmLabel ?? '继续'}
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          )}
-        </div>
-      </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

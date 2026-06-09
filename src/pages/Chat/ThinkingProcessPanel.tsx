@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { useSkillsStore } from '@/stores/skills';
-import type { ThinkingTimelineItem } from './message-utils';
+import { maskSensitiveToolInputForDisplay, type ThinkingTimelineItem } from './message-utils';
 
 type StreamingTool = {
   id?: string;
@@ -291,7 +291,7 @@ function ToolCallRow({
       </button>
       {open && hasInput ? (
         <pre className="overflow-x-auto rounded-md bg-background/60 px-2 py-2 text-xs text-muted-foreground">
-          {typeof input === 'string' ? input : JSON.stringify(input, null, 2)}
+          {maskSensitiveToolInputForDisplay(input)}
         </pre>
       ) : null}
     </div>

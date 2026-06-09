@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useMessageQueueStore } from '@/stores/message-queue';
-import { invokeApi } from '@/lib/api-client';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
@@ -17,7 +16,6 @@ export function useHomeChatEntrySend() {
   const { t } = useTranslation('home');
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
-  const sendMessage = useChatStore((s) => s.sendMessage);
   const newSession = useChatStore((s) => s.newSession);
 
   const handleHubQueue = useCallback(
@@ -29,64 +27,10 @@ export function useHomeChatEntrySend() {
   );
 
   const handleHubSend = useCallback(
-    async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, _dingTalkMentions?: DingTalkMention[], workflowId?: string | null, workflowContext?: import('@/stores/chat').WorkflowContextBlock | null) => {
+    async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, _dingTalkMentions?: DingTalkMention[], workflowId?: string | null) => {
       if (!isGatewayRunning) {
         toast.error(t('assistant.gatewayRequired'));
         return;
-      }
-
-      // Handle pending workflow confirmation (before fresh workflow selection)
-      const { tryResolvePendingWorkflow } = await import('@/hooks/use-workflow-send');
-      const resolved = await tryResolvePendingWorkflow(text, async (msg, runId, wfId) => {
-        await sendMessage({ text: msg, attachments, targetAgentId, workflowId: wfId, runId });
-      });
-      if (resolved) return;
-
-      // Handle workflow: same logic as Chat/index.tsx
-      if (workflowId) {
-        const { sendWithWorkflow } = await import('@/hooks/use-workflow-send');
-        // Create new session BEFORE sending workflow to ensure messages are persisted
-        const { currentSessionKey, currentAgentId } = useChatStore.getState();
-        if (currentSessionKey === DEFAULT_SESSION_KEY) {
-          newSession();
-        }
-        const ok = await sendWithWorkflow(text, workflowId, {
-          sessionKey: useChatStore.getState().currentSessionKey,
-          agentId: currentAgentId,
-        }, async (textToSend, _runId, wfId, ctx) => {
-          const wfCtx = ctx as import('@/stores/chat').WorkflowContextBlock | undefined;
-          await sendMessage({ text: textToSend, attachments, targetAgentId, workflowId: wfId || undefined, workflowContext: wfCtx });
-        });
-        if (!ok) return;
-        return;
-      }
-
-      // ── Natural language workflow intent detection ──
-      const { pendingWorkflow } = useChatStore.getState();
-      if (!pendingWorkflow && !workflowId) {
-        const { currentSessionKey, currentAgentId } = useChatStore.getState();
-        if (currentSessionKey === DEFAULT_SESSION_KEY) {
-          newSession();
-        }
-        const { tryNaturalLanguageWorkflowSend } = await import('@/hooks/use-workflow-send');
-        const nlHandled = await tryNaturalLanguageWorkflowSend({
-          text,
-          context: {
-            sessionKey: useChatStore.getState().currentSessionKey,
-            agentId: currentAgentId,
-          },
-          sendMessage: async (textToSend, _runId, wfId, ctx) => {
-            const wfCtx = ctx as import('@/stores/chat').WorkflowContextBlock | undefined;
-            await sendMessage({
-              text: textToSend,
-              attachments,
-              targetAgentId,
-              workflowId: wfId || undefined,
-              workflowContext: wfCtx,
-            });
-          },
-        });
-        if (nlHandled) return;
       }
 
       const { currentSessionKey } = useChatStore.getState();
@@ -94,39 +38,13 @@ export function useHomeChatEntrySend() {
         newSession();
       }
 
-      let parts: Array<{ type: string; context: string }> | null = null;
-      try {
-        const { currentAgentId: agentId, currentSessionKey } = useChatStore.getState();
-        parts = await invokeApi<Array<{ type: string; context: string }>>('question:split', {
-          prompt: text,
-          agentId: agentId,
-          sessionId: currentSessionKey,
-        });
-      } catch {
-        // Silent fallback — same as Chat page
-      }
-
-      const failed = () => Boolean(useChatStore.getState().error);
-
-      if (parts && parts.length > 1) {
-        await sendMessage({ text: parts[0].context, attachments, targetAgentId });
-        if (failed()) {
-          toast.error(t('assistant.sendFailed'));
-          return;
-        }
-        const { currentSessionKey: sessionKey } = useChatStore.getState();
-        for (let i = 1; i < parts.length; i++) {
-          useMessageQueueStore.getState().enqueue(sessionKey, parts[i].context, undefined, targetAgentId);
-        }
-      } else {
-        await sendMessage({ text, attachments, targetAgentId });
-        if (failed()) {
-          toast.error(t('assistant.sendFailed'));
-          return;
-        }
+      const { dispatchChatSend } = await import('@/hooks/dispatch-chat-send');
+      await dispatchChatSend({ text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId });
+      if (useChatStore.getState().error) {
+        toast.error(t('assistant.sendFailed'));
       }
     },
-    [isGatewayRunning, newSession, sendMessage, t],
+    [isGatewayRunning, newSession, t],
   );
 
   return {

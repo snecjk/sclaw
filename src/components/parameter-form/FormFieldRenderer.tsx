@@ -16,8 +16,9 @@ import type {
   ToggleField,
   EditableListField,
 } from '@/types/user-form';
-import { X, Plus } from 'lucide-react';
-import { Minus } from 'lucide-react';
+import { X, Plus, Minus } from 'lucide-react';
+import { normalizeWorkflowFieldValue } from '@/lib/workflow-form-utils';
+import { OptionCardList, splitRuleTags } from './OptionCardList';
 
 interface FormFieldRendererProps {
   field: FormField;
@@ -26,8 +27,21 @@ interface FormFieldRendererProps {
   error?: string;
 }
 
+function isReadOnlyDisplayField(field: FormField): boolean {
+  if (field.disabled) return true;
+  if (field.type === 'text' || field.type === 'textarea') {
+    const desc = field.description ?? '';
+    return /仅展示|不可修改|系统预置/.test(desc);
+  }
+  return false;
+}
+
 export function FormFieldRenderer({ field, value, onChange, error }: FormFieldRendererProps) {
   if (field.hidden || field.type === 'hidden') return null;
+
+  if (isReadOnlyDisplayField(field) && (field.type === 'text' || field.type === 'textarea')) {
+    return renderDisplayField(field, value, error);
+  }
 
   const commonClasses = cn(
     'w-full px-3 py-2 text-[13px] rounded-lg border bg-background',
@@ -177,92 +191,57 @@ function renderSelectField(
   field: SelectField,
   value: unknown,
   onChange: (v: unknown) => void,
-  className: string,
+  _className: string,
   error?: string
 ) {
   const isMulti = field.type === 'multiselect';
-  const currentMulti = isMulti && Array.isArray(value) ? (value as unknown[]) : [];
+  const useCards = field.options.length > 0;
+
+  if (useCards) {
+    const isDisplay = Boolean(field.disabled) || /仅展示|不可修改|系统预置/.test(field.description ?? '');
+    return (
+      <div key={field.name}>
+        <FieldLabel label={field.label} description={isDisplay ? undefined : field.description} />
+        <OptionCardList
+          options={field.options}
+          mode={isDisplay ? 'display' : isMulti ? 'multi' : 'single'}
+          value={value}
+          onChange={onChange}
+          disabled={field.disabled}
+          selectionLabel={isMulti ? '已选类型' : '已选'}
+        />
+        {isDisplay && field.description && (
+          <p className="mt-2.5 text-[12px] text-[#86909C]">{field.description}</p>
+        )}
+        {error && <p className="text-[12px] text-destructive mt-1.5">{error}</p>}
+      </div>
+    );
+  }
 
   return (
     <div key={field.name}>
-      <label htmlFor={field.name} className="block text-[13.5px] font-medium text-foreground mb-1.5">
-        {field.label}
-      </label>
-      {isMulti ? (
-        <div className="space-y-2">
-          {/* Selected tags */}
-          {currentMulti.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {currentMulti.map((v, idx) => (
-                <span
-                  key={idx}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 text-primary text-[12px]"
-                >
-                  {String(v)}
-                  <button
-                    type="button"
-                    onClick={() => onChange(currentMulti.filter((item) => item !== v))}
-                    className="hover:text-destructive"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-          {/* Add select */}
-          <select
-            id={field.name}
-            value=""
-            onChange={(e) => {
-              const val = e.target.value;
-              if (!val) return;
-              const option = field.options.find((o) => String(o.value) === val);
-              const newValue = option?.value ?? val;
-              if (!currentMulti.includes(newValue)) {
-                onChange([...currentMulti, newValue]);
-              }
-              e.target.value = '';
-            }}
-            disabled={field.disabled}
-            className={className}
-          >
-            <option value="">{field.placeholder || '请选择'}…</option>
-            {field.options
-              .filter((o) => !currentMulti.includes(o.value))
-              .map((option) => (
-                <option key={String(option.value)} value={String(option.value)} disabled={option.disabled}>
-                  {option.label}
-                </option>
-              ))}
-          </select>
-        </div>
-      ) : (
-        <select
-          id={field.name}
-          value={String(value ?? '')}
-          onChange={(e) => {
-            const val = e.target.value;
-            const option = field.options.find((o) => String(o.value) === val);
-            onChange(option?.value ?? val);
-          }}
-          disabled={field.disabled}
-          className={className}
-        >
-          {!field.validation?.required && (
-            <option value="">{field.placeholder || '请选择'}</option>
-          )}
-          {field.options.map((option) => (
-            <option key={String(option.value)} value={String(option.value)} disabled={option.disabled}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      )}
-      {field.description && !error && (
-        <p className="text-[11.5px] text-muted-foreground mt-1">{field.description}</p>
-      )}
-      {error && <p className="text-[12px] text-destructive mt-1">{error}</p>}
+      <FieldLabel label={field.label} description={field.description} />
+      <select
+        id={field.name}
+        value={String(value ?? '')}
+        onChange={(e) => {
+          const val = e.target.value;
+          const option = field.options.find((o) => String(o.value) === val);
+          onChange(option?.value ?? val);
+        }}
+        disabled={field.disabled}
+        className={_className}
+      >
+        {!field.validation?.required && (
+          <option value="">{field.placeholder || '请选择'}</option>
+        )}
+        {field.options.map((option) => (
+          <option key={String(option.value)} value={String(option.value)} disabled={option.disabled}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {error && <p className="text-[12px] text-destructive mt-1.5">{error}</p>}
     </div>
   );
 }
@@ -275,41 +254,15 @@ function renderRadioField(
 ) {
   return (
     <div key={field.name}>
-      <label className="block text-[13.5px] font-medium text-foreground mb-2">
-        {field.label}
-      </label>
-      <div className={cn('space-y-2', field.layout === 'horizontal' ? 'flex flex-wrap gap-4' : '')}>
-        {field.options.map((option) => (
-          <label
-            key={String(option.value)}
-            className={cn(
-              'flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors',
-              value === option.value
-                ? 'border-primary bg-primary/5'
-                : 'border-border hover:border-muted-foreground/50',
-              option.disabled ? 'opacity-50 cursor-not-allowed' : ''
-            )}
-          >
-            <input
-              type="radio"
-              name={field.name}
-              value={String(option.value)}
-              checked={value === option.value}
-              onChange={() => onChange(option.value)}
-              disabled={option.disabled}
-              className="h-4 w-4 text-primary focus:ring-primary"
-            />
-            <span className="text-[13px] text-foreground">{option.label}</span>
-            {option.description && (
-              <span className="text-[11px] text-muted-foreground">{option.description}</span>
-            )}
-          </label>
-        ))}
-      </div>
-      {field.description && !error && (
-        <p className="text-[11.5px] text-muted-foreground mt-1">{field.description}</p>
-      )}
-      {error && <p className="text-[12px] text-destructive mt-1">{error}</p>}
+      <FieldLabel label={field.label} description={field.description} />
+      <OptionCardList
+        options={field.options}
+        mode="single"
+        value={value}
+        onChange={onChange}
+        disabled={field.disabled}
+      />
+      {error && <p className="text-[12px] text-destructive mt-1.5">{error}</p>}
     </div>
   );
 }
@@ -342,40 +295,18 @@ function renderCheckboxField(
     );
   }
 
-  // Multiple checkboxes
-  const currentValue = Array.isArray(value) ? (value as unknown[]) : [];
   return (
     <div key={field.name}>
-      <label className="block text-[13.5px] font-medium text-foreground mb-2">
-        {field.label}
-      </label>
-      <div className="space-y-2">
-        {field.options.map((option) => (
-          <label key={String(option.value)} className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={currentValue.includes(option.value)}
-              onChange={(e) => {
-                if (e.target.checked) {
-                  onChange([...currentValue, option.value]);
-                } else {
-                  onChange(currentValue.filter((v) => v !== option.value));
-                }
-              }}
-              disabled={option.disabled}
-              className="h-4 w-4 text-primary focus:ring-primary rounded"
-            />
-            <span className="text-[13px] text-foreground">{option.label}</span>
-            {option.description && (
-              <span className="text-[11px] text-muted-foreground">{option.description}</span>
-            )}
-          </label>
-        ))}
-      </div>
-      {field.description && !error && (
-        <p className="text-[11.5px] text-muted-foreground mt-1">{field.description}</p>
-      )}
-      {error && <p className="text-[12px] text-destructive mt-1">{error}</p>}
+      <FieldLabel label={field.label} description={field.description} />
+      <OptionCardList
+        options={field.options}
+        mode="multi"
+        value={value}
+        onChange={onChange}
+        disabled={field.disabled}
+        selectionLabel="已选类型"
+      />
+      {error && <p className="text-[12px] text-destructive mt-1.5">{error}</p>}
     </div>
   );
 }
@@ -523,6 +454,13 @@ function renderEditableListField(
   );
 }
 
+function isNumericTitledGroupItem(value: unknown): boolean {
+  const str = String(value ?? '').trim();
+  if (!str) return true;
+  if (/[；;%≥≤<>]/.test(str)) return false;
+  return !Number.isNaN(Number(str));
+}
+
 function renderTitledGroupField(
   field: any,
   value: unknown,
@@ -538,31 +476,77 @@ function renderTitledGroupField(
 
   if (!items || items.length === 0) return null;
 
-  // Parse current value as object
-  const parsedValue: Record<string, unknown> = typeof value === 'string' ? JSON.parse(value) : (value as Record<string, unknown>);
+  const parsedValue = normalizeWorkflowFieldValue(value);
+  const groupRecord =
+    typeof parsedValue === 'object' && parsedValue !== null && !Array.isArray(parsedValue)
+      ? (parsedValue as Record<string, unknown>)
+      : {};
+
+  const readOnly =
+    field.disabled ||
+    /仅展示|不可修改|系统预置/.test(field.description ?? '') ||
+    items.every((item) => !isNumericTitledGroupItem(item.defaultValue));
+
+  if (readOnly) {
+    return (
+      <div key={field.name} className="space-y-3">
+        {field.label && (
+          <FieldLabel label={field.label} description={field.description} />
+        )}
+        {items.map((item) => {
+          const itemValue = groupRecord[item.fieldKey] ?? item.defaultValue ?? '';
+          const tags = splitRuleTags(itemValue);
+          return (
+            <div
+              key={item.fieldKey}
+              className="rounded-xl border border-[#E5E6EB] bg-[#FAFBFC] px-4 py-3.5"
+            >
+              <h4 className="text-[14px] font-semibold text-[#1D2129]">{item.label}</h4>
+              {item.description && (
+                <p className="mt-0.5 text-[12px] text-[#86909C]">{item.description}</p>
+              )}
+              {tags.length > 0 ? (
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  {tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex rounded-lg border border-[#E5E6EB] bg-white px-2.5 py-1 text-[12px] leading-snug text-[#4E5969]"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-1.5 text-[13px] text-[#4E5969]">{String(itemValue)}</p>
+              )}
+            </div>
+          );
+        })}
+        {error && <p className="text-[12px] text-destructive mt-1">{error}</p>}
+      </div>
+    );
+  }
 
   const updateField = (fieldKey: string, newValue: unknown) => {
-    const next = { ...parsedValue, [fieldKey]: newValue };
+    const next = { ...groupRecord, [fieldKey]: newValue };
     onChange(JSON.stringify(next));
   };
 
   return (
     <div key={field.name}>
-      <label className="block text-[13.5px] font-medium text-foreground mb-3">
-        {field.label}
-      </label>
-      <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+      <FieldLabel label={field.label} description={field.description} />
+      <div className="rounded-xl border border-[#E5E6EB] bg-white p-4 space-y-3">
         {items.map((item, index) => {
-          const itemValue = parsedValue[item.fieldKey] ?? item.defaultValue ?? '';
+          const itemValue = groupRecord[item.fieldKey] ?? item.defaultValue ?? '';
           return (
             <div key={item.fieldKey} className="flex items-center gap-3">
-              <span className="w-5 h-5 shrink-0 rounded-full bg-primary text-white text-[11px] font-bold flex items-center justify-center">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--sto-brand-6)] text-[11px] font-bold text-white">
                 {index + 1}
               </span>
-              <div className="flex-1">
-                <label className="text-[13px] font-medium text-foreground">{item.label}</label>
+              <div className="min-w-0 flex-1">
+                <label className="text-[13px] font-semibold text-[#1D2129]">{item.label}</label>
                 {item.description && (
-                  <p className="text-[11px] text-muted-foreground">{item.description}</p>
+                  <p className="text-[12px] text-[#86909C]">{item.description}</p>
                 )}
               </div>
               <div className="flex items-center gap-1.5">
@@ -572,7 +556,7 @@ function renderTitledGroupField(
                     const num = parseFloat(String(itemValue)) || 0;
                     updateField(item.fieldKey, String(num - 1));
                   }}
-                  className="h-8 w-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E5E6EB] hover:bg-[#F5F6F7] transition-colors"
                 >
                   <Minus className="h-4 w-4" />
                 </button>
@@ -580,7 +564,7 @@ function renderTitledGroupField(
                   type="text"
                   value={String(itemValue)}
                   onChange={(e) => updateField(item.fieldKey, e.target.value)}
-                  className="w-16 px-2 py-1.5 text-[13px] text-center rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+                  className="w-16 rounded-lg border border-[#E5E6EB] bg-white px-2 py-1.5 text-center text-[13px] focus:border-[var(--sto-brand-6)] focus:outline-none focus:ring-2 focus:ring-[#FF6F00]/20"
                 />
                 <button
                   type="button"
@@ -588,13 +572,12 @@ function renderTitledGroupField(
                     const num = parseFloat(String(itemValue)) || 0;
                     updateField(item.fieldKey, String(num + 1));
                   }}
-                  className="h-8 w-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E5E6EB] hover:bg-[#F5F6F7] transition-colors"
                 >
                   <Plus className="h-4 w-4" />
                 </button>
-                {/* Extract unit from label (e.g., "天停发" → "天", "降量区间" → "") */}
                 {item.label && (
-                  <span className="text-[12px] text-muted-foreground ml-1">
+                  <span className="ml-1 text-[12px] text-[#86909C]">
                     {extractUnit(item.label)}
                   </span>
                 )}
@@ -603,10 +586,40 @@ function renderTitledGroupField(
           );
         })}
       </div>
-      {field.description && !error && (
-        <p className="text-[11.5px] text-muted-foreground mt-2">{field.description}</p>
+      {error && <p className="text-[12px] text-destructive mt-1.5">{error}</p>}
+    </div>
+  );
+}
+
+function FieldLabel({ label, description }: { label: string; description?: string }) {
+  return (
+    <div className="mb-2.5">
+      <label className="block text-[14px] font-semibold text-[#1D2129]">{label}</label>
+      {description && (
+        <p className="mt-0.5 text-[12.5px] leading-relaxed text-[#86909C]">{description}</p>
       )}
-      {error && <p className="text-[12px] text-destructive mt-1">{error}</p>}
+    </div>
+  );
+}
+
+function renderDisplayField(field: FormField, value: unknown, error?: string) {
+  const displayValue =
+    value !== undefined && value !== null && value !== ''
+      ? String(value)
+      : field.defaultValue !== undefined
+        ? String(field.defaultValue)
+        : '—';
+
+  return (
+    <div key={field.name}>
+      <div className="rounded-xl border border-[#E5E6EB] bg-[#FAFBFC] px-4 py-3.5">
+        <div className="text-[14px] font-semibold text-[#1D2129]">{field.label}</div>
+        <div className="mt-1 text-[13px] text-[#4E5969]">{displayValue}</div>
+      </div>
+      {field.description && (
+        <p className="mt-2 text-[12px] text-[#86909C]">{field.description}</p>
+      )}
+      {error && <p className="text-[12px] text-destructive mt-1.5">{error}</p>}
     </div>
   );
 }

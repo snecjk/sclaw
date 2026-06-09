@@ -170,6 +170,8 @@ export interface UserFormConfig {
   steps?: FormStep[];            // Wizard steps for inline mode (optional)
   layout?: FormLayout;           // Layout configuration
   confirmLabel?: string;         // Confirm button text (default: "确认")
+  nextLabel?: string;            // Next step button text in wizard mode (default: "下一步")
+  prevLabel?: string;            // Previous step button text in wizard mode (default: "上一步")
   cancelLabel?: string;          // Cancel button text (default: "取消")
   allowCancel?: boolean;         // Whether user can cancel (default: true)
   closeOnCancel?: boolean;       // Close modal on cancel (default: true)
