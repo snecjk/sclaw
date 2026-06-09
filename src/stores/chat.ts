@@ -1029,6 +1029,11 @@ function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
     formContext: { source: 'workflow', sourceId: pending.templateId, schemaHash: pending.schemaHash },
   };
 
+  useChatStore.getState().setPendingWorkflow({
+    ...pending,
+    frontendFormInserted: true,
+  });
+
   // Use stripped content (without [parameter_form] marker)
   if (Array.isArray(message.content)) {
     return { ...message, content: [...strippedContent as ContentBlock[], newBlock] };

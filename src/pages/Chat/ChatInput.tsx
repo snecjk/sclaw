@@ -747,6 +747,8 @@ export function ChatInput({
               onClose={() => setWorkflowPickerOpen(false)}
               onSelect={async (id) => {
                 setWorkflowPickerOpen(false);
+                const { useChatStore } = await import('@/stores/chat');
+                useChatStore.getState().clearPendingWorkflow();
                 const template = templates.find((w) => w.id === id);
                 if (template) {
                   mentionEditorRef.current?.insertWorkflow(id, template.label);

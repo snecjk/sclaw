@@ -53,7 +53,15 @@ export async function sendWithWorkflow(
     // 1. Fetch startup schema (use cache if available)
     console.log('[workflow-trace] sendWithWorkflow fetching schema templateId=%s', templateId);
     let cached = schemaCache.get(templateId);
-    if (!cached) {
+    if (cached) {
+      console.log(
+        '[workflow-trace] sendWithWorkflow schema cache hit templateId=%s fields=%d steps=%d response=%s',
+        templateId,
+        cached.schema.fields.length,
+        cached.schema.steps.length,
+        JSON.stringify({ templateId, schemaHash: cached.schemaHash, schema: cached.schema }),
+      );
+    } else {
       const startup = await getStartupSchema(templateId);
       cached = { schema: startup.schema, schemaHash: startup.schemaHash };
       schemaCache.set(templateId, cached);
@@ -94,12 +102,22 @@ export async function sendWithWorkflow(
       schemaHash,
       collectedInputs: {},
       frontendFormInserted: false,
+      modelGuidanceSent: false,
     });
 
     // 5. Send user message to Gateway.
     // The model will process the workflow context and respond.
     // After the model responds, maybeAppendWorkflowParameterForm will inject the form.
     await sendMessage(text, null, null, workflowContext);
+    useChatStore.getState().setPendingWorkflow({
+      templateId,
+      templateName,
+      schema,
+      schemaHash,
+      collectedInputs: {},
+      frontendFormInserted: false,
+      modelGuidanceSent: true,
+    });
     console.log('[workflow-trace] sendWithWorkflow sent message to Gateway, form will appear after model responds');
 
     return true;
@@ -544,7 +562,8 @@ export async function tryResolvePendingWorkflow(
   // Not ready to execute yet: if we extracted any values, update the form by re-inserting
   // an assistant message with guidance + parameter_form. This gives the user feedback
   // on what was understood and what remains.
-  if (hasSchemaFields) {
+  // Only after model guidance was sent — otherwise stale pending would skip the model entirely.
+  if (hasSchemaFields && pending.modelGuidanceSent) {
     const extractedAny = Object.keys(inputs).some((k) => inputs[k] !== pending?.collectedInputs?.[k]);
     if (extractedAny) {
       const { buildWorkflowFormConfig } = await import('@/lib/workflow-form-utils');
@@ -582,6 +601,11 @@ export async function tryResolvePendingWorkflow(
         if (!ok) {
           console.error('[tryResolvePendingWorkflow] handler failed to start workflow');
         }
+      });
+      useChatStore.getState().setPendingWorkflow({
+        ...pending,
+        collectedInputs: inputs,
+        frontendFormInserted: true,
       });
       return true;
     }

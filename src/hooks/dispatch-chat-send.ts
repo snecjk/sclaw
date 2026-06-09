@@ -36,6 +36,23 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
 
   const chatStateEarly = useChatStore.getState();
 
+  const sendWithWorkflowContext = async (
+    textToSend: string,
+    _runId?: string | null,
+    wfId?: string | null,
+    ctx?: unknown,
+  ) => {
+    await sendMessage({
+      text: textToSend,
+      attachments,
+      targetAgentId,
+      dingTalkMentions,
+      workflowId: wfId || undefined,
+      runId: _runId || undefined,
+      workflowContext: ctx as import('@/stores/chat').WorkflowContextBlock | undefined,
+    });
+  };
+
   // Start saved workflow (POST /workflows/{id}/start) — before create/template search.
   if (!workflowId && trimmed) {
     const { tryStartRememberedWorkflowSend } = await import('@/hooks/use-workflow-send');
@@ -59,84 +76,65 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     if (started) return;
   }
 
-  const { isNewWorkflowCreationIntent } = await import('@/hooks/use-workflow-intent');
-
-  // Fresh workflow draft — template search → form → POST create.
-  if (!workflowId && trimmed && isNewWorkflowCreationIntent(trimmed)) {
-    const chatState = useChatStore.getState();
-    chatState.clearPendingWorkflow();
-    chatState.clearPendingTemplateSelection();
-    const { tryNaturalLanguageWorkflowSend } = await import('@/hooks/use-workflow-send');
-    const nlHandled = await tryNaturalLanguageWorkflowSend({
-      text,
-      context: {
-        sessionKey: chatState.currentSessionKey,
-        agentId: chatState.currentAgentId,
-      },
-      sendMessage: async (textToSend, _runId, wfId, ctx) => {
-        await sendMessage({
-          text: textToSend,
-          attachments,
-          targetAgentId,
-          dingTalkMentions,
-          workflowId: wfId || undefined,
-          workflowContext: ctx as import('@/stores/chat').WorkflowContextBlock | undefined,
-        });
-      },
-    });
-    if (nlHandled) return;
-    // Template search failed — fall through to pending resolve / secondary NL below.
-    console.warn('[workflow-trace] creation intent but NL handler returned false, falling through');
-  }
-
   const chatState = useChatStore.getState();
 
+  // Explicit template pick from picker — fetch schema → send to model.
+  if (workflowId) {
+    if (chatState.pendingWorkflow?.templateId !== workflowId) {
+      chatState.clearPendingWorkflow();
+    }
+    const { sendWithWorkflow } = await import('@/hooks/use-workflow-send');
+    const ok = await sendWithWorkflow(text, workflowId, {
+      sessionKey: chatState.currentSessionKey,
+      agentId: chatState.currentAgentId,
+    }, sendWithWorkflowContext);
+    if (!ok) return;
+    return;
+  }
+
+  // NL workflow creation: "创建 xxx 工作流" → POST template search → sendWithWorkflow → model.
+  // Must run before tryResolvePendingWorkflow so stale pending does not skip the model.
+  if (trimmed) {
+    const {
+      isNewWorkflowCreationIntent,
+      shouldSearchWorkflowTemplates,
+    } = await import('@/hooks/use-workflow-intent');
+
+    const pendingSelection = chatState.pendingTemplateSelection;
+    const isFreshCreation = isNewWorkflowCreationIntent(trimmed) && !pendingSelection;
+    const isNlWorkflowIntent =
+      pendingSelection
+      || isFreshCreation
+      || (shouldSearchWorkflowTemplates(trimmed) && !chatState.pendingWorkflow);
+
+    if (isFreshCreation) {
+      chatState.clearPendingWorkflow();
+      chatState.clearPendingTemplateSelection();
+    }
+
+    if (isNlWorkflowIntent) {
+      const { tryNaturalLanguageWorkflowSend } = await import('@/hooks/use-workflow-send');
+      const nlHandled = await tryNaturalLanguageWorkflowSend({
+        text,
+        context: {
+          sessionKey: chatState.currentSessionKey,
+          agentId: chatState.currentAgentId,
+        },
+        sendMessage: sendWithWorkflowContext,
+      });
+      if (nlHandled) return;
+      if (isFreshCreation) {
+        console.warn('[workflow-trace] creation intent but NL handler returned false, falling through');
+      }
+    }
+  }
+
+  // Continue an in-progress workflow (param confirm / re-execution).
   const { tryResolvePendingWorkflow } = await import('@/hooks/use-workflow-send');
   const resolved = await tryResolvePendingWorkflow(text, async (msg, runId, wfId) => {
     await sendMessage({ text: msg, attachments, targetAgentId, dingTalkMentions, workflowId: wfId, runId });
   });
   if (resolved) return;
-
-  if (workflowId) {
-    const { sendWithWorkflow } = await import('@/hooks/use-workflow-send');
-    const ok = await sendWithWorkflow(text, workflowId, {
-      sessionKey: chatState.currentSessionKey,
-      agentId: chatState.currentAgentId,
-    }, async (textToSend, _runId, wfId, ctx) => {
-      await sendMessage({
-        text: textToSend,
-        attachments,
-        targetAgentId,
-        dingTalkMentions,
-        workflowId: wfId || undefined,
-        workflowContext: ctx as import('@/stores/chat').WorkflowContextBlock | undefined,
-      });
-    });
-    if (!ok) return;
-    return;
-  }
-
-  if (!chatState.pendingWorkflow) {
-    const { tryNaturalLanguageWorkflowSend } = await import('@/hooks/use-workflow-send');
-    const nlHandled = await tryNaturalLanguageWorkflowSend({
-      text,
-      context: {
-        sessionKey: chatState.currentSessionKey,
-        agentId: chatState.currentAgentId,
-      },
-      sendMessage: async (textToSend, _runId, wfId, ctx) => {
-        await sendMessage({
-          text: textToSend,
-          attachments,
-          targetAgentId,
-          dingTalkMentions,
-          workflowId: wfId || undefined,
-          workflowContext: ctx as import('@/stores/chat').WorkflowContextBlock | undefined,
-        });
-      },
-    });
-    if (nlHandled) return;
-  }
 
   let parts: Array<{ type: string; context: string }> | null = null;
   if (!skipQuestionSplit) {

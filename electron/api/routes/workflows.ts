@@ -130,6 +130,15 @@ async function proxyWorkflowRequest(
   const contentType = response.headers.get('content-type') || 'application/json; charset=utf-8';
   const responseBody = await response.text();
 
+  if (backendPath.includes('/startup-schema')) {
+    logger.info(
+      '[workflow-trace] GET %s status=%d response=%s',
+      backendPath,
+      response.status,
+      responseBody,
+    );
+  }
+
   res.statusCode = response.status;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', contentType);
@@ -194,6 +203,10 @@ export async function handleWorkflowRoutes(
   const startupSchemaMatch = pathname.match(/^\/agent\/v1\/workflow-templates\/([^/]+)\/startup-schema$/);
   if (startupSchemaMatch && req.method === 'GET') {
     try {
+      logger.info(
+        '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema (proxy)',
+        startupSchemaMatch[1],
+      );
       await proxyWorkflowRequest(req, res, pathname);
     } catch (error) {
       logger.error('[WorkflowRoutes] startup-schema failed:', error);

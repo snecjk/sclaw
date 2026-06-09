@@ -168,6 +168,8 @@ export interface ChatState {
     /** Set to true when the frontend has already inserted a parameter_form inline.
      *  Prevents maybeAppendWorkflowParameterForm from double-injecting. */
     frontendFormInserted?: boolean;
+    /** Set after sendWithWorkflow has sent workflowContext to the model via Gateway. */
+    modelGuidanceSent?: boolean;
   } | null;
   setPendingWorkflow: (pending: ChatState['pendingWorkflow']) => void;
   clearPendingWorkflow: () => void;

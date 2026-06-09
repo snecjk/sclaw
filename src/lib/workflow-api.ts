@@ -70,10 +70,27 @@ export async function searchWorkflowTemplates(query: string, limit = 3): Promise
 // ── 2. Get startup schema ───────────────────────────────────────
 
 export async function getStartupSchema(templateId: string): Promise<StartupSchemaResponse> {
+  console.log(
+    '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema',
+    templateId,
+  );
   const data = await unwrap(
     hostApiFetch<ApiResponse<StartupSchemaResponse>>(`/agent/v1/workflow-templates/${templateId}/startup-schema`, {
       headers: authHeaders(),
     }),
+  );
+  console.log(
+    '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema ok schemaHash=%s fields=%d steps=%d enabled=%s',
+    templateId,
+    data.schemaHash,
+    data.schema?.fields?.length ?? 0,
+    data.schema?.steps?.length ?? 0,
+    String(data.schema?.enabled ?? false),
+  );
+  console.log(
+    '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema response=%s',
+    templateId,
+    JSON.stringify(data),
   );
   return data;
 }
