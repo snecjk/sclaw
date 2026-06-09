@@ -4,6 +4,7 @@ import { useAgentsStore } from '@/stores/agents';
 import {
   clearErrorRecoveryTimer,
   clearHistoryPoll,
+  formatChatRuntimeError,
   getLastChatEventAt,
   setHistoryPollTimer,
   setLastChatEventAt,
@@ -275,13 +276,25 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
         
         if (!result.success) {
           clearHistoryPoll();
-          set({ error: result.error || 'Failed to send message', sending: false });
+          set({
+            error: formatChatRuntimeError(result.error || 'Failed to send message'),
+            sending: false,
+            activeRunId: null,
+            pendingFinal: false,
+            lastUserMessageAt: null,
+          });
         } else if (result.result?.runId) {
           set({ activeRunId: result.result.runId });
         }
       } catch (err) {
         clearHistoryPoll();
-        set({ error: String(err), sending: false });
+        set({
+          error: formatChatRuntimeError(String(err)),
+          sending: false,
+          activeRunId: null,
+          pendingFinal: false,
+          lastUserMessageAt: null,
+        });
       }
     },
 
