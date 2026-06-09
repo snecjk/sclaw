@@ -2,10 +2,8 @@ import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { join } from 'node:path';
 import { CHAT_HISTORY_LIMIT } from '../../../shared/chat-config';
-import {
-  appendDingTalkMentionContext,
-  hasResolvedDingTalkMentions,
-} from '../../../shared/dingtalk-mention-context';
+import { hasResolvedDingTalkMentions } from '../../../shared/dingtalk-mention-context';
+import { prepareDingTalkAgentTurnMessage } from '../../../shared/dingtalk-recipient-message';
 import type { DingTalkMention } from '../../../shared/dingtalk-mention';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
@@ -346,9 +344,7 @@ function buildCronDescription(
 }
 
 function buildCronMessage(message: string, mentions?: DingTalkMention[]): string {
-  const trimmed = message.trim();
-  if (!hasResolvedDingTalkMentions(mentions)) return trimmed;
-  return appendDingTalkMentionContext(trimmed, mentions);
+  return prepareDingTalkAgentTurnMessage(message, mentions);
 }
 
 export async function handleCronRoutes(

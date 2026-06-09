@@ -1,333 +1,35 @@
 import { app, utilityProcess } from 'electron';
-import { existsSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 import type { GatewayLaunchContext } from './config-sync';
 import type { GatewayLifecycleState } from './process-policy';
 import { logger } from '../utils/logger';
 import { appendNodeRequireToNodeOptions } from '../utils/paths';
 
-const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
-(function () {
-  // ── Security: block upgrade/install commands inside Gateway process ──
-  // Prevents AI agent from executing openclaw upgrade or package
-  // manager install commands that would break the Gateway installation.
-  // sai-cli update/upgrade is allowed (standalone binary).
-
-  var BLOCKED_FETCH_URL_PATTERNS = [
-    /\\/api\\/v1\\/cli\\/update/i,
-    /\\/api\\/v1\\/cli\\/download/i
+function resolveBundledGatewayPreloadPath(): string | null {
+  const candidates = [
+    path.join(__dirname, 'gateway-fetch-preload.cjs'),
+    path.join(__dirname, '..', 'gateway', 'gateway-fetch-preload.cjs'),
+    path.join(app.getAppPath(), 'electron', 'gateway', 'gateway-fetch-preload.cjs'),
+    path.join(app.getAppPath(), 'gateway-fetch-preload.cjs'),
   ];
-
-  var UPGRADE_ARG_PATTERNS = [
-    /\\bupdate\\b/i,
-    /\\bupgrade\\b/i,
-    /\\binstall\\b.*\\bopenclaw\\b/i,
-    /\\binstall\\b.*\\bsai[- ]?cli\\b/i,
-    /\\binstall\\b.*\\bdws\\b/i,
-    /\\bopenclaw\\b.*\\b(update|upgrade|install)\\b/i,
-    /\\bsai[- ]?cli\\b.*\\b(update|upgrade|install)\\b/i,
-    /\\bdws\\b.*\\b(update|upgrade|install)\\b/i,
-    /api\\/v1\\/cli\\/(update|download)/i
-  ];
-
-  var BLOCKED_BINARIES = /^(openclaw|sai-cli|sai\\.exe|dws|dws\\.exe)$/i;
-  var PKG_MANAGERS = /^(npm|pnpm|yarn|npx)$/i;
-  var DOWNLOAD_TOOLS = /^(curl|wget|aria2c)$/i;
-  var PYTHON_PKGS = /^(pip|pip3|uv)$/i;
-  var PYTHON_BLOCKED_ARGS = /\\bopenclaw\\b|\\bsai[- ]?cli\\b|\\bdws\\b/i;
-
-  var DWS_CHAT_MSG_SEND = /dws\\s+chat\\s+message\\s+send\\b/i;
-  function isBlockedDwsSendSpam(cmd, argsList) {
-    var c = typeof cmd === 'string' ? cmd.trim() : '';
-    var a = Array.isArray(argsList) ? argsList.join(' ') : '';
-    var full = (c + ' ' + a);
-    if (!DWS_CHAT_MSG_SEND.test(full)) return false;
-    if (/--dry-run\\b/i.test(full)) return false;
-    var matches = full.match(/dws\\s+chat\\s+message\\s+send\\b/gi);
-    if (matches && matches.length > 1) return true;
-    if (/\\b(?:for|while|until|seq|xargs)\\b/i.test(full) && DWS_CHAT_MSG_SEND.test(full)) return true;
-    return false;
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
   }
-
-  function unescapeLiteralDwsSendText(text) {
-    if (!text || typeof text !== 'string' || !/[\\\\][ntr]/.test(text)) return text;
-    return text.replace(/\\\\n/g, '\\n').replace(/\\\\t/g, '\\t').replace(/\\\\r/g, '\\r');
-  }
-
-  function shellQuoteDwsSendTextForBash(text) {
-    var escaped = String(text)
-      .replace(/\\\\/g, '\\\\\\\\')
-      .replace(/'/g, "\\\\'")
-      .replace(/\\n/g, '\\\\n')
-      .replace(/\\r/g, '\\\\r')
-      .replace(/\\t/g, '\\\\t');
-    return "$'" + escaped + "'";
-  }
-
-  var DINGTALK_DISCLAIMER_FOOTER = '<font color="#999999">本消息由 STO Claw 代为发送，非本人实时回复。</font>';
-  var DINGTALK_DISCLAIMER_MARKER = 'STO Claw 代为发送';
-
-  function ensureDingTalkDisclaimerFormat(body) {
-    var trimmed = String(body || '').trim();
-    if (!trimmed) return DINGTALK_DISCLAIMER_FOOTER;
-    if (trimmed.indexOf(DINGTALK_DISCLAIMER_MARKER) < 0) {
-      return trimmed + '\\n\\n---\\n\\n' + DINGTALK_DISCLAIMER_FOOTER;
-    }
-    if (/\\n---\\n[\\s\\S]*STO Claw 代为发送/i.test(trimmed)) return trimmed;
-    var htmlMatch = trimmed.match(/^([\\s\\S]*?)(\\n*)\\s*(<font color="#999999">[\\s\\S]*?STO Claw 代为发送[\\s\\S]*?<\\/font>)\\s*$/i);
-    if (htmlMatch) {
-      return htmlMatch[1].replace(/\\s+$/, '') + '\\n\\n---\\n\\n' + htmlMatch[3];
-    }
-    var plainMatch = trimmed.match(/^([\\s\\S]*?)(\\n*)([^\\n<]*STO Claw 代为发送[^\\n<]*)\\s*$/i);
-    if (plainMatch) {
-      return plainMatch[1].replace(/\\s+$/, '') + '\\n\\n---\\n\\n' + DINGTALK_DISCLAIMER_FOOTER;
-    }
-    return trimmed;
-  }
-
-  function normalizeDwsChatMessageSendText(text) {
-    return ensureDingTalkDisclaimerFormat(unescapeLiteralDwsSendText(text));
-  }
-
-  function fixDwsChatMessageSendShellScript(script) {
-    if (!DWS_CHAT_MSG_SEND.test(script) || !/--text\\s+/i.test(script)) return script;
-    return script.replace(/--text\\s+("(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*')/gi, function(full, quoted) {
-      if (!quoted) return full;
-      var inner = quoted.slice(1, -1);
-      var parsed = inner.replace(/\\\\(.)/g, function(_, ch) {
-        if (ch === 'n') return '\\n';
-        if (ch === 't') return '\\t';
-        if (ch === 'r') return '\\r';
-        return ch;
-      });
-      var normalized = normalizeDwsChatMessageSendText(parsed);
-      if (normalized === parsed) return full;
-      return '--text ' + shellQuoteDwsSendTextForBash(normalized);
-    });
-  }
-
-  function fixDwsChatMessageSendArgv(argsList) {
-    if (!Array.isArray(argsList)) return argsList;
-    var textIdx = -1;
-    for (var i = 0; i < argsList.length; i++) {
-      if (argsList[i] === '--text') { textIdx = i; break; }
-    }
-    if (textIdx < 0 || textIdx + 1 >= argsList.length) return argsList;
-    var next = argsList[textIdx + 1];
-    if (typeof next !== 'string') return argsList;
-    var fixed = normalizeDwsChatMessageSendText(next);
-    if (fixed === next) return argsList;
-    var copy = argsList.slice();
-    copy[textIdx + 1] = fixed;
-    return copy;
-  }
-
-  function normalizeDwsSendInvocation(cmd, argsList) {
-    var c = typeof cmd === 'string' ? cmd.trim() : '';
-    var args = Array.isArray(argsList) ? argsList : [];
-    if (/^dws(\\.exe)?$/i.test(c)) {
-      return fixDwsChatMessageSendArgv(args);
-    }
-    if (/bash|sh|zsh|dash/i.test(c) || /\\\\bash$|\\\\sh$/.test(c)) {
-      var cIdx = args.indexOf('-c');
-      if (cIdx < 0) cIdx = args.indexOf('/c');
-      if (cIdx >= 0 && cIdx + 1 < args.length && typeof args[cIdx + 1] === 'string') {
-        var script = args[cIdx + 1];
-        if (DWS_CHAT_MSG_SEND.test(script)) {
-          var fixedScript = fixDwsChatMessageSendShellScript(script);
-          if (fixedScript !== script) {
-            var shellCopy = args.slice();
-            shellCopy[cIdx + 1] = fixedScript;
-            return shellCopy;
-          }
-        }
-      }
-    }
-    return args;
-  }
-
-  function isBlockedUpgradeCommand(cmd, argsList) {
-    var c = typeof cmd === 'string' ? cmd.trim() : '';
-    var a = Array.isArray(argsList) ? argsList.join(' ') : '';
-    // Allow sai-cli update/upgrade (standalone binary); block install/uninstall/remove only
-    if (/^sai-cli$/i.test(c) || /^sai\.exe$/i.test(c)) {
-      return /\binstall\b/i.test(a) || /\buninstall\b/i.test(a) || /\bremove\b/i.test(a);
-    }
-    if (/^dws$/i.test(c) || /^dws\.exe$/i.test(c)) {
-      return /\b(upgrade|install|uninstall|remove)\b/i.test(a);
-    }
-    if (BLOCKED_BINARIES.test(c)) {
-      for (var i = 0; i < UPGRADE_ARG_PATTERNS.length; i++) {
-        if (UPGRADE_ARG_PATTERNS[i].test(a)) return true;
-      }
-    }
-    if (PKG_MANAGERS.test(c)) {
-      for (var i = 0; i < UPGRADE_ARG_PATTERNS.length; i++) {
-        if (UPGRADE_ARG_PATTERNS[i].test(a)) return true;
-      }
-    }
-    if (DOWNLOAD_TOOLS.test(c)) {
-      for (var i = 0; i < UPGRADE_ARG_PATTERNS.length; i++) {
-        if (UPGRADE_ARG_PATTERNS[i].test(a)) return true;
-      }
-    }
-    if (PYTHON_PKGS.test(c) && PYTHON_BLOCKED_ARGS.test(a)) return true;
-    return false;
-  }
-
-  function securityError(desc) {
-    var e = new Error('[StoClaw 安全策略] ' + desc);
-    e.code = 'EPERM';
-    return e;
-  }
-
-  function upgradeSecurityError(desc) {
-    return securityError('禁止在应用内执行升级/安装操作：' + desc);
-  }
-
-  function resolveBlockedSpawnError(cmd, argsList) {
-    if (isBlockedDwsSendSpam(cmd, argsList)) {
-      return securityError('禁止通过循环或批量命令多次调用 dws chat message send。请一次只发送一条消息。');
-    }
-    if (isBlockedUpgradeCommand(cmd, argsList)) {
-      var c = typeof cmd === 'string' ? cmd.trim() : '';
-      var a = Array.isArray(argsList) ? argsList.join(' ') : '';
-      return upgradeSecurityError(c + ' ' + a);
-    }
-    return null;
-  }
-
-  // ── Patch globalThis.fetch ────────────────────────────────────────
-  var _fetch = globalThis.fetch;
-  if (typeof _fetch === 'function' && !globalThis.__clawxFetchPatched) {
-    globalThis.__clawxFetchPatched = true;
-    globalThis.fetch = function clawxFetch(input, init) {
-      var url = typeof input === 'string' ? input
-        : (input && typeof input === 'object' && typeof input.url === 'string') ? input.url : '';
-
-      for (var i = 0; i < BLOCKED_FETCH_URL_PATTERNS.length; i++) {
-        if (BLOCKED_FETCH_URL_PATTERNS[i].test(url)) throw upgradeSecurityError(url);
-      }
-
-      if (url.indexOf('openrouter.ai') !== -1) {
-        init = init ? Object.assign({}, init) : {};
-        var prev = init.headers;
-        var flat = {};
-        if (prev && typeof prev.forEach === 'function') {
-          prev.forEach(function (v, k) { flat[k] = v; });
-        } else if (prev && typeof prev === 'object') {
-          Object.assign(flat, prev);
-        }
-        delete flat['http-referer']; delete flat['HTTP-Referer'];
-        delete flat['x-title']; delete flat['X-Title'];
-        flat['HTTP-Referer'] = 'https://claw-x.com';
-        flat['X-Title'] = 'StoClaw';
-        init.headers = flat;
-      }
-      return _fetch.call(globalThis, input, init);
-    };
-  }
-
-  // ── Patch child_process ───────────────────────────────────────────
-  try {
-    var cp = require('child_process');
-    if (!cp.__clawxSecurityPatched) {
-      cp.__clawxSecurityPatched = true;
-      var EventEmitter = require('events').EventEmitter;
-
-      function fakeChild(err) {
-        var ch = new EventEmitter();
-        ch.stdout = { on: function(){}, pipe: function(){}, resume: function(){}, destroy: function(){} };
-        ch.stderr = { on: function(){}, pipe: function(){}, resume: function(){}, destroy: function(){} };
-        ch.stdin = { on: function(){}, pipe: function(){}, end: function(){}, write: function(){}, destroy: function(){} };
-        ch.kill = function(){};
-        ch.pid = undefined;
-        ch.connected = false;
-        ch.exitCode = 1;
-        setImmediate(function() { ch.emit('error', err); ch.emit('close', 1, null); });
-        return ch;
-      }
-
-      ['spawn', 'exec', 'execFile'].forEach(function(m) {
-        var orig = cp[m];
-        if (typeof orig !== 'function') return;
-        cp[m] = function() {
-          var args = Array.prototype.slice.call(arguments);
-          var cmd = typeof args[0] === 'string' ? args[0] : '';
-          var cmdArgs = Array.isArray(args[1]) ? args[1] : [];
-          if (m === 'exec' || m === 'execFile') {
-            if (typeof args[0] === 'string' && DWS_CHAT_MSG_SEND.test(args[0])) {
-              args[0] = fixDwsChatMessageSendShellScript(args[0]);
-              cmd = args[0];
-            }
-          } else if (Array.isArray(args[1])) {
-            args[1] = normalizeDwsSendInvocation(cmd, cmdArgs);
-            cmdArgs = args[1];
-          }
-          var blockedErr = resolveBlockedSpawnError(cmd, cmdArgs);
-          if (blockedErr) {
-            for (var i = args.length - 1; i >= 1; i--) {
-              if (typeof args[i] === 'function') {
-                setImmediate(function() { args[i](blockedErr, '', ''); });
-                break;
-              }
-            }
-            return fakeChild(blockedErr);
-          }
-          var optIdx = -1;
-          for (var i = 1; i < args.length; i++) {
-            if (args[i] && typeof args[i] === 'object' && !Array.isArray(args[i]) && typeof args[i] !== 'function') { optIdx = i; break; }
-          }
-          if (optIdx >= 0) { args[optIdx].windowsHide = true; }
-          else {
-            var o = { windowsHide: true };
-            if (typeof args[args.length - 1] === 'function') args.splice(args.length - 1, 0, o);
-            else args.push(o);
-          }
-          return orig.apply(this, args);
-        };
-      });
-
-      ['spawnSync', 'execSync', 'execFileSync'].forEach(function(m) {
-        var orig = cp[m];
-        if (typeof orig !== 'function') return;
-        cp[m] = function() {
-          var args = Array.prototype.slice.call(arguments);
-          var cmd = typeof args[0] === 'string' ? args[0] : '';
-          var cmdArgs = Array.isArray(args[1]) ? args[1] : [];
-          if (m === 'execSync' || m === 'execFileSync') {
-            if (typeof args[0] === 'string' && DWS_CHAT_MSG_SEND.test(args[0])) {
-              args[0] = fixDwsChatMessageSendShellScript(args[0]);
-              cmd = args[0];
-            }
-          } else if (Array.isArray(args[1])) {
-            args[1] = normalizeDwsSendInvocation(cmd, cmdArgs);
-            cmdArgs = args[1];
-          }
-          var blockedSyncErr = resolveBlockedSpawnError(cmd, cmdArgs);
-          if (blockedSyncErr) throw blockedSyncErr;
-          var optIdx = -1;
-          for (var i = 1; i < args.length; i++) {
-            if (args[i] && typeof args[i] === 'object' && !Array.isArray(args[i])) { optIdx = i; break; }
-          }
-          if (optIdx >= 0) { args[optIdx].windowsHide = true; }
-          else args.push({ windowsHide: true });
-          return orig.apply(this, args);
-        };
-      });
-    }
-  } catch (e) {
-    // child_process not available in this context
-  }
-})();
-`;
+  return null;
+}
 
 function ensureGatewayFetchPreload(): string {
   const dest = path.join(app.getPath('userData'), 'gateway-fetch-preload.cjs');
+  const bundled = resolveBundledGatewayPreloadPath();
+  if (!bundled) {
+    logger.warn('gateway-fetch-preload.cjs not found; Gateway security preload disabled');
+    return dest;
+  }
   try {
-    writeFileSync(dest, GATEWAY_FETCH_PRELOAD_SOURCE, 'utf-8');
-  } catch {
-    // best-effort
+    writeFileSync(dest, readFileSync(bundled, 'utf-8'), 'utf-8');
+  } catch (err) {
+    logger.warn('Failed to copy Gateway preload to userData:', err);
   }
   return dest;
 }
