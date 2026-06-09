@@ -35,7 +35,7 @@ vi.mock('@/stores/chat/helpers', () => ({
 
 type ChatLikeState = {
   currentSessionKey: string;
-  messages: Array<{ role: string; timestamp?: number; content?: unknown; _attachedFiles?: unknown[] }>;
+  messages: Array<{ role: string; timestamp?: number; content?: unknown; _attachedFiles?: unknown[]; isError?: boolean }>;
   loading: boolean;
   error: string | null;
   sending: boolean;
@@ -127,5 +127,47 @@ describe('chat history actions', () => {
     expect(hostApiFetchMock).not.toHaveBeenCalled();
     expect(h.read().messages).toEqual([]);
     expect(h.read().loading).toBe(false);
+  });
+
+  it('preserves failed optimistic user message when history has not caught up', async () => {
+    const { createHistoryActions } = await import('@/stores/chat/history-actions');
+    const h = makeHarness({
+      currentSessionKey: 'agent:main:main',
+      error: 'session file locked',
+      sending: false,
+      lastUserMessageAt: 1710000000000,
+      messages: [
+        {
+          id: 'local-user-1',
+          role: 'user',
+          content: '怎么没内容了',
+          timestamp: 1710000000,
+          isError: true,
+        },
+      ] as never,
+    });
+    const actions = createHistoryActions(h.set as never, h.get as never);
+
+    invokeIpcMock.mockResolvedValueOnce({
+      success: true,
+      result: {
+        messages: [
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'older assistant message',
+            timestamp: 1709999990,
+          },
+        ],
+      },
+    });
+
+    await actions.loadHistory(true);
+
+    expect(h.read().messages.map((message) => message.content)).toEqual([
+      'older assistant message',
+      '怎么没内容了',
+    ]);
+    expect(h.read().messages[1]?.isError).toBe(true);
   });
 });

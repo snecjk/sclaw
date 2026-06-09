@@ -276,25 +276,33 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
         
         if (!result.success) {
           clearHistoryPoll();
-          set({
+          set((s) => ({
+            messages: s.messages.map((message, index, arr) => (
+              index === arr.length - 1 && message.role === 'user'
+                ? { ...message, isError: true }
+                : message
+            )),
             error: formatChatRuntimeError(result.error || 'Failed to send message'),
             sending: false,
             activeRunId: null,
             pendingFinal: false,
-            lastUserMessageAt: null,
-          });
+          }));
         } else if (result.result?.runId) {
           set({ activeRunId: result.result.runId });
         }
       } catch (err) {
         clearHistoryPoll();
-        set({
+        set((s) => ({
+          messages: s.messages.map((message, index, arr) => (
+            index === arr.length - 1 && message.role === 'user'
+              ? { ...message, isError: true }
+              : message
+          )),
           error: formatChatRuntimeError(String(err)),
           sending: false,
           activeRunId: null,
           pendingFinal: false,
-          lastUserMessageAt: null,
-        });
+        }));
       }
     },
 
