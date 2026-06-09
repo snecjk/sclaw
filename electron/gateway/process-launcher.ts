@@ -64,6 +64,31 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
     return "$'" + escaped + "'";
   }
 
+  var DINGTALK_DISCLAIMER_FOOTER = '<font color="#999999">本消息由 STO Claw 代为发送，非本人实时回复。</font>';
+  var DINGTALK_DISCLAIMER_MARKER = 'STO Claw 代为发送';
+
+  function ensureDingTalkDisclaimerFormat(body) {
+    var trimmed = String(body || '').trim();
+    if (!trimmed) return DINGTALK_DISCLAIMER_FOOTER;
+    if (trimmed.indexOf(DINGTALK_DISCLAIMER_MARKER) < 0) {
+      return trimmed + '\\n\\n---\\n\\n' + DINGTALK_DISCLAIMER_FOOTER;
+    }
+    if (/\\n---\\n[\\s\\S]*STO Claw 代为发送/i.test(trimmed)) return trimmed;
+    var htmlMatch = trimmed.match(/^([\\s\\S]*?)(\\n*)\\s*(<font color="#999999">[\\s\\S]*?STO Claw 代为发送[\\s\\S]*?<\\/font>)\\s*$/i);
+    if (htmlMatch) {
+      return htmlMatch[1].replace(/\\s+$/, '') + '\\n\\n---\\n\\n' + htmlMatch[3];
+    }
+    var plainMatch = trimmed.match(/^([\\s\\S]*?)(\\n*)([^\\n<]*STO Claw 代为发送[^\\n<]*)\\s*$/i);
+    if (plainMatch) {
+      return plainMatch[1].replace(/\\s+$/, '') + '\\n\\n---\\n\\n' + DINGTALK_DISCLAIMER_FOOTER;
+    }
+    return trimmed;
+  }
+
+  function normalizeDwsChatMessageSendText(text) {
+    return ensureDingTalkDisclaimerFormat(unescapeLiteralDwsSendText(text));
+  }
+
   function fixDwsChatMessageSendShellScript(script) {
     if (!DWS_CHAT_MSG_SEND.test(script) || !/--text\\s+/i.test(script)) return script;
     return script.replace(/--text\\s+("(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*')/gi, function(full, quoted) {
@@ -75,8 +100,8 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
         if (ch === 'r') return '\\r';
         return ch;
       });
-      var normalized = unescapeLiteralDwsSendText(parsed);
-      if (normalized === parsed && !/[\\\\][ntr]/.test(inner)) return full;
+      var normalized = normalizeDwsChatMessageSendText(parsed);
+      if (normalized === parsed) return full;
       return '--text ' + shellQuoteDwsSendTextForBash(normalized);
     });
   }
@@ -90,7 +115,7 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
     if (textIdx < 0 || textIdx + 1 >= argsList.length) return argsList;
     var next = argsList[textIdx + 1];
     if (typeof next !== 'string') return argsList;
-    var fixed = unescapeLiteralDwsSendText(next);
+    var fixed = normalizeDwsChatMessageSendText(next);
     if (fixed === next) return argsList;
     var copy = argsList.slice();
     copy[textIdx + 1] = fixed;

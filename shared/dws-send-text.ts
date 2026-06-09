@@ -1,8 +1,12 @@
+import { ensureDingTalkAgentSendDisclaimerFormat } from './dingtalk-disclaimer';
+
 /**
  * Normalize `dws chat message send --text` payloads.
  * Models often copy JSON.stringify output into shell commands; bash does not
  * expand `\n` inside double quotes, so DingTalk receives literal backslash-n.
  */
+
+import { ensureDingTalkAgentSendDisclaimerFormat } from './dingtalk-disclaimer';
 
 /** Turn literal `\n` / `\t` / `\r` sequences into real whitespace. */
 export function unescapeLiteralDwsSendText(text: string): string {
@@ -22,6 +26,11 @@ export function shellQuoteDwsSendTextForBash(text: string): string {
     .replace(/\r/g, '\\r')
     .replace(/\t/g, '\\t');
   return `$'${escaped}'`;
+}
+
+/** Unescape literals, then ensure `---` + 代发说明底栏（与对话框发送一致）。 */
+export function normalizeDwsChatMessageSendText(text: string): string {
+  return ensureDingTalkAgentSendDisclaimerFormat(unescapeLiteralDwsSendText(text));
 }
 
 const DWS_CHAT_MSG_SEND = /dws\s+chat\s+message\s+send\b/i;
@@ -63,8 +72,8 @@ export function fixDwsChatMessageSendShellScript(script: string): string {
       if (!quoted || typeof quoted !== 'string') return full;
       const parsed = parseQuotedShellSegment(quoted);
       if (!parsed) return full;
-      const normalized = unescapeLiteralDwsSendText(parsed);
-      if (normalized === parsed && !/[\\][ntr]/.test(quoted)) return full;
+      const normalized = normalizeDwsChatMessageSendText(parsed);
+      if (normalized === parsed) return full;
       return `--text ${shellQuoteDwsSendTextForBash(normalized)}`;
     },
   );
@@ -77,7 +86,7 @@ export function fixDwsChatMessageSendArgv(args: string[]): string[] {
   if (textIdx < 0 || textIdx + 1 >= args.length) return args;
   const next = args[textIdx + 1];
   if (typeof next !== 'string') return args;
-  const fixed = unescapeLiteralDwsSendText(next);
+  const fixed = normalizeDwsChatMessageSendText(next);
   if (fixed === next) return args;
   const copy = [...args];
   copy[textIdx + 1] = fixed;

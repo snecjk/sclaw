@@ -62,7 +62,7 @@
         "enabled": "Task enabled",
         "paused": "Task paused",
         "deleted": "Task deleted",
-        "triggered": "Task triggered successfully",
+        "triggered": "Task started. Check the task list after it finishes.",
         "failedTrigger": "Failed to trigger task: {{error}}",
         "failedUpdate": "Failed to update task",
         "failedDelete": "Failed to delete task",
