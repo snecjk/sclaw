@@ -13,8 +13,21 @@ export function useChatPreviewPanel(allMessages: RawMessage[]) {
   const [activePreviewFilePath, setActivePreviewFilePath] = useState<string | null>(null);
   const [previewActiveTab, setPreviewActiveTab] = useState<PreviewPanelTab>('product');
   const [forcedWorkflowId, setForcedWorkflowId] = useState<string | null>(null);
+  /** Files opened on demand (e.g. workflow fallback URL) — not always present in message scan. */
+  const [extraPreviewFiles, setExtraPreviewFiles] = useState<AttachedFileMeta[]>([]);
 
   const previewableFiles = usePreviewableFiles(allMessages, workflowCardStates);
+
+  const previewFiles = useMemo(() => {
+    const byPath = new Map<string, AttachedFileMeta>();
+    for (const file of previewableFiles) {
+      if (file.filePath) byPath.set(file.filePath, file);
+    }
+    for (const file of extraPreviewFiles) {
+      if (file.filePath) byPath.set(file.filePath, file);
+    }
+    return Array.from(byPath.values());
+  }, [previewableFiles, extraPreviewFiles]);
 
   const {
     workflowId: sessionWorkflowId,
@@ -24,10 +37,13 @@ export function useChatPreviewPanel(allMessages: RawMessage[]) {
     error: workflowError,
   } = useSessionWorkflowPreview(allMessages, forcedWorkflowId);
 
-  const canShowPreviewPanel = previewableFiles.length > 0 || showWorkflowTab;
+  const canShowPreviewPanel = previewFiles.length > 0 || showWorkflowTab;
 
   const openArtifactPreview = useCallback((file: AttachedFileMeta) => {
     if (!file.filePath) return;
+    setExtraPreviewFiles((prev) => (
+      prev.some((item) => item.filePath === file.filePath) ? prev : [...prev, file]
+    ));
     setActivePreviewFilePath(file.filePath);
     setPreviewActiveTab('product');
     setShowPreviewPanel(true);
@@ -55,7 +71,7 @@ export function useChatPreviewPanel(allMessages: RawMessage[]) {
     setActivePreviewFilePath,
     previewActiveTab,
     setPreviewActiveTab,
-    previewableFiles,
+    previewableFiles: previewFiles,
     canShowPreviewPanel,
     openArtifactPreview,
     openWorkflowPreview,

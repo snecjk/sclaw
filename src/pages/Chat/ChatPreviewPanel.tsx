@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { isHttpUrl, inferMimeTypeFromUrl } from '@/lib/preview-url';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { FilePreviewViewer } from '@/components/file-preview/FilePreviewViewer';
@@ -79,10 +80,21 @@ export function ChatPreviewPanel({
   const [showFileList, setShowFileList] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const activeFile = useMemo(
-    () => files.find((f) => f.filePath === activeFilePath) || null,
-    [files, activeFilePath],
-  );
+  const activeFile = useMemo(() => {
+    if (!activeFilePath) return null;
+    const found = files.find((f) => f.filePath === activeFilePath);
+    if (found) return found;
+    if (isHttpUrl(activeFilePath)) {
+      return {
+        filePath: activeFilePath,
+        fileName: activeFilePath.replace(/^https?:\/\//, ''),
+        mimeType: inferMimeTypeFromUrl(activeFilePath),
+        fileSize: 0,
+        preview: null,
+      } satisfies AttachedFileMeta;
+    }
+    return null;
+  }, [files, activeFilePath]);
 
   const handleOpenExternal = useCallback(() => {
     if (!activeFile?.filePath) return;

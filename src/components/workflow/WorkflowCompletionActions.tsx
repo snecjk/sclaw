@@ -28,7 +28,7 @@ export function WorkflowCompletionActions({
 
   return (
     <div className="mt-3 space-y-2">
-      {primaryArtifact && (
+      {primaryArtifact && canPreview && (
         <div className="flex items-center gap-3 rounded-xl border border-[#E5E6EB] bg-white px-3.5 py-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#FFF5E6]">
             <FileText className="h-4 w-4 text-[#FF6F00]" />
@@ -37,15 +37,13 @@ export function WorkflowCompletionActions({
             <p className="truncate text-[13px] font-semibold text-[#1D2129]">{primaryArtifact.name}</p>
             <p className="truncate text-[11px] text-[#86909C]">{primaryArtifact.type || 'output'}</p>
           </div>
-          {canPreview ? (
-            <button
-              type="button"
-              onClick={() => onPreviewArtifact!(artifactToPreviewFile(primaryArtifact))}
-              className="shrink-0 rounded-full border border-[#FF6F00]/30 px-3 py-1 text-[12px] font-medium text-[#FF6F00] transition-colors hover:bg-[#FFF5E6]"
-            >
-              查看预览
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={() => onPreviewArtifact!(artifactToPreviewFile(primaryArtifact))}
+            className="shrink-0 rounded-full border border-[#FF6F00]/30 px-3 py-1 text-[12px] font-medium text-[#FF6F00] transition-colors hover:bg-[#FFF5E6]"
+          >
+            查看预览
+          </button>
         </div>
       )}
 
