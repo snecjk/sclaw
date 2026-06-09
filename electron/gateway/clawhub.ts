@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { app, shell } from 'electron';
 import { getOpenClawConfigDir, ensureDir, getClawHubCliBinPath, getClawHubCliEntryPath, quoteForCmd } from '../utils/paths';
+import { readSkillMdFrontmatter } from '../utils/skill-frontmatter';
 
 export interface ClawHubSearchParams {
     query: string;
@@ -76,15 +77,9 @@ export class ClawHubService {
 
     private extractFrontmatterName(skillManifestPath: string): string | null {
         try {
-            const raw = fs.readFileSync(skillManifestPath, 'utf8');
-            // Match the first frontmatter block and read `name: ...`
-            const frontmatterMatch = raw.match(/^---\s*\n([\s\S]*?)\n---/);
-            if (!frontmatterMatch) return null;
-            const body = frontmatterMatch[1];
-            const nameMatch = body.match(/^\s*name\s*:\s*["']?([^"'\n]+)["']?\s*$/m);
-            if (!nameMatch) return null;
-            const name = nameMatch[1].trim();
-            return name || null;
+            const skillDir = path.dirname(skillManifestPath);
+            const fm = readSkillMdFrontmatter(skillDir);
+            return fm?.name ?? null;
         } catch {
             return null;
         }

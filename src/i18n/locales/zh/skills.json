@@ -201,6 +201,7 @@
             "uninstallError": "删除失败"
         },
         "loading": "加载中...",
+        "syncingUserSkills": "正在同步您的技能…",
         "noSkills": "暂无可用技能"
     }
 }
