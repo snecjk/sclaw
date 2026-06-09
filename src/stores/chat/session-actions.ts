@@ -1,5 +1,4 @@
 import { hostApiFetch } from '@/lib/host-api';
-import { useAgentsStore } from '@/stores/agents';
 import { CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
 import {
   getCanonicalPrefixFromSessions,
@@ -17,6 +16,10 @@ function getAgentIdFromSessionKey(sessionKey: string): string {
   return agentId || 'main';
 }
 
+function getSessionEngineType(session: ChatSession | undefined): ChatSession['engineType'] | undefined {
+  return session?.engineType;
+}
+
 function parseSessionUpdatedAtMs(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return toMs(value);
@@ -28,29 +31,6 @@ function parseSessionUpdatedAtMs(value: unknown): number | undefined {
     }
   }
   return undefined;
-}
-
-async function ensureSessionEngineSelected(session: ChatSession | undefined): Promise<void> {
-  if (!session?.key?.startsWith('agent:')) return;
-  const targetEngine = session.engineType;
-  if (!targetEngine) return;
-
-  const agentId = getAgentIdFromSessionKey(session.key);
-  const agentsStore = useAgentsStore.getState();
-  let currentAgent = agentsStore.agents.find((agent) => agent.id === agentId);
-  if (!currentAgent) {
-    await agentsStore.fetchAgents();
-    currentAgent = useAgentsStore.getState().agents.find((agent) => agent.id === agentId);
-  }
-
-  const currentEngine = currentAgent?.engineType ?? 'openclaw';
-  if (currentEngine === targetEngine) return;
-
-  await hostApiFetch(`/api/agents/${encodeURIComponent(agentId)}/engine`, {
-    method: 'PUT',
-    body: JSON.stringify({ engineType: targetEngine }),
-  });
-  await useAgentsStore.getState().fetchAgents();
 }
 
 export function createSessionActions(
@@ -136,8 +116,9 @@ export function createSessionActions(
           && !dedupedSessions.find((s) => s.key === nextSessionKey)
           && (hasLocalPendingSession || hasLocalSessionActivity),
         );
+        const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
         const sessionsWithCurrent = shouldAppendCurrentSession
-          ? [...dedupedSessions, { key: nextSessionKey }]
+          ? [...dedupedSessions, { key: nextSessionKey, engineType: localCurrentSession?.engineType }]
           : dedupedSessions;
 
         const discoveredActivity = Object.fromEntries(
@@ -229,8 +210,6 @@ export function createSessionActions(
           }
         }
 
-        const nextSession = sessionsWithCurrent.find((session) => session.key === nextSessionKey);
-
         set((state) => ({
           sessions: sessionsWithCurrent,
           currentSessionKey: nextSessionKey,
@@ -242,7 +221,6 @@ export function createSessionActions(
         }));
 
         if (currentSessionKey !== nextSessionKey) {
-          await ensureSessionEngineSelected(nextSession);
           await get().loadHistory();
         }
 
@@ -254,7 +232,9 @@ export function createSessionActions(
             sessionsToLabel.map(async (session) => {
               try {
                 const history = await hostApiFetch<{ success?: boolean; result?: { messages?: RawMessage[] } }>(
-                  `/api/chat/history?sessionKey=${encodeURIComponent(session.key)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`,
+                  `/api/chat/history?sessionKey=${encodeURIComponent(session.key)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`
+                  + (getSessionEngineType(session) ? `&engineType=${encodeURIComponent(getSessionEngineType(session)!)}`
+                    : ''),
                 );
                 const msgs = Array.isArray(history.result?.messages) ? history.result.messages : [];
                 const firstUser = msgs.find((m) => m.role === 'user');
@@ -286,7 +266,6 @@ export function createSessionActions(
 
     switchSession: (key: string) => {
       const { currentSessionKey, messages, sessionLastActivity, sessionLabels } = get();
-      const targetSession = get().sessions.find((session) => session.key === key);
       // 仅将没有任何历史记录且无活动时间的会话视为空会话。
       // 单纯依赖 messages.length 是不可靠的，因为 switchSession 会在真正调用 loadHistory 前抢先清空当前 messages，
       // 造成竞争条件，使得带有真实历史的会话被判定为空并从侧边栏移除。
@@ -317,7 +296,6 @@ export function createSessionActions(
         } : {}),
       }));
       void (async () => {
-        await ensureSessionEngineSelected(targetSession);
         await get().loadHistory();
       })();
     },
@@ -338,7 +316,10 @@ export function createSessionActions(
       try {
         const result = await hostApiFetch<{ success: boolean; error?: string }>('/api/sessions/delete', {
           method: 'POST',
-          body: JSON.stringify({ sessionKey: key }),
+          body: JSON.stringify({
+            sessionKey: key,
+            engineType: getSessionEngineType(get().sessions.find((session) => session.key === key)),
+          }),
         });
         const typedResult = result as {
           success: boolean;
@@ -374,7 +355,6 @@ export function createSessionActions(
           currentAgentId: getAgentIdFromSessionKey(next?.key ?? DEFAULT_SESSION_KEY),
         }));
         if (next) {
-          await ensureSessionEngineSelected(next);
           await get().loadHistory();
         }
       } else {
@@ -401,7 +381,8 @@ export function createSessionActions(
         && !sessionLabels[currentSessionKey];
       const prefix = getCanonicalPrefixFromSessions(get().sessions) ?? DEFAULT_CANONICAL_PREFIX;
       const newKey = `${prefix}:session-${Date.now()}`;
-      const newSessionEntry: ChatSession = { key: newKey };
+      const currentSession = get().sessions.find((session) => session.key === currentSessionKey);
+      const newSessionEntry: ChatSession = { key: newKey, engineType: currentSession?.engineType };
       set((s) => ({
         currentSessionKey: newKey,
         currentAgentId: getAgentIdFromSessionKey(newKey),

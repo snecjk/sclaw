@@ -55,26 +55,7 @@ function getSessionEngineType(sessions: ChatSession[], sessionKey: string): Chat
 }
 
 async function ensureSessionEngineSelected(session: ChatSession | undefined): Promise<void> {
-  if (!session?.key?.startsWith('agent:')) return;
-  const targetEngine = session.engineType;
-  if (!targetEngine) return;
-
-  const agentId = getAgentIdFromSessionKey(session.key);
-  const agentsStore = useAgentsStore.getState();
-  let currentAgent = agentsStore.agents.find((agent) => agent.id === agentId);
-  if (!currentAgent) {
-    await agentsStore.fetchAgents();
-    currentAgent = useAgentsStore.getState().agents.find((agent) => agent.id === agentId);
-  }
-
-  const currentEngine = currentAgent?.engineType ?? 'openclaw';
-  if (currentEngine === targetEngine) return;
-
-  await hostApiFetch(`/api/agents/${encodeURIComponent(agentId)}/engine`, {
-    method: 'PUT',
-    body: JSON.stringify({ engineType: targetEngine }),
-  });
-  await useAgentsStore.getState().fetchAgents();
+  void session;
 }
 
 // Timer for fallback history polling during active sends.
@@ -1196,8 +1177,9 @@ export const useChatStore = create<ChatState>()(
             }
           }
 
+          const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
           const sessionsWithCurrent = !dedupedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
-            ? [...dedupedSessions, { key: nextSessionKey }]
+            ? [...dedupedSessions, { key: nextSessionKey, engineType: localCurrentSession?.engineType }]
             : dedupedSessions;
 
           const discoveredActivity = Object.fromEntries(
@@ -1316,7 +1298,10 @@ export const useChatStore = create<ChatState>()(
         error?: string;
       }>('/api/sessions/delete', {
         method: 'POST',
-        body: JSON.stringify({ sessionKey: key }),
+        body: JSON.stringify({
+          sessionKey: key,
+          engineType: getSessionEngineType(get().sessions, key),
+        }),
       });
       if (!result.success) {
         console.warn(`[deleteSession] IPC reported failure for ${key}:`, result.error);
@@ -1380,7 +1365,8 @@ export const useChatStore = create<ChatState>()(
       ?? DEFAULT_CANONICAL_PREFIX;
     const newKey = `${prefix}:session-${Date.now()}`;
     const newAgentId = getAgentIdFromSessionKey(newKey);
-    const newSessionEntry: ChatSession = { key: newKey };
+    const currentSession = sessions.find((session) => session.key === currentSessionKey);
+    const newSessionEntry: ChatSession = { key: newKey, engineType: currentSession?.engineType };
     set((s) => ({
       currentSessionKey: newKey,
       currentAgentId: newAgentId,

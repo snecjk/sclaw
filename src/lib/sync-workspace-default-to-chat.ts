@@ -47,6 +47,7 @@ export async function syncWorkspaceDefaultModelToChat(opts: {
         model: modelId,
         accountId,
         agentId: currentAgentId || undefined,
+        engineType: session?.engineType,
       }),
     });
     void loadSessions();
@@ -76,6 +77,7 @@ export async function applyWorkspaceDefaultToNewSession(
         model: modelId,
         accountId,
         agentId: agentId.trim() || undefined,
+        engineType: useChatStore.getState().sessions.find((session) => session.key === trimmedKey)?.engineType,
       }),
     });
     useChatStore.setState((state) => ({

@@ -44,7 +44,6 @@ const pillBtn = cn(
 );
 
 export function ChatToolbar() {
-  const refresh = useChatStore((s) => s.refresh);
   const loading = useChatStore((s) => s.loading);
   const sending = useChatStore((s) => s.sending);
   const showThinking = useChatStore((s) => s.showThinking);
@@ -137,6 +136,7 @@ export function ChatToolbar() {
           model: modelId,
           accountId: opt?.accountId,
           agentId: currentAgentId || undefined,
+          engineType: currentSession?.engineType,
         }),
       });
       void loadSessions();
@@ -163,9 +163,16 @@ export function ChatToolbar() {
         method: 'PUT',
         body: JSON.stringify({ engineType }),
       });
+      useChatStore.setState((state) => ({
+        sessions: state.sessions.map((session) => (
+          session.key === currentSessionKey
+            ? { ...session, engineType }
+            : session
+        )),
+      }));
       await fetchAgents();
+      await useChatStore.getState().loadHistory();
       await loadSessions();
-      await refresh();
       toast.success(`已切换到 ${engineType === 'claude' ? 'Claude Agent' : 'OpenClaw'} 引擎`);
     } catch (err) {
       toast.error(`切换引擎失败: ${String(err)}`);

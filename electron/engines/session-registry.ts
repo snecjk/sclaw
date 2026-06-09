@@ -8,7 +8,7 @@ export interface EngineSessionRegistryEntry {
   engineType: AgentEngineType;
   agentId: string;
   sessionId?: string;
-  cwd: string;
+  cwd?: string;
   updatedAt?: number;
   title?: string;
   model?: string;
