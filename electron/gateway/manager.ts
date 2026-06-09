@@ -207,7 +207,11 @@ export class GatewayManager extends EventEmitter {
   private static readonly HEARTBEAT_TIMEOUT_MS = 12_000;
   private static readonly HEARTBEAT_MAX_MISSES = 3;
   public static readonly RESTART_COOLDOWN_MS = 5_000;
+  /** After OpenClaw self-restarts (WS 1012), skip StoClaw-managed stop/start to avoid double restart. */
+  private static readonly GATEWAY_SELF_RESTART_QUIET_MS = 12_000;
+  private static readonly DEFERRED_RESTART_DEBOUNCE_MS = 1500;
   private lastRestartAt = 0;
+  private managedRestartSuppressUntil = 0;
 
   constructor(config?: Partial<ReconnectConfig>) {
     super();
@@ -228,9 +232,7 @@ export class GatewayManager extends EventEmitter {
             shouldReconnect: this.shouldReconnect,
           },
           () => {
-            void this.restart().catch((error) => {
-              logger.warn('Deferred Gateway restart failed:', error);
-            });
+            this.debouncedRestart(GatewayManager.DEFERRED_RESTART_DEBOUNCE_MS);
           },
         );
       },
@@ -284,6 +286,46 @@ export class GatewayManager extends EventEmitter {
       this.startLock
       || this.status.state === 'starting'
       || this.status.state === 'reconnecting'
+    );
+  }
+
+  private isManagedRestartSuppressed(): boolean {
+    return Date.now() < this.managedRestartSuppressUntil;
+  }
+
+  /** OpenClaw restarted in-process (e.g. WS close 1012); avoid a second StoClaw stop/start. */
+  private noteGatewaySelfManagedRestart(closeCode: number, reason: string): void {
+    const normalizedReason = reason.toLowerCase();
+    const isServiceRestart =
+      closeCode === 1012
+      || normalizedReason.includes('service restart');
+    if (!isServiceRestart) {
+      return;
+    }
+    this.managedRestartSuppressUntil = Date.now() + GatewayManager.GATEWAY_SELF_RESTART_QUIET_MS;
+    this.restartController.clearDebounceTimer();
+    this.restartController.resetDeferredRestart();
+    if (this.reloadDebounceTimer) {
+      clearTimeout(this.reloadDebounceTimer);
+      this.reloadDebounceTimer = null;
+    }
+    logger.info(
+      `[gateway-refresh] Suppressing managed restart for ${GatewayManager.GATEWAY_SELF_RESTART_QUIET_MS}ms ` +
+      `(OpenClaw self-restart code=${closeCode} reason=${reason})`,
+    );
+  }
+
+  private flushDeferredRestartCoalesced(trigger: string): void {
+    this.restartController.flushDeferredRestart(
+      trigger,
+      {
+        state: this.status.state,
+        startLock: this.startLock,
+        shouldReconnect: this.shouldReconnect,
+      },
+      () => {
+        this.debouncedRestart(GatewayManager.DEFERRED_RESTART_DEBOUNCE_MS);
+      },
     );
   }
 
@@ -417,19 +459,7 @@ export class GatewayManager extends EventEmitter {
       throw error;
     } finally {
       this.startLock = false;
-      this.restartController.flushDeferredRestart(
-        'start:finally',
-        {
-          state: this.status.state,
-          startLock: this.startLock,
-          shouldReconnect: this.shouldReconnect,
-        },
-        () => {
-          void this.restart().catch((error) => {
-            logger.warn('Deferred Gateway restart failed:', error);
-          });
-        },
-      );
+      this.flushDeferredRestartCoalesced('start:finally');
     }
   }
 
@@ -507,6 +537,12 @@ export class GatewayManager extends EventEmitter {
    * Restart Gateway process
    */
   async restart(): Promise<void> {
+    if (this.isManagedRestartSuppressed()) {
+      logger.info('[gateway-refresh] mode=restart result=skipped cause=openclaw_self_restart_quiet_window');
+      this.restartController.resetDeferredRestart();
+      return;
+    }
+
     if (this.restartController.isRestartDeferred({
       state: this.status.state,
       startLock: this.startLock,
@@ -565,21 +601,10 @@ export class GatewayManager extends EventEmitter {
         `[gateway-refresh] mode=restart result=applied pidBefore=${pidBefore ?? 'n/a'} pidAfter=${this.status.pid ?? 'n/a'} ` +
         `suppressed=${observability.suppressed_total} executed=${observability.executed_total} circuitOpenUntil=${observability.circuit_open_until}`,
       );
+      this.lastRestartAt = Date.now();
     } finally {
       this.restartInFlight = null;
-      this.restartController.flushDeferredRestart(
-        'restart:finally',
-        {
-          state: this.status.state,
-          startLock: this.startLock,
-          shouldReconnect: this.shouldReconnect,
-        },
-        () => {
-          void this.restart().catch((error) => {
-            logger.warn('Deferred Gateway restart failed:', error);
-          });
-        },
-      );
+      this.flushDeferredRestartCoalesced('restart:finally');
     }
   }
 
@@ -910,7 +935,8 @@ export class GatewayManager extends EventEmitter {
       onMessage: (message) => {
         this.handleMessage(message);
       },
-      onCloseAfterHandshake: () => {
+      onCloseAfterHandshake: (code, reason) => {
+        this.noteGatewaySelfManagedRestart(code, reason);
         this.connectionMonitor.clear();
         if (this.status.state === 'running') {
           this.setStatus({ state: 'stopped' });

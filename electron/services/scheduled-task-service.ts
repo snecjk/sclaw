@@ -61,6 +61,9 @@ export interface ScheduledTaskUpdateInput {
   description?: string;
   notifyMode?: string;
   enabled?: boolean;
+  dingdingId?: string;
+  dingdingGroupId?: string;
+  dingdingGroupName?: string;
 }
 
 export interface ScheduledTaskRun {
@@ -276,6 +279,9 @@ export class ScheduledTaskService {
     if (input.cronExpr !== undefined) body.cron_expr = input.cronExpr;
     if (input.description !== undefined) body.description = input.description;
     if (input.notifyMode !== undefined) body.notify_mode = input.notifyMode;
+    if (input.dingdingId !== undefined) body.dingding_id = input.dingdingId;
+    if (input.dingdingGroupId !== undefined) body.dingding_group_id = input.dingdingGroupId;
+    if (input.dingdingGroupName !== undefined) body.dingding_group_name = input.dingdingGroupName;
     if (input.enabled !== undefined) body.enabled = input.enabled;
     if (robotCode !== undefined) body.robot_code = robotCode;
 

@@ -23,23 +23,41 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
     /\\bupgrade\\b/i,
     /\\binstall\\b.*\\bopenclaw\\b/i,
     /\\binstall\\b.*\\bsai[- ]?cli\\b/i,
+    /\\binstall\\b.*\\bdws\\b/i,
     /\\bopenclaw\\b.*\\b(update|upgrade|install)\\b/i,
     /\\bsai[- ]?cli\\b.*\\b(update|upgrade|install)\\b/i,
+    /\\bdws\\b.*\\b(update|upgrade|install)\\b/i,
     /api\\/v1\\/cli\\/(update|download)/i
   ];
 
-  var BLOCKED_BINARIES = /^(openclaw|sai-cli|sai\\.exe)$/i;
+  var BLOCKED_BINARIES = /^(openclaw|sai-cli|sai\\.exe|dws|dws\\.exe)$/i;
   var PKG_MANAGERS = /^(npm|pnpm|yarn|npx)$/i;
   var DOWNLOAD_TOOLS = /^(curl|wget|aria2c)$/i;
   var PYTHON_PKGS = /^(pip|pip3|uv)$/i;
-  var PYTHON_BLOCKED_ARGS = /\\bopenclaw\\b|\\bsai[- ]?cli\\b/i;
+  var PYTHON_BLOCKED_ARGS = /\\bopenclaw\\b|\\bsai[- ]?cli\\b|\\bdws\\b/i;
 
-  function isBlockedCommand(cmd, argsList) {
+  var DWS_CHAT_MSG_SEND = /dws\\s+chat\\s+message\\s+send\\b/i;
+  function isBlockedDwsSendSpam(cmd, argsList) {
+    var c = typeof cmd === 'string' ? cmd.trim() : '';
+    var a = Array.isArray(argsList) ? argsList.join(' ') : '';
+    var full = (c + ' ' + a);
+    if (!DWS_CHAT_MSG_SEND.test(full)) return false;
+    if (/--dry-run\\b/i.test(full)) return false;
+    var matches = full.match(/dws\\s+chat\\s+message\\s+send\\b/gi);
+    if (matches && matches.length > 1) return true;
+    if (/\\b(?:for|while|until|seq|xargs)\\b/i.test(full) && DWS_CHAT_MSG_SEND.test(full)) return true;
+    return false;
+  }
+
+  function isBlockedUpgradeCommand(cmd, argsList) {
     var c = typeof cmd === 'string' ? cmd.trim() : '';
     var a = Array.isArray(argsList) ? argsList.join(' ') : '';
     // Allow sai-cli update/upgrade (standalone binary); block install/uninstall/remove only
     if (/^sai-cli$/i.test(c) || /^sai\.exe$/i.test(c)) {
       return /\binstall\b/i.test(a) || /\buninstall\b/i.test(a) || /\bremove\b/i.test(a);
+    }
+    if (/^dws$/i.test(c) || /^dws\.exe$/i.test(c)) {
+      return /\b(upgrade|install|uninstall|remove)\b/i.test(a);
     }
     if (BLOCKED_BINARIES.test(c)) {
       for (var i = 0; i < UPGRADE_ARG_PATTERNS.length; i++) {
@@ -61,9 +79,25 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
   }
 
   function securityError(desc) {
-    var e = new Error('[StoClaw 安全策略] 禁止在应用内执行升级/安装操作：' + desc);
+    var e = new Error('[StoClaw 安全策略] ' + desc);
     e.code = 'EPERM';
     return e;
+  }
+
+  function upgradeSecurityError(desc) {
+    return securityError('禁止在应用内执行升级/安装操作：' + desc);
+  }
+
+  function resolveBlockedSpawnError(cmd, argsList) {
+    if (isBlockedDwsSendSpam(cmd, argsList)) {
+      return securityError('禁止通过循环或批量命令多次调用 dws chat message send。请一次只发送一条消息。');
+    }
+    if (isBlockedUpgradeCommand(cmd, argsList)) {
+      var c = typeof cmd === 'string' ? cmd.trim() : '';
+      var a = Array.isArray(argsList) ? argsList.join(' ') : '';
+      return upgradeSecurityError(c + ' ' + a);
+    }
+    return null;
   }
 
   // ── Patch globalThis.fetch ────────────────────────────────────────
@@ -75,7 +109,7 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
         : (input && typeof input === 'object' && typeof input.url === 'string') ? input.url : '';
 
       for (var i = 0; i < BLOCKED_FETCH_URL_PATTERNS.length; i++) {
-        if (BLOCKED_FETCH_URL_PATTERNS[i].test(url)) throw securityError(url);
+        if (BLOCKED_FETCH_URL_PATTERNS[i].test(url)) throw upgradeSecurityError(url);
       }
 
       if (url.indexOf('openrouter.ai') !== -1) {
@@ -124,15 +158,15 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
           var args = Array.prototype.slice.call(arguments);
           var cmd = typeof args[0] === 'string' ? args[0] : '';
           var cmdArgs = Array.isArray(args[1]) ? args[1] : [];
-          if (isBlockedCommand(cmd, cmdArgs)) {
-            var err = securityError(cmd + ' ' + cmdArgs.join(' '));
+          var blockedErr = resolveBlockedSpawnError(cmd, cmdArgs);
+          if (blockedErr) {
             for (var i = args.length - 1; i >= 1; i--) {
               if (typeof args[i] === 'function') {
-                setImmediate(function() { args[i](err, '', ''); });
+                setImmediate(function() { args[i](blockedErr, '', ''); });
                 break;
               }
             }
-            return fakeChild(err);
+            return fakeChild(blockedErr);
           }
           var optIdx = -1;
           for (var i = 1; i < args.length; i++) {
@@ -155,7 +189,8 @@ const GATEWAY_FETCH_PRELOAD_SOURCE = `'use strict';
           var args = Array.prototype.slice.call(arguments);
           var cmd = typeof args[0] === 'string' ? args[0] : '';
           var cmdArgs = Array.isArray(args[1]) ? args[1] : [];
-          if (isBlockedCommand(cmd, cmdArgs)) throw securityError(cmd + ' ' + cmdArgs.join(' '));
+          var blockedSyncErr = resolveBlockedSpawnError(cmd, cmdArgs);
+          if (blockedSyncErr) throw blockedSyncErr;
           var optIdx = -1;
           for (var i = 1; i < args.length; i++) {
             if (args[i] && typeof args[i] === 'object' && !Array.isArray(args[i])) { optIdx = i; break; }

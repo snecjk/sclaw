@@ -168,7 +168,7 @@ export async function connectGatewaySocket(options: {
   getToken: () => Promise<string>;
   onHandshakeComplete: (ws: WebSocket) => void;
   onMessage: (message: unknown) => void;
-  onCloseAfterHandshake: () => void;
+  onCloseAfterHandshake: (code: number, reason: string) => void;
 }): Promise<WebSocket> {
   logger.debug(`Connecting Gateway WebSocket (ws://localhost:${options.port}/ws)`);
 
@@ -301,7 +301,7 @@ export async function connectGatewaySocket(options: {
         return;
       }
       cleanupHandshakeRequest();
-      options.onCloseAfterHandshake();
+      options.onCloseAfterHandshake(code, reasonStr);
     });
 
     ws.on('error', (error) => {

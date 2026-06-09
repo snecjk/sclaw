@@ -5,14 +5,26 @@
  */
 import { useMemo } from 'react';
 import type { RawMessage, ContentBlock } from '@/stores/chat';
+import {
+  stripDingTalkAgentSendDisclaimerForDisplay,
+  stripDingTalkMentionContextForDisplay,
+} from '@/lib/dingtalk-mention-context';
+
+/** OpenClaw injects queued system events as `System: [timestamp] ...` lines before user text. */
+const GATEWAY_SYSTEM_EVENT_LINE =
+  /^\s*System:\s*(?:\[[^\]]+\]\s*)?[^\n]*(?:\n|$)/gim;
+
+const AT_MENTION_DISPLAY_NAME_PATTERN = /@([^\s@\n]+)/g;
 
 /**
  * Clean Gateway metadata from user message text for display.
- * Strips: [media attached: ... | ...], [message_id: ...],
+ * Strips: System event lines, [media attached: ... | ...], [message_id: ...],
  * and the timestamp prefix [Day Date Time Timezone].
  */
 function cleanUserText(text: string): string {
-  return text
+  const cleaned = text
+    // Remove OpenClaw system event lines (Exec completed/failed, cron, etc.)
+    .replace(GATEWAY_SYSTEM_EVENT_LINE, '')
     // Remove [media attached: path (mime) | path] references
     .replace(/\s*\[media attached:[^\]]*\]/g, '')
     // Remove [message_id: uuid]
@@ -23,7 +35,135 @@ function cleanUserText(text: string): string {
     .replace(/^Conversation info\s*\([^)]*\):\s*\{[\s\S]*?\}\s*/i, '')
     // Remove Gateway timestamp prefix like [Fri 2026-02-13 22:39 GMT+8]
     .replace(/^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+[^\]]+\]\s*/i, '')
+    // OpenClaw cron jobs append "Current time: ..." (+ optional "Reference UTC: ...") to the prompt
+    .replace(/\n*Current time:\s*[^\n]+/gi, '')
+    .replace(/\n*Reference UTC:\s*[^\n]+/gi, '')
     .trim();
+  return stripDingTalkMentionContextForDisplay(cleaned);
+}
+
+/** Strip dws send metadata that agents should not surface to end users. */
+const DWS_SEND_METADATA_PATTERN =
+  /[,，]?\s*(?:\*\*)?(?:任务\s*ID|openTaskId|processQueryKey)(?:\*\*)?\s*[：:]\s*[A-Za-z0-9+/=_-]+(?:\*\*)?/gi;
+
+const DWS_CLI_RECIPIENT_FLAG_NAMES =
+  'user(?:-id)?|group(?:-id)?|space-id|open-conversation-id|conversation-id|cid';
+
+/** Mask JSON-escaped quoted IDs, e.g. `--group \\"cidxxx\\"`. */
+const DWS_CLI_RECIPIENT_JSON_ESCAPED_QUOTED_FLAG_PATTERN = new RegExp(
+  `(--(?:${DWS_CLI_RECIPIENT_FLAG_NAMES})\\s+)(?:\\\\"|\\\\')(?:\\\\.|[^"\\\\])*?(?:\\\\"|\\\\')`,
+  'gi',
+);
+
+/** Mask quoted recipient IDs in dws CLI flags, e.g. `--group "cidxxx"`. */
+const DWS_CLI_RECIPIENT_QUOTED_FLAG_PATTERN = new RegExp(
+  `(--(?:${DWS_CLI_RECIPIENT_FLAG_NAMES})\\s+)(?:"(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*')`,
+  'gi',
+);
+
+/** Mask unquoted recipient IDs in dws CLI flags. */
+const DWS_CLI_RECIPIENT_FLAG_PATTERN = new RegExp(
+  `(--(?:${DWS_CLI_RECIPIENT_FLAG_NAMES})\\s+)([^\\s"'\\\`,)]+)`,
+  'gi',
+);
+
+/** Clean partial masks like `--group ***"cid..."` left after incomplete masking. */
+const DWS_CLI_RECIPIENT_LEAKED_ID_PATTERN = new RegExp(
+  `(--(?:${DWS_CLI_RECIPIENT_FLAG_NAMES})\\s+\\*+)\\s*(?:\\\\?["'])[A-Za-z0-9+/=_=-]{6,}(?:\\\\?["'])`,
+  'gi',
+);
+
+/** Mask structured recipient IDs echoed in thinking / tool output JSON. */
+const DWS_JSON_RECIPIENT_FIELD_PATTERN =
+  /("(?:userId|openConversationId|corpId|staffId|unionId)"\s*:\s*)"([^"]*)"/gi;
+
+/** Mask prose recipient IDs, e.g. `@文鹏 (userid: 0161271920846248)`. */
+const DWS_PROSE_RECIPIENT_ID_IN_PARENS_PATTERN =
+  /(\(\s*(?:user[_\s-]?id|open[_\s-]?conversation[_\s-]?id|conversation[_\s-]?id|corp[_\s-]?id|staff[_\s-]?id|union[_\s-]?id)\s*[:：]\s*)([^)\s"'`，,;]+)(\s*\))/gi;
+
+/** Mask inline labeled IDs outside CLI flags, e.g. `userid:` / `群ID：cid...`. */
+const DWS_PROSE_RECIPIENT_ID_INLINE_PATTERN =
+  /((?<![\w-])(?:user[_\s-]?id|open[_\s-]?conversation[_\s-]?id|conversation[_\s-]?id|corp[_\s-]?id|staff[_\s-]?id|union[_\s-]?id|群\s*[iI][dD]|群\s*聊\s*[iI][dD]|会话\s*[iI][dD])\s*[:：]\s*)([A-Za-z0-9+/=_-]{6,})/gi;
+
+/** Hide DingTalk user/group/corp IDs in display-only text (thinking, assistant reply, tool args). */
+/** Raw message text without display cleaning (preserves DingTalk recipient JSON). */
+export function extractRawMessageText(message: RawMessage | unknown): string {
+  if (!message || typeof message !== 'object') return '';
+  const msg = message as Record<string, unknown>;
+  const content = msg.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return (content as ContentBlock[])
+      .filter((block) => block.type === 'text' && block.text)
+      .map((block) => block.text!)
+      .join('\n');
+  }
+  if (typeof msg.text === 'string') return msg.text;
+  return '';
+}
+
+/** Extract @ display names from user-visible message text. */
+export function extractAtMentionDisplayNames(text: string): string[] {
+  if (!text) return [];
+  const names: string[] = [];
+  for (const match of text.matchAll(AT_MENTION_DISPLAY_NAME_PATTERN)) {
+    const name = match[1]?.trim();
+    if (name) names.push(name);
+  }
+  return names;
+}
+
+export function maskDwsSensitiveIdsForDisplay(text: string): string {
+  if (!text) return text;
+
+  return text
+    .replace(DWS_CLI_RECIPIENT_JSON_ESCAPED_QUOTED_FLAG_PATTERN, '$1***')
+    .replace(DWS_CLI_RECIPIENT_QUOTED_FLAG_PATTERN, '$1***')
+    .replace(DWS_CLI_RECIPIENT_FLAG_PATTERN, (match, flag: string, value: string) => {
+      if (value.startsWith('***')) return match;
+      return `${flag}***`;
+    })
+    .replace(DWS_CLI_RECIPIENT_LEAKED_ID_PATTERN, '$1')
+    .replace(DWS_JSON_RECIPIENT_FIELD_PATTERN, '$1"***"')
+    .replace(DWS_PROSE_RECIPIENT_ID_IN_PARENS_PATTERN, '$1***$3')
+    .replace(DWS_PROSE_RECIPIENT_ID_INLINE_PATTERN, '$1***');
+}
+
+export function maskSensitiveToolInputForDisplay(input: unknown): string {
+  if (input == null) return '';
+  if (typeof input === 'string') return maskDwsSensitiveIdsForDisplay(input);
+  try {
+    return maskDwsSensitiveIdsForDisplay(JSON.stringify(input, null, 2));
+  } catch {
+    return maskDwsSensitiveIdsForDisplay(String(input));
+  }
+}
+
+export function stripDwsSendMetadataForDisplay(text: string): string {
+  let cleaned = text
+    .replace(DWS_SEND_METADATA_PATTERN, '')
+    .replace(/^\s*(?:\*\*)?(?:任务\s*ID|openTaskId|processQueryKey)(?:\*\*)?\s*[：:]\s*[A-Za-z0-9+/=_-]+(?:\*\*)?\s*$/gim, '')
+    .replace(/\*{4,}/g, '**');
+
+  cleaned = cleaned
+    .replace(/，\s*([。！？\n]|$)/g, '$1')
+    .replace(/,\s*([.!?\n]|$)/g, '$1');
+
+  return cleaned.trim();
+}
+
+function cleanDisplayText(text: string): string {
+  return maskDwsSensitiveIdsForDisplay(
+    stripDingTalkAgentSendDisclaimerForDisplay(stripDwsSendMetadataForDisplay(text)),
+  );
+}
+
+function cleanAssistantText(text: string): string {
+  return cleanDisplayText(text);
+}
+
+function cleanThinkingText(text: string): string {
+  return cleanDisplayText(text);
 }
 
 /**
@@ -57,9 +197,15 @@ export function extractText(message: RawMessage | unknown): string {
     result = msg.text.trim().length > 0 ? msg.text : '';
   }
 
+  const role = typeof msg.role === 'string' ? msg.role.toLowerCase() : '';
+
   // Strip Gateway metadata from user messages for clean display
   if (isUser && result) {
     result = cleanUserText(result);
+  }
+
+  if (role === 'assistant' && result) {
+    result = cleanAssistantText(result);
   }
 
   return result;
@@ -79,7 +225,7 @@ export function extractThinking(message: RawMessage | unknown): string | null {
   const parts: string[] = [];
   for (const block of content as ContentBlock[]) {
     if (block.type === 'thinking' && block.thinking) {
-      const cleaned = block.thinking.trim();
+      const cleaned = cleanThinkingText(block.thinking.trim());
       if (cleaned) {
         parts.push(cleaned);
       }
@@ -108,7 +254,7 @@ export function extractThinkingTimeline(message: RawMessage | unknown): Thinking
   if (Array.isArray(content)) {
     for (const block of content as ContentBlock[]) {
       if (block.type === 'thinking' && block.thinking) {
-        const cleaned = block.thinking.trim();
+        const cleaned = cleanThinkingText(block.thinking.trim());
         if (cleaned) {
           items.push({ type: 'thinking', content: cleaned });
         }

@@ -24,6 +24,7 @@ import { syncGatewayTokenToConfig, syncBrowserConfigToOpenClaw, syncSessionIdleM
 import { buildProxyEnv, resolveProxySettings } from '../utils/proxy';
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { logger } from '../utils/logger';
+import { getDwsBinDir } from '../utils/dws-cli';
 import { prependPathEntry } from '../utils/env-path';
 import { copyPluginFromNodeModules, fixupPluginManifest } from '../utils/plugin-install';
 
@@ -298,9 +299,10 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
 
   const { NODE_OPTIONS: _nodeOptions, ...baseEnv } = process.env;
   const baseEnvRecord = baseEnv as Record<string, string | undefined>;
-  const baseEnvPatched = binPathExists
+  let baseEnvPatched = binPathExists
     ? prependPathEntry(baseEnvRecord, binPath).env
     : baseEnvRecord;
+  baseEnvPatched = prependPathEntry(baseEnvPatched, getDwsBinDir()).env;
   const forkEnv: Record<string, string | undefined> = {
     ...baseEnvPatched,
     ...providerEnv,

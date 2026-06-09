@@ -3,7 +3,13 @@ import { extractText, extractThinkingTimeline, type ThinkingTimelineItem } from 
 
 export type ChatDisplayItem =
   | { type: 'single'; message: RawMessage; key: string }
-  | { type: 'assistant-turn'; messages: RawMessage[]; key: string };
+  | {
+      type: 'assistant-turn';
+      messages: RawMessage[];
+      toolResults: RawMessage[];
+      precedingUserMessage?: RawMessage;
+      key: string;
+    };
 
 function normalizeRole(role: unknown): string {
   return typeof role === 'string' ? role.toLowerCase() : '';
@@ -45,8 +51,16 @@ export function mergeThinkingTimelines(messages: RawMessage[]): ThinkingTimeline
   return merged;
 }
 
+export function findLastUserMessage(messages: RawMessage[]): RawMessage | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (normalizeRole(messages[i].role) === 'user') return messages[i];
+  }
+  return null;
+}
+
 export function buildChatDisplayItems(messages: RawMessage[]): ChatDisplayItem[] {
   const items: ChatDisplayItem[] = [];
+  let lastUserMessage: RawMessage | null = null;
   let i = 0;
 
   while (i < messages.length) {
@@ -59,6 +73,7 @@ export function buildChatDisplayItems(messages: RawMessage[]): ChatDisplayItem[]
     }
 
     if (role === 'user') {
+      lastUserMessage = msg;
       items.push({ type: 'single', message: msg, key: msg.id || `user-${i}` });
       i += 1;
       continue;
@@ -67,11 +82,13 @@ export function buildChatDisplayItems(messages: RawMessage[]): ChatDisplayItem[]
     if (isAssistantRole(msg.role)) {
       const start = i;
       const turnMessages: RawMessage[] = [];
+      const turnToolResults: RawMessage[] = [];
       while (i < messages.length) {
         const current = messages[i];
         const currentRole = normalizeRole(current.role);
         if (currentRole === 'user') break;
         if (currentRole === 'toolresult' || currentRole === 'tool_result') {
+          turnToolResults.push(current);
           i += 1;
           continue;
         }
@@ -89,6 +106,8 @@ export function buildChatDisplayItems(messages: RawMessage[]): ChatDisplayItem[]
         items.push({
           type: 'assistant-turn',
           messages: turnMessages,
+          toolResults: turnToolResults,
+          precedingUserMessage: lastUserMessage ?? undefined,
           key: `turn-${start}-${turnMessages[turnMessages.length - 1]?.id ?? i}`,
         });
       } else {

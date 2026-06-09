@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Clock, MoreHorizontal, Play, Pencil, Trash2, Loader2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 
+import { stripInstructionFromTaskMessage } from '@/lib/scheduled-task-recipients';
 import type { CronJob } from '@/types/cron';
 import { parseScheduleLabel } from './utils';
 
@@ -31,6 +32,7 @@ export function CronTaskCard({ job, onToggle, onEdit, onDelete, onTrigger }: Cro
   }, [menuOpen]);
 
   const scheduleLabel = parseScheduleLabel(job.schedule);
+  const displayMessage = stripInstructionFromTaskMessage(job.message || '');
 
   const handleTrigger = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -70,7 +72,7 @@ export function CronTaskCard({ job, onToggle, onEdit, onDelete, onTrigger }: Cro
 
       {/* Description */}
       <p className="text-[13px] text-muted-foreground leading-relaxed mb-4 line-clamp-2">
-        {job.message || '暂无描述'}
+        {displayMessage || '暂无描述'}
       </p>
 
       {/* Footer */}
