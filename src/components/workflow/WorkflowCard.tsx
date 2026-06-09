@@ -1,20 +1,159 @@
-import { useMemo } from 'react';
-import { CheckCircle2, Circle, Loader2, XCircle, FileText, Clock } from 'lucide-react';
-import { WorkflowExecutionSteps } from './WorkflowExecutionSteps';
+import { useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, Circle, Loader2, Workflow, XCircle, Clock, FileText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import {
+  breakdownWorkflowDurationMs,
+  getWorkflowDurationMs,
+} from '@/lib/format-workflow-duration';
 import { useChatStore } from '@/stores/chat';
+import { getExecutionByRunId } from '@/stores/workflow-memory';
+import { hydrateWorkflowRun } from '@/lib/workflow-run-hydration';
+import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
+import type { WorkflowExecutionState, WorkflowRunStatus } from '@/types/workflow';
 
 interface WorkflowCardProps {
   runId: string;
   templateName: string;
 }
 
+interface StatusTheme {
+  labelKey: string;
+  icon: typeof Loader2;
+  badgeClass: string;
+  dotClass: string;
+  cardClass: string;
+  progressClass: string;
+  spin?: boolean;
+}
+
+const STATUS_THEMES: Record<WorkflowRunStatus | 'pending', StatusTheme> = {
+  running: {
+    labelKey: 'workflow.statusRunning',
+    icon: Loader2,
+    badgeClass: 'text-[#D95700] bg-[#FFF5E6]',
+    dotClass: 'bg-[#FF6F00]',
+    cardClass: 'border-[#FFD7A3]/60 bg-[#FFFBF5]',
+    progressClass: 'bg-[#FF6F00]',
+    spin: true,
+  },
+  completed: {
+    labelKey: 'workflow.statusCompleted',
+    icon: CheckCircle2,
+    badgeClass: 'text-[#008F40] bg-[#DCF5E2]',
+    dotClass: 'bg-[#00B54B]',
+    cardClass: 'border-[#ACE8BC]/50 bg-[#FAFFFC]',
+    progressClass: 'bg-[#00B54B]',
+  },
+  failed: {
+    labelKey: 'workflow.statusFailed',
+    icon: XCircle,
+    badgeClass: 'text-[#D4282E] bg-[#FFF2F0]',
+    dotClass: 'bg-[#FA3C3C]',
+    cardClass: 'border-[#FFBFB8]/50 bg-[#FFFAFA]',
+    progressClass: 'bg-[#FA3C3C]',
+  },
+  timeout: {
+    labelKey: 'workflow.statusTimeout',
+    icon: Clock,
+    badgeClass: 'text-[#AD6B00] bg-[#FFFBE6]',
+    dotClass: 'bg-[#FAAD14]',
+    cardClass: 'border-[#FFE58F]/60 bg-[#FFFDF5]',
+    progressClass: 'bg-[#FAAD14]',
+  },
+  unknown: {
+    labelKey: 'workflow.statusUnknown',
+    icon: Circle,
+    badgeClass: 'text-[#4E5969] bg-[#F0F2F5]',
+    dotClass: 'bg-[#86909C]',
+    cardClass: 'border-[#E5E6EB] bg-white',
+    progressClass: 'bg-[#86909C]',
+  },
+  pending: {
+    labelKey: 'workflow.statusPending',
+    icon: Circle,
+    badgeClass: 'text-[#4E5969] bg-[#F0F2F5]',
+    dotClass: 'bg-[#86909C]',
+    cardClass: 'border-[#E5E6EB] bg-white',
+    progressClass: 'bg-[#86909C]',
+  },
+};
+
+function useDurationLabel(
+  startedAt: string | undefined,
+  completedAt: string | undefined,
+  isRunning: boolean,
+): string | null {
+  const { t } = useTranslation('chat');
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!isRunning || !startedAt) return undefined;
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, [isRunning, startedAt]);
+
+  return useMemo(() => {
+    const durationMs = getWorkflowDurationMs(startedAt, completedAt, now);
+    if (durationMs === null) return null;
+
+    const parts = breakdownWorkflowDurationMs(durationMs);
+    let durationText: string;
+    switch (parts.kind) {
+      case 'seconds':
+        durationText = t('workflow.durationSeconds', { count: parts.seconds });
+        break;
+      case 'minutes':
+        durationText = t('workflow.durationMinutes', { count: parts.minutes });
+        break;
+      case 'halfHour':
+        durationText = t('workflow.durationHalfHour');
+        break;
+      case 'hours':
+        durationText = t('workflow.durationHours', { count: parts.hours });
+        break;
+      case 'hoursHalf':
+        durationText = t('workflow.durationHoursHalf', { count: parts.hours });
+        break;
+      case 'hoursMinutes':
+        durationText = t('workflow.durationHoursMinutes', {
+          hours: parts.hours,
+          minutes: parts.remainMinutes,
+        });
+        break;
+    }
+
+    if (isRunning) {
+      return t('workflow.runningFor', { duration: durationText });
+    }
+    if (completedAt) {
+      return t('workflow.elapsed', { duration: durationText });
+    }
+    return null;
+  }, [startedAt, completedAt, isRunning, now, t]);
+}
+
 export function WorkflowCard({ runId, templateName }: WorkflowCardProps) {
   const { t } = useTranslation('chat');
+  const sessionKey = useChatStore((s) => s.currentSessionKey);
+  const agentId = useChatStore((s) => s.currentAgentId);
   const state = useChatStore((s) => s.workflowCardStates[runId]);
 
-  const display = useMemo<import('../../types/workflow').WorkflowExecutionState>(() => {
+  const resolvedName = useMemo(() => {
+    const exec = getExecutionByRunId(runId, sessionKey);
+    const fromMemory = exec?.templateName?.trim();
+    if (fromMemory && !fromMemory.startsWith('tpl_')) return fromMemory;
+    if (templateName && !templateName.startsWith('tpl_')) return templateName;
+    return fromMemory || templateName;
+  }, [runId, sessionKey, templateName]);
+
+  useEffect(() => {
+    const needsHydrate = !state || !isTerminalWorkflowRunStatus(state.status) || !state.result?.summary;
+    if (!needsHydrate) return;
+    void hydrateWorkflowRun(runId, { sessionKey, agentId });
+  }, [runId, sessionKey, agentId, state?.status, state?.result?.summary]);
+
+  const display = useMemo<WorkflowExecutionState>(() => {
     if (!state) {
       return {
         runId,
@@ -27,76 +166,92 @@ export function WorkflowCard({ runId, templateName }: WorkflowCardProps) {
     return state;
   }, [state, runId]);
 
-  const statusConfig = useMemo(() => {
-    switch (display.status) {
-      case 'completed':
-        return { label: t('workflow.statusCompleted'), color: 'text-green-600', icon: CheckCircle2, bg: 'bg-green-50 dark:bg-green-950/20' };
-      case 'failed':
-        return { label: t('workflow.statusFailed'), color: 'text-red-600', icon: XCircle, bg: 'bg-red-50 dark:bg-red-950/20' };
-      case 'running':
-        return { label: t('workflow.statusRunning'), color: 'text-amber-600', icon: Loader2, bg: 'bg-amber-50 dark:bg-amber-950/20' };
-      case 'timeout':
-        return { label: t('workflow.statusTimeout'), color: 'text-orange-600', icon: Clock, bg: 'bg-orange-50 dark:bg-orange-950/20' };
-      case 'unknown':
-        return { label: t('workflow.statusUnknown'), color: 'text-slate-500', icon: Circle, bg: 'bg-slate-50 dark:bg-slate-950/20' };
-      default:
-        return { label: t('workflow.statusPending'), color: 'text-slate-500', icon: Circle, bg: 'bg-slate-50 dark:bg-slate-950/20' };
-    }
-  }, [display.status, t]);
-
-  const StatusIcon = statusConfig.icon;
+  const statusKey = display.status in STATUS_THEMES ? display.status : 'pending';
+  const theme = STATUS_THEMES[statusKey];
+  const StatusIcon = theme.icon;
+  const isRunning = display.status === 'running';
+  const durationLabel = useDurationLabel(display.startedAt, display.completedAt, isRunning);
+  const showProgress = isRunning && display.progress > 0;
 
   return (
-    <div className={cn('mt-2 rounded-xl border p-3 text-sm', statusConfig.bg, 'border-border/60')}>
-      {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <StatusIcon className={cn('h-4 w-4 shrink-0', statusConfig.color, display.status === 'running' && 'animate-spin')} />
-          <span className="font-medium text-foreground truncate">{templateName}</span>
-        </div>
-        <span className={cn('text-xs font-medium shrink-0', statusConfig.color)}>{statusConfig.label}</span>
-      </div>
-
-      {/* Progress bar */}
-      {display.status === 'running' && (
-        <div className="mt-2">
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/5 dark:bg-white/10">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-500"
-              style={{ width: `${display.progress}%` }}
-            />
+    <div
+      className={cn(
+        'mt-3 w-full max-w-md overflow-hidden rounded-2xl border shadow-[0_2px_8px_rgba(29,33,41,0.04)]',
+        theme.cardClass,
+      )}
+    >
+      <div className="px-4 py-3.5">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/80 shadow-sm ring-1 ring-black/[0.04]">
+            <Workflow className="h-4 w-4 text-[#FF6F00]" strokeWidth={2.2} />
           </div>
-          {display.currentStep && (
-            <p className="mt-1 text-xs text-muted-foreground">{display.currentStep}</p>
-          )}
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <h4 className="truncate text-[15px] font-semibold leading-6 text-[#1D2129]">
+                {resolvedName}
+              </h4>
+              <span
+                className={cn(
+                  'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium',
+                  theme.badgeClass,
+                )}
+              >
+                <StatusIcon
+                  className={cn('h-3.5 w-3.5', theme.spin && 'animate-spin')}
+                  strokeWidth={2.2}
+                />
+                {t(theme.labelKey)}
+              </span>
+            </div>
+
+            {durationLabel && (
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-[#86909C]">
+                <span className={cn('inline-block h-1.5 w-1.5 rounded-full', theme.dotClass)} />
+                {durationLabel}
+              </p>
+            )}
+
+            {display.result?.summary && (
+              <p className="mt-2 line-clamp-3 text-xs leading-5 text-[#4E5969]">
+                {display.result.summary}
+              </p>
+            )}
+          </div>
         </div>
-      )}
 
-      {/* Steps timeline */}
-      <WorkflowExecutionSteps steps={display.steps} />
+        {showProgress && (
+          <div className="mt-3 pl-12">
+            <div className="h-1 overflow-hidden rounded-full bg-[#F0F2F5]">
+              <div
+                className={cn('h-full rounded-full transition-all duration-500', theme.progressClass)}
+                style={{ width: `${Math.max(display.progress, 8)}%` }}
+              />
+            </div>
+          </div>
+        )}
 
-      {/* Error */}
-      {display.error && (
-        <p className="mt-2 text-xs text-red-600">{display.error}</p>
-      )}
+        {display.error && (
+          <p className="mt-2.5 pl-12 text-xs leading-5 text-[#FA3C3C]">{display.error}</p>
+        )}
 
-      {/* Result artifacts */}
-      {display.result?.artifacts && display.result.artifacts.length > 0 && (
-        <div className="mt-2 space-y-1">
-          {display.result.artifacts.map((artifact) => (
-            <a
-              key={artifact.id}
-              href={artifact.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs text-primary hover:underline"
-            >
-              <FileText className="h-3 w-3" />
-              {artifact.name}
-            </a>
-          ))}
-        </div>
-      )}
+        {display.result?.artifacts && display.result.artifacts.length > 0 && (
+          <div className="mt-2.5 space-y-1 pl-12">
+            {display.result.artifacts.map((artifact) => (
+              <a
+                key={artifact.id}
+                href={artifact.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-[#4760FE] hover:underline"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                {artifact.name}
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

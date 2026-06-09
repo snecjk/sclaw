@@ -361,9 +361,14 @@ export function buildWorkflowValuesSummary(
   const confirmStepIds = new Set(
     schema.steps.filter((s) => s.mode === 'confirm').map((s) => s.id),
   );
-  const fields = schema.fields
+  let fields = schema.fields
     .filter((f) => confirmStepIds.has(f.group))
     .sort((a, b) => a.order - b.order);
+
+  // Some templates put fields under nodeId groups — fall back to all fields with values.
+  if (fields.length === 0) {
+    fields = [...schema.fields].sort((a, b) => a.order - b.order);
+  }
 
   const lines: string[] = [];
   for (const field of fields) {
@@ -386,6 +391,36 @@ export function buildWorkflowValuesSummary(
 
   if (lines.length === 0) return '参数已确认';
   return `已确认以下参数：\n${lines.map((l) => (l.startsWith('  ·') ? l : `- ${l}`)).join('\n')}`;
+}
+
+/** Fetch schema and build Chinese parameter summary for display / restore. */
+export async function buildWorkflowParamsSummary(
+  templateId: string,
+  values: Record<string, unknown>,
+): Promise<string> {
+  if (!templateId) return buildWorkflowValuesSummaryFallback(values);
+  try {
+    const { getStartupSchema } = await import('@/lib/workflow-api');
+    const startup = await getStartupSchema(templateId);
+    return buildWorkflowValuesSummary(startup.schema, values);
+  } catch {
+    return buildWorkflowValuesSummaryFallback(values);
+  }
+}
+
+/** Last-resort summary when schema is unavailable — prefer field keys only as labels. */
+export function buildWorkflowValuesSummaryFallback(
+  values: Record<string, unknown>,
+): string {
+  const lines = Object.entries(values)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => {
+      if (Array.isArray(value)) return `- ${key}：${value.join('、')}`;
+      if (typeof value === 'object') return `- ${key}：${JSON.stringify(value)}`;
+      return `- ${key}：${String(value)}`;
+    });
+  if (lines.length === 0) return '参数已确认';
+  return `已确认以下参数：\n${lines.join('\n')}`;
 }
 
 /**

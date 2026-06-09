@@ -21,8 +21,8 @@ import {
 import { invokeIpc } from '@/lib/api-client';
 import { canStartWorkflow, useWorkflowsStore } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
-import { appendWorkflowStartedLocalTurn } from '@/lib/workflow-local-turn';
-import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
+import { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } from '@/lib/workflow-local-turn';
+import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata, getSessionWorkflows } from '@/stores/workflow-memory';
 import type { WorkflowSchema, WorkflowSchemaField } from '@/types/workflow';
 
 export interface WorkflowSendContext {
@@ -186,11 +186,10 @@ export async function createAndStartWorkflowDirect(
       idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
     });
 
-    const { buildWorkflowValuesSummary } = await import('@/lib/workflow-form-utils');
     const { schema } = cached;
-    const summaryText = buildWorkflowValuesSummary(schema, inputs);
+    const userText = buildWorkflowStartUserText(schema, inputs);
     appendWorkflowStartedLocalTurn({
-      userText: `${summaryText}\n\n工作流 ID: ${created.workflowId}`,
+      userText,
       templateName,
       runId: run.runId,
     });
@@ -218,6 +217,7 @@ export async function createAndStartWorkflowDirect(
       createdAt: Date.now(),
       updatedAt: Date.now(),
       collectedInputs: inputs,
+      paramsSummary: userText,
     });
 
     useChatStore.getState().setWorkflowCardState(run.runId, {
@@ -273,8 +273,13 @@ export async function startExistingWorkflow(
     });
 
     const displayName = _templateName ?? '工作流';
+    const wfRecord = getSessionWorkflows(context.sessionKey).find((w) => w.workflowId === workflowId);
+    const { buildWorkflowParamsSummary } = await import('@/lib/workflow-form-utils');
+    const userText = wfRecord?.templateId
+      ? await buildWorkflowParamsSummary(wfRecord.templateId, inputs)
+      : originalText;
     appendWorkflowStartedLocalTurn({
-      userText: originalText,
+      userText,
       templateName: displayName,
       runId: run.runId,
       assistantText: `正在启动工作流「${displayName}」…`,
@@ -297,12 +302,13 @@ export async function startExistingWorkflow(
       sessionKey: context.sessionKey,
       workflowId,
       runId: run.runId,
-      templateId: '',
+      templateId: wfRecord?.templateId ?? '',
       templateName: _templateName ?? workflowId,
       status: 'running',
       createdAt: Date.now(),
       updatedAt: Date.now(),
       collectedInputs: inputs,
+      paramsSummary: userText,
     });
 
     const chatStore = useChatStore.getState();

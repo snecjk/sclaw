@@ -26,10 +26,12 @@ import {
   type ToolStatus,
 } from './chat/types';
 import type { WorkflowExecutionState } from '@/types/workflow';
-import { buildWorkflowFormConfig, buildStartupPreset, buildWorkflowValuesSummary } from '@/lib/workflow-form-utils';
+import { buildWorkflowFormConfig, buildStartupPreset } from '@/lib/workflow-form-utils';
 import { registerParameterFormHandler } from '@/components/parameter-form/form-handlers';
 import { mergeLocalWorkflowTurnsFromCurrent, mergeWorkflowTurnsFromMemory } from '@/lib/workflow-local-turn';
 import { buildWorkflowCardStatesForSession } from '@/stores/workflow-memory';
+import { hydrateSessionWorkflowCards } from '@/lib/workflow-run-hydration';
+import { upgradeWorkflowParamUserMessages } from '@/lib/workflow-param-messages';
 import {
   mergeParameterFormBlocksFromCurrent,
   recoverParameterFormsOnHistoryLoad,
@@ -946,10 +948,6 @@ function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
       return;
     }
 
-    const summaryText = pending.schema
-      ? buildWorkflowValuesSummary(pending.schema, values)
-      : '参数已确认';
-
     try {
       const { createWorkflow, startWorkflow, beginWorkflowRunSseTrace } = await import('@/lib/workflow-api');
       const { saveWorkflowRecord, updateWorkflowRunMetadata, saveWorkflowExecution } = await import('@/stores/workflow-memory');
@@ -975,9 +973,10 @@ function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
         idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
       });
 
-      const { appendWorkflowStartedLocalTurn } = await import('@/lib/workflow-local-turn');
+      const { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } = await import('@/lib/workflow-local-turn');
+      const userText = buildWorkflowStartUserText(pending.schema, values);
       appendWorkflowStartedLocalTurn({
-        userText: `${summaryText}\n\n工作流 ID: ${created.workflowId}`,
+        userText,
         templateName: pending.templateName,
         runId: run.runId,
       });
@@ -1006,6 +1005,7 @@ function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
         createdAt: Date.now(),
         updatedAt: Date.now(),
         collectedInputs: values,
+        paramsSummary: userText,
       });
 
       // Initialize workflowCardStates for immediate UI display
@@ -1693,6 +1693,16 @@ export const useChatStore = create<ChatState>()(
           loading: false,
           workflowCardStates: restoredCardStates,
         });
+        void (async () => {
+          const localized = await upgradeWorkflowParamUserMessages(formRecovery.messages, targetSessionKey);
+          if (get().currentSessionKey !== targetSessionKey) return;
+          const msgs = localized !== formRecovery.messages ? localized : formRecovery.messages;
+          if (localized !== formRecovery.messages) set({ messages: msgs });
+          await hydrateSessionWorkflowCards(msgs, {
+            sessionKey: targetSessionKey,
+            agentId: get().currentAgentId,
+          });
+        })();
         return;
       }
       finalMessages = formRecovery.messages;
@@ -1703,6 +1713,19 @@ export const useChatStore = create<ChatState>()(
         loading: false,
         workflowCardStates: restoredCardStates,
       });
+
+      void (async () => {
+        const localized = await upgradeWorkflowParamUserMessages(finalMessages, targetSessionKey);
+        if (get().currentSessionKey !== targetSessionKey) return;
+        if (localized !== finalMessages) {
+          set({ messages: localized });
+          finalMessages = localized;
+        }
+        await hydrateSessionWorkflowCards(finalMessages, {
+          sessionKey: targetSessionKey,
+          agentId: get().currentAgentId,
+        });
+      })();
 
       // Restore in-memory pending workflow from local draft (survives page refresh).
       if (!get().pendingWorkflow) {

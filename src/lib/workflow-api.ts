@@ -18,6 +18,11 @@ import type {
   WorkflowRunResponse,
   WorkflowExecutionState,
 } from '@/types/workflow';
+import {
+  extractRunResult,
+  normalizeWorkflowRunStatus,
+  normalizeWorkflowStepStatus,
+} from '@/lib/workflow-run-status';
 
 /** Extract stoToken from auth store (sync read) */
 function getStoToken(): string | undefined {
@@ -171,44 +176,45 @@ export async function getWorkflowRun(runId: string): Promise<WorkflowRunResponse
       headers: authHeaders(),
     }),
   );
+  console.log(
+    '[workflow-trace] GET /agent/v1/runs/%s apiStatus=%s uiStatus=%s completedAt=%s hasResult=%s artifactCount=%d',
+    runId,
+    data.status,
+    normalizeWorkflowRunStatus(data.status),
+    data.completedAt ?? 'null',
+    Boolean(data.result?.summary || data.result?.title || data.output),
+    data.artifacts?.length ?? 0,
+  );
   return data;
 }
 
 // ── Helper: convert WorkflowRunResponse to UI execution state ───
 
 export function runToExecutionState(run: WorkflowRunResponse): WorkflowExecutionState {
+  const status = normalizeWorkflowRunStatus(run.status);
   const totalNodes = run.nodeRuns.length || 1;
-  const completedNodes = run.nodeRuns.filter((n) => n.status === 'completed').length;
-  const progress = run.status === 'completed' ? 100 : Math.min(99, Math.floor((completedNodes / totalNodes) * 100));
+  const completedNodes = run.nodeRuns.filter(
+    (n) => normalizeWorkflowStepStatus(n.status) === 'completed',
+  ).length;
+  const progress = status === 'completed' ? 100 : Math.min(99, Math.floor((completedNodes / totalNodes) * 100));
 
   return {
     runId: run.id,
     workflowId: run.workflowId,
-    status: run.status,
+    status,
     progress,
-    currentStep: run.nodeRuns.find((n) => n.status === 'running')?.nodeId,
+    currentStep: run.nodeRuns.find((n) => normalizeWorkflowStepStatus(n.status) === 'running')?.nodeId,
     startedAt: run.startedAt,
     completedAt: run.completedAt ?? undefined,
     steps: run.nodeRuns.map((n) => ({
       name: n.nodeId,
-      status: n.status as WorkflowExecutionState['steps'][number]['status'],
+      status: normalizeWorkflowStepStatus(n.status),
       duration: n.startedAt && n.completedAt
         ? new Date(n.completedAt).getTime() - new Date(n.startedAt).getTime()
         : undefined,
       error: n.error,
     })),
-    result: run.status === 'completed' && run.output
-      ? {
-          summary: typeof run.output === 'string' ? run.output : undefined,
-          artifacts: run.artifacts.map((a) => ({
-            id: a.id,
-            name: a.name,
-            type: a.type,
-            url: a.url,
-            size: a.size,
-          })),
-        }
-      : undefined,
+    result: extractRunResult(run),
     error: run.error ?? undefined,
   };
 }

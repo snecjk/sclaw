@@ -218,6 +218,13 @@ export interface WorkflowRunInput {
   startup: WorkflowRunStartupInfo;
 }
 
+export interface WorkflowRunClientResult {
+  title?: string | null;
+  summary?: string | null;
+  status?: string | null;
+  data?: unknown;
+}
+
 export interface WorkflowRunResponse {
   id: string;
   workflowId: string;
@@ -233,6 +240,8 @@ export interface WorkflowRunResponse {
   artifacts: WorkflowRunArtifact[];
   toolInvocations: unknown[];
   input: WorkflowRunInput;
+  /** Client result view (preferred over legacy `output`). */
+  result?: WorkflowRunClientResult | null;
   output: unknown | null;
   startup: WorkflowRunStartupInfo;
   lastAgentRawText?: string | null;

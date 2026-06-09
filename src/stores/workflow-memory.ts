@@ -48,6 +48,10 @@ export interface WorkflowExecutionRecord {
   createdAt: number;        // When execution was started
   updatedAt: number;        // Last status update
   collectedInputs: Record<string, unknown>;  // User-filled parameters
+  /** Human-readable parameter summary for chat UI restore. */
+  paramsSummary?: string;
+  /** Model completion summary already sent for this run. */
+  completionSummaryDelivered?: boolean;
 }
 
 const STORAGE_KEY = 'stoclaw:session-workflows';
@@ -351,6 +355,25 @@ export function saveWorkflowExecution(record: WorkflowExecutionRecord): void {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   });
+}
+
+export function patchWorkflowExecution(
+  sessionKey: string,
+  runId: string,
+  patch: Partial<Pick<WorkflowExecutionRecord, 'status' | 'paramsSummary' | 'completionSummaryDelivered' | 'updatedAt'>>,
+): void {
+  const store = loadExecutions();
+  const records = store[sessionKey];
+  if (!records) return;
+  const idx = records.findIndex((e) => e.runId === runId);
+  if (idx < 0) return;
+  records[idx] = { ...records[idx], ...patch, updatedAt: patch.updatedAt ?? Date.now() };
+  store[sessionKey] = records;
+  saveExecutionsStore(store);
+}
+
+export function markCompletionSummaryDelivered(sessionKey: string, runId: string): void {
+  patchWorkflowExecution(sessionKey, runId, { completionSummaryDelivered: true });
 }
 
 /**

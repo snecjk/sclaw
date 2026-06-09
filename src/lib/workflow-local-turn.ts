@@ -5,8 +5,9 @@
  * Do NOT forward these turns to Gateway chat.send — the model may incorrectly
  * try sai-cli or other tools to "run" the workflow again.
  */
+import { buildWorkflowValuesSummary, buildWorkflowValuesSummaryFallback } from '@/lib/workflow-form-utils';
 import { useChatStore } from '@/stores/chat';
-import { getSessionWorkflows, listSessionExecutions } from '@/stores/workflow-memory';
+import { getExecutionByRunId, getSessionWorkflows, listSessionExecutions } from '@/stores/workflow-memory';
 import type { ContentBlock, RawMessage } from '@/stores/chat/types';
 
 function toMs(ts?: number): number {
@@ -26,11 +27,30 @@ function messageHasWorkflowCardWithRunId(msg: RawMessage, runId: string): boolea
     );
 }
 
+function formatCollectedInputsFallback(inputs: Record<string, unknown>): string {
+  return buildWorkflowValuesSummaryFallback(inputs);
+}
+
+/** Resolve user-facing parameter text for a workflow run in a session. */
+export function resolveWorkflowParamsUserText(sessionKey: string, runId: string): string {
+  const exec = getExecutionByRunId(runId, sessionKey);
+  if (exec?.paramsSummary) return exec.paramsSummary;
+
+  const wf = getSessionWorkflows(sessionKey).find((w) => w.lastRunId === runId || w.workflowId === exec?.workflowId);
+  const inputs = exec?.collectedInputs ?? wf?.collectedInputs;
+  if (!inputs || Object.keys(inputs).length === 0) {
+    return wf?.templateName ? `启动工作流「${wf.templateName}」` : '参数已确认';
+  }
+
+  return formatCollectedInputsFallback(inputs);
+}
+
 interface RunTurnRestore {
   runId: string;
   workflowId: string;
   templateName: string;
   createdAt: number;
+  userText: string;
 }
 
 /** Re-append workflow execution turns from localStorage when Gateway history omits them. */
@@ -49,6 +69,7 @@ export function mergeWorkflowTurnsFromMemory(
       workflowId: exec.workflowId,
       templateName: exec.templateName,
       createdAt: exec.createdAt,
+      userText: resolveWorkflowParamsUserText(sessionKey, exec.runId),
     });
   }
 
@@ -61,6 +82,7 @@ export function mergeWorkflowTurnsFromMemory(
       workflowId: wf.workflowId,
       templateName: wf.templateName,
       createdAt: wf.completedAt ?? wf.createdAt,
+      userText: resolveWorkflowParamsUserText(sessionKey, wf.lastRunId),
     });
   }
 
@@ -74,7 +96,7 @@ export function mergeWorkflowTurnsFromMemory(
     extras.push(
       {
         role: 'user',
-        content: `工作流 ID: ${run.workflowId}`,
+        content: run.userText,
         timestamp: ts,
         id: crypto.randomUUID(),
       } as RawMessage,
@@ -159,4 +181,13 @@ export function appendWorkflowStartedLocalTurn(params: WorkflowStartedLocalTurnP
     lastUserMessageAt: Date.now(),
     sending: false,
   }));
+}
+
+/** Build parameter summary text when schema is available at submit time. */
+export function buildWorkflowStartUserText(
+  schema: import('@/types/workflow').WorkflowSchema | undefined,
+  values: Record<string, unknown>,
+): string {
+  if (schema) return buildWorkflowValuesSummary(schema, values);
+  return formatCollectedInputsFallback(values);
 }

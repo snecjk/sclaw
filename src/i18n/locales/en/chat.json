@@ -100,5 +100,21 @@
         "label": "System notice",
         "expand": "Expand",
         "collapse": "Collapse"
+    },
+    "workflow": {
+        "statusPending": "Pending",
+        "statusRunning": "Running",
+        "statusCompleted": "Completed",
+        "statusFailed": "Failed",
+        "statusTimeout": "Timed out",
+        "statusUnknown": "Unknown",
+        "runningFor": "Running for {{duration}}",
+        "elapsed": "Took {{duration}}",
+        "durationSeconds": "{{count}} sec",
+        "durationMinutes": "{{count}} min",
+        "durationHalfHour": "30 min",
+        "durationHours": "{{count}} hr",
+        "durationHoursHalf": "{{count}}.5 hr",
+        "durationHoursMinutes": "{{hours}} hr {{minutes}} min"
     }
 }

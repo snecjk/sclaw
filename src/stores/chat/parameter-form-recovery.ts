@@ -5,7 +5,7 @@
  */
 import { toast } from 'sonner';
 import { registerParameterFormHandler, hasParameterFormHandler } from '@/components/parameter-form/form-handlers';
-import { buildWorkflowFormConfig, buildStartupPreset, buildWorkflowValuesSummary } from '@/lib/workflow-form-utils';
+import { buildWorkflowFormConfig, buildStartupPreset } from '@/lib/workflow-form-utils';
 import { sessionHasWorkflowExecution } from '@/stores/workflow-memory';
 import type { WorkflowSchema } from '@/types/workflow';
 import type { ContentBlock, RawMessage } from './types';
@@ -77,7 +77,6 @@ function registerWorkflowSubmitHandler(
   const { templateId, templateName, schemaHash, schema, get } = params;
   registerParameterFormHandler(formId, async (values: Record<string, unknown>) => {
     const chatState = get();
-    const summaryText = buildWorkflowValuesSummary(schema, values);
     try {
       const { createWorkflow, startWorkflow, beginWorkflowRunSseTrace } = await import('@/lib/workflow-api');
       const { saveWorkflowExecution } = await import('@/stores/workflow-memory');
@@ -91,9 +90,10 @@ function registerWorkflowSubmitHandler(
         inputs: values,
         idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
       });
-      const { appendWorkflowStartedLocalTurn } = await import('@/lib/workflow-local-turn');
+      const { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } = await import('@/lib/workflow-local-turn');
+      const userText = buildWorkflowStartUserText(schema, values);
       appendWorkflowStartedLocalTurn({
-        userText: `${summaryText}\n\n工作流 ID: ${created.workflowId}`,
+        userText,
         templateName,
         runId: run.runId,
       });
@@ -114,6 +114,7 @@ function registerWorkflowSubmitHandler(
         createdAt: Date.now(),
         updatedAt: Date.now(),
         collectedInputs: values,
+        paramsSummary: userText,
       });
       chatState.setWorkflowCardState(run.runId, {
         runId: run.runId,

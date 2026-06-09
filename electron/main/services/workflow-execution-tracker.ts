@@ -10,6 +10,10 @@ import { logger } from '../../utils/logger';
 import { PORTS } from '../../utils/config';
 import { getStoToken } from '../../utils/auth-store';
 import type { WorkflowExecutionState } from '../../src/types/workflow';
+import {
+  normalizeWorkflowRunStatus,
+  normalizeWorkflowStepStatus,
+} from '../../src/lib/workflow-run-status';
 
 const POLL_INTERVAL_MS = 2_000;
 const MAX_POLL_DURATION_MS = 600_000; // 10 minutes
@@ -89,9 +93,9 @@ class WorkflowExecutionTracker {
     };
 
     this.sessions.set(runId, session);
-    this.beginPolling(session);
     logger.info(`[workflow-trace] workflow:startTracking runId=${runId} workflowId=${workflowId} sessionKey=${sessionKey}`);
     logger.info(`[Tracker] Started tracking run ${runId}`);
+    void this.bootstrapTracking(session);
   }
 
   stopTracking(runId: string) {
@@ -121,15 +125,25 @@ class WorkflowExecutionTracker {
     }
   }
 
-  private beginPolling(session: ExecutionSession) {
-    // Immediate first poll
-    this.poll(session);
+  private async bootstrapTracking(session: ExecutionSession) {
+    await this.poll(session);
+    if (session.stopRequested) return;
 
-    // Then interval
+    const status = session.state.status;
+    if (status === 'completed' || status === 'failed' || status === 'timeout') {
+      logger.info(`[Tracker] Run ${session.runId} already terminal (${status}), skip polling`);
+      return;
+    }
+
+    this.beginPollingInterval(session);
+  }
+
+  private beginPollingInterval(session: ExecutionSession) {
+    if (session.pollTimer) return;
+
     session.pollTimer = setInterval(() => {
       if (session.stopRequested) return;
 
-      // Timeout check
       if (Date.now() - session.createdAt > MAX_POLL_DURATION_MS) {
         this.handleStateChange(session, {
           ...session.state,
@@ -140,8 +154,12 @@ class WorkflowExecutionTracker {
         return;
       }
 
-      this.poll(session);
+      void this.poll(session);
     }, POLL_INTERVAL_MS);
+  }
+
+  private beginPolling(session: ExecutionSession) {
+    void this.bootstrapTracking(session);
   }
 
   private async poll(session: ExecutionSession) {
@@ -168,41 +186,59 @@ class WorkflowExecutionTracker {
         throw new Error(`HTTP ${res.status}`);
       }
 
-      const apiRes = (await res.json()) as { success: boolean; data?: { id: string; workflowId: string; status: string; nodeRuns: Array<{ id: string; nodeId: string; status: string; startedAt?: string; completedAt?: string; error?: string }>; artifacts: Array<{ id: string; name: string; type: string; url: string; size?: number }>; output?: unknown; error?: string | null; startedAt: string; completedAt?: string | null } };
+      const apiRes = (await res.json()) as { success: boolean; data?: {
+        id: string;
+        workflowId: string;
+        status: string;
+        nodeRuns: Array<{ id: string; nodeId: string; status: string; startedAt?: string; completedAt?: string; error?: string }>;
+        artifacts: Array<{ id: string; name: string; type: string; url: string; size?: number }>;
+        output?: unknown;
+        result?: { title?: string | null; summary?: string | null };
+        error?: string | null;
+        startedAt: string;
+        completedAt?: string | null;
+      } };
       if (!apiRes.success || !apiRes.data) {
         throw new Error('API error');
       }
       const run = apiRes.data;
+      const status = normalizeWorkflowRunStatus(run.status);
+      logger.info(
+        `[workflow-trace] GET ${pollPath} poll #${session.pollCount} runId=${session.runId} apiStatus=${run.status} uiStatus=${status} progress=${run.nodeRuns.filter((n) => normalizeWorkflowStepStatus(n.status) === 'completed').length}/${run.nodeRuns.length || 1} completedAt=${run.completedAt ?? 'null'} hasResult=${Boolean(run.result?.summary || run.result?.title)} artifactCount=${run.artifacts?.length ?? 0}`,
+      );
       const totalNodes = run.nodeRuns.length || 1;
-      const completedNodes = run.nodeRuns.filter((n) => n.status === 'completed').length;
-      const progress = run.status === 'completed' ? 100 : Math.min(99, Math.floor((completedNodes / totalNodes) * 100));
+      const completedNodes = run.nodeRuns.filter(
+        (n) => normalizeWorkflowStepStatus(n.status) === 'completed',
+      ).length;
+      const progress = status === 'completed' ? 100 : Math.min(99, Math.floor((completedNodes / totalNodes) * 100));
+      const artifacts = run.artifacts.map((a) => ({
+        id: a.id,
+        name: a.name,
+        type: a.type,
+        url: a.url,
+        size: a.size,
+      }));
+      const summary = run.result?.summary ?? run.result?.title
+        ?? (typeof run.output === 'string' ? run.output : undefined);
+
       data = {
         runId: run.id,
         workflowId: run.workflowId,
-        status: run.status as WorkflowExecutionState['status'],
+        status,
         progress,
-        currentStep: run.nodeRuns.find((n) => n.status === 'running')?.nodeId,
+        currentStep: run.nodeRuns.find((n) => normalizeWorkflowStepStatus(n.status) === 'running')?.nodeId,
         startedAt: run.startedAt,
         completedAt: run.completedAt ?? undefined,
         steps: run.nodeRuns.map((n) => ({
           name: n.nodeId,
-          status: n.status as WorkflowExecutionState['steps'][number]['status'],
+          status: normalizeWorkflowStepStatus(n.status),
           duration: n.startedAt && n.completedAt
             ? new Date(n.completedAt).getTime() - new Date(n.startedAt).getTime()
             : undefined,
           error: n.error,
         })),
-        result: run.status === 'completed' && run.output
-          ? {
-              summary: typeof run.output === 'string' ? run.output : undefined,
-              artifacts: run.artifacts.map((a) => ({
-                id: a.id,
-                name: a.name,
-                type: a.type,
-                url: a.url,
-                size: a.size,
-              })),
-            }
+        result: summary || artifacts.length > 0
+          ? { summary, artifacts: artifacts.length > 0 ? artifacts : undefined }
           : undefined,
         error: run.error ?? undefined,
       };

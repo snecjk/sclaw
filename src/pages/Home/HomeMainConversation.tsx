@@ -35,6 +35,8 @@ export function HomeMainConversation({ className }: { className?: string }) {
   const clearError = useChatStore((s) => s.clearError);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
+  useWorkflowCompletion(currentSessionKey);
+
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const { contentRef, scrollRef, scrollToBottom } = useStickToBottomInstant(currentSessionKey);
   const minLoading = useMinLoading(loading && messages.length > 0);
