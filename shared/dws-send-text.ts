@@ -81,9 +81,11 @@ export function shellQuoteDwsSendTextForBash(text: string): string {
   return `$'${escaped}'`;
 }
 
-/** Unescape literals, then ensure `---` + 唯一代发说明底栏。 */
+/** Parse shell/$' wrappers, unescape literals, then ensure `---` + 唯一代发说明底栏。 */
 export function normalizeDwsChatMessageSendText(text: string): string {
-  return ensureDingTalkAgentSendDisclaimerFormat(unescapeLiteralDwsSendText(text));
+  const parsed = parseDwsSendTextFlagSegment(text);
+  if (!parsed) return ensureDingTalkAgentSendDisclaimerFormat('');
+  return ensureDingTalkAgentSendDisclaimerFormat(parsed);
 }
 
 const DWS_CHAT_MSG_SEND = /dws\s+chat\s+message\s+send\b/i;
@@ -95,9 +97,8 @@ export function fixDwsChatMessageSendShellScript(script: string): string {
   return script.replace(
     /--text\s+([\s\S]*?)(?=\s+--(?:format|uuid|dry-run|media|msg-type|dentry-id|space-id|file-name|file-type|file-path|file-size|open-dingtalk-id)\b|$)/gi,
     (full, rawValue: string) => {
-      const parsed = parseDwsSendTextFlagSegment(rawValue);
-      if (!parsed) return full;
-      const normalized = normalizeDwsChatMessageSendText(parsed);
+      const normalized = normalizeDwsChatMessageSendText(rawValue);
+      if (!normalized) return full;
       return `--text ${shellQuoteDwsSendTextForBash(normalized)}`;
     },
   );

@@ -89,4 +89,32 @@ describe('normalizeDwsChatMessageSendText', () => {
     expect(typeof text).toBe('string');
     expect(hasDingTalkDisclaimerDivider(text as string)).toBe(true);
   });
+
+  it('unwraps bash $ quote and literal newlines in argv --text', () => {
+    const raw = "$'### 标题\\n\\n| 指标 | 数值 |\\n| --- | --- |'";
+    const args = fixDwsChatMessageSendArgv([
+      'chat',
+      'message',
+      'send',
+      '--text',
+      raw,
+      '--format',
+      'json',
+    ]);
+    const text = args[args.indexOf('--text') + 1] as string;
+    expect(text.startsWith('$')).toBe(false);
+    expect(text).toContain('### 标题');
+    expect(text).toContain('| 指标 | 数值 |');
+    expect(text).not.toContain('\\n');
+    expect(hasDingTalkDisclaimerDivider(text)).toBe(true);
+  });
+
+  it('unwraps bash $ quote in shell script --text', () => {
+    const script =
+      "dws chat message send --user uid-1 --title \"消息\" --text $'### 标题\\n\\n正文' --format json";
+    const fixed = fixDwsChatMessageSendShellScript(script);
+    expect(fixed).toContain("$'");
+    expect(fixed).not.toMatch(/\$'### 标题\\n\\n正文'/);
+    expect(fixed).toMatch(/\$'[\s\S]*### 标题[\s\S]*正文/);
+  });
 });

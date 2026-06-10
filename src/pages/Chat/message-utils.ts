@@ -67,6 +67,12 @@ const DWS_CLI_RECIPIENT_FLAG_PATTERN = new RegExp(
   'gi',
 );
 
+/** Mask colon-separated recipient flags, e.g. `--user: 065212112421834`. */
+const DWS_CLI_RECIPIENT_COLON_FLAG_PATTERN = new RegExp(
+  `(--(?:${DWS_CLI_RECIPIENT_FLAG_NAMES})\\s*[:：]\\s*)([^\\s"'\\\`,)\\n]+)`,
+  'gi',
+);
+
 /** Clean partial masks like `--group ***"cid..."` left after incomplete masking. */
 const DWS_CLI_RECIPIENT_LEAKED_ID_PATTERN = new RegExp(
   `(--(?:${DWS_CLI_RECIPIENT_FLAG_NAMES})\\s+\\*+)\\s*(?:\\\\?["'])[A-Za-z0-9+/=_=-]{6,}(?:\\\\?["'])`,
@@ -83,8 +89,14 @@ const DWS_JSON_RECIPIENT_FIELD_PATTERN = new RegExp(
 );
 
 /** Mask prose recipient IDs, e.g. `@文鹏 (userid: 0161271920846248)`. */
-const DWS_PROSE_RECIPIENT_ID_IN_PARENS_PATTERN =
-  /(\(\s*(?:user[_\s-]?id|open[_\s-]?conversation[_\s-]?id|conversation[_\s-]?id|corp[_\s-]?id|staff[_\s-]?id|union[_\s-]?id)\s*[:：]\s*)([^)\s"'`，,;]+)(\s*\))/gi;
+const DWS_PROSE_RECIPIENT_ID_IN_PARENS_PATTERN = new RegExp(
+  `(\\(\\s*(?:${DWS_RECIPIENT_ID_FIELD_NAMES})\\s*[:：]\\s*)([^)\\s"'，,;]+)(\\s*\\))`,
+  'gi',
+);
+
+/** Mask bare numeric / cid recipient IDs in parentheses, e.g. `JSON 块 (065212112421834)`. */
+const DWS_BARE_RECIPIENT_ID_IN_PARENS_PATTERN =
+  /\(\s*(\d{12,}|cid[A-Za-z0-9+/=_-]{8,})\s*\)/gi;
 
 /** Mask quoted inline IDs, e.g. `userid: "0161271920846248"`. */
 const DWS_PROSE_RECIPIENT_ID_QUOTED_INLINE_PATTERN = new RegExp(
@@ -92,9 +104,11 @@ const DWS_PROSE_RECIPIENT_ID_QUOTED_INLINE_PATTERN = new RegExp(
   'gi',
 );
 
-/** Mask inline labeled IDs outside CLI flags, e.g. `userid:` / `群ID：cid...`. */
-const DWS_PROSE_RECIPIENT_ID_INLINE_PATTERN =
-  /((?<![\w-])(?:user[_\s-]?id|open[_\s-]?conversation[_\s-]?id|conversation[_\s-]?id|corp[_\s-]?id|staff[_\s-]?id|union[_\s-]?id|群\s*[iI][dD]|群\s*聊\s*[iI][dD]|会话\s*[iI][dD])\s*[:：]\s*)([A-Za-z0-9+/=_-]{6,})/gi;
+/** Mask inline labeled IDs outside CLI flags, e.g. `userId:` / `群ID：cid...`. */
+const DWS_PROSE_RECIPIENT_ID_INLINE_PATTERN = new RegExp(
+  `((?<![\\w-])(?:${DWS_RECIPIENT_ID_FIELD_NAMES}|群\\s*[iI][dD]|群\\s*聊\\s*[iI][dD]|会话\\s*[iI][dD])\\s*[:：]\\s*)([A-Za-z0-9+/=_-]{6,})`,
+  'gi',
+);
 
 /** Hide DingTalk user/group/corp IDs in display-only text (thinking, assistant reply, tool args). */
 /** Raw message text without display cleaning (preserves DingTalk recipient JSON). */
@@ -134,11 +148,16 @@ export function maskDwsSensitiveIdsForDisplay(text: string): string {
       if (value.startsWith('***')) return match;
       return `${flag}***`;
     })
+    .replace(DWS_CLI_RECIPIENT_COLON_FLAG_PATTERN, (match, flag: string, value: string) => {
+      if (value.startsWith('***')) return match;
+      return `${flag}***`;
+    })
     .replace(DWS_CLI_RECIPIENT_LEAKED_ID_PATTERN, '$1')
     .replace(DWS_JSON_RECIPIENT_FIELD_PATTERN, '$1"***"')
     .replace(DWS_PROSE_RECIPIENT_ID_IN_PARENS_PATTERN, '$1***$3')
     .replace(DWS_PROSE_RECIPIENT_ID_QUOTED_INLINE_PATTERN, '$1***')
-    .replace(DWS_PROSE_RECIPIENT_ID_INLINE_PATTERN, '$1***');
+    .replace(DWS_PROSE_RECIPIENT_ID_INLINE_PATTERN, '$1***')
+    .replace(DWS_BARE_RECIPIENT_ID_IN_PARENS_PATTERN, '(***)');
 }
 
 export function maskSensitiveToolInputForDisplay(input: unknown): string {
@@ -187,7 +206,8 @@ export function extractText(message: RawMessage | unknown): string {
   if (!message || typeof message !== 'object') return '';
   const msg = message as Record<string, unknown>;
   const content = msg.content;
-  const isUser = msg.role === 'user';
+  const role = typeof msg.role === 'string' ? msg.role.toLowerCase() : '';
+  const isUser = role === 'user';
 
   let result = '';
 
@@ -208,8 +228,6 @@ export function extractText(message: RawMessage | unknown): string {
     // Fallback: try .text field
     result = msg.text.trim().length > 0 ? msg.text : '';
   }
-
-  const role = typeof msg.role === 'string' ? msg.role.toLowerCase() : '';
 
   // Strip Gateway metadata from user messages for clean display
   if (isUser && result) {
