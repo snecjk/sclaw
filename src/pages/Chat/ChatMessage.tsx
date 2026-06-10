@@ -21,7 +21,14 @@ import { extractText, extractImages, extractToolUse, extractThinkingTimeline, fo
 import { ensureWorkflowParameterFormHandler } from '@/stores/chat/parameter-form-recovery';
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
 import { WorkflowCompletionActions, extractWorkflowCompletionRunId } from '@/components/workflow/WorkflowCompletionActions';
-import { isPreviewableRemoteUrl } from '@/lib/preview-url';
+import {
+  artifactToPreviewFile,
+  inferMimeTypeFromUrl,
+  isHttpUrl,
+  isPreviewableRemoteUrl,
+  openExternalUrl,
+  resolvePreviewLinkTarget,
+} from '@/lib/preview-url';
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
 import { submitParameterForm } from '@/components/parameter-form/form-handlers';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
@@ -490,6 +497,7 @@ function MessageBubble({
   onPreviewFile?: (file: AttachedFileMeta) => void;
 }) {
   const showStreamingChrome = isStreaming && !isUser;
+  const workflowCardStates = useChatStore((s) => s.workflowCardStates);
 
   return (
     <div
@@ -555,49 +563,66 @@ function MessageBubble({
                   </pre>
                 );
               },
-              a({ href: url, children }) {
-                const href: string | undefined = typeof url === 'string' ? url : typeof children === 'string' ? children : undefined;
-                if (href?.startsWith('preview://') && onPreviewFile) {
-                  const target = href.slice('preview://'.length);
-                  const fileName = target.split('/').pop() || '';
-                  const ext = fileName.split('.').pop()?.toLowerCase() || '';
-                  const mimeMap: Record<string, string> = {
-                    html: 'text/html', htm: 'text/html',
-                    pdf: 'application/pdf',
-                    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
-                    gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp',
-                    md: 'text/markdown',
-                    sql: 'text/plain', py: 'text/plain', js: 'text/plain', ts: 'text/plain',
-                    jsx: 'text/plain', tsx: 'text/plain', java: 'text/plain', go: 'text/plain',
-                    rs: 'text/plain', cpp: 'text/plain', c: 'text/plain', h: 'text/plain',
-                    cs: 'text/plain', rb: 'text/plain', php: 'text/plain', swift: 'text/plain',
-                    kt: 'text/plain', scala: 'text/plain', r: 'text/plain', m: 'text/plain', mm: 'text/plain',
-                    json: 'application/json', yaml: 'text/plain', yml: 'text/plain', xml: 'text/plain',
-                    toml: 'text/plain', ini: 'text/plain', conf: 'text/plain', properties: 'text/plain',
-                    env: 'text/plain', txt: 'text/plain', csv: 'text/csv', tsv: 'text/plain',
-                    log: 'text/plain', css: 'text/plain', scss: 'text/plain', less: 'text/plain',
-                    sh: 'text/plain', bash: 'text/plain', zsh: 'text/plain', fish: 'text/plain',
-                    ps1: 'text/plain', bat: 'text/plain', cmd: 'text/plain',
-                  };
+              a({ href, children }) {
+                const rawHref = typeof href === 'string' ? href.trim() : '';
+                if (!rawHref) {
+                  return <span className="text-link break-words break-all">{children}</span>;
+                }
+
+                const target = rawHref.startsWith('preview://')
+                  ? rawHref.slice('preview://'.length)
+                  : resolvePreviewLinkTarget(rawHref, workflowCardStates);
+
+                if (onPreviewFile && isHttpUrl(target) && isPreviewableRemoteUrl(target)) {
+                  const previewFile = artifactToPreviewFile({
+                    name: decodeURIComponent(target.split('/').pop()?.split('?')[0] || 'preview'),
+                    type: inferMimeTypeFromUrl(target),
+                    url: target,
+                  });
                   return (
                     <button
-                      onClick={() => onPreviewFile({
-                        filePath: target,
-                        fileName,
-                        mimeType: mimeMap[ext] || 'text/html',
-                        fileSize: 0,
-                        preview: null,
-                      })}
-                      className="inline bg-transparent border-0 p-0 text-link hover:underline break-words break-all cursor-pointer font-inherit"
+                      type="button"
+                      onClick={() => onPreviewFile(previewFile)}
+                      className="inline border-0 bg-transparent p-0 font-inherit text-link hover:underline break-words break-all cursor-pointer"
                     >
                       {children}
                     </button>
                   );
                 }
+
+                if (isHttpUrl(target)) {
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => openExternalUrl(target)}
+                      className="inline border-0 bg-transparent p-0 font-inherit text-link hover:underline break-words break-all cursor-pointer"
+                    >
+                      {children}
+                    </button>
+                  );
+                }
+
+                if (onPreviewFile && target) {
+                  const fileName = target.split('/').pop() || 'preview';
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => onPreviewFile({
+                        filePath: target,
+                        fileName,
+                        mimeType: inferMimeTypeFromUrl(target),
+                        fileSize: 0,
+                        preview: null,
+                      })}
+                      className="inline border-0 bg-transparent p-0 font-inherit text-link hover:underline break-words break-all cursor-pointer"
+                    >
+                      {children}
+                    </button>
+                  );
+                }
+
                 return (
-                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-link hover:underline break-words break-all">
-                    {children}
-                  </a>
+                  <span className="text-link break-words break-all">{children}</span>
                 );
               },
             }}
@@ -657,19 +682,13 @@ function preprocessTextForPreviewLinks(text: string): string {
   // and the raw metadata isn't shown in the message bubble.
   text = text.replace(/\s*\[media attached:[^\]]*\]/g, '');
 
-  // Protect existing markdown links [text](url) — extract them so inner paths/URLs
-  // are not mangled by the subsequent replacements.
-  // For local file targets, rewrite to preview://; for external URLs, leave intact.
+  // Protect existing markdown links [text](url) — keep http(s) URLs intact (preview://https:// breaks ReactMarkdown).
   const mdLinks: string[] = [];
   text = text.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (match, linkText, href) => {
-    if (href.startsWith('http://') || href.startsWith('https://')) {
-      if (isPreviewableRemoteUrl(href)) {
-        mdLinks.push(`[${linkText}](preview://${href})`);
-      } else {
-        mdLinks.push(match);
-      }
+    if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('preview://')) {
+      mdLinks.push(match);
     } else {
-      mdLinks.push(`[${linkText}](preview://${href})`);
+      mdLinks.push(`[${linkText}](${href})`);
     }
     return `__MD_LINK_${mdLinks.length - 1}__`;
   });
@@ -695,16 +714,16 @@ function preprocessTextForPreviewLinks(text: string): string {
   // Replace localhost URLs (previewable in side panel)
   text = text.replace(
     /(https?:\/\/localhost:[^\s)\]"',;<>]+)/g,
-    '[$1](preview://$1)',
+    '[$1]($1)',
   );
 
-  // Replace OSS/CDN http(s) URLs with previewable extensions
+  // Replace OSS/CDN http(s) URLs — keep real https href (do NOT prefix preview://)
   text = text.replace(
     /(https?:\/\/[^\s)\]"',;<>]+\.(?:html?|pdf|json|md|txt|csv)(?:\?[^\s)\]"',;<>]*)?)/gi,
     (url) => {
       if (!isPreviewableRemoteUrl(url)) return url;
       const label = decodeURIComponent(url.split('/').pop()?.split('?')[0] || '查看预览');
-      return `[${label}](preview://${url})`;
+      return `[${label}](${url})`;
     },
   );
 
@@ -714,6 +733,12 @@ function preprocessTextForPreviewLinks(text: string): string {
   text = text.replace(
     new RegExp(`(?<![\\w./:])(\\./(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\n\\r]+[\\\\/])*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`, 'g'),
     '[$1](preview://$1)',
+  );
+
+  // Wrap bare filenames (e.g. "查看产物: anomaly_config_params.html") into markdown links.
+  text = text.replace(
+    /(?<![\w./:])([\w][\w.-]*\.(?:html?|pdf|json|md|txt|csv))(?![\w.])/gi,
+    (filename) => `[${filename}](${filename})`,
   );
 
   // Restore file URL placeholders (before other restores so markdown links don't interfere)

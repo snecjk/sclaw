@@ -67,6 +67,53 @@ export function isPreviewableArtifactUrl(url: string, typeHint?: string | null):
   return false;
 }
 
+/** HTTP(S) artifact URLs users can open or preview; hides internal artifact:// refs. */
+export function isUserFacingArtifactUrl(url: string | undefined | null): boolean {
+  return Boolean(url?.trim() && isHttpUrl(url));
+}
+
+/** Open http(s) links in the system browser — required in Electron (plain <a> navigates in-app). */
+export function openExternalUrl(url: string): void {
+  if (!url?.trim() || !isHttpUrl(url)) return;
+  void window.electron?.openExternal(url);
+}
+
+/** Resolve bare filenames / artifact names to OSS URL from hydrated workflow card state. */
+export function resolveArtifactUrlFromWorkflowStates(
+  hint: string,
+  states: Record<string, { result?: { artifacts?: Array<{ name: string; url: string }> } } | undefined>,
+): string | null {
+  const normalized = hint.trim();
+  if (!normalized) return null;
+  if (isHttpUrl(normalized)) return normalized;
+
+  const basename = decodeURIComponent(normalized.split('/').pop()?.split('?')[0] || normalized);
+  for (const state of Object.values(states)) {
+    for (const artifact of state?.result?.artifacts ?? []) {
+      const url = artifact.url?.trim();
+      if (!url || !isHttpUrl(url)) continue;
+      const urlBase = decodeURIComponent(url.split('/').pop()?.split('?')[0] || '');
+      if (
+        artifact.name === normalized
+        || artifact.name === basename
+        || urlBase === basename
+        || url.includes(basename)
+      ) {
+        return url;
+      }
+    }
+  }
+  return null;
+}
+
+export function resolvePreviewLinkTarget(
+  href: string,
+  states: Record<string, { result?: { artifacts?: Array<{ name: string; url: string }> } } | undefined>,
+): string {
+  const raw = href.startsWith('preview://') ? href.slice('preview://'.length) : href;
+  return resolveArtifactUrlFromWorkflowStates(raw, states) ?? raw;
+}
+
 export function artifactToPreviewFile(artifact: {
   id?: string;
   name: string;

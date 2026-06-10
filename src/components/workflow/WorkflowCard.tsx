@@ -6,7 +6,12 @@ import {
   breakdownWorkflowDurationMs,
   getWorkflowDurationMs,
 } from '@/lib/format-workflow-duration';
-import { artifactToPreviewFile, isPreviewableArtifactUrl } from '@/lib/preview-url';
+import {
+  artifactToPreviewFile,
+  isPreviewableArtifactUrl,
+  isUserFacingArtifactUrl,
+  openExternalUrl,
+} from '@/lib/preview-url';
 import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
 import { getExecutionByRunId } from '@/stores/workflow-memory';
 import { hydrateWorkflowRun } from '@/lib/workflow-run-hydration';
@@ -156,10 +161,12 @@ export function WorkflowCard({
   }, [runId, sessionKey, templateName]);
 
   useEffect(() => {
-    const needsHydrate = !state || !isTerminalWorkflowRunStatus(state.status) || !state.result?.summary;
+    const needsHydrate = !state
+      || !isTerminalWorkflowRunStatus(state.status)
+      || (!state.result?.summary && !(state.result?.artifacts?.length));
     if (!needsHydrate) return;
     void hydrateWorkflowRun(runId, { sessionKey, agentId });
-  }, [runId, sessionKey, agentId, state?.status, state?.result?.summary]);
+  }, [runId, sessionKey, agentId, state?.status, state?.result?.summary, state?.result?.artifacts]);
 
   const display = useMemo<WorkflowExecutionState>(() => {
     if (!state) {
@@ -181,10 +188,15 @@ export function WorkflowCard({
   const isTerminal = isTerminalWorkflowRunStatus(display.status);
   const durationLabel = useDurationLabel(display.startedAt, display.completedAt, isRunning);
   const showProgress = isRunning && display.progress > 0;
-  const previewableArtifacts = (display.result?.artifacts ?? []).filter(
-    (artifact) => isPreviewableArtifactUrl(artifact.url, artifact.type),
+  const userFacingArtifacts = (display.result?.artifacts ?? []).filter(
+    (artifact) => isUserFacingArtifactUrl(artifact.url),
   );
-  const primaryArtifact = previewableArtifacts[0] ?? display.result?.artifacts?.[0];
+  const primaryArtifact = userFacingArtifacts[0];
+  const canPreviewArtifact = Boolean(
+    primaryArtifact
+    && onPreviewArtifact
+    && isPreviewableArtifactUrl(primaryArtifact.url, primaryArtifact.type),
+  );
 
   return (
     <div
@@ -248,7 +260,7 @@ export function WorkflowCard({
           <p className="mt-2.5 pl-12 text-xs leading-5 text-[#FA3C3C]">{display.error}</p>
         )}
 
-        {display.result?.artifacts && display.result.artifacts.length > 0 && (
+        {(primaryArtifact || (isTerminal && display.workflowId && onViewWorkflow)) && (
           <div className="mt-3 space-y-2 pl-12">
             {primaryArtifact && (
               <div className="flex items-center gap-3 rounded-xl border border-[#E5E6EB] bg-white px-3.5 py-2.5">
@@ -261,52 +273,36 @@ export function WorkflowCard({
                     {primaryArtifact.type || 'output'}
                   </p>
                 </div>
-                {onPreviewArtifact && isPreviewableArtifactUrl(primaryArtifact.url, primaryArtifact.type) ? (
+                {canPreviewArtifact ? (
                   <button
                     type="button"
-                    onClick={() => onPreviewArtifact(artifactToPreviewFile(primaryArtifact))}
+                    onClick={() => onPreviewArtifact!(artifactToPreviewFile(primaryArtifact))}
                     className="shrink-0 rounded-full border border-[#FF6F00]/30 px-3 py-1 text-[12px] font-medium text-[#FF6F00] transition-colors hover:bg-[#FFF5E6]"
                   >
                     查看预览
                   </button>
-                ) : primaryArtifact.url && !primaryArtifact.url.startsWith('artifact://') ? (
-                  <a
-                    href={primaryArtifact.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => openExternalUrl(primaryArtifact.url)}
                     className="shrink-0 text-[12px] font-medium text-[#4760FE] hover:underline"
                   >
                     打开链接
-                  </a>
-                ) : null}
+                  </button>
+                )}
               </div>
             )}
 
             {isTerminal && display.workflowId && onViewWorkflow && (
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => onViewWorkflow(display.workflowId)}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E6EB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#1D2129] transition-colors hover:border-[#FFD7A3] hover:bg-[#FFFBF5]"
-                >
-                  <GitBranch className="h-3.5 w-3.5 text-[#FF6F00]" />
-                  查看工作流
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => onViewWorkflow(display.workflowId)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E6EB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#1D2129] transition-colors hover:border-[#FFD7A3] hover:bg-[#FFFBF5]"
+              >
+                <GitBranch className="h-3.5 w-3.5 text-[#FF6F00]" />
+                查看工作流
+              </button>
             )}
-          </div>
-        )}
-
-        {isTerminal && display.workflowId && onViewWorkflow && (!display.result?.artifacts || display.result.artifacts.length === 0) && (
-          <div className="mt-3 pl-12">
-            <button
-              type="button"
-              onClick={() => onViewWorkflow(display.workflowId)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E6EB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#1D2129] transition-colors hover:border-[#FFD7A3] hover:bg-[#FFFBF5]"
-            >
-              <GitBranch className="h-3.5 w-3.5 text-[#FF6F00]" />
-              查看工作流
-            </button>
           </div>
         )}
       </div>

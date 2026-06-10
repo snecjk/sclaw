@@ -13,6 +13,15 @@ import type { ContentBlock } from '@/stores/chat/types';
 const hydrateInFlight = new Set<string>();
 const hydratedTerminal = new Set<string>();
 
+function hasTerminalCardDetails(runId: string): boolean {
+  const state = useChatStore.getState().workflowCardStates[runId];
+  if (!state || !isTerminalWorkflowRunStatus(state.status)) return false;
+  return Boolean(
+    state.result?.summary
+    || (state.result?.artifacts && state.result.artifacts.length > 0),
+  );
+}
+
 export function collectWorkflowRunIds(messages: RawMessage[]): string[] {
   const ids = new Set<string>();
   for (const msg of messages) {
@@ -30,7 +39,10 @@ export async function hydrateWorkflowRun(
   runId: string,
   ctx: { sessionKey: string; agentId: string },
 ): Promise<void> {
-  if (hydrateInFlight.has(runId) || hydratedTerminal.has(runId)) return;
+  if (hydrateInFlight.has(runId)) return;
+  // Session switch restores a minimal card state (status only). Re-fetch details even if
+  // this run was hydrated earlier in the same app session.
+  if (hydratedTerminal.has(runId) && hasTerminalCardDetails(runId)) return;
 
   hydrateInFlight.add(runId);
   try {

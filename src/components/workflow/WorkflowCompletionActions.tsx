@@ -1,5 +1,5 @@
-import { FileText, GitBranch } from 'lucide-react';
-import { artifactToPreviewFile, isPreviewableArtifactUrl } from '@/lib/preview-url';
+import { FileText } from 'lucide-react';
+import { artifactToPreviewFile, isPreviewableArtifactUrl, isUserFacingArtifactUrl } from '@/lib/preview-url';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import type { AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
@@ -13,22 +13,20 @@ interface WorkflowCompletionActionsProps {
 export function WorkflowCompletionActions({
   runId,
   onPreviewArtifact,
-  onViewWorkflow,
 }: WorkflowCompletionActionsProps) {
   const state = useChatStore((s) => s.workflowCardStates[runId]);
   if (!state || !isTerminalWorkflowRunStatus(state.status)) return null;
 
-  const artifacts = state.result?.artifacts ?? [];
+  const artifacts = (state.result?.artifacts ?? []).filter((a) => isUserFacingArtifactUrl(a.url));
   const primaryArtifact = artifacts.find((a) => isPreviewableArtifactUrl(a.url, a.type)) ?? artifacts[0];
   const canPreview = primaryArtifact && onPreviewArtifact
     && isPreviewableArtifactUrl(primaryArtifact.url, primaryArtifact.type);
-  const canViewWorkflow = Boolean(state.workflowId && onViewWorkflow);
 
-  if (!canPreview && !canViewWorkflow) return null;
+  if (!canPreview) return null;
 
   return (
     <div className="mt-3 space-y-2">
-      {primaryArtifact && canPreview && (
+      {primaryArtifact && (
         <div className="flex items-center gap-3 rounded-xl border border-[#E5E6EB] bg-white px-3.5 py-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#FFF5E6]">
             <FileText className="h-4 w-4 text-[#FF6F00]" />
@@ -45,17 +43,6 @@ export function WorkflowCompletionActions({
             查看预览
           </button>
         </div>
-      )}
-
-      {canViewWorkflow && (
-        <button
-          type="button"
-          onClick={() => onViewWorkflow!(state.workflowId)}
-          className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E6EB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#1D2129] transition-colors hover:border-[#FFD7A3] hover:bg-[#FFFBF5]"
-        >
-          <GitBranch className="h-3.5 w-3.5 text-[#FF6F00]" />
-          查看工作流
-        </button>
       )}
     </div>
   );

@@ -90,19 +90,77 @@ export function isTerminalWorkflowRunStatus(status: WorkflowRunStatus): boolean 
   return status === 'completed' || status === 'failed' || status === 'timeout';
 }
 
+function isHttpArtifactUrl(url: string): boolean {
+  return url.startsWith('http://') || url.startsWith('https://');
+}
+
 export function normalizeRunArtifacts(
   artifacts: WorkflowRunApiPayload['artifacts'],
 ): WorkflowRunArtifact[] {
   if (!Array.isArray(artifacts)) return [];
   return artifacts
-    .map((a) => ({
-      id: a.id ?? '',
-      name: a.name ?? a.kind ?? 'artifact',
-      type: a.type ?? a.kind ?? 'file',
-      url: a.url ?? a.uri ?? a.tempUrl ?? '',
-      size: a.size,
-    }))
+    .map((a) => {
+      const contentType = (a as { contentType?: string }).contentType;
+      return {
+        id: a.id ?? '',
+        name: a.name ?? a.kind ?? 'artifact',
+        type: a.type ?? a.kind ?? contentType ?? 'file',
+        url: a.tempUrl ?? a.url ?? a.uri ?? '',
+        size: a.size,
+      };
+    })
     .filter((a) => a.id || a.url);
+}
+
+function collectArtifactsFromNodeRuns(
+  nodeRuns: WorkflowRunApiPayload['nodeRuns'],
+): WorkflowRunArtifact[] {
+  const collected: WorkflowRunArtifact[] = [];
+  for (const node of nodeRuns ?? []) {
+    const record = node as WorkflowRunNodeRun & { output?: unknown; input?: unknown };
+    if (record.output) collected.push(...collectArtifactsFromOutput(record.output));
+    const input = record.input;
+    if (input && typeof input === 'object') {
+      const fields = (input as { fields?: Record<string, { value?: unknown }> }).fields;
+      if (fields) {
+        for (const field of Object.values(fields)) {
+          if (field?.value) collected.push(...collectArtifactsFromOutput(field.value));
+        }
+      }
+    }
+  }
+  return collected;
+}
+
+/** Merge artifacts from all API locations; prefer OSS/http over artifact:// refs. */
+export function collectAllRunArtifacts(run: WorkflowRunApiPayload): WorkflowRunArtifact[] {
+  const pools = [
+    normalizeRunArtifacts(run.artifacts),
+    collectArtifactsFromOutput(run.output),
+    collectArtifactsFromNodeRuns(run.nodeRuns),
+  ].flat();
+
+  const byName = new Map<string, WorkflowRunArtifact>();
+  for (const artifact of pools) {
+    const key = artifact.name || artifact.id || artifact.url;
+    if (!key) continue;
+    const existing = byName.get(key);
+    if (!existing) {
+      byName.set(key, artifact);
+      continue;
+    }
+    const incomingHttp = isHttpArtifactUrl(artifact.url);
+    const existingHttp = isHttpArtifactUrl(existing.url);
+    if (incomingHttp && !existingHttp) {
+      byName.set(key, artifact);
+    } else if (incomingHttp && existingHttp && artifact.url.length > existing.url.length) {
+      byName.set(key, artifact);
+    }
+  }
+
+  const merged = [...byName.values()];
+  const httpArtifacts = merged.filter((a) => isHttpArtifactUrl(a.url));
+  return httpArtifacts.length > 0 ? httpArtifacts : merged;
 }
 
 function mapArtifacts(artifacts: WorkflowRunArtifact[]) {
@@ -150,9 +208,7 @@ export function workflowRunResponseToExecutionState(run: WorkflowRunApiPayload):
     (n) => normalizeWorkflowStepStatus(n.status) === 'completed',
   ).length;
   const progress = status === 'completed' ? 100 : Math.min(99, Math.floor((completedNodes / totalNodes) * 100));
-  const topArtifacts = normalizeRunArtifacts(run.artifacts);
-  const outputArtifacts = collectArtifactsFromOutput(run.output);
-  const artifacts = topArtifacts.length > 0 ? topArtifacts : outputArtifacts;
+  const artifacts = collectAllRunArtifacts(run);
 
   return {
     runId: run.id,
@@ -204,8 +260,6 @@ function extractRunResultFromPayload(
 /** Extract client-facing result summary + artifacts from GET /runs response. */
 export function extractRunResult(run: WorkflowRunApiPayload): WorkflowExecutionResult | undefined {
   const status = resolveWorkflowRunStatus(run);
-  const topArtifacts = normalizeRunArtifacts(run.artifacts);
-  const outputArtifacts = collectArtifactsFromOutput(run.output);
-  const artifacts = topArtifacts.length > 0 ? topArtifacts : outputArtifacts;
+  const artifacts = collectAllRunArtifacts(run);
   return extractRunResultFromPayload(run, status, artifacts);
 }

@@ -22,6 +22,14 @@ function toServeUrl(filePath: string): string {
   return `${getHostApiBase()}/api/files/serve?path=${encodeURIComponent(filePath)}`;
 }
 
+function isHtmlFileType(mimeType: string, fileName: string, filePath?: string): boolean {
+  if (mimeType === 'text/html') return true;
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  if (ext === 'html' || ext === 'htm') return true;
+  if (filePath && /\.html?(?:\?|$)/i.test(filePath)) return true;
+  return false;
+}
+
 export function FilePreviewViewer({
   filePath,
   fileName,
@@ -34,6 +42,9 @@ export function FilePreviewViewer({
   const [textContent, setTextContent] = useState<string>('');
   const [textLoading, setTextLoading] = useState(false);
   const [textError, setTextError] = useState<string>('');
+  const [htmlContent, setHtmlContent] = useState<string>('');
+  const [htmlLoading, setHtmlLoading] = useState(false);
+  const [htmlError, setHtmlError] = useState<string>('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -132,6 +143,42 @@ export function FilePreviewViewer({
     };
   }, [filePath, mimeType]);
 
+  // Fetch remote HTML (OSS often sets Content-Disposition: attachment — iframe src triggers download)
+  useEffect(() => {
+    const isRemoteHtml = isHttpUrl(filePath) && isHtmlFileType(mimeType, fileName, filePath);
+    if (!isRemoteHtml) {
+      setHtmlContent('');
+      setHtmlError('');
+      setHtmlLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setHtmlContent('');
+    setHtmlError('');
+    setHtmlLoading(true);
+
+    void (async () => {
+      try {
+        const response = await fetch(filePath);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const content = await response.text();
+        if (cancelled) return;
+        setHtmlContent(content);
+      } catch (e) {
+        if (!cancelled) {
+          setHtmlError(e instanceof Error ? e.message : '加载 HTML 预览失败');
+        }
+      } finally {
+        if (!cancelled) setHtmlLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filePath, mimeType, fileName]);
+
   // Load remote text/json from http(s) URLs (OSS/CDN)
   useEffect(() => {
     const isRemoteTextFile = isHttpUrl(filePath)
@@ -171,12 +218,39 @@ export function FilePreviewViewer({
 
   const content = (() => {
   if (isHttpUrl(filePath)) {
-    const isHtmlFile = mimeType === 'text/html' || (() => {
-      const ext = fileName.split('.').pop()?.toLowerCase();
-      return ext === 'html' || ext === 'htm';
-    })();
+    const isHtmlFile = isHtmlFileType(mimeType, fileName, filePath);
 
-    if (isHtmlFile || mimeType === 'application/pdf') {
+    if (isHtmlFile) {
+      if (htmlLoading) {
+        return (
+          <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
+            <RefreshCw className="h-5 w-5 animate-spin" />
+            正在加载 HTML 预览…
+          </div>
+        );
+      }
+      if (htmlError) {
+        return (
+          <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm', className)}>
+            <p className="text-destructive">{htmlError}</p>
+            <OpenExternalButton filePath={filePath} />
+          </div>
+        );
+      }
+      if (htmlContent) {
+        return (
+          <iframe
+            key={filePath}
+            srcDoc={htmlContent}
+            title={fileName}
+            className={cn('h-full min-w-0 w-full border-0', className)}
+            sandbox="allow-scripts allow-same-origin allow-popups"
+          />
+        );
+      }
+    }
+
+    if (mimeType === 'application/pdf') {
       return (
         <iframe
           key={filePath}
@@ -278,10 +352,7 @@ pre{background:#f4f4f4;padding:16px;border-radius:6px;overflow-x:auto}
   }
   // Local HTML file preview — serve through Host API to bypass browser restrictions
   // Fallback to extension check when mimeType is mis-detected as application/octet-stream
-  const isHtmlFile = mimeType === 'text/html' || (() => {
-    const ext = filePath.split('.').pop()?.toLowerCase();
-    return ext === 'html' || ext === 'htm';
-  })();
+  const isHtmlFile = isHtmlFileType(mimeType, fileName, filePath);
   if (isHtmlFile) {
     return (
       <iframe
