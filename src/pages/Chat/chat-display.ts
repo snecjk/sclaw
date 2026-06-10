@@ -26,12 +26,98 @@ export function isThinkingOnlyAssistantMessage(message: RawMessage): boolean {
   return extractThinkingTimeline(message).length > 0;
 }
 
+function normalizeThinkingKey(text: string): string {
+  return text.replace(/\s+/g, '').toLowerCase();
+}
+
+/** Collapse streaming re-phrases and near-duplicate planning lines in thinking blocks. */
+export function isRedundantThinking(prev: string, next: string): boolean {
+  if (prev === next) return true;
+  const a = normalizeThinkingKey(prev);
+  const b = normalizeThinkingKey(next);
+  if (!a || !b) return false;
+  if (a === b) return true;
+
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length <= b.length ? b : a;
+  if (shorter.length >= 20 && longer.includes(shorter)) return true;
+
+  // Shared substantial substring (same planning sentence with edits).
+  const minShared = Math.min(18, shorter.length);
+  for (let start = 0; start <= shorter.length - minShared; start += 1) {
+    const slice = shorter.slice(start, start + minShared);
+    if (longer.includes(slice)) {
+      const lengthDelta = Math.abs(a.length - b.length);
+      if (lengthDelta <= Math.max(36, shorter.length * 0.55)) return true;
+      break;
+    }
+  }
+
+  // Same opening intent with minor rewording (common in qwen thinking streams).
+  const intentPrefixLen = Math.min(12, shorter.length, longer.length);
+  if (intentPrefixLen >= 10 && shorter.slice(0, intentPrefixLen) === longer.slice(0, intentPrefixLen)) {
+    const lengthDelta = Math.abs(a.length - b.length);
+    if (lengthDelta <= Math.max(36, shorter.length * 0.55)) return true;
+  }
+
+  return false;
+}
+
+function preferThinkingContent(a: string, b: string): string {
+  return b.length >= a.length ? b : a;
+}
+
+function messageToolIds(message: RawMessage): string[] {
+  return extractThinkingTimeline(message)
+    .filter((item): item is Extract<ThinkingTimelineItem, { type: 'tool' }> => item.type === 'tool')
+    .map((item) => item.id)
+    .filter(Boolean);
+}
+
+/**
+ * Streaming turns append many assistant snapshots that only rephrase thinking.
+ * Keep snapshots that introduce new tools or final reply text; otherwise fold
+ * consecutive thinking-only snapshots to the latest one.
+ */
+function pickTimelineSourceMessages(messages: RawMessage[]): RawMessage[] {
+  if (messages.length <= 1) return messages;
+
+  const picked: RawMessage[] = [];
+  const seenToolIds = new Set<string>();
+
+  for (const message of messages) {
+    const toolIds = messageToolIds(message);
+    const hasNewTool = toolIds.some((id) => !seenToolIds.has(id));
+    for (const id of toolIds) seenToolIds.add(id);
+
+    const hasReplyText = extractText(message).trim().length > 0;
+    if (picked.length === 0 || hasNewTool || hasReplyText) {
+      picked.push(message);
+      continue;
+    }
+
+    if (isThinkingOnlyAssistantMessage(message)) {
+      const last = picked[picked.length - 1];
+      if (last && isThinkingOnlyAssistantMessage(last)) {
+        picked[picked.length - 1] = message;
+      } else {
+        picked.push(message);
+      }
+      continue;
+    }
+
+    picked.push(message);
+  }
+
+  return picked;
+}
+
 /** Merge timelines from multiple assistant snapshots; renumber tools sequentially. */
 export function mergeThinkingTimelines(messages: RawMessage[]): ThinkingTimelineItem[] {
   const merged: ThinkingTimelineItem[] = [];
   let toolIndex = 0;
 
-  for (const message of messages) {
+  for (const message of pickTimelineSourceMessages(messages)) {
     for (const item of extractThinkingTimeline(message)) {
       if (item.type === 'tool') {
         toolIndex += 1;
@@ -42,7 +128,13 @@ export function mergeThinkingTimelines(messages: RawMessage[]): ThinkingTimeline
         });
       } else {
         const prev = merged[merged.length - 1];
-        if (prev?.type === 'thinking' && prev.content === item.content) continue;
+        if (prev?.type === 'thinking' && isRedundantThinking(prev.content, item.content)) {
+          merged[merged.length - 1] = {
+            type: 'thinking',
+            content: preferThinkingContent(prev.content, item.content),
+          };
+          continue;
+        }
         merged.push(item);
       }
     }

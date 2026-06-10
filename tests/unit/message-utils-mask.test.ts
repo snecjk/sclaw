@@ -32,6 +32,20 @@ describe('maskDwsSensitiveIdsForDisplay', () => {
     expect(maskDwsSensitiveIdsForDisplay(input)).toBe('收件人 userid: *** 已确认');
   });
 
+  it('masks inline userid label with double-quoted value', () => {
+    const input = '收件人 JSON 中已有 userid: "0161271920846248"，准备发送图片。';
+    expect(maskDwsSensitiveIdsForDisplay(input)).toBe(
+      '收件人 JSON 中已有 userid: ***，准备发送图片。',
+    );
+  });
+
+  it('masks lowercase userid in JSON fields', () => {
+    const input = '{"userid":"0161271920846248","displayName":"文鹏"}';
+    expect(maskDwsSensitiveIdsForDisplay(input)).toBe(
+      '{"userid":"***","displayName":"文鹏"}',
+    );
+  });
+
   it('masks Chinese group id label in thinking prose', () => {
     const input = '群ID：cidtc85GkR9lPhV9dy3UDm8ag==，准备发送天气。';
     expect(maskDwsSensitiveIdsForDisplay(input)).toBe('群ID：***，准备发送天气。');

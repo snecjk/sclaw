@@ -37,6 +37,25 @@ function clearHistoryPoll(): void {
   }
 }
 
+const SESSION_LOCK_ERROR_PATTERNS = [
+  /session file locked/i,
+  /\.jsonl\.lock\b/i,
+  /locked\s*\(timeout\s*\d+ms\)/i,
+];
+
+function isSessionLockErrorMessage(message: unknown): boolean {
+  const text = String(message ?? '').trim();
+  if (!text) return false;
+  return SESSION_LOCK_ERROR_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function formatChatRuntimeError(message: unknown): string {
+  const text = String(message ?? '').trim();
+  if (!text) return 'An error occurred';
+  if (!isSessionLockErrorMessage(text)) return text;
+  return `This session is temporarily locked by another OpenClaw run. Please wait a moment and try again. (${text})`;
+}
+
 // ── Local image cache ─────────────────────────────────────────
 // The Gateway doesn't store image attachments in session content blocks,
 // so we cache them locally keyed by staged file path (which appears in the
@@ -865,6 +884,8 @@ export {
   toMs,
   clearErrorRecoveryTimer,
   clearHistoryPoll,
+  isSessionLockErrorMessage,
+  formatChatRuntimeError,
   extractImagesAsAttachedFiles,
   getMessageText,
   extractMediaRefs,
