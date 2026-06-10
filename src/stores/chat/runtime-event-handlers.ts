@@ -5,10 +5,12 @@ import {
   extractImagesAsAttachedFiles,
   extractMediaRefs,
   extractRawFilePaths,
+  formatChatRuntimeError,
   getMessageText,
   getToolCallFilePath,
   hasErrorRecoveryTimer,
   hasNonToolAssistantContent,
+  isSessionLockErrorMessage,
   isToolOnlyMessage,
   isToolResultRole,
   makeAttachedFile,
@@ -196,7 +198,8 @@ export function handleRuntimeEventState(
           break;
         }
         case 'error': {
-          const errorMsg = String(event.errorMessage || 'An error occurred');
+          const errorMsg = formatChatRuntimeError(event.errorMessage || 'An error occurred');
+          const shouldFinalizeImmediately = isSessionLockErrorMessage(errorMsg);
           const wasSending = get().sending;
 
           // Snapshot the current streaming message into messages[] so partial
@@ -227,7 +230,7 @@ export function handleRuntimeEventState(
           // after transient API failures (e.g. "terminated"). Keep `sending`
           // true for a grace period so that recovery events are processed and
           // the agent-phase-completion handler can still trigger loadHistory.
-          if (wasSending) {
+          if (wasSending && !shouldFinalizeImmediately) {
             clearErrorRecoveryTimer();
             const ERROR_RECOVERY_GRACE_MS = 15_000;
             setErrorRecoveryTimer(setTimeout(() => {
@@ -247,6 +250,7 @@ export function handleRuntimeEventState(
               }
             }, ERROR_RECOVERY_GRACE_MS));
           } else {
+            clearErrorRecoveryTimer();
             clearHistoryPoll();
             set({ sending: false, activeRunId: null, lastUserMessageAt: null });
           }

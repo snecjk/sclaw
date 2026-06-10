@@ -8,14 +8,16 @@ import path from 'path';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
 
-import { getOpenClawConfigDir, getOpenClawSkillsDir, getOpenClawAgentSkillsDir } from '../utils/paths';
+import { getOpenClawConfigDir, getOpenClawSkillsDir, getOpenClawAgentSkillsDir, getOpenClawUserSkillsDir, getOpenClawUserDisabledDir, getOpenClawUserLockPath } from '../utils/paths';
 import { getStoToken } from '../utils/auth-store';
+import { getCurrentActiveUserCode } from './user-skill-workspace';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
 import { logger } from '../utils/logger';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { TIMEOUTS } from '../utils/config';
 import { normalizeSkillVersion } from '../utils/skill-version';
+import { readSkillMdFrontmatter } from '../utils/skill-frontmatter';
 
 export const PREINSTALLED_MARKER_NAME = '.stoclaw-preinstalled.json';
 
@@ -142,11 +144,25 @@ export class StoSkillService {
     }
 
     // Determine install directory: agent-scoped or global
+    const isGlobal = !params.agentId;
     const skillsDir = params.agentId
       ? getOpenClawAgentSkillsDir(params.agentId)
       : this.skillsDir;
     if (!fs.existsSync(skillsDir)) {
       fs.mkdirSync(skillsDir, { recursive: true });
+    }
+
+    // For global installs, also determine user-scoped directory
+    let userSkillsDir: string | null = null;
+    let userCode: string | null = null;
+    if (isGlobal) {
+      userCode = await getCurrentActiveUserCode();
+      if (userCode) {
+        userSkillsDir = getOpenClawUserSkillsDir(userCode);
+        if (!fs.existsSync(userSkillsDir)) {
+          fs.mkdirSync(userSkillsDir, { recursive: true });
+        }
+      }
     }
 
     // Save to a temp file
@@ -160,7 +176,7 @@ export class StoSkillService {
       // @ts-expect-error Node fetch body is compatible with Readable
       await pipeline(body, fileStream);
 
-      // Extract ZIP
+      // Extract ZIP to primary target (mount point)
       const targetDir = path.join(skillsDir, params.slug);
       if (params.force && fs.existsSync(targetDir)) {
         await fs.promises.rm(targetDir, { recursive: true, force: true });
@@ -180,6 +196,16 @@ export class StoSkillService {
         description: params.description,
       });
 
+      // For global installs, also copy to user workspace
+      if (userSkillsDir) {
+        const userTargetDir = path.join(userSkillsDir, params.slug);
+        if (params.force && fs.existsSync(userTargetDir)) {
+          await fs.promises.rm(userTargetDir, { recursive: true, force: true });
+        }
+        await this.copyDir(targetDir, userTargetDir);
+        logger.info(`[StoSkillService] install: ${params.slug} copied to user workspace ${userTargetDir}`);
+      }
+
       // Update lock.json with metadata from search results
       this.updateLockFile(params.slug, {
         version: params.version || '1.0.0',
@@ -188,6 +214,17 @@ export class StoSkillService {
         author: params.author,
         versionSource: 'install',
       });
+
+      // Also update user lock file if applicable
+      if (userCode) {
+        this.updateUserLockFile(userCode, params.slug, {
+          version: params.version || '1.0.0',
+          name: params.name,
+          description: params.description,
+          author: params.author,
+          versionSource: 'install',
+        });
+      }
 
       logger.info(`[StoSkillService] install: ${params.slug} installed to ${targetDir}`);
     } finally {
@@ -202,6 +239,7 @@ export class StoSkillService {
    * Uninstall a skill (same as ClawHub: delete dir + update lock).
    */
   async uninstall(params: StoSkillUninstallParams): Promise<void> {
+    const isGlobal = !params.agentId;
     const skillsDir = params.agentId
       ? getOpenClawAgentSkillsDir(params.agentId)
       : this.skillsDir;
@@ -214,6 +252,21 @@ export class StoSkillService {
     if (fs.existsSync(disabledDir)) {
       logger.info(`[StoSkillService] uninstall: removing disabled ${disabledDir}`);
       await fs.promises.rm(disabledDir, { recursive: true, force: true });
+    }
+
+    // For global uninstall, also remove from user workspace
+    if (isGlobal) {
+      const userCode = await getCurrentActiveUserCode();
+      if (userCode) {
+        const userSkillDir = path.join(getOpenClawUserSkillsDir(userCode), params.slug);
+        const userDisabledDir = path.join(getOpenClawUserDisabledDir(userCode), params.slug);
+        if (fs.existsSync(userSkillDir)) {
+          await fs.promises.rm(userSkillDir, { recursive: true, force: true });
+        }
+        if (fs.existsSync(userDisabledDir)) {
+          await fs.promises.rm(userDisabledDir, { recursive: true, force: true });
+        }
+      }
     }
 
     // Remove from lock.json
@@ -229,11 +282,46 @@ export class StoSkillService {
         logger.warn('[StoSkillService] Failed to update lock file:', err);
       }
     }
+
+    // Remove from user lock.json
+    if (isGlobal) {
+      const userCode = await getCurrentActiveUserCode();
+      if (userCode) {
+        const userLockFile = getOpenClawUserLockPath(userCode);
+        if (fs.existsSync(userLockFile)) {
+          try {
+            const lockData = JSON.parse(fs.readFileSync(userLockFile, 'utf8'));
+            if (lockData.skills && lockData.skills[params.slug]) {
+              delete lockData.skills[params.slug];
+              await fs.promises.writeFile(userLockFile, JSON.stringify(lockData, null, 2));
+            }
+          } catch (err) {
+            logger.warn('[StoSkillService] Failed to update user lock file:', err);
+          }
+        }
+      }
+    }
   }
 
   // -----------------------------------------------------------------------
   // Private helpers
   // -----------------------------------------------------------------------
+
+  private async copyDir(src: string, dest: string): Promise<void> {
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(dest, { recursive: true });
+    }
+    const entries = fs.readdirSync(src, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+      if (entry.isDirectory()) {
+        await this.copyDir(srcPath, destPath);
+      } else {
+        fs.copyFileSync(srcPath, destPath);
+      }
+    }
+  }
 
   private async extractZip(zipPath: string, targetDir: string): Promise<void> {
     const { exec } = await import('child_process');
@@ -331,6 +419,7 @@ export class StoSkillService {
   listInstalled(): Array<{
     slug: string;
     name: string;
+    title?: string;
     version: string;
     source: string;
     baseDir: string;
@@ -340,6 +429,7 @@ export class StoSkillService {
     const results: Array<{
       slug: string;
       name: string;
+      title?: string;
       version: string;
       source: string;
       baseDir: string;
@@ -383,20 +473,19 @@ export class StoSkillService {
         seen.add(entry.name);
 
         const lockInfo = lockSkills[entry.name];
-        // Only include STO-marketplace sourced skills
-        if (lockInfo?.source === 'sto-marketplace') {
-          // Prefer name from lock.json (saved from search results), fallback to file scan
-          const name = lockInfo.name || this.readSkillName(skillDir) || entry.name;
-          results.push({
-            slug: entry.name,
-            name,
-            version: lockInfo.version || 'unknown',
-            source: 'sto-marketplace',
-            baseDir: skillDir,
-            description: lockInfo.description,
-            author: lockInfo.author,
-          });
-        }
+        // Include all skills with a valid SKILL.md manifest
+        const name = lockInfo?.name || this.readSkillName(skillDir) || entry.name;
+        const title = this.readSkillTitle(skillDir) || undefined;
+        results.push({
+          slug: entry.name,
+          name,
+          title,
+          version: lockInfo?.version || this.readSkillMdVersion(skillDir) || 'unknown',
+          source: lockInfo?.source || 'local',
+          baseDir: skillDir,
+          description: lockInfo?.description,
+          author: lockInfo?.author,
+        });
       }
     };
 
@@ -408,19 +497,8 @@ export class StoSkillService {
 
   /** Read version from SKILL.md YAML frontmatter. */
   readSkillMdVersion(skillDir: string): string | null {
-    try {
-      const skillMdPath = path.join(skillDir, 'SKILL.md');
-      if (!fs.existsSync(skillMdPath)) return null;
-      const raw = fs.readFileSync(skillMdPath, 'utf8');
-      const frontmatterMatch = raw.match(/^---\s*\n([\s\S]*?)\n---/);
-      if (!frontmatterMatch) return null;
-      const versionMatch = frontmatterMatch[1].match(/^\s*version\s*:\s*["']?([^"'\n]+)["']?\s*$/m);
-      if (!versionMatch) return null;
-      const version = versionMatch[1].trim();
-      return version || null;
-    } catch {
-      return null;
-    }
+    const fm = readSkillMdFrontmatter(skillDir);
+    return fm?.version ?? null;
   }
 
   /**
@@ -509,18 +587,8 @@ export class StoSkillService {
 
   /** Read description from SKILL.md YAML frontmatter. */
   readSkillMdDescription(skillDir: string): string | null {
-    try {
-      const skillMdPath = path.join(skillDir, 'SKILL.md');
-      if (!fs.existsSync(skillMdPath)) return null;
-      const raw = fs.readFileSync(skillMdPath, 'utf8');
-      const frontmatterMatch = raw.match(/^---\s*\n([\s\S]*?)\n---/);
-      if (!frontmatterMatch) return null;
-      const descMatch = frontmatterMatch[1].match(/^\s*description\s*:\s*["']?([^"'\n]+)["']?\s*$/m);
-      if (!descMatch) return null;
-      return descMatch[1].trim() || null;
-    } catch {
-      return null;
-    }
+    const fm = readSkillMdFrontmatter(skillDir);
+    return fm?.description ?? null;
   }
 
   // -----------------------------------------------------------------------
@@ -546,22 +614,32 @@ export class StoSkillService {
 
     // 2. Try SKILL.md frontmatter: ---\nname: xxx\n---
     try {
-      const skillMdPath = path.join(skillDir, 'SKILL.md');
-      const raw = fs.readFileSync(skillMdPath, 'utf8');
-
-      const frontmatterMatch = raw.match(/^---\s*\n([\s\S]*?)\n---/);
-      if (frontmatterMatch) {
-        const nameMatch = frontmatterMatch[1].match(/^\s*name\s*:\s*["']?([^"'\n]+)["']?\s*$/m);
-        if (nameMatch) return nameMatch[1].trim();
-      }
+      const fm = readSkillMdFrontmatter(skillDir);
+      if (fm?.name) return fm.name;
 
       // 3. Fallback: first H1 heading
+      const skillMdPath = path.join(skillDir, 'SKILL.md');
+      const raw = fs.readFileSync(skillMdPath, 'utf8').replace(/\r\n/g, '\n');
       const h1Match = raw.match(/^#\s+(.+)$/m);
       if (h1Match) return h1Match[1].trim();
     } catch {
       // ignore
     }
 
+    return null;
+  }
+
+  /**
+   * Read the human-readable skill title from SKILL.md frontmatter.
+   * Priority: SKILL.md frontmatter title → null
+   */
+  private readSkillTitle(skillDir: string): string | null {
+    try {
+      const fm = readSkillMdFrontmatter(skillDir);
+      if (fm?.title) return fm.title;
+    } catch {
+      // ignore
+    }
     return null;
   }
 
@@ -587,7 +665,7 @@ export class StoSkillService {
     const gatewayName = slug.toLowerCase();
 
     try {
-      const raw = fs.readFileSync(skillMdPath, 'utf8');
+      const raw = fs.readFileSync(skillMdPath, 'utf8').replace(/\r\n/g, '\n');
       const hasFrontmatter = /^---\s*\n/.test(raw);
 
       if (hasFrontmatter) {
@@ -649,6 +727,46 @@ export class StoSkillService {
     versionSource?: string;
   }): void {
     const lockDir = path.join(this.workDir, '.clawhub');
+    if (!fs.existsSync(lockDir)) {
+      fs.mkdirSync(lockDir, { recursive: true });
+    }
+    const lockFile = path.join(lockDir, 'lock.json');
+
+    let lockData: Record<string, unknown> = {};
+    if (fs.existsSync(lockFile)) {
+      try {
+        lockData = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
+      } catch {
+        lockData = {};
+      }
+    }
+
+    if (!lockData.skills || typeof lockData.skills !== 'object') {
+      lockData.skills = {};
+    }
+    const skillsMap = lockData.skills as Record<string, Record<string, unknown>>;
+    const existing = skillsMap[slug] || {};
+    skillsMap[slug] = {
+      ...existing,
+      version: meta.version,
+      source: existing.source || 'sto-marketplace',
+      name: meta.name ?? existing.name,
+      description: meta.description ?? existing.description,
+      author: meta.author ?? existing.author,
+      versionSource: meta.versionSource ?? existing.versionSource ?? 'install',
+      installedAt: (existing.installedAt as string | undefined) || new Date().toISOString(),
+    };
+    fs.writeFileSync(lockFile, JSON.stringify(lockData, null, 2));
+  }
+
+  private updateUserLockFile(userCode: string, slug: string, meta: {
+    version: string;
+    name?: string;
+    description?: string;
+    author?: string;
+    versionSource?: string;
+  }): void {
+    const lockDir = path.join(getOpenClawConfigDir(), 'users', userCode, '.clawhub');
     if (!fs.existsSync(lockDir)) {
       fs.mkdirSync(lockDir, { recursive: true });
     }

@@ -99,6 +99,7 @@ const PLUGINS = [
   { type: 'local', localDir: 'sto-agent-telemetry', pluginId: 'sto-agent-telemetry' },
   { type: 'local', localDir: 'sto-scheduled-task-tool', pluginId: 'sto-scheduled-task-tool' },
   { type: 'local', localDir: 'sto-skill-call-monitor', pluginId: 'sto-skill-call-monitor' },
+  { type: 'local', localDir: 'sto-dingtalk-send-guard', pluginId: 'sto-dingtalk-send-guard' },
 ];
 
 // Filter for excluding test files and unnecessary dirs when copying local plugins.
@@ -337,6 +338,21 @@ function bundleOneLocalPlugin({ localDir, pluginId }) {
   // 1) Copy plugin source files (excluding test files and node_modules)
   fs.cpSync(sourceDir, outputDir, { recursive: true, filter: bundleCopyFilter });
 
+  // 1b) Ensure shared dingtalk modules are present (same as scripts/sync-plugin-shared.mjs)
+  const sharedSrcDir = path.join(ROOT, 'shared');
+  const sharedDestDir = path.join(outputDir, 'shared');
+  const sharedFiles = [
+    'dingtalk-mention.ts',
+    'dingtalk-disclaimer.ts',
+    'dws-send-text.ts',
+    'dingtalk-file-send.ts',
+    'dingtalk-mention-context.ts',
+  ];
+  fs.mkdirSync(sharedDestDir, { recursive: true });
+  for (const file of sharedFiles) {
+    fs.copyFileSync(path.join(sharedSrcDir, file), path.join(sharedDestDir, file));
+  }
+
   // 2) If the plugin has npm dependencies, resolve and copy them
   let copiedCount = 0;
   let skippedDupes = 0;
@@ -431,6 +447,9 @@ function patchPluginId(pluginDir, expectedId) {
 }
 
 echo`📦 Bundling OpenClaw plugin mirrors...`;
+
+// Sync shared dingtalk modules into local plugins before hashing / copying
+await $`zx ${path.join(ROOT, 'scripts', 'sync-plugin-shared.mjs')}`.quiet();
 
 // Check cache first
 const cacheKey = calculatePluginsHash();

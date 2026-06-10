@@ -17,6 +17,11 @@ import { TaskCard } from './components/TaskCard';
 import { TaskCreateModal, type TaskCreateInputWithRun } from './components/TaskCreateModal';
 import { TaskEmptyState } from './components/TaskEmptyState';
 import type { CronJob } from '@/types/cron';
+import {
+  buildTaskMessageWithRecipients,
+  mentionsToScheduledTaskFields,
+  stripInstructionFromTaskMessage,
+} from '@/lib/scheduled-task-recipients';
 
 // View model for the card grid (adapts ScheduledTask shape to what TaskCard expects)
 interface TaskViewModel extends CronJob {
@@ -27,7 +32,7 @@ function toViewModel(task: import('@/types/scheduled-task').ScheduledTask): Task
   return {
     id: String(task.id),
     name: task.name,
-    message: task.description || '',
+    message: stripInstructionFromTaskMessage(task.description || ''),
     schedule: task.cronExpr,
     enabled: task.enabled,
     createdAt: task.createdAt,
@@ -132,22 +137,34 @@ export default function ScheduledTasks() {
     [triggerTask, navigate, location.pathname],
   );
 
+  const editingSourceTask = useMemo(
+    () => (editingJob ? tasks.find((task) => String(task.id) === editingJob.id) ?? null : null),
+    [editingJob, tasks],
+  );
+
   const handleSave = useCallback(
     async (input: TaskCreateInputWithRun) => {
+      const recipientFields = mentionsToScheduledTaskFields(input.dingTalkMentions ?? []);
+      const description = buildTaskMessageWithRecipients(input.message, input.dingTalkMentions);
+
       try {
         if (editingJob) {
           await updateTask({
             taskId: Number(editingJob.id),
             name: input.name,
             cronExpr: input.schedule,
-            description: input.message,
+            description,
+            ...recipientFields,
+            dingTalkMentions: input.dingTalkMentions,
           });
           toast.success('任务已更新');
         } else {
           await createTask({
             name: input.name,
             cronExpr: input.schedule,
-            description: input.message,
+            description,
+            ...recipientFields,
+            dingTalkMentions: input.dingTalkMentions,
           });
           toast.success('任务已创建');
         }
@@ -270,6 +287,7 @@ export default function ScheduledTasks() {
 
       <TaskCreateModal
         job={editingJob}
+        sourceTask={editingSourceTask}
         open={createOpen}
         onClose={() => { setCreateOpen(false); setRecommendInitialValues(undefined); }}
         onSave={(input) => { setRecommendInitialValues(undefined); return handleSave(input); }}

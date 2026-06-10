@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { DingTalkRecipientField } from '@/components/dingtalk/DingTalkRecipientField';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
 import { scheduleValueToCron, cronToScheduleValue, defaultScheduleValue } from './schedule-utils';
+import { resolveScheduledTaskMentions, stripInstructionFromTaskMessage } from '@/lib/scheduled-task-recipients';
 import { cn } from '@/lib/utils';
 import type { CronJob, CronJobCreateInput } from '@/types/cron';
+import type { DingTalkMention } from '@/types/dingtalk-mention';
 
 interface CronTaskCreateModalProps {
   job?: CronJob | null;
@@ -18,6 +21,7 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
   const [name, setName] = useState('');
   const [message, setMessage] = useState('');
   const [schedule, setSchedule] = useState<ScheduleValue>(defaultScheduleValue());
+  const [recipients, setRecipients] = useState<DingTalkMention[]>([]);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; message?: string }>({});
 
@@ -27,15 +31,18 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
     if (open) {
       if (job) {
         setName(job.name || '');
-        setMessage(job.message || '');
+        setMessage(stripInstructionFromTaskMessage(job.message || ''));
+        setRecipients(resolveScheduledTaskMentions(job.message || ''));
         setSchedule(cronToScheduleValue(job.schedule));
       } else if (initialValues) {
         setName(initialValues.name || '');
         setMessage(initialValues.message || '');
+        setRecipients([]);
         setSchedule(initialValues.schedule ? cronToScheduleValue(initialValues.schedule) : defaultScheduleValue());
       } else {
         setName('');
         setMessage('');
+        setRecipients([]);
         setSchedule(defaultScheduleValue());
       }
       setErrors({});
@@ -59,6 +66,7 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
         message: message.trim(),
         schedule: scheduleValueToCron(schedule),
         enabled: true,
+        dingTalkMentions: recipients.length > 0 ? recipients : undefined,
       });
       onClose();
     } catch (err) {
@@ -151,6 +159,14 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
               计划时间
             </label>
             <SchedulePicker value={schedule} onChange={setSchedule} />
+          </div>
+
+          {/* Recipients */}
+          <div>
+            <label className="block text-[13.5px] font-medium text-foreground mb-1.5">
+              发送对象
+            </label>
+            <DingTalkRecipientField value={recipients} onChange={setRecipients} />
           </div>
         </div>
 

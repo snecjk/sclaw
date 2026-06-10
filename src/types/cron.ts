@@ -4,6 +4,7 @@
  */
 
 import { ChannelType } from './channel';
+import type { DingTalkMention } from './dingtalk-mention';
 
 /**
  * Cron job target (where to send the result)
@@ -60,6 +61,7 @@ export interface CronJobCreateInput {
   message: string;
   schedule: string;
   enabled?: boolean;
+  dingTalkMentions?: DingTalkMention[];
 }
 
 /**
@@ -70,6 +72,8 @@ export interface CronJobUpdateInput {
   message?: string;
   schedule?: string;
   enabled?: boolean;
+  agentId?: string;
+  dingTalkMentions?: DingTalkMention[];
 }
 
 /**

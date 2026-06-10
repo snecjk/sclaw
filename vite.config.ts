@@ -1,8 +1,15 @@
+import { copyFileSync, existsSync } from 'fs';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron';
 import renderer from 'vite-plugin-electron-renderer';
 import { resolve } from 'path';
+
+function copyGatewayPreloadCjs(outDir: string) {
+  const src = resolve(__dirname, 'electron/gateway/gateway-fetch-preload.cjs');
+  if (!existsSync(src)) return;
+  copyFileSync(src, resolve(outDir, 'gateway-fetch-preload.cjs'));
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -32,6 +39,14 @@ export default defineConfig(({ mode }) => {
           },
           vite: {
             define: envDefine,
+            plugins: [
+              {
+                name: 'copy-gateway-preload-cjs',
+                closeBundle() {
+                  copyGatewayPreloadCjs(resolve(__dirname, 'dist-electron/main'));
+                },
+              },
+            ],
             build: {
               outDir: 'dist-electron/main',
               rollupOptions: {

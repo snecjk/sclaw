@@ -115,6 +115,7 @@ export interface ChatState {
       preview: string | null;
     }>,
     targetAgentId?: string | null,
+    dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[],
   ) => Promise<void>;
   abortRun: () => Promise<void>;
   handleChatEvent: (event: Record<string, unknown>) => void;

@@ -9,6 +9,7 @@ import { listAgentsSnapshot } from '../../utils/agent-config';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
+import { preprocessChatSendParams } from '../../utils/dingtalk-mention-send';
 
 export async function handleGatewayRoutes(
   req: IncomingMessage,
@@ -130,6 +131,20 @@ export async function handleGatewayRoutes(
         deliver?: boolean;
         idempotencyKey: string;
         media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
+        dingTalkMentions?: Array<{
+          type: 'user' | 'group';
+          displayName: string;
+          userId?: string;
+          openConversationId?: string;
+          corpId?: string;
+        }>;
+        dingTalkSendFileIntent?: boolean;
+        dingTalkAttachedFiles?: Array<{
+          fileName: string;
+          filePath: string;
+          mimeType: string;
+          fileSize?: number;
+        }>;
       }>(req);
       const VISION_MIME_TYPES = new Set([
         // Static images
@@ -174,7 +189,17 @@ export async function handleGatewayRoutes(
       if (imageAttachments.length > 0) {
         rpcParams.attachments = imageAttachments;
       }
-      const result = await ctx.gatewayManager.rpc('chat.send', rpcParams, 120000);
+      if (body.dingTalkMentions?.length) {
+        rpcParams.dingTalkMentions = body.dingTalkMentions;
+      }
+      if (body.dingTalkSendFileIntent) {
+        rpcParams.dingTalkSendFileIntent = body.dingTalkSendFileIntent;
+      }
+      if (body.dingTalkAttachedFiles?.length) {
+        rpcParams.dingTalkAttachedFiles = body.dingTalkAttachedFiles;
+      }
+      const enrichedParams = await preprocessChatSendParams(rpcParams);
+      const result = await ctx.gatewayManager.rpc('chat.send', enrichedParams, 120000);
       sendJson(res, 200, { success: true, result });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

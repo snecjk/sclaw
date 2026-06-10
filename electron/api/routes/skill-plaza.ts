@@ -133,6 +133,12 @@ export async function handleSkillPlazaRoutes(
         return true;
       }
       await ctx.stoSkillService.uninstall({ slug });
+      // Best-effort: record uninstall on backend (fire-and-forget)
+      try {
+        await ctx.skillPlazaService.recordUninstall(slug);
+      } catch (err) {
+        logger.warn(`[skill-plaza/uninstall] Failed to record uninstall for ${slug}:`, err);
+      }
       sendJson(res, 200, { success: true });
     } catch (error) {
       const message = String(error);

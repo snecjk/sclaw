@@ -174,17 +174,31 @@ function scheduleGatewayChannelRestart(ctx: HostApiContext, reason: string): voi
 // not sufficient for channel plugins (see restartGatewayForAgentDeletion).
 const FORCE_RESTART_CHANNELS = new Set(['dingtalk', 'wecom', 'whatsapp', 'qqbot', OPENCLAW_WECHAT_CHANNEL_TYPE]);
 
+/** Coalesce rapid plugin-channel saves with OpenClaw's own config-driven restart. */
+const PLUGIN_CHANNEL_RESTART_DEBOUNCE_MS = 4000;
+
+type ChannelGatewayRefreshKind = 'config' | 'binding';
+
 function scheduleGatewayChannelSaveRefresh(
   ctx: HostApiContext,
   channelType: string,
   reason: string,
+  kind: ChannelGatewayRefreshKind = 'config',
 ): void {
   const storedChannelType = resolveStoredChannelType(channelType);
   if (ctx.gatewayManager.getStatus().state === 'stopped') {
     return;
   }
+
+  // Binding-only updates do not need plugin teardown; in-process reload is enough.
+  if (kind === 'binding') {
+    ctx.gatewayManager.debouncedReload();
+    void reason;
+    return;
+  }
+
   if (FORCE_RESTART_CHANNELS.has(storedChannelType)) {
-    ctx.gatewayManager.debouncedRestart();
+    ctx.gatewayManager.debouncedRestart(PLUGIN_CHANNEL_RESTART_DEBOUNCE_MS);
     void reason;
     return;
   }
@@ -360,7 +374,6 @@ async function buildChannelAccountsView(ctx: HostApiContext): Promise<ChannelAcc
       }
       if (backfilledBinding) {
         agentsSnapshot = await listAgentsSnapshot();
-        scheduleGatewayChannelSaveRefresh(ctx, OPENCLAW_WECHAT_CHANNEL_TYPE, `channel:backfillWeChatBinding:${rawChannelType}`);
       }
     }
 
@@ -435,7 +448,7 @@ export async function handleChannelRoutes(
     try {
       const body = await parseJsonBody<{ channelType: string; accountId: string; agentId: string }>(req);
       await assignChannelAccountToAgent(body.agentId, resolveStoredChannelType(body.channelType), body.accountId);
-      scheduleGatewayChannelSaveRefresh(ctx, body.channelType, `channel:setBinding:${body.channelType}`);
+      scheduleGatewayChannelSaveRefresh(ctx, body.channelType, `channel:setBinding:${body.channelType}`, 'binding');
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -447,7 +460,7 @@ export async function handleChannelRoutes(
     try {
       const body = await parseJsonBody<{ channelType: string; accountId: string }>(req);
       await clearChannelBinding(resolveStoredChannelType(body.channelType), body.accountId);
-      scheduleGatewayChannelSaveRefresh(ctx, body.channelType, `channel:clearBinding:${body.channelType}`);
+      scheduleGatewayChannelSaveRefresh(ctx, body.channelType, `channel:clearBinding:${body.channelType}`, 'binding');
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -551,7 +564,12 @@ export async function handleChannelRoutes(
       if (storedChannelType === 'dingtalk') {
         const installResult = await ensureDingTalkPluginInstalled();
         if (!installResult.installed) {
-          sendJson(res, 500, { success: false, error: installResult.warning || 'DingTalk plugin install failed' });
+          sendJson(res, 503, {
+            success: false,
+            fallback: 'dws',
+            error: installResult.warning
+              || '钉钉 OpenClaw 通道插件当前未启用（需 OpenClaw >= 2026.3.28）。请改用 dws：在设置页安装并登录 dws，在聊天输入 @ 选择钉钉收件人，由 Agent 调用 dws 发送。',
+          });
           return true;
         }
       }

@@ -114,6 +114,9 @@ export async function handleScheduledTaskRoutes(
         description?: string;
         notifyMode?: string;
         enabled?: boolean;
+        dingdingId?: string;
+        dingdingGroupId?: string;
+        dingdingGroupName?: string;
       }>(req);
       const service = getScheduledTaskService();
       const task = await service.updateTask({ taskId: id, ...input });
