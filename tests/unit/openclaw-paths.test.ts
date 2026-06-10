@@ -72,6 +72,7 @@ describe('OpenClaw packaged paths (ASAR)', () => {
       const normalized = normalizePath(p);
       if (normalized.endsWith('/openclaw.asar')) return true;
       if (normalized.endsWith('/openclaw.asar/openclaw.mjs')) return true;
+      if (normalized.endsWith('/openclaw.asar/node_modules')) return true;
       return false;
     });
 
@@ -79,7 +80,7 @@ describe('OpenClaw packaged paths (ASAR)', () => {
     expect(getOpenClawDir()).toBe(join(RESOURCES, 'openclaw.asar'));
     expect(getOpenClawEntryPath()).toBe(join(RESOURCES, 'openclaw.asar', 'openclaw.mjs'));
     expect(getOpenClawProcessCwd()).toBe(RESOURCES);
-    expect(getOpenClawNodeModulesPath()).toBe(join(RESOURCES, 'openclaw.asar', 'node_modules'));
+    expect(getOpenClawNodeModulesPath()).toContain(join(RESOURCES, 'openclaw.asar', 'node_modules'));
   });
 
   it('falls back to legacy openclaw/ directory when asar is absent', async () => {

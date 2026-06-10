@@ -168,10 +168,24 @@ export function getOpenClawProcessCwd(): string {
 }
 
 /**
- * OpenClaw node_modules path for NODE_PATH (Gateway / doctor / plugins).
+ * NODE_PATH entries for Gateway / doctor / plugin module resolution.
+ * Includes openclaw runtime node_modules plus dev fallbacks for hoisted deps.
  */
 export function getOpenClawNodeModulesPath(): string {
-  return join(getOpenClawDir(), 'node_modules');
+  const delimiter = process.platform === 'win32' ? ';' : ':';
+  const paths: string[] = [];
+  const openclawDir = getOpenClawDir();
+
+  paths.push(join(openclawDir, 'node_modules'));
+
+  if (!app.isPackaged) {
+    const projectRoot = join(__dirname, '../..');
+    paths.push(join(projectRoot, 'build/openclaw/node_modules'));
+    paths.push(join(projectRoot, 'node_modules'));
+  }
+
+  const unique = [...new Set(paths.filter((entry) => existsSync(entry)))];
+  return unique.join(delimiter);
 }
 
 /**

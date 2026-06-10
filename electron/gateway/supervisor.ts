@@ -4,6 +4,9 @@ import { existsSync } from 'fs';
 import WebSocket from 'ws';
 import { getOpenClawEntryPath, getOpenClawProcessCwd, getOpenClawNodeModulesPath } from '../utils/paths';
 import { prependPathEntry, prependNodePathEntry } from '../utils/env-path';
+import { getUvMirrorEnv } from '../utils/uv-env';
+import { isPythonReady, setupManagedPython } from '../utils/uv-setup';
+import { logger } from '../utils/logger';
 import { listAgentsSnapshot } from '../utils/agent-config';
 
 const pidCache = new Map<number, { pids: string[]; ts: number }>();
