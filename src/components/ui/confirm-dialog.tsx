@@ -74,7 +74,7 @@ export function ConfirmDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
@@ -82,7 +82,7 @@ export function ConfirmDialog({
     >
       <div
         className={cn(
-          'mx-4 w-full max-w-md rounded-xl border border-glass-border glass-panel p-6',
+          'mx-4 w-full max-w-[400px] rounded-2xl border border-glass-border glass-panel p-6',
           'shadow-2xl focus:outline-none'
         )}
         tabIndex={-1}
@@ -97,6 +97,7 @@ export function ConfirmDialog({
             variant="outline"
             onClick={onCancel}
             disabled={confirming}
+            className="rounded-full px-5"
           >
             {cancelLabel}
           </Button>
@@ -104,6 +105,10 @@ export function ConfirmDialog({
             variant={variant === 'destructive' ? 'destructive' : 'default'}
             onClick={handleConfirm}
             disabled={confirming}
+            className={cn(
+              'rounded-full px-5',
+              variant === 'destructive' && 'bg-[#e53935] hover:bg-[#c62828]',
+            )}
           >
             {confirmLabel}
           </Button>

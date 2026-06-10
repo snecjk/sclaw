@@ -16,6 +16,7 @@ import { SkillPlazaPage } from './components/skill-plaza/SkillPlazaPage';
 import { Subscriptions } from './pages/Subscriptions';
 import { Cron } from './pages/Cron';
 import ScheduledTasks from './pages/ScheduledTasks';
+import MyTask from './pages/MyTask';
 import { Home } from './pages/Home';
 import { TaskDetail } from './pages/TaskDetail';
 import { Settings } from './pages/Settings';
@@ -298,6 +299,7 @@ function App() {
             <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/cron" element={<Cron />} />
             <Route path="/scheduled-tasks" element={<ScheduledTasks />} />
+            <Route path="/my-tasks" element={<MyTask />} />
             <Route path="/settings/*" element={<Settings />} />
           </Route>
         </Routes>
