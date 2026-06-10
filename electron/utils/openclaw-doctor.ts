@@ -1,7 +1,7 @@
 import { app, utilityProcess } from 'electron';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { getOpenClawDir, getOpenClawEntryPath } from './paths';
+import { getOpenClawDir, getOpenClawEntryPath, getOpenClawProcessCwd } from './paths';
 import { logger } from './logger';
 import { getUvMirrorEnv } from './uv-env';
 
@@ -69,7 +69,7 @@ async function runDoctorCommandWithArgs(
   mode: OpenClawDoctorMode,
   args: string[],
 ): Promise<OpenClawDoctorResult> {
-  const openclawDir = getOpenClawDir();
+  const openclawDir = getOpenClawProcessCwd();
   const entryScript = getOpenClawEntryPath();
   const command = `openclaw ${args.join(' ')}`;
   const startedAt = Date.now();

@@ -12,7 +12,7 @@ import { cp as cpAsync, mkdir as mkdirAsync, rm as rmAsync } from 'node:fs/promi
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { logger } from './logger';
-import { getOpenClawConfigDir } from './paths';
+import { getOpenClawConfigDir, getBundledPluginSourceCandidates } from './paths';
 
 function normalizeFsPathForWindows(filePath: string): string {
   if (process.platform !== 'win32') return filePath;
@@ -509,17 +509,7 @@ export function ensurePluginInstalled(
 // ── Candidate source path builder ────────────────────────────────────────────
 
 export function buildCandidateSources(pluginDirName: string): string[] {
-  return app.isPackaged
-    ? [
-      join(process.resourcesPath, 'openclaw-plugins', pluginDirName),
-      join(process.resourcesPath, 'app.asar.unpacked', 'build', 'openclaw-plugins', pluginDirName),
-      join(process.resourcesPath, 'app.asar.unpacked', 'openclaw-plugins', pluginDirName),
-    ]
-    : [
-      join(app.getAppPath(), 'build', 'openclaw-plugins', pluginDirName),
-      join(process.cwd(), 'build', 'openclaw-plugins', pluginDirName),
-      join(__dirname, '../../build/openclaw-plugins', pluginDirName),
-    ];
+  return getBundledPluginSourceCandidates(pluginDirName);
 }
 
 // ── Per-channel plugin helpers ───────────────────────────────────────────────

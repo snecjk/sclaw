@@ -8,7 +8,7 @@ import { access, mkdir, readFile, writeFile, readdir, stat, rm } from 'fs/promis
 import { constants } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { getOpenClawResolvedDir, getOpenClawConfigDir } from './paths';
+import { getOpenClawEntryPath, getOpenClawProcessCwd, getOpenClawConfigDir, getBundledPluginSourceCandidates } from './paths';
 import * as logger from './logger';
 import { proxyAwareFetch } from './proxy-fetch';
 import { withConfigLock } from './config-mutex';
@@ -1253,7 +1253,8 @@ export async function validateChannelConfig(channelType: string): Promise<Valida
     const result: ValidationResult = { valid: true, errors: [], warnings: [] };
 
     try {
-        const openclawPath = getOpenClawResolvedDir();
+        const openclawPath = getOpenClawProcessCwd();
+        const entryScript = getOpenClawEntryPath();
 
         // Run openclaw doctor command to validate config (async to avoid
         // blocking the main thread).
@@ -1279,7 +1280,7 @@ export async function validateChannelConfig(channelType: string): Promise<Valida
                 );
             });
 
-        const output = await runDoctor(`node openclaw.mjs doctor 2>&1`);
+        const output = await runDoctor(`node "${entryScript}" doctor 2>&1`);
 
         const parsedDoctor = parseDoctorValidationOutput(resolvedChannelType, output);
         result.errors.push(...parsedDoctor.errors);

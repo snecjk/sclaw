@@ -21,11 +21,47 @@
 
 const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, realpathSync } = require('fs');
 const { join, dirname, basename } = require('path');
+const { createPackage } = require('@electron/asar');
 
 // On Windows, paths in pnpm's virtual store can exceed the default MAX_PATH
 // limit (260 chars). Node.js 18.17+ respects the system LongPathsEnabled
 // registry key, but as a safety net we normalize paths to use the \\?\ prefix
 // on Windows, which bypasses the limit unconditionally.
+// Native modules and prebuilt binaries must stay outside the ASAR archive.
+const OPENCLAW_ASAR_UNPACK = '{**/*.node,**/sharp/**,**/koffi/**,**/@img/**,**/@napi-rs/**}';
+
+function countFilesRecursive(dir) {
+  let count = 0;
+  if (!existsSync(dir)) return 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      count += countFilesRecursive(fullPath);
+    } else if (entry.isFile()) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function packDirectoryToAsar(sourceDir, asarPath, label) {
+  if (!existsSync(sourceDir)) {
+    console.warn(`[after-pack] ⚠️  Skipping ${label} ASAR pack — source missing: ${sourceDir}`);
+    return false;
+  }
+
+  const fileCount = countFilesRecursive(sourceDir);
+  const unpackedPath = `${asarPath}.unpacked`;
+  if (existsSync(asarPath)) rmSync(asarPath, { force: true });
+  if (existsSync(unpackedPath)) rmSync(unpackedPath, { recursive: true, force: true });
+
+  console.log(`[after-pack] 📦 Packing ${label} (${fileCount} files) -> ${asarPath}`);
+  createPackage(sourceDir, asarPath, { unpack: OPENCLAW_ASAR_UNPACK });
+  rmSync(sourceDir, { recursive: true, force: true });
+  console.log(`[after-pack] ✅ ${label} packed into ASAR (${basename(asarPath)}).`);
+  return true;
+}
+
 function normWin(p) {
   if (process.platform !== 'win32') return p;
   if (p.startsWith('\\\\?\\')) return p;
@@ -549,8 +585,6 @@ exports.default = async function afterPack(context) {
 
   console.log(`[after-pack] Target: ${platform}/${arch}`);
 
-  const src = join(__dirname, '..', 'build', 'openclaw', 'node_modules');
-
   let resourcesDir;
   if (platform === 'darwin') {
     const appName = context.packager.appInfo.productFilename;
@@ -559,24 +593,36 @@ exports.default = async function afterPack(context) {
     resourcesDir = join(appOutDir, 'resources');
   }
 
+  const buildOpenclawRoot = join(__dirname, '..', 'build', 'openclaw');
   const openclawRoot = join(resourcesDir, 'openclaw');
   const dest = join(openclawRoot, 'node_modules');
   const nodeModulesRoot = join(__dirname, '..', 'node_modules');
   const pluginsDestRoot = join(resourcesDir, 'openclaw-plugins');
 
+  if (!existsSync(buildOpenclawRoot)) {
+    console.warn('[after-pack] ⚠️  build/openclaw not found. Run bundle-openclaw first.');
+    return;
+  }
+
+  console.log('[after-pack] Materializing openclaw package from build/openclaw ...');
+  if (existsSync(openclawRoot)) rmSync(openclawRoot, { recursive: true, force: true });
+  cpSync(buildOpenclawRoot, openclawRoot, { recursive: true, dereference: true });
+
+  const src = join(buildOpenclawRoot, 'node_modules');
   if (!existsSync(src)) {
     console.warn('[after-pack] ⚠️  build/openclaw/node_modules not found. Run bundle-openclaw first.');
     return;
   }
 
-  // 1. Copy node_modules (electron-builder skips it due to .gitignore)
-  const depCount = readdirSync(src, { withFileTypes: true })
-    .filter(d => d.isDirectory() && d.name !== '.bin')
-    .length;
-
-  console.log(`[after-pack] Copying ${depCount} openclaw dependencies to ${dest} ...`);
-  cpSync(src, dest, { recursive: true });
-  console.log('[after-pack] ✅ openclaw node_modules copied.');
+  if (!existsSync(dest)) {
+    console.log('[after-pack] Copying openclaw node_modules (missing after materialize) ...');
+    cpSync(src, dest, { recursive: true });
+  } else {
+    const depCount = readdirSync(src, { withFileTypes: true })
+      .filter(d => d.isDirectory() && d.name !== '.bin')
+      .length;
+    console.log(`[after-pack] ✅ openclaw materialized with ${depCount} dependencies.`);
+  }
 
   // Patch broken modules whose CJS transpiled output sets module.exports = undefined,
   // causing TypeError in Node.js 22+ ESM interop.
@@ -714,5 +760,30 @@ exports.default = async function afterPack(context) {
     if (removedDistSkills > 0) {
       console.log(`[after-pack] ✅ Removed ${removedDistSkills} excluded skills from dist/.`);
     }
+  }
+
+  // 7. Pack openclaw + plugins into ASAR archives to reduce NSIS installer file count.
+  const looseFileCount = countFilesRecursive(openclawRoot)
+    + countFilesRecursive(pluginsDestRoot);
+  console.log(`[after-pack] Loose resource files before ASAR pack: ${looseFileCount}`);
+
+  packDirectoryToAsar(openclawRoot, join(resourcesDir, 'openclaw.asar'), 'OpenClaw runtime');
+
+  const hasPlugins = existsSync(pluginsDestRoot)
+    && readdirSync(pluginsDestRoot).some((entry) => {
+      try {
+        return statSync(join(pluginsDestRoot, entry)).isDirectory();
+      } catch {
+        return false;
+      }
+    });
+  if (hasPlugins) {
+    packDirectoryToAsar(
+      pluginsDestRoot,
+      join(resourcesDir, 'openclaw-plugins.asar'),
+      'OpenClaw plugins',
+    );
+  } else if (existsSync(pluginsDestRoot)) {
+    rmSync(pluginsDestRoot, { recursive: true, force: true });
   }
 };

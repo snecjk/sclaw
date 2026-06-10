@@ -2,7 +2,7 @@ import { app, utilityProcess } from 'electron';
 import path from 'path';
 import { existsSync } from 'fs';
 import WebSocket from 'ws';
-import { getOpenClawDir, getOpenClawEntryPath } from '../utils/paths';
+import { getOpenClawEntryPath, getOpenClawProcessCwd } from '../utils/paths';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { isPythonReady, setupManagedPython } from '../utils/uv-setup';
 import { logger } from '../utils/logger';
@@ -300,7 +300,7 @@ export async function runOpenClawDoctorRepair(): Promise<boolean> {
     logger.warn('Pre-doctor agent config migration failed, continuing with doctor repair:', err);
   }
 
-  const openclawDir = getOpenClawDir();
+  const openclawDir = getOpenClawProcessCwd();
   const entryScript = getOpenClawEntryPath();
   if (!existsSync(entryScript)) {
     logger.error(`Cannot run OpenClaw doctor repair: entry script not found at ${entryScript}`);

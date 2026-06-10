@@ -17,7 +17,13 @@ chcp 65001 >nul 2>&1
 
 set OPENCLAW_EMBEDDED_IN=StoClaw
 set "NODE_EXE=%~dp0..\bin\node.exe"
-set "OPENCLAW_ENTRY=%~dp0..\openclaw\openclaw.mjs"
+set "OPENCLAW_ASAR=%~dp0..\openclaw.asar"
+set "OPENCLAW_LEGACY=%~dp0..\openclaw\openclaw.mjs"
+if exist "%OPENCLAW_ASAR\" (
+    set "OPENCLAW_ENTRY=%OPENCLAW_ASAR%\openclaw.mjs"
+) else (
+    set "OPENCLAW_ENTRY=%OPENCLAW_LEGACY%"
+)
 
 set "_USE_BUNDLED_NODE=0"
 if exist "%NODE_EXE%" (
