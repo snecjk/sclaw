@@ -16,10 +16,13 @@ export function HomeAssistant({
   className,
   seedText,
   onSend,
+  placeholderKey,
 }: {
   className?: string;
   seedText?: string;
   onSend?: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[], workflowId?: string | null) => void;
+  /** i18n key under home namespace for composer placeholder override */
+  placeholderKey?: string;
 }) {
   const { t } = useTranslation('home');
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
@@ -32,6 +35,7 @@ export function HomeAssistant({
     variant: 'embedded',
     seedText,
     className,
+    placeholder: placeholderKey ? t(placeholderKey) : undefined,
   });
 
   useEffect(() => {

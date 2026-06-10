@@ -61,6 +61,8 @@ export interface ChatInputBindingsOptions {
   isEmpty?: boolean;
   /** 种子文本（用于预填充输入框，如任务子项默认提示） */
   seedText?: string;
+  /** 覆盖默认 composer 占位文案 */
+  placeholder?: string;
   /** 外层 className */
   className?: string;
 }
@@ -82,6 +84,8 @@ export interface ChatInputBindingsResult {
   variant: 'default' | 'embedded';
   /** 种子文本 */
   seedText?: string;
+  /** 覆盖默认 composer 占位文案 */
+  placeholder?: string;
   /** 外层 className */
   className?: string;
 }
@@ -110,6 +114,7 @@ export function useChatInputBindings(options: ChatInputBindingsOptions): ChatInp
       isEmpty: options.isEmpty,
       variant: options.variant ?? 'default',
       seedText: options.seedText,
+      placeholder: options.placeholder,
       className: options.className,
     }),
     [
@@ -118,6 +123,7 @@ export function useChatInputBindings(options: ChatInputBindingsOptions): ChatInp
       options.isEmpty,
       options.variant,
       options.seedText,
+      options.placeholder,
       options.className,
       abortRun,
       isGatewayRunning,

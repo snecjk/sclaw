@@ -1,4 +1,58 @@
 {
+  "site": {
+    "hero": {
+      "title": "STO Claw — 拠点オペレーションをより効率的に",
+      "subtitle": "AI ワークプラットフォームで拠点のスマート運営を再構築し、効率的で知的な現場運営を支援します。"
+    },
+    "workflowGuide": {
+      "heading": "ワークフローガイド",
+      "monitor": {
+        "title": "顧客異常モニタリング",
+        "pill": "タスク監視",
+        "status": "未設定",
+        "bodyCaption": "ワークフロー概要",
+        "bodyDetail": "顧客件数・商品構成・損益・サービス指標を日次で比較し、異常顧客を自動検知してモニタリングレポートを生成。ルール設定とワークセンターへの定期プッシュに対応。",
+        "footerTeam": "顧客追跡チーム",
+        "footerHint": "ワークフローを設定",
+        "createPrompt": "顧客異常モニタリング ワークフローを作成"
+      },
+      "recon": {
+        "title": "本社精算照合",
+        "pill": "精算",
+        "status": "完了",
+        "stat1Label": "収支",
+        "stat1Value": "128,560",
+        "stat1Unit": "CNY",
+        "stat2Label": "収入",
+        "stat2Value": "98,750",
+        "stat2Unit": "CNY",
+        "stat3Label": "支出",
+        "stat3Value": "29,810",
+        "stat3Unit": "CNY",
+        "footerTeam": "精算チーム",
+        "footerHint": "例外 4 件"
+      },
+      "cost": {
+        "title": "顧客コスト分析",
+        "pill": "タスク監視",
+        "status": "完了",
+        "stat1Label": "異常顧客",
+        "stat1Value": "57",
+        "stat1Unit": "件",
+        "stat2Label": "高リスク",
+        "stat2Value": "12",
+        "stat2Unit": "件",
+        "stat3Label": "関与金額",
+        "stat3Value": "-26,980.70",
+        "stat3Unit": "CNY",
+        "footerTeam": "顧客追跡チーム",
+        "footerHint": "例外 3 件"
+      }
+    },
+    "assistant": {
+      "placeholder": "本社精算照合表を作成してください"
+    }
+  },
   "hero": {
     "title": "STO Claw — 経営管理をより効率的に",
     "subtitle": "AI ワークスペースで組織の連携と現場オペレーションを強化します。"

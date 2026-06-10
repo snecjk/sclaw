@@ -40,6 +40,11 @@ import {
   waitForPortFree,
   warmupManagedPythonReadiness,
 } from './supervisor';
+import {
+  clearOwnedGatewayProcess,
+  recordOwnedGatewayProcess,
+  terminateOrphanedOwnedGateway,
+} from './process-registry';
 import { GatewayConnectionMonitor } from './connection-monitor';
 import { GatewayLifecycleController, LifecycleSupersededError } from './lifecycle-controller';
 import { launchGatewayProcess } from './process-launcher';
@@ -378,8 +383,21 @@ export class GatewayManager extends EventEmitter {
     // Fire-and-forget: only needs to run once, not on every retry.
     warmupManagedPythonReadiness();
 
+    // Terminate a Gateway orphaned by a previous app run BEFORE port probing.
+    // If the orphan survived on the default port, findAvailablePort below
+    // would silently switch to another port and spawn a second Gateway that
+    // shares the same OpenClaw state dir — the orphan then keeps holding
+    // session .jsonl.lock files ("session file locked (timeout): pid=...").
+    try {
+      await terminateOrphanedOwnedGateway(this.process?.pid);
+    } catch (err) {
+      logger.warn('Failed to terminate orphaned Gateway process:', err);
+    }
+
     // Clean up stale session lock files left by previous crashes.
     // This mitigates the Windows lock-recovery defect in openclaw.
+    // Must run AFTER orphan termination so locks held by the killed orphan
+    // are detected as stale and removed in the same startup pass.
     try {
       const { cleanupStaleSessionLocks } = await import('../utils/session-lock-cleanup');
       await cleanupStaleSessionLocks();
@@ -514,6 +532,7 @@ export class GatewayManager extends EventEmitter {
       if (this.process === child) {
         this.process = null;
       }
+      clearOwnedGatewayProcess();
     }
     this.ownsProcess = false;
 
@@ -537,6 +556,7 @@ export class GatewayManager extends EventEmitter {
     if (this.process === child) {
       this.process = null;
     }
+    clearOwnedGatewayProcess();
     this.ownsProcess = false;
     this.setStatus({ pid: undefined });
     return true;
@@ -888,8 +908,15 @@ export class GatewayManager extends EventEmitter {
         }
         logger.warn(`[Gateway stderr] ${classified.normalized}`);
       },
+      onStdoutLine: (line) => {
+        const trimmed = line.trim();
+        if (trimmed) {
+          logger.debug(`[Gateway stdout] ${trimmed}`);
+        }
+      },
       onSpawn: (pid) => {
         this.setStatus({ pid });
+        recordOwnedGatewayProcess(pid, this.status.port);
       },
       onExit: (exitedChild, code) => {
         this.processExitCode = code;
@@ -897,6 +924,7 @@ export class GatewayManager extends EventEmitter {
         this.connectionMonitor.clear();
         if (this.process === exitedChild) {
           this.process = null;
+          clearOwnedGatewayProcess();
         }
         this.emit('exit', code);
 

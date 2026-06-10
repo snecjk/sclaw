@@ -816,18 +816,21 @@ function FileIcon({ mimeType, className }: { mimeType: string; className?: strin
 }
 
 function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFile?: (file: AttachedFileMeta) => void }) {
+  const isPreviewable = isPreviewableFile(file);
+
   const handleOpen = useCallback(() => {
-    if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
-      // Web URLs always open in external browser due to anti-hotlink / iframe blocking
+    // Keep in sync with the 预览 badge condition: previewable files open in the side panel
+    // (FilePreviewViewer fetches remote HTML/text, so OSS http(s) URLs preview fine).
+    if (onPreviewFile && isPreviewable) {
+      onPreviewFile(file);
+    } else if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
       window.electron.openExternal(file.filePath);
     } else if (onPreviewFile) {
       onPreviewFile(file);
     } else if (file.filePath) {
       invokeIpc('shell:openPath', file.filePath);
     }
-  }, [file, onPreviewFile]);
-
-  const isPreviewable = isPreviewableFile(file);
+  }, [file, onPreviewFile, isPreviewable]);
 
   return (
     <div

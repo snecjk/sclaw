@@ -163,7 +163,7 @@ export async function waitForPortFree(port: number, timeoutMs = 30000): Promise<
   logger.warn(`Port ${port} still occupied after ${timeoutMs}ms, proceeding anyway`);
 }
 
-async function getListeningProcessIds(port: number): Promise<string[]> {
+export async function getListeningProcessIds(port: number): Promise<string[]> {
   const cached = pidCache.get(port);
   if (cached && Date.now() - cached.ts < PID_CACHE_TTL_MS) {
     return cached.pids;
@@ -207,7 +207,7 @@ async function getListeningProcessIds(port: number): Promise<string[]> {
   return result;
 }
 
-async function terminateOrphanedProcessIds(port: number, pids: string[]): Promise<void> {
+export async function terminateOrphanedProcessIds(port: number, pids: string[]): Promise<void> {
   logger.info(`Found orphaned process listening on port ${port} (PIDs: ${pids.join(', ')}), attempting to kill...`);
 
   if (process.platform === 'darwin') {
