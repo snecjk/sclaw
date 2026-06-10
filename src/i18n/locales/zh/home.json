@@ -97,7 +97,7 @@
     "collabValue": "多助手",
     "toolsLabel": "工具",
     "toolsValue": "可调用",
-    "inputPlaceholder": "给 Main Agent 发送消息",
+    "inputPlaceholder": "给 Main Agent 发送消息，输入 @ 搜索钉钉联系人或群",
     "gatewayLineConnected": "网关已连接 | 端口：{{port}} | 进程：{{pid}}",
     "gatewayLineConnecting": "网关连接中 | 端口：{{port}}",
     "gatewayLineDisconnected": "网关未连接 | 端口：{{port}}",

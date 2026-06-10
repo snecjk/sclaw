@@ -7,6 +7,7 @@ import { useMessageQueueStore } from '@/stores/message-queue';
 import { invokeApi } from '@/lib/api-client';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
+import type { DingTalkMention } from '@/types/dingtalk-mention';
 
 /**
  * 首页入口（省区工作台 / Agent Hub）与聊天页保持一致：
@@ -20,15 +21,31 @@ export function useHomeChatEntrySend() {
   const newSession = useChatStore((s) => s.newSession);
 
   const handleHubQueue = useCallback(
-    (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
+    (
+      text: string,
+      attachments?: FileAttachment[],
+      targetAgentId?: string | null,
+      dingTalkMentions?: DingTalkMention[],
+    ) => {
       const { currentSessionKey } = useChatStore.getState();
-      useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId);
+      useMessageQueueStore.getState().enqueue(
+        currentSessionKey,
+        text,
+        attachments,
+        targetAgentId,
+        dingTalkMentions,
+      );
     },
     [],
   );
 
   const handleHubSend = useCallback(
-    async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
+    async (
+      text: string,
+      attachments?: FileAttachment[],
+      targetAgentId?: string | null,
+      dingTalkMentions?: DingTalkMention[],
+    ) => {
       if (!isGatewayRunning) {
         toast.error(t('assistant.gatewayRequired'));
         return;
@@ -38,22 +55,26 @@ export function useHomeChatEntrySend() {
         newSession();
       }
 
+      const skipQuestionSplit = !!(dingTalkMentions && dingTalkMentions.length > 0);
+
       let parts: Array<{ type: string; context: string }> | null = null;
-      try {
-        const { currentAgentId: agentId, currentSessionKey } = useChatStore.getState();
-        parts = await invokeApi<Array<{ type: string; context: string }>>('question:split', {
-          prompt: text,
-          agentId: agentId,
-          sessionId: currentSessionKey,
-        });
-      } catch {
-        // Silent fallback — same as Chat page
+      if (!skipQuestionSplit) {
+        try {
+          const { currentAgentId: agentId, currentSessionKey } = useChatStore.getState();
+          parts = await invokeApi<Array<{ type: string; context: string }>>('question:split', {
+            prompt: text,
+            agentId: agentId,
+            sessionId: currentSessionKey,
+          });
+        } catch {
+          // Silent fallback — same as Chat page
+        }
       }
 
       const failed = () => Boolean(useChatStore.getState().error);
 
       if (parts && parts.length > 1) {
-        await sendMessage(parts[0].context, attachments, targetAgentId);
+        await sendMessage(parts[0].context, attachments, targetAgentId, dingTalkMentions);
         if (failed()) {
           toast.error(t('assistant.sendFailed'));
           return;
@@ -63,7 +84,7 @@ export function useHomeChatEntrySend() {
           useMessageQueueStore.getState().enqueue(sessionKey, parts[i].context, undefined, targetAgentId);
         }
       } else {
-        await sendMessage(text, attachments, targetAgentId);
+        await sendMessage(text, attachments, targetAgentId, dingTalkMentions);
         if (failed()) {
           toast.error(t('assistant.sendFailed'));
           return;

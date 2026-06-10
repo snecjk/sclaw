@@ -201,6 +201,7 @@
             "uninstallError": "削除に失敗しました"
         },
         "loading": "読み込み中...",
+        "syncingUserSkills": "スキルを同期しています…",
         "noSkills": "利用可能なスキルがありません"
     }
 }

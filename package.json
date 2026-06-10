@@ -1,6 +1,6 @@
 {
     "name": "stoclaw",
-    "version": "2026.6.5-GA.1",
+    "version": "2026.6.9-GA.1",
     "pnpm": {
         "onlyBuiltDependencies": [
             "@discordjs/opus",
@@ -32,9 +32,11 @@
     "private": true,
     "scripts": {
         "init": "pnpm install && pnpm run uv:download && pnpm run py:deps",
-        "predev": "zx scripts/ensure-openclaw-dev.mjs && zx scripts/prepare-preinstalled-skills-dev.mjs",
+        "predev": "zx scripts/bundle-gateway-preload.mjs && zx scripts/sync-plugin-shared.mjs && zx scripts/ensure-openclaw-dev.mjs && zx scripts/prepare-preinstalled-skills-dev.mjs",
+        "bundle:gateway-preload": "zx scripts/bundle-gateway-preload.mjs",
+        "sync:plugin-shared": "zx scripts/sync-plugin-shared.mjs",
         "dev": "vite",
-        "build": "pnpm run uv:download:all && vite build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs && electron-builder --config electron-builder.config.js",
+        "build": "pnpm run uv:download:all && pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && vite build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs && electron-builder --config electron-builder.config.js",
         "build:test": "pnpm run package:test && electron-builder --config electron-builder.config.js",
         "build:staging": "pnpm run package:staging && electron-builder --config electron-builder.config.js",
         "build:vite": "vite build",
@@ -52,12 +54,13 @@
         "uv:download:win": "zx scripts/download-bundled-uv.mjs --platform=win",
         "uv:download:linux": "zx scripts/download-bundled-uv.mjs --platform=linux",
         "uv:download:all": "zx scripts/download-bundled-uv.mjs --all",
+        "dws:manifest": "zx scripts/download-dws-manifest.mjs",
         "node:download:win": "zx scripts/download-bundled-node.mjs --platform=win",
         "prep:win-binaries": "pnpm run uv:download:win && pnpm run node:download:win",
         "icons": "zx scripts/generate-icons.mjs",
-        "package": "vite build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
-        "package:test": "cross-env VITE_APP_ENV=test vite build --mode test && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
-        "package:staging": "cross-env VITE_APP_ENV=staging vite build --mode staging && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
+        "package": "pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && vite build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
+        "package:test": "pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && cross-env VITE_APP_ENV=test vite build --mode test && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
+        "package:staging": "pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && cross-env VITE_APP_ENV=staging vite build --mode staging && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
         "package:mac": "pnpm run uv:download:mac && pnpm run package && electron-builder --mac --publish never --config electron-builder.config.js",
         "package:mac:test": "pnpm run uv:download:mac && pnpm run package:test && cross-env BUILD_ENV=test electron-builder --mac --publish never --config electron-builder.config.js",
         "package:mac:staging": "pnpm run uv:download:mac && pnpm run package:staging && cross-env BUILD_ENV=staging electron-builder --mac --publish never --config electron-builder.config.js",

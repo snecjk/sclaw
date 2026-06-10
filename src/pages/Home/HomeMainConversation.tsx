@@ -206,6 +206,8 @@ export function HomeMainConversation({ className }: { className?: string }) {
                     <AssistantTurnMessage
                       key={item.key}
                       turnMessages={item.messages}
+                      turnToolResults={item.toolResults}
+                      precedingUserMessage={item.precedingUserMessage}
                       showThinking={showThinking}
                       onPreviewFile={handlePreviewFile}
                     />
@@ -224,6 +226,8 @@ export function HomeMainConversation({ className }: { className?: string }) {
                 <AssistantTurnMessage
                   key="active-turn"
                   turnMessages={activeTurn.turnMessages}
+                  turnToolResults={activeTurn.turnToolResults}
+                  precedingUserMessage={activeTurn.precedingUserMessage}
                   showThinking={showThinking}
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={handlePreviewFile}

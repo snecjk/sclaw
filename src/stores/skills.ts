@@ -12,6 +12,7 @@ type GatewaySkillStatus = {
   skillKey: string;
   slug?: string;
   name?: string;
+  title?: string;
   description?: string;
   disabled?: boolean;
   emoji?: string;
@@ -39,6 +40,7 @@ type ClawHubListResult = {
 type StoListResult = {
   slug: string;
   name?: string;
+  title?: string;
   description?: string;
   author?: string;
   version?: string;
@@ -143,6 +145,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
             id: s.skillKey,
             slug: s.slug || s.skillKey,
             name: s.name || s.skillKey,
+            title: s.title,
             description: s.description || '',
             enabled: !s.disabled,
             icon: s.emoji || '📦',
@@ -215,15 +218,19 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
               if (!existing.baseDir && ss.baseDir) {
                 existing.baseDir = ss.baseDir;
               }
-              // Always set source to sto-marketplace for STO skills
-              // (Gateway may return a different source value)
-              existing.source = ss.source || 'sto-marketplace';
+              // Only override source for STO-marketplace skills
+              if (ss.source === 'sto-marketplace') {
+                existing.source = ss.source;
+              }
               // Update slug to ensure correct uninstall path
               // (Gateway may return lowercase skillKey instead of original slug)
               if (ss.slug) {
                 existing.slug = ss.slug;
               }
-              // Update name if still showing slug as name
+              // Update title/name from local disk metadata
+              if (ss.title) {
+                existing.title = ss.title;
+              }
               if (ss.name && existing.name === existing.id) {
                 existing.name = ss.name;
               }
@@ -240,6 +247,7 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
               id: ss.slug,
               slug: ss.slug,
               name: ss.name || ss.slug,
+              title: ss.title,
               description: ss.description || 'STO 技能已安装，等待网关加载...',
               enabled: false,
               icon: '⌛',
@@ -255,6 +263,28 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
         }
       } catch {
         // STO list is best-effort, don't block on failure
+      }
+
+      // 5. Supplement title from local skill plaza scan (covers preinstalled skills)
+      try {
+        type PlazaSkill = { slug: string; title: string };
+        const plazaResult = await hostApiFetch<{ success: boolean; data?: { skills: PlazaSkill[] } }>(
+          '/api/skill-plaza/local-skills',
+        );
+        if (plazaResult.success && plazaResult.data?.skills) {
+          plazaResult.data.skills.forEach((ps) => {
+            const existing = combinedSkills.find(
+              (s) =>
+                s.id.toLowerCase() === ps.slug.toLowerCase() ||
+                (s.slug && s.slug.toLowerCase() === ps.slug.toLowerCase()),
+            );
+            if (existing && ps.title && !existing.title) {
+              existing.title = ps.title;
+            }
+          });
+        }
+      } catch {
+        // Best-effort title supplement
       }
 
       set({ skills: combinedSkills, loading: false, error: null });

@@ -97,7 +97,7 @@
     "collabValue": "Multi-assistant",
     "toolsLabel": "Tools",
     "toolsValue": "Available",
-    "inputPlaceholder": "Message Main Agent",
+    "inputPlaceholder": "Message Main Agent — type @ to search DingTalk contacts or groups",
     "gatewayLineConnected": "gateway connected | port: {{port}} | pid: {{pid}}",
     "gatewayLineConnecting": "gateway connecting | port: {{port}}",
     "gatewayLineDisconnected": "gateway disconnected | port: {{port}}",

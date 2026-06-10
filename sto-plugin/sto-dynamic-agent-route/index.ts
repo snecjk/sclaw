@@ -1,7 +1,8 @@
-import { readFile } from "node:fs/promises";
+import { readFile, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
+import { buildDingTalkMentionSystemContext } from "./shared/dingtalk-mention-context";
 
 const PROVIDER_ID = "sto-dynamic-agent-route";
 const DEFAULT_MODEL_ID = "sto-route-model";
@@ -49,6 +50,58 @@ function resolveTildePath(filePath: string): string {
 		return resolve(homedir(), filePath.slice(2));
 	}
 	return resolve(filePath);
+}
+
+type DingTalkMentionPendingPayload = {
+	sessionKey: string;
+	mentions: Array<{
+		type: "user" | "group";
+		displayName: string;
+		userId?: string;
+		openConversationId?: string;
+		corpId?: string;
+	}>;
+	userText: string;
+	writtenAt: number;
+	sendFileIntent?: boolean;
+	attachedFiles?: Array<{
+		fileName: string;
+		filePath: string;
+		mimeType: string;
+		fileSize?: number;
+	}>;
+};
+
+function pendingMentionCachePath(sessionKey: string): string {
+	const safeName = Buffer.from(sessionKey, "utf8").toString("base64url");
+	return join(homedir(), ".stoclaw", "cache", "dingtalk-mention-pending", `${safeName}.json`);
+}
+
+const DINGTALK_MENTION_PENDING_TTL_MS = 5 * 60 * 1000;
+
+async function readDingTalkMentionPending(
+	sessionKey: string,
+): Promise<DingTalkMentionPendingPayload | null> {
+	const cachePath = pendingMentionCachePath(sessionKey);
+	try {
+		const raw = await readFile(cachePath, "utf-8");
+		const parsed = JSON.parse(raw) as DingTalkMentionPendingPayload;
+		if (parsed.sessionKey !== sessionKey || !Array.isArray(parsed.mentions) || parsed.mentions.length === 0) {
+			await unlink(cachePath).catch(() => undefined);
+			return null;
+		}
+		if (Date.now() - parsed.writtenAt > DINGTALK_MENTION_PENDING_TTL_MS) {
+			await unlink(cachePath).catch(() => undefined);
+			return null;
+		}
+		return parsed;
+	} catch {
+		return null;
+	}
+}
+
+async function clearDingTalkMentionPending(sessionKey: string): Promise<void> {
+	await unlink(pendingMentionCachePath(sessionKey)).catch(() => undefined);
 }
 
 async function readSsoAuth(ssoAuthPath: string): Promise<SsoAuthInfo> {
@@ -297,31 +350,46 @@ export default definePluginEntry({
 					`[${TAG}] before_prompt_build: fired — agentId=${ctx.agentId ?? "(none)"}, sessionKey=${ctx.sessionKey ?? "(none)"}`,
 				);
 
+				const appendBlocks: string[] = [];
+
+				if (ctx.sessionKey) {
+					const pendingMentions = await readDingTalkMentionPending(ctx.sessionKey);
+					if (pendingMentions) {
+						appendBlocks.push(buildDingTalkMentionSystemContext(pendingMentions.mentions, {
+							sendFileIntent: pendingMentions.sendFileIntent,
+							attachedFiles: pendingMentions.attachedFiles,
+						}));
+						await clearDingTalkMentionPending(ctx.sessionKey);
+						api.logger.debug?.(
+							`[${TAG}] before_prompt_build: injected DingTalk mention context (${pendingMentions.mentions.length} recipients)`,
+						);
+					}
+				}
+
 				try {
 					const ssoAuth = await readSsoAuth(ssoAuthPath);
-					if (!ssoAuth.userName) {
-						api.logger.debug?.(`[${TAG}] before_prompt_build: no SSO auth found, skipping context injection`);
-						return undefined;
+					if (ssoAuth.userName) {
+						const lines: string[] = [];
+						lines.push("当前登录用户信息（已认证）：");
+						if (ssoAuth.userName) lines.push(`- 用户名：${ssoAuth.userName}`);
+						if (ssoAuth.realName) lines.push(`- 真实姓名：${ssoAuth.realName}`);
+						if (ssoAuth.companyCode) lines.push(`- 网点编码（companyCode）：${ssoAuth.companyCode}`);
+						if (ssoAuth.companyName) lines.push(`- 网点名称（companyName）：${ssoAuth.companyName}`);
+						if (ssoAuth.departmentCode) lines.push(`- 组织编码（departmentCode）：${ssoAuth.departmentCode}`);
+						if (ssoAuth.departmentName) lines.push(`- 组织名称（departmentName）：${ssoAuth.departmentName}`);
+						lines.push("");
+						lines.push("当用户查询涉及网点、组织的数据时，如果用户未指定具体的网点编码或组织编码，默认使用上述当前登录用户的信息，不需要再向用户询问。");
+						appendBlocks.push(lines.join("\n"));
+						api.logger.debug?.(`[${TAG}] before_prompt_build: injected SSO user context for ${ssoAuth.userName}`);
+					} else {
+						api.logger.debug?.(`[${TAG}] before_prompt_build: no SSO auth found, skipping SSO context injection`);
 					}
-
-					const lines: string[] = [];
-					lines.push("当前登录用户信息（已认证）：");
-					if (ssoAuth.userName) lines.push(`- 用户名：${ssoAuth.userName}`);
-					if (ssoAuth.realName) lines.push(`- 真实姓名：${ssoAuth.realName}`);
-					if (ssoAuth.companyCode) lines.push(`- 网点编码（companyCode）：${ssoAuth.companyCode}`);
-					if (ssoAuth.companyName) lines.push(`- 网点名称（companyName）：${ssoAuth.companyName}`);
-					if (ssoAuth.departmentCode) lines.push(`- 组织编码（departmentCode）：${ssoAuth.departmentCode}`);
-					if (ssoAuth.departmentName) lines.push(`- 组织名称（departmentName）：${ssoAuth.departmentName}`);
-					lines.push("");
-					lines.push("当用户查询涉及网点、组织的数据时，如果用户未指定具体的网点编码或组织编码，默认使用上述当前登录用户的信息，不需要再向用户询问。");
-
-					const appendSystemContext = lines.join("\n");
-					api.logger.debug?.(`[${TAG}] before_prompt_build: injected SSO user context for ${ssoAuth.userName}`);
-					return { appendSystemContext };
 				} catch (err) {
-					api.logger.warn?.(`[${TAG}] before_prompt_build: failed to read SSO auth (${String(err)}), skipping context injection`);
-					return undefined;
+					api.logger.warn?.(`[${TAG}] before_prompt_build: failed to read SSO auth (${String(err)}), skipping SSO context injection`);
 				}
+
+				if (appendBlocks.length === 0) return undefined;
+				return { appendSystemContext: appendBlocks.join("\n\n") };
 			});
 
 		api.logger.info?.(`[${TAG}] plugin registered successfully`);

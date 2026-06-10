@@ -11,6 +11,7 @@ import { getAdapterForSession, listEngineSessions } from '../../engines/manager'
 import type { AgentEngineType } from '../../engines/types';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
+import { preprocessChatSendParams } from '../../utils/dingtalk-mention-send';
 
 export async function handleGatewayRoutes(
   req: IncomingMessage,
@@ -219,6 +220,20 @@ export async function handleGatewayRoutes(
         idempotencyKey: string;
         engineType?: AgentEngineType;
         media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
+        dingTalkMentions?: Array<{
+          type: 'user' | 'group';
+          displayName: string;
+          userId?: string;
+          openConversationId?: string;
+          corpId?: string;
+        }>;
+        dingTalkSendFileIntent?: boolean;
+        dingTalkAttachedFiles?: Array<{
+          fileName: string;
+          filePath: string;
+          mimeType: string;
+          fileSize?: number;
+        }>;
       }>(req);
       const VISION_MIME_TYPES = new Set([
         // Static images
@@ -281,6 +296,15 @@ export async function handleGatewayRoutes(
       };
       if (imageAttachments.length > 0) {
         rpcParams.attachments = imageAttachments;
+      }
+      if (body.dingTalkMentions?.length) {
+        rpcParams.dingTalkMentions = body.dingTalkMentions;
+      }
+      if (body.dingTalkSendFileIntent) {
+        rpcParams.dingTalkSendFileIntent = body.dingTalkSendFileIntent;
+      }
+      if (body.dingTalkAttachedFiles?.length) {
+        rpcParams.dingTalkAttachedFiles = body.dingTalkAttachedFiles;
       }
       const result = await adapter.sendMessage(
         { gatewayManager: ctx.gatewayManager },

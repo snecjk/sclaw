@@ -25,10 +25,10 @@ await fs.ensureDir(ICONS_DIR);
 
 try {
   // Configurable sizes - adjust these values to change icon size
-  const MASTER_SIZE = 512; // Master buffer size
-  const OUTPUT_SIZE = 512; // Main icon.png output size (standard macOS icon size)
-  const ICON_PADDING = 0.15; // Padding ratio (15% padding on each side = 70% icon content)
-  const CORNER_RADIUS = 102; // Rounded corner radius (~20% of 512)
+  const MASTER_SIZE = 1024; // Master buffer size
+  const OUTPUT_SIZE = 1024; // Main icon.png output size (standard macOS icon size)
+  const ICON_PADDING = 0; // Padding ratio (15% padding on each side = 70% icon content)
+  const CORNER_RADIUS = 150; // Rounded corner radius (~20% of 512)
 
   // 1. Generate Master PNG Buffer
   echo`  Processing SVG source...`;

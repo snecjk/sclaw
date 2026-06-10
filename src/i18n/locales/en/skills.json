@@ -201,6 +201,7 @@
             "uninstallError": "Delete failed"
         },
         "loading": "Loading...",
+        "syncingUserSkills": "Syncing your skills...",
         "noSkills": "No skills available"
     }
 }

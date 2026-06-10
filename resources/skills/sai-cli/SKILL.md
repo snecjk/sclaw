@@ -192,8 +192,9 @@ sai-cli baseinfo organize search --params '{"key":"上海"}'
 ```powershell
 sai-cli baseinfo organize search --key 上海
 ```
+> KV 形式中的数组参数直接使用英文逗号隔开即可
 
-两种方式可混合使用。同名参数时 KV 标志优先于 `--params` JSON 中的值。
+**切记！很重要！**：如果JSON形式传参执行失败，参数引号问题解析错误，立马使用KV 形式重新发起调用
 
 ### 动态命令的参数构建原则
 

@@ -202,32 +202,37 @@ export function Chat() {
     text: string,
     attachments?: Parameters<typeof sendMessage>[1],
     targetAgentId?: Parameters<typeof sendMessage>[2],
+    dingTalkMentions?: Parameters<typeof sendMessage>[3],
   ) => {
     beginSendScroll();
 
-    // Call question-split API (silent fallback on failure)
-    setSplitting(true);
+    // @ 钉钉收件人已结构化选定，禁止 question:split 拆散上下文与收件人元数据
+    const skipQuestionSplit = !!(dingTalkMentions && dingTalkMentions.length > 0);
+
     let parts: Array<{ type: string; context: string }> | null = null;
-    try {
-      const { currentAgentId, currentSessionKey } = useChatStore.getState();
-      parts = await invokeApi<Array<{ type: string; context: string }>>('question:split', {
-        prompt: text,
-        agentId: currentAgentId,
-        sessionId: currentSessionKey,
-      });
-    } catch {
-      // Silent fallback — send original text
-    } finally {
-      setSplitting(false);
+    if (!skipQuestionSplit) {
+      setSplitting(true);
+      try {
+        const { currentAgentId, currentSessionKey } = useChatStore.getState();
+        parts = await invokeApi<Array<{ type: string; context: string }>>('question:split', {
+          prompt: text,
+          agentId: currentAgentId,
+          sessionId: currentSessionKey,
+        });
+      } catch {
+        // Silent fallback — send original text
+      } finally {
+        setSplitting(false);
+      }
     }
 
     if (parts && parts.length > 1) {
-      sendMessage(parts[0].context, attachments, targetAgentId);
+      sendMessage(parts[0].context, attachments, targetAgentId, dingTalkMentions);
       for (let i = 1; i < parts.length; i++) {
         useMessageQueueStore.getState().enqueue(currentSessionKey, parts[i].context, undefined, targetAgentId);
       }
     } else {
-      sendMessage(text, attachments, targetAgentId);
+      sendMessage(text, attachments, targetAgentId, dingTalkMentions);
     }
   }, [beginSendScroll, sendMessage, currentSessionKey]);
 
@@ -235,9 +240,10 @@ export function Chat() {
     text: string,
     attachments?: FileAttachment[],
     targetAgentId?: string | null,
+    dingTalkMentions?: Parameters<typeof sendMessage>[3],
   ) => {
     const { currentSessionKey } = useChatStore.getState();
-    useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId);
+    useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, dingTalkMentions);
   }, []);
 
   // ── Resizable panel logic ──
@@ -359,6 +365,8 @@ export function Chat() {
                     <AssistantTurnMessage
                       key={item.key}
                       turnMessages={item.messages}
+                      turnToolResults={item.toolResults}
+                      precedingUserMessage={item.precedingUserMessage}
                       showThinking={showThinking}
                       onPreviewFile={onPreviewFile}
                     />
@@ -378,6 +386,8 @@ export function Chat() {
                 <AssistantTurnMessage
                   key="active-turn"
                   turnMessages={activeTurn.turnMessages}
+                  turnToolResults={activeTurn.turnToolResults}
+                  precedingUserMessage={activeTurn.precedingUserMessage}
                   showThinking={showThinking}
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={(file) => {

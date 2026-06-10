@@ -11,10 +11,7 @@ import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useLocation } from 'react-router-dom';
 import type { CronJob, CronJobCreateInput } from '@/types/cron';
-import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
-
 import { CronTaskHero } from './components/CronTaskHero';
 import { CronTaskCard } from './components/CronTaskCard';
 import { CronTaskCreateModal } from './components/CronTaskCreateModal';
@@ -23,8 +20,6 @@ import { filterTasks, sortTasks } from './components/utils';
 
 export function Cron() {
   const { t } = useTranslation('cron');
-  const navigate = useNavigate();
-  const location = useLocation();
   const { jobs, loading, error, fetchJobs, createJob, updateJob, toggleJob, deleteJob, triggerJob } = useCronStore();
   const gatewayStatus = useGatewayStore((state) => state.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
@@ -55,7 +50,10 @@ export function Cron() {
     async (input: CronJobCreateInput) => {
       try {
         if (editingJob) {
-          await updateJob(editingJob.id, input);
+          await updateJob(editingJob.id, {
+            ...input,
+            agentId: editingJob.agentId ?? undefined,
+          });
           toast.success(t('toast.updated'));
         } else {
           await createJob(input);
@@ -95,15 +93,14 @@ export function Cron() {
         await triggerJob(job.id);
         const sessionKey = `agent:${job.agentId ?? 'main'}:cron:${job.id}`;
         useChatStore.getState().switchSession(sessionKey);
-        // navigateToMainChatHome(navigate, location.pathname);
-        // Refresh sessions so the new cron session gets its label enriched
         void useChatStore.getState().loadSessions();
+        toast.success(t('toast.triggered'));
       } catch (error) {
         console.error('Failed to trigger cron job:', error);
         toast.error(t('toast.failedTrigger', { error: error instanceof Error ? error.message : String(error) }));
       }
     },
-    [triggerJob, t, navigate, location.pathname]
+    [triggerJob, t]
   );
 
   const handleDelete = useCallback(async () => {
