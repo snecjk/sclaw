@@ -17,13 +17,17 @@ export OPENCLAW_EMBEDDED_IN="StoClaw"
 NODE_EXE="$INSTALL_DIR/resources/bin/node.exe"
 OPENCLAW_ASAR="$INSTALL_DIR/resources/openclaw.asar"
 OPENCLAW_LEGACY="$INSTALL_DIR/resources/openclaw/openclaw.mjs"
-if [ -f "$OPENCLAW_ASAR/openclaw.mjs" ] || [ -f "$OPENCLAW_ASAR" ]; then
+# ASAR layout: plain node.exe cannot read ASAR archives (only Electron's
+# patched fs can), so the ASAR entry MUST run through StoClaw.exe.
+IS_ASAR=0
+if [ -f "$OPENCLAW_ASAR" ]; then
   OPENCLAW_ENTRY="$OPENCLAW_ASAR/openclaw.mjs"
+  IS_ASAR=1
 else
   OPENCLAW_ENTRY="$OPENCLAW_LEGACY"
 fi
 
-if [ -f "$NODE_EXE" ]; then
+if [ "$IS_ASAR" = "0" ] && [ -f "$NODE_EXE" ]; then
   if "$NODE_EXE" -e 'const [maj,min]=process.versions.node.split(".").map(Number);process.exit((maj>22||maj===22&&min>=16)?0:1)' >/dev/null 2>&1; then
     exec "$NODE_EXE" "$OPENCLAW_ENTRY" "$@"
   fi

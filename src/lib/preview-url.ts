@@ -1,4 +1,5 @@
 import type { AttachedFileMeta } from '@/stores/chat';
+import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 
 const PREVIEWABLE_REMOTE_EXTS =
   'html?|pdf|json|md|txt|csv|tsv|sql|py|js|ts|jsx|tsx|java|go|rs|cpp|c|h|cs|rb|php|yaml|yml|xml';
@@ -87,12 +88,12 @@ export function resolveArtifactUrlFromWorkflowStates(
   if (!normalized) return null;
   if (isHttpUrl(normalized)) return normalized;
 
-  const basename = decodeURIComponent(normalized.split('/').pop()?.split('?')[0] || normalized);
+  const basename = safeDecodeURIComponent(normalized.split('/').pop()?.split('?')[0] || normalized);
   for (const state of Object.values(states)) {
     for (const artifact of state?.result?.artifacts ?? []) {
       const url = artifact.url?.trim();
       if (!url || !isHttpUrl(url)) continue;
-      const urlBase = decodeURIComponent(url.split('/').pop()?.split('?')[0] || '');
+      const urlBase = safeDecodeURIComponent(url.split('/').pop()?.split('?')[0] || '');
       if (
         artifact.name === normalized
         || artifact.name === basename
@@ -144,7 +145,7 @@ export function extractPreviewableHttpUrls(text: string): Array<{ filePath: stri
     const url = match[1];
     if (seen.has(url) || !isPreviewableRemoteUrl(url)) continue;
     seen.add(url);
-    const fileName = decodeURIComponent(url.split('/').pop()?.split('?')[0] || 'preview');
+    const fileName = safeDecodeURIComponent(url.split('/').pop()?.split('?')[0] || 'preview');
     results.push({
       filePath: url,
       fileName,

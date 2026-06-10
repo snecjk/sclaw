@@ -14,7 +14,7 @@ import {
 import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { getOpenClawDir, getOpenClawEntryPath } from './paths';
+import { getOpenClawDir, getOpenClawEntryPath, getResourcesDir } from './paths';
 import { logger } from './logger';
 
 // ── Quoting helpers ──────────────────────────────────────────────────────────
@@ -78,8 +78,10 @@ export function getOpenClawCliCommand(): string {
         return `& ${quoteForPowerShell(cmdPath)}`;
       }
 
+      // Plain node.exe cannot read ASAR archives — only offer it for the
+      // legacy loose-directory layout.
       const bundledNode = getPackagedWindowsNodePath();
-      if (bundledNode) {
+      if (bundledNode && !entryPath.includes('.asar')) {
         return `& ${quoteForPowerShell(bundledNode)} ${quoteForPowerShell(entryPath)}`;
       }
     }
@@ -105,12 +107,19 @@ function getPackagedCliWrapperPath(): string | null {
   const platform = process.platform;
 
   if (platform === 'darwin' || platform === 'linux') {
-    const wrapper = join(process.resourcesPath, 'cli', 'openclaw');
-    return existsSync(wrapper) ? wrapper : null;
+    const candidates = [
+      join(getResourcesDir(), 'cli', 'openclaw'),
+      join(process.resourcesPath, 'cli', 'openclaw'),
+    ];
+    return candidates.find((wrapper) => existsSync(wrapper)) ?? null;
   }
   if (platform === 'win32') {
-    const wrapper = join(process.resourcesPath, 'cli', 'openclaw.cmd');
-    return existsSync(wrapper) ? wrapper : null;
+    const candidates = [
+      join(getResourcesDir(), 'cli', 'win32', 'openclaw.cmd'),
+      join(process.resourcesPath, 'cli', 'win32', 'openclaw.cmd'),
+      join(process.resourcesPath, 'cli', 'openclaw.cmd'),
+    ];
+    return candidates.find((wrapper) => existsSync(wrapper)) ?? null;
   }
   return null;
 }

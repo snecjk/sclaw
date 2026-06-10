@@ -29,6 +29,7 @@ import {
   openExternalUrl,
   resolvePreviewLinkTarget,
 } from '@/lib/preview-url';
+import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
 import { submitParameterForm } from '@/components/parameter-form/form-handlers';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
@@ -575,7 +576,7 @@ function MessageBubble({
 
                 if (onPreviewFile && isHttpUrl(target) && isPreviewableRemoteUrl(target)) {
                   const previewFile = artifactToPreviewFile({
-                    name: decodeURIComponent(target.split('/').pop()?.split('?')[0] || 'preview'),
+                    name: safeDecodeURIComponent(target.split('/').pop()?.split('?')[0] || 'preview'),
                     type: inferMimeTypeFromUrl(target),
                     url: target,
                   });
@@ -722,7 +723,7 @@ function preprocessTextForPreviewLinks(text: string): string {
     /(https?:\/\/[^\s)\]"',;<>]+\.(?:html?|pdf|json|md|txt|csv)(?:\?[^\s)\]"',;<>]*)?)/gi,
     (url) => {
       if (!isPreviewableRemoteUrl(url)) return url;
-      const label = decodeURIComponent(url.split('/').pop()?.split('?')[0] || '查看预览');
+      const label = safeDecodeURIComponent(url.split('/').pop()?.split('?')[0] || '查看预览');
       return `[${label}](${url})`;
     },
   );

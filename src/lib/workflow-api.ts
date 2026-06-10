@@ -6,6 +6,7 @@
  */
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch, hostApiFetchStream } from '@/lib/host-api';
+import { useAuthStore } from '@/stores/auth';
 import type {
   ApiResponse,
   WorkflowTemplateSearchResponse,
@@ -20,13 +21,16 @@ import type {
 } from '@/types/workflow';
 import { workflowRunResponseToExecutionState } from '@/lib/workflow-run-status';
 
-/** Extract stoToken from auth store (sync read) */
-function getStoToken(): string | undefined {
+/** Extract stoToken — prefer in-memory auth store (avoids zustand persist lag after login). */
+export function getWorkflowStoToken(): string | undefined {
+  const fromStore = useAuthStore.getState().user?.stoToken?.trim();
+  if (fromStore) return fromStore;
+
   try {
     const raw = localStorage.getItem('stoclaw-auth');
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as { state?: { user?: { stoToken?: string } } };
-    return parsed?.state?.user?.stoToken;
+    return parsed?.state?.user?.stoToken?.trim() || undefined;
   } catch {
     return undefined;
   }
@@ -37,7 +41,7 @@ function generateTraceId(): string {
 }
 
 function authHeaders(): Record<string, string> {
-  const token = getStoToken();
+  const token = getWorkflowStoToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Trace-Id': generateTraceId(),

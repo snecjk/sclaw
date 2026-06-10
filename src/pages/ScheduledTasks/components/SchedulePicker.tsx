@@ -14,7 +14,6 @@ const FREQUENCY_OPTIONS = [
   { value: 'daily' as const, label: '每天' },
   { value: 'weekly' as const, label: '每周' },
   { value: 'monthly' as const, label: '每月' },
-  { value: 'once' as const, label: '一次性' },
 ];
 
 const WEEKDAY_FULL_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];

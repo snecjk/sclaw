@@ -14,10 +14,17 @@ import { join } from 'node:path';
 import { logger } from './logger';
 import { getOpenClawConfigDir, getBundledPluginSourceCandidates } from './paths';
 
+function isAsarPath(filePath: string): boolean {
+  return /\.asar([\\/]|$)/.test(filePath);
+}
+
 function normalizeFsPathForWindows(filePath: string): string {
   if (process.platform !== 'win32') return filePath;
   if (!filePath) return filePath;
   if (filePath.startsWith('\\\\?\\')) return filePath;
+  // Electron's asar fs patch does not recognize \\?\-prefixed paths, so
+  // asar-virtual paths must stay unprefixed (they are short anyway).
+  if (isAsarPath(filePath)) return filePath;
 
   const windowsPath = filePath.replace(/\//g, '\\');
   if (!path.win32.isAbsolute(windowsPath)) return windowsPath;
@@ -29,6 +36,33 @@ function normalizeFsPathForWindows(filePath: string): string {
 
 function fsPath(filePath: string): string {
   return normalizeFsPathForWindows(filePath);
+}
+
+/**
+ * Recursive copy that supports ASAR-virtual source paths.
+ * Electron's patched fs cannot `cpSync` a directory out of an .asar archive
+ * (it only creates empty directories), so we walk the tree with
+ * readdirSync/readFileSync, which ARE asar-aware, and write real files out.
+ */
+function copyDirFromAsar(sourceDir: string, targetDir: string): void {
+  mkdirSync(fsPath(targetDir), { recursive: true });
+  for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
+    const src = join(sourceDir, entry.name);
+    const dest = join(targetDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDirFromAsar(src, dest);
+    } else if (entry.isFile()) {
+      writeFileSync(fsPath(dest), readFileSync(src));
+    }
+  }
+}
+
+function copyPluginDir(sourceDir: string, targetDir: string): void {
+  if (isAsarPath(sourceDir)) {
+    copyDirFromAsar(sourceDir, targetDir);
+    return;
+  }
+  cpSync(fsPath(sourceDir), fsPath(targetDir), { recursive: true, dereference: true });
 }
 
 function asErrnoException(error: unknown): NodeJS.ErrnoException | null {
@@ -384,7 +418,7 @@ export function ensurePluginInstalled(
       try {
         mkdirSync(fsPath(extensionsRoot), { recursive: true });
         rmSync(fsPath(targetDir), { recursive: true, force: true });
-        cpSync(fsPath(sourceDir), fsPath(targetDir), { recursive: true, dereference: true });
+        copyPluginDir(sourceDir, targetDir);
         if (!existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) {
           return { installed: false, warning: `Failed to install ${pluginLabel} plugin mirror (manifest missing).` };
         }
@@ -630,7 +664,11 @@ async function ensurePluginInstalledAsync(
     try {
       await mkdirAsync(fsPath(extensionsRoot), { recursive: true });
       await rmAsync(fsPath(targetDir), { recursive: true, force: true });
-      await cpAsync(fsPath(sourceDir), fsPath(targetDir), { recursive: true, force: true });
+      if (isAsarPath(sourceDir)) {
+        copyDirFromAsar(sourceDir, targetDir);
+      } else {
+        await cpAsync(fsPath(sourceDir), fsPath(targetDir), { recursive: true, force: true });
+      }
       if (!existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) {
         return { installed: false, warning: `Failed to install ${pluginLabel} plugin mirror (manifest missing).` };
       }

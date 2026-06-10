@@ -1,8 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { dialog, nativeImage } from 'electron';
 import crypto from 'node:crypto';
-import { extname, join } from 'node:path';
+import { extname, isAbsolute, join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { existsSync, readdirSync } from 'node:fs';
 import { copyFile, mkdtemp, readFile, unlink } from 'node:fs/promises';
 import { getOpenClawConfigDir, expandPath } from '../../utils/paths';
 import type { HostApiContext } from '../context';
@@ -58,15 +59,33 @@ function mimeToExt(mimeType: string): string {
 
 const OUTBOUND_DIR = join(getOpenClawConfigDir(), 'media', 'outbound');
 
-/** Resolve a relative path starting with ./ to the main agent workspace, or expand ~ to home. */
+/**
+ * Resolve a preview file path:
+ * - `~` expands to home
+ * - absolute paths pass through
+ * - relative paths (bare filenames like `USER.md`, or `./report.html`) resolve
+ *   against the agent workspaces (`workspace`, then `workspace-<agentId>`),
+ *   since AI messages reference workspace files by bare name.
+ */
 function resolveWorkspaceFilePath(filePath: string): string {
-  if (filePath.startsWith('./')) {
-    return expandPath(join(getOpenClawConfigDir(), 'workspace', filePath));
-  }
   if (filePath.startsWith('~')) {
     return expandPath(filePath);
   }
-  return filePath;
+  if (isAbsolute(filePath)) {
+    return filePath;
+  }
+
+  const configDir = getOpenClawConfigDir();
+  const candidates = [join(configDir, 'workspace', filePath)];
+  try {
+    for (const entry of readdirSync(configDir)) {
+      if (entry.startsWith('workspace-')) {
+        candidates.push(join(configDir, entry, filePath));
+      }
+    }
+  } catch { /* config dir unreadable — fall through to first candidate */ }
+
+  return candidates.find((p) => existsSync(p)) ?? candidates[0];
 }
 
 /**

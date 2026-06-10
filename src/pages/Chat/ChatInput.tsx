@@ -22,6 +22,7 @@ import { DingTalkMentionPopover } from '@/components/dingtalk/DingTalkMentionPop
 import { WorkflowPicker } from '@/components/workflow/WorkflowPicker';
 
 import { useDingTalkMention } from '@/hooks/useDingTalkMention';
+import { useAuthStore } from '@/stores/auth';
 import { useWorkflowsStore } from '@/stores/workflows';
 import type { ActiveMentionTrigger, MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention, MentionSearchItem } from '@/types/dingtalk-mention';
@@ -193,6 +194,7 @@ export function ChatInput({
     install: installDingTalkMention,
     installing: dingTalkInstalling,
   } = useDingTalkMention(mentionTrigger);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { templates, prefetchTemplates } = useWorkflowsStore();
   const composerPlaceholder = disabled
     ? t('composer.gatewayDisconnectedPlaceholder')
@@ -265,8 +267,9 @@ export function ChatInput({
 
   // Preload top templates so picker and NL "创建工作流" respond quickly.
   useEffect(() => {
+    if (!isAuthenticated) return;
     void prefetchTemplates();
-  }, [prefetchTemplates]);
+  }, [isAuthenticated, prefetchTemplates]);
 
   const applyDingTalkMention = useCallback((item: MentionSearchItem) => {
     if (!dingTalkTrigger) return;

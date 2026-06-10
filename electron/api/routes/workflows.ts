@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { resolveStoBaseUrl } from '../../utils/sto-domain';
+import { getStoToken } from '../../utils/auth-store';
 import { logger } from '../../utils/logger';
 import type { HostApiContext } from '../context';
 import { parseJsonBody } from '../route-utils';
@@ -97,13 +98,14 @@ function truncateForRunTrace(text: string): string {
   return `${text.slice(0, RUN_TRACE_JSON_MAX)}…(truncated ${text.length - RUN_TRACE_JSON_MAX} chars)`;
 }
 
-function extractWorkflowHeaders(req: IncomingMessage): Record<string, string> {
+async function extractWorkflowHeaders(req: IncomingMessage): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  const stoToken = req.headers.stotoken;
+  const headerToken = req.headers.stotoken;
+  const stoToken = headerToken ? String(headerToken) : await getStoToken();
   if (stoToken) {
-    headers.stoToken = String(stoToken);
+    headers.stoToken = stoToken;
   }
   const traceId = req.headers['x-trace-id'];
   if (traceId) {
@@ -119,7 +121,7 @@ async function proxyWorkflowRequest(
   body?: unknown,
 ): Promise<void> {
   const baseUrl = await resolveStoBaseUrl();
-  const headers = extractWorkflowHeaders(req);
+  const headers = await extractWorkflowHeaders(req);
 
   let bodyStr: string | undefined;
   if (body !== undefined) {
@@ -183,7 +185,7 @@ export async function handleWorkflowRoutes(
       logger.info('[WorkflowRoutes] search request body:', JSON.stringify(body));
 
       const baseUrl = await resolveStoBaseUrl();
-      const headers = extractWorkflowHeaders(req);
+      const headers = await extractWorkflowHeaders(req);
       const bodyStr = JSON.stringify(body);
 
       const response = await proxyAwareFetch(`${baseUrl}/agent/v1/workflow-templates/search`, {
