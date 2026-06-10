@@ -55,6 +55,7 @@ import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
 import { parseCronSessionKey, parseScheduledTaskAgentSessionKey } from '@/stores/chat/cron-session-utils';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
+import { getCurrentEnvConfig } from '../../../shared/env-config';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
 
 type SessionBucketKey =
@@ -783,7 +784,7 @@ export function Sidebar() {
     ];
     return all.filter((item) => {
       if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
-      if (item.to === '/scheduled-tasks' && import.meta.env.PROD) return false;
+      if (item.to === '/scheduled-tasks' && getCurrentEnvConfig().isProduction) return false;
       return true;
     });
   }, [sidebarVis.primaryMyData, t]);

@@ -6,7 +6,7 @@
  */
 
 /** Base field type */
-export type FormFieldType = 
+export type FormFieldType =
   | 'text'           // Single line text input
   | 'textarea'       // Multi-line text input
   | 'number'         // Number input
@@ -18,7 +18,9 @@ export type FormFieldType =
   | 'datetime'       // Date and time picker
   | 'time'           // Time picker
   | 'toggle'         // Boolean toggle switch
-  | 'hidden'         // Hidden field for passing data;
+  | 'hidden'         // Hidden field for passing data
+  | 'editable_list'  // Editable tag/list input
+  | 'titled_group';  // Group of related fields with titles
 
 /** Option for select/radio/checkbox fields */
 export interface FormFieldOption {
@@ -112,16 +114,44 @@ export interface HiddenField extends FormFieldBase {
   defaultValue: string | number | boolean;
 }
 
+/** Editable list field configuration */
+export interface EditableListField extends FormFieldBase {
+  type: 'editable_list';
+  defaultValue?: string[];
+  placeholder?: string;
+}
+
+/** Titled group field with multiple related items */
+export interface TitledGroupField extends FormFieldBase {
+  type: 'titled_group';
+  _titledGroupItems?: Array<{
+    fieldKey: string;
+    label: string;
+    description?: string;
+    defaultValue: string;
+  }>;
+}
+
 /** Union type for all field types */
-export type FormField = 
-  | TextField 
-  | NumberField 
-  | SelectField 
-  | RadioField 
-  | CheckboxField 
-  | DateTimeField 
+export type FormField =
+  | TextField
+  | NumberField
+  | SelectField
+  | RadioField
+  | CheckboxField
+  | DateTimeField
   | ToggleField
-  | HiddenField;
+  | HiddenField
+  | EditableListField
+  | TitledGroupField;
+
+/** Wizard step for grouping fields in inline parameter form */
+export interface FormStep {
+  id: string;
+  title: string;
+  description?: string;
+  fieldNames?: string[]; // If omitted, inferred from group matching
+}
 
 /** Form layout configuration */
 export interface FormLayout {
@@ -137,8 +167,11 @@ export interface UserFormConfig {
   title: string;                 // Modal title
   description?: string;          // Modal description/subtitle
   fields: FormField[];           // Form fields
+  steps?: FormStep[];            // Wizard steps for inline mode (optional)
   layout?: FormLayout;           // Layout configuration
   confirmLabel?: string;         // Confirm button text (default: "确认")
+  nextLabel?: string;            // Next step button text in wizard mode (default: "下一步")
+  prevLabel?: string;            // Previous step button text in wizard mode (default: "上一步")
   cancelLabel?: string;          // Cancel button text (default: "取消")
   allowCancel?: boolean;         // Whether user can cancel (default: true)
   closeOnCancel?: boolean;       // Close modal on cancel (default: true)

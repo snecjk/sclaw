@@ -409,15 +409,19 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
 
             // Also sync local built-in skills into OpenClaw's bundled skills directory
             // so the Gateway marks them as bundled (shows in the "Built-in" tab).
+            // Skip when OpenClaw is packed in ASAR — paths are read-only archives.
             if (spec.local) {
-                const openclawSkillsDir = join(getOpenClawDir(), 'skills');
-                ensureDir(openclawSkillsDir);
-                const bundledTarget = join(openclawSkillsDir, spec.slug);
-                if (existsSync(bundledTarget)) {
-                    rmSync(bundledTarget, { recursive: true, force: true });
+                const openclawRoot = getOpenClawDir();
+                if (!openclawRoot.endsWith('.asar')) {
+                    const openclawSkillsDir = join(openclawRoot, 'skills');
+                    ensureDir(openclawSkillsDir);
+                    const bundledTarget = join(openclawSkillsDir, spec.slug);
+                    if (existsSync(bundledTarget)) {
+                        rmSync(bundledTarget, { recursive: true, force: true });
+                    }
+                    cpSync(sourceDir, bundledTarget, { recursive: true, dereference: true });
+                    logger.info(`Synced built-in skill to OpenClaw bundled dir: ${bundledTarget}`);
                 }
-                cpSync(sourceDir, bundledTarget, { recursive: true, dereference: true });
-                logger.info(`Synced built-in skill to OpenClaw bundled dir: ${bundledTarget}`);
             }
         } catch (error) {
             logger.warn(`Failed to install preinstalled skill ${spec.slug}:`, error);

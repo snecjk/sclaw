@@ -64,9 +64,9 @@ export function Home() {
 
   // Handle skill-plaza "Use" navigation with ?q= prompt
   const [searchParams, setSearchParams] = useSearchParams();
-  const seedText = searchParams.get('q')
-    ? decodeURIComponent(searchParams.get('q')!)
-    : undefined;
+  // searchParams.get() is already percent-decoded; decodeURIComponent again throws
+  // URIError when the prompt contains a literal '%' (e.g. "完成率50%").
+  const seedText = searchParams.get('q')?.trim() || undefined;
   const { handleHubSend } = useHomeChatEntrySend();
   const gatewayStatus = useGatewayStore((s) => s.status);
   const hasAutoSentRef = useRef(false);

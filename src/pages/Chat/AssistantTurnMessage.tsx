@@ -32,6 +32,7 @@ interface AssistantTurnMessageProps {
   showThinking: boolean;
   activeStream?: ActiveTurnStream | null;
   onPreviewFile?: (file: AttachedFileMeta) => void;
+  onViewWorkflow?: (workflowId: string) => void;
 }
 
 export const AssistantTurnMessage = memo(function AssistantTurnMessage({
@@ -41,6 +42,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   showThinking,
   activeStream = null,
   onPreviewFile,
+  onViewWorkflow,
 }: AssistantTurnMessageProps) {
   const streamSources = useMemo(() => {
     const sources = [...turnMessages];
@@ -138,6 +140,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
             isStreaming={isStreaming && replyHasText}
             streamingTools={[]}
             onPreviewFile={onPreviewFile}
+            onViewWorkflow={onViewWorkflow}
             hideAvatar
             hideThinkingPanel
           />

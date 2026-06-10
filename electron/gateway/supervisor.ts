@@ -2,12 +2,15 @@ import { app, utilityProcess } from 'electron';
 import path from 'path';
 import { existsSync } from 'fs';
 import WebSocket from 'ws';
-import { getOpenClawDir, getOpenClawEntryPath } from '../utils/paths';
+import { getOpenClawEntryPath, getOpenClawProcessCwd, getOpenClawNodeModulesPath } from '../utils/paths';
+import { prependPathEntry, prependNodePathEntry } from '../utils/env-path';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { isPythonReady, setupManagedPython } from '../utils/uv-setup';
 import { logger } from '../utils/logger';
-import { prependPathEntry } from '../utils/env-path';
 import { listAgentsSnapshot } from '../utils/agent-config';
+
+const pidCache = new Map<number, { pids: string[]; ts: number }>();
+const PID_CACHE_TTL_MS = 5000;
 
 export function warmupManagedPythonReadiness(): void {
   void isPythonReady().then((pythonReady) => {
@@ -161,6 +164,11 @@ export async function waitForPortFree(port: number, timeoutMs = 30000): Promise<
 }
 
 async function getListeningProcessIds(port: number): Promise<string[]> {
+  const cached = pidCache.get(port);
+  if (cached && Date.now() - cached.ts < PID_CACHE_TTL_MS) {
+    return cached.pids;
+  }
+
   const cmd = process.platform === 'win32'
     ? `netstat -ano | findstr :${port}`
     : `lsof -i :${port} -sTCP:LISTEN -t`;
@@ -177,9 +185,11 @@ async function getListeningProcessIds(port: number): Promise<string[]> {
   });
 
   if (!stdout.trim()) {
+    pidCache.set(port, { pids: [], ts: Date.now() });
     return [];
   }
 
+  let result: string[];
   if (process.platform === 'win32') {
     const pids: string[] = [];
     for (const line of stdout.trim().split(/\r?\n/)) {
@@ -188,10 +198,13 @@ async function getListeningProcessIds(port: number): Promise<string[]> {
         pids.push(parts[4]);
       }
     }
-    return [...new Set(pids)];
+    result = [...new Set(pids)];
+  } else {
+    result = [...new Set(stdout.trim().split(/\r?\n/).map((value) => value.trim()).filter(Boolean))];
   }
 
-  return [...new Set(stdout.trim().split(/\r?\n/).map((value) => value.trim()).filter(Boolean))];
+  pidCache.set(port, { pids: result, ts: Date.now() });
+  return result;
 }
 
 async function terminateOrphanedProcessIds(port: number, pids: string[]): Promise<void> {
@@ -287,7 +300,7 @@ export async function runOpenClawDoctorRepair(): Promise<boolean> {
     logger.warn('Pre-doctor agent config migration failed, continuing with doctor repair:', err);
   }
 
-  const openclawDir = getOpenClawDir();
+  const openclawDir = getOpenClawProcessCwd();
   const entryScript = getOpenClawEntryPath();
   if (!existsSync(entryScript)) {
     logger.error(`Cannot run OpenClaw doctor repair: entry script not found at ${entryScript}`);
@@ -313,16 +326,14 @@ export async function runOpenClawDoctorRepair(): Promise<boolean> {
   );
 
   return await new Promise<boolean>((resolve) => {
-    const forkEnv: Record<string, string | undefined> = {
-      ...baseEnvPatched,
-      ...uvEnv,
-      OPENCLAW_NO_RESPAWN: '1',
-    };
-
     const child = utilityProcess.fork(entryScript, doctorArgs, {
       cwd: openclawDir,
       stdio: 'pipe',
-      env: forkEnv as NodeJS.ProcessEnv,
+      env: prependNodePathEntry({
+        ...baseEnvPatched,
+        ...uvEnv,
+        OPENCLAW_NO_RESPAWN: '1',
+      }, getOpenClawNodeModulesPath()) as NodeJS.ProcessEnv,
     });
 
     let settled = false;

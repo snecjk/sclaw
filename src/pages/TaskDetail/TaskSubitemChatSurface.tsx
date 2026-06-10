@@ -4,7 +4,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowDown, Loader2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentsStore } from '@/stores/agents';
-import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
+import { useChatStore, type AttachedFileMeta, type RawMessage } from '@/stores/chat';
+import { useSessionWorkflowPreview } from '@/hooks/use-session-workflow-preview';
 import { useGatewayStore } from '@/stores/gateway';
 import { createAutoSendWatcher, /* useMessageQueueStore */ } from '@/stores/message-queue';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
@@ -22,6 +23,7 @@ import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
 import { usePreviewableFiles } from '@/pages/Chat/message-utils';
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
+import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 // import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
 import { extractText } from '@/pages/Chat/message-utils';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
@@ -30,7 +32,7 @@ import { stoTaskSubitemChatCanvasBg } from '@/lib/surfaces';
 import { useStoTaskSubitemChatSend } from './use-sto-task-subitem-chat-send';
 
 /* sessionStorage one-shot + gateway-gated auto-send intentionally use setState in effects */
-/* eslint-disable react-hooks/set-state-in-effect */
+ 
 
 export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId; entryId: string }) {
   const { t } = useTranslation(['home', 'chat', 'common']);
@@ -51,7 +53,6 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
   const streamingText = useChatStore((s) => s.streamingText);
-  const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
   const activityForSession = useChatStore((s) => s.sessionLastActivity[sessionKey] ?? 0);
   const markSubitemReadFromActivity = useStoTaskSubitemsStore((s) => s.markSubitemReadFromActivity);
@@ -271,6 +272,14 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const previewableFiles = usePreviewableFiles(allMessagesForPreview);
   const hasPreviewableFiles = previewableFiles.length > 0;
 
+  const {
+    workflowId: sessionWorkflowId,
+    showWorkflowTab,
+    detail: workflowDetail,
+    loading: workflowLoading,
+    error: workflowError,
+  } = useSessionWorkflowPreview(allMessagesForPreview as RawMessage[]);
+
   // Auto-open newly-generated files in the preview panel
   const prevPreviewableFilesRef = useRef(previewableFiles);
   useEffect(() => {
@@ -298,12 +307,26 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   }, [currentSessionKey, sessionKey, activityForSession, taskId, entryId, markSubitemReadFromActivity]);
 
   const onSend = useCallback(
-    async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
+    async (
+      text: string,
+      attachments?: FileAttachment[],
+      targetAgentId?: string | null,
+      dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[],
+      workflowId?: string | null,
+    ) => {
       beginSendScroll();
-      await handleSend(text, attachments, targetAgentId);
+      await handleSend(text, attachments, targetAgentId, dingTalkMentions, workflowId);
     },
     [beginSendScroll, handleSend],
   );
+
+  const chatInputProps = useChatInputBindings({
+    onSend,
+    onQueue: handleQueue,
+    isEmpty,
+    seedText: composeSeed,
+    className: 'pb-0',
+  });
 
   const handlePreviewFile = useCallback((file: AttachedFileMeta) => {
     if (file.filePath) {
@@ -497,17 +520,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
           onMoveDown={queueMoveDown}
         /> */}
 
-        <ChatInput
-          className="pb-0"
-          seedText={composeSeed}
-          onSend={onSend}
-          onStop={() => void abortRun()}
-          onQueue={handleQueue}
-          disabled={currentAgent?.engineType === 'openclaw' && !isGatewayRunning}
-          sending={sending}
-          isEmpty={isEmpty}
-          engineType={currentAgent?.engineType}
-        />
+        <ChatInput {...chatInputProps} engineType={currentAgent?.engineType} />
       </div>
 
       {/* Resizer */}
@@ -542,6 +555,11 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
               onSelectFile={setActivePreviewFilePath}
               onClose={() => setShowPreviewPanel(false)}
               className="h-full w-full"
+              showWorkflowTab={showWorkflowTab}
+              workflowId={sessionWorkflowId}
+              workflowDetail={workflowDetail}
+              workflowLoading={workflowLoading}
+              workflowError={workflowError}
             />
           </motion.div>
         )}

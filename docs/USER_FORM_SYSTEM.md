@@ -335,6 +335,60 @@ function App() {
 5. **响应式设计**: 使用合适的模态框宽度适应不同内容
 6. **字段分组**: 对于复杂表单，使用 `layout.columns` 进行字段分组
 
+## Inline Parameter Form（聊天内嵌表单）
+
+除了全局弹窗 `UserFormModal`，系统还支持在聊天消息中直接嵌入参数配置卡片（`ParameterFormCard`）。这适用于工作流启动、工具参数确认等场景。
+
+### 特性
+
+- **Wizard 分页**：按 `UserFormConfig.steps` 自动分页，每页一组参数
+- **自然语言编辑**：`editable_list` 字段支持用户通过自然语言编辑每个列表项
+- **跳过/确认**：每页底部支持"跳过"（使用默认值）和"继续/确认"
+- **通用唤起**：任何场景都可以通过 `showInlineParameterForm` 唤起
+
+### 工作流集成示例
+
+```typescript
+import { showInlineParameterForm } from '@/components/parameter-form';
+
+async function startWorkflowWithForm(templateId: string, text: string) {
+  const startup = await getStartupSchema(templateId);
+  const formConfig = buildWorkflowFormConfig(startup.schema, text);
+
+  const result = await showInlineParameterForm(formConfig, {
+    source: 'workflow',
+    sourceId: templateId,
+    schemaHash: startup.schemaHash,
+  });
+
+  if (!result.cancelled) {
+    await createAndStartWorkflow(templateId, result.values!);
+  }
+}
+```
+
+### 组件架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Renderer Process                        │
+│  ┌─────────────────┐  ┌─────────────────────────────────────┐│
+│  │ FormFieldRenderer│  │ ParameterFormCard                   ││
+│  │ (shared fields)  │  │ - Wizard pagination                 ││
+│  └─────────────────┘  │ - Step indicator                    ││
+│         ↑             │ - Skip / Continue / Confirm         ││
+│         └─────────────┤ - Calls submitParameterForm on done ││
+│                       └─────────────────────────────────────┘│
+│                              ↑                                │
+│                    ChatMessage (extracts                      │
+│                     parameter_form block)                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 新增字段类型
+
+- `editable_list`：可编辑的标签/列表输入。每个项是一个独立输入框，支持添加、删除、自然语言编辑。适用于告警规则、自定义标签等场景。
+
 ## 未来扩展
 
 - [ ] 添加文件上传字段类型
@@ -342,5 +396,5 @@ function App() {
 - [ ] 支持表单字段动态显示/隐藏（基于其他字段值）
 - [ ] 支持表单模板和复用
 - [ ] 添加表单提交进度指示
-- [ ] 支持多步骤表单（Wizard）
+- [x] 支持多步骤表单（Wizard）
 - [ ] 添加表单数据持久化（草稿保存）

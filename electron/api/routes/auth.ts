@@ -6,7 +6,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { app } from 'electron';
 import { getAuthState, setAuthUser, clearAuthUser, getSsoEnvironment, setSsoEnvironment, getStoToken, removeSsoAuthFromOpenClaw } from '../../utils/auth-store';
-import type { SsoEnvironment } from '../../utils/auth-store';
+import type { SsoEnvironment, SsoUserInfo } from '../../utils/auth-store';
 import { getBaseUrl, signOut } from '../../utils/sso-service';
 import { SsoLoginManager } from '../../utils/sso-login';
 import type { HostApiContext } from '../context';
@@ -45,6 +45,48 @@ async function clearAuthAfterAccessDenied(): Promise<void> {
   await clearAuthUser();
   void removeSsoAuthFromOpenClaw();
   void removeStoDynamicRoutePluginFromOpenClaw();
+}
+
+/**
+ * Heavy post-login work (skill workspace sync, SAI CLI, model/biz-agent setup).
+ * Runs in the background so POST /api/auth/login can return immediately after SSO.
+ */
+function schedulePostLoginBackgroundWork(user: SsoUserInfo, ctx: HostApiContext): void {
+  void (async () => {
+    try {
+      const previousUserCode = await getCurrentActiveUserCode();
+      const workspaceResult = await activateUserWorkspace(user.code);
+      if (workspaceResult.userChanged && previousUserCode) {
+        logger.info(`[auth] User changed from ${previousUserCode} to ${user.code}, restarting Gateway`);
+        await ctx.gatewayManager.restart();
+      }
+    } catch (err) {
+      logger.warn('[auth] Failed to activate user skill workspace on login:', err);
+    }
+
+    void loadSiteDepartmentTypes().catch((err) =>
+      logger.warn('Post-login site department types load failed:', err),
+    );
+
+    try {
+      const { autoInstallSaiCliIfNeeded } = await import('../../utils/sai-cli');
+      await autoInstallSaiCliIfNeeded();
+    } catch (err) {
+      logger.warn('SAI CLI auto-install on login failed:', err);
+    }
+
+    try {
+      await runAuthenticatedSetup({
+        user,
+        gatewayManager: ctx.gatewayManager,
+        source: 'login',
+      });
+    } catch (err) {
+      logger.warn('[auth] Post-login authenticated setup failed:', err);
+    }
+
+    void runPendingInstallReport(app.getVersion(), process.platform);
+  })();
 }
 
 const CRM_WEEK_REPORT_POLICY_PATH =
@@ -142,48 +184,12 @@ export async function handleAuthRoutes(
 
       await setAuthUser(user);
 
-      // Activate user skill workspace and sync with cloud installed list
-      try {
-        const previousUserCode = await getCurrentActiveUserCode();
-        const workspaceResult = await activateUserWorkspace(user.code);
-        if (workspaceResult.userChanged && previousUserCode) {
-          logger.info(`[auth] User changed from ${previousUserCode} to ${user.code}, restarting Gateway`);
-          await ctx.gatewayManager.restart();
-        }
-      } catch (err) {
-        logger.warn('[auth] Failed to activate user skill workspace on login:', err);
-        // Non-fatal: do not block login if workspace sync fails
-      }
-
-      // Load site department types from Apollo config for site-user detection
-      void loadSiteDepartmentTypes().catch((err) =>
-        logger.warn('Post-login site department types load failed:', err),
-      );
-
-      // Ensure SAI CLI is installed so the synced token can be used by commands
-      try {
-        const { autoInstallSaiCliIfNeeded } = await import('../../utils/sai-cli');
-        await autoInstallSaiCliIfNeeded();
-      } catch (err) {
-        logger.warn('SAI CLI auto-install on login failed:', err);
-      }
-
-      const setup = await runAuthenticatedSetup({
-        user,
-        gatewayManager: ctx.gatewayManager,
-        source: 'login',
-      });
-
-      const stoSync = getStoModelSyncService();
-      stoSync.startPeriodicSync();
-
-      void runPendingInstallReport(app.getVersion(), process.platform);
+      getStoModelSyncService().startPeriodicSync();
+      schedulePostLoginBackgroundWork(user, ctx);
 
       sendJson(res, 200, {
         success: true,
         user,
-        stoSync: setup.stoSync,
-        bizAgentSync: setup.bizAgentSync,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

@@ -9,6 +9,7 @@ import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
 import { ChatInput } from '@/pages/Chat/ChatInput';
+import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 import { HomeHero } from './HomeHero';
 import { HomeMainConversation } from './HomeMainConversation';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
@@ -40,8 +41,6 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
-  const abortRun = useChatStore((s) => s.abortRun);
-  const sending = useChatStore((s) => s.sending);
   const error = useChatStore((s) => s.error);
   const currentAgent = useMemo(
     () => agents.find((agent) => agent.id === currentAgentId),
@@ -150,13 +149,12 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
         <div className="mx-auto w-full max-w-[960px]">
           <section className="flex flex-col" aria-label={t('assistant.placeholder')}>
             <ChatInput
-              variant="embedded"
-              onSend={handleHubSend}
-              onStop={() => void abortRun()}
-              onQueue={handleHubQueue}
-              disabled={composerDisabled}
-              sending={sending}
-              seedText={seedText}
+              {...useChatInputBindings({
+                onSend: handleHubSend,
+                onQueue: handleHubQueue,
+                variant: 'embedded',
+                seedText,
+              })}
               engineType={currentEngineType}
             />
             {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}

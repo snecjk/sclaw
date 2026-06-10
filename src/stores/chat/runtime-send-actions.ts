@@ -85,10 +85,9 @@ export function formatQuotaExceededMessage(usedToday?: number, limit?: number): 
 export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<RuntimeActions, 'sendMessage' | 'abortRun'> {
   return {
     sendMessage: async (
-      text: string,
-      attachments?: Array<{ fileName: string; mimeType: string; fileSize: number; stagedPath: string; preview: string | null }>,
-      targetAgentId?: string | null,
+      options: import('@/stores/chat/types').SendMessageOptions,
     ) => {
+      const { text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId: _workflowId, runId: _runId } = options;
       const trimmed = text.trim();
       if (!trimmed && (!attachments || attachments.length === 0)) return;
 
