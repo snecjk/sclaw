@@ -2,11 +2,8 @@ import { app, utilityProcess } from 'electron';
 import path from 'path';
 import { existsSync } from 'fs';
 import WebSocket from 'ws';
-import { getOpenClawEntryPath, getOpenClawProcessCwd } from '../utils/paths';
-import { getUvMirrorEnv } from '../utils/uv-env';
-import { isPythonReady, setupManagedPython } from '../utils/uv-setup';
-import { logger } from '../utils/logger';
-import { prependPathEntry } from '../utils/env-path';
+import { getOpenClawEntryPath, getOpenClawProcessCwd, getOpenClawNodeModulesPath } from '../utils/paths';
+import { prependPathEntry, prependNodePathEntry } from '../utils/env-path';
 import { listAgentsSnapshot } from '../utils/agent-config';
 
 const pidCache = new Map<number, { pids: string[]; ts: number }>();
@@ -326,16 +323,14 @@ export async function runOpenClawDoctorRepair(): Promise<boolean> {
   );
 
   return await new Promise<boolean>((resolve) => {
-    const forkEnv: Record<string, string | undefined> = {
-      ...baseEnvPatched,
-      ...uvEnv,
-      OPENCLAW_NO_RESPAWN: '1',
-    };
-
     const child = utilityProcess.fork(entryScript, doctorArgs, {
       cwd: openclawDir,
       stdio: 'pipe',
-      env: forkEnv as NodeJS.ProcessEnv,
+      env: prependNodePathEntry({
+        ...baseEnvPatched,
+        ...uvEnv,
+        OPENCLAW_NO_RESPAWN: '1',
+      }, getOpenClawNodeModulesPath()) as NodeJS.ProcessEnv,
     });
 
     let settled = false;

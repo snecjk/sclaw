@@ -75,10 +75,11 @@ describe('OpenClaw packaged paths (ASAR)', () => {
       return false;
     });
 
-    const { getOpenClawDir, getOpenClawEntryPath, getOpenClawProcessCwd } = await import('@electron/utils/paths');
+    const { getOpenClawDir, getOpenClawEntryPath, getOpenClawProcessCwd, getOpenClawNodeModulesPath } = await import('@electron/utils/paths');
     expect(getOpenClawDir()).toBe(join(RESOURCES, 'openclaw.asar'));
     expect(getOpenClawEntryPath()).toBe(join(RESOURCES, 'openclaw.asar', 'openclaw.mjs'));
     expect(getOpenClawProcessCwd()).toBe(RESOURCES);
+    expect(getOpenClawNodeModulesPath()).toBe(join(RESOURCES, 'openclaw.asar', 'node_modules'));
   });
 
   it('falls back to legacy openclaw/ directory when asar is absent', async () => {

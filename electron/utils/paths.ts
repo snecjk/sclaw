@@ -168,6 +168,13 @@ export function getOpenClawProcessCwd(): string {
 }
 
 /**
+ * OpenClaw node_modules path for NODE_PATH (Gateway / doctor / plugins).
+ */
+export function getOpenClawNodeModulesPath(): string {
+  return join(getOpenClawDir(), 'node_modules');
+}
+
+/**
  * Candidate directories for bundled plugin mirrors in packaged builds.
  */
 export function getBundledPluginSourceCandidates(pluginDirName: string): string[] {

@@ -115,6 +115,11 @@ win:
       arch: x64
     - target: nsis
       arch: arm64
+    # Portable ZIP for IT / power users (same ASAR layout as NSIS, faster extract)
+    - target: zip
+      arch: x64
+    - target: zip
+      arch: arm64
 
 nsis:
   oneClick: false

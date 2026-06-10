@@ -17,7 +17,7 @@ function fsPath(filePath: string): string {
 import { getAllSettings } from '../utils/store';
 import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-storage';
 import { getProviderEnvVar, getKeyableProviderTypes } from '../utils/provider-registry';
-import { getOpenClawDir, getOpenClawEntryPath, getOpenClawConfigDir, getOpenClawProcessCwd, getBundledPluginSourceCandidates, isOpenClawPresent } from '../utils/paths';
+import { getOpenClawDir, getOpenClawEntryPath, getOpenClawConfigDir, getOpenClawProcessCwd, getOpenClawNodeModulesPath, getBundledPluginSourceCandidates, isOpenClawPresent } from '../utils/paths';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { cleanupDanglingWeChatPluginState, listConfiguredChannels } from '../utils/channel-config';
 import { syncGatewayTokenToConfig, syncBrowserConfigToOpenClaw, syncSessionIdleMinutesToOpenClaw, sanitizeOpenClawConfig } from '../utils/openclaw-auth';
@@ -25,7 +25,7 @@ import { buildProxyEnv, resolveProxySettings } from '../utils/proxy';
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { logger } from '../utils/logger';
 import { getDwsBinDir } from '../utils/dws-cli';
-import { prependPathEntry } from '../utils/env-path';
+import { prependPathEntry, prependNodePathEntry } from '../utils/env-path';
 import { copyPluginFromNodeModules, fixupPluginManifest } from '../utils/plugin-install';
 
 export interface GatewayLaunchContext {
@@ -299,7 +299,7 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     ? prependPathEntry(baseEnvRecord, binPath).env
     : baseEnvRecord;
   baseEnvPatched = prependPathEntry(baseEnvPatched, getDwsBinDir()).env;
-  const forkEnv: Record<string, string | undefined> = {
+  const forkEnv: Record<string, string | undefined> = prependNodePathEntry({
     ...baseEnvPatched,
     ...providerEnv,
     ...uvEnv,
@@ -309,7 +309,7 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     CLAWDBOT_SKIP_CHANNELS: skipChannels ? '1' : '',
     OPENCLAW_NO_RESPAWN: '1',
     OPENCLAW_STATE_DIR: getOpenClawConfigDir(),
-  };
+  }, getOpenClawNodeModulesPath());
 
   return {
     appSettings,

@@ -1,7 +1,8 @@
 import { app, utilityProcess } from 'electron';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { getOpenClawDir, getOpenClawEntryPath, getOpenClawProcessCwd } from './paths';
+import { getOpenClawEntryPath, getOpenClawProcessCwd, getOpenClawNodeModulesPath } from './paths';
+import { prependNodePathEntry } from './env-path';
 import { logger } from './logger';
 import { getUvMirrorEnv } from './uv-env';
 
@@ -105,12 +106,12 @@ async function runDoctorCommandWithArgs(
     const child = utilityProcess.fork(entryScript, args, {
       cwd: openclawDir,
       stdio: 'pipe',
-      env: {
+      env: prependNodePathEntry({
         ...process.env,
         ...uvEnv,
         PATH: finalPath,
         OPENCLAW_NO_RESPAWN: '1',
-      } as NodeJS.ProcessEnv,
+      }, getOpenClawNodeModulesPath()) as NodeJS.ProcessEnv,
     });
 
     let stdout = '';

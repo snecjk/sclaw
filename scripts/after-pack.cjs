@@ -19,7 +19,7 @@
  *      @mariozechner/clipboard).
  */
 
-const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, realpathSync } = require('fs');
+const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, realpathSync, readFileSync } = require('fs');
 const { join, dirname, basename } = require('path');
 const { createPackage } = require('@electron/asar');
 
@@ -83,12 +83,19 @@ function cleanupUnnecessaryFiles(dir) {
 
   const REMOVE_DIRS = new Set([
     'test', 'tests', '__tests__', '.github', 'examples', 'example',
+    'docs', 'doc', 'website', 'benchmark', 'benchmarks', 'coverage', '.nyc_output', 'man',
   ]);
-  const REMOVE_FILE_EXTS = ['.d.ts', '.d.ts.map', '.js.map', '.mjs.map', '.ts.map', '.markdown'];
+  const REMOVE_FILE_EXTS = ['.d.ts', '.d.ts.map', '.js.map', '.mjs.map', '.ts.map', '.markdown', '.flow'];
   const REMOVE_FILE_NAMES = new Set([
     '.DS_Store', 'README.md', 'CHANGELOG.md', 'LICENSE.md', 'CONTRIBUTING.md',
+    'History.md', 'HISTORY.md', 'AUTHORS', 'NOTICE', 'License',
     'tsconfig.json', '.npmignore', '.eslintrc', '.prettierrc', '.editorconfig',
   ]);
+  const ENGLISH_LOCALE_RE = /^(en|en[-_].*)\.(json|js|yaml|yml)$/i;
+
+  function isEnglishLocaleFile(name) {
+    return ENGLISH_LOCALE_RE.test(name);
+  }
 
   function walk(currentDir) {
     let entries;
@@ -100,12 +107,21 @@ function cleanupUnnecessaryFiles(dir) {
       if (entry.isDirectory()) {
         if (REMOVE_DIRS.has(entry.name)) {
           try { rmSync(fullPath, { recursive: true, force: true }); removedCount++; } catch { /* */ }
-        } else {
-          walk(fullPath);
+          continue;
         }
+        if (entry.name === 'locale' || entry.name === 'locales') {
+          try {
+            for (const localeFile of readdirSync(fullPath)) {
+              if (!isEnglishLocaleFile(localeFile)) {
+                try { rmSync(join(fullPath, localeFile), { force: true }); removedCount++; } catch { /* */ }
+              }
+            }
+          } catch { /* */ }
+        }
+        walk(fullPath);
       } else if (entry.isFile()) {
         const name = entry.name;
-        if (REMOVE_FILE_NAMES.has(name) || REMOVE_FILE_EXTS.some(e => name.endsWith(e))) {
+        if (REMOVE_FILE_NAMES.has(name) || name === 'LICENSE' || REMOVE_FILE_EXTS.some(e => name.endsWith(e))) {
           try { rmSync(fullPath, { force: true }); removedCount++; } catch { /* */ }
         }
       }
@@ -114,6 +130,104 @@ function cleanupUnnecessaryFiles(dir) {
 
   walk(dir);
   return removedCount;
+}
+
+// ── Plugin node_modules dedupe against openclaw runtime ─────────────────────
+// Bundled plugins copy transitive deps into their own node_modules. Packages
+// with the same name+version as openclaw's runtime are removed; Gateway resolves
+// them via NODE_PATH (see getOpenClawNodeModulesPath in electron/utils/paths.ts).
+
+function readPackageVersion(pkgDir) {
+  try {
+    const raw = readFileSync(join(pkgDir, 'package.json'), 'utf8');
+    return JSON.parse(raw).version ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function buildOpenclawPackageIndex(openclawNodeModulesDir) {
+  const index = new Map();
+  if (!existsSync(openclawNodeModulesDir)) return index;
+
+  for (const entry of readdirSync(openclawNodeModulesDir)) {
+    if (entry === '.bin') continue;
+    const fullPath = join(openclawNodeModulesDir, entry);
+    if (entry.startsWith('@')) {
+      let subs;
+      try { subs = readdirSync(fullPath); } catch { continue; }
+      for (const sub of subs) {
+        index.set(`${entry}/${sub}`, readPackageVersion(join(fullPath, sub)));
+      }
+    } else {
+      index.set(entry, readPackageVersion(fullPath));
+    }
+  }
+  return index;
+}
+
+function removeEmptyPluginNodeModules(pluginNodeModulesDir) {
+  if (!existsSync(pluginNodeModulesDir)) return;
+  let entries;
+  try { entries = readdirSync(pluginNodeModulesDir); } catch { return; }
+  if (entries.length === 0 || (entries.length === 1 && entries[0] === '.bin')) {
+    rmSync(pluginNodeModulesDir, { recursive: true, force: true });
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.startsWith('@')) continue;
+    const scopeDir = join(pluginNodeModulesDir, entry);
+    try {
+      if (readdirSync(scopeDir).length === 0) {
+        rmSync(scopeDir, { recursive: true, force: true });
+      }
+    } catch { /* */ }
+  }
+}
+
+function dedupePluginNodeModules(pluginDir, openclawPackageIndex) {
+  const pluginNodeModulesDir = join(pluginDir, 'node_modules');
+  if (!existsSync(pluginNodeModulesDir) || openclawPackageIndex.size === 0) return 0;
+
+  let removed = 0;
+  for (const entry of readdirSync(pluginNodeModulesDir)) {
+    if (entry === '.bin') continue;
+    const fullPath = join(pluginNodeModulesDir, entry);
+    if (entry.startsWith('@')) {
+      let subs;
+      try { subs = readdirSync(fullPath); } catch { continue; }
+      for (const sub of subs) {
+        const pkgName = `${entry}/${sub}`;
+        const runtimeVersion = openclawPackageIndex.get(pkgName);
+        if (runtimeVersion == null) continue;
+        const pluginVersion = readPackageVersion(join(fullPath, sub));
+        if (pluginVersion === runtimeVersion) {
+          try {
+            rmSync(join(fullPath, sub), { recursive: true, force: true });
+            removed++;
+          } catch { /* */ }
+        }
+      }
+      try {
+        if (existsSync(fullPath) && readdirSync(fullPath).length === 0) {
+          rmSync(fullPath, { recursive: true, force: true });
+        }
+      } catch { /* */ }
+    } else {
+      const runtimeVersion = openclawPackageIndex.get(entry);
+      if (runtimeVersion == null) continue;
+      const pluginVersion = readPackageVersion(fullPath);
+      if (pluginVersion === runtimeVersion) {
+        try {
+          rmSync(fullPath, { recursive: true, force: true });
+          removed++;
+        } catch { /* */ }
+      }
+    }
+  }
+
+  removeEmptyPluginNodeModules(pluginNodeModulesDir);
+  return removed;
 }
 
 // ── Platform-specific: koffi ─────────────────────────────────────────────────
@@ -697,6 +811,18 @@ exports.default = async function afterPack(context) {
   if (existsSync(llamaCppDir)) {
     rmSync(llamaCppDir, { recursive: true, force: true });
     console.log('[after-pack] ✅ Removed @node-llama-cpp (not needed, using Ollama/vLLM HTTP API instead).');
+  }
+
+  // 5.1 Dedupe plugin node_modules against openclaw runtime (same name + version)
+  const openclawPackageIndex = buildOpenclawPackageIndex(dest);
+  let totalPluginDeduped = 0;
+  for (const plugin of BUNDLED_PLUGINS) {
+    const pluginDestDir = join(pluginsDestRoot, plugin.pluginId);
+    if (!existsSync(pluginDestDir)) continue;
+    totalPluginDeduped += dedupePluginNodeModules(pluginDestDir, openclawPackageIndex);
+  }
+  if (totalPluginDeduped > 0) {
+    console.log(`[after-pack] ✅ Deduped ${totalPluginDeduped} plugin packages already in openclaw runtime.`);
   }
 
   // 6. Remove excluded OpenClaw built-in skills (not needed for StoClaw distribution)
