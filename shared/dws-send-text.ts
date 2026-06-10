@@ -93,7 +93,7 @@ export function fixDwsChatMessageSendShellScript(script: string): string {
   if (!DWS_CHAT_MSG_SEND.test(script) || !/--text\s+/i.test(script)) return script;
 
   return script.replace(
-    /--text\s+([\s\S]*?)(?=\s+--(?:format|uuid|dry-run)\b|$)/gi,
+    /--text\s+([\s\S]*?)(?=\s+--(?:format|uuid|dry-run|media|msg-type|dentry-id|space-id|file-name|file-type|file-path|file-size|open-dingtalk-id)\b|$)/gi,
     (full, rawValue: string) => {
       const parsed = parseDwsSendTextFlagSegment(rawValue);
       if (!parsed) return full;
