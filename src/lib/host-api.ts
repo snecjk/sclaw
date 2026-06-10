@@ -219,6 +219,20 @@ export async function hostApiFetch<T>(path: string, init?: RequestInit): Promise
   }
 }
 
+/**
+ * Fetch a streaming endpoint (e.g. SSE) from the local Host API.
+ * Unlike `hostApiFetch`, this bypasses IPC and returns the raw Response
+ * so the caller can read `response.body` as a ReadableStream.
+ */
+export async function hostApiFetchStream(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(`${HOST_API_BASE}${path}`, {
+    ...init,
+    headers: {
+      ...(init?.headers || {}),
+    },
+  });
+}
+
 export function createHostEventSource(path = '/api/events'): EventSource {
   return new EventSource(`${HOST_API_BASE}${path}`);
 }

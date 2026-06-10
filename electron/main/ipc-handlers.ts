@@ -65,6 +65,8 @@ import {
 import { validateApiKeyWithProvider } from '../services/providers/provider-validation';
 import { appUpdater } from './updater';
 import { registerHostApiProxyHandlers } from './ipc/host-api-proxy';
+import { registerWorkflowStreamHandlers } from './ipc/workflow-stream-proxy';
+import { getWorkflowExecutionTracker } from './services/workflow-execution-tracker';
 import {
   isLaunchAtStartupKey,
   isProxyKey,
@@ -88,6 +90,7 @@ export function registerIpcHandlers(
 
   // Host API proxy handlers
   registerHostApiProxyHandlers();
+  registerWorkflowStreamHandlers();
 
   // Gateway handlers
   registerGatewayHandlers(gatewayManager, mainWindow, getSpriteWindow, getFloatIconWindow);
@@ -2871,5 +2874,19 @@ function registerSessionHandlers(): void {
       logger.error(`[session:delete] Unexpected error for ${sessionKey}:`, err);
       return { success: false, error: String(err) };
     }
+  });
+
+  // ── Workflow Execution Tracker ──
+  ipcMain.handle('workflow:startTracking', async (_, { runId, sessionKey, agentId, workflowId }: { runId: string; sessionKey: string; agentId: string; workflowId: string }) => {
+    logger.info(`[workflow-trace] IPC workflow:startTracking runId=${runId} workflowId=${workflowId} sessionKey=${sessionKey}`);
+    getWorkflowExecutionTracker().startTracking(runId, sessionKey, agentId, workflowId);
+  });
+
+  ipcMain.handle('workflow:stopTracking', async (_, { runId }: { runId: string }) => {
+    getWorkflowExecutionTracker().stopTracking(runId);
+  });
+
+  ipcMain.handle('workflow:sync-state', async (_, { runId }: { runId: string }) => {
+    return getWorkflowExecutionTracker().getState(runId);
   });
 }

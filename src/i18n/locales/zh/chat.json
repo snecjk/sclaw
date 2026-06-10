@@ -56,7 +56,13 @@
         "dingtalkLoggingIn": "登录中…",
         "dingtalkSentPreviewTitle": "已发送至 {{name}}",
         "dingtalkSentPreviewTitleGroup": "已发送至群聊 {{name}}",
-        "dingtalkSentPreviewMessageTitle": "消息标题：{{title}}"
+        "dingtalkSentPreviewMessageTitle": "消息标题：{{title}}",
+        "pickWorkflow": "选择工作流",
+        "workflowPlaceholder": "搜索工作流模板...",
+        "workflowLoading": "加载中...",
+        "workflowNoResults": "未找到匹配模板",
+        "workflowNoTemplates": "暂无工作流模板",
+        "workflowClear": "清除工作流"
     },
     "streaming": {
         "connectingModel": "连接模型中...",
@@ -99,5 +105,21 @@
         "label": "系统提示",
         "expand": "展开",
         "collapse": "收起"
+    },
+    "workflow": {
+        "statusPending": "等待中",
+        "statusRunning": "执行中",
+        "statusCompleted": "已完成",
+        "statusFailed": "执行失败",
+        "statusTimeout": "执行超时",
+        "statusUnknown": "状态未知",
+        "runningFor": "已运行 {{duration}}",
+        "elapsed": "耗时 {{duration}}",
+        "durationSeconds": "{{count}} 秒",
+        "durationMinutes": "{{count}} 分钟",
+        "durationHalfHour": "半小时",
+        "durationHours": "{{count}} 小时",
+        "durationHoursHalf": "{{count}} 个半小时",
+        "durationHoursMinutes": "{{hours}} 小时 {{minutes}} 分钟"
     }
 }

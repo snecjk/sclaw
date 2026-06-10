@@ -16,11 +16,22 @@ export async function proxyAwareFetch(
   input: string | URL,
   init?: RequestInit & { timeoutMs?: number }
 ): Promise<Response> {
-  const timeoutMs = init?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const rawTimeout = init?.timeoutMs;
+  // timeoutMs: 0 / Infinity / omitted-with-explicit-0 → no timer (for SSE etc.)
+  // omitted entirely → default 15s
+  const useTimeout = rawTimeout === undefined
+    ? true
+    : Number.isFinite(rawTimeout) && rawTimeout > 0;
+  const timeoutMs = useTimeout ? (rawTimeout ?? DEFAULT_TIMEOUT_MS) : DEFAULT_TIMEOUT_MS;
 
-  // Create an AbortController that aborts after timeoutMs
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timer = useTimeout
+    ? setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs)
+    : undefined;
 
   const mergedInit: RequestInit = {
     ...init,
@@ -54,12 +65,11 @@ export async function proxyAwareFetch(
 
     return await fetch(input, mergedInit);
   } catch (e: unknown) {
-    // Translate AbortError to a more descriptive timeout error
-    if (controller.signal.aborted) {
+    if (timedOut) {
       throw new Error(`请求超时（${Math.round(timeoutMs / 1000)}秒未响应），请检查网络后重试`);
     }
     throw e;
   } finally {
-    clearTimeout(timer);
+    if (timer !== undefined) clearTimeout(timer);
   }
 }

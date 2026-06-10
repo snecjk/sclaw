@@ -8,12 +8,9 @@ import { ExternalLink, FileText, RefreshCw, Maximize, Minimize, Table, FileSprea
 import { cn } from '@/lib/utils';
 import { hostApiFetch, getHostApiBase } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
+import { isHttpUrl } from '@/lib/preview-url';
 // @ts-ignore — highlight.js v10 ships without bundled .d.ts
 import hljs from 'highlight.js';
-
-
-// Install the real packages to enable Excel / Word previews:
-//   pnpm add xlsx mammoth
 
 interface FilePreviewViewerProps {
   filePath: string;
@@ -25,6 +22,14 @@ interface FilePreviewViewerProps {
 /** Serve local files through the Host API to bypass browser file:// restrictions in iframes. */
 function toServeUrl(filePath: string): string {
   return `${getHostApiBase()}/api/files/serve?path=${encodeURIComponent(filePath)}`;
+}
+
+function isHtmlFileType(mimeType: string, fileName: string, filePath?: string): boolean {
+  if (mimeType === 'text/html') return true;
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  if (ext === 'html' || ext === 'htm') return true;
+  if (filePath && /\.html?(?:\?|$)/i.test(filePath)) return true;
+  return false;
 }
 
 /** Map file extension to highlight.js language name. */
@@ -94,6 +99,9 @@ export function FilePreviewViewer({
   const [textContent, setTextContent] = useState<string>('');
   const [textLoading, setTextLoading] = useState(false);
   const [textError, setTextError] = useState<string>('');
+  const [htmlContent, setHtmlContent] = useState<string>('');
+  const [htmlLoading, setHtmlLoading] = useState(false);
+  const [htmlError, setHtmlError] = useState<string>('');
   const [officeData, setOfficeData] = useState<OfficeData | null>(null);
   const [officeLoading, setOfficeLoading] = useState(false);
   const [officeError, setOfficeError] = useState<string>('');
@@ -119,10 +127,12 @@ export function FilePreviewViewer({
   }, []);
 
   useEffect(() => {
-    if (mimeType !== 'text/markdown') {
-      setMdContent('');
-      setMdError('');
-      setMdLoading(false);
+    if (mimeType !== 'text/markdown' || isHttpUrl(filePath)) {
+      if (!isHttpUrl(filePath)) {
+        setMdContent('');
+        setMdError('');
+        setMdLoading(false);
+      }
       return;
     }
 
@@ -154,14 +164,15 @@ export function FilePreviewViewer({
     };
   }, [filePath, mimeType]);
 
-  // Load plain text / code / json / csv / tsv files
+  // Load local plain text / code / json / csv / tsv files
   useEffect(() => {
-    const isText =
+    const isText = !isHttpUrl(filePath) && (
       mimeType === 'text/plain' ||
       mimeType === 'application/json' ||
       mimeType === 'text/csv' ||
       mimeType === 'text/tab-separated-values' ||
-      isCodeFile(filePath, mimeType);
+      isCodeFile(filePath, mimeType)
+    );
 
     if (!isText) {
       setTextContent('');
@@ -198,8 +209,89 @@ export function FilePreviewViewer({
     };
   }, [filePath, mimeType]);
 
-  // Load Office files (Excel / Word / PPT)
+  // Fetch remote HTML (OSS often sets Content-Disposition: attachment — iframe src triggers download)
   useEffect(() => {
+    const isRemoteHtml = isHttpUrl(filePath) && isHtmlFileType(mimeType, fileName, filePath);
+    if (!isRemoteHtml) {
+      setHtmlContent('');
+      setHtmlError('');
+      setHtmlLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setHtmlContent('');
+    setHtmlError('');
+    setHtmlLoading(true);
+
+    void (async () => {
+      try {
+        const response = await fetch(filePath);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const content = await response.text();
+        if (cancelled) return;
+        setHtmlContent(content);
+      } catch (e) {
+        if (!cancelled) {
+          setHtmlError(e instanceof Error ? e.message : '加载 HTML 预览失败');
+        }
+      } finally {
+        if (!cancelled) setHtmlLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filePath, mimeType, fileName]);
+
+  // Load remote text/json/markdown from http(s) URLs (OSS/CDN)
+  useEffect(() => {
+    const isRemoteTextFile = isHttpUrl(filePath)
+      && (mimeType === 'text/plain' || mimeType === 'application/json' || mimeType === 'text/csv' || mimeType === 'text/markdown');
+    if (!isRemoteTextFile) {
+      if (isHttpUrl(filePath)) return;
+      setTextContent('');
+      setTextError('');
+      setTextLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setTextContent('');
+    setTextError('');
+    setTextLoading(true);
+
+    void (async () => {
+      try {
+        const response = await fetch(filePath);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const content = await response.text();
+        if (cancelled) return;
+        setTextContent(content);
+      } catch (e) {
+        if (!cancelled) {
+          setTextError(e instanceof Error ? e.message : '加载远程文件失败');
+        }
+      } finally {
+        if (!cancelled) setTextLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filePath, mimeType]);
+
+  // Load local Office files (Excel / Word / PPT)
+  useEffect(() => {
+    if (isHttpUrl(filePath)) {
+      setOfficeData(null);
+      setOfficeLoading(false);
+      setOfficeError('');
+      return;
+    }
+
     const office = isOfficeFile(mimeType, filePath);
     if (!office.type) {
       setOfficeData(null);
@@ -215,7 +307,6 @@ export function FilePreviewViewer({
 
     void (async () => {
       try {
-        // Read file as base64 through IPC proxy (avoids direct fetch/CORS issues)
         const readRes = await hostApiFetch<{ content: string; encoding: string }>('/api/files/read', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -264,15 +355,12 @@ export function FilePreviewViewer({
     };
   }, [filePath, mimeType]);
 
-  // Parsed CSV/TSV table data
   const tableData = useMemo(() => {
     if (!textContent || (mimeType !== 'text/csv' && mimeType !== 'text/tab-separated-values')) return null;
     const delimiter = mimeType === 'text/tab-separated-values' ? '\t' : ',';
-    // Simple CSV split — does not handle quoted commas, but good enough for AI-generated files
     return textContent.split('\n').map((row) => row.split(delimiter));
   }, [textContent, mimeType]);
 
-  // Syntax-highlighted code HTML
   const highlightedHtml = useMemo(() => {
     if (!textContent) return '';
     if (mimeType === 'text/csv' || mimeType === 'text/tab-separated-values') return '';
@@ -293,7 +381,6 @@ export function FilePreviewViewer({
       return hljs.highlight(textContent, { language: lang }).value;
     }
 
-    // Auto-detect for unrecognized code files
     if (isCodeFile(filePath, mimeType)) {
       const auto = hljs.highlightAuto(textContent);
       return auto.value;
@@ -303,8 +390,119 @@ export function FilePreviewViewer({
   }, [textContent, filePath, mimeType]);
 
   const content = (() => {
-    // Web URLs
-    if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+    if (isHttpUrl(filePath)) {
+      const isHtmlFile = isHtmlFileType(mimeType, fileName, filePath);
+
+      if (isHtmlFile) {
+        if (htmlLoading) {
+          return (
+            <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
+              <RefreshCw className="h-5 w-5 animate-spin" />
+              正在加载 HTML 预览…
+            </div>
+          );
+        }
+        if (htmlError) {
+          return (
+            <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm', className)}>
+              <p className="text-destructive">{htmlError}</p>
+              <OpenExternalButton filePath={filePath} />
+            </div>
+          );
+        }
+        if (htmlContent) {
+          return (
+            <iframe
+              key={filePath}
+              srcDoc={htmlContent}
+              title={fileName}
+              className={cn('h-full min-w-0 w-full border-0', className)}
+              sandbox="allow-scripts allow-same-origin allow-popups"
+            />
+          );
+        }
+      }
+
+      if (mimeType === 'application/pdf') {
+        return (
+          <iframe
+            key={filePath}
+            src={filePath}
+            title={fileName}
+            className={cn('h-full min-w-0 w-full border-0', className)}
+            sandbox="allow-scripts allow-same-origin allow-popups"
+          />
+        );
+      }
+
+      if (mimeType === 'text/markdown') {
+        if (textLoading) {
+          return (
+            <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
+              <RefreshCw className="h-5 w-5 animate-spin" />
+              正在加载预览…
+            </div>
+          );
+        }
+        if (textError) {
+          return (
+            <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm', className)}>
+              <p className="text-destructive">{textError}</p>
+              <OpenExternalButton filePath={filePath} />
+            </div>
+          );
+        }
+        if (textContent) {
+          const srcDoc = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;max-width:800px;margin:40px auto;padding:0 20px;color:#333;background:#fff}
+code{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:0.9em}
+pre{background:#f4f4f4;padding:16px;border-radius:6px;overflow-x:auto}
+</style>
+</head>
+<body>${textContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</body>
+</html>`;
+          return (
+            <iframe
+              key={filePath}
+              srcDoc={srcDoc}
+              title={fileName}
+              className={cn('h-full min-w-0 w-full border-0', className)}
+              sandbox="allow-scripts"
+            />
+          );
+        }
+      }
+
+      if (mimeType === 'text/plain' || mimeType === 'application/json' || mimeType === 'text/csv') {
+        if (textLoading) {
+          return (
+            <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
+              <RefreshCw className="h-5 w-5 animate-spin" />
+              正在加载文件…
+            </div>
+          );
+        }
+        if (textError) {
+          return (
+            <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm', className)}>
+              <p className="text-destructive">{textError}</p>
+              <OpenExternalButton filePath={filePath} />
+            </div>
+          );
+        }
+        if (textContent) {
+          return (
+            <div className={cn('h-full overflow-auto bg-[#1e1e1e] text-[#d4d4d4] p-4', className)}>
+              <pre className="text-sm font-mono whitespace-pre-wrap break-words">{textContent}</pre>
+            </div>
+          );
+        }
+      }
+
       return (
         <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm text-muted-foreground', className)}>
           <FileText className="h-10 w-10 opacity-40" />
@@ -314,7 +512,6 @@ export function FilePreviewViewer({
       );
     }
 
-    // PDF preview
     if (mimeType === 'application/pdf') {
       return (
         <iframe
@@ -326,11 +523,7 @@ export function FilePreviewViewer({
       );
     }
 
-    // Local HTML file preview
-    const isHtmlFile = mimeType === 'text/html' || (() => {
-      const ext = filePath.split('.').pop()?.toLowerCase();
-      return ext === 'html' || ext === 'htm';
-    })();
+    const isHtmlFile = isHtmlFileType(mimeType, fileName, filePath);
     if (isHtmlFile) {
       return (
         <iframe
@@ -343,7 +536,6 @@ export function FilePreviewViewer({
       );
     }
 
-    // Markdown preview
     if (mimeType === 'text/markdown') {
       if (mdLoading) {
         return (
@@ -391,7 +583,6 @@ img{max-width:100%}
       );
     }
 
-    // CSV / TSV table preview
     if (tableData && tableData.length > 0) {
       if (textLoading) {
         return (
@@ -441,7 +632,6 @@ img{max-width:100%}
       );
     }
 
-    // Code / JSON / plain text preview with syntax highlighting
     const isText =
       mimeType === 'text/plain' ||
       mimeType === 'application/json' ||
@@ -484,7 +674,6 @@ img{max-width:100%}
       );
     }
 
-    // Office docs preview
     const office = isOfficeFile(mimeType, filePath);
     if (office.type) {
       const Icon = office.type === 'excel' ? FileSpreadsheet : office.type === 'ppt' ? Presentation : FileText;
@@ -591,7 +780,6 @@ img{max-width:100%}
       }
     }
 
-    // Fallback for other previewable types
     return (
       <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm text-muted-foreground', className)}>
         <FileText className="h-10 w-10 opacity-40" />
@@ -604,7 +792,6 @@ img{max-width:100%}
   return (
     <div ref={containerRef} className="relative h-full w-full">
       {content}
-      {/* Fullscreen toggle button */}
       <button
         onClick={toggleFullscreen}
         title={isFullscreen ? '退出全屏' : '全屏放映'}
@@ -669,7 +856,7 @@ function PptxPreviewPanel({ buffer, className }: { buffer: Uint8Array; className
 
 function OpenExternalButton({ filePath }: { filePath: string }) {
   const handleOpen = () => {
-    if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+    if (isHttpUrl(filePath)) {
       window.electron.openExternal(filePath);
     } else {
       void invokeIpc('shell:openPath', filePath);

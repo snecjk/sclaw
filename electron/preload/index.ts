@@ -23,6 +23,12 @@ const electronAPI = {
         'gateway:rpc',
         'gateway:httpProxy',
         'hostapi:fetch',
+        // Workflow
+        'workflow:startTracking',
+        'workflow:stopTracking',
+        'workflow:sync-state',
+        'workflow:stream:subscribe',
+        'workflow:stream:unsubscribe',
         'gateway:health',
         'gateway:getControlUiUrl',
         // OpenClaw
@@ -157,6 +163,12 @@ const electronAPI = {
         'form:response',
         'form:isShowing',
         'form:hide',
+        // Workflow
+        'workflow:startTracking',
+        'workflow:stopTracking',
+        'workflow:sync-state',
+        'workflow:stream:subscribe',
+        'workflow:stream:unsubscribe',
       ];
 
       if (validChannels.includes(channel)) {
@@ -206,6 +218,10 @@ const electronAPI = {
         'dws:cli-install-failed',
         'startup-progress',
         'auth:token-expired',
+        'workflow:status-update',
+        'workflow:poll-trace',
+        'workflow:stream:event',
+        'workflow:stream:error',
       ];
 
       if (validChannels.includes(channel)) {

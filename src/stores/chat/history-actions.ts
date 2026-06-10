@@ -1,6 +1,12 @@
 import { invokeIpc } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
+import { stripWorkflowContextForDisplay } from '@/lib/workflow-context';
+import { mergeLocalWorkflowTurnsFromCurrent } from '@/lib/workflow-local-turn';
+import {
+  mergeParameterFormBlocksFromCurrent,
+  recoverParameterFormsOnHistoryLoad,
+} from './parameter-form-recovery';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
 import {
   clearHistoryPoll,
@@ -53,6 +59,7 @@ export function createHistoryActions(
 ): Pick<SessionHistoryActions, 'loadHistory'> {
   return {
     loadHistory: async (quiet = false) => {
+      console.log('[loadHistory] called, quiet=%s', quiet);
       const { currentSessionKey } = get();
       if (!quiet) set({ loading: true, error: null });
 
@@ -83,18 +90,39 @@ export function createHistoryActions(
           }
         }
 
+        finalMessages = mergeParameterFormBlocksFromCurrent(
+          finalMessages,
+          get().messages,
+          getMessageText,
+        );
+        finalMessages = mergeLocalWorkflowTurnsFromCurrent(finalMessages, get().messages);
+        const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
+          sessionKey: currentSessionKey,
+          get,
+          set,
+          getMessageText,
+          thinkingLevel,
+        });
+        if (formRecovery.deferSet) return;
+        finalMessages = formRecovery.messages;
+
         set({ messages: finalMessages, thinkingLevel, loading: false });
 
-        // Extract first user message text as a session label for display in the sidebar.
-        // Only set if no manual label exists yet, to preserve user-renamed titles.
-        const firstUserMsg = finalMessages.find((m) => m.role === 'user');
-        if (firstUserMsg && !get().sessionLabels[currentSessionKey]) {
-          const labelText = getMessageText(firstUserMsg.content).trim();
-          if (labelText) {
-            const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
-            set((s) => ({
-              sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated },
-            }));
+        // Extract first user message text as a session label for display in the toolbar.
+        // Skip main sessions (key ends with ":main") — they rely on the Gateway-provided
+        // displayName (e.g. the configured agent name "StoClaw") instead.
+        const isMainSession = currentSessionKey.endsWith(':main');
+        if (!isMainSession) {
+          const firstUserMsg = finalMessages.find((m) => m.role === 'user');
+          if (firstUserMsg && !get().sessionLabels[currentSessionKey]) {
+            const rawText = getMessageText(firstUserMsg.content).trim();
+            const labelText = stripWorkflowContextForDisplay(rawText);
+            if (labelText) {
+              const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
+              set((s) => ({
+                sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated },
+              }));
+            }
           }
         }
 
@@ -122,6 +150,7 @@ export function createHistoryActions(
             });
           }
         });
+
         const { pendingFinal, lastUserMessageAt, sending: isSendingNow } = get();
 
         // If we're sending but haven't received streaming events, check
