@@ -50,6 +50,50 @@ export function getOpenClawAgentSkillsDir(agentId: string): string {
   return join(getOpenClawConfigDir(), 'agents', agentId, 'agent', 'skills');
 }
 
+// ── User-scoped skill workspace (for multi-account isolation) ──
+
+// eslint-disable-next-line no-control-regex
+const INVALID_PATH_CHARS = /[<>:"|?*\\/\x00-\x1f]/g;
+
+function sanitizeUserCodeForPath(userCode: string): string {
+  return userCode.replace(INVALID_PATH_CHARS, '_');
+}
+
+/**
+ * Get the base directory for a user's isolated skill workspace.
+ */
+export function getOpenClawUserBaseDir(userCode: string): string {
+  return join(getOpenClawConfigDir(), 'users', sanitizeUserCodeForPath(userCode));
+}
+
+/**
+ * Get a user's isolated skills directory.
+ */
+export function getOpenClawUserSkillsDir(userCode: string): string {
+  return join(getOpenClawUserBaseDir(userCode), 'skills');
+}
+
+/**
+ * Get a user's isolated disabled-skills directory.
+ */
+export function getOpenClawUserDisabledDir(userCode: string): string {
+  return join(getOpenClawUserBaseDir(userCode), 'skills-disabled');
+}
+
+/**
+ * Get a user's isolated ClawHub lock directory.
+ */
+export function getOpenClawUserLockDir(userCode: string): string {
+  return join(getOpenClawUserBaseDir(userCode), '.clawhub');
+}
+
+/**
+ * Get a user's isolated ClawHub lock file path.
+ */
+export function getOpenClawUserLockPath(userCode: string): string {
+  return join(getOpenClawUserLockDir(userCode), 'lock.json');
+}
+
 /**
  * Get StoClaw config directory
  */

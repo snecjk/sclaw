@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { useSkillsStore } from '@/stores/skills';
 import { maskSensitiveToolInputForDisplay, type ThinkingTimelineItem } from './message-utils';
 
 type StreamingTool = {
@@ -57,6 +58,46 @@ function buildCollapsedSummary(
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
+function resolveSkillDisplayName(name: string, skills: { id: string; slug?: string; name: string; title?: string }[]): string {
+  if (!name) return name;
+  const skill = skills.find(
+    (s) => s.id === name || s.slug === name || s.id.toLowerCase() === name.toLowerCase() || s.slug?.toLowerCase() === name.toLowerCase(),
+  );
+  return skill?.title || skill?.name || name;
+}
+
+function resolveSkillNamesInThinking(
+  text: string,
+  skills: { id: string; slug?: string; name: string; title?: string }[],
+): string {
+  if (!text || skills.length === 0) return text;
+
+  // Build a map of name/slug/id -> title, longest keys first to avoid partial matches
+  const replacements = new Map<string, string>();
+  for (const s of skills) {
+    const title = s.title?.trim();
+    if (!title) continue;
+    if (s.name && s.name !== title) replacements.set(s.name, title);
+    if (s.slug && s.slug !== title) replacements.set(s.slug, title);
+    if (s.id && s.id !== title) replacements.set(s.id, title);
+  }
+
+  const sortedKeys = Array.from(replacements.keys()).sort((a, b) => b.length - a.length);
+  if (sortedKeys.length === 0) return text;
+
+  // Escape regex special chars and match only when surrounded by word boundaries
+  // (start/end of string, whitespace, or punctuation). Skill names often contain
+  // hyphens, so we treat hyphens as part of the word.
+  let result = text;
+  for (const key of sortedKeys) {
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Match key when not preceded/followed by [A-Za-z0-9_\-]
+    const regex = new RegExp(`(?<![A-Za-z0-9_\\-])${escaped}(?![A-Za-z0-9_\\-])`, 'g');
+    result = result.replace(regex, replacements.get(key)!);
+  }
+  return result;
+}
+
 export function ThinkingProcessPanel({
   timeline,
   isStreaming = false,
@@ -67,6 +108,8 @@ export function ThinkingProcessPanel({
 }: ThinkingProcessPanelProps) {
   const { t } = useTranslation('chat');
   const [expanded, setExpanded] = useState(isStreaming);
+  const skills = useSkillsStore((state) => state.skills);
+  const fetchSkills = useSkillsStore((state) => state.fetchSkills);
 
   useEffect(() => {
     if (isStreaming || isConnecting || isProcessing) {
@@ -77,6 +120,12 @@ export function ThinkingProcessPanel({
       setExpanded(false);
     }
   }, [isStreaming, isConnecting, isProcessing, timeline.length]);
+
+  useEffect(() => {
+    if (skills.length === 0) {
+      void fetchSkills();
+    }
+  }, [skills.length, fetchSkills]);
 
   const mergedTimeline = useMemo(() => {
     if (streamingTools.length === 0) return timeline;
@@ -154,12 +203,13 @@ export function ThinkingProcessPanel({
         <div className="space-y-3 px-3 pb-3">
           {mergedTimeline.map((item, i) => {
             if (item.type === 'thinking') {
+              const thinkingContent = resolveSkillNamesInThinking(item.content, skills);
               return (
                 <div
                   key={`thinking-${i}`}
                   className="prose prose-sm max-w-none text-sm leading-relaxed text-foreground dark:prose-invert"
                 >
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinkingContent}</ReactMarkdown>
                 </div>
               );
             }
@@ -169,7 +219,7 @@ export function ThinkingProcessPanel({
               <ToolCallRow
                 key={key}
                 index={item.index}
-                name={item.name}
+                name={resolveSkillDisplayName(item.name, skills)}
                 input={item.input}
                 status={streamingStatusByKey.get(key)}
               />
@@ -190,7 +240,7 @@ export function ThinkingProcessPanel({
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin opacity-70" aria-hidden />
               <span>
                 {t('streaming.generatingWithTool', {
-                  tool: runningTool.summary || runningTool.name,
+                  tool: runningTool.summary || resolveSkillDisplayName(runningTool.name, skills),
                 })}
               </span>
             </div>

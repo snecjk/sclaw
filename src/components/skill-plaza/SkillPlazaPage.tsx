@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Package, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
+import { useAuthStore } from '@/stores/auth';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SkillPlazaHeader } from './SkillPlazaHeader';
@@ -22,13 +23,17 @@ export function SkillPlazaPage() {
     plazaSkills,
     mySkills,
     loading,
+    syncingUserSkills,
     viewMode,
 
     fetchCategories,
     fetchPlazaSkills,
     fetchLocalSkills,
+    syncUserSkills,
     uninstallSkill,
   } = useSkillPlazaStore();
+
+  const user = useAuthStore((s) => s.user);
 
   const [selectedSkill, setSelectedSkill] = useState<SkillSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SkillSummary | null>(null);
@@ -39,6 +44,14 @@ export function SkillPlazaPage() {
     fetchCategories();
     fetchPlazaSkills({ reset: true });
   }, [fetchCategories, fetchPlazaSkills]);
+
+  // Refresh when authenticated user changes (login / switch account)
+  useEffect(() => {
+    if (user?.code) {
+      void syncUserSkills();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.code]);
 
   // Tab switch data loading
   useEffect(() => {
@@ -82,7 +95,12 @@ export function SkillPlazaPage() {
 
       {/* Skill list */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        {loading && skills.length === 0 ? (
+        {syncingUserSkills ? (
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+            <RefreshCw className="h-8 w-8 mb-4 animate-spin opacity-50" />
+            <p>{t('plaza.syncingUserSkills', { defaultValue: '正在同步您的技能…' })}</p>
+          </div>
+        ) : loading && skills.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <RefreshCw className="h-8 w-8 mb-4 animate-spin opacity-50" />
             <p>{t('plaza.loading', { defaultValue: '加载中...' })}</p>

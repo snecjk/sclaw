@@ -200,9 +200,11 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
         </div>
 
         {/* Description */}
-        <p className="m-0 mb-2 flex-1 text-[13px] leading-snug text-muted-foreground line-clamp-2">
-          {skill.description}
-        </p>
+        <div className="flex-1 min-h-0 mb-2">
+          <p className="m-0 text-[13px] leading-snug text-muted-foreground line-clamp-2">
+            {skill.description}
+          </p>
+        </div>
 
         {/* Meta */}
         <div className="flex items-center justify-between gap-2 mt-auto text-xs text-muted-foreground font-medium">
