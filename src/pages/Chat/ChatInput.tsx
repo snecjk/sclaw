@@ -820,6 +820,11 @@ export function ChatInput({
                   })}
                 </span>
               </div>
+            ) : engineType === 'claude' ? (
+              <div className="flex items-center gap-1.5">
+                <div className="h-1.5 w-1.5 rounded-full bg-green-500/80" />
+                <span>{statusText ?? t('composer.claudeReady')}</span>
+              </div>
             ) : <div />}
             <div className="flex items-center gap-3">
               {dailyTokenQuotaText ? (

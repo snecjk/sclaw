@@ -78,7 +78,7 @@ export function Chat() {
   const composerRequiresGateway = currentEngineType === 'openclaw';
   const composerDisabled = composerRequiresGateway && !isGatewayRunning;
   const composerStatusText = currentEngineType === 'claude'
-    ? 'Claude Agent 直连可用，不受 OpenClaw 网关启动状态限制'
+    ? t('composer.claudeReadyDetail')
     : t('composer.gatewayStatus', {
         state: gatewayStatus.state === 'running'
           ? t('composer.gatewayConnected')

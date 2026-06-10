@@ -98,6 +98,7 @@
     "toolsLabel": "ツール",
     "toolsValue": "呼び出し可",
     "inputPlaceholder": "Main Agent に送信 — @ で連絡先またはグループを検索",
+    "claudeLineConnected": "Claude Agent 準備完了",
     "gatewayLineConnected": "gateway 接続済み | port: {{port}} | pid: {{pid}}",
     "gatewayLineConnecting": "gateway 接続中 | port: {{port}}",
     "gatewayLineDisconnected": "gateway 未接続 | port: {{port}}",

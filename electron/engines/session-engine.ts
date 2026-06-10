@@ -38,7 +38,7 @@ export async function rememberSessionEngineType(
     sessionId: engineChanged ? undefined : existing?.sessionId,
     cwd: engineChanged ? undefined : existing?.cwd,
     updatedAt: Date.now(),
-    title: engineChanged ? undefined : existing?.title,
+    title: existing?.title,
     model: existing?.model,
     accountId: existing?.accountId,
   });

@@ -33,6 +33,8 @@
         "send": "Send",
         "stop": "Stop",
         "gatewayConnected": "connected",
+        "claudeReady": "Claude Agent ready",
+        "claudeReadyDetail": "Claude Agent direct connection available, unaffected by OpenClaw gateway status",
         "gatewayStatus": "gateway {{state}} | port: {{port}} {{pid}}",
         "retryFailedAttachments": "Retry failed attachments",
         "dingtalkMentionTitle": "Mention a DingTalk contact or group",

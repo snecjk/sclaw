@@ -24,8 +24,6 @@ export function HomeAssistant({
   const { t } = useTranslation('home');
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const agents = useAgentsStore((s) => s.agents);
-  const gatewayStatus = useGatewayStore((s) => s.status);
-  const isGatewayRunning = gatewayStatus.state === 'running';
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const error = useChatStore((s) => s.error);
   const { handleHubSend, handleHubQueue } = useHomeChatEntrySend();
@@ -34,8 +32,6 @@ export function HomeAssistant({
     [agents, currentAgentId],
   );
   const currentEngineType = currentAgent?.engineType;
-  const composerDisabled = currentEngineType === 'openclaw' && !isGatewayRunning;
-
   const inputProps = useChatInputBindings({
     onSend: onSend || handleHubSend,
     onQueue: handleHubQueue,

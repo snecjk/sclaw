@@ -28,6 +28,7 @@ import type { WorkflowExecutionState } from '@/types/workflow';
 import { buildWorkflowFormConfig, buildStartupPreset } from '@/lib/workflow-form-utils';
 import { registerParameterFormHandler } from '@/components/parameter-form/form-handlers';
 import { mergeLocalWorkflowTurnsFromCurrent, mergeWorkflowTurnsFromMemory } from '@/lib/workflow-local-turn';
+import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import { buildWorkflowCardStatesForSession } from '@/stores/workflow-memory';
 import { hydrateSessionWorkflowCards } from '@/lib/workflow-run-hydration';
 import { upgradeWorkflowParamUserMessages } from '@/lib/workflow-param-messages';
@@ -1972,7 +1973,7 @@ export const useChatStore = create<ChatState>()(
   sendMessage: async (
     options: import('./chat/types').SendMessageOptions,
   ) => {
-    const { text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
+    const { text, attachments, targetAgentId, dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
 

@@ -33,6 +33,8 @@
         "send": "送信",
         "stop": "停止",
         "gatewayConnected": "接続済み",
+        "claudeReady": "Claude Agent 準備完了",
+        "claudeReadyDetail": "Claude Agent ダイレクト接続利用可能、OpenClaw ゲートウェイの状態に影響されません",
         "gatewayStatus": "ゲートウェイ {{state}} | ポート: {{port}} {{pid}}",
         "retryFailedAttachments": "失敗した添付を再試行",
         "dingtalkMentionTitle": "钉钉の連絡先またはグループを選択",

@@ -38,6 +38,8 @@
         "send": "发送",
         "stop": "停止",
         "gatewayConnected": "已连接",
+        "claudeReady": "Claude Agent 已就绪",
+        "claudeReadyDetail": "Claude Agent 直连可用，不受 OpenClaw 网关启动状态限制",
         "gatewayStatus": "gateway {{state}} | port: {{port}} {{pid}}",
         "retryFailedAttachments": "重试失败的附件",
         "dingtalkMentionTitle": "选择钉钉联系人或群",

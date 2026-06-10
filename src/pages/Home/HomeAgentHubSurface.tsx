@@ -47,9 +47,6 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
     [agents, currentAgentId],
   );
   const currentEngineType = currentAgent?.engineType;
-  const composerRequiresGateway = currentEngineType === 'openclaw';
-  const composerDisabled = composerRequiresGateway && !isGatewayRunning;
-
   useEffect(() => {
     void fetchAgents();
   }, [fetchAgents]);
@@ -164,6 +161,11 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
               <span className="flex items-center gap-2">
                 <span className={cn('h-2 w-2 shrink-0 rounded-full', isGatewayRunning ? DOT_SUCCESS : 'bg-[#FAAD14]')} aria-hidden />
                 {gatewayLine}
+              </span>
+            ) : currentEngineType === 'claude' ? (
+              <span className="flex items-center gap-2">
+                <span className={cn('h-2 w-2 shrink-0 rounded-full', DOT_SUCCESS)} aria-hidden />
+                {t('agentHub.claudeLineConnected')}
               </span>
             ) : <span />}
             <span className="text-center">{t('assistant.footerDisclaimer')}</span>
