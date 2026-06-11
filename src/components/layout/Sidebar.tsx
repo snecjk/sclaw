@@ -612,11 +612,12 @@ export function Sidebar() {
       // 否则会把默认 main 会话继续绑定到 OpenClaw 启动态。
       if (window.location.pathname === '/') {
         const state = useChatStore.getState();
-        if (state.currentSessionKey !== DEFAULT_SESSION_KEY || state.messages.length > 0) {
+        if (state.currentSessionKey !== DEFAULT_SESSION_KEY || state.messages.length > 0 || state.loading) {
           useChatStore.setState({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: 'main',
             messages: [],
+            loading: false,
             streamingText: '',
             streamingMessage: null,
             streamingTools: [],
@@ -856,12 +857,13 @@ export function Sidebar() {
   // 点击首页时，切换到默认会话并清空消息，让首页显示初始内容
   const handleHomeClick = item.to === '/'
     ? () => {
-        const { messages, currentSessionKey: currKey } = useChatStore.getState();
-        if (messages.length > 0 || currKey !== DEFAULT_SESSION_KEY) {
+        const { messages, currentSessionKey: currKey, loading } = useChatStore.getState();
+        if (messages.length > 0 || currKey !== DEFAULT_SESSION_KEY || loading) {
           useChatStore.setState({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: 'main',
             messages: [],
+            loading: false,
             streamingText: '',
             streamingMessage: null,
             streamingTools: [],

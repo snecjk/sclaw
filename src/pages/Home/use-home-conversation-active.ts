@@ -5,17 +5,15 @@ import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 export function useHomeConversationActive(): boolean {
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const messageCount = useChatStore((s) => s.messages.length);
-  const loading = useChatStore((s) => s.loading);
   const sending = useChatStore((s) => s.sending);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const streamingText = useChatStore((s) => s.streamingText);
   const streamingTools = useChatStore((s) => s.streamingTools);
+  const hasConversationContext = currentSessionKey !== DEFAULT_SESSION_KEY || messageCount > 0;
 
   return (
-    currentSessionKey !== DEFAULT_SESSION_KEY
-    || messageCount > 0
-    || loading
+    hasConversationContext
     || sending
     || pendingFinal
     || streamingMessage != null
