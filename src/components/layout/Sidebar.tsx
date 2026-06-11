@@ -105,7 +105,7 @@ function collapsedEntryLabel(full: string): string {
 }
 
 const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' | 'taskWeeklyPpt' }[] = [
-  // { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation' },
+  { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation' },
 ];
 
 function SidebarTaskDateLinks({
