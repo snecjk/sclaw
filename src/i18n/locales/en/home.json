@@ -1,4 +1,58 @@
 {
+  "site": {
+    "hero": {
+      "title": "STO Claw — smarter outlet operations",
+      "subtitle": "An AI work platform that reshapes smart outlet operations and empowers efficient, intelligent day-to-day management."
+    },
+    "workflowGuide": {
+      "heading": "Workflow guide",
+      "monitor": {
+        "title": "Customer anomaly monitoring",
+        "pill": "Task monitoring",
+        "status": "Not configured",
+        "bodyCaption": "Workflow overview",
+        "bodyDetail": "Compare daily customer volume, product mix, P&L, and service metrics; automatically flag abnormal customers, generate monitoring reports, and support rule configuration with scheduled pushes to the work center.",
+        "footerTeam": "Customer tracking squad",
+        "footerHint": "Configure workflow",
+        "createPrompt": "Customer anomaly monitoring — create workflow"
+      },
+      "recon": {
+        "title": "HQ settlement reconciliation",
+        "pill": "Settlement",
+        "status": "Done",
+        "stat1Label": "Net",
+        "stat1Value": "128,560",
+        "stat1Unit": "CNY",
+        "stat2Label": "Income",
+        "stat2Value": "98,750",
+        "stat2Unit": "CNY",
+        "stat3Label": "Expense",
+        "stat3Value": "29,810",
+        "stat3Unit": "CNY",
+        "footerTeam": "Ace settlement squad",
+        "footerHint": "4 exceptions"
+      },
+      "cost": {
+        "title": "Customer cost analysis",
+        "pill": "Task monitoring",
+        "status": "Done",
+        "stat1Label": "Abnormal customers",
+        "stat1Value": "57",
+        "stat1Unit": "items",
+        "stat2Label": "High risk",
+        "stat2Value": "12",
+        "stat2Unit": "items",
+        "stat3Label": "Amount involved",
+        "stat3Value": "-26,980.70",
+        "stat3Unit": "CNY",
+        "footerTeam": "Customer tracking squad",
+        "footerHint": "3 exceptions"
+      }
+    },
+    "assistant": {
+      "placeholder": "Help me prepare an HQ settlement reconciliation sheet"
+    }
+  },
   "hero": {
     "title": "STO Claw — smarter business management",
     "subtitle": "An AI workspace that drives team collaboration and stronger day-to-day operations."

@@ -21,7 +21,7 @@ const SHARED_FILES = [
 ];
 
 const PLUGIN_TARGETS = [
-  'sto-plugin/sto-dynamic-agent-route/shared',
+  'sto-plugin/sto-dingtalk-send-guard/shared',
 ];
 
 for (const relTarget of PLUGIN_TARGETS) {

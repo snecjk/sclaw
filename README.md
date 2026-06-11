@@ -47,6 +47,19 @@
 - **Memory**: 4GB RAM minimum (8GB recommended)
 - **Storage**: 1GB available disk space
 
+**Windows only** — run `pnpm run preflight:win` (or `scripts/preflight-windows.ps1`) **before** downloading `Setup.exe` to check hardware and network. The NSIS installer repeats the same hard checks on fresh install (auto-updates are exempt):
+
+| Check | Threshold | Blocks install |
+|-------|-----------|----------------|
+| Windows | 10 1809+ (64-bit) | Yes |
+| Physical RAM | 16 GB | Yes |
+| Disk total / free on install drive | 256 GB / 10 GB | Yes |
+| Physical CPU cores | 4 | Yes |
+| SSO (`baseinfo-usercenterserviceapi*.sto.cn`, see `sso-service.ts`) | TCP 443 reachable | Yes |
+| GitHub (DWS CLI) | TCP 443 reachable | No — warning only |
+
+macOS and Linux installers are unchanged.
+
 ### Installation
 
 #### Build from Source

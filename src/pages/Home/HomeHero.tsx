@@ -3,10 +3,18 @@ import logoSvg from '@/assets/logo.svg';
 import { cn } from '@/lib/utils';
 
 /**
- * 首页 Hero：左对齐 Logo + 主副标题（对齐经营管理向设计稿）。
+ * 首页 Hero：左对齐 Logo + 主副标题（默认经营管理向；site 为网点运营向）。
  */
-export function HomeHero({ className }: { className?: string }) {
+export function HomeHero({
+  className,
+  variant = 'default',
+}: {
+  className?: string;
+  variant?: 'default' | 'site';
+}) {
   const { t } = useTranslation('home');
+  const titleKey = variant === 'site' ? 'site.hero.title' : 'hero.title';
+  const subtitleKey = variant === 'site' ? 'site.hero.subtitle' : 'hero.subtitle';
   return (
     <section className={cn('flex flex-col items-start', className)}>
       <img
@@ -17,10 +25,10 @@ export function HomeHero({ className }: { className?: string }) {
         height={58}
       />
       <h1 className="mt-4 max-w-3xl text-left text-[22px] font-bold leading-snug tracking-tight text-[#1D2129] sm:text-[26px] sm:leading-tight dark:text-foreground">
-        {t('hero.title')}
+        {t(titleKey)}
       </h1>
       <p className="mt-2 max-w-3xl text-left text-[15px] leading-relaxed text-[#86909C] dark:text-muted-foreground">
-        {t('hero.subtitle')}
+        {t(subtitleKey)}
       </p>
     </section>
   );

@@ -32,6 +32,7 @@ import {
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
 import { submitParameterForm } from '@/components/parameter-form/form-handlers';
+import { AtMentionText, highlightAtMentionsInChildren } from '@/lib/at-mention-highlight';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
 
 interface ChatMessageProps {
@@ -540,12 +541,21 @@ function MessageBubble({
       )}
 
       {isUser ? (
-        <p className="whitespace-pre-wrap break-words break-all text-sm">{text}</p>
+        <AtMentionText
+          text={text}
+          className="whitespace-pre-wrap break-words break-all text-sm"
+        />
       ) : (
         <div className="prose prose-sm max-w-none break-words break-all text-sm leading-normal dark:prose-invert">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
+              p({ children }) {
+                return <p>{highlightAtMentionsInChildren(children)}</p>;
+              },
+              li({ children }) {
+                return <li>{highlightAtMentionsInChildren(children)}</li>;
+              },
               code({ className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || '');
                 const isInline = !match && !className;
@@ -816,18 +826,21 @@ function FileIcon({ mimeType, className }: { mimeType: string; className?: strin
 }
 
 function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFile?: (file: AttachedFileMeta) => void }) {
+  const isPreviewable = isPreviewableFile(file);
+
   const handleOpen = useCallback(() => {
-    if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
-      // Web URLs always open in external browser due to anti-hotlink / iframe blocking
+    // Keep in sync with the 预览 badge condition: previewable files open in the side panel
+    // (FilePreviewViewer fetches remote HTML/text, so OSS http(s) URLs preview fine).
+    if (onPreviewFile && isPreviewable) {
+      onPreviewFile(file);
+    } else if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
       window.electron.openExternal(file.filePath);
     } else if (onPreviewFile) {
       onPreviewFile(file);
     } else if (file.filePath) {
       invokeIpc('shell:openPath', file.filePath);
     }
-  }, [file, onPreviewFile]);
-
-  const isPreviewable = isPreviewableFile(file);
+  }, [file, onPreviewFile, isPreviewable]);
 
   return (
     <div

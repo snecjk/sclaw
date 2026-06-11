@@ -3,11 +3,13 @@ import { Send } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
+import { renderTextWithAtMentions } from '@/lib/at-mention-highlight';
 import { cn } from '@/lib/utils';
 import {
   formatDingTalkSentTextForChatPreview,
   type DingTalkSentMessagePreview,
 } from '../../../shared/dingtalk-sent-display';
+import { maskDwsSensitiveIdsForDisplay } from './message-utils';
 
 interface DingTalkSentPreviewProps {
   previews: DingTalkSentMessagePreview[];
@@ -25,7 +27,10 @@ export const DingTalkSentPreview = memo(function DingTalkSentPreview({
   return (
     <div className={cn('w-full space-y-2', className)}>
       {previews.map((preview, index) => {
-        const body = formatDingTalkSentTextForChatPreview(preview.text);
+        const body = maskDwsSensitiveIdsForDisplay(
+          formatDingTalkSentTextForChatPreview(preview.text),
+        );
+        const recipientLabel = maskDwsSensitiveIdsForDisplay(preview.recipientLabel);
         return (
           <div
             key={preview.toolCallId ?? `${preview.recipientLabel}-${index}`}
@@ -35,14 +40,21 @@ export const DingTalkSentPreview = memo(function DingTalkSentPreview({
               <div className="flex items-center gap-1.5">
                 <Send className="h-3.5 w-3.5 shrink-0 text-primary/80" aria-hidden />
                 <span>
-                  {preview.recipientKind === 'group'
-                    ? t('composer.dingtalkSentPreviewTitleGroup', { name: preview.recipientLabel })
-                    : t('composer.dingtalkSentPreviewTitle', { name: preview.recipientLabel })}
+                  {preview.recipientKind === 'group' ? (
+                    t('composer.dingtalkSentPreviewTitleGroup', { name: recipientLabel })
+                  ) : (
+                    <>
+                      {t('composer.dingtalkSentPreviewTitle', { name: '' })}
+                      {renderTextWithAtMentions(`@${recipientLabel}`)}
+                    </>
+                  )}
                 </span>
               </div>
               {preview.title && preview.title !== '消息' ? (
                 <div className="truncate pl-5">
-                  {t('composer.dingtalkSentPreviewMessageTitle', { title: preview.title })}
+                  {t('composer.dingtalkSentPreviewMessageTitle', {
+                    title: maskDwsSensitiveIdsForDisplay(preview.title),
+                  })}
                 </div>
               ) : null}
             </div>

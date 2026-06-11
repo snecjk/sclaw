@@ -67,6 +67,8 @@ interface ChatInputProps {
   variant?: 'default' | 'embedded';
   /** One-time seed into the textarea (e.g. task subitem default prompt). */
   seedText?: string;
+  /** Override default composer placeholder (e.g. site home prompt). */
+  placeholder?: string;
   /** Merged onto the outer wrapper (after defaults); use to tune padding, e.g. task subitem bottom inset. */
   className?: string;
 }
@@ -143,6 +145,7 @@ export function ChatInput({
   statusTone = 'warning',
   variant = 'default',
   seedText,
+  placeholder,
   className,
 }: ChatInputProps) {
   const { t } = useTranslation('chat');
@@ -204,7 +207,7 @@ export function ChatInput({
   const { templates, prefetchTemplates } = useWorkflowsStore();
   const composerPlaceholder = disabled && engineType === 'openclaw'
     ? t('composer.gatewayDisconnectedPlaceholder')
-    : t('composer.messagePlaceholder', { agent: currentAgentName });
+    : placeholder?.trim() || t('composer.messagePlaceholder', { agent: currentAgentName });
   const dailyTokenQuotaText = useMemo(() => {
     const usedToday = dailyTokenQuotaStatus?.usedToday;
     const limit = dailyTokenQuotaStatus?.limit;
