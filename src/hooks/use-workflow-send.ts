@@ -787,7 +787,7 @@ export async function tryNaturalLanguageWorkflowSend(
     return true;
   }
 
-  // Search templates via POST /agent/v1/workflow-templates/search (not hard-coded ID).
+  // Search templates via POST /agent/v1/workflow-templates (not hard-coded ID).
   if (!shouldSearchWorkflowTemplates(trimmed)) return false;
 
   const unspecified = isUnspecifiedWorkflowCreation(trimmed);

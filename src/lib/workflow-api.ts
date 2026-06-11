@@ -9,6 +9,8 @@ import { hostApiFetch, hostApiFetchStream } from '@/lib/host-api';
 import type {
   ApiResponse,
   WorkflowTemplateSearchResponse,
+  WorkflowTemplateListApiResponse,
+  WorkflowTemplateListResult,
   StartupSchemaResponse,
   CreateWorkflowRequest,
   CreateWorkflowResponse,
@@ -55,17 +57,51 @@ async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
   return res.data;
 }
 
-// ── 1. Search templates ─────────────────────────────────────────
+// ── 1. List templates (paginated) ───────────────────────────────
 
-export async function searchWorkflowTemplates(query: string, limit = 3): Promise<WorkflowTemplateSearchResponse> {
-  const data = await unwrap(
-    hostApiFetch<ApiResponse<WorkflowTemplateSearchResponse>>('/agent/v1/workflow-templates/search', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ query, limit }),
+export interface ListWorkflowTemplatesParams {
+  query?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export async function listWorkflowTemplates(
+  params: ListWorkflowTemplatesParams = {},
+): Promise<WorkflowTemplateListResult> {
+  const page = params.page ?? 1;
+  const pageSize = params.pageSize ?? 10;
+  const query = params.query?.trim();
+  const res = await hostApiFetch<WorkflowTemplateListApiResponse>('/agent/v1/workflow-templates', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      ...(query ? { query } : {}),
+      page,
+      pageSize,
     }),
-  );
-  return data;
+  });
+  if (!res.success || !res.data) {
+    const msg = res.errMessage || (res.errCode ? `Workflow API error: ${res.errCode}` : 'Workflow API error');
+    throw new Error(msg);
+  }
+  return {
+    items: res.data,
+    total: res.total ?? res.data.length,
+    page: res.page ?? page,
+    pageSize: res.pageSize ?? pageSize,
+  };
+}
+
+/** Query templates by keyword; adapts paginated API to legacy matchedItems shape. */
+export async function searchWorkflowTemplates(
+  query: string,
+  pageSize = 3,
+): Promise<WorkflowTemplateSearchResponse> {
+  const result = await listWorkflowTemplates({ query, page: 1, pageSize });
+  return {
+    matchedItems: result.items,
+    recommendedItems: [],
+  };
 }
 
 // ── 2. Get startup schema ───────────────────────────────────────

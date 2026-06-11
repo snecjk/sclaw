@@ -138,8 +138,20 @@ export function isUnspecifiedWorkflowCreation(text: string): boolean {
   return !subject || /^(工作流|流程|workflow)$/i.test(subject);
 }
 
+/** Score template relevance when paginated API does not return matchScore. */
+function scoreTemplateMatch(item: WorkflowTemplateSearchItem, query: string): number {
+  const q = query.toLowerCase().trim();
+  if (!q) return 0.5;
+  const label = item.label.toLowerCase();
+  const desc = (item.description ?? '').toLowerCase();
+  if (label === q) return 0.95;
+  if (label.includes(q) || q.includes(label)) return 0.88;
+  if (desc.includes(q)) return 0.72;
+  return 0.6;
+}
+
 /**
- * Resolve workflow template from user text by calling backend search.
+ * Resolve workflow template from user text by calling backend template list API.
  * Returns matched templates with confidence level.
  */
 export async function resolveTemplateFromText(
@@ -152,7 +164,10 @@ export async function resolveTemplateFromText(
     const allItems = [
       ...(result.matchedItems ?? []),
       ...(result.recommendedItems ?? []),
-    ];
+    ].map((item) => ({
+      ...item,
+      matchScore: item.matchScore ?? scoreTemplateMatch(item, query),
+    }));
 
     if (allItems.length === 0) {
       return { hasIntent: false, templates: [], bestMatch: null, confidence: 'low' };

@@ -17,7 +17,7 @@ export interface ApiResponse<T> {
   errMessage?: string;
 }
 
-// ── Template Search ─────────────────────────────────────────────
+// ── Template List (paginated) ─────────────────────────────────
 
 export interface WorkflowTemplateSearchItem {
   id: string;
@@ -28,14 +28,29 @@ export interface WorkflowTemplateSearchItem {
   nodeCount?: number;
   nodes?: Array<{ id: string; type: string; name: string }>;
   edges?: unknown[];
+  /** Client-side match hint when adapting paginated list for NL intent */
   matchScore?: number;
   matchReason?: string[];
   resultType?: 'matched' | 'recommended';
 }
 
+/** @deprecated Use WorkflowTemplateListResult — kept for intent/picker adapters */
 export interface WorkflowTemplateSearchResponse {
   matchedItems: WorkflowTemplateSearchItem[];
   recommendedItems: WorkflowTemplateSearchItem[];
+}
+
+export interface WorkflowTemplateListApiResponse extends ApiResponse<WorkflowTemplateSearchItem[]> {
+  total?: number;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface WorkflowTemplateListResult {
+  items: WorkflowTemplateSearchItem[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 // ── Startup Schema ──────────────────────────────────────────────
