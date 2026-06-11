@@ -433,51 +433,106 @@ export interface ScheduledTaskSessionListItem {
   updatedAt?: number;
 }
 
-export async function listAllScheduledTaskSessions(): Promise<ScheduledTaskSessionListItem[]> {
-  const baseDir = join(getOpenClawConfigDir(), 'scheduled-tasks');
-  const sessions: ScheduledTaskSessionListItem[] = [];
+function isScheduledTaskAgentSessionKey(sessionKey: string): boolean {
+  if (!sessionKey.startsWith('agent:')) return false;
+  const parts = sessionKey.split(':');
+  if (parts.length !== 5 || parts[2] !== 'scheduled-task') return false;
+  const taskId = Number(parts[3]);
+  const date = parts[4];
+  return !Number.isNaN(taskId) && /^\d{4}-\d{2}-\d{2}$/.test(date);
+}
 
-  let taskDirs: string[];
+export async function listAllScheduledTaskSessions(): Promise<ScheduledTaskSessionListItem[]> {
+  const sessions: ScheduledTaskSessionListItem[] = [];
+  const { stat } = await import('node:fs/promises');
+
+  // 1) Summary sessions under scheduled-tasks/{taskId}/
+  const baseDir = join(getOpenClawConfigDir(), 'scheduled-tasks');
   try {
-    taskDirs = await readdir(baseDir);
+    const taskDirs = await readdir(baseDir);
+    for (const taskDir of taskDirs) {
+      const taskId = Number(taskDir);
+      if (Number.isNaN(taskId)) continue;
+
+      const storePath = getSessionsJsonPath(taskId);
+      let store: SessionStore;
+      try {
+        const raw = await readFile(storePath, 'utf8');
+        if (!raw.trim()) continue;
+        store = JSON.parse(raw) as SessionStore;
+      } catch {
+        continue;
+      }
+
+      const sessionKey = buildScheduledTaskSessionKey(taskId);
+      const entry = findSessionEntry(store, sessionKey);
+      if (!entry) continue;
+
+      let updatedAt: number | undefined;
+      try {
+        const s = await stat(entry.sessionFile);
+        updatedAt = s.mtimeMs;
+      } catch {
+        // ignore
+      }
+
+      sessions.push({
+        key: sessionKey,
+        label: entry.label || `定时任务 ${taskId}`,
+        sessionFile: entry.sessionFile,
+        updatedAt,
+      });
+    }
   } catch {
-    return sessions;
+    // ignore
   }
 
-  for (const taskDir of taskDirs) {
-    const taskId = Number(taskDir);
-    if (Number.isNaN(taskId)) continue;
+  // 2) Dated agent sessions (agent:main:scheduled-task:{taskId}:{date}) from agents/main/sessions/sessions.json
+  try {
+    const agentStore = await readAgentSessionStore('main');
+    const candidates: Array<{ key: string; record: Record<string, unknown> }> = [];
 
-    const storePath = getSessionsJsonPath(taskId);
-    let store: SessionStore;
-    try {
-      const raw = await readFile(storePath, 'utf8');
-      if (!raw.trim()) continue;
-      store = JSON.parse(raw) as SessionStore;
-    } catch {
-      continue;
+    for (const [key, value] of Object.entries(agentStore)) {
+      if (key === 'sessions') continue;
+      if (value && typeof value === 'object') {
+        candidates.push({ key, record: value as Record<string, unknown> });
+      }
     }
 
-    const sessionKey = buildScheduledTaskSessionKey(taskId);
-    const entry = findSessionEntry(store, sessionKey);
-    if (!entry) continue;
-
-    // Try to get the last modified time of the session file for sorting
-    let updatedAt: number | undefined;
-    try {
-      const { stat } = await import('node:fs/promises');
-      const s = await stat(entry.sessionFile);
-      updatedAt = s.mtimeMs;
-    } catch {
-      // ignore
+    if (Array.isArray(agentStore.sessions)) {
+      for (const s of agentStore.sessions) {
+        if (!s || typeof s !== 'object') continue;
+        const record = s as Record<string, unknown>;
+        const key = (record.key || record.sessionKey) as string | undefined;
+        if (!key) continue;
+        candidates.push({ key, record });
+      }
     }
 
-    sessions.push({
-      key: sessionKey,
-      label: entry.label || `定时任务 ${taskId}`,
-      sessionFile: entry.sessionFile,
-      updatedAt,
-    });
+    for (const { key, record } of candidates) {
+      if (!isScheduledTaskAgentSessionKey(key)) continue;
+
+      const sessionFile =
+        (record.sessionFile ?? record.file ?? record.fileName ?? record.path) as string | undefined;
+      if (!sessionFile) continue;
+
+      let updatedAt: number | undefined;
+      try {
+        const s = await stat(sessionFile);
+        updatedAt = s.mtimeMs;
+      } catch {
+        // ignore
+      }
+
+      sessions.push({
+        key,
+        label: typeof record.label === 'string' ? record.label : key,
+        sessionFile,
+        updatedAt,
+      });
+    }
+  } catch {
+    // ignore
   }
 
   // Sort by most recently updated first
