@@ -4,6 +4,11 @@ import {
   handleDingTalkSendGuardAfter,
   rememberPendingDingTalkSend,
 } from './dingtalk-send-guard.js';
+import {
+  clearDingTalkMentionPending,
+  readDingTalkMentionPending,
+} from './dingtalk-mention-pending.js';
+import { buildDingTalkMentionSystemContext } from './shared/dingtalk-mention-context';
 
 const TAG = 'sto-dingtalk-send-guard';
 
@@ -17,9 +22,31 @@ function pickToolResult(event: Record<string, unknown>): unknown {
 export default definePluginEntry({
   id: 'sto-dingtalk-send-guard',
   name: '钉钉发送防护',
-  description: '限制 dws chat message send 频率（成功后才计数），并拦截 shell 循环批量发送。',
+  description:
+    '钉钉 @ 收件人 prompt 注入、dws chat message send 频率限制（成功后才计数），并拦截 shell 循环批量发送。',
   register(api: OpenClawPluginApi) {
     api.logger.info?.(`[${TAG}] plugin registering`);
+
+    api.on('before_prompt_build', async (event, ctx) => {
+      api.logger.debug?.(
+        `[${TAG}] before_prompt_build: fired — agentId=${ctx.agentId ?? '(none)'}, sessionKey=${ctx.sessionKey ?? '(none)'}`,
+      );
+
+      if (!ctx.sessionKey) return undefined;
+
+      const pendingMentions = await readDingTalkMentionPending(ctx.sessionKey);
+      if (!pendingMentions) return undefined;
+
+      const block = buildDingTalkMentionSystemContext(pendingMentions.mentions, {
+        sendFileIntent: pendingMentions.sendFileIntent,
+        attachedFiles: pendingMentions.attachedFiles,
+      });
+      await clearDingTalkMentionPending(ctx.sessionKey);
+      api.logger.debug?.(
+        `[${TAG}] before_prompt_build: injected DingTalk mention context (${pendingMentions.mentions.length} recipients)`,
+      );
+      return { appendSystemContext: block };
+    });
 
     api.on(
       'before_tool_call',

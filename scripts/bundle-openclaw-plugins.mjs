@@ -338,19 +338,21 @@ function bundleOneLocalPlugin({ localDir, pluginId }) {
   // 1) Copy plugin source files (excluding test files and node_modules)
   fs.cpSync(sourceDir, outputDir, { recursive: true, filter: bundleCopyFilter });
 
-  // 1b) Ensure shared dingtalk modules are present (same as scripts/sync-plugin-shared.mjs)
-  const sharedSrcDir = path.join(ROOT, 'shared');
-  const sharedDestDir = path.join(outputDir, 'shared');
-  const sharedFiles = [
-    'dingtalk-mention.ts',
-    'dingtalk-disclaimer.ts',
-    'dws-send-text.ts',
-    'dingtalk-file-send.ts',
-    'dingtalk-mention-context.ts',
-  ];
-  fs.mkdirSync(sharedDestDir, { recursive: true });
-  for (const file of sharedFiles) {
-    fs.copyFileSync(path.join(sharedSrcDir, file), path.join(sharedDestDir, file));
+  // 1b) Ensure shared dingtalk modules are present for send-guard (same as sync-plugin-shared.mjs)
+  if (pluginId === 'sto-dingtalk-send-guard') {
+    const sharedSrcDir = path.join(ROOT, 'shared');
+    const sharedDestDir = path.join(outputDir, 'shared');
+    const sharedFiles = [
+      'dingtalk-mention.ts',
+      'dingtalk-disclaimer.ts',
+      'dws-send-text.ts',
+      'dingtalk-file-send.ts',
+      'dingtalk-mention-context.ts',
+    ];
+    fs.mkdirSync(sharedDestDir, { recursive: true });
+    for (const file of sharedFiles) {
+      fs.copyFileSync(path.join(sharedSrcDir, file), path.join(sharedDestDir, file));
+    }
   }
 
   // 2) If the plugin has npm dependencies, resolve and copy them

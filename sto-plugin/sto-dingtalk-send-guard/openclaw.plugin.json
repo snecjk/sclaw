@@ -1,7 +1,7 @@
 {
   "id": "sto-dingtalk-send-guard",
   "name": "钉钉发送防护",
-  "description": "限制 dws chat message send 频率，并拦截 shell 循环批量发送。",
+  "description": "钉钉 @ 收件人 prompt 注入；限制 dws chat message send 频率，并拦截 shell 循环批量发送。",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

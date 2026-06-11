@@ -25,6 +25,23 @@ describe('parseDwsChatMessageSendCommand', () => {
     expect(preview).toContain('> *本消息由 STO Claw 代为发送，非本人实时回复。*');
     expect(preview).not.toContain('<font');
   });
+
+  it('renders shell-mangled font disclaimer without raw HTML tags', () => {
+    const text = [
+      '### 上海明日天气',
+      '',
+      '- **日期**：6月11日',
+      '',
+      '---',
+      '',
+      '<font color=\'"#999999"\'>本消息由 STO Claw 代为发送，非本人实时回复。</font>',
+    ].join('\n');
+    const preview = formatDingTalkSentTextForChatPreview(text);
+    expect(preview).toContain('上海明日天气');
+    expect(preview).toContain('> *本消息由 STO Claw 代为发送，非本人实时回复。*');
+    expect(preview).not.toContain('<font');
+    expect(preview).not.toContain('</font>');
+  });
 });
 
 describe('extractDingTalkSentPreviews', () => {

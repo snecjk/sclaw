@@ -242,14 +242,35 @@ export function parseDwsChatMessageSendCommand(
 
 /** Sent-success card preview: body + disclaimer as Markdown quote (no raw HTML). */
 export function formatDingTalkSentTextForChatPreview(text: string): string {
-  return text
-    .replace(/\r\n/g, '\n')
-    .replace(
-      /\n*---\n*\s*<font color=['"]#999999['"]>([\s\S]*?)<\/font>\s*/gi,
-      '\n\n> *$1*',
-    )
-    .replace(/<font color=['"]#999999['"]>([\s\S]*?)<\/font>/gi, '\n\n> *$1*')
-    .trim();
+  const toQuote = (inner: string) => `\n\n> *${inner.trim()}*`;
+
+  let result = text.replace(/\r\n/g, '\n');
+
+  // --- + <font> disclaimer (incl. shell-mangled attrs like color='"#999999"')
+  result = result.replace(
+    /\n*---\n*\s*<font\s+color=[^>\n]*>([\s\S]*?)<\/font>\s*/gi,
+    (_, inner) => toQuote(inner),
+  );
+
+  // Remaining <font> disclaimer blocks
+  result = result.replace(
+    /<font\s+color=[^>\n]*>([\s\S]*?)<\/font>/gi,
+    (_, inner) => toQuote(inner),
+  );
+
+  // Broken open tag without </font>
+  result = result.replace(
+    /\n*---\n*\s*<font\s+color=[^>\n]*>([^\n<]*STO Claw 代为发送[^\n<]*)\s*/gi,
+    (_, inner) => toQuote(inner),
+  );
+
+  // Plain disclaimer line after ---
+  result = result.replace(
+    /\n*---\n*\s*([^\n<]*STO Claw 代为发送[^\n<]*)\s*$/i,
+    (_, inner) => toQuote(inner),
+  );
+
+  return result.trim();
 }
 
 function extractToolResultText(message: DingTalkSentDisplayMessage): string {
