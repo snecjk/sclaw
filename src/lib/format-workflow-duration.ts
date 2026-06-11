@@ -4,6 +4,42 @@ export function parseWorkflowTimestamp(value?: string): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
+/** Keep the earlier of two ISO timestamps (client track start vs API startedAt). */
+export function pickEarlierWorkflowTimestamp(a?: string, b?: string): string | undefined {
+  const aMs = parseWorkflowTimestamp(a);
+  const bMs = parseWorkflowTimestamp(b);
+  if (aMs === null) return b;
+  if (bMs === null) return a;
+  return aMs <= bMs ? a : b;
+}
+
+/**
+ * Resolve startedAt for duration display. API may return startedAt ≈ completedAt;
+ * prefer local track time when it yields a materially longer duration.
+ */
+export function resolveWorkflowStartedAt(
+  previous?: string,
+  incoming?: string,
+  localStartedAtMs?: number,
+  completedAt?: string,
+): string | undefined {
+  const localIso = localStartedAtMs ? new Date(localStartedAtMs).toISOString() : undefined;
+  let startedAt = pickEarlierWorkflowTimestamp(
+    pickEarlierWorkflowTimestamp(previous, incoming),
+    localIso,
+  );
+  if (!startedAt) return undefined;
+
+  if (completedAt && localIso) {
+    const apiDur = getWorkflowDurationMs(startedAt, completedAt) ?? 0;
+    const localDur = getWorkflowDurationMs(localIso, completedAt) ?? 0;
+    if (localDur > apiDur + 5000) {
+      startedAt = localIso;
+    }
+  }
+  return startedAt;
+}
+
 export function getWorkflowDurationMs(
   startedAt?: string,
   completedAt?: string,

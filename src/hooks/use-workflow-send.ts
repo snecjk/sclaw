@@ -220,6 +220,11 @@ export async function createAndStartWorkflowDirect(
       paramsSummary: userText,
     });
 
+    const { dismissWorkflowParameterFormsForTemplate } = await import(
+      '@/components/parameter-form/dismiss-parameter-form'
+    );
+    dismissWorkflowParameterFormsForTemplate(templateId);
+
     useChatStore.getState().setWorkflowCardState(run.runId, {
       runId: run.runId,
       workflowId: created.workflowId,

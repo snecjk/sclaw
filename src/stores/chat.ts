@@ -26,16 +26,24 @@ import {
   type ToolStatus,
 } from './chat/types';
 import type { WorkflowExecutionState } from '@/types/workflow';
-import { buildWorkflowFormConfig, buildStartupPreset } from '@/lib/workflow-form-utils';
-import { registerParameterFormHandler } from '@/components/parameter-form/form-handlers';
 import { mergeLocalWorkflowTurnsFromCurrent, mergeWorkflowTurnsFromMemory } from '@/lib/workflow-local-turn';
 import { buildWorkflowCardStatesForSession } from '@/stores/workflow-memory';
 import { hydrateSessionWorkflowCards } from '@/lib/workflow-run-hydration';
 import { upgradeWorkflowParamUserMessages } from '@/lib/workflow-param-messages';
 import {
+  absorbWorkflowSchemaFromToolResults,
+  appendWorkflowParameterFormToMessage,
+  applyWorkflowSchemaReady,
+  ensureWorkflowParameterFormInjected,
   mergeParameterFormBlocksFromCurrent,
+  patchLastAssistantWithWorkflowForm,
+  isWorkflowFormInjectionAllowed,
+  reconcilePendingWorkflowForSession,
   recoverParameterFormsOnHistoryLoad,
 } from './chat/parameter-form-recovery';
+import { parseStoToolEnvelope } from '@/lib/builtin-tool-envelope';
+import type { WorkflowSchemaReadyData } from '@/lib/builtin-tool-envelope';
+import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 
 export type {
   AttachedFileMeta,
@@ -871,182 +879,12 @@ function extractTextFromContent(content: unknown): string {
   return parts.join('\n');
 }
 
-/**
- * If a workflow guidance phase is pending, append a parameter_form block to
- * the assistant message so the user can confirm parameters interactively.
- * The form is registered with a handler that creates and starts the workflow.
- */
+/** Append workflow parameter_form to assistant final when schema is pending. */
 function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
-  const pending = useChatStore.getState().pendingWorkflow;
-  console.log('[maybeAppendWorkflowParameterForm] called, pending:', pending ? { templateId: pending.templateId, hasSchema: !!pending.schema } : null);
-  if (!pending) { console.log('[maybeAppendWorkflowParameterForm] no pending workflow, returning'); return message; }
-  if (message.role !== 'assistant') { console.log('[maybeAppendWorkflowParameterForm] not assistant role, returning'); return message; }
-  if (!pending.schema) { console.log('[maybeAppendWorkflowParameterForm] no schema, returning'); return message; }
-
-  // If the frontend has already inserted an inline parameter_form (e.g. via
-  // sendWithWorkflow), skip injecting so we don't show duplicate forms.
-  if (pending.frontendFormInserted) {
-    console.log('[maybeAppendWorkflowParameterForm] frontendFormInserted=true, returning');
-    return message;
-  }
-
-  // Avoid double-injecting if the message already carries a parameter_form
-  const content = message.content;
-  if (Array.isArray(content)) {
-    if ((content as ContentBlock[]).some((b) => b.type === 'parameter_form')) {
-      console.log('[maybeAppendWorkflowParameterForm] already has parameter_form block, returning');
-      return message;
-    }
-  }
-
-  // Check if model output contains <ParameterForm ... /> marker before injecting form
-  const messageText = getMessageText(message.content);
-  const paramFormRegex = /<ParameterForm\s+templateId="([^"]+)"\s+schemaHash="([^"]+)"\s*\/>/i;
-  const paramFormMatch = messageText.match(paramFormRegex);
-  console.log('[maybeAppendWorkflowParameterForm] messageText=%s, hasMarker=%s, pendingWorkflow=%s',
-    messageText.slice(0, 100), paramFormMatch ? 'yes' : 'no', pending ? 'yes' : 'no');
-  if (!paramFormMatch) {
-    return message;
-  }
-
-  // Extract templateId and schemaHash from the marker
-  const extractedTemplateId = paramFormMatch[1];
-  const extractedSchemaHash = paramFormMatch[2];
-  console.log('[maybeAppendWorkflowParameterForm] extracted templateId=%s, schemaHash=%s, pending.schemaFields=%d',
-    extractedTemplateId, extractedSchemaHash, pending.schema?.fields.length ?? 0);
-
-  // Strip the <ParameterForm ... /> marker from the message text for display
-  const strippedText = messageText.replace(paramFormRegex, '').trim();
-  const strippedContent = Array.isArray(message.content)
-    ? (message.content as ContentBlock[]).map((block) =>
-        block.type === 'text' ? { ...block, text: block.text?.replace(paramFormRegex, '').trim() } : block
-      )
-    : strippedText;
-
-  console.log('[maybeAppendWorkflowParameterForm] strippedText=%s', strippedText.slice(0, 100));
-
-  // buildWorkflowFormConfig, buildStartupPreset and registerParameterFormHandler are
-  // imported at the top of the file. They do not transitively depend on chat.ts.
-
-  const MAX_CONCURRENT_WORKFLOWS = 5;
-  function canStartWorkflowLocal(): boolean {
-    const activeCount = Object.values(useChatStore.getState().workflowCardStates).filter(
-      (s) => s.status === 'pending' || s.status === 'running',
-    ).length;
-    return activeCount < MAX_CONCURRENT_WORKFLOWS;
-  }
-
-  const formId = `workflow-form-${pending.templateId}-${Date.now()}`;
-  const formConfig = buildWorkflowFormConfig(pending.schema, '', pending.collectedInputs);
-
-  registerParameterFormHandler(formId, async (values: Record<string, unknown>) => {
-    const chatState = useChatStore.getState();
-    if (!canStartWorkflowLocal()) {
-      const { toast } = await import('sonner');
-      toast.error('当前会话已有过多执行中的工作流，请等待完成后再试');
-      return;
-    }
-
-    try {
-      const { createWorkflow, startWorkflow, beginWorkflowRunSseTrace } = await import('@/lib/workflow-api');
-      const { saveWorkflowRecord, updateWorkflowRunMetadata, saveWorkflowExecution } = await import('@/stores/workflow-memory');
-      const { invokeIpc } = await import('@/lib/api-client');
-
-      const created = await createWorkflow({
-        templateId: pending.templateId,
-        startup: buildStartupPreset(values, pending.schemaHash),
-        idempotencyKey: `create-wf-${pending.templateId}-${Date.now()}`,
-      });
-
-      saveWorkflowRecord(chatState.currentSessionKey, {
-        workflowId: created.workflowId,
-        templateId: pending.templateId,
-        templateName: pending.templateName,
-        schemaHash: pending.schemaHash,
-        collectedInputs: values,
-        createdAt: Date.now(),
-      });
-
-      const run = await startWorkflow(created.workflowId, {
-        inputs: values,
-        idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
-      });
-
-      const { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } = await import('@/lib/workflow-local-turn');
-      const userText = buildWorkflowStartUserText(pending.schema, values);
-      appendWorkflowStartedLocalTurn({
-        userText,
-        templateName: pending.templateName,
-        runId: run.runId,
-      });
-
-      await invokeIpc('workflow:startTracking', {
-        runId: run.runId,
-        workflowId: created.workflowId,
-        sessionKey: chatState.currentSessionKey,
-        agentId: chatState.currentAgentId,
-      });
-      beginWorkflowRunSseTrace(run.runId);
-
-      updateWorkflowRunMetadata(chatState.currentSessionKey, created.workflowId, {
-        lastRunId: run.runId,
-        lastStatus: 'running',
-      });
-
-      // Save execution record for SSE tracking and future lookup
-      saveWorkflowExecution({
-        sessionKey: chatState.currentSessionKey,
-        workflowId: created.workflowId,
-        runId: run.runId,
-        templateId: pending.templateId,
-        templateName: pending.templateName,
-        status: 'running',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        collectedInputs: values,
-        paramsSummary: userText,
-      });
-
-      // Initialize workflowCardStates for immediate UI display
-      chatState.setWorkflowCardState(run.runId, {
-        runId: run.runId,
-        workflowId: created.workflowId,
-        status: 'running',
-        progress: 0,
-        steps: [],
-        startedAt: new Date().toISOString(),
-      });
-
-      chatState.clearPendingWorkflow();
-    } catch (err) {
-      const messageErr = err instanceof Error ? err.message : String(err);
-      console.error('[parameterFormHandler] error', err);
-      const { toast } = await import('sonner');
-      toast.error(`工作流启动失败: ${messageErr}`);
-    }
-  });
-
-  const newBlock: ContentBlock = {
-    type: 'parameter_form',
-    formId,
-    formConfig,
-    formContext: { source: 'workflow', sourceId: pending.templateId, schemaHash: pending.schemaHash },
-  };
-
-  useChatStore.getState().setPendingWorkflow({
-    ...pending,
-    frontendFormInserted: true,
-  });
-
-  // Use stripped content (without [parameter_form] marker)
-  if (Array.isArray(message.content)) {
-    return { ...message, content: [...strippedContent as ContentBlock[], newBlock] };
-  }
-  if (typeof message.content === 'string' && message.content.trim()) {
-    return { ...message, content: [{ type: 'text', text: strippedText }, newBlock] };
-  }
-  return { ...message, content: [newBlock] };
+  return appendWorkflowParameterFormToMessage(message, getMessageText, { allowLivePending: true })
+    ?? message;
 }
+
 
 function summarizeToolOutput(text: string): string | undefined {
   const trimmed = text.trim();
@@ -1424,9 +1262,9 @@ export const useChatStore = create<ChatState>()(
                   const lastMsg = msgs[msgs.length - 1];
                   set((s) => {
                     const next: Partial<typeof s> = {};
-                    if (firstUser && !s.sessionLabels[session.key]) {
-                      const rawText = getMessageText(firstUser.content).trim();
-                      const labelText = stripWorkflowContextForDisplay(rawText);
+                    const existingLabel = s.sessionLabels[session.key];
+                    if (firstUser && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+                      const labelText = deriveSessionLabelFromUserText(getMessageText(firstUser.content));
                       if (labelText) {
                         const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
                         next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
@@ -1637,6 +1475,8 @@ export const useChatStore = create<ChatState>()(
       const applyLoadedMessages = (rawMessages: RawMessage[], thinkingLevel: string | null) => {
       if (get().currentSessionKey !== targetSessionKey) return;
 
+      absorbWorkflowSchemaFromToolResults(rawMessages);
+
       // Before filtering: attach images/files from tool_result messages to the next assistant message
       const messagesWithToolImages = enrichWithToolResultFiles(rawMessages);
       const filteredMessages = messagesWithToolImages.filter((msg) => !isToolResultRole(msg.role));
@@ -1666,6 +1506,8 @@ export const useChatStore = create<ChatState>()(
 
       if (get().currentSessionKey !== targetSessionKey) return;
 
+      reconcilePendingWorkflowForSession(enrichedMessages, rawMessages, targetSessionKey, getMessageText);
+
       finalMessages = mergeParameterFormBlocksFromCurrent(
         finalMessages,
         get().messages,
@@ -1682,18 +1524,25 @@ export const useChatStore = create<ChatState>()(
         thinkingLevel,
       });
       if (formRecovery.deferSet) {
+        const deferredPatched = patchLastAssistantWithWorkflowForm(
+          formRecovery.messages,
+          getMessageText,
+          { rawMessages },
+        );
         set({
-          messages: formRecovery.messages,
+          messages: deferredPatched,
           thinkingLevel,
           loading: false,
           workflowCardStates: restoredCardStates,
         });
+        ensureWorkflowParameterFormInjected();
         void (async () => {
-          const localized = await upgradeWorkflowParamUserMessages(formRecovery.messages, targetSessionKey);
+          const localized = await upgradeWorkflowParamUserMessages(deferredPatched, targetSessionKey);
           if (get().currentSessionKey !== targetSessionKey) return;
-          const msgs = localized !== formRecovery.messages ? localized : formRecovery.messages;
-          if (localized !== formRecovery.messages) set({ messages: msgs });
-          await hydrateSessionWorkflowCards(msgs, {
+          const msgs = localized !== deferredPatched ? localized : deferredPatched;
+          const patched = patchLastAssistantWithWorkflowForm(msgs, getMessageText, { rawMessages });
+          if (patched !== msgs) set({ messages: patched });
+          await hydrateSessionWorkflowCards(patched !== msgs ? patched : msgs, {
             sessionKey: targetSessionKey,
             agentId: get().currentAgentId,
           });
@@ -1701,6 +1550,7 @@ export const useChatStore = create<ChatState>()(
         return;
       }
       finalMessages = formRecovery.messages;
+      finalMessages = patchLastAssistantWithWorkflowForm(finalMessages, getMessageText, { rawMessages });
 
       set({
         messages: finalMessages,
@@ -1708,6 +1558,8 @@ export const useChatStore = create<ChatState>()(
         loading: false,
         workflowCardStates: restoredCardStates,
       });
+
+      ensureWorkflowParameterFormInjected();
 
       void (async () => {
         const localized = await upgradeWorkflowParamUserMessages(finalMessages, targetSessionKey);
@@ -1734,6 +1586,19 @@ export const useChatStore = create<ChatState>()(
           void import('@/lib/workflow-api').then(({ getStartupSchema }) => {
             getStartupSchema(draft.templateId).then((startup) => {
               if (get().currentSessionKey !== targetSessionKey) return;
+              const msgs = get().messages;
+              if (
+                !isWorkflowFormInjectionAllowed(
+                  draft.templateId,
+                  msgs,
+                  getMessageText,
+                  targetSessionKey,
+                  { rawMessages },
+                )
+              ) {
+                clearPendingWorkflowDraft(targetSessionKey, draft.templateId);
+                return;
+              }
               get().setPendingWorkflow({
                 templateId: draft.templateId,
                 templateName: draft.templateName,
@@ -1742,6 +1607,12 @@ export const useChatStore = create<ChatState>()(
                 collectedInputs: draft.collectedInputs ?? {},
                 modelGuidanceSent: draft.modelGuidanceSent,
               });
+              const patched = patchLastAssistantWithWorkflowForm(msgs, getMessageText, {
+                rawMessages,
+              });
+              if (patched !== msgs) {
+                set({ messages: patched });
+              }
             }).catch(() => {});
           });
         });
@@ -1752,11 +1623,11 @@ export const useChatStore = create<ChatState>()(
       // Skip main sessions (key ends with ":main") — they rely on the Gateway-provided
       // displayName (e.g. the configured agent name "StoClaw") instead.
       const isMainSession = targetSessionKey.endsWith(':main');
-      if (!isMainSession && !get().sessionLabels[targetSessionKey]) {
+      if (!isMainSession) {
         const firstUserMsg = finalMessages.find((m) => m.role === 'user');
-        if (firstUserMsg) {
-          const rawText = getMessageText(firstUserMsg.content).trim();
-          const labelText = stripWorkflowContextForDisplay(rawText);
+        const existingLabel = get().sessionLabels[targetSessionKey];
+        if (firstUserMsg && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+          const labelText = deriveSessionLabelFromUserText(getMessageText(firstUserMsg.content));
           if (labelText) {
             const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
             set((s) => ({
@@ -1934,7 +1805,19 @@ export const useChatStore = create<ChatState>()(
         );
         textForGateway = appendWorkflowSessionHint(trimmed, hint);
       } else if (isWorkflowCreationIntent(trimmed)) {
-        textForGateway = appendWorkflowSessionHint(trimmed, buildWorkflowCreationHint(trimmed));
+        get().clearPendingWorkflow();
+        let creationHint = buildWorkflowCreationHint(trimmed);
+        try {
+          const { searchWorkflowTemplates } = await import('@/lib/workflow-api');
+          const { extractWorkflowSearchQuery } = await import('@/lib/workflow-session-hint');
+          const searchResult = await searchWorkflowTemplates(extractWorkflowSearchQuery(trimmed), 5);
+          if (searchResult.matchedItems.length > 0) {
+            creationHint = buildWorkflowCreationHint(trimmed, searchResult.matchedItems);
+          }
+        } catch (err) {
+          console.warn('[workflow-trace] creation hint pre-search failed:', err);
+        }
+        textForGateway = appendWorkflowSessionHint(trimmed, creationHint);
       }
     }
 
@@ -2224,6 +2107,10 @@ export const useChatStore = create<ChatState>()(
         if (finalMsg) {
           const updates = collectToolUpdates(finalMsg, resolvedState);
           if (isToolResultRole(finalMsg.role)) {
+            const schemaEnvelope = parseStoToolEnvelope(finalMsg.content);
+            if (schemaEnvelope?.type === 'workflow_schema_ready' && schemaEnvelope.success) {
+              applyWorkflowSchemaReady((schemaEnvelope.data ?? {}) as WorkflowSchemaReadyData);
+            }
             // Resolve file path from the streaming assistant message's matching tool call
             const currentStreamForPath = get().streamingMessage as RawMessage | null;
             const matchedPath = (currentStreamForPath && finalMsg.toolCallId)
@@ -2417,7 +2304,11 @@ export const useChatStore = create<ChatState>()(
           // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
           if (hasOutput && !toolOnly) {
             clearHistoryPoll();
-            void get().loadHistory(true);
+            void get().loadHistory(true).then(() => {
+              const patched = patchLastAssistantWithWorkflowForm(get().messages, getMessageText);
+              if (patched !== get().messages) set({ messages: patched });
+              ensureWorkflowParameterFormInjected();
+            });
           }
         } else {
           // No message in final event - reload history to get complete data
@@ -2540,6 +2431,5 @@ export const useChatStore = create<ChatState>()(
   name: 'stoclaw-chat-session-labels',
   partialize: (state) => ({
     sessionLabels: state.sessionLabels,
-    pendingWorkflow: state.pendingWorkflow,
   }),
 }));

@@ -9,6 +9,7 @@ import {
 } from './helpers';
 import { DEFAULT_CANONICAL_PREFIX, DEFAULT_SESSION_KEY, type ChatSession, type RawMessage } from './types';
 import { parseCronSessionKey, parseScheduledTaskAgentSessionKey, parseScheduledTaskSessionKey } from './cron-session-utils';
+import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 
 function getAgentIdFromSessionKey(sessionKey: string): string {
@@ -237,8 +238,9 @@ export function createSessionActions(
                 const lastMsg = msgs[msgs.length - 1];
                 set((s) => {
                   const next: Partial<typeof s> = {};
-                  if (firstUser && !s.sessionLabels[session.key]) {
-                    const labelText = getMessageText(firstUser.content).trim();
+                  const existingLabel = s.sessionLabels[session.key];
+                  if (firstUser && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+                    const labelText = deriveSessionLabelFromUserText(getMessageText(firstUser.content));
                     if (labelText) {
                       const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
                       next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };

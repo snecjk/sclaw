@@ -97,7 +97,7 @@ function useDurationLabel(
 
   useEffect(() => {
     if (!isRunning || !startedAt) return undefined;
-    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, [isRunning, startedAt]);
 

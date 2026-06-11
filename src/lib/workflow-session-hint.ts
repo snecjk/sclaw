@@ -3,33 +3,67 @@
  * can call execute_workflow with the correct workflowId.
  */
 import { resolveSessionWorkflowId } from '@/lib/session-workflow-context';
+import { stripWorkflowContextForDisplay } from '@/lib/workflow-context';
 import { getLatestWorkflow, getSessionWorkflows } from '@/stores/workflow-memory';
 import type { RawMessage } from '@/stores/chat/types';
 import type { WorkflowExecutionState } from '@/types/workflow';
 
 export const WORKFLOW_SESSION_HINT_MARKER = '<!-- StoClaw-Workflow-Session -->';
 
+export interface WorkflowCreationTemplateHint {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+/** Strip workflow-creation boilerplate; keep template name keywords for POST /workflow-templates. */
+export function extractWorkflowSearchQuery(userText: string): string {
+  const trimmed = userText.trim();
+  const stripped = trimmed
+    .replace(/(?:帮我|请|给我)/g, '')
+    .replace(/(?:创建|新建|搭建|配置|建立)(?:一个)?(?:工作流|workflow)?/gi, '')
+    .replace(/(?:工作流|workflow)(?:的)?(?:创建|新建|搭建)/gi, '')
+    .trim();
+  return stripped || trimmed;
+}
+
 /**
  * Hidden hint for NL workflow creation — steers model to builtin tools, not sai-cli/exec.
  */
-export function buildWorkflowCreationHint(userText: string): string {
-  const query = userText.trim();
-  return [
+export function buildWorkflowCreationHint(
+  userText: string,
+  templates?: WorkflowCreationTemplateHint[],
+): string {
+  const query = extractWorkflowSearchQuery(userText);
+  const lines = [
     WORKFLOW_SESSION_HINT_MARKER,
     '',
     '## 工作流创建指引',
     '',
-    '用户要创建或查找工作流。必须使用 sto-workflow-tool 注册的内置 OpenClaw Tools，按顺序：',
-    '1. `search_workflow_templates`（query 取自用户描述中的模板名/关键词）',
-    '2. `get_workflow_schema`（选中模板后）',
-    '3. `create_workflow`',
-    '4. 若需立即运行：`execute_workflow`',
+    '用户要创建或查找工作流。必须使用 sto-workflow-tool 内置 OpenClaw Tools：',
+    '1. `search_workflow_templates`（POST /agent/v1/workflow-templates，query 取模板关键词）',
+    '2. `get_workflow_schema`（传 templates[].id；或直接传 query 自动搜索模板）',
+    '3. **禁止** `create_workflow`：get_workflow_schema 后客户端会弹出参数表单，用户填写并提交后由客户端创建并启动',
+    '4. 引导用户在参数表单中逐步确认参数，不要用默认值直接创建',
+    '5. get_workflow_schema 后：在回复末尾单独一行输出 `<ParameterForm templateId="模板id" schemaHash="schemaHash" />`（templateId/schemaHash 取自工具结果）',
     '',
-    '这些 tool 由你在对话中直接调用（OpenClaw 内置 tool 列表），不是 `openclaw` CLI 子命令。',
-    '禁止 exec、shell、openclaw CLI、sai-cli、sai-cli discover 或读取 sai-cli SKILL 替代上述内置 tools。',
-    '',
-    `用户原话：${query}`,
-  ].join('\n');
+    '禁止 exec、shell、openclaw CLI、sai-cli 或读取 sai-cli SKILL 替代上述内置 tools。',
+  ];
+
+  if (templates?.length) {
+    lines.push('', '## 已预搜索模板（POST /agent/v1/workflow-templates）', '');
+    for (const item of templates.slice(0, 5)) {
+      lines.push(`- templateId=${item.id} label=${item.label}`);
+    }
+    lines.push(
+      '',
+      `推荐下一步：get_workflow_schema({ "templateId": "${templates[0].id}" })`,
+      `或：get_workflow_schema({ "query": "${query}" })`,
+    );
+  }
+
+  lines.push('', `用户原话：${userText.trim()}`, `搜索关键词：${query}`);
+  return lines.join('\n');
 }
 
 export function buildWorkflowSessionHint(
@@ -74,13 +108,19 @@ export function appendWorkflowSessionHint(text: string, hint: string | null): st
 
 export function stripWorkflowSessionHintForDisplay(message: string): string {
   if (!message.includes(WORKFLOW_SESSION_HINT_MARKER)) return message;
-  const startIdx = message.indexOf(WORKFLOW_SESSION_HINT_MARKER);
-  const endIdx = message.lastIndexOf(WORKFLOW_SESSION_HINT_MARKER);
-  if (startIdx >= 0 && endIdx > startIdx) {
-    return message.slice(endIdx + WORKFLOW_SESSION_HINT_MARKER.length).trim();
+  const parts = message.split(WORKFLOW_SESSION_HINT_MARKER);
+  // appendWorkflowSessionHint: marker + hint + marker + user text
+  if (parts.length >= 3) {
+    return parts.slice(2).join(WORKFLOW_SESSION_HINT_MARKER).trim();
   }
-  if (startIdx >= 0) {
-    return message.slice(0, startIdx).trim();
-  }
-  return message;
+  return parts[parts.length - 1]?.trim() || message;
+}
+
+/** User-visible session title from gateway user message (strips injected hints). */
+export function deriveSessionLabelFromUserText(rawText: string): string {
+  return stripWorkflowContextForDisplay(stripWorkflowSessionHintForDisplay(rawText)).trim();
+}
+
+export function isCorruptedSessionLabel(label: string): boolean {
+  return label.includes('<!-- StoClaw-Workflow') || label.includes('## 工作流');
 }

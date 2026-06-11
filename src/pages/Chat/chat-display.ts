@@ -1,5 +1,10 @@
 import type { RawMessage } from '@/stores/chat';
-import { extractText, extractThinkingTimeline, type ThinkingTimelineItem } from './message-utils';
+import {
+  extractText,
+  extractThinkingTimeline,
+  isHiddenWorkflowCompleteUserMessage,
+  type ThinkingTimelineItem,
+} from './message-utils';
 
 export type ChatDisplayItem =
   | { type: 'single'; message: RawMessage; key: string }
@@ -165,6 +170,10 @@ export function buildChatDisplayItems(messages: RawMessage[]): ChatDisplayItem[]
     }
 
     if (role === 'user') {
+      if (isHiddenWorkflowCompleteUserMessage(msg)) {
+        i += 1;
+        continue;
+      }
       lastUserMessage = msg;
       items.push({ type: 'single', message: msg, key: msg.id || `user-${i}` });
       i += 1;

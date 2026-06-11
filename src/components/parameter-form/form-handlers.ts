@@ -44,6 +44,8 @@ export async function submitParameterForm(formId: string, values: FormResult): P
   if (!handler) return false;
   try {
     await handler(values);
+    const { dismissParameterFormInChat } = await import('./dismiss-parameter-form');
+    dismissParameterFormInChat(resolvedId);
   } finally {
     handlers.delete(resolvedId);
   }

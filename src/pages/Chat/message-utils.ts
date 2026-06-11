@@ -8,6 +8,10 @@ import { hostApiFetch } from '@/lib/host-api';
 import { useChatStore } from '@/stores/chat';
 import { sessionHasWorkflowExecution } from '@/stores/workflow-memory';
 import { buildWorkflowFormConfig } from '@/lib/workflow-form-utils';
+import {
+  PARAM_FORM_MARKER_REGEX,
+  parseParameterFormMarker,
+} from '@/lib/parameter-form-marker';
 import { resolveParameterFormId } from '@/components/parameter-form/form-handlers';
 import type { RawMessage, ContentBlock } from '@/stores/chat';
 import {
@@ -15,7 +19,8 @@ import {
   stripDingTalkMentionContextForDisplay,
 } from '@/lib/dingtalk-mention-context';
 import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
-import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay } from '@/lib/workflow-context';
+import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay, WORKFLOW_COMPLETE_TAG } from '@/lib/workflow-context';
+import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
 import {
   artifactToPreviewFile,
   extractPreviewableHttpUrls,
@@ -58,8 +63,10 @@ function cleanUserText(text: string): string {
     .trim();
   return stripDingTalkMentionContextForDisplay(
     stripWorkflowCompleteForDisplay(
-      stripWorkflowContextForDisplay(
-        stripCronTriggerTextForDisplay(cleaned),
+      stripWorkflowSessionHintForDisplay(
+        stripWorkflowContextForDisplay(
+          stripCronTriggerTextForDisplay(cleaned),
+        ),
       ),
     ),
   );
@@ -206,13 +213,38 @@ function cleanThinkingText(text: string): string {
  * Handles both string content and array-of-blocks content.
  * For user messages, strips Gateway-injected metadata.
  */
-/**
- * Extract parameter_form block from a message's content field.
- */
-// Regex to match <ParameterForm ... /> marker in text blocks
-const PARAM_FORM_REGEX = /<ParameterForm\s+templateId="([^"]+)"\s+schemaHash="([^"]+)"\s*\/>/i;
+export {
+  PARAM_FORM_MARKER_REGEX,
+  parseParameterFormMarker,
+  findParameterFormMarkerInMessage,
+} from '@/lib/parameter-form-marker';
 
-export function extractParameterForm(message: RawMessage | unknown): {
+function rawMessageText(message: RawMessage): string {
+  const content = message.content;
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return (content as ContentBlock[])
+    .filter((b) => b.type === 'text' && typeof b.text === 'string')
+    .map((b) => b.text as string)
+    .join('\n');
+}
+
+/** Internal [workflow:complete] trigger — hidden from chat UI. */
+export function isHiddenWorkflowCompleteUserMessage(message: RawMessage): boolean {
+  if (message.role !== 'user') return false;
+  return rawMessageText(message).includes(WORKFLOW_COMPLETE_TAG);
+}
+
+type PendingWorkflowSnapshot = {
+  templateId: string;
+  schema?: import('@/types/workflow').WorkflowSchema;
+  collectedInputs?: Record<string, unknown>;
+} | null;
+
+export function extractParameterForm(
+  message: RawMessage | unknown,
+  pendingOverride?: PendingWorkflowSnapshot,
+): {
   formId: string;
   formConfig: import('@/types/user-form').UserFormConfig;
   formContext: { source: 'workflow' | 'tool' | 'skill'; sourceId: string; schemaHash?: string };
@@ -232,42 +264,53 @@ export function extractParameterForm(message: RawMessage | unknown): {
       (block as any).formContext
     ) {
       const formId = (block as any).formId;
+      const formContext = (block as any).formContext as {
+        source: 'workflow' | 'tool' | 'skill';
+        sourceId: string;
+        schemaHash?: string;
+      };
+      if (
+        formContext.source === 'workflow'
+        && formContext.sourceId
+        && sessionHasWorkflowExecution(useChatStore.getState().currentSessionKey, formContext.sourceId)
+      ) {
+        return null;
+      }
       console.log('[extractParameterForm] found native parameter_form block, formId:', formId);
-      // Always return the form, let ParameterFormCard handle empty config
-      // Don't check hasParameterFormHandler here - the handler may have been
-      // registered but the form should still render for user to fill
       return {
         formId,
         formConfig: (block as any).formConfig as import('@/types/user-form').UserFormConfig,
-        formContext: (block as any).formContext as {
-          source: 'workflow' | 'tool' | 'skill';
-          sourceId: string;
-          schemaHash?: string;
-        },
+        formContext,
       };
     }
 
     // Check for <ParameterForm ... /> marker in text blocks
     if (block.type === 'text' && typeof block.text === 'string') {
-      const match = block.text.match(PARAM_FORM_REGEX);
-      if (match) {
-        const templateId = match[1];
-        const schemaHash = match[2];
+      const parsed = parseParameterFormMarker(block.text);
+      if (parsed) {
+        const { templateId, schemaHash } = parsed;
         const sessionKey = useChatStore.getState().currentSessionKey;
         if (sessionHasWorkflowExecution(sessionKey, templateId)) {
           return null;
         }
 
-        const pendingWorkflow = useChatStore.getState().pendingWorkflow;
-        let formConfig: import('@/types/user-form').UserFormConfig = {} as import('@/types/user-form').UserFormConfig;
-
-        if (pendingWorkflow && pendingWorkflow.templateId === templateId && pendingWorkflow.schema) {
-          formConfig = buildWorkflowFormConfig(pendingWorkflow.schema, '', pendingWorkflow.collectedInputs);
+        const pendingWorkflow =
+          pendingOverride ?? useChatStore.getState().pendingWorkflow;
+        if (
+          !pendingWorkflow
+          || pendingWorkflow.templateId !== templateId
+          || !pendingWorkflow.schema
+        ) {
+          return null;
         }
 
         return {
           formId: resolveParameterFormId(`workflow-form-${templateId}`),
-          formConfig,
+          formConfig: buildWorkflowFormConfig(
+            pendingWorkflow.schema,
+            '',
+            pendingWorkflow.collectedInputs,
+          ),
           formContext: {
             source: 'workflow',
             sourceId: templateId,
@@ -331,7 +374,7 @@ export function extractText(message: RawMessage | unknown): string {
 
   // Strip <ParameterForm ... /> marker from text for clean display
   if (result) {
-    result = result.replace(PARAM_FORM_REGEX, '').trim();
+    result = result.replace(PARAM_FORM_MARKER_REGEX, '').trim();
   }
 
   // Strip Gateway metadata from user messages for clean display

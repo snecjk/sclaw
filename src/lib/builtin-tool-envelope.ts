@@ -34,6 +34,8 @@ export interface WorkflowSchemaReadyData {
   templateId: string;
   schemaHash: string;
   schema: import('@/types/workflow').WorkflowSchema;
+  templateName?: string;
+  matchedLabel?: string;
 }
 
 export interface WorkflowCreatedData {

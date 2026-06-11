@@ -8,13 +8,12 @@
 |------|------|
 | `search_workflow_templates` | 按自然语言搜索工作流模板 |
 | `get_workflow_schema` | 获取模板启动参数 schema |
-| `create_workflow` | 创建工作流实例 |
 | `execute_workflow` | 启动已创建的 `workflowId`（含重新执行） |
 | `get_workflow_status` | 查询 runId 执行状态 |
 
 **正反例：**
 - 「帮我在桌面创建文件夹」→ **不要** 调用工作流 tool，用普通文件能力。
-- 「帮我创建结算对账工作流」→ `search_workflow_templates` → `get_workflow_schema` → …
+- 「帮我创建结算对账工作流」→ `search_workflow_templates` → `get_workflow_schema` → **用户在参数表单中确认**（禁止 `create_workflow`）
 - 「重新执行」「再跑一遍」且会话有 `workflowId` → **必须** `execute_workflow`，禁止 sai-cli/exec。
 
 ### ⛔ 禁止的工具调用（安全红线）

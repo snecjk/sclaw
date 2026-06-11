@@ -101,6 +101,7 @@ function truncateForRunTrace(text: string): string {
 async function extractWorkflowHeaders(req: IncomingMessage): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'X-Source-Client': 'stoclaw',
   };
   const headerToken = req.headers.stotoken;
   const stoToken = headerToken ? String(headerToken) : await getStoToken();
@@ -114,6 +115,18 @@ async function extractWorkflowHeaders(req: IncomingMessage): Promise<Record<stri
   return headers;
 }
 
+function logWorkflowApiRequest(method: string, path: string, body?: string): void {
+  logger.info(
+    `[workflow-api] >>> ${method} ${path} body=${truncateForRunTrace(body ?? '(none)')}`,
+  );
+}
+
+function logWorkflowApiResponse(method: string, path: string, status: number, responseBody: string): void {
+  logger.info(
+    `[workflow-api] <<< ${method} ${path} status=${status} response=${truncateForRunTrace(responseBody)}`,
+  );
+}
+
 async function proxyWorkflowRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -122,14 +135,17 @@ async function proxyWorkflowRequest(
 ): Promise<void> {
   const baseUrl = await resolveStoBaseUrl();
   const headers = await extractWorkflowHeaders(req);
+  const method = (req.method || 'GET').toUpperCase();
 
   let bodyStr: string | undefined;
   if (body !== undefined) {
     bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
   }
 
+  logWorkflowApiRequest(method, backendPath, bodyStr);
+
   const response = await proxyAwareFetch(`${baseUrl}${backendPath}`, {
-    method: req.method || 'GET',
+    method,
     headers,
     body: bodyStr,
     timeoutMs: 30_000,
@@ -139,25 +155,7 @@ async function proxyWorkflowRequest(
   const contentType = response.headers.get('content-type') || 'application/json; charset=utf-8';
   const responseBody = await response.text();
 
-  if (backendPath.includes('/startup-schema')) {
-    logger.info(
-      `[workflow-trace] GET ${backendPath} status=${response.status} response=${truncateForRunTrace(responseBody)}`,
-    );
-  }
-
-  const runStatusMatch = backendPath.match(/^\/agent\/v1\/runs\/([^/]+)$/);
-  if (runStatusMatch) {
-    logger.info(
-      `[workflow-trace] GET ${backendPath} status=${response.status} response=${truncateForRunTrace(responseBody)}`,
-    );
-  }
-
-  const workflowDetailMatch = backendPath.match(/^\/agent\/v1\/workflows\/([^/]+)$/);
-  if (workflowDetailMatch) {
-    logger.info(
-      `[workflow-trace] GET ${backendPath} status=${response.status} response=${truncateForRunTrace(responseBody)}`,
-    );
-  }
+  logWorkflowApiResponse(method, backendPath, response.status, responseBody);
 
   res.statusCode = response.status;
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -182,13 +180,14 @@ export async function handleWorkflowRoutes(
   if (pathname === '/agent/v1/workflow-templates' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ query?: string; page?: number; pageSize?: number }>(req);
-      logger.info('[WorkflowRoutes] list templates request body:', JSON.stringify(body));
+      const backendPath = '/agent/v1/workflow-templates';
+      const bodyStr = JSON.stringify(body);
+      logWorkflowApiRequest('POST', backendPath, bodyStr);
 
       const baseUrl = await resolveStoBaseUrl();
       const headers = await extractWorkflowHeaders(req);
-      const bodyStr = JSON.stringify(body);
 
-      const response = await proxyAwareFetch(`${baseUrl}/agent/v1/workflow-templates`, {
+      const response = await proxyAwareFetch(`${baseUrl}${backendPath}`, {
         method: 'POST',
         headers,
         body: bodyStr,
@@ -198,8 +197,7 @@ export async function handleWorkflowRoutes(
       const contentType = response.headers.get('content-type') || 'application/json; charset=utf-8';
       const responseBody = await response.text();
 
-      logger.info('[WorkflowRoutes] list templates response status:', response.status);
-      logger.info('[WorkflowRoutes] list templates response body:', responseBody);
+      logWorkflowApiResponse('POST', backendPath, response.status, responseBody);
 
       res.statusCode = response.status;
       res.setHeader('Access-Control-Allow-Origin', '*');

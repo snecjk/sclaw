@@ -112,7 +112,5 @@ export function stripWorkflowContextForDisplay(message: string): string {
  */
 export function stripWorkflowCompleteForDisplay(message: string): string {
   if (!message.includes(WORKFLOW_COMPLETE_TAG)) return message;
-  const statusMatch = message.match(/^工作流名称：(.+)$/m);
-  const name = statusMatch ? statusMatch[1].trim() : '工作流';
-  return `「${name}」执行完成，正在生成结果总结...`;
+  return '';
 }

@@ -18,9 +18,11 @@ import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
 import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm, useLocalPathExistence, resolvePreviewCandidate, unwrapPreviewablePathMarkdown } from './message-utils';
-import { ensureWorkflowParameterFormHandler } from '@/stores/chat/parameter-form-recovery';
+import {
+  ensureWorkflowParameterFormHandler,
+  isWorkflowFormInjectionAllowed,
+} from '@/stores/chat/parameter-form-recovery';
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
-import { WorkflowCompletionActions, extractWorkflowCompletionRunId } from '@/components/workflow/WorkflowCompletionActions';
 import {
   artifactToPreviewFile,
   inferMimeTypeFromUrl,
@@ -93,9 +95,33 @@ export const ChatMessage = memo(function ChatMessage({
 
   const attachedFiles = message._attachedFiles || [];
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
+  const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
+  const sessionKey = useChatStore((s) => s.currentSessionKey);
+  const sessionMessages = useChatStore((s) => s.messages);
   const workflowCard = !isUser ? extractWorkflowCard(message) : null;
-  const completionRunId = !isUser && !isStreaming ? extractWorkflowCompletionRunId(text) : null;
-  const parameterForm = !isUser ? extractParameterForm(message) : null;
+  const parameterForm = useMemo(() => {
+    if (isUser) return null;
+    const hasNativeFormBlock = Array.isArray(message.content)
+      && (message.content as import('@/stores/chat').ContentBlock[]).some(
+        (b) => b.type === 'parameter_form' && b.formId && b.formConfig,
+      );
+    if (hasNativeFormBlock) {
+      return extractParameterForm(message, pendingWorkflow);
+    }
+    if (!pendingWorkflow?.schema) return null;
+    if (
+      !isWorkflowFormInjectionAllowed(
+        pendingWorkflow.templateId,
+        sessionMessages,
+        extractText,
+        sessionKey,
+        { allowLivePending: true },
+      )
+    ) {
+      return null;
+    }
+    return extractParameterForm(message, pendingWorkflow);
+  }, [isUser, message, pendingWorkflow, sessionMessages, sessionKey]);
 
   useEffect(() => {
     if (!parameterForm || parameterForm.formContext.source !== 'workflow') return;
@@ -124,6 +150,16 @@ export const ChatMessage = memo(function ChatMessage({
     [candidateRefs],
   );
   const refExistence = useLocalPathExistence(candidateLocalPaths);
+  const workflowArtifactUrls = useMemo(() => {
+    const urls = new Set<string>();
+    for (const state of Object.values(workflowCardStatesForRefs)) {
+      for (const artifact of state?.result?.artifacts ?? []) {
+        if (artifact.url?.startsWith('http')) urls.add(artifact.url);
+      }
+    }
+    return urls;
+  }, [workflowCardStatesForRefs]);
+
   const extractedRefs = useMemo(() => {
     const seen = new Set<string>();
     const result: typeof candidateRefs = [];
@@ -134,11 +170,12 @@ export const ChatMessage = memo(function ChatMessage({
         workflowCardStatesForRefs,
       );
       if (!resolved || seen.has(resolved.filePath)) continue;
+      if (workflowArtifactUrls.has(resolved.filePath)) continue;
       seen.add(resolved.filePath);
       result.push({ filePath: resolved.filePath, fileName: resolved.fileName, mimeType: resolved.mimeType });
     }
     return result;
-  }, [candidateRefs, refExistence, workflowCardStatesForRefs]);
+  }, [candidateRefs, refExistence, workflowCardStatesForRefs, workflowArtifactUrls]);
 
   useEffect(() => {
     if (!isFilePreviewDebugEnabled() || isUser || !hasText) return;
@@ -345,14 +382,6 @@ export const ChatMessage = memo(function ChatMessage({
           <WorkflowCard
             runId={workflowCard.runId}
             templateName={workflowCard.templateName}
-            onPreviewArtifact={onPreviewFile}
-            onViewWorkflow={onViewWorkflow}
-          />
-        )}
-
-        {completionRunId && (
-          <WorkflowCompletionActions
-            runId={completionRunId}
             onPreviewArtifact={onPreviewFile}
             onViewWorkflow={onViewWorkflow}
           />

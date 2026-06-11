@@ -12,6 +12,10 @@ import {
 } from '@/lib/builtin-tool-envelope';
 import { applyWorkflowRunStarted } from '@/lib/workflow-run-started';
 import { useChatStore } from '@/stores/chat';
+import {
+  applyWorkflowSchemaReady,
+  ensureWorkflowParameterFormInjected,
+} from '@/stores/chat/parameter-form-recovery';
 import { saveWorkflowRecord } from '@/stores/workflow-memory';
 import type { NlExtractedValues } from '@/hooks/use-scheduled-task-tool-listener';
 
@@ -44,18 +48,13 @@ function parseScheduledTaskFromLegacy(content: unknown): NlExtractedValues | nul
 }
 
 function handleWorkflowSchemaReady(data: WorkflowSchemaReadyData): void {
-  if (!data.templateId || !data.schema) return;
-  const chatState = useChatStore.getState();
-  chatState.setPendingWorkflow({
-    templateId: data.templateId,
-    templateName: data.templateId,
-    schemaHash: data.schemaHash,
-    schema: data.schema,
-    collectedInputs: {},
-    frontendFormInserted: false,
-    modelGuidanceSent: true,
-  });
-  console.log('[builtin-tool] workflow_schema_ready templateId=%s', data.templateId);
+  applyWorkflowSchemaReady(data);
+  const injected = ensureWorkflowParameterFormInjected();
+  console.log(
+    '[builtin-tool] workflow_schema_ready templateId=%s formInjected=%s',
+    data.templateId,
+    injected,
+  );
 }
 
 function handleWorkflowCreated(data: WorkflowCreatedData): void {

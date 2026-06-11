@@ -30,14 +30,20 @@ export function defineStoTool<TParams>(
 		label,
 		description,
 		parameters,
-		execute: async (params, ctx) => {
-			api.logger.info?.(`[sto-builtin-tool] ${id} invoked domain=${domain}`);
+		execute: async (toolCallId, params) => {
+			const paramsPreview = (() => {
+				try {
+					const text = JSON.stringify(params);
+					return text.length > 600 ? `${text.slice(0, 600)}…` : text;
+				} catch {
+					return "(unserializable)";
+				}
+			})();
+			api.logger.warn?.(
+				`[sto-builtin-tool] ${id} invoked domain=${domain} toolCallId=${toolCallId} params=${paramsPreview}`,
+			);
 			try {
-				const data = await execute(params as TParams, {
-					sessionKey: (ctx as { sessionKey?: string }).sessionKey,
-					agentId: (ctx as { agentId?: string }).agentId,
-					runId: (ctx as { runId?: string }).runId,
-				});
+				const data = await execute(params as TParams, {});
 				const envelope: StoToolEnvelope = {
 					type: resultType,
 					success: true,

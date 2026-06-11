@@ -282,6 +282,25 @@ function copyWorkflowToolRuntimeDeps(workflowPluginDir: string): void {
   }
 }
 
+const STO_WORKFLOW_DEV_SYNC_FILES = ['index.ts', 'api.ts', 'workflow-params.ts', 'workflow-search.ts', 'openclaw.plugin.json', 'package.json'] as const;
+
+/** Dev-only: keep ~/.stoclaw extension in sync with sto-plugin sources without a version bump. */
+function syncStoWorkflowToolDevSources(candidateSources: string[]): void {
+  if (app.isPackaged) return;
+  const sourceDir = pickPluginSourceDir('sto-workflow-tool', candidateSources);
+  if (!sourceDir) return;
+
+  const targetDir = join(getOpenClawConfigDir(), 'extensions', 'sto-workflow-tool');
+  if (!existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) return;
+
+  for (const file of STO_WORKFLOW_DEV_SYNC_FILES) {
+    const src = join(sourceDir, file);
+    if (!existsSync(fsPath(src))) continue;
+    cpSync(fsPath(src), fsPath(join(targetDir, file)), { force: true });
+  }
+  logger.info(`[plugin] Synced sto-workflow-tool dev sources from ${sourceDir}`);
+}
+
 function ensureStoToolkitLibraryInstalled(): void {
   const workflowPluginDir = join(getOpenClawConfigDir(), 'extensions', 'sto-workflow-tool');
   const workflowManifest = join(workflowPluginDir, 'openclaw.plugin.json');
@@ -687,12 +706,14 @@ export function ensureStoScheduledTaskToolPluginInstalled(): { installed: boolea
 }
 
 export function ensureStoWorkflowToolPluginInstalled(): { installed: boolean; warning?: string } {
+  const candidateSources = buildCandidateSources('sto-workflow-tool');
   const result = ensurePluginInstalled(
     'sto-workflow-tool',
-    buildCandidateSources('sto-workflow-tool'),
+    candidateSources,
     'STO Workflow Tool',
   );
   if (result.installed) {
+    syncStoWorkflowToolDevSources(candidateSources);
     ensureStoToolkitLibraryInstalled();
   }
   return result;

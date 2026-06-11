@@ -1430,6 +1430,10 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
     if (!deny.includes('create_scheduled_task')) {
       deny.push('create_scheduled_task');
     }
+    // NL workflow creation uses inline parameter form + HostApi; model must not create with defaults.
+    if (!deny.includes('create_workflow')) {
+      deny.push('create_workflow');
+    }
     // Remove the old 'cron' deny so local cron creation is possible again
     tools.deny = deny.filter((t) => t !== 'cron');
     config.tools = tools;

@@ -36,3 +36,16 @@ describe('buildWorkflowCreationHint', () => {
     expect(hint).toContain('用户原话：创建工作流测试');
   });
 });
+
+describe('stripWorkflowSessionHintForDisplay', () => {
+  it('strips creation hint and keeps user text', async () => {
+    const { appendWorkflowSessionHint, stripWorkflowSessionHintForDisplay } = await import(
+      '@/lib/workflow-session-hint'
+    );
+    const injected = appendWorkflowSessionHint(
+      '云端agent测试-产物测试 创建工作流',
+      buildWorkflowCreationHint('云端agent测试-产物测试 创建工作流'),
+    );
+    expect(stripWorkflowSessionHintForDisplay(injected)).toBe('云端agent测试-产物测试 创建工作流');
+  });
+});
