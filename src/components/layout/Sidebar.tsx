@@ -393,8 +393,7 @@ function SidebarScheduledTaskGroup({
                 <button
                   type="button"
                   onClick={() => {
-                    switchSession(s.key);
-                    navigateToMainChatHome(navigate, location.pathname);
+                    navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
                   }}
                   title={label}
                   className={cn(
@@ -925,9 +924,10 @@ export function Sidebar() {
             <button
               type="button"
               onClick={() => {
-                const { messages } = useChatStore.getState();
-                if (messages.length > 0) newSession();
-                navigateToMainChatHome(navigate, location.pathname);
+                navigateToMainChatHome(navigate, location.pathname, () => {
+                  const { messages } = useChatStore.getState();
+                  if (messages.length > 0) newSession();
+                });
               }}
               className="mx-1 mt-1 flex items-center gap-2 rounded-xl border border-[rgba(255,140,0,0.35)] bg-[var(--sto-accent-soft)] px-3 py-2.5 text-left text-[13px] font-semibold text-[var(--sto-accent)] shadow-sm transition-colors hover:opacity-95 dark:bg-amber-950/35"
             >
@@ -942,9 +942,10 @@ export function Sidebar() {
                   aria-label={t('common:sidebar.newChat')}
                   title={t('common:sidebar.newChat')}
                   onClick={() => {
-                    const { messages } = useChatStore.getState();
-                    if (messages.length > 0) newSession();
-                    navigateToMainChatHome(navigate, location.pathname);
+                    navigateToMainChatHome(navigate, location.pathname, () => {
+                      const { messages } = useChatStore.getState();
+                      if (messages.length > 0) newSession();
+                    });
                   }}
                   className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card"
                 >
@@ -976,8 +977,7 @@ export function Sidebar() {
                       <button
                         type="button"
                         onClick={() => {
-                          switchSession(s.key);
-                          navigateToMainChatHome(navigate, location.pathname);
+                          navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
                         }}
                         className={cn(
                           'mx-auto flex min-h-0 min-w-0 items-center justify-center rounded-[8px] font-medium leading-none transition-colors',
@@ -1060,8 +1060,7 @@ export function Sidebar() {
                             <button
                               type="button"
                               onClick={() => {
-                                switchSession(s.key);
-                                navigateToMainChatHome(navigate, location.pathname);
+                                navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
                               }}
                               title={sessionLabel}
                               className={cn(
