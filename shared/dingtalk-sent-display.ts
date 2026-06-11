@@ -1,3 +1,7 @@
+import {
+  ensureDingTalkAgentSendDisclaimerFormat,
+  stripDingTalkAgentSendDisclaimerBody,
+} from './dingtalk-disclaimer';
 import { messageHasDingTalkRecipientContext } from './dingtalk-mention-context';
 import { parseDwsSendTextFlagSegment, unescapeLiteralDwsSendText } from './dws-send-text';
 
@@ -168,7 +172,9 @@ function parseTextFlag(command: string): string | undefined {
 }
 
 function previewDedupeKey(parsed: Omit<DingTalkSentMessagePreview, 'toolCallId'>): string {
-  const body = formatDingTalkSentTextForChatPreview(parsed.text);
+  const body = stripDingTalkAgentSendDisclaimerBody(parsed.text)
+    .replace(/\s+/g, ' ')
+    .trim();
   return `${parsed.recipientLabel}\0${body}`;
 }
 
@@ -214,12 +220,21 @@ function inferRecipient(
   return { kind: 'unknown', label: '钉钉' };
 }
 
+function sanitizeRecipientLabel(label: string): string {
+  const trimmed = label.trim();
+  if (!trimmed) return trimmed;
+  if (/^cid[A-Za-z0-9+/=_=-]{8,}$/i.test(trimmed)) return '群聊';
+  if (/^\d{12,}$/.test(trimmed)) return '联系人';
+  return trimmed;
+}
+
 function enrichRecipientLabel(label: string, mentionHints: string[] = []): string {
-  if (!GENERIC_RECIPIENT_LABELS.has(label)) return label;
+  const sanitized = sanitizeRecipientLabel(label);
+  if (!GENERIC_RECIPIENT_LABELS.has(sanitized)) return sanitized;
   const hints = mentionHints.map((name) => name.trim()).filter(Boolean);
   if (hints.length === 1) return hints[0];
   if (hints.length > 1) return hints.join('、');
-  return label;
+  return sanitized;
 }
 
 /** Parse `dws chat message send` from a shell / bash tool command string. */
@@ -244,7 +259,8 @@ export function parseDwsChatMessageSendCommand(
 export function formatDingTalkSentTextForChatPreview(text: string): string {
   const toQuote = (inner: string) => `\n\n> *${inner.trim()}*`;
 
-  let result = text.replace(/\r\n/g, '\n');
+  // Preview always shows the proxy-send footer even when the agent omitted it in --text.
+  let result = ensureDingTalkAgentSendDisclaimerFormat(text).replace(/\r\n/g, '\n');
 
   // --- + <font> disclaimer (incl. shell-mangled attrs like color='"#999999"')
   result = result.replace(
@@ -270,7 +286,40 @@ export function formatDingTalkSentTextForChatPreview(text: string): string {
     (_, inner) => toQuote(inner),
   );
 
+  // Single-quoted font disclaimer (current dws send format)
+  if (!/> \*[^*]*STO Claw 代为发送/.test(result) && /STO Claw 代为发送/.test(result)) {
+    result = result.replace(
+      /<font\s+color=['"]#999999['"][^>]*>([\s\S]*?STO Claw 代为发送[\s\S]*?)<\/font>/gi,
+      (_, inner) => toQuote(inner),
+    );
+  }
+
   return result.trim();
+}
+
+/** Remove assistant reply bodies that duplicate DingTalk sent-success preview cards. */
+export function stripEchoedDingTalkSentBodiesFromAssistantReply(
+  replyText: string,
+  previews: DingTalkSentMessagePreview[],
+): string {
+  if (!replyText?.trim() || previews.length === 0) return replyText;
+
+  let result = replyText;
+  for (const preview of previews) {
+    const body = stripDingTalkAgentSendDisclaimerBody(preview.text).trim();
+    if (!body) continue;
+
+    if (result.includes(body)) {
+      result = result.split(body).join('').trim();
+    }
+
+    const formatted = formatDingTalkSentTextForChatPreview(preview.text).trim();
+    if (formatted && result.includes(formatted)) {
+      result = result.split(formatted).join('').trim();
+    }
+  }
+
+  return result.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function extractToolResultText(message: DingTalkSentDisplayMessage): string {

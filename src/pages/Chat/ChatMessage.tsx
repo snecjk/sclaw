@@ -32,6 +32,7 @@ import {
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
 import { submitParameterForm } from '@/components/parameter-form/form-handlers';
+import { AtMentionText, highlightAtMentionsInChildren } from '@/lib/at-mention-highlight';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
 
 interface ChatMessageProps {
@@ -540,12 +541,21 @@ function MessageBubble({
       )}
 
       {isUser ? (
-        <p className="whitespace-pre-wrap break-words break-all text-sm">{text}</p>
+        <AtMentionText
+          text={text}
+          className="whitespace-pre-wrap break-words break-all text-sm"
+        />
       ) : (
         <div className="prose prose-sm max-w-none break-words break-all text-sm leading-normal dark:prose-invert">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
+              p({ children }) {
+                return <p>{highlightAtMentionsInChildren(children)}</p>;
+              },
+              li({ children }) {
+                return <li>{highlightAtMentionsInChildren(children)}</li>;
+              },
               code({ className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || '');
                 const isInline = !match && !className;

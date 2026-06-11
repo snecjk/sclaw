@@ -3,7 +3,10 @@ import { Sparkles } from 'lucide-react';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { ChatMessage } from './ChatMessage';
 import { mergeThinkingTimelines, pickAssistantReplyMessage } from './chat-display';
-import { extractDingTalkSentPreviews } from '../../../shared/dingtalk-sent-display';
+import {
+  extractDingTalkSentPreviews,
+  stripEchoedDingTalkSentBodiesFromAssistantReply,
+} from '../../../shared/dingtalk-sent-display';
 import { extractAtMentionDisplayNames, extractRawMessageText, extractText } from './message-utils';
 import { DingTalkSentPreview } from './DingTalkSentPreview';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
@@ -109,7 +112,25 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
   const hasDingTalkSentPreview = dingTalkSentPreviews.length > 0;
 
-  if (!showThinkingPanel && !replyHasText && !hasDingTalkSentPreview) return null;
+  const replyDisplayMessage = useMemo(() => {
+    if (!replyMessage || !hasDingTalkSentPreview || !assistantReplyText) return replyMessage;
+    const stripped = stripEchoedDingTalkSentBodiesFromAssistantReply(
+      assistantReplyText,
+      dingTalkSentPreviews,
+    );
+    if (!stripped.trim()) return null;
+    if (stripped.trim() === assistantReplyText.trim()) return replyMessage;
+    return {
+      ...replyMessage,
+      content: stripped,
+    } as RawMessage;
+  }, [replyMessage, hasDingTalkSentPreview, assistantReplyText, dingTalkSentPreviews]);
+
+  const replyDisplayHasText = replyDisplayMessage
+    ? extractText(replyDisplayMessage).trim().length > 0
+    : false;
+
+  if (!showThinkingPanel && !replyDisplayHasText && !hasDingTalkSentPreview) return null;
 
   const avatar = (
     <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,#FFF5E6,#FFE8CC)] text-primary shadow-[0_8px_20px_rgba(255,111,0,0.12)]">
@@ -117,7 +138,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     </div>
   );
 
-  if (replyHasText && replyMessage) {
+  if (replyDisplayHasText && replyDisplayMessage) {
     return (
       <div className="group flex flex-row gap-3" data-chat-message-role="assistant">
         {avatar}
@@ -135,9 +156,9 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
             <DingTalkSentPreview previews={dingTalkSentPreviews} />
           ) : null}
           <ChatMessage
-            message={replyMessage}
+            message={replyDisplayMessage}
             showThinking={false}
-            isStreaming={isStreaming && replyHasText}
+            isStreaming={isStreaming && replyDisplayHasText}
             streamingTools={[]}
             onPreviewFile={onPreviewFile}
             onViewWorkflow={onViewWorkflow}

@@ -11,6 +11,7 @@ import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
+import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import { stripWorkflowContextForDisplay } from '@/lib/workflow-context';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
 import { buildCronSessionHistoryPath, isCronSessionKey } from './chat/cron-session-utils';
@@ -1902,7 +1903,7 @@ export const useChatStore = create<ChatState>()(
   sendMessage: async (
     options: import('./chat/types').SendMessageOptions,
   ) => {
-    const { text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
+    const { text, attachments, targetAgentId, dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
 
@@ -1912,6 +1913,16 @@ export const useChatStore = create<ChatState>()(
     const messageWithContext = appendWorkflowContext(trimmed, workflowContext);
     const displayText = stripWorkflowContextForDisplay(messageWithContext);
     console.log('[workflow-trace] sendMessage injected=%s finalLength=%d', workflowContext ? 'yes' : 'no', messageWithContext.length);
+
+    const dingTalkRpcExtras = buildDingTalkMentionRpcExtras(
+      dingTalkMentions,
+      attachments?.map((file) => ({
+        fileName: file.fileName,
+        filePath: file.stagedPath,
+        mimeType: file.mimeType,
+        fileSize: file.fileSize,
+      })),
+    );
 
     const targetSessionKey = resolveMainSessionKeyForAgent(targetAgentId) ?? get().currentSessionKey;
 
@@ -2065,6 +2076,7 @@ export const useChatStore = create<ChatState>()(
                 mimeType: a.mimeType,
                 fileName: a.fileName,
               })),
+              ...dingTalkRpcExtras,
             }),
           },
         );
@@ -2076,6 +2088,7 @@ export const useChatStore = create<ChatState>()(
             message: messageWithContext,
             deliver: false,
             idempotencyKey,
+            ...dingTalkRpcExtras,
             // NOTE: workflowId/runId are not forwarded to Gateway chat.send yet
             // because the Gateway schema does not accept them. Workflow state
             // is tracked via SSE + main process polling instead.

@@ -11,6 +11,7 @@ import {
   upsertImageCacheEntry,
 } from './helpers';
 import type { ChatSession, RawMessage } from './types';
+import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
 
 function normalizeAgentId(value: string | undefined | null): string {
@@ -84,9 +85,19 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
     sendMessage: async (
       options: import('@/stores/chat/types').SendMessageOptions,
     ) => {
-      const { text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId: _workflowId, runId: _runId } = options;
+      const { text, attachments, targetAgentId, dingTalkMentions, workflowId: _workflowId, runId: _runId } = options;
       const trimmed = text.trim();
       if (!trimmed && (!attachments || attachments.length === 0)) return;
+
+      const dingTalkRpcExtras = buildDingTalkMentionRpcExtras(
+        dingTalkMentions,
+        attachments?.map((file) => ({
+          fileName: file.fileName,
+          filePath: file.stagedPath,
+          mimeType: file.mimeType,
+          fileSize: file.fileSize,
+        })),
+      );
 
       const targetSessionKey = resolveMainSessionKeyForAgent(targetAgentId) ?? get().currentSessionKey;
       if (targetSessionKey !== get().currentSessionKey) {
@@ -257,6 +268,7 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
                 mimeType: a.mimeType,
                 fileName: a.fileName,
               })),
+              ...dingTalkRpcExtras,
             },
             MEDIA_SEND_TIMEOUT_MS,
           ) as { success: boolean; result?: { runId?: string }; error?: string };
@@ -269,6 +281,7 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
               message: trimmed,
               deliver: false,
               idempotencyKey,
+              ...dingTalkRpcExtras,
             },
             CHAT_SEND_TIMEOUT_MS,
           ) as { success: boolean; result?: { runId?: string }; error?: string };

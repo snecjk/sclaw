@@ -4,6 +4,7 @@ import {
   extractDingTalkSentPreviews,
   formatDingTalkSentTextForChatPreview,
   parseDwsChatMessageSendCommand,
+  stripEchoedDingTalkSentBodiesFromAssistantReply,
 } from '../../shared/dingtalk-sent-display';
 
 describe('parseDwsChatMessageSendCommand', () => {
@@ -22,6 +23,27 @@ describe('parseDwsChatMessageSendCommand', () => {
     const text = appendDingTalkAgentSendDisclaimer('正文内容');
     const preview = formatDingTalkSentTextForChatPreview(text);
     expect(preview).toContain('正文内容');
+    expect(preview).toContain('> *本消息由 STO Claw 代为发送，非本人实时回复。*');
+    expect(preview).not.toContain('<font');
+  });
+
+  it('renders single-quoted font disclaimer without raw HTML tags', () => {
+    const text = [
+      '### 上海明日天气',
+      '',
+      '---',
+      '',
+      "<font color='#999999'>本消息由 STO Claw 代为发送，非本人实时回复。</font>",
+    ].join('\n');
+    const preview = formatDingTalkSentTextForChatPreview(text);
+    expect(preview).toContain('上海明日天气');
+    expect(preview).toContain('> *本消息由 STO Claw 代为发送，非本人实时回复。*');
+    expect(preview).not.toContain('<font');
+  });
+
+  it('always renders proxy-send footer when agent omitted disclaimer in --text', () => {
+    const preview = formatDingTalkSentTextForChatPreview('☀️ 上海明天天气预报\n\n天气晴朗，适合出行！');
+    expect(preview).toContain('上海明天天气预报');
     expect(preview).toContain('> *本消息由 STO Claw 代为发送，非本人实时回复。*');
     expect(preview).not.toContain('<font');
   });
@@ -235,5 +257,33 @@ describe('extractDingTalkSentPreviews', () => {
     expect(previews).toHaveLength(1);
     expect(previews[0]?.recipientLabel).toBe('文鹏');
     expect(previews[0]?.title).toBe('申通快递浙江嘉兴洪合公司信息');
+  });
+
+  it('strips echoed send bodies from assistant reply when preview card is shown', () => {
+    const body = '### 上海明日天气\n\n晴，8km/h 风速';
+    const textExample = appendDingTalkAgentSendDisclaimer(body);
+    const previews = extractDingTalkSentPreviews(
+      [
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tool-1',
+              name: 'bash',
+              input: {
+                command: `dws chat message send --user uid-1 --title "消息" --text ${JSON.stringify(textExample)} --format json`,
+              },
+            },
+          ],
+        },
+      ],
+      [{ role: 'tool', toolCallId: 'tool-1', content: [{ type: 'text', text: '{"ok":true}' }] }],
+      { mentionHints: ['文鹏'] },
+    );
+    const reply = `${body}\n\n✅ 已将上海明天天气预报发送给文鹏。`;
+    const stripped = stripEchoedDingTalkSentBodiesFromAssistantReply(reply, previews);
+    expect(stripped).not.toContain('上海明日天气');
+    expect(stripped).toContain('已将上海明天天气预报发送给文鹏');
   });
 });

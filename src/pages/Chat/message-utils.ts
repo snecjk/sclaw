@@ -344,8 +344,6 @@ export function extractText(message: RawMessage | unknown): string {
     result = msg.text.trim().length > 0 ? msg.text : '';
   }
 
-  const role = typeof msg.role === 'string' ? msg.role.toLowerCase() : '';
-
   // Strip <ParameterForm ... /> marker from text for clean display
   if (result) {
     result = result.replace(PARAM_FORM_REGEX, '').trim();
