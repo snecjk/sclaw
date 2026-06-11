@@ -66,8 +66,30 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     return;
   }
 
+  // Re-run / start remembered workflow without waiting for model execute_workflow.
+  const { tryStartRememberedWorkflowSend, tryResolvePendingWorkflow } = await import(
+    '@/hooks/use-workflow-send'
+  );
+  const startedRemembered = await tryStartRememberedWorkflowSend({
+    text,
+    context: {
+      sessionKey: chatState.currentSessionKey,
+      agentId: chatState.currentAgentId,
+    },
+    sendMessage: async (msg, runId, wfId) => {
+      await sendMessage({
+        text: msg,
+        attachments,
+        targetAgentId,
+        dingTalkMentions,
+        workflowId: wfId ?? undefined,
+        runId: runId ?? undefined,
+      });
+    },
+  });
+  if (startedRemembered) return;
+
   // In-flight parameter_form confirm / cancel only — creation & search go through model tools.
-  const { tryResolvePendingWorkflow } = await import('@/hooks/use-workflow-send');
   const resolved = await tryResolvePendingWorkflow(text, async (msg, runId, wfId) => {
     await sendMessage({ text: msg, attachments, targetAgentId, dingTalkMentions, workflowId: wfId, runId });
   });

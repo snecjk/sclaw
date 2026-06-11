@@ -19,9 +19,6 @@ import type { WorkflowSchema } from '@/types/workflow';
 import type { ContentBlock, RawMessage } from './types';
 import type { ChatGet, ChatSet } from './store-api';
 
-export const PARAM_FORM_MARKER_REGEX =
-  /<ParameterForm\s+templateId="([^"]+)"\s+schemaHash="([^"]+)"\s*\/>/i;
-
 function rawMessageText(message: RawMessage, getMessageText: (content: unknown) => string): string {
   const content = message.content;
   if (typeof content === 'string') return content;

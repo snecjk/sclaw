@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildWorkflowStartUnavailablePrompt,
   isWorkflowCreationIntent,
   isWorkflowStartIntent,
+  isReExecutionIntent,
 } from '@/hooks/use-workflow-intent';
 import { buildWorkflowCreationHint } from '@/lib/workflow-session-hint';
 
@@ -25,6 +27,17 @@ describe('isWorkflowCreationIntent', () => {
   it('does not overlap with start intent without create verb', () => {
     expect(isWorkflowStartIntent('执行工作流')).toBe(true);
     expect(isWorkflowCreationIntent('执行工作流')).toBe(false);
+  });
+});
+
+describe('re-run / start intents', () => {
+  it('matches re-execution phrases', () => {
+    expect(isReExecutionIntent('再跑一遍')).toBe(true);
+    expect(isWorkflowStartIntent('运行这个工作流')).toBe(true);
+  });
+
+  it('builds unavailable prompt when no workflow memory', () => {
+    expect(buildWorkflowStartUnavailablePrompt()).toContain('没有可运行的工作流记录');
   });
 });
 

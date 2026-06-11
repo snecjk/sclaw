@@ -419,6 +419,23 @@ export async function tryResolvePendingWorkflow(
     }
   }
 
+  if (pending.workflowId && (isConfirmIntent || isShortReply)) {
+    console.log(
+      '[workflow-trace] tryResolvePendingWorkflow → startExistingWorkflow workflowId=%s text=%s',
+      pending.workflowId,
+      text,
+    );
+    const ok = await startExistingWorkflow(
+      pending.workflowId,
+      inputs,
+      { sessionKey: chatState.currentSessionKey, agentId: chatState.currentAgentId },
+      sendMessage,
+      text,
+      pending.templateName,
+    );
+    return ok;
+  }
+
   if (!hasSchemaFields) {
     // Restored from memory but no schema loaded yet, and user didn't confirm — fall through
     return false;
@@ -527,5 +544,102 @@ export async function tryResolvePendingWorkflow(
   }
 
   return false;
+}
+
+function appendLocalConversationTurn(userText: string, assistantText: string): void {
+  const now = Date.now() / 1000;
+  useChatStore.setState((s) => ({
+    messages: [
+      ...s.messages,
+      {
+        role: 'user',
+        content: userText,
+        timestamp: now,
+        id: crypto.randomUUID(),
+      } as import('@/stores/chat').RawMessage,
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: assistantText }],
+        timestamp: now + 0.001,
+        id: crypto.randomUUID(),
+      } as import('@/stores/chat').RawMessage,
+    ],
+    lastUserMessageAt: Date.now(),
+  }));
+}
+
+export interface StartRememberedWorkflowSendOptions {
+  text: string;
+  context: WorkflowSendContext;
+  sendMessage: (
+    text: string,
+    runId?: string | null,
+    workflowId?: string | null,
+    workflowContext?: unknown,
+  ) => Promise<void>;
+}
+
+/**
+ * Start a previously saved workflow via POST /workflows/{id}/start.
+ * Fallback when the model does not call execute_workflow for re-run intents.
+ */
+export async function tryStartRememberedWorkflowSend(
+  options: StartRememberedWorkflowSendOptions,
+): Promise<boolean> {
+  const { text, context, sendMessage } = options;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  const {
+    isWorkflowStartIntent,
+    isImmediateExecutionIntent,
+    buildWorkflowStartUnavailablePrompt,
+  } = await import('@/hooks/use-workflow-intent');
+
+  const wantsStart = isWorkflowStartIntent(trimmed) || isImmediateExecutionIntent(trimmed);
+  if (!wantsStart) return false;
+
+  const chatState = useChatStore.getState();
+  const pending = chatState.pendingWorkflow;
+
+  let workflowId = pending?.workflowId;
+  let inputs: Record<string, unknown> = pending?.collectedInputs ?? {};
+  let templateName = pending?.templateName;
+
+  if (!workflowId) {
+    const { getLatestWorkflow } = await import('@/stores/workflow-memory');
+    const latest = getLatestWorkflow(context.sessionKey);
+    if (latest) {
+      workflowId = latest.workflowId;
+      inputs = latest.collectedInputs ?? {};
+      templateName = latest.templateName;
+    }
+  }
+
+  if (!workflowId) {
+    if (isImmediateExecutionIntent(trimmed)) {
+      return false;
+    }
+    appendLocalConversationTurn(trimmed, buildWorkflowStartUnavailablePrompt());
+    return true;
+  }
+
+  console.log(
+    '[workflow-trace] tryStartRememberedWorkflowSend workflowId=%s text=%s',
+    workflowId,
+    trimmed,
+  );
+
+  chatState.clearPendingWorkflow();
+
+  await startExistingWorkflow(
+    workflowId,
+    inputs,
+    context,
+    sendMessage,
+    trimmed,
+    templateName,
+  );
+  return true;
 }
 

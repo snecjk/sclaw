@@ -3,10 +3,8 @@
  */
 import { useChatStore } from '@/stores/chat';
 import type { ContentBlock } from '@/stores/chat';
+import { PARAM_FORM_MARKER_REGEX } from '@/lib/parameter-form-marker';
 import { resolveParameterFormId } from './form-handlers';
-
-const PARAM_FORM_MARKER_REGEX =
-  /<ParameterForm\s+templateId="([^"]+)"\s+schemaHash="([^"]+)"\s*\/>/i;
 
 function formIdsMatch(blockFormId: string | undefined, targetFormId: string): boolean {
   if (!blockFormId) return false;

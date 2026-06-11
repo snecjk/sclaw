@@ -33,7 +33,6 @@ import { upgradeWorkflowParamUserMessages } from '@/lib/workflow-param-messages'
 import {
   absorbWorkflowSchemaFromToolResults,
   appendWorkflowParameterFormToMessage,
-  applyWorkflowSchemaReady,
   ensureWorkflowParameterFormInjected,
   mergeParameterFormBlocksFromCurrent,
   patchLastAssistantWithWorkflowForm,
@@ -41,8 +40,7 @@ import {
   reconcilePendingWorkflowForSession,
   recoverParameterFormsOnHistoryLoad,
 } from './chat/parameter-form-recovery';
-import { parseStoToolEnvelope } from '@/lib/builtin-tool-envelope';
-import type { WorkflowSchemaReadyData } from '@/lib/builtin-tool-envelope';
+import { dispatchBuiltinToolResult } from '@/lib/builtin-tool-dispatch';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 
 export type {
@@ -2147,10 +2145,12 @@ export const useChatStore = create<ChatState>()(
         if (finalMsg) {
           const updates = collectToolUpdates(finalMsg, resolvedState);
           if (isToolResultRole(finalMsg.role)) {
-            const schemaEnvelope = parseStoToolEnvelope(finalMsg.content);
-            if (schemaEnvelope?.type === 'workflow_schema_ready' && schemaEnvelope.success) {
-              applyWorkflowSchemaReady((schemaEnvelope.data ?? {}) as WorkflowSchemaReadyData);
-            }
+            void dispatchBuiltinToolResult({
+              id: finalMsg.id,
+              toolCallId: finalMsg.toolCallId,
+              toolName: finalMsg.toolName,
+              content: finalMsg.content,
+            });
             // Resolve file path from the streaming assistant message's matching tool call
             const currentStreamForPath = get().streamingMessage as RawMessage | null;
             const matchedPath = (currentStreamForPath && finalMsg.toolCallId)

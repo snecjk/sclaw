@@ -76,3 +76,11 @@ export function isReExecutionIntent(text: string): boolean {
   const reExecPatterns = /(?:执行刚才的|再跑一遍|再执行一次|重新执行|用上次参数|继续执行)|(?:运行|执行|启动)这个(?:工作流|workflow)/i;
   return reExecPatterns.test(text);
 }
+
+/** Prompt when user wants to run but no saved workflow exists in session. */
+export function buildWorkflowStartUnavailablePrompt(): string {
+  return [
+    '当前会话没有可运行的工作流记录。',
+    '请先通过「创建xxx工作流」完成参数配置，或输入 / 从列表中选择模板。',
+  ].join('\n');
+}
