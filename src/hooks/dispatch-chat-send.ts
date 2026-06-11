@@ -1,5 +1,5 @@
 /**
- * Unified chat send dispatcher: workflow (slash / NL) then normal chat.
+ * Unified chat send dispatcher: workflow UI shortcuts then normal chat (model + builtin tools).
  * Used by Chat page and Home hub so behavior stays consistent.
  */
 import { toast } from 'sonner';
@@ -32,9 +32,6 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
   } = options;
 
   const sendMessage = useChatStore.getState().sendMessage;
-  const trimmed = text.trim();
-
-  const chatStateEarly = useChatStore.getState();
 
   const sendWithWorkflowContext = async (
     textToSend: string,
@@ -53,29 +50,6 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     });
   };
 
-  // Start saved workflow (POST /workflows/{id}/start) — before create/template search.
-  if (!workflowId && trimmed) {
-    const { tryStartRememberedWorkflowSend } = await import('@/hooks/use-workflow-send');
-    const started = await tryStartRememberedWorkflowSend({
-      text,
-      context: {
-        sessionKey: chatStateEarly.currentSessionKey,
-        agentId: chatStateEarly.currentAgentId,
-      },
-      sendMessage: async (textToSend, runId, wfId) => {
-        await sendMessage({
-          text: textToSend,
-          attachments,
-          targetAgentId,
-          dingTalkMentions,
-          workflowId: wfId || undefined,
-          runId: runId || undefined,
-        });
-      },
-    });
-    if (started) return;
-  }
-
   const chatState = useChatStore.getState();
 
   // Explicit template pick from picker — fetch schema → send to model.
@@ -92,44 +66,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     return;
   }
 
-  // NL workflow creation: "创建 xxx 工作流" → POST template search → sendWithWorkflow → model.
-  // Must run before tryResolvePendingWorkflow so stale pending does not skip the model.
-  if (trimmed) {
-    const {
-      isNewWorkflowCreationIntent,
-      shouldSearchWorkflowTemplates,
-    } = await import('@/hooks/use-workflow-intent');
-
-    const pendingSelection = chatState.pendingTemplateSelection;
-    const isFreshCreation = isNewWorkflowCreationIntent(trimmed) && !pendingSelection;
-    const isNlWorkflowIntent =
-      pendingSelection
-      || isFreshCreation
-      || (shouldSearchWorkflowTemplates(trimmed) && !chatState.pendingWorkflow);
-
-    if (isFreshCreation) {
-      chatState.clearPendingWorkflow();
-      chatState.clearPendingTemplateSelection();
-    }
-
-    if (isNlWorkflowIntent) {
-      const { tryNaturalLanguageWorkflowSend } = await import('@/hooks/use-workflow-send');
-      const nlHandled = await tryNaturalLanguageWorkflowSend({
-        text,
-        context: {
-          sessionKey: chatState.currentSessionKey,
-          agentId: chatState.currentAgentId,
-        },
-        sendMessage: sendWithWorkflowContext,
-      });
-      if (nlHandled) return;
-      if (isFreshCreation) {
-        console.warn('[workflow-trace] creation intent but NL handler returned false, falling through');
-      }
-    }
-  }
-
-  // Continue an in-progress workflow (param confirm / re-execution).
+  // In-flight parameter_form confirm / cancel only — creation & search go through model tools.
   const { tryResolvePendingWorkflow } = await import('@/hooks/use-workflow-send');
   const resolved = await tryResolvePendingWorkflow(text, async (msg, runId, wfId) => {
     await sendMessage({ text: msg, attachments, targetAgentId, dingTalkMentions, workflowId: wfId, runId });

@@ -1,5 +1,22 @@
 ## StoClaw Tool Notes
 
+### 工作流内置 Tools（sto-workflow-tool）
+
+工作流的创建、搜索、执行、重新执行 **必须** 使用以下内置 OpenClaw Tools（由 `sto-workflow-tool` 插件注册），**禁止** 用 `exec`、`sai-cli` 或虚构 CLI 命令替代：
+
+| Tool | 用途 |
+|------|------|
+| `search_workflow_templates` | 按自然语言搜索工作流模板 |
+| `get_workflow_schema` | 获取模板启动参数 schema |
+| `create_workflow` | 创建工作流实例 |
+| `execute_workflow` | 启动已创建的 `workflowId`（含重新执行） |
+| `get_workflow_status` | 查询 runId 执行状态 |
+
+**正反例：**
+- 「帮我在桌面创建文件夹」→ **不要** 调用工作流 tool，用普通文件能力。
+- 「帮我创建结算对账工作流」→ `search_workflow_templates` → `get_workflow_schema` → …
+- 「重新执行」「再跑一遍」且会话有 `workflowId` → **必须** `execute_workflow`，禁止 sai-cli/exec。
+
 ### ⛔ 禁止的工具调用（安全红线）
 
 以下工具调用**绝对禁止**，系统已在 RPC/HTTP/CLI 三层实施黑名单拦截，Agent 不应尝试绕过：

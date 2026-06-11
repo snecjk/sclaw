@@ -22,12 +22,45 @@ function extToMimeType(ext: string): string {
     txt: 'text/plain',
     json: 'application/json',
     csv: 'text/csv',
-    tsv: 'text/plain',
+    tsv: 'text/tab-separated-values',
+    xml: 'application/xml',
+    yaml: 'text/plain',
+    yml: 'text/plain',
+    sql: 'text/plain',
+    py: 'text/plain',
+    js: 'text/plain',
+    ts: 'text/plain',
+    jsx: 'text/plain',
+    tsx: 'text/plain',
+    sh: 'text/plain',
+    bash: 'text/plain',
+    java: 'text/plain',
+    go: 'text/plain',
+    rs: 'text/plain',
+    css: 'text/plain',
   };
   return map[ext] || 'application/octet-stream';
 }
 
-/** Infer MIME type from artifact type hint and/or URL path extension. */
+function extFromPathOrUrl(pathOrUrl: string): string {
+  if (isHttpUrl(pathOrUrl)) {
+    try {
+      const pathname = new URL(pathOrUrl).pathname;
+      return pathname.split('/').pop()?.split('.').pop()?.toLowerCase() || '';
+    } catch {
+      // fall through to basename
+    }
+  }
+  return previewBasename(pathOrUrl).split('.').pop()?.toLowerCase() || '';
+}
+
+/** Infer MIME type from a local path or remote URL (extension-based). */
+export function inferMimeTypeFromPath(pathOrUrl: string): string {
+  const ext = extFromPathOrUrl(pathOrUrl);
+  return ext ? extToMimeType(ext) : 'application/octet-stream';
+}
+
+/** Infer MIME type from artifact type hint and/or URL/path extension. */
 export function inferMimeTypeFromUrl(url: string, typeHint?: string | null): string {
   const hint = typeHint?.toLowerCase().trim();
   if (hint === 'html' || hint === 'text/html') return 'text/html';
@@ -36,21 +69,11 @@ export function inferMimeTypeFromUrl(url: string, typeHint?: string | null): str
   if (hint === 'markdown' || hint === 'text/markdown') return 'text/markdown';
   if (hint === 'csv' || hint === 'text/csv') return 'text/csv';
   if (hint === 'output') {
-    // Backend may label HTML artifacts as "output" before OSS link is fixed.
     if (/\.html?(?:\?|$)/i.test(url)) return 'text/html';
     return 'text/html';
   }
 
-  try {
-    const pathname = new URL(url).pathname;
-    const fileName = pathname.split('/').pop() || '';
-    const ext = fileName.split('.').pop()?.toLowerCase() || '';
-    if (ext) return extToMimeType(ext);
-  } catch {
-    // ignore invalid URL
-  }
-
-  return 'text/html';
+  return inferMimeTypeFromPath(url);
 }
 
 export function isPreviewableRemoteUrl(url: string, typeHint?: string | null): boolean {

@@ -5,12 +5,15 @@
  */
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { ExternalLink, FileText, RefreshCw, Maximize, Minimize, Table, FileSpreadsheet, Presentation } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { hostApiFetch, getHostApiBase } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { isHttpUrl } from '@/lib/preview-url';
 // @ts-ignore — highlight.js v10 ships without bundled .d.ts
 import hljs from 'highlight.js';
+import 'highlight.js/styles/atom-one-dark.css';
 
 interface FilePreviewViewerProps {
   filePath: string;
@@ -453,27 +456,7 @@ export function FilePreviewViewer({
           );
         }
         if (textContent) {
-          const srcDoc = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;max-width:800px;margin:40px auto;padding:0 20px;color:#333;background:#fff}
-code{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:0.9em}
-pre{background:#f4f4f4;padding:16px;border-radius:6px;overflow-x:auto}
-</style>
-</head>
-<body>${textContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</body>
-</html>`;
-          return (
-            <iframe
-              key={filePath}
-              srcDoc={srcDoc}
-              title={fileName}
-              className={cn('h-full min-w-0 w-full border-0', className)}
-              sandbox="allow-scripts"
-            />
-          );
+          return <MarkdownPreviewPane content={textContent} className={className} />;
         }
       }
 
@@ -553,34 +536,7 @@ pre{background:#f4f4f4;padding:16px;border-radius:6px;overflow-x:auto}
           </div>
         );
       }
-      const srcDoc = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;max-width:800px;margin:40px auto;padding:0 20px;color:#333;background:#fff}
-h1,h2,h3,h4,h5,h6{margin-top:1.5em;margin-bottom:0.5em}
-code{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:0.9em}
-pre{background:#f4f4f4;padding:16px;border-radius:6px;overflow-x:auto}
-blockquote{border-left:4px solid #ddd;margin:0;padding-left:16px;color:#666}
-table{border-collapse:collapse;width:100%;margin:1em 0}
-th,td{border:1px solid #ddd;padding:8px;text-align:left}
-th{background:#f8f8f8}
-img{max-width:100%}
-</style>
-</head>
-<body>${(mdContent ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</body>
-</html>`;
-
-      return (
-        <iframe
-          key={filePath}
-          srcDoc={srcDoc}
-          title={fileName}
-          className={cn('h-full min-w-0 w-full border-0', className)}
-          sandbox="allow-scripts"
-        />
-      );
+      return <MarkdownPreviewPane content={mdContent ?? ''} className={className} />;
     }
 
     if (tableData && tableData.length > 0) {
@@ -657,19 +613,21 @@ img{max-width:100%}
 
       if (highlightedHtml) {
         return (
-          <div className={cn('h-full overflow-auto bg-[#1e1e1e] p-4', className)}>
-            <pre
-              className="text-sm font-mono whitespace-pre"
-              // eslint-disable-next-line react/no-danger
-              dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-            />
+          <div className={cn('file-preview-code h-full overflow-auto bg-[#1e1e1e] p-4', className)}>
+            <pre className="hljs !m-0 !bg-transparent text-sm font-mono whitespace-pre text-[#d4d4d4]">
+              <code
+                className="hljs !bg-transparent text-[#d4d4d4]"
+                // eslint-disable-next-line react/no-danger
+                dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+              />
+            </pre>
           </div>
         );
       }
 
       return (
-        <div className={cn('h-full overflow-auto bg-[#1e1e1e] text-[#d4d4d4] p-4', className)}>
-          <pre className="text-sm font-mono whitespace-pre">{textContent}</pre>
+        <div className={cn('file-preview-code h-full overflow-auto bg-[#1e1e1e] p-4', className)}>
+          <pre className="text-sm font-mono whitespace-pre text-[#d4d4d4]">{textContent}</pre>
         </div>
       );
     }
@@ -852,6 +810,40 @@ function PptxPreviewPanel({ buffer, className }: { buffer: Uint8Array; className
   }
 
   return <div ref={containerRef} className={cn('h-full w-full', className)} />;
+}
+
+function MarkdownPreviewPane({ content, className }: { content: string; className?: string }) {
+  return (
+    <div className={cn('h-full overflow-auto bg-white px-6 py-5 dark:bg-[#0d1117]', className)}>
+      <article className="prose prose-sm max-w-none text-foreground dark:prose-invert">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            code({ className: codeClassName, children, ...props }) {
+              const match = /language-(\w+)/.exec(codeClassName || '');
+              const isInline = !match && !codeClassName;
+              if (isInline) {
+                return (
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-[0.9em] font-mono" {...props}>
+                    {children}
+                  </code>
+                );
+              }
+              return (
+                <pre className="overflow-x-auto rounded-lg border border-border bg-[#282c34] p-4">
+                  <code className={cn('text-sm font-mono text-[#abb2bf]', codeClassName)} {...props}>
+                    {children}
+                  </code>
+                </pre>
+              );
+            },
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      </article>
+    </div>
+  );
 }
 
 function OpenExternalButton({ filePath }: { filePath: string }) {

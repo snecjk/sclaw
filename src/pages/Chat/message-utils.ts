@@ -614,11 +614,126 @@ function extToMimeType(ext: string): string {
 export const PREVIEWABLE_FILE_EXTS =
   'properties|swift|scala|bash|fish|html?|java|jsx|tsx|cpp|php|toml|conf|scss|less|zsh|yaml|json|sql|xml|csv|tsv|txt|log|ini|env|md|htm|py|go|rs|cs|rb|mm|bat|cmd|pdf|kt|css|yml|ts|js|sh|c|h|r|m';
 
-/** Remove fenced code blocks from text so paths inside them are not matched.
- *  Inline code (`path`) is preserved — it often contains actual file paths the user/AI wants to preview.
+/** Match a single line that is only a previewable file path (relative, absolute, or Windows). */
+export const PREVIEWABLE_PATH_LINE_REGEX = new RegExp(
+  `^(?:\\./(?:[^/\\n\\r]+/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|/(?:[^/\\n\\r]+/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\n\\r]+[\\\\/])*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS}))$`,
+  'i',
+);
+
+/** Strip list markers / emoji prefixes so `- 📁 /path` is recognized as a path line. */
+export function normalizePreviewPathLine(line: string): string {
+  return line
+    .trim()
+    .replace(/^[-*+]\s+/, '')
+    .replace(/^[^\s/\\.`[\]()]+\s+/, '') // emoji or short label prefix before path
+    .trim();
+}
+
+export function isPreviewablePathLine(line: string): boolean {
+  let trimmed = normalizePreviewPathLine(line);
+  if (!trimmed) return false;
+  // "链接：/Users/..." or "path: ./foo.md"
+  const colonIdx = Math.max(trimmed.lastIndexOf('：'), trimmed.lastIndexOf(':'));
+  if (colonIdx >= 0) {
+    const afterColon = trimmed.slice(colonIdx + 1).trim();
+    if (afterColon.startsWith('/') || afterColon.startsWith('./') || /^[A-Za-z]:[\\/]/.test(afterColon)) {
+      trimmed = afterColon;
+    }
+  }
+  if (trimmed.startsWith('file://')) {
+    return isPreviewablePathLine(trimmed.slice('file://'.length).replace(/^\/([A-Za-z]:)/, '$1'));
+  }
+  return PREVIEWABLE_PATH_LINE_REGEX.test(trimmed);
+}
+
+export function extractPreviewPathFromLine(line: string): string | null {
+  let trimmed = normalizePreviewPathLine(line);
+  if (!trimmed) return null;
+  const colonIdx = Math.max(trimmed.lastIndexOf('：'), trimmed.lastIndexOf(':'));
+  if (colonIdx >= 0) {
+    const afterColon = trimmed.slice(colonIdx + 1).trim();
+    if (afterColon.startsWith('/') || afterColon.startsWith('./') || /^[A-Za-z]:[\\/]/.test(afterColon)) {
+      trimmed = afterColon;
+    }
+  }
+  if (trimmed.startsWith('file://')) {
+    trimmed = trimmed.slice('file://'.length).replace(/^\/([A-Za-z]:)/, '$1');
+  }
+  return PREVIEWABLE_PATH_LINE_REGEX.test(trimmed) ? trimmed : null;
+}
+
+/** Markdown link for a local/remote previewable path. */
+export function previewMarkdownLinkForPath(filePath: string): string {
+  const path = filePath.trim();
+  const fileName = path.split('/').pop() || path;
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return `[${fileName}](${path})`;
+  }
+  return `[${fileName}](preview://${path})`;
+}
+
+/**
+ * Unwrap AI code blocks / inline code that contain only file paths into preview links.
+ * Models often wrap path lists in ``` fences or `backticks`, which blocks normal path detection.
  */
+export function unwrapPreviewablePathMarkdown(text: string): string {
+  // Fenced blocks: ``` optional-lang + newline + path lines + ```
+  text = text.replace(/```[^\n]*\n([\s\S]*?)```/g, (match, inner: string) => {
+    const lines = inner.split('\n').map((line) => line.trim()).filter(Boolean);
+    if (lines.length === 0 || !lines.every(isPreviewablePathLine)) return match;
+    return lines
+      .map((line) => {
+        const path = extractPreviewPathFromLine(line);
+        return path ? `- ${previewMarkdownLinkForPath(path)}` : line;
+      })
+      .join('\n');
+  });
+
+  // Inline `path` — models often wrap a single absolute path in backticks.
+  text = text.replace(/`([^`\n]+)`/g, (match, inner: string) => {
+    const path = extractPreviewPathFromLine(inner);
+    if (!path) return match;
+    return previewMarkdownLinkForPath(path);
+  });
+
+  return linkifyPreviewPathLines(text);
+}
+
+/** Turn plain path lines (lists, emoji prefixes, "链接：/path") into preview markdown links. */
+export function linkifyPreviewPathLines(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => {
+      if (!isPreviewablePathLine(line)) return line;
+      const path = extractPreviewPathFromLine(line);
+      return path ? previewMarkdownLinkForPath(path) : line;
+    })
+    .join('\n');
+}
+
+/** Remove fenced code blocks from text so paths inside them are not matched. */
 function stripCodeBlocks(text: string): string {
   return text.replace(/```[\s\S]*?```/g, '');
+}
+
+function extractPathsFromPathOnlyCodeBlocks(text: string): string[] {
+  const paths: string[] = [];
+  text.replace(/```[^\n]*\n([\s\S]*?)```/g, (_match, inner: string) => {
+    const lines = inner.split('\n').map((line) => line.trim()).filter(Boolean);
+    if (lines.length > 0 && lines.every(isPreviewablePathLine)) {
+      for (const line of lines) {
+        const path = extractPreviewPathFromLine(line);
+        if (path) paths.push(path);
+      }
+    }
+    return _match;
+  });
+  text.replace(/`([^`\n]+)`/g, (_match, inner: string) => {
+    const path = extractPreviewPathFromLine(inner);
+    if (path) paths.push(path);
+    return _match;
+  });
+  return paths;
 }
 
 /**
@@ -632,6 +747,30 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
   const cleanText = stripCodeBlocks(text);
   const results: Array<{ filePath: string; fileName: string; mimeType: string }> = [];
   const seen = new Set<string>();
+
+  for (const path of extractPathsFromPathOnlyCodeBlocks(text)) {
+    const fileName = path.split('/').pop() || '';
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    if (fileName && ext) {
+      const mimeType = extToMimeType(ext);
+      if (!mimeType.startsWith('image/') && !seen.has(path)) {
+        seen.add(path);
+        results.push({ filePath: path, fileName, mimeType });
+      }
+    }
+  }
+
+  for (const line of text.split('\n')) {
+    const path = extractPreviewPathFromLine(line);
+    if (!path || seen.has(path)) continue;
+    const fileName = path.split('/').pop() || '';
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    if (!ext) continue;
+    const mimeType = extToMimeType(ext);
+    if (mimeType.startsWith('image/')) continue;
+    seen.add(path);
+    results.push({ filePath: path, fileName, mimeType });
+  }
 
   function addIfNotImage(filePath: string, fileName: string, ext: string) {
     const mimeType = extToMimeType(ext);

@@ -1360,6 +1360,7 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
       'sto-dynamic-agent-route',
       'sto-agent-telemetry',
       'sto-scheduled-task-tool',
+      'sto-workflow-tool',
       'sto-skill-call-monitor',
       DINGTALK_SEND_GUARD_PLUGIN_ID,
     ]) {
@@ -1399,6 +1400,14 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
     if (entries['sto-scheduled-task-tool']) {
       delete entries['sto-scheduled-task-tool'];
     }
+    entries['sto-workflow-tool'] = {
+      enabled: true,
+      config: {
+        baseUrl: stoBaseUrl,
+        ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
+        timeoutMs: 30000,
+      },
+    };
     entries['sto-skill-call-monitor'] = {
       enabled: true,
       config: {

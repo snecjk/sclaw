@@ -22,6 +22,18 @@
 - **P1（建议）**：指数退避、停滞检测、错误消息映射、并发执行限制
 - **P2（可选）**：tool_result 注入、系统通知、状态持久化、ARIA/网络检测
 
+### 架构演进（2026-06）
+
+一期实现以 **Renderer 直调 `workflow-api.ts`** 为主（见 `src/hooks/use-workflow-send.ts`、`src/hooks/dispatch-chat-send.ts`）。  
+目标架构升级为 **STO 内置 OpenClaw Plugin Tools**（模型调 tool → 插件调 HTTP → 前端 Handler 跟 UI），与 sai-cli / MCP 无关。
+
+| 文档 | 说明 |
+|------|------|
+| [plans/sto-builtin-tools-platform.md](../plans/sto-builtin-tools-platform.md) | 通用内置 Tools 平台（契约、迁移、现有代码图谱） |
+| [plans/workflow-tool-architecture.md](../plans/workflow-tool-architecture.md) | 工作流域 6 个 tool 与迁移清单 |
+
+迁移期：**本文档描述的模块继续可用**；新能力优先走插件 tool，逐步收窄前端意图拦截。
+
 ---
 
 ## 二、整体架构
@@ -1015,69 +1027,53 @@ qianwen3.7 的《工作流执行状态推送技术方案》设计了 **Main Proc
 
 ### 14.2 整体流程
 
+> **v2.0（已废弃）**：`detectWorkflowIntent()` → `resolveTemplateFromText()` 前端抢先路由已移除（2026-06）。  
+> 以下 **v3.0** 为当前生产路径。
+
 ```
-用户输入自然语言 / 选择 / 命令模板
+用户输入
     │
-    ▼
-detectWorkflowIntent() → resolveTemplateFromText()
+    ├── / 工作流选择器（显式 templateId）
+    │       ▼
+    │   sendWithWorkflow() → workflow-context 注入 → Gateway → parameter_form
     │
-    ├── 高置信度（matchScore >= 0.85）
-    │       │
-    │       ▼
-    │   sendWithWorkflow() Phase 1
-    │       │
-    │       ▼
-    │   获取 startup-schema + 构建 workflowContext
-    │   设置 chatStore.pendingWorkflow
-    │   发送带隐藏上下文的 user message 给 Gateway
-    │       │
-    │       ▼
-    │   AI 生成自然语言参数引导
-    │       │
-    │       ▼
-    │   handleChatEvent(final) 检测到 pendingWorkflow
-    │   自动在 assistant message 中追加 parameter_form
-    │       │
-    │       ▼
-    │   用户填写表单 / 自然语言回复补充参数
-    │       │
-    │       ▼
-    │   createAndStartWorkflowDirect() Phase 2
-    │   创建 → 启动 → 插入 workflow_card → 启动 Tracker
-    │
-    ├── 中置信度（0.60 <= matchScore < 0.85）
-    │       │
-    │       ▼
-    │   向用户展示 Top 3 匹配模板供手动选择
-    │
-    └── 低置信度 / 无匹配
+    └── 自然语言（创建 / 搜索 / 重执行 / 普通任务）
+            ▼
+        dispatchChatSend → sendMessage(Gateway)
             │
             ▼
-        走普通聊天流程
-
-WorkflowExecutionTracker 轮询
-    │
-    ▼
-completed / failed 状态
-    │
-    ▼
-useWorkflowCompletion 触发
-    │
-    ▼
-构造 [workflow:complete] 结构化 user message
-发送给 Gateway → AI 生成结果总结
+        模型 + sto-workflow-tool（Skill 约束，见 TOOLS.stoclaw.md）
+            │
+            ├── search_workflow_templates
+            ├── get_workflow_schema → toolresult workflow_schema_ready → pendingWorkflow
+            ├── create_workflow     → toolresult workflow_created → workflow-memory
+            └── execute_workflow    → toolresult workflow_execution_started
+                                        → workflow_card + Tracker
+            │
+            ▼
+        parameter_form 提交（或 / 入口）→ createAndStartWorkflowDirect（前端 API）
+            │
+            ▼
+        WorkflowExecutionTracker 轮询（2s）
+            │
+            ▼
+        completed / failed → workflow-completion-delivery → AI 总结
 ```
 
 ### 14.3 关键实现文件
 
 | 文件 | 说明 |
 |------|------|
-| `src/hooks/use-workflow-intent.ts` | 自然语言意图识别：关键词检测、模板搜索、置信度分级 |
-| `src/hooks/use-workflow-send.ts` | 两阶段工作流发送：Phase 1 AI 引导，Phase 2 创建执行 |
-| `src/hooks/use-workflow-completion.ts` | 监听 workflow 完成，触发 AI 结果总结 |
-| `src/lib/workflow-context.ts` | 构建并注入隐藏 workflow 上下文到 user message |
-| `src/stores/chat.ts` | sendMessage 支持 workflowContext；handleChatEvent 自动追加 parameter_form |
-| `src/stores/workflow-memory.ts` | 持久化 workflow 元数据，支持 30 天 TTL 和跨会话恢复 |
+| `sto-plugin/sto-workflow-tool/` | 内置 OpenClaw tools（search / schema / create / execute / status） |
+| `src/hooks/use-builtin-tool-listener.ts` | 扫描 `toolresult`，分发 workflow 信封 → UI / memory |
+| `src/hooks/dispatch-chat-send.ts` | `/` + 表单确认 + 普通 sendMessage（**无 NL 拦截**） |
+| `src/hooks/use-workflow-send.ts` | `sendWithWorkflow`、`createAndStartWorkflowDirect` |
+| `src/hooks/use-workflow-intent.ts` | 表单取消/确认、重执行 **session hint**（非路由） |
+| `src/lib/workflow-session-hint.ts` | 重执行意图时向 Gateway 注入 workflowId 摘要 |
+| `src/lib/workflow-run-started.ts` | 启动后卡片 + Tracker + memory（tool 与表单共用） |
+| `src/lib/workflow-context.ts` | `/` 入口隐藏 schema 上下文 |
+| `src/stores/chat.ts` | `sendMessage`、`maybeAppendWorkflowParameterForm` |
+| `src/stores/workflow-memory.ts` | 30 天 TTL 长记忆 |
 
 ### 14.4 隐藏上下文注入
 
@@ -1139,9 +1135,29 @@ interface WorkflowMemoryRecord {
 }
 ```
 
-当用户输入"执行刚才的"、"再跑一遍"等复跑意图时，`tryResolvePendingWorkflow()` 从 memory 恢复最近记录并直接调用 `startExistingWorkflow()`。超过 30 天 TTL 的记录会提示用户重新创建。
+当用户输入「再跑一遍工作流」等复跑意图时：
+
+1. `sendMessage` 经 `workflow-session-hint` 向 Gateway 注入当前会话 `workflowId` 摘要；
+2. 模型应调用 `execute_workflow`（`sto-workflow-tool`）；
+3. `use-builtin-tool-listener` 收到 `workflow_execution_started` 后调用 `applyWorkflowRunStarted()`。
+
+**不再**由 `tryResolvePendingWorkflow` 从 memory 抢先 `startExistingWorkflow`。超过 30 天 TTL 的记录由模型引导用户重新创建。
 
 ### 14.8 取消与并发控制
 
-- 用户在参数收集阶段发送"取消"、"不执行了"等，`isWorkflowCancelIntent()` 返回 true，`chat.ts` 清除 `pendingWorkflow` 并降级为普通聊天
+- 用户在参数收集阶段发送"取消"、"不执行了"等，`isWorkflowCancelIntent()` 返回 true，`tryResolvePendingWorkflow` 清除 `pendingWorkflow` 并降级为普通聊天
 - 工作流创建/启动前统一检查 `canStartWorkflow()`，当前会话最多允许 5 个 pending/running 状态的工作流
+
+### 14.9 内置 Tools 迁移说明（v3.0，2026-06）
+
+| 变更 | 说明 |
+|------|------|
+| 移除 `tryStartRememberedWorkflowSend` | 重执行改模型 `execute_workflow` |
+| 移除 `tryNaturalLanguageWorkflowSend` | 创建/搜索改模型 `search_workflow_templates` 等 |
+| 移除 `pendingTemplateSelection` | 不再本地弹静态模板列表 |
+| 移除 NL 关键词路由 | `use-workflow-intent.ts` 仅保留表单态与 session hint |
+| 新增 `sto-workflow-tool` + `use-builtin-tool-listener` | 模型调 API，前端跟 UI |
+| 保留 `/` → `sendWithWorkflow` | 显式 UI 快捷入口不变 |
+| 保留 `parameter_form` + `createAndStartWorkflowDirect` | 表单提交仍前端直调 API |
+
+详细 PR 记录见 `plans/workflow-nl-to-tool-migration.md`、`plans/sto-builtin-tools-platform.md` §7。

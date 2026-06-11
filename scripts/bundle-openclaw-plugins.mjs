@@ -23,6 +23,8 @@ const ROOT = path.resolve(__dirname, '..');
 const OUTPUT_ROOT = path.join(ROOT, 'build', 'openclaw-plugins');
 const NODE_MODULES = path.join(ROOT, 'node_modules');
 const STO_PLUGIN_ROOT = path.join(ROOT, 'sto-plugin');
+/** Shared library copied beside sto-workflow-tool for ../sto-toolkit imports at runtime. */
+const STO_TOOLKIT_DIR = 'sto-toolkit';
 const CACHE_DIR = path.join(ROOT, '.download-cache', 'openclaw-plugins');
 const CACHE_MANIFEST = path.join(CACHE_DIR, 'manifest.json');
 
@@ -100,6 +102,7 @@ const PLUGINS = [
   { type: 'local', localDir: 'sto-scheduled-task-tool', pluginId: 'sto-scheduled-task-tool' },
   { type: 'local', localDir: 'sto-skill-call-monitor', pluginId: 'sto-skill-call-monitor' },
   { type: 'local', localDir: 'sto-dingtalk-send-guard', pluginId: 'sto-dingtalk-send-guard' },
+  { type: 'local', localDir: 'sto-workflow-tool', pluginId: 'sto-workflow-tool' },
 ];
 
 // Filter for excluding test files and unnecessary dirs when copying local plugins.
@@ -155,6 +158,12 @@ function calculatePluginsHash() {
           hashLocalPluginDir(pluginDir, hash);
         }
       }
+    }
+
+    const toolkitDir = path.join(STO_PLUGIN_ROOT, STO_TOOLKIT_DIR);
+    if (fs.existsSync(toolkitDir)) {
+      hash.update(`shared:${STO_TOOLKIT_DIR}:`);
+      hashLocalPluginDir(toolkitDir, hash);
     }
     
     return hash.digest('hex').substring(0, 16);
@@ -393,6 +402,28 @@ function bundleOneLocalPlugin({ localDir, pluginId }) {
 }
 
 /**
+ * Copy sto-toolkit shared SDK beside bundled plugins (sibling of sto-workflow-tool).
+ */
+function bundleStoToolkitLibrary() {
+  const sourceDir = path.join(STO_PLUGIN_ROOT, STO_TOOLKIT_DIR);
+  if (!fs.existsSync(path.join(sourceDir, 'index.ts'))) {
+    echo`   ⚠️  ${STO_TOOLKIT_DIR} not found at ${sourceDir}, skipping`;
+    return;
+  }
+
+  const outputDir = path.join(OUTPUT_ROOT, STO_TOOLKIT_DIR);
+  echo`📦 Bundling shared library ${STO_TOOLKIT_DIR} -> ${outputDir}`;
+
+  if (fs.existsSync(outputDir)) {
+    fs.rmSync(outputDir, { recursive: true, force: true });
+  }
+  fs.mkdirSync(outputDir, { recursive: true });
+  fs.cpSync(sourceDir, outputDir, { recursive: true, filter: bundleCopyFilter });
+
+  echo`   ✅ ${STO_TOOLKIT_DIR}: shared library bundled`;
+}
+
+/**
  * Patch plugin entry JS files so the exported `id` matches openclaw.plugin.json.
  * Some plugins (e.g. wecom) ship with a hardcoded ID in their compiled output
  * that differs from the manifest, causing a Gateway "plugin id mismatch" error.
@@ -470,6 +501,8 @@ for (const plugin of PLUGINS) {
     bundleOnePlugin(plugin);
   }
 }
+
+bundleStoToolkitLibrary();
 
 // Save to cache for future builds
 if (cacheKey) {

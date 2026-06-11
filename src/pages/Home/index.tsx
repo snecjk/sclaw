@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { HomeAgentHubSurface } from './HomeAgentHubSurface';
@@ -14,7 +14,7 @@ import { useGatewayStore } from '@/stores/gateway';
 import { useScheduledTasksStore } from '@/stores/scheduledTasks';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
-import { useScheduledTaskToolListener } from '@/hooks/use-scheduled-task-tool-listener';
+import { useBuiltinToolListener } from '@/hooks/use-builtin-tool-listener';
 import { TaskCreateModal } from '@/pages/ScheduledTasks/components/TaskCreateModal';
 import type { TaskCreateInputWithRun } from '@/pages/ScheduledTasks/components/TaskCreateModal';
 
@@ -31,11 +31,19 @@ export function Home() {
   const createTask = useScheduledTasksStore((s) => s.createTask);
   const fetchTasks = useScheduledTasksStore((s) => s.fetchTasks);
 
-  const {
-    nlModalOpen,
-    nlInitialValues,
-    closeNlModal,
-  } = useScheduledTaskToolListener();
+  const [nlModalOpen, setNlModalOpen] = useState(false);
+  const [nlInitialValues, setNlInitialValues] = useState<import('@/hooks/use-scheduled-task-tool-listener').NlExtractedValues>({});
+  const closeNlModal = useCallback(() => {
+    setNlModalOpen(false);
+    setNlInitialValues({});
+  }, []);
+
+  useBuiltinToolListener({
+    onScheduledTaskConfirmation: (values) => {
+      setNlInitialValues(values);
+      setNlModalOpen(true);
+    },
+  });
 
   const handleNlSave = useCallback(
     async (input: TaskCreateInputWithRun) => {
