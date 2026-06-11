@@ -2,8 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Loader2, ChevronDown, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
+import { DingTalkRecipientField } from '@/components/dingtalk/DingTalkRecipientField';
 import { cn } from '@/lib/utils';
 import type { CronJob, CronJobCreateInput } from '@/types/cron';
+import type { DingTalkMention } from '@/types/dingtalk-mention';
 
 export type TaskCreateInputWithRun = CronJobCreateInput;
 
@@ -75,6 +77,7 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
   const [instructions, setInstructions] = useState('');
   const [schedule, setSchedule] = useState<ScheduleValue>(defaultScheduleValue());
   const [saving, setSaving] = useState(false);
+  const [recipients, setRecipients] = useState<DingTalkMention[]>([]);
   const [errors, setErrors] = useState<{ name?: string; instructions?: string }>({});
 
   // 关联工作流下拉
@@ -113,6 +116,7 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
         setInstructions('');
         setSchedule(defaultScheduleValue());
       }
+      setRecipients([]);
       setErrors({});
       setSaving(false);
       /* eslint-enable react-hooks/set-state-in-effect */
@@ -135,6 +139,7 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
         message: instructions.trim(),
         schedule: scheduleValueToCron(schedule),
         enabled: true,
+        dingTalkMentions: recipients.length > 0 ? recipients : undefined,
       });
       onClose();
     } catch (err) {
@@ -259,7 +264,7 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
             <textarea
               value={instructions}
               onChange={(e) => { setInstructions(e.target.value); if (errors.instructions) setErrors(p => ({ ...p, instructions: undefined })); }}
-              rows={10}
+              rows={7}
               placeholder="让 STO Claw 帮你做什么…"
               className={cn(
                 "w-full px-3.5 py-2.5 text-sm rounded-[10px] border bg-background placeholder:text-muted-foreground focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] resize-none transition-colors leading-relaxed",
@@ -275,6 +280,14 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
               计划时间
             </span>
             <SchedulePicker value={schedule} onChange={setSchedule} />
+          </div>
+
+          {/* Recipients */}
+          <div className="flex flex-col gap-2">
+            <label className="block text-sm font-semibold text-foreground">
+              发送对象
+            </label>
+            <DingTalkRecipientField value={recipients} onChange={setRecipients} />
           </div>
         </div>
 

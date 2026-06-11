@@ -70,8 +70,8 @@ const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '
 const MONTH_DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
 
 // 设计稿颜色 token
-const ORANGE = '#c2410c';
-const ORANGE_SOFT = '#fff7ed';
+const ORANGE = '#ff8c00';
+const ORANGE_SOFT = '#fff3e0';
 
 interface SchedulePickerProps {
   value: ScheduleValue;
