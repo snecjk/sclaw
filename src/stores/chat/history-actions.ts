@@ -234,7 +234,7 @@ export function createHistoryActions(
         if (fallbackMessages.length > 0) {
           applyLoadedMessages(fallbackMessages, null);
         } else {
-          set({ messages: [], loading: false });
+          set({ messages: [], loading: false, error: String(err) });
         }
       }
     },

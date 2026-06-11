@@ -30,6 +30,9 @@ export async function rememberSessionEngineType(
   engineType: AgentEngineType,
 ): Promise<void> {
   const existing = await getEngineSessionRegistryEntry(sessionKey);
+  if (existing?.engineType === engineType) {
+    return;
+  }
   const engineChanged = existing?.engineType != null && existing.engineType !== engineType;
   await upsertEngineSessionRegistryEntry({
     sessionKey,

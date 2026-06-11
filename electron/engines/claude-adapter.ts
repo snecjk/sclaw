@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { syncClaudeSkillsForAgent } from '../services/claude-skill-bridge';
-import { getProviderAccount } from '../services/providers/provider-store';
+import { getDefaultProviderAccountId, getProviderAccount } from '../services/providers/provider-store';
 import { StoModelSyncService } from '../services/providers/sto-model-sync';
 import { getAgentPreferredModel, getAgentWorkspacePath } from '../utils/agent-config';
 import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
@@ -79,6 +79,34 @@ async function buildClaudeEnvForAccount(accountId?: string): Promise<NodeJS.Proc
   logger.info(`[claude-env] Provider "${account.vendorId}": base_url=${account.baseUrl ?? '(default)'}`);
 
   return base;
+}
+
+async function resolveClaudeLaunchSelection(
+  agentId: string,
+  existing?: {
+    model?: string;
+    accountId?: string;
+  } | null,
+): Promise<{ model?: string; accountId?: string }> {
+  let model = existing?.model;
+  let accountId = existing?.accountId;
+
+  if (!model || !accountId) {
+    const preferredModel = await getAgentPreferredModel(agentId);
+    model = model ?? preferredModel.model;
+    accountId = accountId ?? preferredModel.accountId;
+  }
+
+  if (!accountId) {
+    accountId = await getDefaultProviderAccountId();
+  }
+
+  if (!model && accountId) {
+    const account = await getProviderAccount(accountId);
+    model = account?.model;
+  }
+
+  return { model, accountId };
 }
 
 /**
@@ -435,8 +463,8 @@ async function ensureClaudeRegistryEntry(sessionKey: string) {
 
   const agentId = extractAgentId(sessionKey);
   const cwd = await getAgentWorkspacePath(agentId);
-  const preferredModel = await getAgentPreferredModel(agentId);
   if (!cwd) return existing;
+  const launchSelection = await resolveClaudeLaunchSelection(agentId, existing);
 
   const nextEntry = {
     sessionKey,
@@ -446,8 +474,8 @@ async function ensureClaudeRegistryEntry(sessionKey: string) {
     engineType: 'claude' as const,
     updatedAt: existing?.updatedAt ?? Date.now(),
     title: existing?.title,
-    model: existing?.model ?? preferredModel.model,
-    accountId: existing?.accountId ?? preferredModel.accountId,
+    model: launchSelection.model,
+    accountId: launchSelection.accountId,
   };
   await upsertEngineSessionRegistryEntry(nextEntry);
   return nextEntry;
@@ -470,6 +498,7 @@ async function startClaudeQuery(
     }
 
     const agentId = extractAgentId(sessionKey);
+    const launchSelection = await resolveClaudeLaunchSelection(agentId, existing);
     const syncResult = await syncClaudeSkillsForAgent(agentId, cwd).catch((error) => {
       logger.warn('Failed to sync Claude skill bridge:', error);
       return null;
@@ -490,24 +519,24 @@ async function startClaudeQuery(
       options: existing?.sessionId
         ? {
           cwd,
-          env: await buildClaudeEnvForAccount(existing?.accountId),
+          env: await buildClaudeEnvForAccount(launchSelection.accountId),
           resume: existing.sessionId,
           permissionMode: 'bypassPermissions',
           allowDangerouslySkipPermissions: true,
           settingSources: ['user'],
           skills: 'all',
-          settings: existing?.model ? { model: existing.model } : undefined,
+          settings: launchSelection.model ? { model: launchSelection.model } : undefined,
           additionalDirectories: options?.additionalDirectories,
         }
         : {
           cwd,
-          env: await buildClaudeEnvForAccount(existing?.accountId),
+          env: await buildClaudeEnvForAccount(launchSelection.accountId),
           sessionId,
           permissionMode: 'bypassPermissions',
           allowDangerouslySkipPermissions: true,
           settingSources: ['user'],
           skills: 'all',
-          settings: existing?.model ? { model: existing.model } : undefined,
+          settings: launchSelection.model ? { model: launchSelection.model } : undefined,
           additionalDirectories: options?.additionalDirectories,
         },
     });
@@ -526,8 +555,8 @@ async function startClaudeQuery(
       agentId: extractAgentId(sessionKey),
       engineType: 'claude',
       updatedAt: Date.now(),
-      model: existing?.model,
-      accountId: existing?.accountId,
+      model: launchSelection.model,
+      accountId: launchSelection.accountId,
     });
 
     void consumeClaudeQuery(sessionKey, sessionId, cwd, query as AsyncIterable<Record<string, unknown>> & { close(): void }).catch((error) => {
@@ -540,8 +569,8 @@ async function startClaudeQuery(
         agentId: extractAgentId(sessionKey),
         engineType: 'claude',
         updatedAt: Date.now(),
-        model: existing?.model,
-        accountId: existing?.accountId,
+        model: launchSelection.model,
+        accountId: launchSelection.accountId,
       }).catch((registryError) => {
         logger.warn('Failed to persist Claude session metadata after query error:', registryError);
       });

@@ -20,8 +20,22 @@ interface EngineSessionRegistryDocument {
 }
 
 const ENGINE_SESSION_REGISTRY_FILE = join(getClawXConfigDir(), 'engine-sessions.json');
+let registryMutationQueue: Promise<void> = Promise.resolve();
 
-async function readRegistryDocument(): Promise<EngineSessionRegistryDocument> {
+async function waitForRegistryMutations(): Promise<void> {
+  await registryMutationQueue.catch(() => {});
+}
+
+async function runRegistryMutation<T>(mutation: (doc: EngineSessionRegistryDocument) => Promise<T>): Promise<T> {
+  const next = registryMutationQueue.then(async () => {
+    const doc = await readRegistryDocumentFromDisk();
+    return mutation(doc);
+  });
+  registryMutationQueue = next.then(() => undefined, () => undefined);
+  return next;
+}
+
+async function readRegistryDocumentFromDisk(): Promise<EngineSessionRegistryDocument> {
   try {
     const raw = await readFile(ENGINE_SESSION_REGISTRY_FILE, 'utf8');
     return JSON.parse(raw) as EngineSessionRegistryDocument;
@@ -36,7 +50,8 @@ async function writeRegistryDocument(doc: EngineSessionRegistryDocument): Promis
 }
 
 export async function listEngineSessionRegistryEntries(engineType?: AgentEngineType): Promise<EngineSessionRegistryEntry[]> {
-  const doc = await readRegistryDocument();
+  await waitForRegistryMutations();
+  const doc = await readRegistryDocumentFromDisk();
   const entries = Array.isArray(doc.entries) ? doc.entries : [];
   return engineType ? entries.filter((entry) => entry.engineType === engineType) : entries;
 }
@@ -47,23 +62,25 @@ export async function getEngineSessionRegistryEntry(sessionKey: string): Promise
 }
 
 export async function upsertEngineSessionRegistryEntry(entry: EngineSessionRegistryEntry): Promise<void> {
-  const doc = await readRegistryDocument();
-  const entries = Array.isArray(doc.entries) ? [...doc.entries] : [];
-  const index = entries.findIndex((item) => item.sessionKey === entry.sessionKey);
-  if (index >= 0) {
-    entries[index] = { ...entries[index], ...entry };
-  } else {
-    entries.push(entry);
-  }
-  await writeRegistryDocument({ entries });
+  await runRegistryMutation(async (doc) => {
+    const entries = Array.isArray(doc.entries) ? [...doc.entries] : [];
+    const index = entries.findIndex((item) => item.sessionKey === entry.sessionKey);
+    if (index >= 0) {
+      entries[index] = { ...entries[index], ...entry };
+    } else {
+      entries.push(entry);
+    }
+    await writeRegistryDocument({ entries });
+  });
 }
 
 export async function deleteEngineSessionRegistryEntry(sessionKey: string): Promise<EngineSessionRegistryEntry | null> {
-  const doc = await readRegistryDocument();
-  const entries = Array.isArray(doc.entries) ? [...doc.entries] : [];
-  const index = entries.findIndex((item) => item.sessionKey === sessionKey);
-  if (index < 0) return null;
-  const [removed] = entries.splice(index, 1);
-  await writeRegistryDocument({ entries });
-  return removed ?? null;
+  return runRegistryMutation(async (doc) => {
+    const entries = Array.isArray(doc.entries) ? [...doc.entries] : [];
+    const index = entries.findIndex((item) => item.sessionKey === sessionKey);
+    if (index < 0) return null;
+    const [removed] = entries.splice(index, 1);
+    await writeRegistryDocument({ entries });
+    return removed ?? null;
+  });
 }
