@@ -62,6 +62,31 @@ async function packDirectoryToAsar(sourceDir, asarPath, label) {
   return true;
 }
 
+function getClaudeBinaryFileName(platform) {
+  return platform === 'win32' ? 'claude.exe' : 'claude';
+}
+
+function getClaudeOptionalPackageName(platform, arch) {
+  return `@anthropic-ai/claude-agent-sdk-${platform}-${arch}`;
+}
+
+function validateBundledClaudeSdk(resourcesDir, platform, arch) {
+  const packageName = getClaudeOptionalPackageName(platform, arch);
+  const binaryName = getClaudeBinaryFileName(platform);
+  const unpackedRoot = join(resourcesDir, 'app.asar.unpacked');
+  const candidate = join(unpackedRoot, 'node_modules', ...packageName.split('/'), binaryName);
+
+  if (!existsSync(candidate)) {
+    throw new Error(
+      `[after-pack] Claude SDK validation failed — missing unpacked binary for ${platform}/${arch}: ${candidate}\n`
+      + `Ensure electron-builder asarUnpack includes node_modules/@anthropic-ai/claude-agent-sdk-*/** `
+      + `and the target platform optional dependency is installed before packaging.`,
+    );
+  }
+
+  console.log(`[after-pack] ✅ Claude SDK binary present: ${candidate}`);
+}
+
 function normWin(p) {
   if (process.platform !== 'win32') return p;
   if (p.startsWith('\\\\?\\')) return p;
@@ -1062,4 +1087,6 @@ exports.default = async function afterPack(context) {
   } else if (existsSync(pluginsDestRoot)) {
     rmSync(pluginsDestRoot, { recursive: true, force: true });
   }
+
+  validateBundledClaudeSdk(resourcesDir, platform, arch);
 };
