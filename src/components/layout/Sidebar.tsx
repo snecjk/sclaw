@@ -327,6 +327,7 @@ function SidebarScheduledTaskGroup({
   const [open, setOpen] = useState(true);
   const { switchSession, currentSessionKey } = useChatStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation(['common', 'tasks']);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
 
@@ -805,7 +806,7 @@ export function Sidebar() {
         <div className={cn('flex flex-col gap-1', sidebarCollapsed && 'mt-2')}>
 {primaryNav.map((item) => {
   // 当有选中非默认会话时，首页不高亮，避免与会话列表项同时高亮
-  const shouldDimHome = isOnHome && currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY;
+  const shouldDimHome = currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY;
   const homeIsActiveOverride = item.to === '/' && shouldDimHome ? false : undefined;
   
   // 点击首页时，切换到默认会话并清空消息，让首页显示初始内容
