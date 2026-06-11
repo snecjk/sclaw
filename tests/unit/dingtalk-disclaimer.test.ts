@@ -23,7 +23,7 @@ describe('ensureDingTalkAgentSendDisclaimerFormat', () => {
   it('inserts divider when footer exists without --- (scheduled task case)', () => {
     const bodyOnlyFooter = `### 任务结果\n\n- 条目一\n\n${DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER}`;
     const result = ensureDingTalkAgentSendDisclaimerFormat(bodyOnlyFooter);
-    expect(result).toMatch(/条目一\n\n---\n\n<font color="#999999">/);
+    expect(result).toMatch(/条目一\n\n---\n\n<font color='#999999'>/);
     expect(hasDingTalkDisclaimerDivider(result)).toBe(true);
   });
 
@@ -40,6 +40,34 @@ describe('normalizeDwsChatMessageSendText', () => {
     const fixed = fixDwsChatMessageSendShellScript(script);
     expect(fixed).toContain("---");
     expect(fixed).toMatch(/\$'[\s\S]*---[\s\S]*STO Claw 代为发送/);
+  });
+
+  it('dedupes broken footer and keeps single disclaimer line', () => {
+    const broken = [
+      '请查看图片：https://example.com',
+      '',
+      '---',
+      '',
+      '本消息由 STO Claw 代为发送，非本人实时回复。',
+      '',
+      '<font color=',
+      "#999999>本消息由 STO Claw 代为发送，非本人实时回复。",
+    ].join('\n');
+    const result = ensureDingTalkAgentSendDisclaimerFormat(broken);
+    expect(result).toBe(
+      `请查看图片：https://example.com\n\n---\n\n${DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER}`,
+    );
+    expect((result.match(/STO Claw 代为发送/g) || []).length).toBe(1);
+  });
+
+  it('fixes double-quoted shell --text with embedded HTML quotes', () => {
+    const body = `请查收图片\n\n---\n\n<font color="#999999">本消息由 STO Claw 代为发送，非本人实时回复。</font>`;
+    const script =
+      `dws chat message send --user uid-1 --title "消息" --text "${body.replace(/\n/g, '\\n')}" --format json`;
+    const fixed = fixDwsChatMessageSendShellScript(script);
+    expect(fixed).toContain("$'");
+    expect(fixed).not.toContain('color="#999999"');
+    expect(fixed).toMatch(/---[\s\S]*STO Claw 代为发送/);
   });
 
   it('fixes argv missing disclaimer divider', () => {

@@ -3,7 +3,8 @@
  * Manages workflow template list, selection, and execution constraints.
  */
 import { create } from 'zustand';
-import { listWorkflowTemplates, searchWorkflowTemplates } from '@/lib/workflow-api';
+import { listWorkflowTemplates, getWorkflowStoToken, searchWorkflowTemplates } from '@/lib/workflow-api';
+import { useAuthStore } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import type { WorkflowTemplateSearchItem } from '@/types/workflow';
 
@@ -67,6 +68,10 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
     const trimmed = query.trim();
     const useCatalog = options.catalog ?? !trimmed;
 
+    if (!getWorkflowStoToken()) {
+      return;
+    }
+
     if (loadInFlight && !options.force) {
       await loadInFlight;
       return;
@@ -88,8 +93,11 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
         set({ templates, loading: false, lastFetchedAt: Date.now() });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        set({ error: message, loading: false });
-        console.error('[WorkflowsStore] loadTemplates failed:', message);
+        const isAuthError = message.includes('401') || message.includes('AUTH_INVALID');
+        set({ error: isAuthError ? null : message, loading: false });
+        if (!isAuthError) {
+          console.error('[WorkflowsStore] loadTemplates failed:', message);
+        }
       }
     })();
 
@@ -100,6 +108,10 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
   },
 
   prefetchTemplates: async () => {
+    if (!useAuthStore.getState().isAuthenticated || !getWorkflowStoToken()) {
+      return;
+    }
+
     const { templates, lastFetchedAt } = get();
     if (
       templates.length > 0 &&

@@ -22,6 +22,7 @@ import { DingTalkMentionPopover } from '@/components/dingtalk/DingTalkMentionPop
 import { WorkflowPicker } from '@/components/workflow/WorkflowPicker';
 
 import { useDingTalkMention } from '@/hooks/useDingTalkMention';
+import { useAuthStore } from '@/stores/auth';
 import { useWorkflowsStore } from '@/stores/workflows';
 import type { ActiveMentionTrigger, MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention, MentionSearchItem } from '@/types/dingtalk-mention';
@@ -63,6 +64,8 @@ interface ChatInputProps {
   variant?: 'default' | 'embedded';
   /** One-time seed into the textarea (e.g. task subitem default prompt). */
   seedText?: string;
+  /** Override default composer placeholder (e.g. site home prompt). */
+  placeholder?: string;
   /** Merged onto the outer wrapper (after defaults); use to tune padding, e.g. task subitem bottom inset. */
   className?: string;
 }
@@ -136,6 +139,7 @@ export function ChatInput({
   isEmpty: _isEmpty = false,
   variant = 'default',
   seedText,
+  placeholder,
   className,
 }: ChatInputProps) {
   const { t } = useTranslation('chat');
@@ -193,10 +197,11 @@ export function ChatInput({
     install: installDingTalkMention,
     installing: dingTalkInstalling,
   } = useDingTalkMention(mentionTrigger);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { templates, prefetchTemplates } = useWorkflowsStore();
   const composerPlaceholder = disabled
     ? t('composer.gatewayDisconnectedPlaceholder')
-    : t('composer.messagePlaceholder', { agent: currentAgentName });
+    : placeholder?.trim() || t('composer.messagePlaceholder', { agent: currentAgentName });
   const dailyTokenQuotaText = useMemo(() => {
     const usedToday = dailyTokenQuotaStatus?.usedToday;
     const limit = dailyTokenQuotaStatus?.limit;
@@ -265,8 +270,9 @@ export function ChatInput({
 
   // Preload top templates so picker and NL "创建工作流" respond quickly.
   useEffect(() => {
+    if (!isAuthenticated) return;
     void prefetchTemplates();
-  }, [prefetchTemplates]);
+  }, [isAuthenticated, prefetchTemplates]);
 
   const applyDingTalkMention = useCallback((item: MentionSearchItem) => {
     if (!dingTalkTrigger) return;

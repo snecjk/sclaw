@@ -4,7 +4,7 @@
  * with markdown, thinking sections, images, and tool cards.
  */
 import { useState, useCallback, useEffect, memo } from 'react';
-import { Sparkles, Copy, Check, ChevronDown, ChevronRight, Wrench, FileText, Film, Music, FileArchive, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Sparkles, Copy, Check, ChevronDown, ChevronRight, Wrench, FileText, Film, Music, FileArchive, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, Table2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -29,6 +29,7 @@ import {
   openExternalUrl,
   resolvePreviewLinkTarget,
 } from '@/lib/preview-url';
+import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
 import { submitParameterForm } from '@/components/parameter-form/form-handlers';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
@@ -575,7 +576,7 @@ function MessageBubble({
 
                 if (onPreviewFile && isHttpUrl(target) && isPreviewableRemoteUrl(target)) {
                   const previewFile = artifactToPreviewFile({
-                    name: decodeURIComponent(target.split('/').pop()?.split('?')[0] || 'preview'),
+                    name: safeDecodeURIComponent(target.split('/').pop()?.split('?')[0] || 'preview'),
                     type: inferMimeTypeFromUrl(target),
                     url: target,
                   });
@@ -722,7 +723,7 @@ function preprocessTextForPreviewLinks(text: string): string {
     /(https?:\/\/[^\s)\]"',;<>]+\.(?:html?|pdf|json|md|txt|csv)(?:\?[^\s)\]"',;<>]*)?)/gi,
     (url) => {
       if (!isPreviewableRemoteUrl(url)) return url;
-      const label = decodeURIComponent(url.split('/').pop()?.split('?')[0] || '查看预览');
+      const label = safeDecodeURIComponent(url.split('/').pop()?.split('?')[0] || '查看预览');
       return `[${label}](${url})`;
     },
   );
@@ -802,25 +803,34 @@ function formatFileSize(bytes: number): string {
 function FileIcon({ mimeType, className }: { mimeType: string; className?: string }) {
   if (mimeType.startsWith('video/')) return <Film className={className} />;
   if (mimeType.startsWith('audio/')) return <Music className={className} />;
+  // CSV / TSV — tabular data, show spreadsheet icon before generic text/ fallback
+  if (mimeType === 'text/csv' || mimeType === 'text/tab-separated-values') return <Table2 className={className} />;
   if (mimeType.startsWith('text/') || mimeType === 'application/json' || mimeType === 'application/xml') return <FileText className={className} />;
   if (mimeType.includes('zip') || mimeType.includes('compressed') || mimeType.includes('archive') || mimeType.includes('tar') || mimeType.includes('rar') || mimeType.includes('7z')) return <FileArchive className={className} />;
   if (mimeType === 'application/pdf') return <FileText className={className} />;
+  if (
+    mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    mimeType === 'application/vnd.ms-excel'
+  ) return <Table2 className={className} />;
   return <File className={className} />;
 }
 
 function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFile?: (file: AttachedFileMeta) => void }) {
+  const isPreviewable = isPreviewableFile(file);
+
   const handleOpen = useCallback(() => {
-    if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
-      // Web URLs always open in external browser due to anti-hotlink / iframe blocking
+    // Keep in sync with the 预览 badge condition: previewable files open in the side panel
+    // (FilePreviewViewer fetches remote HTML/text, so OSS http(s) URLs preview fine).
+    if (onPreviewFile && isPreviewable) {
+      onPreviewFile(file);
+    } else if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
       window.electron.openExternal(file.filePath);
     } else if (onPreviewFile) {
       onPreviewFile(file);
     } else if (file.filePath) {
       invokeIpc('shell:openPath', file.filePath);
     }
-  }, [file, onPreviewFile]);
-
-  const isPreviewable = isPreviewableFile(file);
+  }, [file, onPreviewFile, isPreviewable]);
 
   return (
     <div

@@ -1,5 +1,5 @@
 import { messageHasDingTalkRecipientContext } from './dingtalk-mention-context';
-import { unescapeLiteralDwsSendText } from './dws-send-text';
+import { parseDwsSendTextFlagSegment, unescapeLiteralDwsSendText } from './dws-send-text';
 
 export interface DingTalkSentDisplayMessage {
   role?: string;
@@ -158,13 +158,25 @@ function parseQuotedValue(raw: string): string | null {
 }
 
 function parseTextFlag(command: string): string | undefined {
-  const match = command.match(/--text\s+([\s\S]*)$/i);
+  const match = command.match(
+    /--text\s+([\s\S]*?)(?=\s+--(?:format|uuid|dry-run|media|msg-type|dentry-id|space-id|file-name|file-type|file-path|file-size|open-dingtalk-id)\b|$)/i,
+  );
   if (!match) return undefined;
-  let rest = match[1].trim();
-  rest = rest.replace(/\s+--(?:format|uuid|dry-run)\b[\s\S]*$/i, '').trim();
-  if (!rest) return undefined;
-  const parsed = parseQuotedValue(rest) ?? rest;
+  const parsed = parseDwsSendTextFlagSegment(match[1]);
+  if (!parsed?.trim()) return undefined;
   return unescapeLiteralDwsSendText(parsed);
+}
+
+function previewDedupeKey(parsed: Omit<DingTalkSentMessagePreview, 'toolCallId'>): string {
+  const body = formatDingTalkSentTextForChatPreview(parsed.text);
+  return `${parsed.recipientLabel}\0${body}`;
+}
+
+/** Prefer file / image sends over plain text when body + recipient are the same. */
+function dwsSendRichness(command: string): number {
+  if (/--msg-type\s+file\b/i.test(command)) return 3;
+  if (/--msg-type\s+image\b/i.test(command) || /\s--media\s+/i.test(command)) return 2;
+  return 1;
 }
 
 function inferRecipient(
@@ -233,10 +245,10 @@ export function formatDingTalkSentTextForChatPreview(text: string): string {
   return text
     .replace(/\r\n/g, '\n')
     .replace(
-      /\n*---\n*\s*<font color="#999999">([\s\S]*?)<\/font>\s*/gi,
+      /\n*---\n*\s*<font color=['"]#999999['"]>([\s\S]*?)<\/font>\s*/gi,
       '\n\n> *$1*',
     )
-    .replace(/<font color="#999999">([\s\S]*?)<\/font>/gi, '\n\n> *$1*')
+    .replace(/<font color=['"]#999999['"]>([\s\S]*?)<\/font>/gi, '\n\n> *$1*')
     .trim();
 }
 
@@ -333,8 +345,7 @@ export function extractDingTalkSentPreviews(
     resultOkByToolId.set(toolCallId, isSuccessfulDwsToolResult(result));
   }
 
-  const previews: DingTalkSentMessagePreview[] = [];
-  const seenTexts = new Set<string>();
+  const previewsByKey = new Map<string, { preview: DingTalkSentMessagePreview; richness: number }>();
 
   for (const message of turnMessages) {
     for (const tool of extractToolUseFromMessage(message)) {
@@ -349,14 +360,18 @@ export function extractDingTalkSentPreviews(
         if (toolResults.length > 0 && ok !== true) continue;
       }
 
-      if (seenTexts.has(parsed.text)) continue;
-      seenTexts.add(parsed.text);
-      previews.push({
+      const key = previewDedupeKey(parsed);
+      const richness = dwsSendRichness(command);
+      const candidate: DingTalkSentMessagePreview = {
         toolCallId: tool.id || undefined,
         ...parsed,
-      });
+      };
+      const existing = previewsByKey.get(key);
+      if (!existing || richness > existing.richness) {
+        previewsByKey.set(key, { preview: candidate, richness });
+      }
     }
   }
 
-  return previews;
+  return Array.from(previewsByKey.values()).map((entry) => entry.preview);
 }

@@ -55,7 +55,9 @@ function fileIcon(mimeType: string) {
   ) return Presentation;
   if (
     mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-    mimeType === 'application/vnd.ms-excel'
+    mimeType === 'application/vnd.ms-excel' ||
+    mimeType === 'text/csv' ||
+    mimeType === 'text/tab-separated-values'
   ) return Table2;
   return File;
 }

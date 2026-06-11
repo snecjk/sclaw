@@ -114,7 +114,7 @@ export function createHistoryActions(
         const isMainSession = currentSessionKey.endsWith(':main');
         if (!isMainSession) {
           const firstUserMsg = finalMessages.find((m) => m.role === 'user');
-          if (firstUserMsg) {
+          if (firstUserMsg && !get().sessionLabels[currentSessionKey]) {
             const rawText = getMessageText(firstUserMsg.content).trim();
             const labelText = stripWorkflowContextForDisplay(rawText);
             if (labelText) {

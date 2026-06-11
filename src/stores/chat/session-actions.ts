@@ -219,9 +219,9 @@ export function createSessionActions(
           get().loadHistory();
         }
 
-        // Background: fetch first user message for every non-main session to populate labels upfront.
+        // Background: fetch first user message for every session to populate labels upfront.
         // Uses a small limit so it's cheap; runs in parallel and doesn't block anything.
-        const sessionsToLabel = sessionsWithCurrent.filter((s) => !s.key.endsWith(':main'));
+        const sessionsToLabel = sessionsWithCurrent;
         if (sessionsToLabel.length > 0) {
           void Promise.all(
             sessionsToLabel.map(async (session) => {

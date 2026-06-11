@@ -93,13 +93,24 @@ const DWS_CLI_RECIPIENT_LEAKED_ID_PATTERN = new RegExp(
   'gi',
 );
 
+const DWS_RECIPIENT_ID_FIELD_NAMES =
+  'userId|userid|user[_\\s-]?id|openConversationId|open[_\\s-]?conversation[_\\s-]?id|conversation[_\\s-]?id|corpId|corp[_\\s-]?id|staffId|staff[_\\s-]?id|unionId|union[_\\s-]?id';
+
 /** Mask structured recipient IDs echoed in thinking / tool output JSON. */
-const DWS_JSON_RECIPIENT_FIELD_PATTERN =
-  /("(?:userId|openConversationId|corpId|staffId|unionId)"\s*:\s*)"([^"]*)"/gi;
+const DWS_JSON_RECIPIENT_FIELD_PATTERN = new RegExp(
+  `("(?:${DWS_RECIPIENT_ID_FIELD_NAMES})"\\s*:\\s*)"([^"]*)"`,
+  'gi',
+);
 
 /** Mask prose recipient IDs, e.g. `@文鹏 (userid: 0161271920846248)`. */
 const DWS_PROSE_RECIPIENT_ID_IN_PARENS_PATTERN =
   /(\(\s*(?:user[_\s-]?id|open[_\s-]?conversation[_\s-]?id|conversation[_\s-]?id|corp[_\s-]?id|staff[_\s-]?id|union[_\s-]?id)\s*[:：]\s*)([^)\s"'`，,;]+)(\s*\))/gi;
+
+/** Mask quoted inline IDs, e.g. `userid: "0161271920846248"`. */
+const DWS_PROSE_RECIPIENT_ID_QUOTED_INLINE_PATTERN = new RegExp(
+  `((?<![\\w-])(?:${DWS_RECIPIENT_ID_FIELD_NAMES}|群\\s*[iI][dD]|群\\s*聊\\s*[iI][dD]|会话\\s*[iI][dD])\\s*[:：]\\s*)(["'])([A-Za-z0-9+/=_=-]{4,})\\2`,
+  'gi',
+);
 
 /** Mask inline labeled IDs outside CLI flags, e.g. `userid:` / `群ID：cid...`. */
 const DWS_PROSE_RECIPIENT_ID_INLINE_PATTERN =
@@ -146,6 +157,7 @@ export function maskDwsSensitiveIdsForDisplay(text: string): string {
     .replace(DWS_CLI_RECIPIENT_LEAKED_ID_PATTERN, '$1')
     .replace(DWS_JSON_RECIPIENT_FIELD_PATTERN, '$1"***"')
     .replace(DWS_PROSE_RECIPIENT_ID_IN_PARENS_PATTERN, '$1***$3')
+    .replace(DWS_PROSE_RECIPIENT_ID_QUOTED_INLINE_PATTERN, '$1***')
     .replace(DWS_PROSE_RECIPIENT_ID_INLINE_PATTERN, '$1***');
 }
 
@@ -526,12 +538,24 @@ export function extractToolUse(message: RawMessage | unknown): Array<{ id: strin
 
 /**
  * Determine if an attached file is previewable in the side panel.
+ * Covers: text, code, data, Office docs (fallback/external-open).
  */
 const PREVIEWABLE_MIME_PREFIXES = [
   'text/html',
   'text/plain',
   'application/json',
   'text/csv',
+  'text/tab-separated-values',
+  'application/pdf',
+  'text/markdown',
+  // Office docs — currently shown as "open externally" placeholder,
+  // but listed so users can click them in the product panel.
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-powerpoint',
 ];
 
 export function isPreviewableFile(file: { mimeType: string; filePath?: string; type?: string }): boolean {
@@ -540,9 +564,14 @@ export function isPreviewableFile(file: { mimeType: string; filePath?: string; t
     return isPreviewableRemoteUrl(file.filePath, file.type ?? file.mimeType);
   }
   if (file.filePath.startsWith('artifact://')) return false;
-  return PREVIEWABLE_MIME_PREFIXES.some((prefix) =>
+  const ext = file.filePath.split('.').pop()?.toLowerCase() || '';
+  const matched = PREVIEWABLE_MIME_PREFIXES.some((prefix) =>
     prefix.endsWith('/') ? file.mimeType.startsWith(prefix) : file.mimeType === prefix,
   );
+  if (matched) return true;
+  // Fallback: known extensions whose MIME may be application/octet-stream
+  return ['html', 'htm', 'pdf', 'md', 'txt', 'json', 'csv', 'tsv',
+    'xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt'].includes(ext);
 }
 
 function extToMimeType(ext: string): string {
@@ -568,7 +597,7 @@ function extToMimeType(ext: string): string {
     yaml: 'text/plain', yml: 'text/plain', xml: 'text/plain', toml: 'text/plain',
     ini: 'text/plain', conf: 'text/plain', properties: 'text/plain', env: 'text/plain',
     // Data/Log files
-    log: 'text/plain', tsv: 'text/plain',
+    log: 'text/plain', tsv: 'text/tab-separated-values',
     // Web files
     css: 'text/plain', scss: 'text/plain', less: 'text/plain',
     // Shell scripts
@@ -580,7 +609,7 @@ function extToMimeType(ext: string): string {
 
 /** Shared extension list for previewable local file paths (used by extractPreviewableRefs and preprocessTextForPreviewLinks). */
 export const PREVIEWABLE_FILE_EXTS =
-  'html?|sql|py|js|ts|jsx|tsx|java|go|rs|cpp|c|h|cs|rb|php|swift|kt|scala|r|m|mm|json|yaml|yml|xml|toml|ini|conf|properties|env|md|txt|csv|tsv|log|css|scss|less|sh|bash|zsh|fish|ps1|bat|cmd|pdf';
+  'properties|swift|scala|bash|fish|html?|java|jsx|tsx|cpp|php|toml|conf|scss|less|zsh|yaml|json|sql|xml|csv|tsv|txt|log|ini|env|md|htm|py|go|rs|cs|rb|mm|bat|cmd|pdf|kt|css|yml|ts|js|sh|c|h|r|m';
 
 /** Remove fenced code blocks from text so paths inside them are not matched.
  *  Inline code (`path`) is preserved — it often contains actual file paths the user/AI wants to preview.

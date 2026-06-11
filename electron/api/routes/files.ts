@@ -1,7 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { dialog, nativeImage } from 'electron';
 import crypto from 'node:crypto';
-import { extname, join } from 'node:path';
+import { extname, isAbsolute, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { existsSync, readdirSync } from 'node:fs';
+import { copyFile, mkdtemp, readFile, unlink } from 'node:fs/promises';
 import { getOpenClawConfigDir, expandPath } from '../../utils/paths';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
@@ -56,12 +59,57 @@ function mimeToExt(mimeType: string): string {
 
 const OUTBOUND_DIR = join(getOpenClawConfigDir(), 'media', 'outbound');
 
-/** Resolve a relative path starting with ./ to the main agent workspace. */
+/**
+ * Resolve a preview file path:
+ * - `~` expands to home
+ * - absolute paths pass through
+ * - relative paths (bare filenames like `USER.md`, or `./report.html`) resolve
+ *   against the agent workspaces (`workspace`, then `workspace-<agentId>`),
+ *   since AI messages reference workspace files by bare name.
+ */
 function resolveWorkspaceFilePath(filePath: string): string {
-  if (filePath.startsWith('./')) {
-    return expandPath(join(getOpenClawConfigDir(), 'workspace', filePath));
+  if (filePath.startsWith('~')) {
+    return expandPath(filePath);
   }
-  return filePath;
+  if (isAbsolute(filePath)) {
+    return filePath;
+  }
+
+  const configDir = getOpenClawConfigDir();
+  const candidates = [join(configDir, 'workspace', filePath)];
+  try {
+    for (const entry of readdirSync(configDir)) {
+      if (entry.startsWith('workspace-')) {
+        candidates.push(join(configDir, entry, filePath));
+      }
+    }
+  } catch { /* config dir unreadable — fall through to first candidate */ }
+
+  return candidates.find((p) => existsSync(p)) ?? candidates[0];
+}
+
+/**
+ * Read file with EPERM/EACCES fallback: copy to temp directory and read from there.
+ * macOS sometimes locks files created by other processes (e.g. AI tools).
+ */
+async function readFileWithFallback(filePath: string): Promise<Buffer> {
+  try {
+    return await readFile(filePath);
+  } catch (err: any) {
+    if (err.code === 'EPERM' || err.code === 'EACCES') {
+      const tmpDir = await mkdtemp(join(tmpdir(), 'stoclaw-'));
+      const tmpFile = join(tmpDir, 'tmpfile');
+      try {
+        await copyFile(filePath, tmpFile);
+        const buf = await readFile(tmpFile);
+        await unlink(tmpFile).catch(() => {});
+        return buf;
+      } catch {
+        throw err;
+      }
+    }
+    throw err;
+  }
 }
 
 async function generateImagePreview(filePath: string, mimeType: string): Promise<string | null> {
@@ -170,15 +218,14 @@ export async function handleFileRoutes(
   if (url.pathname === '/api/files/read' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ filePath: string; encoding?: 'utf-8' | 'base64' }>(req);
-      const fsP = await import('node:fs/promises');
       const filePath = resolveWorkspaceFilePath(body.filePath);
       const encoding = body.encoding || 'utf-8';
       if (encoding === 'base64') {
-        const buf = await fsP.readFile(filePath);
+        const buf = await readFileWithFallback(filePath);
         sendJson(res, 200, { content: buf.toString('base64'), encoding: 'base64' });
       } else {
-        const content = await fsP.readFile(filePath, 'utf-8');
-        sendJson(res, 200, { content, encoding: 'utf-8' });
+        const buf = await readFileWithFallback(filePath);
+        sendJson(res, 200, { content: buf.toString('utf-8'), encoding: 'utf-8' });
       }
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -194,8 +241,7 @@ export async function handleFileRoutes(
         return true;
       }
       const filePath = resolveWorkspaceFilePath(rawPath);
-      const fsP = await import('node:fs/promises');
-      const buf = await fsP.readFile(filePath);
+      const buf = await readFileWithFallback(filePath);
       const ext = extname(filePath).toLowerCase();
       const mimeType = getMimeType(ext);
       res.setHeader('Content-Type', mimeType);

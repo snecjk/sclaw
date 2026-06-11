@@ -43,6 +43,8 @@ vi.mock('electron', () => ({
 vi.mock('@electron/utils/paths', () => ({
   getOpenClawDir: () => '/tmp/openclaw',
   getOpenClawEntryPath: () => '/tmp/openclaw/openclaw-entry.js',
+  getOpenClawProcessCwd: () => '/tmp/openclaw',
+  getOpenClawNodeModulesPath: () => '/tmp/openclaw/node_modules',
 }));
 
 vi.mock('@electron/utils/uv-env', () => ({

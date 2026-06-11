@@ -1,5 +1,5 @@
+import { prepareDingTalkAgentTurnMessage } from '../../shared/dingtalk-recipient-message';
 import {
-  appendDingTalkMentionContext,
   hasResolvedDingTalkMentions,
   messageHasDingTalkRecipientContext,
   stripDingTalkMentionContextForDisplay,
@@ -84,14 +84,15 @@ export function stripInstructionFromTaskMessage(message: string): string {
   return stripDingTalkMentionContextForDisplay(message);
 }
 
+/** @deprecated 使用 prepareDingTalkAgentTurnMessage */
 export function buildTaskMessageWithRecipients(
   instruction: string,
   mentions?: DingTalkMention[],
 ): string {
-  const trimmed = instruction.trim();
-  if (!hasResolvedDingTalkMentions(mentions)) return trimmed;
-  return appendDingTalkMentionContext(trimmed, mentions);
+  return prepareDingTalkAgentTurnMessage(instruction, mentions);
 }
+
+export { prepareDingTalkAgentTurnMessage } from '../../shared/dingtalk-recipient-message';
 
 export function mentionsToScheduledTaskFields(mentions: DingTalkMention[]): {
   notifyMode?: string;

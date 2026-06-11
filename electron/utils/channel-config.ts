@@ -8,7 +8,7 @@ import { access, mkdir, readFile, writeFile, readdir, stat, rm } from 'fs/promis
 import { constants } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { getOpenClawResolvedDir, getOpenClawConfigDir } from './paths';
+import { getOpenClawEntryPath, getOpenClawProcessCwd, getOpenClawConfigDir, getBundledPluginSourceCandidates } from './paths';
 import * as logger from './logger';
 import { proxyAwareFetch } from './proxy-fetch';
 import { withConfigLock } from './config-mutex';
@@ -1253,10 +1253,13 @@ export async function validateChannelConfig(channelType: string): Promise<Valida
     const result: ValidationResult = { valid: true, errors: [], warnings: [] };
 
     try {
-        const openclawPath = getOpenClawResolvedDir();
+        const openclawPath = getOpenClawProcessCwd();
+        const entryScript = getOpenClawEntryPath();
 
         // Run openclaw doctor command to validate config (async to avoid
-        // blocking the main thread).
+        // blocking the main thread). Use Electron itself as the Node runtime
+        // (ELECTRON_RUN_AS_NODE) — system `node` cannot read entry scripts
+        // inside the openclaw.asar archive.
         const runDoctor = async (command: string): Promise<string> =>
             await new Promise<string>((resolve, reject) => {
                 exec(
@@ -1266,6 +1269,7 @@ export async function validateChannelConfig(channelType: string): Promise<Valida
                         encoding: 'utf-8',
                         timeout: 30000,
                         windowsHide: true,
+                        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', OPENCLAW_NO_RESPAWN: '1' },
                     },
                     (err, stdout, stderr) => {
                         const combined = `${stdout || ''}${stderr || ''}`;
@@ -1279,7 +1283,7 @@ export async function validateChannelConfig(channelType: string): Promise<Valida
                 );
             });
 
-        const output = await runDoctor(`node openclaw.mjs doctor 2>&1`);
+        const output = await runDoctor(`"${process.execPath}" "${entryScript}" doctor 2>&1`);
 
         const parsedDoctor = parseDoctorValidationOutput(resolvedChannelType, output);
         result.errors.push(...parsedDoctor.errors);

@@ -25,10 +25,9 @@ extraResources:
       - "!icons/*.svg"
       - "!bin/**"
       - "!screenshot/**"
-  # OpenClaw package (node_modules copied separately by afterPack hook
-  # because electron-builder respects .gitignore which excludes node_modules/)
-  - from: build/openclaw/
-    to: openclaw/
+  # OpenClaw runtime is materialized and packed into openclaw.asar by afterPack
+  # (scripts/after-pack.cjs). Do not list build/openclaw/ here — that would
+  # inflate the NSIS installer with ~17k loose files before afterPack runs.
   # Pre-bundled third-party skills (full directories, not only SKILL.md)
   - from: build/preinstalled-skills/
     to: resources/preinstalled-skills/
@@ -115,6 +114,11 @@ win:
     - target: nsis
       arch: x64
     - target: nsis
+      arch: arm64
+    # Portable ZIP for IT / power users (same ASAR layout as NSIS, faster extract)
+    - target: zip
+      arch: x64
+    - target: zip
       arch: arm64
 
 nsis:

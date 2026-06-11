@@ -37,7 +37,7 @@ vi.mock('electron', () => ({
 
 vi.mock('@electron/utils/paths', () => ({
   getOpenClawDir: () => '/tmp/openclaw',
-  getOpenClawEntryPath: () => 'C:\\Program Files\\StoClaw\\resources\\openclaw\\openclaw.mjs',
+  getOpenClawEntryPath: () => 'C:\\Program Files\\StoClaw\\resources\\openclaw.asar\\openclaw.mjs',
 }));
 
 describe('getOpenClawCliCommand (Windows packaged)', () => {
@@ -74,7 +74,7 @@ describe('getOpenClawCliCommand (Windows packaged)', () => {
     mockExistsSync.mockImplementation((p: string) => /[\\/]bin[\\/]node\.exe$/i.test(p));
     const { getOpenClawCliCommand } = await import('@electron/utils/openclaw-cli');
     expect(getOpenClawCliCommand()).toBe(
-      "& 'C:\\Program Files\\StoClaw\\resources/bin/node.exe' 'C:\\Program Files\\StoClaw\\resources\\openclaw\\openclaw.mjs'",
+      "& 'C:\\Program Files\\StoClaw\\resources/bin/node.exe' 'C:\\Program Files\\StoClaw\\resources\\openclaw.asar\\openclaw.mjs'",
     );
   });
 
@@ -83,6 +83,6 @@ describe('getOpenClawCliCommand (Windows packaged)', () => {
     const { getOpenClawCliCommand } = await import('@electron/utils/openclaw-cli');
     const command = getOpenClawCliCommand();
     expect(command.startsWith('$env:ELECTRON_RUN_AS_NODE=1; & ')).toBe(true);
-    expect(command.endsWith("'C:\\Program Files\\StoClaw\\resources\\openclaw\\openclaw.mjs'")).toBe(true);
+    expect(command.endsWith("'C:\\Program Files\\StoClaw\\resources\\openclaw.asar\\openclaw.mjs'")).toBe(true);
   });
 });
