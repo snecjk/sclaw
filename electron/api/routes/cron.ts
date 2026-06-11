@@ -272,6 +272,36 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
   }
 
   // 2) Generate virtual dated sessions from cron run logs for local cron jobs
+  // Read job names from local cron/jobs.json and base session labels from sessions.json
+  const jobNamesById = new Map<string, string>();
+  try {
+    const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
+    const jobsRaw = await readFile(jobsFile, 'utf8');
+    const jobsData = JSON.parse(jobsRaw) as { jobs?: Array<{ id: string; name?: string }> };
+    for (const job of jobsData.jobs ?? []) {
+      if (job.name) jobNamesById.set(job.id, job.name);
+    }
+  } catch {
+    // ignore
+  }
+
+  // Also read base session labels from agents/main/sessions/sessions.json as fallback
+  const baseSessionLabels = new Map<string, string>();
+  try {
+    const sessionsFile = join(getOpenClawConfigDir(), 'agents', 'main', 'sessions', 'sessions.json');
+    const sessionsRaw = await readFile(sessionsFile, 'utf8');
+    const sessionsData = JSON.parse(sessionsRaw) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(sessionsData)) {
+      if (key === 'sessions' || !value || typeof value !== 'object') continue;
+      const record = value as Record<string, unknown>;
+      if (typeof record.label === 'string') {
+        baseSessionLabels.set(key, record.label);
+      }
+    }
+  } catch {
+    // ignore
+  }
+
   const runsDir = join(getOpenClawConfigDir(), 'cron', 'runs');
   try {
     const runFiles = await readdir(runsDir);
@@ -306,9 +336,12 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
         const sessionKey = `agent:main:cron:${jobId}:${date}`;
         // Skip if already present from physical sessions scan
         if (sessions.some((s) => s.key === sessionKey)) continue;
+        const baseKey = `agent:main:cron:${jobId}`;
+        const label = baseSessionLabels.get(baseKey) || `Cron: ${jobId}`;
         sessions.push({
           key: sessionKey,
-          label: `Cron: ${jobId}`,
+          label,
+          displayName: jobNamesById.get(jobId),
           updatedAt,
         });
       }
@@ -529,7 +562,7 @@ export async function handleCronRoutes(
 
   if (url.pathname === '/api/cron/sessions' && req.method === 'GET') {
     try {
-      const sessions = await listAllCronSessions();
+      const sessions = await listAllCronSessions(ctx);
       sendJson(res, 200, { sessions });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
