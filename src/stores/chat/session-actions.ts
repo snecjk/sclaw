@@ -61,6 +61,39 @@ export function createSessionActions(
           console.warn('Failed to load scheduled task sessions:', err);
         }
 
+        // Also load cron dated sessions from local filesystem (Gateway may prune old ones)
+        try {
+          const cronResult = await hostApiFetch<{ sessions?: Array<{ key: string; label: string; updatedAt?: number }> }>(
+            '/api/cron/sessions',
+          );
+          if (cronResult.sessions) {
+            rawSessions = [...rawSessions, ...cronResult.sessions];
+          }
+        } catch (err) {
+          console.warn('Failed to load cron sessions:', err);
+        }
+
+        // If a local cron job has virtual dated sessions, drop its base session
+        // from Gateway to avoid duplicate entries in the sidebar.
+        const cronJobIdsWithDates = new Set<string>();
+        for (const s of rawSessions) {
+          const key = String(s.key || '');
+          const parsed = parseCronSessionKey(key);
+          if (parsed?.date) {
+            cronJobIdsWithDates.add(parsed.jobId);
+          }
+        }
+        if (cronJobIdsWithDates.size > 0) {
+          rawSessions = rawSessions.filter((s) => {
+            const key = String(s.key || '');
+            const parsed = parseCronSessionKey(key);
+            if (parsed && !parsed.date && !parsed.runSessionId && cronJobIdsWithDates.has(parsed.jobId)) {
+              return false;
+            }
+            return true;
+          });
+        }
+
         const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
           const key = String(s.key || '');
           return {

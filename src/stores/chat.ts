@@ -13,7 +13,7 @@ import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 import { stripWorkflowContextForDisplay } from '@/lib/workflow-context';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
-import { buildCronSessionHistoryPath, isCronSessionKey } from './chat/cron-session-utils';
+import { buildCronSessionHistoryPath, isCronSessionKey, parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './chat/cron-session-utils';
 import { sanitizeSessionDisplayField } from './chat/helpers';
 import {
   DEFAULT_CANONICAL_PREFIX,
@@ -1335,8 +1335,27 @@ export const useChatStore = create<ChatState>()(
     _loadSessionsInFlight = (async () => {
       try {
         const data = await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.list', {});
-        if (data) {
-          const rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
+        let rawSessions: Record<string, unknown>[] = [];
+        if (data && Array.isArray(data.sessions)) {
+          rawSessions = data.sessions;
+        }
+
+        // ── Merge local filesystem sessions (dated cron + scheduled-task runs) ──
+        try {
+          const [stRes, cronRes] = await Promise.all([
+            hostApiFetch('/api/scheduled-tasks/sessions').catch(() => null),
+            hostApiFetch('/api/cron/sessions').catch(() => null),
+          ]);
+          const stData = stRes && typeof stRes === 'object' ? (stRes as Record<string, unknown>) : null;
+          const cronData = cronRes && typeof cronRes === 'object' ? (cronRes as Record<string, unknown>) : null;
+          const stSessions = Array.isArray(stData?.sessions) ? (stData.sessions as Record<string, unknown>[]) : [];
+          const cronSessions = Array.isArray(cronData?.sessions) ? (cronData.sessions as Record<string, unknown>[]) : [];
+          rawSessions = [...rawSessions, ...stSessions, ...cronSessions];
+        } catch {
+          // ignore
+        }
+
+        if (rawSessions.length > 0) {
           const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
             const key = String(s.key || '');
             return {
@@ -1352,8 +1371,29 @@ export const useChatStore = create<ChatState>()(
             };
           }).filter((s: ChatSession) => s.key);
 
-          const canonicalBySuffix = new Map<string, string>();
+          // ── Identify which jobs already have real dated sessions ──
+          const cronDated = new Set<string>();
+          const scheduledTaskDated = new Set<string>();
           for (const session of sessions) {
+            const cronParts = parseCronSessionKey(session.key);
+            if (cronParts && cronParts.date) {
+              cronDated.add(`agent:main:cron:${cronParts.jobId}`);
+            }
+            const stParts = parseScheduledTaskAgentSessionKey(session.key);
+            if (stParts && stParts.date) {
+              scheduledTaskDated.add(`agent:main:scheduled-task:${stParts.taskId}`);
+            }
+          }
+
+          // Filter out base sessions that have dated replacements
+          let filteredSessions = sessions.filter((s) => {
+            if (cronDated.has(s.key)) return false;
+            if (scheduledTaskDated.has(s.key)) return false;
+            return true;
+          });
+
+          const canonicalBySuffix = new Map<string, string>();
+          for (const session of filteredSessions) {
             if (!session.key.startsWith('agent:')) continue;
             const parts = session.key.split(':');
             if (parts.length < 3) continue;
@@ -1365,7 +1405,7 @@ export const useChatStore = create<ChatState>()(
 
           // Deduplicate: if both short and canonical existed, keep canonical only
           const seen = new Set<string>();
-          const dedupedSessions = sessions.filter((s) => {
+          const dedupedSessions = filteredSessions.filter((s) => {
             if (!s.key.startsWith('agent:') && canonicalBySuffix.has(s.key)) return false;
             if (seen.has(s.key)) return false;
             seen.add(s.key);
