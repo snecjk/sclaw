@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { constants } from 'node:fs';
-import { access, copyFile, cp, mkdir, readdir, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { mkdir } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { syncClaudeSkillsForAgent } from '../services/claude-skill-bridge';
 import { getAgentPreferredModel, getAgentWorkspacePath } from '../utils/agent-config';
@@ -27,15 +25,9 @@ const liveClaudeMessages = new Map<string, Array<{
   receivedAt: number;
 }>>();
 let claudeConfigEnvQueue: Promise<void> = Promise.resolve();
-let claudeConfigBootstrapPromise: Promise<void> | null = null;
-const CLAUDE_BOOTSTRAP_MARKER_FILE = '.stoclaw-bootstrap.json';
 
 function getClaudeConfigDir(): string {
   return join(getClawXConfigDir(), '.claude');
-}
-
-function getLegacyClaudeConfigDir(): string {
-  return join(homedir(), '.claude');
 }
 
 function getClaudeProcessEnv(): NodeJS.ProcessEnv {
@@ -45,78 +37,19 @@ function getClaudeProcessEnv(): NodeJS.ProcessEnv {
   };
 }
 
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await access(targetPath, constants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
+let ensureClaudeConfigDirPromise: Promise<void> | null = null;
 
-async function directoryHasEntries(dirPath: string): Promise<boolean> {
-  try {
-    const entries = await readdir(dirPath);
-    return entries.length > 0;
-  } catch {
-    return false;
-  }
-}
-
-async function copyFileIfMissing(sourcePath: string, targetPath: string): Promise<void> {
-  if (!(await pathExists(sourcePath)) || (await pathExists(targetPath))) {
+async function ensureClaudeConfigDir(): Promise<void> {
+  if (ensureClaudeConfigDirPromise) {
+    await ensureClaudeConfigDirPromise;
     return;
   }
-  await mkdir(dirname(targetPath), { recursive: true });
-  await copyFile(sourcePath, targetPath);
-}
-
-async function copyDirectoryContentsIfTargetEmpty(sourceDir: string, targetDir: string): Promise<void> {
-  if (!(await pathExists(sourceDir))) return;
-  const targetHasEntries = await directoryHasEntries(targetDir);
-  if (targetHasEntries) return;
-  await mkdir(targetDir, { recursive: true });
-  const entries = await readdir(sourceDir);
-  await Promise.all(entries.map(async (entry) => {
-    await cp(join(sourceDir, entry), join(targetDir, entry), { recursive: true, force: false });
-  }));
-}
-
-async function ensureClaudeConfigBootstrap(): Promise<void> {
-  if (claudeConfigBootstrapPromise) {
-    await claudeConfigBootstrapPromise;
-    return;
-  }
-
-  claudeConfigBootstrapPromise = (async () => {
-    const targetRoot = getClaudeConfigDir();
-    const legacyRoot = getLegacyClaudeConfigDir();
-    await mkdir(targetRoot, { recursive: true });
-    const markerPath = join(targetRoot, CLAUDE_BOOTSTRAP_MARKER_FILE);
-    if (await pathExists(markerPath)) {
-      return;
-    }
-
-    await Promise.all([
-      copyFileIfMissing(join(legacyRoot, 'settings.json'), join(targetRoot, 'settings.json')),
-      copyFileIfMissing(join(legacyRoot, '.claude.json'), join(targetRoot, '.claude.json')),
-    ]);
-
-    await Promise.all([
-      copyDirectoryContentsIfTargetEmpty(join(legacyRoot, 'sessions'), join(targetRoot, 'sessions')),
-      copyDirectoryContentsIfTargetEmpty(join(legacyRoot, 'session-env'), join(targetRoot, 'session-env')),
-      copyDirectoryContentsIfTargetEmpty(join(legacyRoot, 'plugins'), join(targetRoot, 'plugins')),
-    ]);
-
-    await writeFile(markerPath, JSON.stringify({
-      bootstrappedAt: new Date().toISOString(),
-      source: legacyRoot,
-    }, null, 2), 'utf8');
-  })().catch((error) => {
-    logger.warn('Failed to bootstrap Claude config directory from legacy root:', error);
-  });
-
-  await claudeConfigBootstrapPromise;
+  ensureClaudeConfigDirPromise = mkdir(getClaudeConfigDir(), { recursive: true })
+    .catch((error) => {
+      logger.warn('Failed to ensure Claude config directory:', error);
+    })
+    .then(() => {});
+  await ensureClaudeConfigDirPromise;
 }
 
 async function withClaudeConfigDirEnv<T>(configDir: string, task: () => Promise<T>): Promise<T> {
@@ -142,15 +75,13 @@ async function resolveClaudeSessionConfigDir(
   cwd: string,
   sessionId: string,
 ): Promise<string | null> {
-  await ensureClaudeConfigBootstrap();
+  await ensureClaudeConfigDir();
   const sdk = await import('@anthropic-ai/claude-agent-sdk');
-  for (const configDir of [getClaudeConfigDir(), getLegacyClaudeConfigDir()]) {
-    const info = await withClaudeConfigDirEnv(configDir, async () => (
-      sdk.getSessionInfo(sessionId, { dir: cwd })
-    )).catch(() => undefined);
-    if (info) return configDir;
-  }
-  return null;
+  const configDir = getClaudeConfigDir();
+  const info = await withClaudeConfigDirEnv(configDir, async () => (
+    sdk.getSessionInfo(sessionId, { dir: cwd })
+  )).catch(() => undefined);
+  return info ? configDir : null;
 }
 
 function toEpochMs(value: unknown): number | undefined {
@@ -454,7 +385,7 @@ async function startClaudeQuery(
   },
 ): Promise<{ success: boolean; result?: { runId: string }; error?: string }> {
   try {
-    await ensureClaudeConfigBootstrap();
+    await ensureClaudeConfigDir();
     const sdk = await import('@anthropic-ai/claude-agent-sdk');
     const existing = await ensureClaudeRegistryEntry(sessionKey);
     const cwd = existing?.cwd;
@@ -545,7 +476,7 @@ async function startClaudeQuery(
 }
 
 export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void> {
-  await ensureClaudeConfigBootstrap();
+  await ensureClaudeConfigDir();
   const entry = await getEngineSessionRegistryEntry(sessionKey);
   liveClaudeMessages.delete(sessionKey);
   if (!entry?.sessionId) {
@@ -554,9 +485,9 @@ export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void
   }
 
   const sdk = await import('@anthropic-ai/claude-agent-sdk');
-  const configDir = await resolveClaudeSessionConfigDir(entry.cwd, entry.sessionId) ?? getClaudeConfigDir();
+  const configDir = await resolveClaudeSessionConfigDir(entry.cwd!, entry.sessionId!) ?? getClaudeConfigDir();
   await withClaudeConfigDirEnv(configDir, async () => {
-    await sdk.deleteSession(entry.sessionId!, { dir: entry.cwd });
+    await sdk.deleteSession(entry.sessionId!, { dir: entry.cwd! });
   });
   await deleteEngineSessionRegistryEntry(sessionKey);
 }
@@ -565,12 +496,12 @@ export const claudeAdapter: EngineAdapter = {
   type: 'claude',
 
   async listSessions() {
-    await ensureClaudeConfigBootstrap();
+    await ensureClaudeConfigDir();
     const entries = await listEngineSessionRegistryEntries('claude');
     const sessions: EngineSessionSummary[] = [];
     for (const entry of entries) {
       if (entry.sessionId) {
-        const configDir = await resolveClaudeSessionConfigDir(entry.cwd, entry.sessionId);
+        const configDir = await resolveClaudeSessionConfigDir(entry.cwd!, entry.sessionId);
         if (!configDir) {
           continue;
         }
@@ -593,7 +524,7 @@ export const claudeAdapter: EngineAdapter = {
     }
 
     try {
-      const result = await buildHistory(params.sessionKey, entry.sessionId, entry.cwd);
+      const result = await buildHistory(params.sessionKey, entry.sessionId!, entry.cwd!);
       return { success: true, result };
     } catch (error) {
       return { success: false, error: String(error) };
