@@ -48,7 +48,7 @@ import { useTranslation } from 'react-i18next';
 import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
 import logoSvg from '@/assets/logo.svg';
 import packageJson from '../../../package.json';
-import { taskDetailPath, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
+import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
@@ -248,11 +248,7 @@ function SidebarTaskGroup({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId]); // Only depend on taskId, not entries
-  const overviewTo = taskOverviewPath(taskId);
-  const underTask =
-    entries.length > 0
-      ? pathname.startsWith(`/tasks/${taskId}`)
-      : pathname === overviewTo || pathname.startsWith(`${overviewTo}/`);
+  const underTask = pathname.startsWith(`/tasks/${taskId}`);
 
   const [open, setOpen] = useState(true);
   const prevUnderTask = useRef<boolean | null>(null);
@@ -267,20 +263,7 @@ function SidebarTaskGroup({
   }, [underTask]);
 
   if (entries.length === 0) {
-    return (
-      <NavLink
-        to={overviewTo}
-        className="flex items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] text-left transition-colors"
-      >
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{label}</span>
-        {hasUnreadSubitem ? (
-          <span
-            className="h-2 w-2 shrink-0 rounded-full bg-[hsl(var(--destructive))]"
-            aria-label={tTasks('unreadBadge', { defaultValue: 'Unread' })}
-          />
-        ) : null}
-      </NavLink>
-    );
+    return null;
   }
 
   const panelId = `sto-sidebar-task-${taskId}-entries`;
