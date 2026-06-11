@@ -10,7 +10,7 @@ import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { hostApiFetch, getHostApiBase } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
-import { isExtensionlessWebUrl, isHttpUrl } from '@/lib/preview-url';
+import { isExtensionlessWebUrl, isHttpUrl, isRemoteFileHtmlUrl, normalizeLocalFilePath } from '@/lib/preview-url';
 // @ts-ignore — highlight.js v10 ships without bundled .d.ts
 import hljs from 'highlight.js';
 import 'highlight.js/styles/atom-one-dark.css';
@@ -92,17 +92,20 @@ type OfficeData =
   | { type: 'ppt'; buffer: Uint8Array };
 
 export function FilePreviewViewer({
-  filePath,
+  filePath: rawFilePath,
   fileName,
   mimeType,
   className,
 }: FilePreviewViewerProps) {
+  const filePath = useMemo(() => normalizeLocalFilePath(rawFilePath), [rawFilePath]);
   const [mdContent, setMdContent] = useState<string>('');
   const [mdLoading, setMdLoading] = useState(false);
   const [mdError, setMdError] = useState<string>('');
   const [textContent, setTextContent] = useState<string>('');
   const [textLoading, setTextLoading] = useState(false);
   const [textError, setTextError] = useState<string>('');
+  const [htmlContent, setHtmlContent] = useState<string>('');
+  const [htmlLoading, setHtmlLoading] = useState(false);
   const [officeData, setOfficeData] = useState<OfficeData | null>(null);
   const [officeLoading, setOfficeLoading] = useState(false);
   const [officeError, setOfficeError] = useState<string>('');
@@ -209,6 +212,40 @@ export function FilePreviewViewer({
       cancelled = true;
     };
   }, [filePath, mimeType]);
+
+  // Fetch remote .html/.htm on OSS/CDN (iframe src may trigger download when Content-Disposition: attachment)
+  useEffect(() => {
+    const shouldFetch = isHttpUrl(filePath)
+      && isHtmlFileType(mimeType, fileName, filePath)
+      && isRemoteFileHtmlUrl(filePath);
+    if (!shouldFetch) {
+      setHtmlContent('');
+      setHtmlLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setHtmlContent('');
+    setHtmlLoading(true);
+
+    void (async () => {
+      try {
+        const response = await fetch(filePath);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const content = await response.text();
+        if (cancelled) return;
+        setHtmlContent(content);
+      } catch {
+        // Fall through to iframe src when fetch fails (CORS, attachment headers, etc.)
+      } finally {
+        if (!cancelled) setHtmlLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filePath, mimeType, fileName]);
 
   // Load remote text/json/markdown from http(s) URLs (OSS/CDN)
   useEffect(() => {
@@ -359,6 +396,27 @@ export function FilePreviewViewer({
       const isHtmlFile = isHtmlFileType(mimeType, fileName, filePath);
 
       if (isHtmlFile) {
+        if (isRemoteFileHtmlUrl(filePath)) {
+          if (htmlLoading) {
+            return (
+              <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
+                <RefreshCw className="h-5 w-5 animate-spin" />
+                正在加载 HTML 预览…
+              </div>
+            );
+          }
+          if (htmlContent) {
+            return (
+              <iframe
+                key={filePath}
+                srcDoc={htmlContent}
+                title={fileName}
+                className={cn('h-full min-h-0 w-full border-0', className)}
+                sandbox="allow-scripts allow-same-origin allow-popups"
+              />
+            );
+          }
+        }
         return (
           <HtmlIframeView
             src={filePath}

@@ -59,28 +59,48 @@ function mimeToExt(mimeType: string): string {
 
 const OUTBOUND_DIR = join(getOpenClawConfigDir(), 'media', 'outbound');
 
+function decodePathSegments(filePath: string): string {
+  let path = filePath.trim();
+  if (!path.includes('%')) return path;
+  try {
+    const once = decodeURIComponent(path);
+    if (once.includes('%')) {
+      try {
+        return decodeURIComponent(once);
+      } catch {
+        return once;
+      }
+    }
+    return once;
+  } catch {
+    return path;
+  }
+}
+
 /**
  * Resolve a preview file path:
  * - `~` expands to home
- * - absolute paths pass through
+ * - absolute paths pass through (incl. Windows `C:\` / `C:/`, after URI decode)
  * - relative paths (bare filenames like `USER.md`, or `./report.html`) resolve
  *   against the agent workspaces (`workspace`, then `workspace-<agentId>`),
  *   since AI messages reference workspace files by bare name.
  */
 function resolveWorkspaceFilePath(filePath: string): string {
-  if (filePath.startsWith('~')) {
-    return expandPath(filePath);
+  const normalized = decodePathSegments(filePath);
+
+  if (normalized.startsWith('~')) {
+    return expandPath(normalized);
   }
-  if (isAbsolute(filePath)) {
-    return filePath;
+  if (isAbsolute(normalized)) {
+    return normalized;
   }
 
   const configDir = getOpenClawConfigDir();
-  const candidates = [join(configDir, 'workspace', filePath)];
+  const candidates = [join(configDir, 'workspace', normalized)];
   try {
     for (const entry of readdirSync(configDir)) {
       if (entry.startsWith('workspace-')) {
-        candidates.push(join(configDir, entry, filePath));
+        candidates.push(join(configDir, entry, normalized));
       }
     }
   } catch { /* config dir unreadable — fall through to first candidate */ }

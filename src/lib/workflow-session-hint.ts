@@ -9,6 +9,29 @@ import type { WorkflowExecutionState } from '@/types/workflow';
 
 export const WORKFLOW_SESSION_HINT_MARKER = '<!-- StoClaw-Workflow-Session -->';
 
+/**
+ * Hidden hint for NL workflow creation — steers model to builtin tools, not sai-cli/exec.
+ */
+export function buildWorkflowCreationHint(userText: string): string {
+  const query = userText.trim();
+  return [
+    WORKFLOW_SESSION_HINT_MARKER,
+    '',
+    '## 工作流创建指引',
+    '',
+    '用户要创建或查找工作流。必须使用 sto-workflow-tool 注册的内置 OpenClaw Tools，按顺序：',
+    '1. `search_workflow_templates`（query 取自用户描述中的模板名/关键词）',
+    '2. `get_workflow_schema`（选中模板后）',
+    '3. `create_workflow`',
+    '4. 若需立即运行：`execute_workflow`',
+    '',
+    '这些 tool 由你在对话中直接调用（OpenClaw 内置 tool 列表），不是 `openclaw` CLI 子命令。',
+    '禁止 exec、shell、openclaw CLI、sai-cli、sai-cli discover 或读取 sai-cli SKILL 替代上述内置 tools。',
+    '',
+    `用户原话：${query}`,
+  ].join('\n');
+}
+
 export function buildWorkflowSessionHint(
   sessionKey: string,
   messages: RawMessage[],

@@ -401,18 +401,23 @@ function bundleOneLocalPlugin({ localDir, pluginId }) {
   echo`   ✅ ${pluginId}: local plugin bundled${copiedCount > 0 ? `, copied ${copiedCount} deps (skipped dupes: ${skippedDupes})` : ' (no deps)'}`;
 }
 
+const WORKFLOW_TOOL_RUNTIME_DEPS = ['@sinclair/typebox'];
+
 /**
- * Copy sto-toolkit shared SDK beside bundled plugins (sibling of sto-workflow-tool).
+ * Nest sto-toolkit inside sto-workflow-tool (OpenClaw scans extensions/* as plugins).
  */
-function bundleStoToolkitLibrary() {
+function bundleStoToolkitIntoWorkflowTool() {
+  const workflowOutDir = path.join(OUTPUT_ROOT, 'sto-workflow-tool');
+  if (!fs.existsSync(path.join(workflowOutDir, 'openclaw.plugin.json'))) return;
+
   const sourceDir = path.join(STO_PLUGIN_ROOT, STO_TOOLKIT_DIR);
   if (!fs.existsSync(path.join(sourceDir, 'index.ts'))) {
     echo`   ⚠️  ${STO_TOOLKIT_DIR} not found at ${sourceDir}, skipping`;
     return;
   }
 
-  const outputDir = path.join(OUTPUT_ROOT, STO_TOOLKIT_DIR);
-  echo`📦 Bundling shared library ${STO_TOOLKIT_DIR} -> ${outputDir}`;
+  const outputDir = path.join(workflowOutDir, STO_TOOLKIT_DIR);
+  echo`📦 Bundling ${STO_TOOLKIT_DIR} -> ${outputDir}`;
 
   if (fs.existsSync(outputDir)) {
     fs.rmSync(outputDir, { recursive: true, force: true });
@@ -420,7 +425,30 @@ function bundleStoToolkitLibrary() {
   fs.mkdirSync(outputDir, { recursive: true });
   fs.cpSync(sourceDir, outputDir, { recursive: true, filter: bundleCopyFilter });
 
-  echo`   ✅ ${STO_TOOLKIT_DIR}: shared library bundled`;
+  // Legacy sibling breaks Gateway plugin validation — remove if present.
+  const legacySibling = path.join(OUTPUT_ROOT, STO_TOOLKIT_DIR);
+  if (fs.existsSync(legacySibling)) {
+    fs.rmSync(legacySibling, { recursive: true, force: true });
+  }
+
+  for (const depName of WORKFLOW_TOOL_RUNTIME_DEPS) {
+    const depPath = path.join(NODE_MODULES, ...depName.split('/'));
+    if (!fs.existsSync(depPath)) {
+      echo`   ⚠️  Runtime dep "${depName}" not found, skipping`;
+      continue;
+    }
+    const destNM = path.join(workflowOutDir, 'node_modules', depName);
+    if (fs.existsSync(destNM)) continue;
+    try {
+      fs.mkdirSync(normWin(path.dirname(destNM)), { recursive: true });
+      fs.cpSync(normWin(fs.realpathSync(depPath)), normWin(destNM), { recursive: true, dereference: true });
+      echo`   ✅ Copied runtime dep ${depName} for sto-workflow-tool`;
+    } catch (err) {
+      echo`   ⚠️  Skipped ${depName}: ${err.message}`;
+    }
+  }
+
+  echo`   ✅ ${STO_TOOLKIT_DIR}: nested into sto-workflow-tool`;
 }
 
 /**
@@ -502,7 +530,7 @@ for (const plugin of PLUGINS) {
   }
 }
 
-bundleStoToolkitLibrary();
+bundleStoToolkitIntoWorkflowTool();
 
 // Save to cache for future builds
 if (cacheKey) {

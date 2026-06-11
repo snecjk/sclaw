@@ -937,33 +937,41 @@ exports.default = async function afterPack(context) {
     }
   }
 
-  // sto-workflow-tool imports ../sto-toolkit at runtime — copy shared SDK beside plugins.
-  const toolkitDestDir = join(pluginsDestRoot, STO_TOOLKIT_DIR);
-  const toolkitPreBuildDir = join(preBuildRoot, STO_TOOLKIT_DIR);
-  const toolkitSourceDir = join(localPluginSourceRoot, STO_TOOLKIT_DIR);
-  const toolkitSource =
-    existsSync(join(toolkitPreBuildDir, 'index.ts'))
-      ? toolkitPreBuildDir
-      : existsSync(join(toolkitSourceDir, 'index.ts'))
-        ? toolkitSourceDir
-        : null;
-  if (toolkitSource) {
-    console.log(`[after-pack] Copying shared library ${STO_TOOLKIT_DIR} -> ${toolkitDestDir}`);
-    if (existsSync(normWin(toolkitDestDir))) rmSync(normWin(toolkitDestDir), { recursive: true, force: true });
-    mkdirSync(normWin(toolkitDestDir), { recursive: true });
-    cpSync(normWin(toolkitSource), normWin(toolkitDestDir), {
-      recursive: true,
-      dereference: true,
-      filter: (src) => {
-        const name = basename(src);
-        if (/\.(test|spec)\.(ts|js|mjs)$/.test(name)) return false;
-        if (name === '__tests__' || name === 'node_modules') return false;
-        return true;
-      },
-    });
-    cleanupUnnecessaryFiles(toolkitDestDir);
-  } else {
-    console.warn(`[after-pack] ⚠️  ${STO_TOOLKIT_DIR} not found; sto-workflow-tool may fail to load`);
+  // Nest sto-toolkit inside sto-workflow-tool (OpenClaw scans extensions/* as plugins).
+  const workflowDestDir = join(pluginsDestRoot, 'sto-workflow-tool');
+  const legacyToolkitSibling = join(pluginsDestRoot, STO_TOOLKIT_DIR);
+  if (existsSync(legacyToolkitSibling)) {
+    rmSync(normWin(legacyToolkitSibling), { recursive: true, force: true });
+    console.log(`[after-pack] Removed legacy extensions/${STO_TOOLKIT_DIR} sibling`);
+  }
+  if (existsSync(join(workflowDestDir, 'openclaw.plugin.json'))) {
+    const nestedToolkitDir = join(workflowDestDir, STO_TOOLKIT_DIR);
+    const nestedPreBuild = join(preBuildRoot, 'sto-workflow-tool', STO_TOOLKIT_DIR);
+    const toolkitSourceDir = join(localPluginSourceRoot, STO_TOOLKIT_DIR);
+    const toolkitSource =
+      existsSync(join(nestedPreBuild, 'index.ts'))
+        ? nestedPreBuild
+        : existsSync(join(toolkitSourceDir, 'index.ts'))
+          ? toolkitSourceDir
+          : null;
+    if (toolkitSource) {
+      console.log(`[after-pack] Copying ${STO_TOOLKIT_DIR} -> ${nestedToolkitDir}`);
+      if (existsSync(normWin(nestedToolkitDir))) rmSync(normWin(nestedToolkitDir), { recursive: true, force: true });
+      mkdirSync(normWin(nestedToolkitDir), { recursive: true });
+      cpSync(normWin(toolkitSource), normWin(nestedToolkitDir), {
+        recursive: true,
+        dereference: true,
+        filter: (src) => {
+          const name = basename(src);
+          if (/\.(test|spec)\.(ts|js|mjs)$/.test(name)) return false;
+          if (name === '__tests__' || name === 'node_modules') return false;
+          return true;
+        },
+      });
+      cleanupUnnecessaryFiles(nestedToolkitDir);
+    } else {
+      console.warn(`[after-pack] ⚠️  ${STO_TOOLKIT_DIR} not found; sto-workflow-tool may fail to load`);
+    }
   }
 
   // 2. General cleanup on the full openclaw directory (not just node_modules)
