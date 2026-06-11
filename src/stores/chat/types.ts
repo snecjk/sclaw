@@ -1,3 +1,39 @@
+import type { WorkflowExecutionState } from '@/types/workflow';
+import type { DingTalkMention } from '@/types/dingtalk-mention';
+
+export interface SendMessageOptions {
+  text: string;
+  attachments?: Array<{
+    fileName: string;
+    mimeType: string;
+    fileSize: number;
+    stagedPath: string;
+    preview: string | null;
+  }>;
+  targetAgentId?: string | null;
+  dingTalkMentions?: DingTalkMention[];
+  workflowId?: string | null;
+  runId?: string | null;
+  /** Hidden workflow schema context injected into the user message for AI guidance */
+  workflowContext?: WorkflowContextBlock | null;
+}
+
+/** Hidden context block describing a workflow for AI parameter guidance */
+export interface WorkflowContextBlock {
+  type: 'workflow_context';
+  templateId: string;
+  templateName: string;
+  schemaHash: string;
+  fields: Array<{
+    key: string;
+    label: string;
+    component: string;
+    required?: boolean;
+    options?: Array<{ value: string; label: string }>;
+    defaultValue?: unknown;
+  }>;
+}
+
 /** Metadata for locally-attached files (not from Gateway) */
 export interface AttachedFileMeta {
   fileName: string;
@@ -23,7 +59,7 @@ export interface RawMessage {
 
 /** Content block inside a message */
 export interface ContentBlock {
-  type: 'text' | 'image' | 'thinking' | 'tool_use' | 'tool_result' | 'toolCall' | 'toolResult';
+  type: 'text' | 'image' | 'thinking' | 'tool_use' | 'tool_result' | 'toolCall' | 'toolResult' | 'workflow_card' | 'parameter_form' | 'workflow_context';
   text?: string;
   thinking?: string;
   source?: { type: string; media_type?: string; data?: string; url?: string };
@@ -35,6 +71,29 @@ export interface ContentBlock {
   input?: unknown;
   arguments?: unknown;
   content?: unknown;
+  /** Workflow execution card reference */
+  runId?: string;
+  /** Shared by workflow_card and workflow_context blocks */
+  templateName?: string;
+  /** Parameter form block fields */
+  formId?: string;
+  formConfig?: import('@/types/user-form').UserFormConfig;
+  formContext?: {
+    source: 'workflow' | 'tool' | 'skill';
+    sourceId: string;
+    schemaHash?: string;
+  };
+  /** Workflow context block fields (hidden from user, used for AI guidance) */
+  templateId?: string;
+  schemaHash?: string;
+  fields?: Array<{
+    key: string;
+    label: string;
+    component: string;
+    required?: boolean;
+    options?: Array<{ value: string; label: string }>;
+    defaultValue?: unknown;
+  }>;
 }
 
 /** Session from sessions.list */
@@ -96,6 +155,32 @@ export interface ChatState {
   showThinking: boolean;
   thinkingLevel: string | null;
 
+  // Workflow
+  workflowCardStates: Record<string, WorkflowExecutionState>;
+  setWorkflowCardState: (runId: string, state: WorkflowExecutionState) => void;
+  pendingWorkflow: {
+    templateId: string;
+    templateName: string;
+    schema: import('@/types/workflow').WorkflowSchema;
+    schemaHash: string;
+    workflowId?: string;
+    collectedInputs?: Record<string, unknown>;
+    /** Set to true when the frontend has already inserted a parameter_form inline.
+     *  Prevents maybeAppendWorkflowParameterForm from double-injecting. */
+    frontendFormInserted?: boolean;
+    /** Set after sendWithWorkflow has sent workflowContext to the model via Gateway. */
+    modelGuidanceSent?: boolean;
+  } | null;
+  setPendingWorkflow: (pending: ChatState['pendingWorkflow']) => void;
+  clearPendingWorkflow: () => void;
+  /** Awaiting user to pick a template after NL search returned medium confidence. */
+  pendingTemplateSelection: {
+    templates: import('@/types/workflow').WorkflowTemplateSearchItem[];
+    originalText: string;
+  } | null;
+  setPendingTemplateSelection: (pending: ChatState['pendingTemplateSelection']) => void;
+  clearPendingTemplateSelection: () => void;
+
   // Actions
   loadSessions: () => Promise<void>;
   switchSession: (key: string) => void;
@@ -105,18 +190,7 @@ export interface ChatState {
   deleteSession: (key: string) => Promise<void>;
   cleanupEmptySession: () => void;
   loadHistory: (quiet?: boolean) => Promise<void>;
-  sendMessage: (
-    text: string,
-    attachments?: Array<{
-      fileName: string;
-      mimeType: string;
-      fileSize: number;
-      stagedPath: string;
-      preview: string | null;
-    }>,
-    targetAgentId?: string | null,
-    dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[],
-  ) => Promise<void>;
+  sendMessage: (options: SendMessageOptions) => Promise<void>;
   abortRun: () => Promise<void>;
   handleChatEvent: (event: Record<string, unknown>) => void;
   toggleThinking: () => void;

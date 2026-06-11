@@ -3,9 +3,13 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 export const MENTION_SPAN_CLASS = 'dingtalk-mention-token';
 export const MENTION_SPAN_SELECTOR = `span.${MENTION_SPAN_CLASS}`;
 
+export const WORKFLOW_SPAN_CLASS = 'workflow-token';
+export const WORKFLOW_SPAN_SELECTOR = `span.${WORKFLOW_SPAN_CLASS}`;
+
 export interface MentionComposerSnapshot {
   plainText: string;
   mentions: DingTalkMention[];
+  workflowId?: string;
   isEmpty: boolean;
 }
 
@@ -17,8 +21,12 @@ export interface ActiveMentionTrigger {
   endOffset: number;
 }
 
-function isMentionSpan(node: Node | null): node is HTMLSpanElement {
+function isMentionSpan(node: Node | null): boolean {
   return node instanceof HTMLSpanElement && node.classList.contains(MENTION_SPAN_CLASS);
+}
+
+function isWorkflowSpan(node: Node | null): boolean {
+  return node instanceof HTMLSpanElement && node.classList.contains(WORKFLOW_SPAN_CLASS);
 }
 
 function readMentionFromSpan(span: HTMLSpanElement): DingTalkMention | null {
@@ -48,6 +56,7 @@ function readMentionFromSpan(span: HTMLSpanElement): DingTalkMention | null {
 export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapshot {
   const mentions: DingTalkMention[] = [];
   let plainText = '';
+  let workflowId: string | undefined;
 
   const walk = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -65,6 +74,13 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
       return;
     }
 
+    if (isWorkflowSpan(node)) {
+      const id = (node as HTMLSpanElement).dataset.workflowId;
+      if (id) workflowId = id;
+      plainText += (node as HTMLSpanElement).textContent ?? '';
+      return;
+    }
+
     const element = node as HTMLElement;
     if (element.tagName === 'BR') {
       plainText += '\n';
@@ -79,6 +95,7 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
   return {
     plainText: normalized,
     mentions,
+    workflowId,
     isEmpty: normalized.trim().length === 0 && mentions.length === 0,
   };
 }
@@ -117,7 +134,7 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
       return null;
     }
 
-    if (node instanceof HTMLElement && isMentionSpan(node)) {
+    if (node instanceof HTMLElement && (isMentionSpan(node) || isWorkflowSpan(node))) {
       const text = node.textContent ?? '';
       const next = current + text.length;
       if (targetOffset <= next) {
@@ -270,6 +287,20 @@ export function createMentionSpan(mention: DingTalkMention, options?: MentionSpa
   return span;
 }
 
+export function createWorkflowSpan(workflowId: string, name: string): HTMLSpanElement {
+  const span = document.createElement('span');
+  span.className = [
+    WORKFLOW_SPAN_CLASS,
+    'inline',
+    'text-primary',
+    'font-medium',
+  ].join(' ');
+  span.contentEditable = 'false';
+  span.dataset.workflowId = workflowId;
+  span.textContent = `/${name}`;
+  return span;
+}
+
 export function removeMentionSpan(root: HTMLElement, span: HTMLSpanElement): void {
   if (!root.contains(span)) return;
 
@@ -308,6 +339,38 @@ export function insertMentionAtTrigger(
   root.focus();
 }
 
+export function insertWorkflowSpan(
+  root: HTMLElement,
+  workflowId: string,
+  name: string,
+): void {
+  const selection = window.getSelection();
+  const snapshot = serializeMentionEditor(root);
+  const text = snapshot.plainText;
+  const lastSlashIndex = text.lastIndexOf('/');
+
+  if (lastSlashIndex >= 0) {
+    const slashRange = buildRangeFromPlainTextOffsets(root, lastSlashIndex, lastSlashIndex + 1);
+    if (slashRange) {
+      slashRange.deleteContents();
+    }
+  }
+
+  const span = createWorkflowSpan(workflowId, name);
+  const space = document.createTextNode('\u00A0');
+
+  // Insert at the end (or at the slash position if found)
+  root.appendChild(span);
+  root.appendChild(space);
+
+  const caretRange = document.createRange();
+  caretRange.setStart(space, 1);
+  caretRange.collapse(true);
+  selection?.removeAllRanges();
+  selection?.addRange(caretRange);
+  root.focus();
+}
+
 export function removeMentionBeforeCaret(root: HTMLElement): boolean {
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) return false;
@@ -320,7 +383,7 @@ export function removeMentionBeforeCaret(root: HTMLElement): boolean {
   if (startContainer.nodeType === Node.TEXT_NODE) {
     const textNode = startContainer as Text;
     const prev = textNode.previousSibling;
-    if (isMentionSpan(prev)) {
+    if (prev && (isMentionSpan(prev) || isWorkflowSpan(prev))) {
       const text = textNode.data ?? '';
       const trailingSeparator = text === '\u00A0' || text === ' ';
       if (startOffset === 0 || (trailingSeparator && startOffset <= text.length)) {
@@ -340,7 +403,7 @@ export function removeMentionBeforeCaret(root: HTMLElement): boolean {
   if (startContainer instanceof HTMLElement) {
     const index = startOffset - 1;
     const prev = startContainer.childNodes[index] ?? null;
-    if (isMentionSpan(prev)) {
+    if (isMentionSpan(prev) || isWorkflowSpan(prev)) {
       prev.remove();
       const next = startContainer.childNodes[index] ?? null;
       if (next?.nodeType === Node.TEXT_NODE && (next.textContent === '\u00A0' || next.textContent === '')) {

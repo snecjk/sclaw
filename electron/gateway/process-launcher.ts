@@ -41,6 +41,7 @@ export async function launchGatewayProcess(options: {
   getCurrentState: () => GatewayLifecycleState;
   getShouldReconnect: () => boolean;
   onStderrLine: (line: string) => void;
+  onStdoutLine: (line: string) => void;
   onSpawn: (pid: number | undefined) => void;
   onExit: (child: Electron.UtilityProcess, code: number | null) => void;
   onError: (error: Error) => void;
@@ -115,6 +116,17 @@ export async function launchGatewayProcess(options: {
       const raw = data.toString();
       for (const line of raw.split(/\r?\n/)) {
         options.onStderrLine(line);
+      }
+    });
+
+    // stdout MUST be drained: piped streams start paused, and once the OS
+    // pipe buffer fills (as small as 4KB on Windows) any write to stdout
+    // blocks the whole Gateway process — it then misses heartbeats and gets
+    // force-restarted, showing up as random mid-run Gateway interruptions.
+    child.stdout?.on('data', (data) => {
+      const raw = data.toString();
+      for (const line of raw.split(/\r?\n/)) {
+        options.onStdoutLine(line);
       }
     });
 

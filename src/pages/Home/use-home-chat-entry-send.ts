@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useMessageQueueStore } from '@/stores/message-queue';
-import { invokeApi } from '@/lib/api-client';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
@@ -17,81 +16,35 @@ export function useHomeChatEntrySend() {
   const { t } = useTranslation('home');
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
-  const sendMessage = useChatStore((s) => s.sendMessage);
   const newSession = useChatStore((s) => s.newSession);
 
   const handleHubQueue = useCallback(
-    (
-      text: string,
-      attachments?: FileAttachment[],
-      targetAgentId?: string | null,
-      dingTalkMentions?: DingTalkMention[],
-    ) => {
+    (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, _dingTalkMentions?: DingTalkMention[], workflowId?: string | null) => {
       const { currentSessionKey } = useChatStore.getState();
-      useMessageQueueStore.getState().enqueue(
-        currentSessionKey,
-        text,
-        attachments,
-        targetAgentId,
-        dingTalkMentions,
-      );
+      useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, _dingTalkMentions, workflowId);
     },
     [],
   );
 
   const handleHubSend = useCallback(
-    async (
-      text: string,
-      attachments?: FileAttachment[],
-      targetAgentId?: string | null,
-      dingTalkMentions?: DingTalkMention[],
-    ) => {
+    async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, _dingTalkMentions?: DingTalkMention[], workflowId?: string | null) => {
       if (!isGatewayRunning) {
         toast.error(t('assistant.gatewayRequired'));
         return;
       }
+
       const { currentSessionKey } = useChatStore.getState();
       if (currentSessionKey === DEFAULT_SESSION_KEY) {
         newSession();
       }
 
-      const skipQuestionSplit = !!(dingTalkMentions && dingTalkMentions.length > 0);
-
-      let parts: Array<{ type: string; context: string }> | null = null;
-      if (!skipQuestionSplit) {
-        try {
-          const { currentAgentId: agentId, currentSessionKey } = useChatStore.getState();
-          parts = await invokeApi<Array<{ type: string; context: string }>>('question:split', {
-            prompt: text,
-            agentId: agentId,
-            sessionId: currentSessionKey,
-          });
-        } catch {
-          // Silent fallback — same as Chat page
-        }
-      }
-
-      const failed = () => Boolean(useChatStore.getState().error);
-
-      if (parts && parts.length > 1) {
-        await sendMessage(parts[0].context, attachments, targetAgentId, dingTalkMentions);
-        if (failed()) {
-          toast.error(t('assistant.sendFailed'));
-          return;
-        }
-        const { currentSessionKey: sessionKey } = useChatStore.getState();
-        for (let i = 1; i < parts.length; i++) {
-          useMessageQueueStore.getState().enqueue(sessionKey, parts[i].context, undefined, targetAgentId);
-        }
-      } else {
-        await sendMessage(text, attachments, targetAgentId, dingTalkMentions);
-        if (failed()) {
-          toast.error(t('assistant.sendFailed'));
-          return;
-        }
+      const { dispatchChatSend } = await import('@/hooks/dispatch-chat-send');
+      await dispatchChatSend({ text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId });
+      if (useChatStore.getState().error) {
+        toast.error(t('assistant.sendFailed'));
       }
     },
-    [isGatewayRunning, newSession, sendMessage, t],
+    [isGatewayRunning, newSession, t],
   );
 
   return {

@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowDown, Loader2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
+import { useChatStore, type RawMessage } from '@/stores/chat';
+import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
+import { useWorkflowCompletion } from '@/hooks/use-workflow-completion';
 import { useAgentsStore } from '@/stores/agents';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
@@ -14,7 +16,6 @@ import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { cn } from '@/lib/utils';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
-import { usePreviewableFiles } from '@/pages/Chat/message-utils';
 
 /**
  * Main-agent conversation thread on the home route (replaces the old `/chat` welcome + messages UI).
@@ -32,6 +33,8 @@ export function HomeMainConversation({ className }: { className?: string }) {
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const clearError = useChatStore((s) => s.clearError);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
+
+  useWorkflowCompletion(currentSessionKey);
 
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const { contentRef, scrollRef, scrollToBottom } = useStickToBottomInstant(currentSessionKey);
@@ -98,28 +101,36 @@ export function HomeMainConversation({ className }: { className?: string }) {
     [scrollToBottom],
   );
 
-  const [activePreviewFilePath, setActivePreviewFilePath] = useState<string | null>(null);
-  const [showPreviewPanel, setShowPreviewPanel] = useState(false);
   const [previewPanelWidth, setPreviewPanelWidth] = useState(480);
   const [isResizing, setIsResizing] = useState(false);
   const previewPanelRef = useRef<HTMLDivElement>(null);
 
   const allMessagesForPreview = useMemo(() => {
-    const arr = [...messages] as Array<{ _attachedFiles?: AttachedFileMeta[]; role?: string }>;
+    const arr = [...messages] as RawMessage[];
     if (streamMsg) {
-      arr.push(streamMsg as unknown as { _attachedFiles?: AttachedFileMeta[]; role?: string });
+      arr.push(streamMsg as unknown as RawMessage);
     }
     return arr;
   }, [messages, streamMsg]);
-  const previewableFiles = usePreviewableFiles(allMessagesForPreview);
-  const hasPreviewableFiles = previewableFiles.length > 0;
 
-  const handlePreviewFile = useCallback((file: AttachedFileMeta) => {
-    if (file.filePath) {
-      setActivePreviewFilePath(file.filePath);
-      setShowPreviewPanel(true);
-    }
-  }, []);
+  const {
+    showPreviewPanel,
+    setShowPreviewPanel,
+    activePreviewFilePath,
+    setActivePreviewFilePath,
+    previewActiveTab,
+    setPreviewActiveTab,
+    previewableFiles,
+    canShowPreviewPanel,
+    openArtifactPreview,
+    openWorkflowPreview,
+    closePreviewPanel,
+    showWorkflowTab,
+    workflowId: sessionWorkflowId,
+    workflowDetail,
+    workflowLoading,
+    workflowError,
+  } = useChatPreviewPanel(allMessagesForPreview);
 
   // ── Resizable panel logic ──
   const startResize = useCallback((e: React.MouseEvent) => {
@@ -209,7 +220,8 @@ export function HomeMainConversation({ className }: { className?: string }) {
                       turnToolResults={item.toolResults}
                       precedingUserMessage={item.precedingUserMessage}
                       showThinking={showThinking}
-                      onPreviewFile={handlePreviewFile}
+                      onPreviewFile={openArtifactPreview}
+                      onViewWorkflow={openWorkflowPreview}
                     />
                   );
                 }
@@ -218,7 +230,8 @@ export function HomeMainConversation({ className }: { className?: string }) {
                     key={item.key}
                     message={item.message}
                     showThinking={showThinking}
-                    onPreviewFile={handlePreviewFile}
+                    onPreviewFile={openArtifactPreview}
+                    onViewWorkflow={openWorkflowPreview}
                   />
                 );
               })}
@@ -230,7 +243,8 @@ export function HomeMainConversation({ className }: { className?: string }) {
                   precedingUserMessage={activeTurn.precedingUserMessage}
                   showThinking={showThinking}
                   activeStream={activeTurn.activeStream}
-                  onPreviewFile={handlePreviewFile}
+                  onPreviewFile={openArtifactPreview}
+                  onViewWorkflow={openWorkflowPreview}
                 />
               ) : null}
             </>
@@ -288,7 +302,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
       </div>
 
     {/* Resizer */}
-    {hasPreviewableFiles && showPreviewPanel && (
+    {canShowPreviewPanel && showPreviewPanel && (
       <div
         onMouseDown={startResize}
         className={cn(
@@ -303,7 +317,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
 
     {/* Right: Preview Panel */}
     <AnimatePresence>
-      {hasPreviewableFiles && showPreviewPanel && (
+      {canShowPreviewPanel && showPreviewPanel && (
         <motion.div
           ref={previewPanelRef}
           layout={false}
@@ -318,23 +332,32 @@ export function HomeMainConversation({ className }: { className?: string }) {
             files={previewableFiles}
             activeFilePath={activePreviewFilePath}
             onSelectFile={setActivePreviewFilePath}
-            onClose={() => setShowPreviewPanel(false)}
+            onClose={closePreviewPanel}
             className="h-full w-full"
+            showWorkflowTab={showWorkflowTab}
+            workflowId={sessionWorkflowId}
+            workflowDetail={workflowDetail}
+            workflowLoading={workflowLoading}
+            workflowError={workflowError}
+            activeTab={previewActiveTab}
+            onActiveTabChange={setPreviewActiveTab}
           />
         </motion.div>
       )}
     </AnimatePresence>
 
     {/* Floating toggle button when panel is hidden but files exist */}
-    {hasPreviewableFiles && !showPreviewPanel && (
+    {canShowPreviewPanel && !showPreviewPanel && (
       <button
         onClick={() => setShowPreviewPanel(true)}
         className="absolute right-4 top-4 z-20 inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-white/60 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white/80 dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
       >
-        <span>预览产物</span>
-        <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] text-primary">
-          {previewableFiles.length}
-        </span>
+        <span>{showWorkflowTab ? '预览' : '预览产物'}</span>
+        {previewableFiles.length > 0 && (
+          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] text-primary">
+            {previewableFiles.length}
+          </span>
+        )}
       </button>
     )}
   </div>

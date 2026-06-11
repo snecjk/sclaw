@@ -1,4 +1,58 @@
 {
+  "site": {
+    "hero": {
+      "title": "STO Claw，让网点运营更高效",
+      "subtitle": "搭载 AI 智能工作平台，重塑网点智慧运营新模式，赋能网点高效智能运营"
+    },
+    "workflowGuide": {
+      "heading": "工作流引导",
+      "monitor": {
+        "title": "客户异常监控",
+        "pill": "任务监控",
+        "status": "未配置",
+        "bodyCaption": "工作流简介",
+        "bodyDetail": "按日对比客户件量、货品结构、损益与服务指标，自动识别异常客户并生成监控报告，支持配置规则与定时推送至工作中心。",
+        "footerTeam": "客户跟踪小组",
+        "footerHint": "配置工作流",
+        "createPrompt": "客户异常监控 创建工作流"
+      },
+      "recon": {
+        "title": "总部结算对账",
+        "pill": "结算对账",
+        "status": "已完成",
+        "stat1Label": "总收支",
+        "stat1Value": "128,560",
+        "stat1Unit": "元",
+        "stat2Label": "收入",
+        "stat2Value": "98,750",
+        "stat2Unit": "元",
+        "stat3Label": "支出",
+        "stat3Value": "29,810",
+        "stat3Unit": "元",
+        "footerTeam": "王牌结算小组",
+        "footerHint": "存在异常4项目"
+      },
+      "cost": {
+        "title": "客户成本分析",
+        "pill": "任务监控",
+        "status": "已完成",
+        "stat1Label": "异常客户",
+        "stat1Value": "57",
+        "stat1Unit": "个",
+        "stat2Label": "高风险",
+        "stat2Value": "12",
+        "stat2Unit": "个",
+        "stat3Label": "涉及金额",
+        "stat3Value": "-26,980.70",
+        "stat3Unit": "元",
+        "footerTeam": "客户跟踪小组",
+        "footerHint": "存在异常3项"
+      }
+    },
+    "assistant": {
+      "placeholder": "帮我做一份客户异常监控"
+    }
+  },
   "hero": {
     "title": "STO Claw，让经营管理更高效",
     "subtitle": "搭载AI智能工作台，驱动组织高效协同，赋能经营管理新价值"

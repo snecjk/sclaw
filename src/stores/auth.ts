@@ -336,6 +336,7 @@ export const useAuthStore = create<AuthState>()(
             });
 
             showStoSyncErrorToasts(data.stoSync);
+            void syncStoModelsAndRefreshProviders('login');
             void refreshProviderSnapshot();
             void get().refreshCrmWeekReportPolicy();
 

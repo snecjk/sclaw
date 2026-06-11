@@ -17,10 +17,21 @@ chcp 65001 >nul 2>&1
 
 set OPENCLAW_EMBEDDED_IN=StoClaw
 set "NODE_EXE=%~dp0..\bin\node.exe"
-set "OPENCLAW_ENTRY=%~dp0..\openclaw\openclaw.mjs"
+set "OPENCLAW_ASAR=%~dp0..\openclaw.asar"
+set "OPENCLAW_LEGACY=%~dp0..\openclaw\openclaw.mjs"
+rem ASAR layout: entry lives inside openclaw.asar. Plain node.exe cannot read
+rem ASAR archives (only Electron's patched fs can), so we MUST run through
+rem StoClaw.exe with ELECTRON_RUN_AS_NODE in that case.
+set "_IS_ASAR=0"
+if exist "%OPENCLAW_ASAR%" (
+    set "OPENCLAW_ENTRY=%OPENCLAW_ASAR%\openclaw.mjs"
+    set "_IS_ASAR=1"
+) else (
+    set "OPENCLAW_ENTRY=%OPENCLAW_LEGACY%"
+)
 
 set "_USE_BUNDLED_NODE=0"
-if exist "%NODE_EXE%" (
+if "%_IS_ASAR%"=="0" if exist "%NODE_EXE%" (
     "%NODE_EXE%" -e "const [maj,min]=process.versions.node.split('.').map(Number);process.exit((maj>22||maj===22&&min>=16)?0:1)" >nul 2>&1
     if not errorlevel 1 set "_USE_BUNDLED_NODE=1"
 )

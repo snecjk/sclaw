@@ -19,7 +19,11 @@ import type { AgentSummary } from '@/types/agent';
 import { useTranslation } from 'react-i18next';
 import { DingTalkMentionEditor, type DingTalkMentionEditorHandle } from '@/components/dingtalk/DingTalkMentionEditor';
 import { DingTalkMentionPopover } from '@/components/dingtalk/DingTalkMentionPopover';
+import { WorkflowPicker } from '@/components/workflow/WorkflowPicker';
+
 import { useDingTalkMention } from '@/hooks/useDingTalkMention';
+import { useAuthStore } from '@/stores/auth';
+import { useWorkflowsStore } from '@/stores/workflows';
 import type { ActiveMentionTrigger, MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention, MentionSearchItem } from '@/types/dingtalk-mention';
 import { mentionSearchItemToMention } from '@/types/dingtalk-mention';
@@ -43,6 +47,7 @@ interface ChatInputProps {
     attachments?: FileAttachment[],
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
+    workflowId?: string | null,
   ) => void;
   onStop?: () => void;
   onQueue?: (
@@ -50,6 +55,7 @@ interface ChatInputProps {
     attachments?: FileAttachment[],
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
+    workflowId?: string | null,
   ) => void;
   disabled?: boolean;
   sending?: boolean;
@@ -58,6 +64,8 @@ interface ChatInputProps {
   variant?: 'default' | 'embedded';
   /** One-time seed into the textarea (e.g. task subitem default prompt). */
   seedText?: string;
+  /** Override default composer placeholder (e.g. site home prompt). */
+  placeholder?: string;
   /** Merged onto the outer wrapper (after defaults); use to tune padding, e.g. task subitem bottom inset. */
   className?: string;
 }
@@ -131,6 +139,7 @@ export function ChatInput({
   isEmpty: _isEmpty = false,
   variant = 'default',
   seedText,
+  placeholder,
   className,
 }: ChatInputProps) {
   const { t } = useTranslation('chat');
@@ -146,7 +155,10 @@ export function ChatInput({
   const mentionEditorRef = useRef<DingTalkMentionEditorHandle>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const mentionPopoverRef = useRef<HTMLDivElement>(null);
+  const workflowPickerRef = useRef<HTMLDivElement>(null);
+  const workflowButtonRef = useRef<HTMLButtonElement>(null);
   const isComposingRef = useRef(false);
+  const [workflowPickerOpen, setWorkflowPickerOpen] = useState(false);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
@@ -185,9 +197,11 @@ export function ChatInput({
     install: installDingTalkMention,
     installing: dingTalkInstalling,
   } = useDingTalkMention(mentionTrigger);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const { templates, prefetchTemplates } = useWorkflowsStore();
   const composerPlaceholder = disabled
     ? t('composer.gatewayDisconnectedPlaceholder')
-    : t('composer.messagePlaceholder', { agent: currentAgentName });
+    : placeholder?.trim() || t('composer.messagePlaceholder', { agent: currentAgentName });
   const dailyTokenQuotaText = useMemo(() => {
     const usedToday = dailyTokenQuotaStatus?.usedToday;
     const limit = dailyTokenQuotaStatus?.limit;
@@ -236,6 +250,29 @@ export function ChatInput({
       document.removeEventListener('mousedown', handlePointerDown);
     };
   }, [pickerOpen]);
+
+  useEffect(() => {
+    if (!workflowPickerOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        !workflowPickerRef.current?.contains(target) &&
+        !workflowButtonRef.current?.contains(target)
+      ) {
+        setWorkflowPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [workflowPickerOpen]);
+
+  // Preload top templates so picker and NL "创建工作流" respond quickly.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    void prefetchTemplates();
+  }, [isAuthenticated, prefetchTemplates]);
 
   const applyDingTalkMention = useCallback((item: MentionSearchItem) => {
     if (!dingTalkTrigger) return;
@@ -387,17 +424,20 @@ export function ChatInput({
     const textToSend = snapshot.plainText.trim();
     const attachmentsToSend = readyAttachments.length > 0 ? readyAttachments : undefined;
     const mentionsToSend = snapshot.mentions.length > 0 ? snapshot.mentions : undefined;
+    const workflowIdToSend = snapshot.workflowId;
     mentionEditorRef.current?.clear();
     setAttachments([]);
     setMentionTrigger(null);
     // When AI is responding and queue callback is available, add to queue instead of sending directly
-    if (sending && onQueue) {
-      onQueue(textToSend, attachmentsToSend, targetAgentId, mentionsToSend);
+    // but only if no workflow is selected (workflow creation flow needs direct send)
+    if (sending && onQueue && !workflowIdToSend) {
+      onQueue(textToSend, attachmentsToSend, targetAgentId, mentionsToSend, workflowIdToSend);
     } else {
-      onSend(textToSend, attachmentsToSend, targetAgentId, mentionsToSend);
+      onSend(textToSend, attachmentsToSend, targetAgentId, mentionsToSend, workflowIdToSend);
     }
     setTargetAgentId(null);
     setPickerOpen(false);
+    setWorkflowPickerOpen(false);
     closeDingTalkMention();
   }, [attachments, canSend, closeDingTalkMention, composerSnapshot, onQueue, onSend, sending, targetAgentId]);
 
@@ -439,6 +479,20 @@ export function ChatInput({
         setTargetAgentId(null);
         return;
       }
+      // Trigger workflow picker when typing /
+      const hasWorkflowInEditor = !!composerSnapshot.workflowId;
+      if (e.key === '/' && !workflowPickerOpen && !hasWorkflowInEditor) {
+        const nativeEvent = e.nativeEvent as KeyboardEvent;
+        if (!isComposingRef.current && !nativeEvent.isComposing && nativeEvent.keyCode !== 229) {
+          // Close mention popover if open
+          if (dingTalkMentionOpen) {
+            closeDingTalkMention();
+            setMentionTrigger(null);
+          }
+          setWorkflowPickerOpen(true);
+        }
+      }
+
       if (e.key === 'Enter' && !e.shiftKey) {
         const nativeEvent = e.nativeEvent as KeyboardEvent;
         if (isComposingRef.current || nativeEvent.isComposing || nativeEvent.keyCode === 229) {
@@ -572,6 +626,8 @@ export function ChatInput({
             </div>
           )}
 
+
+
           <div className={cn('px-4', attachments.length > 0 ? 'pt-1.5' : 'pt-2.5')}>
             <div ref={mentionPopoverRef} className="flex-1 relative">
               <DingTalkMentionPopover
@@ -664,7 +720,43 @@ export function ChatInput({
                   )}
                 </div>
               )}
+
+              {/* Workflow picker button */}
+              <div ref={workflowPickerRef} className="relative shrink-0">
+                <Button
+                  ref={workflowButtonRef}
+                  variant="ghost"
+                  type="button"
+                  className={cn(
+                    'h-8  rounded-full p-4 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
+                    workflowPickerOpen && 'bg-primary/10 text-primary hover:bg-primary/12'
+                  )}
+                  onClick={() => setWorkflowPickerOpen((open) => !open)}
+                  disabled={disabled}
+                  title={t('composer.pickWorkflow')}
+                >
+                  <span className="text-[13px] font-medium">{t('composer.pickWorkflow')}</span>
+                </Button>
+              </div>
             </div>
+
+            {/* Workflow picker */}
+            <WorkflowPicker
+              ref={workflowPickerRef}
+              open={workflowPickerOpen}
+              onClose={() => setWorkflowPickerOpen(false)}
+              onSelect={async (id) => {
+                setWorkflowPickerOpen(false);
+                const { useChatStore } = await import('@/stores/chat');
+                useChatStore.getState().clearPendingWorkflow();
+                const template = templates.find((w) => w.id === id);
+                if (template) {
+                  mentionEditorRef.current?.insertWorkflow(id, template.label);
+                }
+                mentionEditorRef.current?.focus();
+              }}
+              className="absolute left-4 right-4 bottom-full z-50 mb-2"
+            />
 
             {/* When sending: show Send (to queue) if there's input, otherwise show Stop */}
             {sending && canSend ? (
