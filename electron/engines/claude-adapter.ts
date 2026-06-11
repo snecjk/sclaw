@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { syncClaudeSkillsForAgent } from '../services/claude-skill-bridge';
+import { getProviderAccount } from '../services/providers/provider-store';
+import { StoModelSyncService } from '../services/providers/sto-model-sync';
 import { getAgentPreferredModel, getAgentWorkspacePath } from '../utils/agent-config';
+import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import { getClawXConfigDir } from '../utils/paths';
+import { getApiKey } from '../utils/secure-storage';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, upsertEngineSessionRegistryEntry } from './session-registry';
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EngineSessionSummary } from './types';
 
@@ -30,11 +34,83 @@ function getClaudeConfigDir(): string {
   return join(getClawXConfigDir(), '.claude');
 }
 
-function getClaudeProcessEnv(): NodeJS.ProcessEnv {
-  return {
+async function buildClaudeEnvForAccount(accountId?: string): Promise<NodeJS.ProcessEnv> {
+  const base: NodeJS.ProcessEnv = {
     ...process.env,
     CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
   };
+
+  if (!accountId) {
+    logger.debug('[claude-env] No accountId, returning base env');
+    return base;
+  }
+
+  const account = await getProviderAccount(accountId);
+  if (!account) {
+    logger.debug(`[claude-env] Account "${accountId}" not found`);
+    return base;
+  }
+
+  if (account.vendorId === 'sto') {
+    const token = await getStoToken();
+    const ssoEnv = await getSsoEnvironment();
+    const domain = StoModelSyncService.resolveDomain(ssoEnv);
+    if (token) {
+      const baseUrl = `${domain}/v1/anthropic`;
+      base.ANTHROPIC_BASE_URL = baseUrl;
+      base.ANTHROPIC_API_KEY = token;
+      base.ANTHROPIC_AUTH_TOKEN = token;
+      logger.info(`[claude-env] STO provider: base_url=${baseUrl}`);
+    } else {
+      logger.warn('[claude-env] STO provider but no stoToken available');
+    }
+    return base;
+  }
+
+  // Generic: use account's baseUrl + stored API key for Anthropic-compatible providers
+  const apiKey = await getApiKey(accountId);
+  if (account.baseUrl) {
+    base.ANTHROPIC_BASE_URL = account.baseUrl;
+  }
+  if (apiKey) {
+    base.ANTHROPIC_API_KEY = apiKey;
+    base.ANTHROPIC_AUTH_TOKEN = apiKey;
+  }
+  logger.info(`[claude-env] Provider "${account.vendorId}": base_url=${account.baseUrl ?? '(default)'}`);
+
+  return base;
+}
+
+/**
+ * Strip ANTHROPIC_* env vars from settings.json so they don't override
+ * the dynamically injected values from buildClaudeEnvForAccount().
+ * The Claude Agent SDK loads settings.json env AFTER receiving the
+ * process env, which can overwrite our ANTHROPIC_BASE_URL / API_KEY.
+ */
+async function sanitizeClaudeSettingsEnv(): Promise<void> {
+  const settingsPath = join(getClaudeConfigDir(), 'settings.json');
+  try {
+    const raw = await readFile(settingsPath, 'utf8');
+    const settings = JSON.parse(raw) as Record<string, unknown>;
+    const env = settings.env as Record<string, unknown> | undefined;
+    if (!env || typeof env !== 'object') return;
+
+    let changed = false;
+    for (const key of Object.keys(env)) {
+      if (key.startsWith('ANTHROPIC_')) {
+        delete env[key];
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      settings.env = env;
+      await writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+      logger.info('[claude-settings] Stripped ANTHROPIC_* env vars from settings.json');
+    }
+  } catch {
+    // settings.json doesn't exist or is unreadable — nothing to sanitize
+  }
 }
 
 let ensureClaudeConfigDirPromise: Promise<void> | null = null;
@@ -408,12 +484,13 @@ async function startClaudeQuery(
 
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();
+    await sanitizeClaudeSettingsEnv();
     const query = sdk.query({
       prompt: message,
       options: existing?.sessionId
         ? {
           cwd,
-          env: getClaudeProcessEnv(),
+          env: await buildClaudeEnvForAccount(existing?.accountId),
           resume: existing.sessionId,
           permissionMode: 'bypassPermissions',
           allowDangerouslySkipPermissions: true,
@@ -424,7 +501,7 @@ async function startClaudeQuery(
         }
         : {
           cwd,
-          env: getClaudeProcessEnv(),
+          env: await buildClaudeEnvForAccount(existing?.accountId),
           sessionId,
           permissionMode: 'bypassPermissions',
           allowDangerouslySkipPermissions: true,
