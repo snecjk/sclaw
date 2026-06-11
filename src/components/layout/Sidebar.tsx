@@ -796,12 +796,12 @@ export function Sidebar() {
 
       <nav
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden pb-2 pt-2',
+          'flex shrink-0 flex-col gap-1 overflow-hidden pb-2 pt-2',
           sidebarCollapsed ? 'px-0' : 'px-2',
         )}
       >
-        {/* 固定区：避免下方 flex-1 会话占位在滚动叠层时盖住任务子链（如第二条日期药丸） */}
-        <div className="relative z-10 flex shrink-0 flex-col gap-1">
+        {/* 固定区：首页、定时任务、技能广场、工作区等 */}
+        <div className="flex shrink-0 flex-col gap-1">
         <div className={cn('flex flex-col gap-1', sidebarCollapsed && 'mt-2')}>
 {primaryNav.map((item) => {
   // 当有选中非默认会话时，首页不高亮，避免与会话列表项同时高亮
@@ -846,6 +846,40 @@ export function Sidebar() {
 })}
         </div>
 
+        {sidebarVis.workspace ? (
+          !sidebarCollapsed ? (
+            <SidebarCollapsibleSectionLabel
+              open={workspaceSectionOpen}
+              onToggle={() => setWorkspaceSectionOpen((o) => !o)}
+              label={t('common:sidebar.workspace')}
+              toggleAriaLabel={t('common:sidebar.toggleWorkspaceSection')}
+            />
+          ) : (
+            <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
+          )
+        ) : null}
+        {sidebarVis.workspace && (sidebarCollapsed || workspaceSectionOpen) && (
+        <div className="flex flex-col gap-1">
+          {workspaceNav.map((item) => (
+            <SidebarNavLink
+              key={item.to}
+              to={item.to}
+              icon={item.icon}
+              label={item.label}
+              collapsed={sidebarCollapsed}
+            />
+          ))}
+        </div>
+        )}
+        </div>
+      </nav>
+
+      <div
+        className={cn(
+          'min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden',
+          sidebarCollapsed ? 'px-0' : 'px-2',
+        )}
+      >
         {!sidebarCollapsed ? (
           <SidebarCollapsibleSectionLabel
             open={taskListSectionOpen}
@@ -874,32 +908,6 @@ export function Sidebar() {
             ))}
           </div>
         ) : null}
-
-        {sidebarVis.workspace ? (
-          !sidebarCollapsed ? (
-            <SidebarCollapsibleSectionLabel
-              open={workspaceSectionOpen}
-              onToggle={() => setWorkspaceSectionOpen((o) => !o)}
-              label={t('common:sidebar.workspace')}
-              toggleAriaLabel={t('common:sidebar.toggleWorkspaceSection')}
-            />
-          ) : (
-            <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
-          )
-        ) : null}
-        {sidebarVis.workspace && (sidebarCollapsed || workspaceSectionOpen) && (
-        <div className="flex flex-col gap-1">
-          {workspaceNav.map((item) => (
-            <SidebarNavLink
-              key={item.to}
-              to={item.to}
-              icon={item.icon}
-              label={item.label}
-              collapsed={sidebarCollapsed}
-            />
-          ))}
-        </div>
-        )}
 
         {sidebarVis.conversationChrome ? (
           !sidebarCollapsed ? (
@@ -953,9 +961,8 @@ export function Sidebar() {
             </Tooltip>
           )
         ) : null}
-        </div>
 
-        <div className="relative z-0 min-h-0 flex-1 overflow-y-auto overflow-x-hidden space-y-1 pb-2 pt-1">
+        <div className="space-y-1 pb-2 pt-1">
           {sidebarCollapsed && sessionsOrderedForCollapse.length > 0 ? (
             <div className="flex flex-col gap-1">
               {sessionsOrderedForCollapse.map((s) => {
@@ -1114,7 +1121,7 @@ isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION
             )
           )}
         </div>
-      </nav>
+      </div>
 
       {authUser ? (
         <div className="shrink-0 bg-[var(--sto-sidebar-bg)] p-2">
