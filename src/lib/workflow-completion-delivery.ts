@@ -61,6 +61,10 @@ function buildCompletionPrompt(
   }
 
   lines.push('', '请根据以上信息生成一段自然语言总结，包含执行状态、关键结果与产物引用。');
+  lines.push(
+    '',
+    '产物引用要求（必须遵守）：引用产物时一律使用上方产物列表中的 http(s) 链接，并以 Markdown 链接格式输出（如 [文件名](链接)）；严禁输出云端运行环境的内部文件路径（如 /runtime/、/workspace/ 开头的路径），用户无法访问这些路径；没有可用链接的产物只写文件名，不要编造链接。',
+  );
 
   return lines.join('\n');
 }

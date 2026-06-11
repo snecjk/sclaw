@@ -3,7 +3,8 @@
  * Ported from OpenClaw's message-extract.ts to handle the various
  * message content formats returned by the Gateway.
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { hostApiFetch } from '@/lib/host-api';
 import { useChatStore } from '@/stores/chat';
 import { sessionHasWorkflowExecution } from '@/stores/workflow-memory';
 import { buildWorkflowFormConfig } from '@/lib/workflow-form-utils';
@@ -18,9 +19,11 @@ import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay } from 
 import {
   artifactToPreviewFile,
   extractPreviewableHttpUrls,
+  inferMimeTypeFromUrl,
   isHttpUrl,
   isPreviewableArtifactUrl,
   isPreviewableRemoteUrl,
+  resolveArtifactUrlFromWorkflowStates,
 } from '@/lib/preview-url';
 import type { WorkflowExecutionState } from '@/types/workflow';
 
@@ -683,6 +686,83 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
   return results;
 }
 
+// ── Local path existence verification ────────────────────────────
+// Text-extracted paths may point at cloud-runtime locations (e.g. /runtime/outputs/x.html)
+// that do not exist on the user's machine. Verify before rendering preview entries.
+
+/** Module-level cache so the same path is stat-ed at most once per app session. */
+const _pathExistsCache = new Map<string, boolean>();
+
+/**
+ * Batch-verify local (non-http) paths via /api/files/stat.
+ * Returns a map of path → exists; paths still being verified are absent from the map.
+ * On transport failure paths are marked as existing (fail-open, preserves legacy behavior).
+ */
+export function useLocalPathExistence(paths: string[]): Record<string, boolean> {
+  const key = paths.join('\n');
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    const unknown = paths.filter((p) => !_pathExistsCache.has(p));
+    if (unknown.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await hostApiFetch<{ exists: Record<string, boolean> }>('/api/files/stat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paths: unknown }),
+        });
+        for (const p of unknown) {
+          _pathExistsCache.set(p, res?.exists?.[p] === true);
+        }
+      } catch {
+        for (const p of unknown) _pathExistsCache.set(p, true);
+      }
+      if (!cancelled) setVersion((v) => v + 1);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  return useMemo(() => {
+    const out: Record<string, boolean> = {};
+    for (const p of paths) {
+      const v = _pathExistsCache.get(p);
+      if (v !== undefined) out[p] = v;
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, version]);
+}
+
+/**
+ * Resolve a non-http candidate path to its final previewable form:
+ * - exists locally → keep the local path;
+ * - doesn't exist (cloud-runtime path) → map to the matching artifact OSS URL by basename;
+ * - unresolvable → null (do not render a preview entry).
+ */
+export function resolvePreviewCandidate(
+  file: { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null },
+  exists: boolean | undefined,
+  workflowCardStates?: Record<string, WorkflowExecutionState>,
+): { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null } | null {
+  if (isHttpUrl(file.filePath)) return file;
+  if (exists === true) return file;
+  if (exists === undefined) return null; // verification pending
+  const resolved = resolveArtifactUrlFromWorkflowStates(file.filePath, workflowCardStates ?? {});
+  if (resolved && isHttpUrl(resolved)) {
+    return {
+      ...file,
+      filePath: resolved,
+      mimeType: inferMimeTypeFromUrl(resolved, file.mimeType),
+    };
+  }
+  return null;
+}
+
 /**
  * Extract previewable files from an array of messages.
  * Includes both _attachedFiles and references found in message text.
@@ -691,7 +771,7 @@ export function usePreviewableFiles(
   messages: Array<unknown & { _attachedFiles?: Array<{ mimeType: string; filePath?: string; fileName: string }>; content?: unknown; role?: string }>,
   workflowCardStates?: Record<string, WorkflowExecutionState>,
 ) {
-  return useMemo(() => {
+  const candidates = useMemo(() => {
     const seen = new Set<string>();
     const result: Array<{ mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }> = [];
 
@@ -699,6 +779,24 @@ export function usePreviewableFiles(
       if (seen.has(item.filePath)) return;
       seen.add(item.filePath);
       result.push(item);
+    }
+
+    // Structured workflow artifacts first — authoritative OSS URLs win dedup.
+    if (workflowCardStates) {
+      for (const state of Object.values(workflowCardStates)) {
+        for (const artifact of state.result?.artifacts ?? []) {
+          if (!isPreviewableArtifactUrl(artifact.url, artifact.type)) continue;
+          const previewFile = artifactToPreviewFile(artifact);
+          if (!previewFile.filePath) continue;
+          addItem({
+            mimeType: previewFile.mimeType,
+            filePath: previewFile.filePath,
+            fileName: previewFile.fileName,
+            fileSize: previewFile.fileSize,
+            preview: previewFile.preview,
+          });
+        }
+      }
     }
 
     for (const msg of messages) {
@@ -735,25 +833,28 @@ export function usePreviewableFiles(
       }
     }
 
-    if (workflowCardStates) {
-      for (const state of Object.values(workflowCardStates)) {
-        for (const artifact of state.result?.artifacts ?? []) {
-          if (!isPreviewableArtifactUrl(artifact.url, artifact.type)) continue;
-          const previewFile = artifactToPreviewFile(artifact);
-          if (!previewFile.filePath) continue;
-          addItem({
-            mimeType: previewFile.mimeType,
-            filePath: previewFile.filePath,
-            fileName: previewFile.fileName,
-            fileSize: previewFile.fileSize,
-            preview: previewFile.preview,
-          });
-        }
-      }
-    }
-
     return result;
   }, [messages, workflowCardStates]);
+
+  // Verify non-http candidates against the local filesystem; cloud-runtime paths
+  // resolve to their artifact OSS URL or are dropped (never rendered as broken cards).
+  const localPaths = useMemo(
+    () => candidates.filter((f) => !isHttpUrl(f.filePath)).map((f) => f.filePath),
+    [candidates],
+  );
+  const existence = useLocalPathExistence(localPaths);
+
+  return useMemo(() => {
+    const seen = new Set<string>();
+    const result: typeof candidates = [];
+    for (const file of candidates) {
+      const resolved = resolvePreviewCandidate(file, existence[file.filePath], workflowCardStates);
+      if (!resolved || seen.has(resolved.filePath)) continue;
+      seen.add(resolved.filePath);
+      result.push(resolved);
+    }
+    return result;
+  }, [candidates, existence, workflowCardStates]);
 }
 
 /**

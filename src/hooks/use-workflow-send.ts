@@ -22,6 +22,7 @@ import { invokeIpc } from '@/lib/api-client';
 import { canStartWorkflow, useWorkflowsStore } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
 import { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } from '@/lib/workflow-local-turn';
+import { resolveSessionWorkflowId } from '@/lib/session-workflow-context';
 import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata, getSessionWorkflows } from '@/stores/workflow-memory';
 import type { WorkflowSchema, WorkflowSchemaField } from '@/types/workflow';
 
@@ -459,7 +460,7 @@ export async function tryResolvePendingWorkflow(
         };
         chatState.setPendingWorkflow(pending);
       } else {
-        toast.info('未找到可重新执行的工作流记录');
+        // No remembered workflow — let the model respond instead of a static local turn.
         return false;
       }
     }
@@ -669,7 +670,6 @@ export async function tryStartRememberedWorkflowSend(
   const {
     isWorkflowStartIntent,
     isImmediateExecutionIntent,
-    buildWorkflowStartUnavailablePrompt,
   } = await import('@/hooks/use-workflow-intent');
 
   const wantsStart = isWorkflowStartIntent(trimmed) || isImmediateExecutionIntent(trimmed);
@@ -693,15 +693,26 @@ export async function tryStartRememberedWorkflowSend(
   }
 
   if (!workflowId) {
-    if (isImmediateExecutionIntent(trimmed)) {
-      console.log(
-        '[workflow-trace] immediate execution deferred — no workflowId yet, try pending/create path text=%s',
-        trimmed,
-      );
-      return false;
+    workflowId = resolveSessionWorkflowId(
+      context.sessionKey,
+      chatState.messages,
+      chatState.workflowCardStates,
+    ) ?? undefined;
+    if (workflowId) {
+      const remembered = getSessionWorkflows(context.sessionKey).find((w) => w.workflowId === workflowId);
+      if (remembered) {
+        inputs = remembered.collectedInputs ?? inputs;
+        templateName = remembered.templateName ?? templateName;
+      }
     }
-    appendLocalConversationTurn(trimmed, buildWorkflowStartUnavailablePrompt());
-    return true;
+  }
+
+  if (!workflowId) {
+    console.log(
+      '[workflow-trace] start intent but no workflowId — fall through to model text=%s',
+      trimmed,
+    );
+    return false;
   }
 
   console.log(

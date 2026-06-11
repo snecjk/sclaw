@@ -3,7 +3,7 @@
  * Renders user / assistant / system / toolresult messages
  * with markdown, thinking sections, images, and tool cards.
  */
-import { useState, useCallback, useEffect, memo } from 'react';
+import { useState, useCallback, useEffect, useMemo, memo } from 'react';
 import { Sparkles, Copy, Check, ChevronDown, ChevronRight, Wrench, FileText, Film, Music, FileArchive, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, Table2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
@@ -17,7 +17,7 @@ import { assistantChatCardBg, assistantChatCardBgStreaming } from '@/lib/surface
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
-import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm } from './message-utils';
+import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm, useLocalPathExistence, resolvePreviewCandidate } from './message-utils';
 import { ensureWorkflowParameterFormHandler } from '@/stores/chat/parameter-form-recovery';
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
 import { WorkflowCompletionActions, extractWorkflowCompletionRunId } from '@/components/workflow/WorkflowCompletionActions';
@@ -104,10 +104,39 @@ export const ChatMessage = memo(function ChatMessage({
       useChatStore.getState,
     );
   }, [parameterForm]);
-  // Extract previewable refs from message text
-  const extractedRefs = extractPreviewableRefs(text)
-    .filter((ref) => !attachedFiles.some((f) => f.filePath === ref.filePath))
-    .filter((ref) => isPreviewableFile(ref));
+
+  // Extract previewable refs from message text, then verify non-http paths:
+  // local files must exist on disk; cloud-runtime paths resolve to artifact OSS
+  // URLs or are dropped (no broken file cards).
+  const workflowCardStatesForRefs = useChatStore((s) => s.workflowCardStates);
+  const candidateRefs = useMemo(
+    () =>
+      extractPreviewableRefs(text)
+        .filter((ref) => !attachedFiles.some((f) => f.filePath === ref.filePath))
+        .filter((ref) => isPreviewableFile(ref)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [text, message._attachedFiles],
+  );
+  const candidateLocalPaths = useMemo(
+    () => candidateRefs.filter((ref) => !isHttpUrl(ref.filePath)).map((ref) => ref.filePath),
+    [candidateRefs],
+  );
+  const refExistence = useLocalPathExistence(candidateLocalPaths);
+  const extractedRefs = useMemo(() => {
+    const seen = new Set<string>();
+    const result: typeof candidateRefs = [];
+    for (const ref of candidateRefs) {
+      const resolved = resolvePreviewCandidate(
+        { ...ref, fileSize: 0, preview: null },
+        refExistence[ref.filePath],
+        workflowCardStatesForRefs,
+      );
+      if (!resolved || seen.has(resolved.filePath)) continue;
+      seen.add(resolved.filePath);
+      result.push({ filePath: resolved.filePath, fileName: resolved.fileName, mimeType: resolved.mimeType });
+    }
+    return result;
+  }, [candidateRefs, refExistence, workflowCardStatesForRefs]);
 
   // All attached files should render as cards (images as thumbnails, everything else as FileCard)
   const hasRenderableFiles = attachedFiles.length > 0;
@@ -570,9 +599,9 @@ function MessageBubble({
                   return <span className="text-link break-words break-all">{children}</span>;
                 }
 
-                const target = rawHref.startsWith('preview://')
-                  ? rawHref.slice('preview://'.length)
-                  : resolvePreviewLinkTarget(rawHref, workflowCardStates);
+                // Always resolve through workflow artifact states so cloud-runtime
+                // paths (e.g. /runtime/outputs/x.html) map to their OSS URL.
+                const target = resolvePreviewLinkTarget(rawHref, workflowCardStates);
 
                 if (onPreviewFile && isHttpUrl(target) && isPreviewableRemoteUrl(target)) {
                   const previewFile = artifactToPreviewFile({

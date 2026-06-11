@@ -8,6 +8,11 @@ export function isHttpUrl(path: string): boolean {
   return path.startsWith('http://') || path.startsWith('https://');
 }
 
+/** Basename without query string, URI-decoded (works for both paths and URLs). */
+export function previewBasename(pathOrUrl: string): string {
+  return safeDecodeURIComponent(pathOrUrl.split(/[\\/]/).pop()?.split('?')[0] || pathOrUrl);
+}
+
 function extToMimeType(ext: string): string {
   const map: Record<string, string> = {
     html: 'text/html',

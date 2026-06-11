@@ -215,6 +215,27 @@ export async function handleFileRoutes(
     return true;
   }
 
+  // POST /api/files/stat — batch existence check for local paths (preview gating)
+  if (url.pathname === '/api/files/stat' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ paths: string[] }>(req);
+      const fsP = await import('node:fs/promises');
+      const exists: Record<string, boolean> = {};
+      for (const rawPath of (body.paths || []).slice(0, 200)) {
+        try {
+          const stat = await fsP.stat(resolveWorkspaceFilePath(rawPath));
+          exists[rawPath] = stat.isFile();
+        } catch {
+          exists[rawPath] = false;
+        }
+      }
+      sendJson(res, 200, { exists });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/files/read' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ filePath: string; encoding?: 'utf-8' | 'base64' }>(req);

@@ -352,6 +352,15 @@ export default definePluginEntry({
 
 				const appendBlocks: string[] = [];
 
+				// 产物文件引用规范：所有会话（含定时任务/工作流总结）统一约束，
+				// 防止模型把云端运行时路径当作可访问链接输出给用户。
+				appendBlocks.push([
+					"产物文件引用规范（重要）：",
+					"- 当回复中引用用户可查看或下载的产物文件（HTML 报告、PDF、表格、文档等）时，必须使用 Markdown 链接格式 [文件名](链接)，链接只能使用执行结果数据中提供的 http(s) 地址（如 OSS 链接）。",
+					"- 严禁向用户输出运行环境的内部文件路径（如 /runtime/、/workspace/、/tmp/ 开头的路径），用户无法访问这些路径。",
+					"- 如果产物没有可访问的 http(s) 链接，只描述文件名即可，不要伪造链接，也不要把内部路径写成链接或代码。",
+				].join("\n"));
+
 				if (ctx.sessionKey) {
 					const pendingMentions = await readDingTalkMentionPending(ctx.sessionKey);
 					if (pendingMentions) {
