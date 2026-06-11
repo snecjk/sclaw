@@ -27,6 +27,7 @@ import {
   isHttpUrl,
   isPreviewableRemoteUrl,
   openExternalUrl,
+  previewHttpUrlLabel,
   resolvePreviewLinkTarget,
 } from '@/lib/preview-url';
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
@@ -683,7 +684,7 @@ function MessageBubble({
                     logFilePreview('link-node-branch', { branch: 'remote-preview-button', target });
                   }
                   const previewFile = artifactToPreviewFile({
-                    name: safeDecodeURIComponent(target.split('/').pop()?.split('?')[0] || 'preview'),
+                    name: previewHttpUrlLabel(target),
                     type: inferMimeTypeFromUrl(target),
                     url: target,
                   });
@@ -860,18 +861,13 @@ function preprocessTextForPreviewLinks(text: string): string {
     },
   );
 
-  // Replace localhost URLs (previewable in side panel)
+  // Replace previewable http(s) URLs — keep real href (do NOT prefix preview://)
   text = text.replace(
-    /(https?:\/\/localhost:[^\s)\]"',;<>]+)/g,
-    '[$1]($1)',
-  );
-
-  // Replace OSS/CDN http(s) URLs — keep real https href (do NOT prefix preview://)
-  text = text.replace(
-    /(https?:\/\/[^\s)\]"',;<>]+\.(?:html?|pdf|json|md|txt|csv)(?:\?[^\s)\]"',;<>]*)?)/gi,
-    (url) => {
-      if (!isPreviewableRemoteUrl(url)) return url;
-      const label = safeDecodeURIComponent(url.split('/').pop()?.split('?')[0] || '查看预览');
+    /(https?:\/\/[^\s)\]"',;<>]+)/gi,
+    (rawUrl) => {
+      const url = rawUrl.replace(/[.,;:!?)}\]]+$/, '');
+      if (!isPreviewableRemoteUrl(url)) return rawUrl;
+      const label = previewHttpUrlLabel(url);
       return `[${label}](${url})`;
     },
   );
@@ -974,14 +970,10 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
       isPreviewable,
       hasOnPreviewFile: !!onPreviewFile,
     });
-    // Keep in sync with the 预览 badge condition: previewable files open in the side panel
-    // (FilePreviewViewer fetches remote HTML/text, so OSS http(s) URLs preview fine).
     if (onPreviewFile && isPreviewable) {
       onPreviewFile(file);
     } else if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
-      window.electron.openExternal(file.filePath);
-    } else if (onPreviewFile) {
-      onPreviewFile(file);
+      openExternalUrl(file.filePath);
     } else if (file.filePath) {
       invokeIpc('shell:openPath', file.filePath);
     }

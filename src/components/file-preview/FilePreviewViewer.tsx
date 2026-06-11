@@ -10,7 +10,7 @@ import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { hostApiFetch, getHostApiBase } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
-import { isHttpUrl } from '@/lib/preview-url';
+import { isExtensionlessWebUrl, isHttpUrl } from '@/lib/preview-url';
 // @ts-ignore — highlight.js v10 ships without bundled .d.ts
 import hljs from 'highlight.js';
 import 'highlight.js/styles/atom-one-dark.css';
@@ -31,7 +31,8 @@ function isHtmlFileType(mimeType: string, fileName: string, filePath?: string): 
   if (mimeType === 'text/html') return true;
   const ext = fileName.split('.').pop()?.toLowerCase();
   if (ext === 'html' || ext === 'htm') return true;
-  if (filePath && /\.html?(?:\?|$)/i.test(filePath)) return true;
+  if (filePath && /\.html?(?:\?|#|$)/i.test(filePath)) return true;
+  if (filePath && isHttpUrl(filePath) && isExtensionlessWebUrl(filePath)) return true;
   return false;
 }
 
@@ -102,9 +103,6 @@ export function FilePreviewViewer({
   const [textContent, setTextContent] = useState<string>('');
   const [textLoading, setTextLoading] = useState(false);
   const [textError, setTextError] = useState<string>('');
-  const [htmlContent, setHtmlContent] = useState<string>('');
-  const [htmlLoading, setHtmlLoading] = useState(false);
-  const [htmlError, setHtmlError] = useState<string>('');
   const [officeData, setOfficeData] = useState<OfficeData | null>(null);
   const [officeLoading, setOfficeLoading] = useState(false);
   const [officeError, setOfficeError] = useState<string>('');
@@ -211,42 +209,6 @@ export function FilePreviewViewer({
       cancelled = true;
     };
   }, [filePath, mimeType]);
-
-  // Fetch remote HTML (OSS often sets Content-Disposition: attachment — iframe src triggers download)
-  useEffect(() => {
-    const isRemoteHtml = isHttpUrl(filePath) && isHtmlFileType(mimeType, fileName, filePath);
-    if (!isRemoteHtml) {
-      setHtmlContent('');
-      setHtmlError('');
-      setHtmlLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setHtmlContent('');
-    setHtmlError('');
-    setHtmlLoading(true);
-
-    void (async () => {
-      try {
-        const response = await fetch(filePath);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const content = await response.text();
-        if (cancelled) return;
-        setHtmlContent(content);
-      } catch (e) {
-        if (!cancelled) {
-          setHtmlError(e instanceof Error ? e.message : '加载 HTML 预览失败');
-        }
-      } finally {
-        if (!cancelled) setHtmlLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [filePath, mimeType, fileName]);
 
   // Load remote text/json/markdown from http(s) URLs (OSS/CDN)
   useEffect(() => {
@@ -397,33 +359,13 @@ export function FilePreviewViewer({
       const isHtmlFile = isHtmlFileType(mimeType, fileName, filePath);
 
       if (isHtmlFile) {
-        if (htmlLoading) {
-          return (
-            <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
-              <RefreshCw className="h-5 w-5 animate-spin" />
-              正在加载 HTML 预览…
-            </div>
-          );
-        }
-        if (htmlError) {
-          return (
-            <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm', className)}>
-              <p className="text-destructive">{htmlError}</p>
-              <OpenExternalButton filePath={filePath} />
-            </div>
-          );
-        }
-        if (htmlContent) {
-          return (
-            <iframe
-              key={filePath}
-              srcDoc={htmlContent}
-              title={fileName}
-              className={cn('h-full min-w-0 w-full border-0', className)}
-              sandbox="allow-scripts allow-same-origin allow-popups"
-            />
-          );
-        }
+        return (
+          <HtmlIframeView
+            src={filePath}
+            fileName={fileName}
+            className={className}
+          />
+        );
       }
 
       if (mimeType === 'application/pdf') {
@@ -509,12 +451,10 @@ export function FilePreviewViewer({
     const isHtmlFile = isHtmlFileType(mimeType, fileName, filePath);
     if (isHtmlFile) {
       return (
-        <iframe
-          key={filePath}
+        <HtmlIframeView
           src={toServeUrl(filePath)}
-          title={fileName}
-          className={cn('h-full min-w-0 w-full border-0', className)}
-          sandbox="allow-scripts allow-same-origin"
+          fileName={fileName}
+          className={className}
         />
       );
     }
@@ -843,6 +783,26 @@ function MarkdownPreviewPane({ content, className }: { content: string; classNam
         </ReactMarkdown>
       </article>
     </div>
+  );
+}
+
+function HtmlIframeView({
+  src,
+  fileName,
+  className,
+}: {
+  src: string;
+  fileName: string;
+  className?: string;
+}) {
+  return (
+    <iframe
+      key={src}
+      src={src}
+      title={fileName}
+      className={cn('h-full min-h-0 w-full border-0', className)}
+      sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+    />
   );
 }
 
