@@ -27,8 +27,10 @@ import { cn } from '@/lib/utils';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
+import { useBuiltinToolListener } from '@/hooks/use-builtin-tool-listener';
 
 export function Chat() {
+  useBuiltinToolListener();
   const { t } = useTranslation('chat');
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';

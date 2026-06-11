@@ -1,0 +1,7 @@
+{
+  "name": "sto-toolkit",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Shared SDK for STO OpenClaw builtin plugin tools"
+}

@@ -5,12 +5,15 @@
  */
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { ExternalLink, FileText, RefreshCw, Maximize, Minimize, Table, FileSpreadsheet, Presentation } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { hostApiFetch, getHostApiBase } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
-import { isHttpUrl } from '@/lib/preview-url';
+import { isExtensionlessWebUrl, isHttpUrl } from '@/lib/preview-url';
 // @ts-ignore — highlight.js v10 ships without bundled .d.ts
 import hljs from 'highlight.js';
+import 'highlight.js/styles/atom-one-dark.css';
 
 interface FilePreviewViewerProps {
   filePath: string;
@@ -28,7 +31,8 @@ function isHtmlFileType(mimeType: string, fileName: string, filePath?: string): 
   if (mimeType === 'text/html') return true;
   const ext = fileName.split('.').pop()?.toLowerCase();
   if (ext === 'html' || ext === 'htm') return true;
-  if (filePath && /\.html?(?:\?|$)/i.test(filePath)) return true;
+  if (filePath && /\.html?(?:\?|#|$)/i.test(filePath)) return true;
+  if (filePath && isHttpUrl(filePath) && isExtensionlessWebUrl(filePath)) return true;
   return false;
 }
 
@@ -99,9 +103,6 @@ export function FilePreviewViewer({
   const [textContent, setTextContent] = useState<string>('');
   const [textLoading, setTextLoading] = useState(false);
   const [textError, setTextError] = useState<string>('');
-  const [htmlContent, setHtmlContent] = useState<string>('');
-  const [htmlLoading, setHtmlLoading] = useState(false);
-  const [htmlError, setHtmlError] = useState<string>('');
   const [officeData, setOfficeData] = useState<OfficeData | null>(null);
   const [officeLoading, setOfficeLoading] = useState(false);
   const [officeError, setOfficeError] = useState<string>('');
@@ -208,42 +209,6 @@ export function FilePreviewViewer({
       cancelled = true;
     };
   }, [filePath, mimeType]);
-
-  // Fetch remote HTML (OSS often sets Content-Disposition: attachment — iframe src triggers download)
-  useEffect(() => {
-    const isRemoteHtml = isHttpUrl(filePath) && isHtmlFileType(mimeType, fileName, filePath);
-    if (!isRemoteHtml) {
-      setHtmlContent('');
-      setHtmlError('');
-      setHtmlLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setHtmlContent('');
-    setHtmlError('');
-    setHtmlLoading(true);
-
-    void (async () => {
-      try {
-        const response = await fetch(filePath);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const content = await response.text();
-        if (cancelled) return;
-        setHtmlContent(content);
-      } catch (e) {
-        if (!cancelled) {
-          setHtmlError(e instanceof Error ? e.message : '加载 HTML 预览失败');
-        }
-      } finally {
-        if (!cancelled) setHtmlLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [filePath, mimeType, fileName]);
 
   // Load remote text/json/markdown from http(s) URLs (OSS/CDN)
   useEffect(() => {
@@ -394,33 +359,13 @@ export function FilePreviewViewer({
       const isHtmlFile = isHtmlFileType(mimeType, fileName, filePath);
 
       if (isHtmlFile) {
-        if (htmlLoading) {
-          return (
-            <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
-              <RefreshCw className="h-5 w-5 animate-spin" />
-              正在加载 HTML 预览…
-            </div>
-          );
-        }
-        if (htmlError) {
-          return (
-            <div className={cn('flex h-full flex-col items-center justify-center gap-3 px-6 text-sm', className)}>
-              <p className="text-destructive">{htmlError}</p>
-              <OpenExternalButton filePath={filePath} />
-            </div>
-          );
-        }
-        if (htmlContent) {
-          return (
-            <iframe
-              key={filePath}
-              srcDoc={htmlContent}
-              title={fileName}
-              className={cn('h-full min-w-0 w-full border-0', className)}
-              sandbox="allow-scripts allow-same-origin allow-popups"
-            />
-          );
-        }
+        return (
+          <HtmlIframeView
+            src={filePath}
+            fileName={fileName}
+            className={className}
+          />
+        );
       }
 
       if (mimeType === 'application/pdf') {
@@ -453,27 +398,7 @@ export function FilePreviewViewer({
           );
         }
         if (textContent) {
-          const srcDoc = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;max-width:800px;margin:40px auto;padding:0 20px;color:#333;background:#fff}
-code{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:0.9em}
-pre{background:#f4f4f4;padding:16px;border-radius:6px;overflow-x:auto}
-</style>
-</head>
-<body>${textContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</body>
-</html>`;
-          return (
-            <iframe
-              key={filePath}
-              srcDoc={srcDoc}
-              title={fileName}
-              className={cn('h-full min-w-0 w-full border-0', className)}
-              sandbox="allow-scripts"
-            />
-          );
+          return <MarkdownPreviewPane content={textContent} className={className} />;
         }
       }
 
@@ -526,12 +451,10 @@ pre{background:#f4f4f4;padding:16px;border-radius:6px;overflow-x:auto}
     const isHtmlFile = isHtmlFileType(mimeType, fileName, filePath);
     if (isHtmlFile) {
       return (
-        <iframe
-          key={filePath}
+        <HtmlIframeView
           src={toServeUrl(filePath)}
-          title={fileName}
-          className={cn('h-full min-w-0 w-full border-0', className)}
-          sandbox="allow-scripts allow-same-origin"
+          fileName={fileName}
+          className={className}
         />
       );
     }
@@ -553,34 +476,7 @@ pre{background:#f4f4f4;padding:16px;border-radius:6px;overflow-x:auto}
           </div>
         );
       }
-      const srcDoc = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;max-width:800px;margin:40px auto;padding:0 20px;color:#333;background:#fff}
-h1,h2,h3,h4,h5,h6{margin-top:1.5em;margin-bottom:0.5em}
-code{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:0.9em}
-pre{background:#f4f4f4;padding:16px;border-radius:6px;overflow-x:auto}
-blockquote{border-left:4px solid #ddd;margin:0;padding-left:16px;color:#666}
-table{border-collapse:collapse;width:100%;margin:1em 0}
-th,td{border:1px solid #ddd;padding:8px;text-align:left}
-th{background:#f8f8f8}
-img{max-width:100%}
-</style>
-</head>
-<body>${(mdContent ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</body>
-</html>`;
-
-      return (
-        <iframe
-          key={filePath}
-          srcDoc={srcDoc}
-          title={fileName}
-          className={cn('h-full min-w-0 w-full border-0', className)}
-          sandbox="allow-scripts"
-        />
-      );
+      return <MarkdownPreviewPane content={mdContent ?? ''} className={className} />;
     }
 
     if (tableData && tableData.length > 0) {
@@ -657,19 +553,21 @@ img{max-width:100%}
 
       if (highlightedHtml) {
         return (
-          <div className={cn('h-full overflow-auto bg-[#1e1e1e] p-4', className)}>
-            <pre
-              className="text-sm font-mono whitespace-pre"
-              // eslint-disable-next-line react/no-danger
-              dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-            />
+          <div className={cn('file-preview-code h-full overflow-auto bg-[#1e1e1e] p-4', className)}>
+            <pre className="hljs !m-0 !bg-transparent text-sm font-mono whitespace-pre text-[#d4d4d4]">
+              <code
+                className="hljs !bg-transparent text-[#d4d4d4]"
+                // eslint-disable-next-line react/no-danger
+                dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+              />
+            </pre>
           </div>
         );
       }
 
       return (
-        <div className={cn('h-full overflow-auto bg-[#1e1e1e] text-[#d4d4d4] p-4', className)}>
-          <pre className="text-sm font-mono whitespace-pre">{textContent}</pre>
+        <div className={cn('file-preview-code h-full overflow-auto bg-[#1e1e1e] p-4', className)}>
+          <pre className="text-sm font-mono whitespace-pre text-[#d4d4d4]">{textContent}</pre>
         </div>
       );
     }
@@ -852,6 +750,60 @@ function PptxPreviewPanel({ buffer, className }: { buffer: Uint8Array; className
   }
 
   return <div ref={containerRef} className={cn('h-full w-full', className)} />;
+}
+
+function MarkdownPreviewPane({ content, className }: { content: string; className?: string }) {
+  return (
+    <div className={cn('h-full overflow-auto bg-white px-6 py-5 dark:bg-[#0d1117]', className)}>
+      <article className="prose prose-sm max-w-none text-foreground dark:prose-invert">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            code({ className: codeClassName, children, ...props }) {
+              const match = /language-(\w+)/.exec(codeClassName || '');
+              const isInline = !match && !codeClassName;
+              if (isInline) {
+                return (
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-[0.9em] font-mono" {...props}>
+                    {children}
+                  </code>
+                );
+              }
+              return (
+                <pre className="overflow-x-auto rounded-lg border border-border bg-[#282c34] p-4">
+                  <code className={cn('text-sm font-mono text-[#abb2bf]', codeClassName)} {...props}>
+                    {children}
+                  </code>
+                </pre>
+              );
+            },
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      </article>
+    </div>
+  );
+}
+
+function HtmlIframeView({
+  src,
+  fileName,
+  className,
+}: {
+  src: string;
+  fileName: string;
+  className?: string;
+}) {
+  return (
+    <iframe
+      key={src}
+      src={src}
+      title={fileName}
+      className={cn('h-full min-h-0 w-full border-0', className)}
+      sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+    />
+  );
 }
 
 function OpenExternalButton({ filePath }: { filePath: string }) {

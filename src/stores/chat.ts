@@ -797,7 +797,6 @@ function buildSessionSwitchPatch(
     pendingToolImages: [],
     workflowCardStates: {},
     pendingWorkflow: null,
-    pendingTemplateSelection: null,
   };
 }
 
@@ -1315,10 +1314,6 @@ export const useChatStore = create<ChatState>()(
       clearPendingWorkflowDraft(sessionKey, templateId);
     });
   },
-
-  pendingTemplateSelection: null,
-  setPendingTemplateSelection: (pending) => set({ pendingTemplateSelection: pending }),
-  clearPendingTemplateSelection: () => set({ pendingTemplateSelection: null }),
 
   // ── Load sessions via sessions.list ──
 
@@ -1946,12 +1941,13 @@ export const useChatStore = create<ChatState>()(
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
 
-    // Inject hidden workflow context into the outgoing message for AI guidance
+    // Inject hidden workflow context / session hint for AI guidance
     const { appendWorkflowContext, stripWorkflowContextForDisplay } = await import('@/lib/workflow-context');
-    console.log('[workflow-trace] sendMessage workflowContext=%s text=%s', workflowContext ? `templateId=${workflowContext.templateId} fields=${workflowContext.fields.length}` : 'null', trimmed.slice(0, 50));
-    const messageWithContext = appendWorkflowContext(trimmed, workflowContext);
-    const displayText = stripWorkflowContextForDisplay(messageWithContext);
-    console.log('[workflow-trace] sendMessage injected=%s finalLength=%d', workflowContext ? 'yes' : 'no', messageWithContext.length);
+    const {
+      buildWorkflowSessionHint,
+      appendWorkflowSessionHint,
+      stripWorkflowSessionHintForDisplay,
+    } = await import('@/lib/workflow-session-hint');
 
     const targetSessionKey = resolveMainSessionKeyForAgent(targetAgentId) ?? get().currentSessionKey;
 
@@ -1961,6 +1957,26 @@ export const useChatStore = create<ChatState>()(
     }
 
     const currentSessionKey = targetSessionKey;
+
+    let textForGateway = trimmed;
+    if (!workflowContext) {
+      const { isReExecutionIntent, isWorkflowStartIntent } = await import('@/hooks/use-workflow-intent');
+      if (isReExecutionIntent(trimmed) || isWorkflowStartIntent(trimmed)) {
+        const hint = buildWorkflowSessionHint(
+          currentSessionKey,
+          get().messages,
+          get().workflowCardStates,
+        );
+        textForGateway = appendWorkflowSessionHint(trimmed, hint);
+      }
+    }
+
+    console.log('[workflow-trace] sendMessage workflowContext=%s text=%s', workflowContext ? `templateId=${workflowContext.templateId} fields=${workflowContext.fields.length}` : 'null', trimmed.slice(0, 50));
+    const messageWithContext = appendWorkflowContext(textForGateway, workflowContext);
+    const displayText = stripWorkflowSessionHintForDisplay(
+      stripWorkflowContextForDisplay(messageWithContext),
+    );
+    console.log('[workflow-trace] sendMessage injected=%s finalLength=%d', workflowContext ? 'yes' : 'no', messageWithContext.length);
 
     const quotaCheck = await checkDailyTokenQuota();
     if (quotaCheck) {

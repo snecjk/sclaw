@@ -1,0 +1,63 @@
+/**
+ * Inject current session workflow memory into user messages so the model
+ * can call execute_workflow with the correct workflowId.
+ */
+import { resolveSessionWorkflowId } from '@/lib/session-workflow-context';
+import { getLatestWorkflow, getSessionWorkflows } from '@/stores/workflow-memory';
+import type { RawMessage } from '@/stores/chat/types';
+import type { WorkflowExecutionState } from '@/types/workflow';
+
+export const WORKFLOW_SESSION_HINT_MARKER = '<!-- StoClaw-Workflow-Session -->';
+
+export function buildWorkflowSessionHint(
+  sessionKey: string,
+  messages: RawMessage[],
+  workflowCardStates: Record<string, WorkflowExecutionState>,
+): string | null {
+  const latest = getLatestWorkflow(sessionKey);
+  const workflowId = resolveSessionWorkflowId(sessionKey, messages, workflowCardStates)
+    ?? latest?.workflowId;
+  if (!workflowId) return null;
+
+  const remembered = getSessionWorkflows(sessionKey).find((w) => w.workflowId === workflowId);
+  const payload = {
+    version: 1,
+    source: 'stoclaw-workflow-session',
+    workflowId,
+    templateId: remembered?.templateId ?? latest?.templateId,
+    templateName: remembered?.templateName ?? latest?.templateName,
+    collectedInputs: remembered?.collectedInputs ?? latest?.collectedInputs ?? {},
+    lastRunId: remembered?.lastRunId ?? latest?.lastRunId,
+  };
+
+  return [
+    WORKFLOW_SESSION_HINT_MARKER,
+    '',
+    '```json',
+    JSON.stringify(payload, null, 2),
+    '```',
+    '',
+    '## 当前会话工作流上下文',
+    '',
+    '用户可能要重新执行或启动上述工作流。请使用内置工具 `execute_workflow`，传入 JSON 中的 `workflowId`（及可选 `inputs`）。',
+    '禁止 exec、sai-cli 或虚构 CLI 命令。',
+  ].join('\n');
+}
+
+export function appendWorkflowSessionHint(text: string, hint: string | null): string {
+  if (!hint || text.includes(WORKFLOW_SESSION_HINT_MARKER)) return text;
+  return `${hint}\n${WORKFLOW_SESSION_HINT_MARKER}\n${text}`;
+}
+
+export function stripWorkflowSessionHintForDisplay(message: string): string {
+  if (!message.includes(WORKFLOW_SESSION_HINT_MARKER)) return message;
+  const startIdx = message.indexOf(WORKFLOW_SESSION_HINT_MARKER);
+  const endIdx = message.lastIndexOf(WORKFLOW_SESSION_HINT_MARKER);
+  if (startIdx >= 0 && endIdx > startIdx) {
+    return message.slice(endIdx + WORKFLOW_SESSION_HINT_MARKER.length).trim();
+  }
+  if (startIdx >= 0) {
+    return message.slice(0, startIdx).trim();
+  }
+  return message;
+}

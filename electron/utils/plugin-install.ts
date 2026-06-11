@@ -216,9 +216,28 @@ const LOCAL_PLUGIN_DIRS: Record<string, string> = {
   'sto-dynamic-agent-route': 'sto-dynamic-agent-route',
   'sto-agent-telemetry': 'sto-agent-telemetry',
   'sto-scheduled-task-tool': 'sto-scheduled-task-tool',
+  'sto-workflow-tool': 'sto-workflow-tool',
   'sto-skill-call-monitor': 'sto-skill-call-monitor',
   'sto-dingtalk-send-guard': 'sto-dingtalk-send-guard',
 };
+
+/** Shared library copied beside workflow-tool for ../sto-toolkit imports at runtime. */
+const STO_TOOLKIT_DIR = 'sto-toolkit';
+
+function ensureStoToolkitLibraryInstalled(): void {
+  const extensionsRoot = join(getOpenClawConfigDir(), 'extensions');
+  const targetDir = join(extensionsRoot, STO_TOOLKIT_DIR);
+  const sourceDir = join(process.cwd(), 'sto-plugin', STO_TOOLKIT_DIR);
+  if (!existsSync(fsPath(join(sourceDir, 'index.ts')))) return;
+  try {
+    mkdirSync(fsPath(extensionsRoot), { recursive: true });
+    rmSync(fsPath(targetDir), { recursive: true, force: true });
+    copyPluginDir(sourceDir, targetDir);
+    logger.info(`[plugin] Installed ${STO_TOOLKIT_DIR} shared library`);
+  } catch (error) {
+    logger.warn(`[plugin] Failed to install ${STO_TOOLKIT_DIR}:`, error);
+  }
+}
 
 // ── Version helper ───────────────────────────────────────────────────────────
 
@@ -423,6 +442,9 @@ export function ensurePluginInstalled(
           return { installed: false, warning: `Failed to install ${pluginLabel} plugin mirror (manifest missing).` };
         }
         fixupPluginManifest(targetDir);
+        if (pluginDirName === 'sto-workflow-tool') {
+          ensureStoToolkitLibraryInstalled();
+        }
         logger.info(`Installed ${pluginLabel} plugin from bundled mirror: ${sourceDir}`);
         return { installed: true };
       } catch (error) {
@@ -588,6 +610,18 @@ export function ensureStoScheduledTaskToolPluginInstalled(): { installed: boolea
   );
 }
 
+export function ensureStoWorkflowToolPluginInstalled(): { installed: boolean; warning?: string } {
+  const result = ensurePluginInstalled(
+    'sto-workflow-tool',
+    buildCandidateSources('sto-workflow-tool'),
+    'STO Workflow Tool',
+  );
+  if (result.installed) {
+    ensureStoToolkitLibraryInstalled();
+  }
+  return result;
+}
+
 export function ensureStoSkillCallMonitorPluginInstalled(): { installed: boolean; warning?: string } {
   return ensurePluginInstalled(
     'sto-skill-call-monitor',
@@ -617,6 +651,7 @@ const ALL_BUNDLED_PLUGINS = [
   { fn: ensureStoDynamicRoutePluginInstalled, label: 'STO Dynamic Route' },
   { fn: ensureStoAgentTelemetryPluginInstalled, label: 'STO Agent Telemetry' },
   { fn: ensureStoScheduledTaskToolPluginInstalled, label: 'STO Scheduled Task Tool' },
+  { fn: ensureStoWorkflowToolPluginInstalled, label: 'STO Workflow Tool' },
   { fn: ensureStoSkillCallMonitorPluginInstalled, label: 'STO Skill Call Monitor' },
   { fn: ensureStoDingTalkSendGuardPluginInstalled, label: 'STO DingTalk Send Guard' },
 ] as const;
@@ -734,6 +769,7 @@ export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
     { dirName: 'sto-dynamic-agent-route', label: 'STO Dynamic Route' },
     { dirName: 'sto-agent-telemetry', label: 'STO Agent Telemetry' },
     { dirName: 'sto-scheduled-task-tool', label: 'STO Scheduled Task Tool' },
+    { dirName: 'sto-workflow-tool', label: 'STO Workflow Tool' },
     { dirName: 'sto-skill-call-monitor', label: 'STO Skill Call Monitor' },
     { dirName: 'sto-dingtalk-send-guard', label: 'STO DingTalk Send Guard' },
   ] as const;

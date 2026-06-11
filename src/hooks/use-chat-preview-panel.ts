@@ -3,6 +3,7 @@ import type { AttachedFileMeta, RawMessage } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
 import { useSessionWorkflowPreview } from '@/hooks/use-session-workflow-preview';
 import { usePreviewableFiles } from '@/pages/Chat/message-utils';
+import { logFilePreview } from '@/lib/file-preview-debug';
 
 export type PreviewPanelTab = 'product' | 'workflow';
 
@@ -41,6 +42,11 @@ export function useChatPreviewPanel(allMessages: RawMessage[]) {
 
   const openArtifactPreview = useCallback((file: AttachedFileMeta) => {
     if (!file.filePath) return;
+    logFilePreview('open-artifact-preview', {
+      filePath: file.filePath,
+      fileName: file.fileName,
+      mimeType: file.mimeType,
+    });
     setExtraPreviewFiles((prev) => (
       prev.some((item) => item.filePath === file.filePath) ? prev : [...prev, file]
     ));
