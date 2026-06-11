@@ -224,16 +224,82 @@ const LOCAL_PLUGIN_DIRS: Record<string, string> = {
 /** Shared library copied beside workflow-tool for ../sto-toolkit imports at runtime. */
 const STO_TOOLKIT_DIR = 'sto-toolkit';
 
-function ensureStoToolkitLibraryInstalled(): void {
-  const extensionsRoot = join(getOpenClawConfigDir(), 'extensions');
-  const targetDir = join(extensionsRoot, STO_TOOLKIT_DIR);
-  const sourceDir = join(process.cwd(), 'sto-plugin', STO_TOOLKIT_DIR);
-  if (!existsSync(fsPath(join(sourceDir, 'index.ts')))) return;
+function pickStoToolkitSourceDir(): string | undefined {
+  const candidates = [
+    ...getBundledPluginSourceCandidates(STO_TOOLKIT_DIR),
+    join(process.cwd(), 'sto-plugin', STO_TOOLKIT_DIR),
+    join(app.getAppPath(), 'sto-plugin', STO_TOOLKIT_DIR),
+  ];
+  for (const dir of candidates) {
+    if (existsSync(fsPath(join(dir, 'index.ts')))) return dir;
+  }
+  return undefined;
+}
+
+/** Runtime deps not declared in plugin package.json — copied from app node_modules. */
+const WORKFLOW_TOOL_RUNTIME_DEPS = ['@sinclair/typebox'] as const;
+
+function removeLegacyStoToolkitExtensionSibling(): void {
+  const legacySibling = join(getOpenClawConfigDir(), 'extensions', STO_TOOLKIT_DIR);
+  if (!existsSync(fsPath(legacySibling))) return;
   try {
-    mkdirSync(fsPath(extensionsRoot), { recursive: true });
+    rmSync(fsPath(legacySibling), { recursive: true, force: true });
+    logger.info(`[plugin] Removed legacy extensions/${STO_TOOLKIT_DIR} (not an OpenClaw plugin)`);
+  } catch (error) {
+    logger.warn(`[plugin] Failed to remove legacy extensions/${STO_TOOLKIT_DIR}:`, error);
+  }
+}
+
+function copyWorkflowToolRuntimeDeps(workflowPluginDir: string): void {
+  const nodeModuleRoots = [
+    join(process.cwd(), 'node_modules'),
+    join(app.getAppPath(), 'node_modules'),
+  ];
+  const outputNM = join(workflowPluginDir, 'node_modules');
+  mkdirSync(fsPath(outputNM), { recursive: true });
+
+  for (const depName of WORKFLOW_TOOL_RUNTIME_DEPS) {
+    const dest = join(outputNM, depName);
+    if (existsSync(fsPath(dest))) continue;
+
+    let copied = false;
+    for (const root of nodeModuleRoots) {
+      const src = join(root, depName);
+      if (!existsSync(fsPath(src))) continue;
+      try {
+        mkdirSync(fsPath(path.dirname(dest)), { recursive: true });
+        cpSync(fsPath(src), fsPath(dest), { recursive: true, dereference: true });
+        copied = true;
+        logger.info(`[plugin] Copied runtime dep ${depName} for sto-workflow-tool`);
+        break;
+      } catch (error) {
+        logger.warn(`[plugin] Failed to copy ${depName} from ${src}:`, error);
+      }
+    }
+    if (!copied) {
+      logger.warn(`[plugin] Runtime dep ${depName} not found; sto-workflow-tool may fail to load`);
+    }
+  }
+}
+
+function ensureStoToolkitLibraryInstalled(): void {
+  const workflowPluginDir = join(getOpenClawConfigDir(), 'extensions', 'sto-workflow-tool');
+  const workflowManifest = join(workflowPluginDir, 'openclaw.plugin.json');
+  if (!existsSync(fsPath(workflowManifest))) return;
+
+  removeLegacyStoToolkitExtensionSibling();
+
+  const targetDir = join(workflowPluginDir, STO_TOOLKIT_DIR);
+  const sourceDir = pickStoToolkitSourceDir();
+  if (!sourceDir) {
+    logger.warn(`[plugin] ${STO_TOOLKIT_DIR} source not found; sto-workflow-tool may fail to load`);
+    return;
+  }
+  try {
     rmSync(fsPath(targetDir), { recursive: true, force: true });
     copyPluginDir(sourceDir, targetDir);
-    logger.info(`[plugin] Installed ${STO_TOOLKIT_DIR} shared library`);
+    logger.info(`[plugin] Installed ${STO_TOOLKIT_DIR} into sto-workflow-tool from ${sourceDir}`);
+    copyWorkflowToolRuntimeDeps(workflowPluginDir);
   } catch (error) {
     logger.warn(`[plugin] Failed to install ${STO_TOOLKIT_DIR}:`, error);
   }
@@ -415,10 +481,14 @@ export function ensurePluginInstalled(
 
   // If already installed, check whether an upgrade is available
   if (existsSync(fsPath(targetManifest))) {
-    if (!sourceDir) return { installed: true }; // no bundled source to compare, keep existing
+    if (!sourceDir) {
+      if (pluginDirName === 'sto-workflow-tool') ensureStoToolkitLibraryInstalled();
+      return { installed: true }; // no bundled source to compare, keep existing
+    }
     const installedVersion = readPluginVersion(targetPkgJson);
     const sourceVersion = readPluginVersion(join(sourceDir, 'package.json'));
     if (!sourceVersion || !installedVersion || sourceVersion === installedVersion) {
+      if (pluginDirName === 'sto-workflow-tool') ensureStoToolkitLibraryInstalled();
       return { installed: true }; // same version or unable to compare
     }
     // Version differs — fall through to overwrite install
@@ -541,6 +611,9 @@ export function ensurePluginInstalled(
             });
             fixupPluginManifest(targetDir);
             if (existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) {
+              if (pluginDirName === 'sto-workflow-tool') {
+                ensureStoToolkitLibraryInstalled();
+              }
               return { installed: true };
             }
           } catch (err) {
@@ -550,6 +623,9 @@ export function ensurePluginInstalled(
             );
           }
         } else if (existsSync(fsPath(targetManifest))) {
+          if (pluginDirName === 'sto-workflow-tool') {
+            ensureStoToolkitLibraryInstalled();
+          }
           return { installed: true }; // same version, already installed
         }
       }
@@ -708,6 +784,9 @@ async function ensurePluginInstalledAsync(
         return { installed: false, warning: `Failed to install ${pluginLabel} plugin mirror (manifest missing).` };
       }
       fixupPluginManifest(targetDir);
+      if (pluginDirName === 'sto-workflow-tool') {
+        ensureStoToolkitLibraryInstalled();
+      }
       logger.info(`Installed ${pluginLabel} plugin from bundled mirror (async): ${sourceDir}`);
       return { installed: true };
     } catch (error) {
@@ -784,4 +863,7 @@ export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
       logger.warn(`[plugin] Failed to install/upgrade ${label} plugin (async):`, error);
     }
   }
+
+  // Async path bypasses ensureStoWorkflowToolPluginInstalled wrapper — always sync toolkit.
+  ensureStoToolkitLibraryInstalled();
 }

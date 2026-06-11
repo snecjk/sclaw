@@ -1945,6 +1945,7 @@ export const useChatStore = create<ChatState>()(
     const { appendWorkflowContext, stripWorkflowContextForDisplay } = await import('@/lib/workflow-context');
     const {
       buildWorkflowSessionHint,
+      buildWorkflowCreationHint,
       appendWorkflowSessionHint,
       stripWorkflowSessionHintForDisplay,
     } = await import('@/lib/workflow-session-hint');
@@ -1960,7 +1961,11 @@ export const useChatStore = create<ChatState>()(
 
     let textForGateway = trimmed;
     if (!workflowContext) {
-      const { isReExecutionIntent, isWorkflowStartIntent } = await import('@/hooks/use-workflow-intent');
+      const {
+        isReExecutionIntent,
+        isWorkflowStartIntent,
+        isWorkflowCreationIntent,
+      } = await import('@/hooks/use-workflow-intent');
       if (isReExecutionIntent(trimmed) || isWorkflowStartIntent(trimmed)) {
         const hint = buildWorkflowSessionHint(
           currentSessionKey,
@@ -1968,6 +1973,8 @@ export const useChatStore = create<ChatState>()(
           get().workflowCardStates,
         );
         textForGateway = appendWorkflowSessionHint(trimmed, hint);
+      } else if (isWorkflowCreationIntent(trimmed)) {
+        textForGateway = appendWorkflowSessionHint(trimmed, buildWorkflowCreationHint(trimmed));
       }
     }
 

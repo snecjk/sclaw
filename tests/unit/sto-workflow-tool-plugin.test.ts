@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchJsonMock = vi.fn();
 
-vi.mock("../../sto-plugin/sto-toolkit/http-client.js", () => ({
+vi.mock("../../sto-plugin/sto-workflow-tool/sto-toolkit/http-client.js", () => ({
 	createStoApiClient: () => ({
 		fetchJson: fetchJsonMock,
 		getBaseUrl: () => "https://sto.example.com",

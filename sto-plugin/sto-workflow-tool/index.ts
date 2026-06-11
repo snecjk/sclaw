@@ -1,7 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
-import { createStoApiClient } from "../sto-toolkit/http-client.js";
-import { defineStoTool } from "../sto-toolkit/define-sto-tool.js";
+import { createStoApiClient } from "./sto-toolkit/http-client.js";
+import { defineStoTool } from "./sto-toolkit/define-sto-tool.js";
 
 const TAG = "sto-workflow-tool";
 
@@ -57,10 +57,10 @@ type WorkflowRunResponse = {
 
 const WORKFLOW_TOOL_PROMPT = [
 	"工作流内置工具（重要）：",
-	"- 创建/查找工作流：search_workflow_templates → get_workflow_schema → create_workflow → execute_workflow。",
+	"- 用户说「创建工作流」「新建 XX 工作流」等：必须先 search_workflow_templates，再 get_workflow_schema → create_workflow →（可选）execute_workflow。",
 	"- 重新执行/启动已有实例：execute_workflow（传入 workflowId）。",
 	"- 查询运行状态：get_workflow_status（传入 runId）。",
-	"- 禁止用 exec、shell、sai-cli 处理工作流；「创建文件夹/文件」等普通任务不要调用工作流 tool。",
+	"- 禁止用 exec、shell、sai-cli、sai-cli discover 或读 sai-cli SKILL 处理工作流；「创建文件夹/文件」等普通任务不要调用工作流 tool。",
 ].join("\n");
 
 export default definePluginEntry({

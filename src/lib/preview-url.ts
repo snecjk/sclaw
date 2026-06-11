@@ -5,6 +5,28 @@ export function isHttpUrl(path: string): boolean {
   return path.startsWith('http://') || path.startsWith('https://');
 }
 
+/**
+ * Normalize a local file path before Host API read/serve.
+ * ReactMarkdown may percent-encode backslashes in preview:// hrefs (C:\ → C:%5C…),
+ * which makes Node isAbsolute() false and causes workspace join bugs on Windows.
+ */
+export function normalizeLocalFilePath(filePath: string): string {
+  let path = filePath.trim();
+  if (!path || isHttpUrl(path) || path.startsWith('artifact://')) return path;
+
+  if (path.includes('%')) {
+    const once = safeDecodeURIComponent(path);
+    path = once.includes('%') ? safeDecodeURIComponent(once) : once;
+  }
+
+  return path;
+}
+
+/** True for Windows drive paths (C:\ or C:/). */
+export function isWindowsDrivePath(path: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(path);
+}
+
 /** Basename without query string, URI-decoded (works for both paths and URLs). */
 export function previewBasename(pathOrUrl: string): string {
   return safeDecodeURIComponent(pathOrUrl.split(/[\\/]/).pop()?.split('?')[0] || pathOrUrl);
@@ -70,6 +92,13 @@ function extFromPathOrUrl(pathOrUrl: string): string {
 /** http(s) URL whose path has no file extension — treat as a web page (e.g. https://www.baidu.com). */
 export function isExtensionlessWebUrl(url: string): boolean {
   return isHttpUrl(url) && !urlPathHasFileExtension(url);
+}
+
+/** Remote .html/.htm file URL (OSS/CDN) — may need fetch before iframe (Content-Disposition: attachment). */
+export function isRemoteFileHtmlUrl(url: string): boolean {
+  if (!isHttpUrl(url) || isExtensionlessWebUrl(url)) return false;
+  const ext = extFromPathOrUrl(url);
+  return ext === 'html' || ext === 'htm';
 }
 
 /** Infer MIME type from a local path or remote URL (extension-based). */
@@ -181,7 +210,9 @@ export function resolvePreviewLinkTarget(
   href: string,
   states: Record<string, { result?: { artifacts?: Array<{ name: string; url: string }> } } | undefined>,
 ): string {
-  const raw = href.startsWith('preview://') ? href.slice('preview://'.length) : href;
+  const raw = normalizeLocalFilePath(
+    href.startsWith('preview://') ? href.slice('preview://'.length) : href,
+  );
   return resolveArtifactUrlFromWorkflowStates(raw, states) ?? raw;
 }
 

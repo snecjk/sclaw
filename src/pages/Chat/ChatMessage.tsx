@@ -652,37 +652,14 @@ function MessageBubble({
               },
               a({ href, children }) {
                 const rawHref = typeof href === 'string' ? href.trim() : '';
-                const childLabel = Array.isArray(children)
-                  ? children.map((c) => (typeof c === 'string' ? c : '')).join('')
-                  : typeof children === 'string'
-                    ? children
-                    : String(children ?? '');
-
-                if (isFilePreviewDebugEnabled()) {
-                  const urlAfterTransform = rawHref ? previewUrlTransform(rawHref) : '';
-                  logFilePreview('link-node', {
-                    rawHref,
-                    urlAfterTransform,
-                    childLabel: childLabel.slice(0, 160),
-                    hasOnPreviewFile: !!onPreviewFile,
-                  });
-                }
 
                 if (!rawHref) {
-                  if (isFilePreviewDebugEnabled()) {
-                    logFilePreview('link-node-branch', { branch: 'empty-href-span', childLabel: childLabel.slice(0, 160) });
-                  }
                   return <span className="text-link break-words break-all">{children}</span>;
                 }
 
-                const target = rawHref.startsWith('preview://')
-                  ? rawHref.slice('preview://'.length)
-                  : resolvePreviewLinkTarget(rawHref, workflowCardStates);
+                const target = resolvePreviewLinkTarget(rawHref, workflowCardStates);
 
                 if (onPreviewFile && isHttpUrl(target) && isPreviewableRemoteUrl(target)) {
-                  if (isFilePreviewDebugEnabled()) {
-                    logFilePreview('link-node-branch', { branch: 'remote-preview-button', target });
-                  }
                   const previewFile = artifactToPreviewFile({
                     name: previewHttpUrlLabel(target),
                     type: inferMimeTypeFromUrl(target),
@@ -691,7 +668,10 @@ function MessageBubble({
                   return (
                     <button
                       type="button"
-                      onClick={() => onPreviewFile(previewFile)}
+                      onClick={() => {
+                        logFilePreview('link-click', { branch: 'remote-preview', target });
+                        onPreviewFile(previewFile);
+                      }}
                       className="inline border-0 bg-transparent p-0 font-inherit text-link hover:underline break-words break-all cursor-pointer"
                     >
                       {children}
@@ -700,13 +680,13 @@ function MessageBubble({
                 }
 
                 if (isHttpUrl(target)) {
-                  if (isFilePreviewDebugEnabled()) {
-                    logFilePreview('link-node-branch', { branch: 'external-http-button', target });
-                  }
                   return (
                     <button
                       type="button"
-                      onClick={() => openExternalUrl(target)}
+                      onClick={() => {
+                        logFilePreview('link-click', { branch: 'external-http', target });
+                        openExternalUrl(target);
+                      }}
                       className="inline border-0 bg-transparent p-0 font-inherit text-link hover:underline break-words break-all cursor-pointer"
                     >
                       {children}
@@ -717,19 +697,11 @@ function MessageBubble({
                 if (onPreviewFile && target) {
                   const fileName = target.split('/').pop() || 'preview';
                   const mimeType = inferMimeTypeFromUrl(target);
-                  if (isFilePreviewDebugEnabled()) {
-                    logFilePreview('link-node-branch', {
-                      branch: 'local-preview-button',
-                      target,
-                      fileName,
-                      mimeType,
-                    });
-                  }
                   return (
                     <button
                       type="button"
                       onClick={() => {
-                        logFilePreview('link-click', { target, fileName, mimeType });
+                        logFilePreview('link-click', { branch: 'local-preview', target, fileName, mimeType });
                         onPreviewFile({
                           filePath: target,
                           fileName,
@@ -745,14 +717,6 @@ function MessageBubble({
                   );
                 }
 
-                if (isFilePreviewDebugEnabled()) {
-                  logFilePreview('link-node-branch', {
-                    branch: 'fallback-span',
-                    rawHref,
-                    target,
-                    hasOnPreviewFile: !!onPreviewFile,
-                  });
-                }
                 return (
                   <span className="text-link break-words break-all">{children}</span>
                 );

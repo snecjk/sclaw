@@ -45,6 +45,28 @@ export function isImmediateExecutionIntent(text: string): boolean {
   return immediatePatterns.test(text);
 }
 
+/** Non-workflow file/folder creation — must not trigger workflow tool hints. */
+const NON_WORKFLOW_CREATE_PATTERN =
+  /创建(?:一个)?(?:文件|文件夹|目录|文档|ppt|报告|表格)/i;
+
+/**
+ * User wants to create a new workflow instance from a template (NL or named template).
+ * Injected as a hidden session hint so the model calls search_workflow_templates, not sai-cli.
+ */
+export function isWorkflowCreationIntent(text: string): boolean {
+  if (!text?.trim()) return false;
+  if (isReExecutionIntent(text) || isWorkflowStartIntent(text)) return false;
+
+  const hasWorkflow = /工作流|workflow/i.test(text);
+  if (NON_WORKFLOW_CREATE_PATTERN.test(text) && !hasWorkflow) return false;
+
+  if (/(?:创建|新建|搭建|配置|建立)(?:一个)?(?:工作流|workflow)/i.test(text)) return true;
+  if (/(?:工作流|workflow)(?:的)?(?:创建|新建|搭建)/i.test(text)) return true;
+
+  const hasCreateVerb = /创建|新建|搭建|配置|建立/i.test(text);
+  return hasWorkflow && hasCreateVerb;
+}
+
 /**
  * Check if user message is a re-execution intent for a remembered workflow.
  * Only acted on when session has saved workflow memory or model calls execute_workflow.
