@@ -7,7 +7,7 @@
 当前一期开放 6 个接口：
 
 ```http
-POST /agent/v1/workflow-templates/search
+POST /agent/v1/workflow-templates
 GET  /agent/v1/workflow-templates/{templateId}/startup-schema
 POST /agent/v1/workflows
 POST /agent/v1/workflows/{workflowId}/start
@@ -17,7 +17,7 @@ GET  /agent/v1/runs/{runId}/stream
 
 完整调用链路：
 
-1. 搜索系统模板
+1. 查询系统模板（分页 / 可选关键词）
 2. 查询模板启动参数
 3. 保存用户流程草稿与默认启动参数草稿
 4. 启动流程
@@ -25,14 +25,14 @@ GET  /agent/v1/runs/{runId}/stream
 
 ## 完整联调示例
 
-下面用一条真实联调链路说明客户端如何从“搜索模板”一直走到“查看运行结果”。
+下面用一条真实联调链路说明客户端如何从“查询模板”一直走到“查看运行结果”。
 
-### Step 1. 搜索工作流模板
+### Step 1. 查询工作流模板
 
 请求：
 
 ```http
-POST /agent/v1/workflow-templates/search
+POST /agent/v1/workflow-templates
 stoToken: xxx
 X-Trace-Id: 189286878971117568
 X-Source-Client: client-a
@@ -41,7 +41,9 @@ Content-Type: application/json
 
 ```json
 {
-  "query": "结算对账"
+  "query": "结算对账",
+  "page": 1,
+  "pageSize": 10
 }
 ```
 
@@ -50,69 +52,62 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "traceId": "189286878971117568",
-  "data": {
-    "matchedItems": [
-      {
-        "id": "tpl_61afd1ae",
-        "label": "结算对账流程",
-        "description": "制作一份结算对账报表",
-        "category": "通用",
-        "scope": "system",
-        "nodeCount": 4,
-        "nodes": [
-          {
-            "id": "trigger_1",
-            "type": "trigger",
-            "name": "开始方式"
-          },
-          {
-            "id": "check_bill_config_1",
-            "type": "startup_config",
-            "name": "启动配置"
-          },
-          {
-            "id": "agent_task_1780804497810",
-            "type": "agent_task",
-            "name": "智能处理"
-          },
-          {
-            "id": "output_1780813808607",
-            "type": "output",
-            "name": "保存结果"
-          }
-        ],
-        "edges": [
-          {
-            "id": "edge_1",
-            "source": "trigger_1",
-            "target": "check_bill_config_1",
-            "condition": null
-          },
-          {
-            "id": "edge_1780804500853",
-            "source": "check_bill_config_1",
-            "target": "agent_task_1780804497810",
-            "condition": null
-          },
-          {
-            "id": "edge_1780813812773",
-            "source": "agent_task_1780804497810",
-            "target": "output_1780813808607",
-            "condition": null
-          }
-        ],
-        "matchScore": 0.99,
-        "matchReason": [
-          "名称完全匹配查询词'结算对账'",
-          "描述明确提及制作一份结算对账报表",
-          "原始匹配度最高"
-        ],
-        "resultType": "matched"
-      }
-    ],
-    "recommendedItems": []
-  }
+  "data": [
+    {
+      "id": "tpl_61afd1ae",
+      "label": "结算对账流程",
+      "description": "制作一份结算对账报表",
+      "category": "通用",
+      "scope": "system",
+      "nodeCount": 4,
+      "nodes": [
+        {
+          "id": "trigger_1",
+          "type": "trigger",
+          "name": "开始方式"
+        },
+        {
+          "id": "check_bill_config_1",
+          "type": "startup_config",
+          "name": "启动配置"
+        },
+        {
+          "id": "agent_task_1780804497810",
+          "type": "agent_task",
+          "name": "智能处理"
+        },
+        {
+          "id": "output_1780813808607",
+          "type": "output",
+          "name": "保存结果"
+        }
+      ],
+      "edges": [
+        {
+          "id": "edge_1",
+          "source": "trigger_1",
+          "target": "check_bill_config_1",
+          "condition": null
+        },
+        {
+          "id": "edge_1780804500853",
+          "source": "check_bill_config_1",
+          "target": "agent_task_1780804497810",
+          "condition": null
+        },
+        {
+          "id": "edge_1780813812773",
+          "source": "agent_task_1780804497810",
+          "target": "output_1780813808607",
+          "condition": null
+        }
+      ]
+    }
+  ],
+  "total": 19,
+  "page": 1,
+  "pageSize": 10,
+  "traceId": "189286878971117568"
 }
 ```
 
@@ -463,32 +458,35 @@ X-Trace-Id: xxxxx123
 
 ---
 
-## 1. 搜索工作流模板
+## 1. 查询工作流模板（分页）
 
 ```http
-POST /agent/v1/workflow-templates/search
+POST /agent/v1/workflow-templates
 ```
 
 ### 说明
 
-- 输入用户自然语言描述
-- 服务端先召回系统模板候选，再由模型精选排序
-- 如果查询词已直接命中模板名称，则不再调用模型精排，直接返回规则匹配结果
-- 默认返回 3 个结果
-- 仅返回系统模板
+当客户端不走自然语言搜索，而是希望直接浏览系统模板列表时，可调用分页接口。
+
+- `query` 可选，按 `template_id` / `name` / `description` 做模糊查询；不传时默认分页查全部系统模板
+- 仅返回系统模板（`scope = system`）
+- 分页从第 `1` 页开始
 
 ### 请求体
 
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|------|------|
-| `query` | string | 是 | - | 用户自然语言输入 |
-| `limit` | integer | 否 | `3` | 返回数量，服务端会限制最大值 |
+| `query` | string | 否 | - | 按 `template_id` / `name` / `description` 模糊查询 |
+| `page` | integer | 否 | `1` | 页码，从 `1` 开始 |
+| `pageSize` | integer | 否 | `10` | 每页条数 |
 
 ### 请求示例
 
 ```json
 {
-  "query": "结算对账"
+  "query": "结算",
+  "page": 1,
+  "pageSize": 10
 }
 ```
 
@@ -497,69 +495,28 @@ POST /agent/v1/workflow-templates/search
 ```json
 {
   "success": true,
-  "data": {
-    "matchedItems": [
-      {
-        "id": "tpl_61afd1ae",
-        "label": "结算对账流程",
-        "description": "制作一份结算对账报表",
-        "category": "通用",
-        "scope": "system",
-        "nodeCount": 4,
-        "nodes": [
-          {
-            "id": "trigger_1",
-            "type": "trigger",
-            "name": "开始方式"
-          },
-          {
-            "id": "check_bill_config_1",
-            "type": "startup_config",
-            "name": "启动配置"
-          },
-          {
-            "id": "agent_task_1780804497810",
-            "type": "agent_task",
-            "name": "智能处理"
-          },
-          {
-            "id": "output_1780813808607",
-            "type": "output",
-            "name": "保存结果"
-          }
-        ],
-        "edges": [
-          {
-            "id": "edge_1",
-            "source": "trigger_1",
-            "target": "check_bill_config_1",
-            "condition": null
-          },
-          {
-            "id": "edge_1780804500853",
-            "source": "check_bill_config_1",
-            "target": "agent_task_1780804497810",
-            "condition": null
-          },
-          {
-            "id": "edge_1780813812773",
-            "source": "agent_task_1780804497810",
-            "target": "output_1780813808607",
-            "condition": null
-          }
-        ],
-        "matchScore": 0.99,
-        "matchReason": [
-          "名称完全匹配查询词'结算对账'",
-          "描述明确提及制作一份结算对账报表",
-          "原始匹配度最高"
-        ],
-        "resultType": "matched"
-      }
-    ],
-    "recommendedItems": []
-  },
-  "traceId": "189215191610245120"
+  "data": [
+    {
+      "id": "tpl_61afd1ae",
+      "label": "结算对账流程",
+      "description": "制作一份结算对账报表",
+      "category": "通用",
+      "scope": "system",
+      "nodeCount": 4,
+      "nodes": [
+        {
+          "id": "trigger_1",
+          "type": "trigger",
+          "name": "开始方式"
+        }
+      ],
+      "edges": []
+    }
+  ],
+  "total": 19,
+  "page": 1,
+  "pageSize": 10,
+  "traceId": "189312518965379073"
 }
 ```
 
@@ -570,11 +527,13 @@ POST /agent/v1/workflow-templates/search
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `success` | boolean | 固定为 `true` |
-| `data.matchedItems` | array | 强匹配结果列表，按匹配度降序 |
-| `data.recommendedItems` | array | 兜底推荐结果列表；当存在强匹配结果时通常为空 |
-| `traceId` | string | 请求链路 ID |
+| `data` | array | 当前页模板列表 |
+| `total` | integer | 满足查询条件的模板总数 |
+| `page` | integer | 当前页码 |
+| `pageSize` | integer | 当前每页条数 |
+| `traceId` | string | 链路追踪 ID |
 
-模板项字段：`data.matchedItems[*]` / `data.recommendedItems[*]`
+模板项字段：`data[*]`
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -589,9 +548,6 @@ POST /agent/v1/workflow-templates/search
 | `nodes[*].type` | string | 节点类型 |
 | `nodes[*].name` | string | 节点名称 |
 | `edges` | array | 模板边摘要列表；当前仅用于补充展示或调试 |
-| `matchScore` | number | 相对匹配分数，值越大表示越符合用户输入 |
-| `matchReason` | string[] | 服务端给出的匹配原因，供客户端展示推荐理由 |
-| `resultType` | string | 结果类型，取值：`matched` / `recommended` |
 
 ### 错误响应
 

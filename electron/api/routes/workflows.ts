@@ -178,17 +178,17 @@ export async function handleWorkflowRoutes(
   const pathname = url.pathname;
   logger.info(`[WorkflowRoutes] checking ${req.method} ${pathname}`);
 
-  // 1. POST /agent/v1/workflow-templates/search
-  if (pathname === '/agent/v1/workflow-templates/search' && req.method === 'POST') {
+  // 1. POST /agent/v1/workflow-templates
+  if (pathname === '/agent/v1/workflow-templates' && req.method === 'POST') {
     try {
-      const body = await parseJsonBody<{ query: string; limit?: number }>(req);
-      logger.info('[WorkflowRoutes] search request body:', JSON.stringify(body));
+      const body = await parseJsonBody<{ query?: string; page?: number; pageSize?: number }>(req);
+      logger.info('[WorkflowRoutes] list templates request body:', JSON.stringify(body));
 
       const baseUrl = await resolveStoBaseUrl();
       const headers = await extractWorkflowHeaders(req);
       const bodyStr = JSON.stringify(body);
 
-      const response = await proxyAwareFetch(`${baseUrl}/agent/v1/workflow-templates/search`, {
+      const response = await proxyAwareFetch(`${baseUrl}/agent/v1/workflow-templates`, {
         method: 'POST',
         headers,
         body: bodyStr,
@@ -198,8 +198,8 @@ export async function handleWorkflowRoutes(
       const contentType = response.headers.get('content-type') || 'application/json; charset=utf-8';
       const responseBody = await response.text();
 
-      logger.info('[WorkflowRoutes] search response status:', response.status);
-      logger.info('[WorkflowRoutes] search response body:', responseBody);
+      logger.info('[WorkflowRoutes] list templates response status:', response.status);
+      logger.info('[WorkflowRoutes] list templates response body:', responseBody);
 
       res.statusCode = response.status;
       res.setHeader('Access-Control-Allow-Origin', '*');
@@ -210,7 +210,7 @@ export async function handleWorkflowRoutes(
       }
       res.end(responseBody);
     } catch (error) {
-      logger.error('[WorkflowRoutes] search failed:', error);
+      logger.error('[WorkflowRoutes] list templates failed:', error);
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.end(JSON.stringify({ success: false, error: String(error) }));

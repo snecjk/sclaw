@@ -3,7 +3,7 @@
  * Manages workflow template list, selection, and execution constraints.
  */
 import { create } from 'zustand';
-import { getWorkflowStoToken, searchWorkflowTemplates } from '@/lib/workflow-api';
+import { listWorkflowTemplates, getWorkflowStoToken, searchWorkflowTemplates } from '@/lib/workflow-api';
 import { useAuthStore } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import type { WorkflowTemplateSearchItem } from '@/types/workflow';
@@ -30,9 +30,7 @@ export interface WorkflowsState {
 }
 
 const PREFETCH_TTL_MS = 5 * 60 * 1000;
-const PICKER_SEARCH_LIMIT = 20;
-/** Broad queries merged for picker catalog — single "工作流" search is non-deterministic. */
-const PICKER_CATALOG_QUERIES = ['工作流', '流程模板', '模板'];
+const PICKER_PAGE_SIZE = 20;
 let prefetchInFlight: Promise<void> | null = null;
 let loadInFlight: Promise<void> | null = null;
 
@@ -55,12 +53,8 @@ export function mergeWorkflowTemplateItems(
 }
 
 async function fetchTemplateCatalog(): Promise<WorkflowTemplateSearchItem[]> {
-  const results = await Promise.all(
-    PICKER_CATALOG_QUERIES.map((q) => searchWorkflowTemplates(q, PICKER_SEARCH_LIMIT)),
-  );
-  return mergeWorkflowTemplateItems(
-    ...results.map((r) => [...(r.matchedItems ?? []), ...(r.recommendedItems ?? [])]),
-  );
+  const result = await listWorkflowTemplates({ page: 1, pageSize: PICKER_PAGE_SIZE });
+  return mergeWorkflowTemplateItems(result.items);
 }
 
 export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
@@ -90,7 +84,7 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
         if (useCatalog) {
           templates = await fetchTemplateCatalog();
         } else {
-          const result = await searchWorkflowTemplates(trimmed, PICKER_SEARCH_LIMIT);
+          const result = await searchWorkflowTemplates(trimmed, PICKER_PAGE_SIZE);
           templates = mergeWorkflowTemplateItems(
             result.matchedItems,
             result.recommendedItems,

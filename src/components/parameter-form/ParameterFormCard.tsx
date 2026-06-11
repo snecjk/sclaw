@@ -412,24 +412,6 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
 
       {!collapsed && (
         <>
-          {/* Step indicator */}
-          {steps.length > 1 && (
-            <div className="flex items-center gap-1.5 bg-white px-5 pb-3 pt-2">
-              {steps.map((_, idx) => (
-                <div
-                  key={idx}
-                  className={cn(
-                    'h-1 rounded-full transition-all duration-300',
-                    idx === currentStep
-                      ? 'w-6 bg-[var(--sto-brand-6)]'
-                      : idx < currentStep
-                        ? 'w-3 bg-[#FFD7A3]'
-                        : 'w-3 bg-[#E5E6EB]',
-                  )}
-                />
-              ))}
-            </div>
-          )}
 
           {/* Fields */}
           <div className="space-y-5 px-5 py-4">
