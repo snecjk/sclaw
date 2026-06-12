@@ -21,6 +21,7 @@ import { buildProviderListItems } from '@/lib/provider-accounts';
 import {
   buildChatModelOptions,
   getWorkspaceDefaultModelId,
+  isConcreteModelId,
   resolveChatToolbarModelId,
 } from '@/lib/chat-model-options';
 import { cn } from '@/lib/utils';
@@ -92,20 +93,32 @@ export function ChatToolbar() {
     return (sto?.metadata?.customModels as string[] | undefined) ?? [];
   }, [accounts]);
 
+  const currentEngineType = currentAgent?.engineType ?? 'openclaw';
+  const currentEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
+
   // session override → agent default → workspace default (Settings 页默认模型)
   useEffect(() => {
     if (modelSaving) return;
-    const resolved = resolveChatToolbarModelId({
-      sessionModel: currentSession?.model,
-      agentModelDisplay: currentAgent?.modelDisplay,
-      agentInheritedModel: currentAgent?.inheritedModel,
-      workspaceDefaultModel: workspaceDefaultModelId,
-      stoCatalogModelIds,
-    });
+    const resolved = currentEngineType === 'claude'
+      ? (
+        isConcreteModelId(currentAgent?.modelDisplay)
+          ? currentAgent?.modelDisplay?.trim()
+          : (workspaceDefaultModelId || '')
+      )
+      : resolveChatToolbarModelId({
+        sessionModel: currentSession?.model,
+        agentModelDisplay: currentAgent?.modelDisplay,
+        agentInheritedModel: currentAgent?.inheritedModel,
+        workspaceDefaultModel: workspaceDefaultModelId,
+        stoCatalogModelIds,
+      });
     if (resolved) {
       setSelectedModelId(resolved);
+    } else {
+      setSelectedModelId('');
     }
   }, [
+    currentEngineType,
     modelSaving,
     currentSessionKey,
     currentSession?.model,
@@ -121,8 +134,11 @@ export function ChatToolbar() {
     [modelOptions, selectedModelId],
   );
 
-  const currentEngineType = currentAgent?.engineType ?? 'openclaw';
-  const currentEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
+  const claudeModelConfigured = isConcreteModelId(currentAgent?.modelDisplay);
+  const modelDisplayText = selectedModel?.displayName
+    ?? (currentEngineType === 'claude' && !claudeModelConfigured
+      ? (workspaceDefaultModelId || t('toolbar.modelNotConfigured'))
+      : t('toolbar.currentModel'));
 
   const handleModelSwitch = async (modelId: string) => {
     if (!currentSessionKey || modelId === selectedModelId) return;
@@ -130,21 +146,37 @@ export function ChatToolbar() {
     setSelectedModelId(modelId);
     setModelSaving(true);
     try {
-      const result = await hostApiFetch<{
-        model?: string;
-        modelOverride?: string | null;
-        changedModel?: boolean;
-      }>('/api/sessions/model', {
-        method: 'POST',
-        body: JSON.stringify({
-          sessionKey: currentSessionKey,
-          model: modelId,
-          accountId: opt?.accountId,
-          agentId: currentAgentId || undefined,
-          engineType: currentSession?.engineType,
-        }),
-      });
-      const persistedModel = (result.modelOverride || result.model || modelId).trim();
+      let persistedModel = modelId;
+      if (currentEngineType === 'claude' && currentAgentId) {
+        const result = await hostApiFetch<{ success?: boolean; snapshot?: { agents?: Array<{ id: string; modelDisplay?: string }> } }>(
+          `/api/agents/${encodeURIComponent(currentAgentId)}/model`,
+          {
+            method: 'PUT',
+            body: JSON.stringify({
+              model: modelId,
+              accountId: opt?.accountId,
+            }),
+          },
+        );
+        persistedModel = result.snapshot?.agents?.find((agent) => agent.id === currentAgentId)?.modelDisplay?.trim() || modelId;
+        await fetchAgents();
+      } else {
+        const result = await hostApiFetch<{
+          model?: string;
+          modelOverride?: string | null;
+          changedModel?: boolean;
+        }>('/api/sessions/model', {
+          method: 'POST',
+          body: JSON.stringify({
+            sessionKey: currentSessionKey,
+            model: modelId,
+            accountId: opt?.accountId,
+            agentId: currentAgentId || undefined,
+            engineType: currentSession?.engineType,
+          }),
+        });
+        persistedModel = (result.modelOverride || result.model || modelId).trim();
+      }
       useChatStore.setState((state) => ({
         sessions: state.sessions.map((session) => (
           session.key === currentSessionKey
@@ -155,14 +187,21 @@ export function ChatToolbar() {
       void loadSessions();
     } catch (err) {
       toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));
-      const resolved = resolveChatToolbarModelId({
-        sessionModel: currentSession?.model,
-        agentModelDisplay: currentAgent?.modelDisplay,
-        agentInheritedModel: currentAgent?.inheritedModel,
-        workspaceDefaultModel: workspaceDefaultModelId,
-        stoCatalogModelIds,
-      });
+      const resolved = currentEngineType === 'claude'
+        ? (
+          isConcreteModelId(currentAgent?.modelDisplay)
+            ? currentAgent?.modelDisplay?.trim()
+            : (workspaceDefaultModelId || '')
+        )
+        : resolveChatToolbarModelId({
+          sessionModel: currentSession?.model,
+          agentModelDisplay: currentAgent?.modelDisplay,
+          agentInheritedModel: currentAgent?.inheritedModel,
+          workspaceDefaultModel: workspaceDefaultModelId,
+          stoCatalogModelIds,
+        });
       if (resolved) setSelectedModelId(resolved);
+      else setSelectedModelId('');
     } finally {
       setModelSaving(false);
     }
@@ -257,7 +296,7 @@ export function ChatToolbar() {
               >
                 <Cpu className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
                 <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground/90">
-                  {selectedModel?.displayName ?? t('toolbar.currentModel')}
+                  {modelDisplayText}
                 </span>
                 {selectedModel && (
                   <span className={cn(

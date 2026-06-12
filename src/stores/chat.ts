@@ -11,7 +11,6 @@ import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
-import { stripWorkflowContextForDisplay } from '@/lib/workflow-context';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
 import { buildCronSessionHistoryPath, isCronSessionKey, parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './chat/cron-session-utils';
 import { sanitizeSessionDisplayField } from './chat/helpers';
@@ -68,6 +67,28 @@ function toNumberIfFinite(value: unknown): number | undefined {
   if (typeof value !== 'number') return undefined;
   if (!Number.isFinite(value)) return undefined;
   return value;
+}
+
+function getSessionEngineType(
+  sessions: ChatSession[],
+  sessionKey: string,
+): ChatSession['engineType'] | undefined {
+  return sessions.find((session) => session.key === sessionKey)?.engineType;
+}
+
+function normalizeSendMessageOptions(args: unknown[]): import('./chat/types').SendMessageOptions {
+  const [first, attachments, targetAgentId, workflowContext] = args;
+  if (typeof first === 'string') {
+    return {
+      text: first,
+      attachments: Array.isArray(attachments)
+        ? attachments as import('./chat/types').SendMessageOptions['attachments']
+        : undefined,
+      targetAgentId: typeof targetAgentId === 'string' ? targetAgentId : undefined,
+      workflowContext: workflowContext as import('./chat/types').WorkflowContextBlock | undefined,
+    };
+  }
+  return first as import('./chat/types').SendMessageOptions;
 }
 
 // Timer for fallback history polling during active sends.
@@ -1189,6 +1210,7 @@ export const useChatStore = create<ChatState>()(
         if (rawSessions.length > 0) {
           const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
             const key = String(s.key || '');
+            const engineType: ChatSession['engineType'] = s.engineType === 'claude' ? 'claude' : 'openclaw';
             return {
               key,
               label: s.label ? String(s.label) : undefined,
@@ -1199,6 +1221,7 @@ export const useChatStore = create<ChatState>()(
               thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
               model: s.model ? String(s.model) : undefined,
               updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
+              engineType,
             };
           }).filter((s: ChatSession) => s.key);
 
@@ -1803,9 +1826,8 @@ export const useChatStore = create<ChatState>()(
 
   // ── Send message ──
 
-  sendMessage: async (
-    options: import('./chat/types').SendMessageOptions,
-  ) => {
+  sendMessage: async (...args: unknown[]) => {
+    const options = normalizeSendMessageOptions(args);
     const { text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
@@ -1827,6 +1849,7 @@ export const useChatStore = create<ChatState>()(
     }
 
     const currentSessionKey = targetSessionKey;
+    const currentSessionEngineType = getSessionEngineType(get().sessions, currentSessionKey);
 
     let textForGateway = trimmed;
     if (!workflowContext) {
@@ -1991,9 +2014,6 @@ export const useChatStore = create<ChatState>()(
 
       let result: { success: boolean; result?: { runId?: string }; error?: string };
 
-      // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
-      const CHAT_SEND_TIMEOUT_MS = 120_000;
-
       if (hasMedia) {
         result = await hostApiFetch<{ success: boolean; result?: { runId?: string }; error?: string }>(
           '/api/chat/send-with-media',
@@ -2004,6 +2024,7 @@ export const useChatStore = create<ChatState>()(
               message: messageWithContext || 'Process the attached file(s).',
               deliver: false,
               idempotencyKey,
+              engineType: currentSessionEngineType,
               media: attachments.map((a) => ({
                 filePath: a.stagedPath,
                 mimeType: a.mimeType,
@@ -2020,11 +2041,11 @@ export const useChatStore = create<ChatState>()(
             message: messageWithContext,
             deliver: false,
             idempotencyKey,
+            engineType: currentSessionEngineType,
             // NOTE: workflowId/runId are not forwarded to Gateway chat.send yet
             // because the Gateway schema does not accept them. Workflow state
             // is tracked via SSE + main process polling instead.
           },
-          CHAT_SEND_TIMEOUT_MS,
         );
         result = { success: true, result: rpcResult };
       }
@@ -2054,7 +2075,7 @@ export const useChatStore = create<ChatState>()(
     try {
       await useGatewayStore.getState().rpc(
         'chat.abort',
-        { sessionKey: currentSessionKey },
+        { sessionKey: currentSessionKey, engineType: getSessionEngineType(get().sessions, currentSessionKey) },
       );
     } catch (err) {
       set({ error: String(err) });

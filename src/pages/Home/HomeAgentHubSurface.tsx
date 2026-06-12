@@ -151,6 +151,7 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
                 onQueue: handleHubQueue,
                 variant: 'embedded',
                 seedText,
+                engineType: currentEngineType,
               })}
               engineType={currentEngineType}
             />

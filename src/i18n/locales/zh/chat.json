@@ -21,6 +21,7 @@
         "switchAgentTitle": "切换到该 Agent 的主会话；新对话也会在该 Agent 下进行",
         "defaultAgentMark": "（默认）",
         "currentModel": "模型",
+        "modelNotConfigured": "未配置",
         "switchModelTitle": "切换对话模型",
         "modelTagBuiltin": "内置",
         "modelTagCustom": "自定义",

@@ -20,6 +20,12 @@
         "switchAgentAria": "会話 Agent を切り替え",
         "switchAgentTitle": "その Agent のメインセッションに切り替えます。新規チャットもこの Agent 配下になります",
         "defaultAgentMark": "（既定）",
+        "currentModel": "モデル",
+        "modelNotConfigured": "未設定",
+        "switchModelTitle": "会話モデルを切り替え",
+        "modelTagBuiltin": "内蔵",
+        "modelTagCustom": "カスタム",
+        "noModels": "利用可能なモデルがありません",
         "modelSwitchFailed": "モデルの切り替えに失敗しました：{{message}}"
     },
     "composer": {

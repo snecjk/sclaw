@@ -106,14 +106,9 @@ async function resolveClaudeLaunchSelection(
     accountId?: string;
   } | null,
 ): Promise<{ model?: string; accountId?: string }> {
-  let model = existing?.model;
-  let accountId = existing?.accountId;
-
-  if (!model || !accountId) {
-    const preferredModel = await getAgentPreferredModel(agentId);
-    model = model ?? preferredModel.model;
-    accountId = accountId ?? preferredModel.accountId;
-  }
+  const preferredModel = await getAgentPreferredModel(agentId);
+  let model = preferredModel.model ?? existing?.model;
+  let accountId = preferredModel.accountId ?? existing?.accountId;
 
   if (!accountId) {
     accountId = await getDefaultProviderAccountId();

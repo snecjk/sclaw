@@ -326,6 +326,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
     isEmpty,
     seedText: composeSeed,
     className: 'pb-0',
+    engineType: currentAgent?.engineType,
   });
 
   const handlePreviewFile = useCallback((file: AttachedFileMeta) => {

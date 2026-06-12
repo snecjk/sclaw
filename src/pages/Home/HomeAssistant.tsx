@@ -42,6 +42,7 @@ export function HomeAssistant({
     seedText,
     className,
     placeholder: placeholderKey ? t(placeholderKey) : undefined,
+    engineType: currentEngineType,
   });
 
   useEffect(() => {
