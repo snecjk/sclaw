@@ -1267,6 +1267,10 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
         console.log(`[sanitize] Migrated plugins.entries: ${LEGACY_WECOM_ID} → ${NEW_WECOM_ID}`);
         modified = true;
       }
+
+      if (ensureDingTalkSendGuardPluginConfig(pluginsObj)) {
+        modified = true;
+      }
     }
 
     // ── channels default-account migration ─────────────────────────
@@ -1304,6 +1308,34 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
   });
 }
 
+const DINGTALK_SEND_GUARD_PLUGIN_ID = 'sto-dingtalk-send-guard';
+
+/** Always enable local DingTalk send guard (no remote config required). */
+function ensureDingTalkSendGuardPluginConfig(plugins: Record<string, unknown>): boolean {
+  const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
+  const entries = (
+    plugins.entries && typeof plugins.entries === 'object' && !Array.isArray(plugins.entries)
+      ? plugins.entries
+      : {}
+  ) as Record<string, Record<string, unknown>>;
+
+  let modified = false;
+  if (!allow.includes(DINGTALK_SEND_GUARD_PLUGIN_ID)) {
+    allow.push(DINGTALK_SEND_GUARD_PLUGIN_ID);
+    modified = true;
+  }
+  const current = entries[DINGTALK_SEND_GUARD_PLUGIN_ID];
+  if (!current || current.enabled !== true) {
+    entries[DINGTALK_SEND_GUARD_PLUGIN_ID] = { enabled: true, config: {} };
+    modified = true;
+  }
+  if (modified) {
+    plugins.allow = allow;
+    plugins.entries = entries;
+  }
+  return modified;
+}
+
 /**
  * Configure STO plugins in a single openclaw.json write (avoids multiple hot-reload cycles).
  */
@@ -1324,7 +1356,13 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
     plugins.enabled = true;
 
     const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
-    for (const pluginId of ['sto-dynamic-agent-route', 'sto-agent-telemetry', 'sto-scheduled-task-tool', 'sto-skill-call-monitor']) {
+    for (const pluginId of [
+      'sto-dynamic-agent-route',
+      'sto-agent-telemetry',
+      'sto-scheduled-task-tool',
+      'sto-skill-call-monitor',
+      DINGTALK_SEND_GUARD_PLUGIN_ID,
+    ]) {
       if (!allow.includes(pluginId)) {
         allow.push(pluginId);
       }
@@ -1368,6 +1406,10 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
         ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
         timeoutMs: 5000,
       },
+    };
+    entries[DINGTALK_SEND_GUARD_PLUGIN_ID] = {
+      enabled: true,
+      config: {},
     };
     plugins.entries = entries;
     config.plugins = plugins;

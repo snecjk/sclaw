@@ -1,3 +1,4 @@
+import { stripInstructionFromTaskMessage } from '@/lib/scheduled-task-recipients';
 import type { CronJob } from '@/types/cron';
 
 function parseCronStringLabel(cron: string): string {
@@ -61,11 +62,10 @@ export function parseScheduleLabel(schedule: CronJob['schedule']): string {
 export function filterTasks(tasks: CronJob[], query: string): CronJob[] {
   if (!query.trim()) return tasks;
   const q = query.trim().toLowerCase();
-  return tasks.filter(
-    (t) =>
-      t.name.toLowerCase().includes(q) ||
-      t.message.toLowerCase().includes(q)
-  );
+  return tasks.filter((t) => {
+    const message = stripInstructionFromTaskMessage(t.message || '');
+    return t.name.toLowerCase().includes(q) || message.toLowerCase().includes(q);
+  });
 }
 
 export function sortTasks(tasks: CronJob[], sort: string): CronJob[] {

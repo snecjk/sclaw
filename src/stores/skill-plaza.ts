@@ -49,6 +49,7 @@ interface SkillPlazaState {
   installing: Record<string, boolean>;
   uninstalling: Record<string, boolean>;
   error: string | null;
+  syncingUserSkills: boolean;
 
   // Stale flags (trigger re-fetch on tab switch after mutations)
   plazaStale: boolean;
@@ -65,6 +66,7 @@ interface SkillPlazaState {
   fetchCategories: () => Promise<void>;
   fetchPlazaSkills: (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => Promise<void>;
   fetchLocalSkills: (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => Promise<void>;
+  syncUserSkills: () => Promise<void>;
 
   installSkill: (slug: string, options?: InstallPlazaSkillOptions) => Promise<void>;
   uninstallSkill: (slug: string) => Promise<void>;
@@ -125,6 +127,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
   installing: {},
   uninstalling: {},
   error: null,
+  syncingUserSkills: false,
 
   // Stale flags
   plazaStale: false,
@@ -279,6 +282,22 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
       set(nextState);
     } catch (err) {
       set({ error: String(err), loading: false });
+    }
+  },
+
+  syncUserSkills: async () => {
+    set({ syncingUserSkills: true, error: null });
+    try {
+      await Promise.all([
+        get().fetchCategories(),
+        get().fetchPlazaSkills({ reset: true }),
+        get().fetchLocalSkills(),
+      ]);
+    } catch (err) {
+      console.error('Failed to sync user skills:', err);
+      set({ error: String(err) });
+    } finally {
+      set({ syncingUserSkills: false });
     }
   },
 

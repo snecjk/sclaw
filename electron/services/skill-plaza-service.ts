@@ -5,7 +5,8 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { getOpenClawConfigDir, getOpenClawSkillsDir } from '../utils/paths';
+import { getOpenClawConfigDir, getOpenClawSkillsDir, getOpenClawUserSkillsDir, getOpenClawUserDisabledDir } from '../utils/paths';
+import { getCurrentActiveUserCode } from './user-skill-workspace';
 import { setSkillsEnabled } from '../utils/skill-config';
 import { getStoToken, getAuthState, isSiteUser } from '../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
@@ -17,6 +18,7 @@ import {
   resolveInstalledVersionForCompare,
 } from '../utils/skill-version';
 import { PREINSTALLED_MARKER_NAME } from './sto-skill-service';
+import { parseSkillFrontmatter, readSkillMdFrontmatter } from '../utils/skill-frontmatter';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -158,6 +160,10 @@ class PythonApiClient {
 
   async recordInstall(slug: string): Promise<void> {
     await this.request<unknown>('POST', `/agent/v1/skills/plaza/${encodeURIComponent(slug)}/install`);
+  }
+
+  async recordUninstall(slug: string): Promise<void> {
+    await this.request<unknown>('POST', `/agent/v1/skills/plaza/${encodeURIComponent(slug)}/uninstall`);
   }
 }
 
@@ -306,18 +312,8 @@ function isPreinstalledSkill(skillDir: string): boolean {
 }
 
 function readSkillMdVersion(skillDir: string): string | null {
-  try {
-    const skillMdPath = path.join(skillDir, 'SKILL.md');
-    if (!fs.existsSync(skillMdPath)) return null;
-    const raw = fs.readFileSync(skillMdPath, 'utf8');
-    const frontmatterMatch = raw.match(/^---\s*\n([\s\S]*?)\n---/);
-    if (!frontmatterMatch) return null;
-    const versionMatch = frontmatterMatch[1].match(/^\s*version\s*:\s*["']?([^"'\n]+)["']?\s*$/m);
-    if (!versionMatch) return null;
-    return versionMatch[1].trim() || null;
-  } catch {
-    return null;
-  }
+  const fm = readSkillMdFrontmatter(skillDir);
+  return fm?.version ?? null;
 }
 
 function resolveSkillDirForSlug(skillsDir: string, disabledDir: string, slug: string): string | null {
@@ -379,20 +375,10 @@ function readLocalSkillSummary(skillsDir: string, slug: string): Partial<SkillSu
   const skillMdPath = path.join(skillDir, 'SKILL.md');
   if (fs.existsSync(skillMdPath)) {
     try {
-      const content = fs.readFileSync(skillMdPath, 'utf8');
+      const content = fs.readFileSync(skillMdPath, 'utf8').replace(/\r\n/g, '\n');
       const frontMatterMatch = content.match(/^---\n([\s\S]*?)\n---\n/);
       if (frontMatterMatch) {
-        const frontMatter = frontMatterMatch[1];
-        const lines = frontMatter.split('\n');
-        const meta: Record<string, string> = {};
-        for (const line of lines) {
-          const colonIdx = line.indexOf(':');
-          if (colonIdx > 0) {
-            const key = line.slice(0, colonIdx).trim();
-            const value = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, '');
-            meta[key] = value;
-          }
-        }
+        const meta = parseSkillFrontmatter(frontMatterMatch[1]);
         // front matter 里优先取 title，没有 title 再取 name
         let title = meta.title || meta.name || '';
         if (!title) {
@@ -465,7 +451,6 @@ export class SkillPlazaService {
     const lockEntries = readLockJsonSkillEntries(this.configDir);
     const installed = installedSlugs.has(skill.slug);
     // overlayLocalState 仅处理 plaza API 项，不应因 lock 缺失把市场安装误判为「纯本地自建」
-    const isLocalOnly = false;
     const source: 'official' | 'mine' = skill.source === 'mine' ? 'mine' : 'official';
 
     let installedVersion: string | undefined;
@@ -896,6 +881,10 @@ export class SkillPlazaService {
     await this.client.recordInstall(slug);
   }
 
+  async recordUninstall(slug: string): Promise<void> {
+    await this.client.recordUninstall(slug);
+  }
+
   async toggleSkillEnabled(slug: string, enabled: boolean): Promise<void> {
     const disabledDir = this.getDisabledDir();
     const activeDir = this.skillsDir;
@@ -917,6 +906,27 @@ export class SkillPlazaService {
     } catch (err) {
       logger.error(`[SkillPlazaService] Failed to rename ${srcDir} -> ${destDir}:`, err);
     }
+
+    // Also toggle in user workspace if applicable
+    const userCode = await getCurrentActiveUserCode();
+    if (userCode) {
+      const userActiveDir = getOpenClawUserSkillsDir(userCode);
+      const userDisabledDir = getOpenClawUserDisabledDir(userCode);
+      const userSrcDir = enabled ? path.join(userDisabledDir, slug) : path.join(userActiveDir, slug);
+      const userDestDir = enabled ? path.join(userActiveDir, slug) : path.join(userDisabledDir, slug);
+
+      if (fs.existsSync(userSrcDir)) {
+        if (!fs.existsSync(userDisabledDir)) {
+          fs.mkdirSync(userDisabledDir, { recursive: true });
+        }
+        try {
+          fs.renameSync(userSrcDir, userDestDir);
+        } catch (err) {
+          logger.error(`[SkillPlazaService] Failed to rename user workspace ${userSrcDir} -> ${userDestDir}:`, err);
+        }
+      }
+    }
+
     await setSkillsEnabled([slug], enabled);
   }
 }

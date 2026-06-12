@@ -12,6 +12,8 @@ import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
+import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
+import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { buildCronSessionHistoryPath, isCronSessionKey } from './chat/cron-session-utils';
 import { sanitizeSessionDisplayField } from './chat/helpers';
 import {
@@ -1593,6 +1595,7 @@ export const useChatStore = create<ChatState>()(
     text: string,
     attachments?: Array<{ fileName: string; mimeType: string; fileSize: number; stagedPath: string; preview: string | null }>,
     targetAgentId?: string | null,
+    dingTalkMentions?: DingTalkMention[],
   ) => {
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
@@ -1749,6 +1752,15 @@ export const useChatStore = create<ChatState>()(
                 mimeType: a.mimeType,
                 fileName: a.fileName,
               })),
+              ...buildDingTalkMentionRpcExtras(
+                dingTalkMentions,
+                attachments?.map((file) => ({
+                  fileName: file.fileName,
+                  filePath: file.stagedPath,
+                  mimeType: file.mimeType,
+                  fileSize: file.fileSize,
+                })),
+              ),
             }),
           },
         );
@@ -1760,6 +1772,7 @@ export const useChatStore = create<ChatState>()(
             message: trimmed,
             deliver: false,
             idempotencyKey,
+            ...buildDingTalkMentionRpcExtras(dingTalkMentions),
           },
           CHAT_SEND_TIMEOUT_MS,
         );

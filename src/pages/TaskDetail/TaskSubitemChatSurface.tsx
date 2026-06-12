@@ -408,6 +408,8 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
                       <AssistantTurnMessage
                         key={item.key}
                         turnMessages={item.messages}
+                        turnToolResults={item.toolResults}
+                        precedingUserMessage={item.precedingUserMessage}
                         showThinking={showThinking}
                         onPreviewFile={handlePreviewFile}
                       />
@@ -426,6 +428,8 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
                   <AssistantTurnMessage
                     key="active-turn"
                     turnMessages={activeTurn.turnMessages}
+                    turnToolResults={activeTurn.turnToolResults}
+                    precedingUserMessage={activeTurn.precedingUserMessage}
                     showThinking={showThinking}
                     activeStream={activeTurn.activeStream}
                     onPreviewFile={handlePreviewFile}

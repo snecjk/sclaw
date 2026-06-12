@@ -10,6 +10,7 @@ export interface Skill {
   id: string;
   slug?: string;
   name: string;
+  title?: string;
   description: string;
   enabled: boolean;
   icon?: string;

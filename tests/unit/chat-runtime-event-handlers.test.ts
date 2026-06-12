@@ -6,10 +6,12 @@ const collectToolUpdates = vi.fn(() => []);
 const extractImagesAsAttachedFiles = vi.fn(() => []);
 const extractMediaRefs = vi.fn(() => []);
 const extractRawFilePaths = vi.fn(() => []);
+const formatChatRuntimeError = vi.fn((message: unknown) => String(message ?? ''));
 const getMessageText = vi.fn(() => '');
 const getToolCallFilePath = vi.fn(() => undefined);
 const hasErrorRecoveryTimer = vi.fn(() => false);
 const hasNonToolAssistantContent = vi.fn(() => true);
+const isSessionLockErrorMessage = vi.fn(() => false);
 const isToolOnlyMessage = vi.fn(() => false);
 const isToolResultRole = vi.fn((role: unknown) => role === 'toolresult');
 const makeAttachedFile = vi.fn((ref: { filePath: string; mimeType: string }) => ({
@@ -29,10 +31,12 @@ vi.mock('@/stores/chat/helpers', () => ({
   extractImagesAsAttachedFiles: (...args: unknown[]) => extractImagesAsAttachedFiles(...args),
   extractMediaRefs: (...args: unknown[]) => extractMediaRefs(...args),
   extractRawFilePaths: (...args: unknown[]) => extractRawFilePaths(...args),
+  formatChatRuntimeError: (...args: unknown[]) => formatChatRuntimeError(...args),
   getMessageText: (...args: unknown[]) => getMessageText(...args),
   getToolCallFilePath: (...args: unknown[]) => getToolCallFilePath(...args),
   hasErrorRecoveryTimer: (...args: unknown[]) => hasErrorRecoveryTimer(...args),
   hasNonToolAssistantContent: (...args: unknown[]) => hasNonToolAssistantContent(...args),
+  isSessionLockErrorMessage: (...args: unknown[]) => isSessionLockErrorMessage(...args),
   isToolOnlyMessage: (...args: unknown[]) => isToolOnlyMessage(...args),
   isToolResultRole: (...args: unknown[]) => isToolResultRole(...args),
   makeAttachedFile: (...args: unknown[]) => makeAttachedFile(...args),
@@ -83,6 +87,8 @@ describe('chat runtime event handlers', () => {
     vi.resetAllMocks();
     hasErrorRecoveryTimer.mockReturnValue(false);
     collectToolUpdates.mockReturnValue([]);
+    formatChatRuntimeError.mockImplementation((message: unknown) => String(message ?? ''));
+    isSessionLockErrorMessage.mockReturnValue(false);
     upsertToolStatuses.mockImplementation((_current, updates) => updates);
   });
 
@@ -140,6 +146,33 @@ describe('chat runtime event handlers', () => {
     expect(next.activeRunId).toBeNull();
     expect(next.lastUserMessageAt).toBeNull();
     expect(next.streamingTools).toEqual([]);
+  });
+
+  it('finalizes session lock errors immediately without recovery timer', async () => {
+    formatChatRuntimeError.mockImplementation(
+      () => 'This session is temporarily locked by another OpenClaw run.',
+    );
+    isSessionLockErrorMessage.mockReturnValue(true);
+
+    const { handleRuntimeEventState } = await import('@/stores/chat/runtime-event-handlers');
+    const h = makeHarness({ sending: true, activeRunId: 'r-lock', lastUserMessageAt: 456 });
+
+    handleRuntimeEventState(
+      h.set as never,
+      h.get as never,
+      { errorMessage: 'session file locked (timeout 10000ms)' },
+      'error',
+      'r-lock',
+    );
+
+    const next = h.read();
+    expect(clearErrorRecoveryTimer).toHaveBeenCalledTimes(1);
+    expect(clearHistoryPoll).toHaveBeenCalledTimes(1);
+    expect(setErrorRecoveryTimer).not.toHaveBeenCalled();
+    expect(next.error).toBe('This session is temporarily locked by another OpenClaw run.');
+    expect(next.sending).toBe(false);
+    expect(next.activeRunId).toBeNull();
+    expect(next.lastUserMessageAt).toBeNull();
   });
 
   it('clears runtime state on aborted event', async () => {

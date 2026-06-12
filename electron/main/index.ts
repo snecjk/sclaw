@@ -210,8 +210,12 @@ function getIconsDir(): string {
  * Get the app icon for the current platform
  */
 function getAppIcon(): Electron.NativeImage | undefined {
-  if (process.platform === 'darwin') return undefined; // macOS uses the app bundle icon
+  if (process.platform === 'darwin' && app.isPackaged) {
+    // Packaged macOS: use the app bundle icon (from Info.plist)
+    return undefined;
+  }
 
+  // Dev mode (all platforms) or packaged Windows/Linux: load icon from file
   const iconsDir = getIconsDir();
   const iconPath =
     process.platform === 'win32'
@@ -408,6 +412,7 @@ async function initialize(): Promise<void> {
     { ensureClawXContext, repairClawXOnlyBootstrapFiles },
     { autoInstallCliIfNeeded, generateCompletionCache, installCompletionToProfile },
     { autoInstallSaiCliIfNeeded },
+    { autoInstallDwsCliIfNeeded },
     { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled },
     { ensureLongOutputConstraint, ensureChineseThinkingConstraint, getAgentWorkspacePath },
     { ensureAllBundledPluginsInstalledAsync },
@@ -431,6 +436,7 @@ async function initialize(): Promise<void> {
     import('../utils/openclaw-workspace'),
     import('../utils/openclaw-cli'),
     import('../utils/sai-cli'),
+    import('../utils/dws-cli'),
     import('../utils/skill-config'),
     import('../utils/agent-config'),
     import('../utils/plugin-install'),
@@ -587,6 +593,18 @@ async function initialize(): Promise<void> {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn('SAI CLI auto-install failed:', message);
       mainWindow?.webContents.send('sai:cli-install-failed', message);
+    });
+    await autoInstallDwsCliIfNeeded((installedPath) => {
+      mainWindow?.webContents.send('dws:cli-installed', installedPath);
+    }).then(async (result) => {
+      if (result.success) {
+        const { promptGatewayRestartAfterDwsInstall } = await import('../utils/dws-install-notify');
+        await promptGatewayRestartAfterDwsInstall(gm, mainWindow, result);
+      }
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn('dws auto-install failed:', message);
+      mainWindow?.webContents.send('dws:cli-install-failed', message);
     });
   });
 

@@ -596,6 +596,7 @@ exports.default = async function afterPack(context) {
     { type: 'local', localDir: 'sto-agent-telemetry', pluginId: 'sto-agent-telemetry' },
     { type: 'local', localDir: 'sto-scheduled-task-tool', pluginId: 'sto-scheduled-task-tool' },
     { type: 'local', localDir: 'sto-skill-call-monitor', pluginId: 'sto-skill-call-monitor' },
+    { type: 'local', localDir: 'sto-dingtalk-send-guard', pluginId: 'sto-dingtalk-send-guard' },
   ];
 
   const localPluginSourceRoot = join(__dirname, '..', 'sto-plugin');

@@ -5,11 +5,18 @@
  *
  * During the swap the backup may briefly exist as a file/symlink before becoming
  * a full `.app` directory — do not require `isDirectory()` before removal.
+ *
+ * Node `fs.rm(recursive)` often fails on macOS app bundles (ENOTEMPTY under
+ * Contents/Resources/app.asar); use `/bin/rm -rf` instead.
  */
+import { execFile } from 'node:child_process';
 import { app } from 'electron';
 import { lstat, readdir, rm } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
+import { promisify } from 'node:util';
 import { logger } from './logger';
+
+const execFileAsync = promisify(execFile);
 
 /** Retries after launch: ShipIt may still be renaming `.old-*` into a bundle. */
 export const CLEANUP_RETRY_DELAYS_MS = [0, 30_000, 120_000, 300_000] as const;
@@ -52,10 +59,30 @@ async function describeEntry(target: string): Promise<string> {
   }
 }
 
+/** Delete a path on macOS; falls back when Node fs.rm hits ENOTEMPTY on .app bundles. */
+export async function removeMacAppBackupPath(target: string): Promise<void> {
+  if (process.platform === 'darwin') {
+    try {
+      await execFileAsync('/bin/rm', ['-rf', target]);
+      return;
+    } catch (error) {
+      logger.warn(`[Updater] /bin/rm -rf failed for ${target}, retrying with fs.rm:`, error);
+    }
+  }
+
+  await rm(target, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 200,
+  });
+}
+
 /** Remove all sibling `.app.old-*` backups next to the running app bundle. */
 export async function cleanupOldMacAppBackups(execPath: string): Promise<string[]> {
   const info = getMacAppBundleInfo(execPath);
   if (!info) {
+    logger.warn('[Updater] Old app backup cleanup skipped: could not resolve .app bundle path');
     return [];
   }
 
@@ -85,7 +112,7 @@ export async function cleanupOldMacAppBackups(execPath: string): Promise<string[
 
     const kind = await describeEntry(target);
     try {
-      await rm(target, { recursive: true, force: true });
+      await removeMacAppBackupPath(target);
       removed.push(target);
       logger.info(`[Updater] Removed old app backup (${kind}): ${target}`);
     } catch (error) {
@@ -102,6 +129,10 @@ export async function cleanupOldMacAppBackups(execPath: string): Promise<string[
 
   if (removed.length > 0) {
     logger.info(`[Updater] Cleaned ${removed.length}/${candidates.length} old app backup(s)`);
+  } else if (candidates.length > 0) {
+    logger.warn(
+      `[Updater] Could not remove any of ${candidates.length} old app backup(s); check permissions or quit other STO Claw instances`,
+    );
   }
 
   return removed;
