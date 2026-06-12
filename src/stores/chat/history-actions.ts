@@ -1,6 +1,6 @@
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
-import { stripWorkflowContextForDisplay } from '@/lib/workflow-context';
+import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 import { mergeLocalWorkflowTurnsFromCurrent } from '@/lib/workflow-local-turn';
 import {
   mergeParameterFormBlocksFromCurrent,
@@ -114,9 +114,9 @@ export function createHistoryActions(
         const isMainSession = currentSessionKey.endsWith(':main');
         if (!isMainSession) {
           const firstUserMsg = finalMessages.find((m) => m.role === 'user');
-          if (firstUserMsg && !get().sessionLabels[currentSessionKey]) {
-            const rawText = getMessageText(firstUserMsg.content).trim();
-            const labelText = stripWorkflowContextForDisplay(rawText);
+          const existingLabel = get().sessionLabels[currentSessionKey];
+          if (firstUserMsg && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+            const labelText = deriveSessionLabelFromUserText(getMessageText(firstUserMsg.content));
             if (labelText) {
               const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
               set((s) => ({

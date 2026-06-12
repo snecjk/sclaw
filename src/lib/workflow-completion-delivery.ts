@@ -1,8 +1,9 @@
 /**
- * Deliver workflow completion summaries via the chat model (Gateway sendMessage).
- * Persists delivery flag in localStorage to avoid duplicate summaries on refresh.
+ * Finalize workflow runs when they reach a terminal state.
+ * Results render on WorkflowCard directly — no extra Gateway sendMessage round-trip.
  */
 import { getWorkflowRun, runToExecutionState } from '@/lib/workflow-api';
+import { mergeWorkflowCardState } from '@/lib/workflow-card-state-merge';
 import { WORKFLOW_COMPLETE_TAG } from '@/lib/workflow-context';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import { useChatStore, type RawMessage } from '@/stores/chat';
@@ -27,45 +28,7 @@ export function messagesHasCompletionSummary(
   });
 }
 
-function buildCompletionPrompt(
-  templateName: string,
-  state: WorkflowExecutionState,
-  runId: string,
-): string {
-  const lines: string[] = [
-    WORKFLOW_COMPLETE_TAG,
-    '',
-    `工作流名称：${templateName}`,
-    `执行状态：${state.status === 'completed' ? '成功' : state.status === 'failed' ? '失败' : state.status}`,
-    `运行 ID：${runId}`,
-  ];
-
-  if (state.workflowId) lines.push(`工作流 ID：${state.workflowId}`);
-
-  if (state.startedAt) lines.push(`开始时间：${state.startedAt}`);
-  if (state.completedAt) lines.push(`完成时间：${state.completedAt}`);
-
-  if (state.result?.summary) {
-    lines.push('', '执行摘要：', state.result.summary);
-  }
-
-  if (state.result?.artifacts && state.result.artifacts.length > 0) {
-    lines.push('', '产物列表：');
-    for (const artifact of state.result.artifacts) {
-      lines.push(`- ${artifact.name}（类型：${artifact.type}，链接：${artifact.url}）`);
-    }
-  }
-
-  if (state.error) {
-    lines.push('', '异常信息：', state.error);
-  }
-
-  lines.push('', '请根据以上信息生成一段自然语言总结，包含执行状态、关键结果与产物引用。');
-
-  return lines.join('\n');
-}
-
-/** Push a model-authored completion summary when a run reaches a terminal state. */
+/** Hydrate card + mark delivered when a run completes; WorkflowCard shows summary/artifacts. */
 export async function deliverWorkflowCompletionIfNeeded(
   runId: string,
   sessionKey: string,
@@ -87,40 +50,32 @@ export async function deliverWorkflowCompletionIfNeeded(
   try {
     let state = prefetchedState;
     let workflowId = state?.workflowId ?? exec?.workflowId ?? '';
-    let templateName = exec?.templateName ?? '工作流';
 
     if (!state || !isTerminalWorkflowRunStatus(state.status)) {
       const run = await getWorkflowRun(runId);
       state = runToExecutionState(run);
       workflowId = run.workflowId;
-      templateName = run.startup?.presetName || exec?.templateName || templateName;
     }
 
     if (!state || !isTerminalWorkflowRunStatus(state.status)) return;
     if (state.status !== 'completed' && state.status !== 'failed') return;
 
-    chatState.setWorkflowCardState(runId, state);
-    patchWorkflowExecution(sessionKey, runId, {
-      status: state.status,
-      updatedAt: Date.now(),
+    const previous = useChatStore.getState().workflowCardStates[runId];
+    const merged = mergeWorkflowCardState(previous, state, {
+      localStartedAtMs: exec?.createdAt,
     });
 
-    const latest = useChatStore.getState();
-    if (latest.currentSessionKey !== sessionKey) return;
-    if (latest.sending) return;
-    if (messagesHasCompletionSummary(latest.messages, runId)) {
-      markCompletionSummaryDelivered(sessionKey, runId);
-      return;
-    }
-
-    const prompt = buildCompletionPrompt(templateName, state, runId);
-    await latest.sendMessage({ text: prompt, workflowId, runId });
+    chatState.setWorkflowCardState(runId, merged);
+    patchWorkflowExecution(sessionKey, runId, {
+      status: merged.status,
+      updatedAt: Date.now(),
+    });
 
     markCompletionSummaryDelivered(sessionKey, runId);
     if (workflowId) {
       updateWorkflowRunMetadata(sessionKey, workflowId, {
         lastRunId: runId,
-        lastStatus: state.status,
+        lastStatus: merged.status,
         completedAt: Date.now(),
       });
     }

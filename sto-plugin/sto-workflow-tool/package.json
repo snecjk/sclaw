@@ -1,0 +1,11 @@
+{
+  "name": "sto-workflow-tool",
+  "version": "1.0.4",
+  "type": "module",
+  "main": "index.ts",
+  "description": "申通工作流内置工具 - 模板搜索与执行",
+  "private": true,
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  }
+}

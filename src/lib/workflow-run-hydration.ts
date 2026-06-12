@@ -5,6 +5,7 @@
 import { invokeIpc } from '@/lib/api-client';
 import { fetchWorkflowStatus, beginWorkflowRunSseTrace } from '@/lib/workflow-api';
 import { isActiveWorkflowRunStatus, isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
+import { mergeWorkflowCardState } from '@/lib/workflow-card-state-merge';
 import { deliverWorkflowCompletionIfNeeded } from '@/lib/workflow-completion-delivery';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { getExecutionByRunId, listSessionExecutions, updateExecutionStatus } from '@/stores/workflow-memory';
@@ -55,7 +56,10 @@ export async function hydrateWorkflowRun(
 
     if (useChatStore.getState().currentSessionKey !== ctx.sessionKey) return;
 
-    useChatStore.getState().setWorkflowCardState(runId, state);
+    const previous = useChatStore.getState().workflowCardStates[runId];
+    const exec = getExecutionByRunId(runId, ctx.sessionKey);
+    const merged = mergeWorkflowCardState(previous, state, { localStartedAtMs: exec?.createdAt });
+    useChatStore.getState().setWorkflowCardState(runId, merged);
     updateExecutionStatus(runId, state.status, ctx.sessionKey);
 
     if (isActiveWorkflowRunStatus(state.status)) {
@@ -89,7 +93,7 @@ export async function hydrateWorkflowRun(
     hydratedTerminal.add(runId);
     await invokeIpc('workflow:stopTracking', { runId }).catch(() => {});
     if (isTerminalWorkflowRunStatus(state.status)) {
-      void deliverWorkflowCompletionIfNeeded(runId, ctx.sessionKey, state);
+      void deliverWorkflowCompletionIfNeeded(runId, ctx.sessionKey, merged);
     }
   } finally {
     hydrateInFlight.delete(runId);

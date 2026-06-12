@@ -83,6 +83,15 @@ describe('syncStoPluginsToOpenClaw', () => {
     const writtenConfig = JSON.parse(writtenJson) as Record<string, any>;
 
     expect(writtenConfig.plugins.allow).toContain('sto-skill-call-monitor');
+    expect(writtenConfig.plugins.allow).toContain('sto-workflow-tool');
+    expect(writtenConfig.plugins.entries['sto-workflow-tool']).toEqual({
+      enabled: true,
+      config: {
+        baseUrl: 'https://sto.example.com',
+        ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
+        timeoutMs: 30000,
+      },
+    });
     expect(writtenConfig.plugins.entries['sto-skill-call-monitor']).toEqual({
       enabled: true,
       config: {

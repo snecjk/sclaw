@@ -3,10 +3,10 @@
  * Renders user / assistant / system / toolresult messages
  * with markdown, thinking sections, images, and tool cards.
  */
-import { useState, useCallback, useEffect, memo } from 'react';
+import { useState, useCallback, useEffect, useMemo, memo } from 'react';
 import { Sparkles, Copy, Check, ChevronDown, ChevronRight, Wrench, FileText, Film, Music, FileArchive, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, Table2 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -17,19 +17,23 @@ import { assistantChatCardBg, assistantChatCardBgStreaming } from '@/lib/surface
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
-import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm } from './message-utils';
-import { ensureWorkflowParameterFormHandler } from '@/stores/chat/parameter-form-recovery';
+import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm, useLocalPathExistence, resolvePreviewCandidate, unwrapPreviewablePathMarkdown } from './message-utils';
+import {
+  ensureWorkflowParameterFormHandler,
+  isWorkflowFormInjectionAllowed,
+} from '@/stores/chat/parameter-form-recovery';
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
-import { WorkflowCompletionActions, extractWorkflowCompletionRunId } from '@/components/workflow/WorkflowCompletionActions';
 import {
   artifactToPreviewFile,
   inferMimeTypeFromUrl,
   isHttpUrl,
   isPreviewableRemoteUrl,
   openExternalUrl,
+  previewHttpUrlLabel,
   resolvePreviewLinkTarget,
 } from '@/lib/preview-url';
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
+import { isFilePreviewDebugEnabled, logFilePreview } from '@/lib/file-preview-debug';
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
 import { submitParameterForm } from '@/components/parameter-form/form-handlers';
 import { AtMentionText, highlightAtMentionsInChildren } from '@/lib/at-mention-highlight';
@@ -92,9 +96,33 @@ export const ChatMessage = memo(function ChatMessage({
 
   const attachedFiles = message._attachedFiles || [];
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
+  const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
+  const sessionKey = useChatStore((s) => s.currentSessionKey);
+  const sessionMessages = useChatStore((s) => s.messages);
   const workflowCard = !isUser ? extractWorkflowCard(message) : null;
-  const completionRunId = !isUser && !isStreaming ? extractWorkflowCompletionRunId(text) : null;
-  const parameterForm = !isUser ? extractParameterForm(message) : null;
+  const parameterForm = useMemo(() => {
+    if (isUser) return null;
+    const hasNativeFormBlock = Array.isArray(message.content)
+      && (message.content as import('@/stores/chat').ContentBlock[]).some(
+        (b) => b.type === 'parameter_form' && b.formId && b.formConfig,
+      );
+    if (hasNativeFormBlock) {
+      return extractParameterForm(message, pendingWorkflow);
+    }
+    if (!pendingWorkflow?.schema) return null;
+    if (
+      !isWorkflowFormInjectionAllowed(
+        pendingWorkflow.templateId,
+        sessionMessages,
+        extractText,
+        sessionKey,
+        { allowLivePending: true },
+      )
+    ) {
+      return null;
+    }
+    return extractParameterForm(message, pendingWorkflow);
+  }, [isUser, message, pendingWorkflow, sessionMessages, sessionKey]);
 
   useEffect(() => {
     if (!parameterForm || parameterForm.formContext.source !== 'workflow') return;
@@ -105,10 +133,77 @@ export const ChatMessage = memo(function ChatMessage({
       useChatStore.getState,
     );
   }, [parameterForm]);
-  // Extract previewable refs from message text
-  const extractedRefs = extractPreviewableRefs(text)
-    .filter((ref) => !attachedFiles.some((f) => f.filePath === ref.filePath))
-    .filter((ref) => isPreviewableFile(ref));
+
+  // Extract previewable refs from message text, then verify non-http paths:
+  // local files must exist on disk; cloud-runtime paths resolve to artifact OSS
+  // URLs or are dropped (no broken file cards).
+  const workflowCardStatesForRefs = useChatStore((s) => s.workflowCardStates);
+  const candidateRefs = useMemo(
+    () =>
+      extractPreviewableRefs(text)
+        .filter((ref) => !attachedFiles.some((f) => f.filePath === ref.filePath))
+        .filter((ref) => isPreviewableFile(ref)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [text, message._attachedFiles],
+  );
+  const candidateLocalPaths = useMemo(
+    () => candidateRefs.filter((ref) => !isHttpUrl(ref.filePath)).map((ref) => ref.filePath),
+    [candidateRefs],
+  );
+  const refExistence = useLocalPathExistence(candidateLocalPaths);
+  const workflowArtifactUrls = useMemo(() => {
+    const urls = new Set<string>();
+    for (const state of Object.values(workflowCardStatesForRefs)) {
+      for (const artifact of state?.result?.artifacts ?? []) {
+        if (artifact.url?.startsWith('http')) urls.add(artifact.url);
+      }
+    }
+    return urls;
+  }, [workflowCardStatesForRefs]);
+
+  const extractedRefs = useMemo(() => {
+    const seen = new Set<string>();
+    const result: typeof candidateRefs = [];
+    for (const ref of candidateRefs) {
+      const resolved = resolvePreviewCandidate(
+        { ...ref, fileSize: 0, preview: null },
+        refExistence[ref.filePath],
+        workflowCardStatesForRefs,
+      );
+      if (!resolved || seen.has(resolved.filePath)) continue;
+      if (workflowArtifactUrls.has(resolved.filePath)) continue;
+      seen.add(resolved.filePath);
+      result.push({ filePath: resolved.filePath, fileName: resolved.fileName, mimeType: resolved.mimeType });
+    }
+    return result;
+  }, [candidateRefs, refExistence, workflowCardStatesForRefs, workflowArtifactUrls]);
+
+  useEffect(() => {
+    if (!isFilePreviewDebugEnabled() || isUser || !hasText) return;
+    logFilePreview('message-refs', {
+      messageId: message.id,
+      isStreaming,
+      hasOnPreviewFile: !!onPreviewFile,
+      candidateRefs,
+      refExistence,
+      extractedRefs,
+      attachedFiles: attachedFiles.map((f) => ({
+        filePath: f.filePath,
+        fileName: f.fileName,
+        mimeType: f.mimeType,
+      })),
+    });
+  }, [
+    isUser,
+    hasText,
+    isStreaming,
+    onPreviewFile,
+    message.id,
+    candidateRefs,
+    refExistence,
+    extractedRefs,
+    attachedFiles,
+  ]);
 
   // All attached files should render as cards (images as thumbnails, everything else as FileCard)
   const hasRenderableFiles = attachedFiles.length > 0;
@@ -293,14 +388,6 @@ export const ChatMessage = memo(function ChatMessage({
           />
         )}
 
-        {completionRunId && (
-          <WorkflowCompletionActions
-            runId={completionRunId}
-            onPreviewArtifact={onPreviewFile}
-            onViewWorkflow={onViewWorkflow}
-          />
-        )}
-
         {/* Parameter form card */}
         {parameterForm && (
           <ParameterFormCard
@@ -479,6 +566,12 @@ function AssistantHoverBar({ text, timestamp }: { text: string; timestamp?: numb
   );
 }
 
+/** Allow custom preview:// links — react-markdown strips unknown URL schemes by default. */
+function previewUrlTransform(url: string): string {
+  if (url.startsWith('preview://')) return url;
+  return defaultUrlTransform(url);
+}
+
 // ── Message Bubble ──────────────────────────────────────────────
 
 function MessageBubble({
@@ -500,6 +593,27 @@ function MessageBubble({
 }) {
   const showStreamingChrome = isStreaming && !isUser;
   const workflowCardStates = useChatStore((s) => s.workflowCardStates);
+  const markdownSource = useMemo(
+    () => (onPreviewFile ? preprocessTextForPreviewLinks(text) : text),
+    [text, onPreviewFile],
+  );
+
+  useEffect(() => {
+    if (isUser || !isFilePreviewDebugEnabled()) return;
+    logFilePreview('markdown-render', {
+      isStreaming,
+      hasOnPreviewFile: !!onPreviewFile,
+      rawTextPreview: text.slice(0, 600),
+      markdownSourcePreview: markdownSource.slice(0, 900),
+      rawLength: text.length,
+      markdownLength: markdownSource.length,
+      containsPreviewScheme: markdownSource.includes('preview://'),
+      containsFilePreviewTag: /\[file-preview:/i.test(text),
+      containsInlineCodePaths: /`[^`]*\.(?:md|txt|html?|json|csv|py|js)[^`]*`/i.test(text),
+      unwrappedPreview: unwrapPreviewablePathMarkdown(text).slice(0, 900),
+      preprocessChanged: markdownSource !== text,
+    });
+  }, [isUser, text, markdownSource, onPreviewFile, isStreaming]);
 
   return (
     <div
@@ -549,6 +663,7 @@ function MessageBubble({
         <div className="prose prose-sm max-w-none break-words break-all text-sm leading-normal dark:prose-invert">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
+            urlTransform={previewUrlTransform}
             components={{
               p({ children }) {
                 return <p>{highlightAtMentionsInChildren(children)}</p>;
@@ -576,24 +691,26 @@ function MessageBubble({
               },
               a({ href, children }) {
                 const rawHref = typeof href === 'string' ? href.trim() : '';
+
                 if (!rawHref) {
                   return <span className="text-link break-words break-all">{children}</span>;
                 }
 
-                const target = rawHref.startsWith('preview://')
-                  ? rawHref.slice('preview://'.length)
-                  : resolvePreviewLinkTarget(rawHref, workflowCardStates);
+                const target = resolvePreviewLinkTarget(rawHref, workflowCardStates);
 
                 if (onPreviewFile && isHttpUrl(target) && isPreviewableRemoteUrl(target)) {
                   const previewFile = artifactToPreviewFile({
-                    name: safeDecodeURIComponent(target.split('/').pop()?.split('?')[0] || 'preview'),
+                    name: previewHttpUrlLabel(target),
                     type: inferMimeTypeFromUrl(target),
                     url: target,
                   });
                   return (
                     <button
                       type="button"
-                      onClick={() => onPreviewFile(previewFile)}
+                      onClick={() => {
+                        logFilePreview('link-click', { branch: 'remote-preview', target });
+                        onPreviewFile(previewFile);
+                      }}
                       className="inline border-0 bg-transparent p-0 font-inherit text-link hover:underline break-words break-all cursor-pointer"
                     >
                       {children}
@@ -605,7 +722,10 @@ function MessageBubble({
                   return (
                     <button
                       type="button"
-                      onClick={() => openExternalUrl(target)}
+                      onClick={() => {
+                        logFilePreview('link-click', { branch: 'external-http', target });
+                        openExternalUrl(target);
+                      }}
                       className="inline border-0 bg-transparent p-0 font-inherit text-link hover:underline break-words break-all cursor-pointer"
                     >
                       {children}
@@ -615,16 +735,20 @@ function MessageBubble({
 
                 if (onPreviewFile && target) {
                   const fileName = target.split('/').pop() || 'preview';
+                  const mimeType = inferMimeTypeFromUrl(target);
                   return (
                     <button
                       type="button"
-                      onClick={() => onPreviewFile({
-                        filePath: target,
-                        fileName,
-                        mimeType: inferMimeTypeFromUrl(target),
-                        fileSize: 0,
-                        preview: null,
-                      })}
+                      onClick={() => {
+                        logFilePreview('link-click', { branch: 'local-preview', target, fileName, mimeType });
+                        onPreviewFile({
+                          filePath: target,
+                          fileName,
+                          mimeType,
+                          fileSize: 0,
+                          preview: null,
+                        });
+                      }}
                       className="inline border-0 bg-transparent p-0 font-inherit text-link hover:underline break-words break-all cursor-pointer"
                     >
                       {children}
@@ -638,7 +762,7 @@ function MessageBubble({
               },
             }}
           >
-            {onPreviewFile ? preprocessTextForPreviewLinks(text) : text}
+            {markdownSource}
           </ReactMarkdown>
           {isStreaming && (
             <StreamingCursor />
@@ -676,6 +800,9 @@ function MessageBubble({
 
 /** Wrap local file paths and web URLs in preview:// markdown links so ReactMarkdown can render them as clickable buttons. */
 function preprocessTextForPreviewLinks(text: string): string {
+  // Unwrap path-only ``` / `inline` blocks and plain path lines before code protection.
+  text = unwrapPreviewablePathMarkdown(text);
+
   // Protect code blocks and inline code from being modified
   const codeBlocks: string[] = [];
   text = text.replace(/```[\s\S]*?```/g, (match) => {
@@ -692,6 +819,21 @@ function preprocessTextForPreviewLinks(text: string): string {
   // Remove [media attached: ...] blocks so their inner paths don't get mangled
   // and the raw metadata isn't shown in the message bubble.
   text = text.replace(/\s*\[media attached:[^\]]*\]/g, '');
+
+  // Convert [file-preview: path] (model-invented tag) into a normal preview markdown link.
+  text = text.replace(/\s*\[file-preview:\s*([^\]]+)\]/gi, (_match, rawPath: string) => {
+    const path = rawPath.trim();
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      const label = safeDecodeURIComponent(path.split('/').pop()?.split('?')[0] || '查看预览');
+      return `[${label}](${path})`;
+    }
+    if (path.startsWith('preview://')) {
+      const target = path.slice('preview://'.length);
+      return `[${target}](preview://${target})`;
+    }
+    return `[${path}](preview://${path})`;
+  });
 
   // Protect existing markdown links [text](url) — keep http(s) URLs intact (preview://https:// breaks ReactMarkdown).
   const mdLinks: string[] = [];
@@ -722,18 +864,13 @@ function preprocessTextForPreviewLinks(text: string): string {
     },
   );
 
-  // Replace localhost URLs (previewable in side panel)
+  // Replace previewable http(s) URLs — keep real href (do NOT prefix preview://)
   text = text.replace(
-    /(https?:\/\/localhost:[^\s)\]"',;<>]+)/g,
-    '[$1]($1)',
-  );
-
-  // Replace OSS/CDN http(s) URLs — keep real https href (do NOT prefix preview://)
-  text = text.replace(
-    /(https?:\/\/[^\s)\]"',;<>]+\.(?:html?|pdf|json|md|txt|csv)(?:\?[^\s)\]"',;<>]*)?)/gi,
-    (url) => {
-      if (!isPreviewableRemoteUrl(url)) return url;
-      const label = safeDecodeURIComponent(url.split('/').pop()?.split('?')[0] || '查看预览');
+    /(https?:\/\/[^\s)\]"',;<>]+)/gi,
+    (rawUrl) => {
+      const url = rawUrl.replace(/[.,;:!?)}\]]+$/, '');
+      if (!isPreviewableRemoteUrl(url)) return rawUrl;
+      const label = previewHttpUrlLabel(url);
       return `[${label}](${url})`;
     },
   );
@@ -829,14 +966,17 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
   const isPreviewable = isPreviewableFile(file);
 
   const handleOpen = useCallback(() => {
-    // Keep in sync with the 预览 badge condition: previewable files open in the side panel
-    // (FilePreviewViewer fetches remote HTML/text, so OSS http(s) URLs preview fine).
+    logFilePreview('file-card-click', {
+      filePath: file.filePath,
+      fileName: file.fileName,
+      mimeType: file.mimeType,
+      isPreviewable,
+      hasOnPreviewFile: !!onPreviewFile,
+    });
     if (onPreviewFile && isPreviewable) {
       onPreviewFile(file);
     } else if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
-      window.electron.openExternal(file.filePath);
-    } else if (onPreviewFile) {
-      onPreviewFile(file);
+      openExternalUrl(file.filePath);
     } else if (file.filePath) {
       invokeIpc('shell:openPath', file.filePath);
     }

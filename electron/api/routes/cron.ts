@@ -202,6 +202,158 @@ async function readSessionStoreEntry(
   return undefined;
 }
 
+interface CronSessionListItem {
+  key: string;
+  label: string;
+  updatedAt?: number;
+}
+
+async function listAllCronSessions(): Promise<CronSessionListItem[]> {
+  const sessions: CronSessionListItem[] = [];
+  const { stat, readdir, readFile: fsReadFile } = await import('node:fs/promises');
+
+  // 1) Scan agents/*/sessions/sessions.json for physical dated sessions
+  const agentsDir = join(getOpenClawConfigDir(), 'agents');
+  try {
+    const agentIds = await readdir(agentsDir);
+    for (const agentId of agentIds) {
+      const storePath = join(agentsDir, agentId, 'sessions', 'sessions.json');
+      let store: Record<string, unknown>;
+      try {
+        const raw = await readFile(storePath, 'utf8');
+        if (!raw.trim()) continue;
+        store = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+
+      const entries: Array<{ key: string; record: Record<string, unknown> }> = [];
+
+      for (const [key, value] of Object.entries(store)) {
+        if (key === 'sessions') continue;
+        if (value && typeof value === 'object') {
+          entries.push({ key, record: value as Record<string, unknown> });
+        }
+      }
+
+      if (Array.isArray(store.sessions)) {
+        for (const s of store.sessions) {
+          if (!s || typeof s !== 'object') continue;
+          const record = s as Record<string, unknown>;
+          const key = (record.key || record.sessionKey) as string | undefined;
+          if (!key) continue;
+          entries.push({ key, record });
+        }
+      }
+
+      for (const { key, record } of entries) {
+        const parsed = parseCronSessionKey(key);
+        if (!parsed || !parsed.date) continue;
+        const sessionFile = (record.sessionFile ?? record.file ?? record.fileName ?? record.path) as string | undefined;
+        if (!sessionFile) continue;
+
+        let updatedAt: number | undefined;
+        try {
+          const s = await stat(sessionFile);
+          updatedAt = s.mtimeMs;
+        } catch {
+          // ignore
+        }
+
+        sessions.push({
+          key,
+          label: typeof record.label === 'string' ? record.label : key,
+          updatedAt,
+        });
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2) Generate virtual dated sessions from cron run logs for local cron jobs
+  // Read job names from local cron/jobs.json and base session labels from sessions.json
+  const jobNamesById = new Map<string, string>();
+  try {
+    const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
+    const jobsRaw = await readFile(jobsFile, 'utf8');
+    const jobsData = JSON.parse(jobsRaw) as { jobs?: Array<{ id: string; name?: string }> };
+    for (const job of jobsData.jobs ?? []) {
+      if (job.name) jobNamesById.set(job.id, job.name);
+    }
+  } catch {
+    // ignore
+  }
+
+  // Also read base session labels from agents/main/sessions/sessions.json as fallback
+  const baseSessionLabels = new Map<string, string>();
+  try {
+    const sessionsFile = join(getOpenClawConfigDir(), 'agents', 'main', 'sessions', 'sessions.json');
+    const sessionsRaw = await readFile(sessionsFile, 'utf8');
+    const sessionsData = JSON.parse(sessionsRaw) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(sessionsData)) {
+      if (key === 'sessions' || !value || typeof value !== 'object') continue;
+      const record = value as Record<string, unknown>;
+      if (typeof record.label === 'string') {
+        baseSessionLabels.set(key, record.label);
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  const runsDir = join(getOpenClawConfigDir(), 'cron', 'runs');
+  try {
+    const runFiles = await readdir(runsDir);
+    for (const file of runFiles) {
+      if (!file.endsWith('.jsonl')) continue;
+      const jobId = file.slice(0, -6); // remove '.jsonl'
+
+      const raw = await fsReadFile(join(runsDir, file), 'utf8').catch(() => '');
+      if (!raw.trim()) continue;
+
+      const runsByDate = new Map<string, number>(); // date -> latest timestamp
+      for (const line of raw.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const entry = JSON.parse(trimmed) as CronRunLogEntry;
+          if (entry.jobId !== jobId) continue;
+          if (entry.action && entry.action !== 'finished') continue;
+
+          const ts = normalizeTimestampMs(entry.ts) ?? normalizeTimestampMs(entry.runAtMs);
+          if (!ts) continue;
+
+          const d = new Date(ts);
+          const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          runsByDate.set(date, Math.max(runsByDate.get(date) ?? 0, ts));
+        } catch {
+          // ignore malformed lines
+        }
+      }
+
+      for (const [date, updatedAt] of runsByDate) {
+        const sessionKey = `agent:main:cron:${jobId}:${date}`;
+        // Skip if already present from physical sessions scan
+        if (sessions.some((s) => s.key === sessionKey)) continue;
+        const baseKey = `agent:main:cron:${jobId}`;
+        const label = baseSessionLabels.get(baseKey) || `Cron: ${jobId}`;
+        sessions.push({
+          key: sessionKey,
+          label,
+          displayName: jobNamesById.get(jobId),
+          updatedAt,
+        });
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  return sessions;
+}
+
 export function buildCronSessionFallbackMessages(params: {
   sessionKey: string;
   job?: Pick<GatewayCronJob, 'name' | 'payload' | 'state'>;
@@ -214,6 +366,13 @@ export function buildCronSessionFallbackMessages(params: {
 
   const matchingRuns = params.runs
     .filter((entry) => {
+      if (parsed.date) {
+        const ts = normalizeTimestampMs(entry.ts) ?? normalizeTimestampMs(entry.runAtMs);
+        if (!ts) return false;
+        const d = new Date(ts);
+        const entryDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        return entryDate === parsed.date;
+      }
       if (!parsed.runSessionId) return true;
       return entry.sessionId === parsed.runSessionId
         || entry.sessionKey === `${params.sessionKey}`;
@@ -367,12 +526,19 @@ export async function handleCronRoutes(
       : CHAT_HISTORY_LIMIT;
 
     try {
-      const [jobsResult, runs, sessionEntry] = await Promise.all([
+      const [jobsResult, runs, directSessionEntry] = await Promise.all([
         ctx.gatewayManager.rpc('cron.list', { includeDisabled: true })
           .catch(() => ({ jobs: [] as GatewayCronJob[] })),
         readCronRunLog(parsedSession.jobId),
         readSessionStoreEntry(parsedSession.agentId, sessionKey),
       ]);
+
+      // For virtual dated sessions, fall back to the base cron session entry
+      let sessionEntry = directSessionEntry;
+      if (!sessionEntry && parsedSession.date) {
+        const baseKey = `agent:${parsedSession.agentId}:cron:${parsedSession.jobId}`;
+        sessionEntry = await readSessionStoreEntry(parsedSession.agentId, baseKey);
+      }
 
       const jobs = (jobsResult as { jobs?: GatewayCronJob[] }).jobs ?? [];
       const job = jobs.find((item) => item.id === parsedSession.jobId);
@@ -388,6 +554,16 @@ export async function handleCronRoutes(
       });
 
       sendJson(res, 200, { messages });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/cron/sessions' && req.method === 'GET') {
+    try {
+      const sessions = await listAllCronSessions(ctx);
+      sendJson(res, 200, { sessions });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

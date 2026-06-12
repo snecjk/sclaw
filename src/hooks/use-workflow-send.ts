@@ -22,7 +22,7 @@ import { invokeIpc } from '@/lib/api-client';
 import { canStartWorkflow, useWorkflowsStore } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
 import { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } from '@/lib/workflow-local-turn';
-import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata, getSessionWorkflows } from '@/stores/workflow-memory';
+import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
 import type { WorkflowSchema, WorkflowSchemaField } from '@/types/workflow';
 
 export interface WorkflowSendContext {
@@ -220,6 +220,11 @@ export async function createAndStartWorkflowDirect(
       paramsSummary: userText,
     });
 
+    const { dismissWorkflowParameterFormsForTemplate } = await import(
+      '@/components/parameter-form/dismiss-parameter-form'
+    );
+    dismissWorkflowParameterFormsForTemplate(templateId);
+
     useChatStore.getState().setWorkflowCardState(run.runId, {
       runId: run.runId,
       workflowId: created.workflowId,
@@ -273,57 +278,16 @@ export async function startExistingWorkflow(
     });
 
     const displayName = _templateName ?? '工作流';
-    const wfRecord = getSessionWorkflows(context.sessionKey).find((w) => w.workflowId === workflowId);
-    const { buildWorkflowParamsSummary } = await import('@/lib/workflow-form-utils');
-    const userText = wfRecord?.templateId
-      ? await buildWorkflowParamsSummary(wfRecord.templateId, inputs)
-      : originalText;
-    appendWorkflowStartedLocalTurn({
-      userText,
-      templateName: displayName,
-      runId: run.runId,
-      assistantText: `正在启动工作流「${displayName}」…`,
-    });
-
-    await invokeIpc('workflow:startTracking', {
-      runId: run.runId,
-      workflowId,
+    const { applyWorkflowRunStarted } = await import('@/lib/workflow-run-started');
+    return applyWorkflowRunStarted({
       sessionKey: context.sessionKey,
       agentId: context.agentId,
-    });
-    beginWorkflowRunSseTrace(run.runId);
-
-    updateWorkflowRunMetadata(context.sessionKey, workflowId, {
-      lastRunId: run.runId,
-      lastStatus: 'running',
-    });
-
-    saveWorkflowExecution({
-      sessionKey: context.sessionKey,
       workflowId,
       runId: run.runId,
-      templateId: wfRecord?.templateId ?? '',
-      templateName: _templateName ?? workflowId,
-      status: 'running',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      collectedInputs: inputs,
-      paramsSummary: userText,
+      templateName: displayName,
+      inputs,
+      userText: originalText,
     });
-
-    const chatStore = useChatStore.getState();
-    chatStore.setWorkflowCardState(run.runId, {
-      runId: run.runId,
-      workflowId,
-      status: 'running',
-      progress: 0,
-      steps: [],
-      startedAt: new Date().toISOString(),
-    });
-
-    chatStore.clearPendingWorkflow();
-
-    return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[startExistingWorkflow] error', err);
@@ -419,50 +383,11 @@ export async function tryResolvePendingWorkflow(
   sendMessage: (msg: string, runId?: string | null, workflowId?: string | null) => Promise<void>,
 ): Promise<boolean> {
   const chatState = useChatStore.getState();
-  let pending = chatState.pendingWorkflow;
+  const pending = chatState.pendingWorkflow;
 
-  // Memory-based recovery for re-execution intents like "执行刚才的" / "再跑一遍"
-  if (!pending) {
-    const { isReExecutionIntent } = await import('@/hooks/use-workflow-intent');
-    if (isReExecutionIntent(text)) {
-      const { getLatestWorkflow } = await import('@/stores/workflow-memory');
-      const latest = getLatestWorkflow(chatState.currentSessionKey);
-      if (latest) {
-        // Check for expired memory (30 days)
-        const ageMs = Date.now() - latest.createdAt;
-        const RECORD_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-        if (ageMs > RECORD_TTL_MS) {
-          toast.info('之前的工作流记录已过期（超过30天），请重新创建工作流');
-          return false;
-        }
-
-        // Fetch the latest startup schema so parameter extraction / override works
-        let restoredSchema: WorkflowSchema = { fields: [], steps: [], nodeId: '', enabled: false };
-        let restoredSchemaHash = latest.schemaHash;
-        try {
-          const startup = await getStartupSchema(latest.templateId);
-          restoredSchema = startup.schema;
-          restoredSchemaHash = startup.schemaHash;
-          schemaCache.set(latest.templateId, { schema: startup.schema, schemaHash: startup.schemaHash });
-        } catch (err) {
-          console.warn('[tryResolvePendingWorkflow] failed to fetch schema for remembered workflow:', err);
-          toast.info('无法加载之前工作流的参数模板，将使用已保存的参数直接执行');
-        }
-
-        pending = {
-          templateId: latest.templateId,
-          templateName: latest.templateName,
-          schemaHash: restoredSchemaHash,
-          workflowId: latest.workflowId,
-          collectedInputs: { ...(latest.collectedInputs ?? {}) },
-          schema: restoredSchema,
-        };
-        chatState.setPendingWorkflow(pending);
-      } else {
-        toast.info('未找到可重新执行的工作流记录');
-        return false;
-      }
-    }
+  const { isReExecutionIntent, isWorkflowStartIntent } = await import('@/hooks/use-workflow-intent');
+  if (isReExecutionIntent(text) || (isWorkflowStartIntent(text) && !pending)) {
+    return false;
   }
 
   if (!pending) return false;
@@ -494,7 +419,6 @@ export async function tryResolvePendingWorkflow(
     }
   }
 
-  // If pending has a workflowId (from memory re-execution) and user confirms, execute directly
   if (pending.workflowId && (isConfirmIntent || isShortReply)) {
     console.log(
       '[workflow-trace] tryResolvePendingWorkflow → startExistingWorkflow workflowId=%s text=%s',
@@ -656,8 +580,8 @@ export interface StartRememberedWorkflowSendOptions {
 }
 
 /**
- * Start a previously saved workflow via POST /agent/v1/workflows/{workflowId}/start.
- * Used for "帮我运行这个工作流" — does NOT search templates or create a new draft.
+ * Start a previously saved workflow via POST /workflows/{id}/start.
+ * Fallback when the model does not call execute_workflow for re-run intents.
  */
 export async function tryStartRememberedWorkflowSend(
   options: StartRememberedWorkflowSendOptions,
@@ -694,10 +618,6 @@ export async function tryStartRememberedWorkflowSend(
 
   if (!workflowId) {
     if (isImmediateExecutionIntent(trimmed)) {
-      console.log(
-        '[workflow-trace] immediate execution deferred — no workflowId yet, try pending/create path text=%s',
-        trimmed,
-      );
       return false;
     }
     appendLocalConversationTurn(trimmed, buildWorkflowStartUnavailablePrompt());
@@ -705,13 +625,12 @@ export async function tryStartRememberedWorkflowSend(
   }
 
   console.log(
-    '[workflow-trace] tryStartRememberedWorkflowSend workflowId=%s immediate=%s text=%s',
+    '[workflow-trace] tryStartRememberedWorkflowSend workflowId=%s text=%s',
     workflowId,
-    isImmediateExecutionIntent(trimmed),
     trimmed,
   );
 
-  chatState.clearPendingTemplateSelection();
+  chatState.clearPendingWorkflow();
 
   await startExistingWorkflow(
     workflowId,
@@ -724,120 +643,3 @@ export async function tryStartRememberedWorkflowSend(
   return true;
 }
 
-export interface NaturalLanguageWorkflowSendOptions {
-  text: string;
-  context: WorkflowSendContext;
-  sendMessage: (
-    text: string,
-    runId?: string | null,
-    workflowId?: string | null,
-    workflowContext?: unknown,
-  ) => Promise<void>;
-}
-
-/**
- * Detect natural-language workflow intent, resolve template, fetch schema and
- * enter the workflow pipeline. Returns true when the message is handled and
- * should not fall through to normal chat.
- */
-export async function tryNaturalLanguageWorkflowSend(
-  options: NaturalLanguageWorkflowSendOptions,
-): Promise<boolean> {
-  const { text, context, sendMessage } = options;
-  const chatState = useChatStore.getState();
-  const trimmed = text.trim();
-  if (!trimmed) return false;
-
-  const {
-    shouldSearchWorkflowTemplates,
-    resolveTemplateFromText,
-    isWorkflowCancelIntent,
-    isUnspecifiedWorkflowCreation,
-    buildTemplateSelectionPrompt,
-    buildWorkflowClarificationPrompt,
-    resolveTemplateSelectionFromText,
-    TEMPLATE_LIST_LIMIT,
-  } = await import('@/hooks/use-workflow-intent');
-
-  // User is picking a template from a previous clarification prompt
-  const pendingSelection = chatState.pendingTemplateSelection;
-  if (pendingSelection) {
-    if (isWorkflowCancelIntent(trimmed)) {
-      chatState.clearPendingTemplateSelection();
-      appendLocalConversationTurn(trimmed, '已取消工作流创建，您可以继续正常对话。');
-      return true;
-    }
-
-    const selected = resolveTemplateSelectionFromText(trimmed, pendingSelection.templates);
-    if (!selected) {
-      appendLocalConversationTurn(
-        trimmed,
-        `未能识别您的选择。${buildTemplateSelectionPrompt(pendingSelection.templates)}`,
-      );
-      return true;
-    }
-
-    chatState.clearPendingTemplateSelection();
-    await sendWithWorkflow(
-      pendingSelection.originalText,
-      selected.id,
-      context,
-      sendMessage,
-    );
-    return true;
-  }
-
-  // Search templates via POST /agent/v1/workflow-templates/search (not hard-coded ID).
-  if (!shouldSearchWorkflowTemplates(trimmed)) return false;
-
-  const unspecified = isUnspecifiedWorkflowCreation(trimmed);
-  let intent: import('@/hooks/use-workflow-intent').WorkflowIntentResult;
-
-  if (unspecified) {
-    // Bare "创建工作流" — show prefetched list, never auto-pick (e.g. blank template).
-    const { useWorkflowsStore } = await import('@/stores/workflows');
-    await useWorkflowsStore.getState().loadTemplates('', { force: true, catalog: true });
-    const cached = useWorkflowsStore.getState().templates;
-    intent = cached.length > 0
-      ? {
-          hasIntent: true,
-          templates: cached.slice(0, TEMPLATE_LIST_LIMIT),
-          bestMatch: null,
-          confidence: 'low',
-        }
-      : await resolveTemplateFromText('工作流', TEMPLATE_LIST_LIMIT);
-  } else {
-    intent = await resolveTemplateFromText(trimmed, TEMPLATE_LIST_LIMIT);
-  }
-
-  // Named creation intent (e.g. "异常客户跟踪 创建工作流") → always let the model guide
-  // parameter confirmation, even when template search confidence is low.
-  if (!unspecified && intent.bestMatch) {
-    console.log(
-      '[workflow-trace] tryNaturalLanguageWorkflowSend → sendWithWorkflow templateId=%s confidence=%s score=%s',
-      intent.bestMatch.id,
-      intent.confidence,
-      intent.bestMatch.matchScore ?? 0,
-    );
-    await sendWithWorkflow(trimmed, intent.bestMatch.id, context, sendMessage);
-    return true;
-  }
-
-  // Bare "创建工作流" with no subject — local picker only (user must choose template).
-  if (intent.templates.length > 0) {
-    console.log(
-      '[workflow-trace] tryNaturalLanguageWorkflowSend → local template list count=%d (no model until user picks)',
-      intent.templates.length,
-    );
-    const candidates = intent.templates.slice(0, TEMPLATE_LIST_LIMIT);
-    chatState.setPendingTemplateSelection({ templates: candidates, originalText: trimmed });
-    appendLocalConversationTurn(
-      trimmed,
-      buildTemplateSelectionPrompt(candidates, { unspecified }),
-    );
-    return true;
-  }
-
-  appendLocalConversationTurn(trimmed, buildWorkflowClarificationPrompt());
-  return true;
-}

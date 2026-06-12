@@ -8,12 +8,12 @@ import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
 import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-to-chat';
 import { hostApiFetch } from '@/lib/host-api';
+import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
-import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import { stripWorkflowContextForDisplay } from '@/lib/workflow-context';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
-import { buildCronSessionHistoryPath, isCronSessionKey } from './chat/cron-session-utils';
+import { buildCronSessionHistoryPath, isCronSessionKey, parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './chat/cron-session-utils';
 import { sanitizeSessionDisplayField } from './chat/helpers';
 import {
   DEFAULT_CANONICAL_PREFIX,
@@ -26,17 +26,22 @@ import {
   type ToolStatus,
 } from './chat/types';
 import type { WorkflowExecutionState } from '@/types/workflow';
-import { buildWorkflowFormConfig, buildStartupPreset } from '@/lib/workflow-form-utils';
-import { registerParameterFormHandler } from '@/components/parameter-form/form-handlers';
 import { mergeLocalWorkflowTurnsFromCurrent, mergeWorkflowTurnsFromMemory } from '@/lib/workflow-local-turn';
-import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import { buildWorkflowCardStatesForSession } from '@/stores/workflow-memory';
 import { hydrateSessionWorkflowCards } from '@/lib/workflow-run-hydration';
 import { upgradeWorkflowParamUserMessages } from '@/lib/workflow-param-messages';
 import {
+  absorbWorkflowSchemaFromToolResults,
+  appendWorkflowParameterFormToMessage,
+  ensureWorkflowParameterFormInjected,
   mergeParameterFormBlocksFromCurrent,
+  patchLastAssistantWithWorkflowForm,
+  isWorkflowFormInjectionAllowed,
+  reconcilePendingWorkflowForSession,
   recoverParameterFormsOnHistoryLoad,
 } from './chat/parameter-form-recovery';
+import { dispatchBuiltinToolResult } from '@/lib/builtin-tool-dispatch';
+import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 
 export type {
   AttachedFileMeta,
@@ -63,14 +68,6 @@ function toNumberIfFinite(value: unknown): number | undefined {
   if (typeof value !== 'number') return undefined;
   if (!Number.isFinite(value)) return undefined;
   return value;
-}
-
-function getSessionEngineType(sessions: ChatSession[], sessionKey: string): ChatSession['engineType'] | undefined {
-  return sessions.find((session) => session.key === sessionKey)?.engineType;
-}
-
-async function ensureSessionEngineSelected(session: ChatSession | undefined): Promise<void> {
-  void session;
 }
 
 // Timer for fallback history polling during active sends.
@@ -806,7 +803,6 @@ function buildSessionSwitchPatch(
     pendingToolImages: [],
     workflowCardStates: {},
     pendingWorkflow: null,
-    pendingTemplateSelection: null,
   };
 }
 
@@ -881,182 +877,12 @@ function extractTextFromContent(content: unknown): string {
   return parts.join('\n');
 }
 
-/**
- * If a workflow guidance phase is pending, append a parameter_form block to
- * the assistant message so the user can confirm parameters interactively.
- * The form is registered with a handler that creates and starts the workflow.
- */
+/** Append workflow parameter_form to assistant final when schema is pending. */
 function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
-  const pending = useChatStore.getState().pendingWorkflow;
-  console.log('[maybeAppendWorkflowParameterForm] called, pending:', pending ? { templateId: pending.templateId, hasSchema: !!pending.schema } : null);
-  if (!pending) { console.log('[maybeAppendWorkflowParameterForm] no pending workflow, returning'); return message; }
-  if (message.role !== 'assistant') { console.log('[maybeAppendWorkflowParameterForm] not assistant role, returning'); return message; }
-  if (!pending.schema) { console.log('[maybeAppendWorkflowParameterForm] no schema, returning'); return message; }
-
-  // If the frontend has already inserted an inline parameter_form (e.g. via
-  // sendWithWorkflow), skip injecting so we don't show duplicate forms.
-  if (pending.frontendFormInserted) {
-    console.log('[maybeAppendWorkflowParameterForm] frontendFormInserted=true, returning');
-    return message;
-  }
-
-  // Avoid double-injecting if the message already carries a parameter_form
-  const content = message.content;
-  if (Array.isArray(content)) {
-    if ((content as ContentBlock[]).some((b) => b.type === 'parameter_form')) {
-      console.log('[maybeAppendWorkflowParameterForm] already has parameter_form block, returning');
-      return message;
-    }
-  }
-
-  // Check if model output contains <ParameterForm ... /> marker before injecting form
-  const messageText = getMessageText(message.content);
-  const paramFormRegex = /<ParameterForm\s+templateId="([^"]+)"\s+schemaHash="([^"]+)"\s*\/>/i;
-  const paramFormMatch = messageText.match(paramFormRegex);
-  console.log('[maybeAppendWorkflowParameterForm] messageText=%s, hasMarker=%s, pendingWorkflow=%s',
-    messageText.slice(0, 100), paramFormMatch ? 'yes' : 'no', pending ? 'yes' : 'no');
-  if (!paramFormMatch) {
-    return message;
-  }
-
-  // Extract templateId and schemaHash from the marker
-  const extractedTemplateId = paramFormMatch[1];
-  const extractedSchemaHash = paramFormMatch[2];
-  console.log('[maybeAppendWorkflowParameterForm] extracted templateId=%s, schemaHash=%s, pending.schemaFields=%d',
-    extractedTemplateId, extractedSchemaHash, pending.schema?.fields.length ?? 0);
-
-  // Strip the <ParameterForm ... /> marker from the message text for display
-  const strippedText = messageText.replace(paramFormRegex, '').trim();
-  const strippedContent = Array.isArray(message.content)
-    ? (message.content as ContentBlock[]).map((block) =>
-        block.type === 'text' ? { ...block, text: block.text?.replace(paramFormRegex, '').trim() } : block
-      )
-    : strippedText;
-
-  console.log('[maybeAppendWorkflowParameterForm] strippedText=%s', strippedText.slice(0, 100));
-
-  // buildWorkflowFormConfig, buildStartupPreset and registerParameterFormHandler are
-  // imported at the top of the file. They do not transitively depend on chat.ts.
-
-  const MAX_CONCURRENT_WORKFLOWS = 5;
-  function canStartWorkflowLocal(): boolean {
-    const activeCount = Object.values(useChatStore.getState().workflowCardStates).filter(
-      (s) => s.status === 'pending' || s.status === 'running',
-    ).length;
-    return activeCount < MAX_CONCURRENT_WORKFLOWS;
-  }
-
-  const formId = `workflow-form-${pending.templateId}-${Date.now()}`;
-  const formConfig = buildWorkflowFormConfig(pending.schema, '', pending.collectedInputs);
-
-  registerParameterFormHandler(formId, async (values: Record<string, unknown>) => {
-    const chatState = useChatStore.getState();
-    if (!canStartWorkflowLocal()) {
-      const { toast } = await import('sonner');
-      toast.error('当前会话已有过多执行中的工作流，请等待完成后再试');
-      return;
-    }
-
-    try {
-      const { createWorkflow, startWorkflow, beginWorkflowRunSseTrace } = await import('@/lib/workflow-api');
-      const { saveWorkflowRecord, updateWorkflowRunMetadata, saveWorkflowExecution } = await import('@/stores/workflow-memory');
-      const { invokeIpc } = await import('@/lib/api-client');
-
-      const created = await createWorkflow({
-        templateId: pending.templateId,
-        startup: buildStartupPreset(values, pending.schemaHash),
-        idempotencyKey: `create-wf-${pending.templateId}-${Date.now()}`,
-      });
-
-      saveWorkflowRecord(chatState.currentSessionKey, {
-        workflowId: created.workflowId,
-        templateId: pending.templateId,
-        templateName: pending.templateName,
-        schemaHash: pending.schemaHash,
-        collectedInputs: values,
-        createdAt: Date.now(),
-      });
-
-      const run = await startWorkflow(created.workflowId, {
-        inputs: values,
-        idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
-      });
-
-      const { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } = await import('@/lib/workflow-local-turn');
-      const userText = buildWorkflowStartUserText(pending.schema, values);
-      appendWorkflowStartedLocalTurn({
-        userText,
-        templateName: pending.templateName,
-        runId: run.runId,
-      });
-
-      await invokeIpc('workflow:startTracking', {
-        runId: run.runId,
-        workflowId: created.workflowId,
-        sessionKey: chatState.currentSessionKey,
-        agentId: chatState.currentAgentId,
-      });
-      beginWorkflowRunSseTrace(run.runId);
-
-      updateWorkflowRunMetadata(chatState.currentSessionKey, created.workflowId, {
-        lastRunId: run.runId,
-        lastStatus: 'running',
-      });
-
-      // Save execution record for SSE tracking and future lookup
-      saveWorkflowExecution({
-        sessionKey: chatState.currentSessionKey,
-        workflowId: created.workflowId,
-        runId: run.runId,
-        templateId: pending.templateId,
-        templateName: pending.templateName,
-        status: 'running',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        collectedInputs: values,
-        paramsSummary: userText,
-      });
-
-      // Initialize workflowCardStates for immediate UI display
-      chatState.setWorkflowCardState(run.runId, {
-        runId: run.runId,
-        workflowId: created.workflowId,
-        status: 'running',
-        progress: 0,
-        steps: [],
-        startedAt: new Date().toISOString(),
-      });
-
-      chatState.clearPendingWorkflow();
-    } catch (err) {
-      const messageErr = err instanceof Error ? err.message : String(err);
-      console.error('[parameterFormHandler] error', err);
-      const { toast } = await import('sonner');
-      toast.error(`工作流启动失败: ${messageErr}`);
-    }
-  });
-
-  const newBlock: ContentBlock = {
-    type: 'parameter_form',
-    formId,
-    formConfig,
-    formContext: { source: 'workflow', sourceId: pending.templateId, schemaHash: pending.schemaHash },
-  };
-
-  useChatStore.getState().setPendingWorkflow({
-    ...pending,
-    frontendFormInserted: true,
-  });
-
-  // Use stripped content (without [parameter_form] marker)
-  if (Array.isArray(message.content)) {
-    return { ...message, content: [...strippedContent as ContentBlock[], newBlock] };
-  }
-  if (typeof message.content === 'string' && message.content.trim()) {
-    return { ...message, content: [{ type: 'text', text: strippedText }, newBlock] };
-  }
-  return { ...message, content: [newBlock] };
+  return appendWorkflowParameterFormToMessage(message, getMessageText, { allowLivePending: true })
+    ?? message;
 }
+
 
 function summarizeToolOutput(text: string): string | undefined {
   const trimmed = text.trim();
@@ -1265,11 +1091,6 @@ function hasAssistantTextOutput(message: RawMessage | undefined): boolean {
   return false;
 }
 
-function hasAssistantTerminalOutput(message: RawMessage | undefined): boolean {
-  if (!hasAssistantTextOutput(message)) return false;
-  return collectToolUpdates(message, 'final').length === 0 && !isToolOnlyMessage(message);
-}
-
 // ── Store ────────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>()(
@@ -1330,10 +1151,6 @@ export const useChatStore = create<ChatState>()(
     });
   },
 
-  pendingTemplateSelection: null,
-  setPendingTemplateSelection: (pending) => set({ pendingTemplateSelection: pending }),
-  clearPendingTemplateSelection: () => set({ pendingTemplateSelection: null }),
-
   // ── Load sessions via sessions.list ──
 
   loadSessions: async () => {
@@ -1348,15 +1165,30 @@ export const useChatStore = create<ChatState>()(
 
     _loadSessionsInFlight = (async () => {
       try {
-        const payload = await hostApiFetch<{ success?: boolean; sessions?: Record<string, unknown>[] }>('/api/chat/sessions');
-        const data = {
-          sessions: Array.isArray(payload?.sessions) ? payload.sessions : [],
-        };
-        if (data) {
-          const rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
+        const data = await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.list', {});
+        let rawSessions: Record<string, unknown>[] = [];
+        if (data && Array.isArray(data.sessions)) {
+          rawSessions = data.sessions;
+        }
+
+        // ── Merge local filesystem sessions (dated cron + scheduled-task runs) ──
+        try {
+          const [stRes, cronRes] = await Promise.all([
+            hostApiFetch('/api/scheduled-tasks/sessions').catch(() => null),
+            hostApiFetch('/api/cron/sessions').catch(() => null),
+          ]);
+          const stData = stRes && typeof stRes === 'object' ? (stRes as Record<string, unknown>) : null;
+          const cronData = cronRes && typeof cronRes === 'object' ? (cronRes as Record<string, unknown>) : null;
+          const stSessions = Array.isArray(stData?.sessions) ? (stData.sessions as Record<string, unknown>[]) : [];
+          const cronSessions = Array.isArray(cronData?.sessions) ? (cronData.sessions as Record<string, unknown>[]) : [];
+          rawSessions = [...rawSessions, ...stSessions, ...cronSessions];
+        } catch {
+          // ignore
+        }
+
+        if (rawSessions.length > 0) {
           const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
             const key = String(s.key || '');
-            const engineType: ChatSession['engineType'] = s.engineType === 'claude' ? 'claude' : 'openclaw';
             return {
               key,
               label: s.label ? String(s.label) : undefined,
@@ -1367,12 +1199,32 @@ export const useChatStore = create<ChatState>()(
               thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
               model: s.model ? String(s.model) : undefined,
               updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
-              engineType,
             };
           }).filter((s: ChatSession) => s.key);
 
-          const canonicalBySuffix = new Map<string, string>();
+          // ── Identify which jobs already have real dated sessions ──
+          const cronDated = new Set<string>();
+          const scheduledTaskDated = new Set<string>();
           for (const session of sessions) {
+            const cronParts = parseCronSessionKey(session.key);
+            if (cronParts && cronParts.date) {
+              cronDated.add(`agent:main:cron:${cronParts.jobId}`);
+            }
+            const stParts = parseScheduledTaskAgentSessionKey(session.key);
+            if (stParts && stParts.date) {
+              scheduledTaskDated.add(`agent:main:scheduled-task:${stParts.taskId}`);
+            }
+          }
+
+          // Filter out base sessions that have dated replacements
+          let filteredSessions = sessions.filter((s) => {
+            if (cronDated.has(s.key)) return false;
+            if (scheduledTaskDated.has(s.key)) return false;
+            return true;
+          });
+
+          const canonicalBySuffix = new Map<string, string>();
+          for (const session of filteredSessions) {
             if (!session.key.startsWith('agent:')) continue;
             const parts = session.key.split(':');
             if (parts.length < 3) continue;
@@ -1384,7 +1236,7 @@ export const useChatStore = create<ChatState>()(
 
           // Deduplicate: if both short and canonical existed, keep canonical only
           const seen = new Set<string>();
-          const dedupedSessions = sessions.filter((s) => {
+          const dedupedSessions = filteredSessions.filter((s) => {
             if (!s.key.startsWith('agent:') && canonicalBySuffix.has(s.key)) return false;
             if (seen.has(s.key)) return false;
             seen.add(s.key);
@@ -1408,9 +1260,8 @@ export const useChatStore = create<ChatState>()(
             }
           }
 
-          const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
           const sessionsWithCurrent = !dedupedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
-            ? [...dedupedSessions, { key: nextSessionKey, engineType: localCurrentSession?.engineType }]
+            ? [...dedupedSessions, { key: nextSessionKey }]
             : dedupedSessions;
 
           const discoveredActivity = Object.fromEntries(
@@ -1430,11 +1281,7 @@ export const useChatStore = create<ChatState>()(
           }));
 
           if (currentSessionKey !== nextSessionKey) {
-            const nextSession = sessionsWithCurrent.find((session) => session.key === nextSessionKey);
-            void (async () => {
-              await ensureSessionEngineSelected(nextSession);
-              await get().loadHistory();
-            })();
+            void get().loadHistory();
           }
 
           // Background: fetch first user message for every non-main session to populate labels upfront.
@@ -1444,21 +1291,18 @@ export const useChatStore = create<ChatState>()(
             void Promise.all(
               sessionsToLabel.map(async (session) => {
                 try {
-                  const r = await hostApiFetch<{
-                    success?: boolean;
-                    result?: { messages?: RawMessage[]; thinkingLevel?: string | null };
-                  }>(
-                    `/api/chat/history?sessionKey=${encodeURIComponent(session.key)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`
-                    + (session.engineType ? `&engineType=${encodeURIComponent(session.engineType)}` : ''),
+                  const r = await useGatewayStore.getState().rpc<Record<string, unknown>>(
+                    'chat.history',
+                    { sessionKey: session.key, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
                   );
-                  const msgs = Array.isArray(r.result?.messages) ? r.result.messages as RawMessage[] : [];
+                  const msgs = Array.isArray(r.messages) ? r.messages as RawMessage[] : [];
                   const firstUser = msgs.find((m) => m.role === 'user');
                   const lastMsg = msgs[msgs.length - 1];
                   set((s) => {
                     const next: Partial<typeof s> = {};
-                    if (firstUser && !s.sessionLabels[session.key]) {
-                      const rawText = getMessageText(firstUser.content).trim();
-                      const labelText = stripWorkflowContextForDisplay(rawText);
+                    const existingLabel = s.sessionLabels[session.key];
+                    if (firstUser && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+                      const labelText = deriveSessionLabelFromUserText(getMessageText(firstUser.content));
                       if (labelText) {
                         const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
                         next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
@@ -1493,16 +1337,9 @@ export const useChatStore = create<ChatState>()(
   // ── Switch session ──
 
   switchSession: (key: string) => {
-    if (key === get().currentSessionKey) {
-      void get().loadHistory();
-      return;
-    }
-    const targetSession = get().sessions.find((session) => session.key === key);
+    if (key === get().currentSessionKey) return;
     set((s) => buildSessionSwitchPatch(s, key));
-    void (async () => {
-      await ensureSessionEngineSelected(targetSession);
-      await get().loadHistory();
-    })();
+    get().loadHistory();
   },
 
   switchToAgentMainSession: (agentId: string) => {
@@ -1530,10 +1367,7 @@ export const useChatStore = create<ChatState>()(
         error?: string;
       }>('/api/sessions/delete', {
         method: 'POST',
-        body: JSON.stringify({
-          sessionKey: key,
-          engineType: getSessionEngineType(get().sessions, key),
-        }),
+        body: JSON.stringify({ sessionKey: key }),
       });
       if (!result.success) {
         console.warn(`[deleteSession] IPC reported failure for ${key}:`, result.error);
@@ -1565,10 +1399,7 @@ export const useChatStore = create<ChatState>()(
         currentAgentId: getAgentIdFromSessionKey(next?.key ?? DEFAULT_SESSION_KEY),
       }));
       if (next) {
-        void (async () => {
-          await ensureSessionEngineSelected(next);
-          await get().loadHistory();
-        })();
+        get().loadHistory();
       }
     } else {
       set((s) => ({
@@ -1597,8 +1428,7 @@ export const useChatStore = create<ChatState>()(
       ?? DEFAULT_CANONICAL_PREFIX;
     const newKey = `${prefix}:session-${Date.now()}`;
     const newAgentId = getAgentIdFromSessionKey(newKey);
-    const currentSession = sessions.find((session) => session.key === currentSessionKey);
-    const newSessionEntry: ChatSession = { key: newKey, engineType: currentSession?.engineType };
+    const newSessionEntry: ChatSession = { key: newKey };
     set((s) => ({
       currentSessionKey: newKey,
       currentAgentId: newAgentId,
@@ -1655,7 +1485,6 @@ export const useChatStore = create<ChatState>()(
 
   loadHistory: async (quiet = false) => {
     const targetSessionKey = get().currentSessionKey;
-    const targetSession = get().sessions.find((session) => session.key === targetSessionKey);
     const existingLoad = _historyLoadInFlight.get(targetSessionKey);
     if (existingLoad) {
       await existingLoad;
@@ -1681,12 +1510,10 @@ export const useChatStore = create<ChatState>()(
     }, 15_000);
 
     const loadPromise = (async () => {
-      const applyLoadedMessages = (
-        rawMessages: RawMessage[],
-        thinkingLevel: string | null,
-        isEngineRunActive = false,
-      ) => {
+      const applyLoadedMessages = (rawMessages: RawMessage[], thinkingLevel: string | null) => {
       if (get().currentSessionKey !== targetSessionKey) return;
+
+      absorbWorkflowSchemaFromToolResults(rawMessages);
 
       // Before filtering: attach images/files from tool_result messages to the next assistant message
       const messagesWithToolImages = enrichWithToolResultFiles(rawMessages);
@@ -1717,6 +1544,8 @@ export const useChatStore = create<ChatState>()(
 
       if (get().currentSessionKey !== targetSessionKey) return;
 
+      reconcilePendingWorkflowForSession(enrichedMessages, rawMessages, targetSessionKey, getMessageText);
+
       finalMessages = mergeParameterFormBlocksFromCurrent(
         finalMessages,
         get().messages,
@@ -1733,18 +1562,25 @@ export const useChatStore = create<ChatState>()(
         thinkingLevel,
       });
       if (formRecovery.deferSet) {
+        const deferredPatched = patchLastAssistantWithWorkflowForm(
+          formRecovery.messages,
+          getMessageText,
+          { rawMessages },
+        );
         set({
-          messages: formRecovery.messages,
+          messages: deferredPatched,
           thinkingLevel,
           loading: false,
           workflowCardStates: restoredCardStates,
         });
+        ensureWorkflowParameterFormInjected();
         void (async () => {
-          const localized = await upgradeWorkflowParamUserMessages(formRecovery.messages, targetSessionKey);
+          const localized = await upgradeWorkflowParamUserMessages(deferredPatched, targetSessionKey);
           if (get().currentSessionKey !== targetSessionKey) return;
-          const msgs = localized !== formRecovery.messages ? localized : formRecovery.messages;
-          if (localized !== formRecovery.messages) set({ messages: msgs });
-          await hydrateSessionWorkflowCards(msgs, {
+          const msgs = localized !== deferredPatched ? localized : deferredPatched;
+          const patched = patchLastAssistantWithWorkflowForm(msgs, getMessageText, { rawMessages });
+          if (patched !== msgs) set({ messages: patched });
+          await hydrateSessionWorkflowCards(patched !== msgs ? patched : msgs, {
             sessionKey: targetSessionKey,
             agentId: get().currentAgentId,
           });
@@ -1752,6 +1588,7 @@ export const useChatStore = create<ChatState>()(
         return;
       }
       finalMessages = formRecovery.messages;
+      finalMessages = patchLastAssistantWithWorkflowForm(finalMessages, getMessageText, { rawMessages });
 
       set({
         messages: finalMessages,
@@ -1759,6 +1596,8 @@ export const useChatStore = create<ChatState>()(
         loading: false,
         workflowCardStates: restoredCardStates,
       });
+
+      ensureWorkflowParameterFormInjected();
 
       void (async () => {
         const localized = await upgradeWorkflowParamUserMessages(finalMessages, targetSessionKey);
@@ -1785,6 +1624,19 @@ export const useChatStore = create<ChatState>()(
           void import('@/lib/workflow-api').then(({ getStartupSchema }) => {
             getStartupSchema(draft.templateId).then((startup) => {
               if (get().currentSessionKey !== targetSessionKey) return;
+              const msgs = get().messages;
+              if (
+                !isWorkflowFormInjectionAllowed(
+                  draft.templateId,
+                  msgs,
+                  getMessageText,
+                  targetSessionKey,
+                  { rawMessages },
+                )
+              ) {
+                clearPendingWorkflowDraft(targetSessionKey, draft.templateId);
+                return;
+              }
               get().setPendingWorkflow({
                 templateId: draft.templateId,
                 templateName: draft.templateName,
@@ -1793,6 +1645,12 @@ export const useChatStore = create<ChatState>()(
                 collectedInputs: draft.collectedInputs ?? {},
                 modelGuidanceSent: draft.modelGuidanceSent,
               });
+              const patched = patchLastAssistantWithWorkflowForm(msgs, getMessageText, {
+                rawMessages,
+              });
+              if (patched !== msgs) {
+                set({ messages: patched });
+              }
             }).catch(() => {});
           });
         });
@@ -1803,11 +1661,11 @@ export const useChatStore = create<ChatState>()(
       // Skip main sessions (key ends with ":main") — they rely on the Gateway-provided
       // displayName (e.g. the configured agent name "StoClaw") instead.
       const isMainSession = targetSessionKey.endsWith(':main');
-      if (!isMainSession && !get().sessionLabels[targetSessionKey]) {
+      if (!isMainSession) {
         const firstUserMsg = finalMessages.find((m) => m.role === 'user');
-        if (firstUserMsg) {
-          const rawText = getMessageText(firstUserMsg.content).trim();
-          const labelText = stripWorkflowContextForDisplay(rawText);
+        const existingLabel = get().sessionLabels[targetSessionKey];
+        if (firstUserMsg && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+          const labelText = deriveSessionLabelFromUserText(getMessageText(firstUserMsg.content));
           if (labelText) {
             const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
             set((s) => ({
@@ -1861,46 +1719,23 @@ export const useChatStore = create<ChatState>()(
       });
       const recentAssistant = [...filteredMessages].reverse().find((msg) => {
         if (msg.role !== 'assistant') return false;
-        if (!hasAssistantTerminalOutput(msg)) return false;
+        // Use hasAssistantTextOutput (not hasNonToolAssistantContent) so that
+        // intermediate thinking+tool_use turns don't prematurely end the run.
+        if (!hasAssistantTextOutput(msg)) return false;
         return isAfterUserMsg(msg);
-      });
-      const recentProcessAssistant = [...filteredMessages].reverse().find((msg) => {
-        if (msg.role !== 'assistant') return false;
-        if (!isAfterUserMsg(msg)) return false;
-        if (hasAssistantTerminalOutput(msg)) return false;
-        return hasNonToolAssistantContent(msg)
-          || isToolOnlyMessage(msg)
-          || collectToolUpdates(msg, 'final').length > 0;
       });
       const currentRecentAssistant = [...get().messages].reverse().find((msg) => {
         if (msg.role !== 'assistant') return false;
-        if (!hasAssistantTerminalOutput(msg)) return false;
+        if (!hasAssistantTextOutput(msg)) return false;
         return isAfterUserMsg(msg);
       });
 
       if (get().currentSessionKey !== targetSessionKey) return;
 
-      if (!isEngineRunActive && (recentAssistant || currentRecentAssistant)) {
+      if (recentAssistant || currentRecentAssistant) {
         clearHistoryPoll();
-        set({
-          sending: false,
-          activeRunId: null,
-          pendingFinal: false,
-          streamingMessage: null,
-          streamingText: '',
-          streamingTools: [],
-        });
-      } else if (recentProcessAssistant) {
-        const processUpdates = collectToolUpdates(recentProcessAssistant, 'final');
-        set((s) => ({
-          pendingFinal: true,
-          streamingMessage: recentProcessAssistant,
-          streamingText: '',
-          streamingTools: processUpdates.length > 0
-            ? upsertToolStatuses(s.streamingTools, processUpdates)
-            : s.streamingTools,
-        }));
-      } else if ((isEngineRunActive || hasRecentAssistantActivity) && !pendingFinal) {
+        set({ sending: false, activeRunId: null, pendingFinal: false });
+      } else if (hasRecentAssistantActivity && !pendingFinal) {
         set({ pendingFinal: true });
       }
       };
@@ -1908,20 +1743,17 @@ export const useChatStore = create<ChatState>()(
       try {
         // Gateway chat.history does not support offset; load up to the hard max in one call.
         let thinkingLevel: string | null = null;
-        const data = await hostApiFetch<{
-          success?: boolean;
-          result?: { messages?: RawMessage[]; thinkingLevel?: string | null; isRunning?: boolean };
-        }>(
-          `/api/chat/history?sessionKey=${encodeURIComponent(targetSessionKey)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`
-          + (targetSession?.engineType ? `&engineType=${encodeURIComponent(targetSession.engineType)}` : ''),
+        const data = await useGatewayStore.getState().rpc<Record<string, unknown>>(
+          'chat.history',
+          { sessionKey: targetSessionKey, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
         );
         if (get().currentSessionKey !== targetSessionKey) return;
 
-        const allMessages: RawMessage[] = Array.isArray(data.result?.messages)
-          ? data.result.messages as RawMessage[]
+        const allMessages: RawMessage[] = Array.isArray(data.messages)
+          ? data.messages as RawMessage[]
           : [];
-        if (data.result?.thinkingLevel) {
-          thinkingLevel = String(data.result.thinkingLevel);
+        if (data.thinkingLevel) {
+          thinkingLevel = String(data.thinkingLevel);
         }
 
         if (allMessages.length >= CHAT_HISTORY_LENGTH_MAX_LIMIT) {
@@ -1937,7 +1769,7 @@ export const useChatStore = create<ChatState>()(
         }
 
         if (get().currentSessionKey !== targetSessionKey) return;
-        applyLoadedMessages(rawMessages, thinkingLevel, data.result?.isRunning === true);
+        applyLoadedMessages(rawMessages, thinkingLevel);
       } catch (err) {
         console.warn('Failed to load chat history:', err);
         if (get().currentSessionKey !== targetSessionKey) return;
@@ -1974,26 +1806,18 @@ export const useChatStore = create<ChatState>()(
   sendMessage: async (
     options: import('./chat/types').SendMessageOptions,
   ) => {
-    const { text, attachments, targetAgentId, dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
+    const { text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
 
-    // Inject hidden workflow context into the outgoing message for AI guidance
+    // Inject hidden workflow context / session hint for AI guidance
     const { appendWorkflowContext, stripWorkflowContextForDisplay } = await import('@/lib/workflow-context');
-    console.log('[workflow-trace] sendMessage workflowContext=%s text=%s', workflowContext ? `templateId=${workflowContext.templateId} fields=${workflowContext.fields.length}` : 'null', trimmed.slice(0, 50));
-    const messageWithContext = appendWorkflowContext(trimmed, workflowContext);
-    const displayText = stripWorkflowContextForDisplay(messageWithContext);
-    console.log('[workflow-trace] sendMessage injected=%s finalLength=%d', workflowContext ? 'yes' : 'no', messageWithContext.length);
-
-    const dingTalkRpcExtras = buildDingTalkMentionRpcExtras(
-      dingTalkMentions,
-      attachments?.map((file) => ({
-        fileName: file.fileName,
-        filePath: file.stagedPath,
-        mimeType: file.mimeType,
-        fileSize: file.fileSize,
-      })),
-    );
+    const {
+      buildWorkflowSessionHint,
+      buildWorkflowCreationHint,
+      appendWorkflowSessionHint,
+      stripWorkflowSessionHintForDisplay,
+    } = await import('@/lib/workflow-session-hint');
 
     const targetSessionKey = resolveMainSessionKeyForAgent(targetAgentId) ?? get().currentSessionKey;
 
@@ -2003,7 +1827,44 @@ export const useChatStore = create<ChatState>()(
     }
 
     const currentSessionKey = targetSessionKey;
-    const currentSessionEngineType = getSessionEngineType(get().sessions, currentSessionKey);
+
+    let textForGateway = trimmed;
+    if (!workflowContext) {
+      const {
+        isReExecutionIntent,
+        isWorkflowStartIntent,
+        isWorkflowCreationIntent,
+      } = await import('@/hooks/use-workflow-intent');
+      if (isReExecutionIntent(trimmed) || isWorkflowStartIntent(trimmed)) {
+        const hint = buildWorkflowSessionHint(
+          currentSessionKey,
+          get().messages,
+          get().workflowCardStates,
+        );
+        textForGateway = appendWorkflowSessionHint(trimmed, hint);
+      } else if (isWorkflowCreationIntent(trimmed)) {
+        get().clearPendingWorkflow();
+        let creationHint = buildWorkflowCreationHint(trimmed);
+        try {
+          const { searchWorkflowTemplates } = await import('@/lib/workflow-api');
+          const { extractWorkflowSearchQuery } = await import('@/lib/workflow-session-hint');
+          const searchResult = await searchWorkflowTemplates(extractWorkflowSearchQuery(trimmed), 5);
+          if (searchResult.matchedItems.length > 0) {
+            creationHint = buildWorkflowCreationHint(trimmed, searchResult.matchedItems);
+          }
+        } catch (err) {
+          console.warn('[workflow-trace] creation hint pre-search failed:', err);
+        }
+        textForGateway = appendWorkflowSessionHint(trimmed, creationHint);
+      }
+    }
+
+    console.log('[workflow-trace] sendMessage workflowContext=%s text=%s', workflowContext ? `templateId=${workflowContext.templateId} fields=${workflowContext.fields.length}` : 'null', trimmed.slice(0, 50));
+    const messageWithContext = appendWorkflowContext(textForGateway, workflowContext);
+    const displayText = stripWorkflowSessionHintForDisplay(
+      stripWorkflowContextForDisplay(messageWithContext),
+    );
+    console.log('[workflow-trace] sendMessage injected=%s finalLength=%d', workflowContext ? 'yes' : 'no', messageWithContext.length);
 
     const quotaCheck = await checkDailyTokenQuota();
     if (quotaCheck) {
@@ -2073,10 +1934,7 @@ export const useChatStore = create<ChatState>()(
     const pollHistory = () => {
       const state = get();
       if (!state.sending) { clearHistoryPoll(); return; }
-      const activeStreamHasFinalOutput = hasAssistantTerminalOutput(
-        (state.streamingMessage as RawMessage | null | undefined) ?? undefined,
-      );
-      if (state.streamingMessage && activeStreamHasFinalOutput) {
+      if (state.streamingMessage) {
         _historyPollTimer = setTimeout(pollHistory, POLL_INTERVAL);
         return;
       }
@@ -2093,10 +1951,7 @@ export const useChatStore = create<ChatState>()(
     const checkStuck = () => {
       const state = get();
       if (!state.sending) return;
-      const activeStreamHasFinalOutput = hasAssistantTerminalOutput(
-        (state.streamingMessage as RawMessage | null | undefined) ?? undefined,
-      );
-      if (state.streamingText || (state.streamingMessage && activeStreamHasFinalOutput)) return;
+      if (state.streamingMessage || state.streamingText) return;
       if (state.pendingFinal) {
         setTimeout(checkStuck, 10_000);
         return;
@@ -2136,6 +1991,9 @@ export const useChatStore = create<ChatState>()(
 
       let result: { success: boolean; result?: { runId?: string }; error?: string };
 
+      // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
+      const CHAT_SEND_TIMEOUT_MS = 120_000;
+
       if (hasMedia) {
         result = await hostApiFetch<{ success: boolean; result?: { runId?: string }; error?: string }>(
           '/api/chat/send-with-media',
@@ -2146,34 +2004,29 @@ export const useChatStore = create<ChatState>()(
               message: messageWithContext || 'Process the attached file(s).',
               deliver: false,
               idempotencyKey,
-              engineType: currentSessionEngineType,
               media: attachments.map((a) => ({
                 filePath: a.stagedPath,
                 mimeType: a.mimeType,
                 fileName: a.fileName,
               })),
-              ...dingTalkRpcExtras,
             }),
           },
         );
       } else {
-        result = await hostApiFetch<{ success: boolean; result?: { runId?: string }; error?: string }>(
-          '/api/chat/send',
+        const rpcResult = await useGatewayStore.getState().rpc<{ runId?: string }>(
+          'chat.send',
           {
-            method: 'POST',
-            body: JSON.stringify({
-              sessionKey: currentSessionKey,
-              message: messageWithContext,
-              deliver: false,
-              idempotencyKey,
-              engineType: currentSessionEngineType,
-              ...dingTalkRpcExtras,
-              // NOTE: workflowId/runId are not forwarded to Gateway chat.send yet
-              // because the Gateway schema does not accept them. Workflow state
-              // is tracked via SSE + main process polling instead.
-            }),
+            sessionKey: currentSessionKey,
+            message: messageWithContext,
+            deliver: false,
+            idempotencyKey,
+            // NOTE: workflowId/runId are not forwarded to Gateway chat.send yet
+            // because the Gateway schema does not accept them. Workflow state
+            // is tracked via SSE + main process polling instead.
           },
+          CHAT_SEND_TIMEOUT_MS,
         );
+        result = { success: true, result: rpcResult };
       }
 
 
@@ -2199,13 +2052,10 @@ export const useChatStore = create<ChatState>()(
     set({ streamingTools: [] });
 
     try {
-      await hostApiFetch<{ success?: boolean; error?: string }>('/api/chat/abort', {
-        method: 'POST',
-        body: JSON.stringify({
-          sessionKey: currentSessionKey,
-          engineType: getSessionEngineType(get().sessions, currentSessionKey),
-        }),
-      });
+      await useGatewayStore.getState().rpc(
+        'chat.abort',
+        { sessionKey: currentSessionKey },
+      );
     } catch (err) {
       set({ error: String(err) });
     }
@@ -2295,6 +2145,12 @@ export const useChatStore = create<ChatState>()(
         if (finalMsg) {
           const updates = collectToolUpdates(finalMsg, resolvedState);
           if (isToolResultRole(finalMsg.role)) {
+            void dispatchBuiltinToolResult({
+              id: finalMsg.id,
+              toolCallId: finalMsg.toolCallId,
+              toolName: finalMsg.toolName,
+              content: finalMsg.content,
+            });
             // Resolve file path from the streaming assistant message's matching tool call
             const currentStreamForPath = get().streamingMessage as RawMessage | null;
             const matchedPath = (currentStreamForPath && finalMsg.toolCallId)
@@ -2488,7 +2344,11 @@ export const useChatStore = create<ChatState>()(
           // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
           if (hasOutput && !toolOnly) {
             clearHistoryPoll();
-            void get().loadHistory(true);
+            void get().loadHistory(true).then(() => {
+              const patched = patchLastAssistantWithWorkflowForm(get().messages, getMessageText);
+              if (patched !== get().messages) set({ messages: patched });
+              ensureWorkflowParameterFormInjected();
+            });
           }
         } else {
           // No message in final event - reload history to get complete data
@@ -2611,6 +2471,5 @@ export const useChatStore = create<ChatState>()(
   name: 'stoclaw-chat-session-labels',
   partialize: (state) => ({
     sessionLabels: state.sessionLabels,
-    pendingWorkflow: state.pendingWorkflow,
   }),
 }));

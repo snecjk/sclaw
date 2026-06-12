@@ -1,11 +1,35 @@
 import type { AttachedFileMeta } from '@/stores/chat';
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 
-const PREVIEWABLE_REMOTE_EXTS =
-  'html?|pdf|json|md|txt|csv|tsv|sql|py|js|ts|jsx|tsx|java|go|rs|cpp|c|h|cs|rb|php|yaml|yml|xml';
-
 export function isHttpUrl(path: string): boolean {
   return path.startsWith('http://') || path.startsWith('https://');
+}
+
+/**
+ * Normalize a local file path before Host API read/serve.
+ * ReactMarkdown may percent-encode backslashes in preview:// hrefs (C:\ → C:%5C…),
+ * which makes Node isAbsolute() false and causes workspace join bugs on Windows.
+ */
+export function normalizeLocalFilePath(filePath: string): string {
+  let path = filePath.trim();
+  if (!path || isHttpUrl(path) || path.startsWith('artifact://')) return path;
+
+  if (path.includes('%')) {
+    const once = safeDecodeURIComponent(path);
+    path = once.includes('%') ? safeDecodeURIComponent(once) : once;
+  }
+
+  return path;
+}
+
+/** True for Windows drive paths (C:\ or C:/). */
+export function isWindowsDrivePath(path: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(path);
+}
+
+/** Basename without query string, URI-decoded (works for both paths and URLs). */
+export function previewBasename(pathOrUrl: string): string {
+  return safeDecodeURIComponent(pathOrUrl.split(/[\\/]/).pop()?.split('?')[0] || pathOrUrl);
 }
 
 function extToMimeType(ext: string): string {
@@ -17,12 +41,75 @@ function extToMimeType(ext: string): string {
     txt: 'text/plain',
     json: 'application/json',
     csv: 'text/csv',
-    tsv: 'text/plain',
+    tsv: 'text/tab-separated-values',
+    xml: 'application/xml',
+    yaml: 'text/plain',
+    yml: 'text/plain',
+    sql: 'text/plain',
+    py: 'text/plain',
+    js: 'text/plain',
+    ts: 'text/plain',
+    jsx: 'text/plain',
+    tsx: 'text/plain',
+    sh: 'text/plain',
+    bash: 'text/plain',
+    java: 'text/plain',
+    go: 'text/plain',
+    rs: 'text/plain',
+    css: 'text/plain',
   };
   return map[ext] || 'application/octet-stream';
 }
 
-/** Infer MIME type from artifact type hint and/or URL path extension. */
+/** True when the last path segment looks like a file name with extension (e.g. report.pdf). */
+export function urlPathHasFileExtension(pathOrUrl: string): boolean {
+  let segment = '';
+  if (isHttpUrl(pathOrUrl)) {
+    try {
+      segment = new URL(pathOrUrl).pathname.split('/').filter(Boolean).pop() || '';
+    } catch {
+      segment = previewBasename(pathOrUrl);
+    }
+  } else {
+    segment = previewBasename(pathOrUrl);
+  }
+  return /\.[a-z0-9]{1,12}$/i.test(segment);
+}
+
+function extFromPathOrUrl(pathOrUrl: string): string {
+  if (isHttpUrl(pathOrUrl)) {
+    if (!urlPathHasFileExtension(pathOrUrl)) return '';
+    try {
+      const last = new URL(pathOrUrl).pathname.split('/').filter(Boolean).pop() || '';
+      return last.split('.').pop()?.toLowerCase() || '';
+    } catch {
+      // fall through to basename
+    }
+  }
+  return previewBasename(pathOrUrl).split('.').pop()?.toLowerCase() || '';
+}
+
+/** http(s) URL whose path has no file extension — treat as a web page (e.g. https://www.baidu.com). */
+export function isExtensionlessWebUrl(url: string): boolean {
+  return isHttpUrl(url) && !urlPathHasFileExtension(url);
+}
+
+/** Remote .html/.htm file URL (OSS/CDN) — may need fetch before iframe (Content-Disposition: attachment). */
+export function isRemoteFileHtmlUrl(url: string): boolean {
+  if (!isHttpUrl(url) || isExtensionlessWebUrl(url)) return false;
+  const ext = extFromPathOrUrl(url);
+  return ext === 'html' || ext === 'htm';
+}
+
+/** Infer MIME type from a local path or remote URL (extension-based). */
+export function inferMimeTypeFromPath(pathOrUrl: string): string {
+  const ext = extFromPathOrUrl(pathOrUrl);
+  if (ext) return extToMimeType(ext);
+  if (isHttpUrl(pathOrUrl) && isExtensionlessWebUrl(pathOrUrl)) return 'text/html';
+  return 'application/octet-stream';
+}
+
+/** Infer MIME type from artifact type hint and/or URL/path extension. */
 export function inferMimeTypeFromUrl(url: string, typeHint?: string | null): string {
   const hint = typeHint?.toLowerCase().trim();
   if (hint === 'html' || hint === 'text/html') return 'text/html';
@@ -31,34 +118,46 @@ export function inferMimeTypeFromUrl(url: string, typeHint?: string | null): str
   if (hint === 'markdown' || hint === 'text/markdown') return 'text/markdown';
   if (hint === 'csv' || hint === 'text/csv') return 'text/csv';
   if (hint === 'output') {
-    // Backend may label HTML artifacts as "output" before OSS link is fixed.
     if (/\.html?(?:\?|$)/i.test(url)) return 'text/html';
     return 'text/html';
   }
 
-  try {
-    const pathname = new URL(url).pathname;
-    const fileName = pathname.split('/').pop() || '';
-    const ext = fileName.split('.').pop()?.toLowerCase() || '';
-    if (ext) return extToMimeType(ext);
-  } catch {
-    // ignore invalid URL
-  }
-
-  return 'text/html';
+  return inferMimeTypeFromPath(url);
 }
 
+const PREVIEWABLE_REMOTE_MIMES = new Set([
+  'text/html',
+  'application/pdf',
+  'text/markdown',
+  'application/json',
+  'text/plain',
+  'text/csv',
+]);
+
+/** Remote http(s) URLs we can render in the side preview panel. */
 export function isPreviewableRemoteUrl(url: string, typeHint?: string | null): boolean {
   if (!isHttpUrl(url)) return false;
-  const mime = inferMimeTypeFromUrl(url, typeHint);
-  return (
-    mime === 'text/html'
-    || mime === 'application/pdf'
-    || mime === 'text/markdown'
-    || mime === 'application/json'
-    || mime === 'text/plain'
-    || mime === 'text/csv'
-  );
+  return PREVIEWABLE_REMOTE_MIMES.has(inferMimeTypeFromUrl(url, typeHint));
+}
+
+/** Display label for a http(s) URL used in markdown links / file cards. */
+export function previewHttpUrlLabel(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const segment = parsed.pathname.split('/').filter(Boolean).pop();
+    if (segment) return safeDecodeURIComponent(segment);
+    return parsed.hostname || url;
+  } catch {
+    return safeDecodeURIComponent(url.split('/').pop()?.split('?')[0] || '链接');
+  }
+}
+
+export function previewFileNameFromUrl(url: string, mimeType?: string): string {
+  const fromUrl = previewHttpUrlLabel(url);
+  if (fromUrl && fromUrl !== url && fromUrl.includes('.')) return fromUrl;
+  if (mimeType === 'text/html') return `${fromUrl || 'page'}.html`;
+  if (mimeType === 'application/json') return `${fromUrl || 'data'}.json`;
+  return fromUrl || 'preview';
 }
 
 export function isPreviewableArtifactUrl(url: string, typeHint?: string | null): boolean {
@@ -111,7 +210,9 @@ export function resolvePreviewLinkTarget(
   href: string,
   states: Record<string, { result?: { artifacts?: Array<{ name: string; url: string }> } } | undefined>,
 ): string {
-  const raw = href.startsWith('preview://') ? href.slice('preview://'.length) : href;
+  const raw = normalizeLocalFilePath(
+    href.startsWith('preview://') ? href.slice('preview://'.length) : href,
+  );
   return resolveArtifactUrlFromWorkflowStates(raw, states) ?? raw;
 }
 
@@ -122,9 +223,9 @@ export function artifactToPreviewFile(artifact: {
   url: string;
 }): AttachedFileMeta {
   const mimeType = inferMimeTypeFromUrl(artifact.url, artifact.type);
-  const fileName = artifact.name.includes('.')
-    ? artifact.name
-    : `${artifact.name}${mimeType === 'text/html' ? '.html' : mimeType === 'application/json' ? '.json' : ''}`;
+  const fileName = artifact.name && artifact.name !== 'preview' && !artifact.name.startsWith('http')
+    ? (artifact.name.includes('.') ? artifact.name : previewFileNameFromUrl(artifact.url, mimeType))
+    : previewFileNameFromUrl(artifact.url, mimeType);
 
   return {
     filePath: artifact.url,
@@ -135,21 +236,26 @@ export function artifactToPreviewFile(artifact: {
   };
 }
 
-/** Match previewable http(s) URLs in plain text (OSS/CDN links). */
+/** Strip trailing sentence punctuation accidentally captured with a URL. */
+export function normalizeHttpUrlToken(url: string): string {
+  return url.replace(/[.,;:!?)}\]]+$/, '');
+}
+
+/** Match all http(s) URLs in plain text. */
 export function extractPreviewableHttpUrls(text: string): Array<{ filePath: string; fileName: string; mimeType: string }> {
-  const regex = new RegExp(`(https?:\\/\\/[^\\s)\\]"',;<>]+\\.(?:${PREVIEWABLE_REMOTE_EXTS})(?:\\?[^\\s)\\]"',;<>]*)?)`, 'gi');
+  const regex = /(https?:\/\/[^\s)\]"',;<>]+)/gi;
   const results: Array<{ filePath: string; fileName: string; mimeType: string }> = [];
   const seen = new Set<string>();
   let match: RegExpExecArray | null;
   while ((match = regex.exec(text)) !== null) {
-    const url = match[1];
-    if (seen.has(url) || !isPreviewableRemoteUrl(url)) continue;
+    const url = normalizeHttpUrlToken(match[1]);
+    if (!url || seen.has(url) || !isPreviewableRemoteUrl(url)) continue;
     seen.add(url);
-    const fileName = safeDecodeURIComponent(url.split('/').pop()?.split('?')[0] || 'preview');
+    const mimeType = inferMimeTypeFromUrl(url);
     results.push({
       filePath: url,
-      fileName,
-      mimeType: inferMimeTypeFromUrl(url),
+      fileName: previewFileNameFromUrl(url, mimeType),
+      mimeType,
     });
   }
   return results;

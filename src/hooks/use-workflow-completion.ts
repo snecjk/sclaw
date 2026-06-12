@@ -1,10 +1,12 @@
 /**
- * Workflow Completion Hook — listens for IPC status updates and triggers model summary.
+ * Workflow Completion Hook — listens for IPC status updates and finalizes WorkflowCard.
  */
 import { useEffect } from 'react';
 import { deliverWorkflowCompletionIfNeeded } from '@/lib/workflow-completion-delivery';
+import { mergeWorkflowCardState } from '@/lib/workflow-card-state-merge';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import { useChatStore } from '@/stores/chat';
+import { getExecutionByRunId } from '@/stores/workflow-memory';
 import type { WorkflowExecutionState } from '@/types/workflow';
 
 interface WorkflowStatusPayload {
@@ -51,7 +53,8 @@ export function useWorkflowCompletion(sessionKey: string) {
 
       const chatState = useChatStore.getState();
       const currentState = chatState.workflowCardStates[data.runId];
-      chatState.setWorkflowCardState(data.runId, {
+      const exec = getExecutionByRunId(data.runId, sessionKey);
+      const incoming: WorkflowExecutionState = {
         runId: data.runId,
         workflowId: data.workflowId ?? currentState?.workflowId ?? '',
         status: data.status,
@@ -61,22 +64,16 @@ export function useWorkflowCompletion(sessionKey: string) {
         error: data.error ?? currentState?.error,
         startedAt: data.startedAt ?? currentState?.startedAt,
         completedAt: data.completedAt ?? currentState?.completedAt,
-      });
+      };
+      chatState.setWorkflowCardState(
+        data.runId,
+        mergeWorkflowCardState(currentState, incoming, { localStartedAtMs: exec?.createdAt }),
+      );
 
       if (!isTerminalWorkflowRunStatus(data.status)) return;
       if (data.status !== 'completed' && data.status !== 'failed') return;
 
-      await deliverWorkflowCompletionIfNeeded(data.runId, sessionKey, {
-        runId: data.runId,
-        workflowId: data.workflowId ?? currentState?.workflowId ?? '',
-        status: data.status,
-        progress: data.progress ?? 100,
-        steps: data.steps ?? [],
-        result: data.result,
-        error: data.error,
-        startedAt: data.startedAt ?? currentState?.startedAt,
-        completedAt: data.completedAt ?? currentState?.completedAt,
-      });
+      await deliverWorkflowCompletionIfNeeded(data.runId, sessionKey, incoming);
     };
 
     const unsubscribe = window.electron.ipcRenderer.on(

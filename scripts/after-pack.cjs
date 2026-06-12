@@ -946,10 +946,12 @@ exports.default = async function afterPack(context) {
     { type: 'local', localDir: 'sto-scheduled-task-tool', pluginId: 'sto-scheduled-task-tool' },
     { type: 'local', localDir: 'sto-skill-call-monitor', pluginId: 'sto-skill-call-monitor' },
     { type: 'local', localDir: 'sto-dingtalk-send-guard', pluginId: 'sto-dingtalk-send-guard' },
+    { type: 'local', localDir: 'sto-workflow-tool', pluginId: 'sto-workflow-tool' },
   ];
 
   const localPluginSourceRoot = join(__dirname, '..', 'sto-plugin');
   const preBuildRoot = join(__dirname, '..', 'build', 'openclaw-plugins');
+  const STO_TOOLKIT_DIR = 'sto-toolkit';
 
   mkdirSync(pluginsDestRoot, { recursive: true });
   for (const plugin of BUNDLED_PLUGINS) {
@@ -975,6 +977,43 @@ exports.default = async function afterPack(context) {
       }
       // Fix hardcoded plugin ID mismatches in compiled JS
       patchPluginIds(pluginDestDir, plugin.pluginId);
+    }
+  }
+
+  // Nest sto-toolkit inside sto-workflow-tool (OpenClaw scans extensions/* as plugins).
+  const workflowDestDir = join(pluginsDestRoot, 'sto-workflow-tool');
+  const legacyToolkitSibling = join(pluginsDestRoot, STO_TOOLKIT_DIR);
+  if (existsSync(legacyToolkitSibling)) {
+    rmSync(normWin(legacyToolkitSibling), { recursive: true, force: true });
+    console.log(`[after-pack] Removed legacy extensions/${STO_TOOLKIT_DIR} sibling`);
+  }
+  if (existsSync(join(workflowDestDir, 'openclaw.plugin.json'))) {
+    const nestedToolkitDir = join(workflowDestDir, STO_TOOLKIT_DIR);
+    const nestedPreBuild = join(preBuildRoot, 'sto-workflow-tool', STO_TOOLKIT_DIR);
+    const toolkitSourceDir = join(localPluginSourceRoot, STO_TOOLKIT_DIR);
+    const toolkitSource =
+      existsSync(join(nestedPreBuild, 'index.ts'))
+        ? nestedPreBuild
+        : existsSync(join(toolkitSourceDir, 'index.ts'))
+          ? toolkitSourceDir
+          : null;
+    if (toolkitSource) {
+      console.log(`[after-pack] Copying ${STO_TOOLKIT_DIR} -> ${nestedToolkitDir}`);
+      if (existsSync(normWin(nestedToolkitDir))) rmSync(normWin(nestedToolkitDir), { recursive: true, force: true });
+      mkdirSync(normWin(nestedToolkitDir), { recursive: true });
+      cpSync(normWin(toolkitSource), normWin(nestedToolkitDir), {
+        recursive: true,
+        dereference: true,
+        filter: (src) => {
+          const name = basename(src);
+          if (/\.(test|spec)\.(ts|js|mjs)$/.test(name)) return false;
+          if (name === '__tests__' || name === 'node_modules') return false;
+          return true;
+        },
+      });
+      cleanupUnnecessaryFiles(nestedToolkitDir);
+    } else {
+      console.warn(`[after-pack] ⚠️  ${STO_TOOLKIT_DIR} not found; sto-workflow-tool may fail to load`);
     }
   }
 

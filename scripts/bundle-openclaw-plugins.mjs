@@ -23,6 +23,8 @@ const ROOT = path.resolve(__dirname, '..');
 const OUTPUT_ROOT = path.join(ROOT, 'build', 'openclaw-plugins');
 const NODE_MODULES = path.join(ROOT, 'node_modules');
 const STO_PLUGIN_ROOT = path.join(ROOT, 'sto-plugin');
+/** Shared library copied beside sto-workflow-tool for ../sto-toolkit imports at runtime. */
+const STO_TOOLKIT_DIR = 'sto-toolkit';
 const CACHE_DIR = path.join(ROOT, '.download-cache', 'openclaw-plugins');
 const CACHE_MANIFEST = path.join(CACHE_DIR, 'manifest.json');
 
@@ -100,6 +102,7 @@ const PLUGINS = [
   { type: 'local', localDir: 'sto-scheduled-task-tool', pluginId: 'sto-scheduled-task-tool' },
   { type: 'local', localDir: 'sto-skill-call-monitor', pluginId: 'sto-skill-call-monitor' },
   { type: 'local', localDir: 'sto-dingtalk-send-guard', pluginId: 'sto-dingtalk-send-guard' },
+  { type: 'local', localDir: 'sto-workflow-tool', pluginId: 'sto-workflow-tool' },
 ];
 
 // Filter for excluding test files and unnecessary dirs when copying local plugins.
@@ -155,6 +158,12 @@ function calculatePluginsHash() {
           hashLocalPluginDir(pluginDir, hash);
         }
       }
+    }
+
+    const toolkitDir = path.join(STO_PLUGIN_ROOT, STO_TOOLKIT_DIR);
+    if (fs.existsSync(toolkitDir)) {
+      hash.update(`shared:${STO_TOOLKIT_DIR}:`);
+      hashLocalPluginDir(toolkitDir, hash);
     }
     
     return hash.digest('hex').substring(0, 16);
@@ -394,6 +403,56 @@ function bundleOneLocalPlugin({ localDir, pluginId }) {
   echo`   ✅ ${pluginId}: local plugin bundled${copiedCount > 0 ? `, copied ${copiedCount} deps (skipped dupes: ${skippedDupes})` : ' (no deps)'}`;
 }
 
+const WORKFLOW_TOOL_RUNTIME_DEPS = ['@sinclair/typebox'];
+
+/**
+ * Nest sto-toolkit inside sto-workflow-tool (OpenClaw scans extensions/* as plugins).
+ */
+function bundleStoToolkitIntoWorkflowTool() {
+  const workflowOutDir = path.join(OUTPUT_ROOT, 'sto-workflow-tool');
+  if (!fs.existsSync(path.join(workflowOutDir, 'openclaw.plugin.json'))) return;
+
+  const sourceDir = path.join(STO_PLUGIN_ROOT, STO_TOOLKIT_DIR);
+  if (!fs.existsSync(path.join(sourceDir, 'index.ts'))) {
+    echo`   ⚠️  ${STO_TOOLKIT_DIR} not found at ${sourceDir}, skipping`;
+    return;
+  }
+
+  const outputDir = path.join(workflowOutDir, STO_TOOLKIT_DIR);
+  echo`📦 Bundling ${STO_TOOLKIT_DIR} -> ${outputDir}`;
+
+  if (fs.existsSync(outputDir)) {
+    fs.rmSync(outputDir, { recursive: true, force: true });
+  }
+  fs.mkdirSync(outputDir, { recursive: true });
+  fs.cpSync(sourceDir, outputDir, { recursive: true, filter: bundleCopyFilter });
+
+  // Legacy sibling breaks Gateway plugin validation — remove if present.
+  const legacySibling = path.join(OUTPUT_ROOT, STO_TOOLKIT_DIR);
+  if (fs.existsSync(legacySibling)) {
+    fs.rmSync(legacySibling, { recursive: true, force: true });
+  }
+
+  for (const depName of WORKFLOW_TOOL_RUNTIME_DEPS) {
+    const depPath = path.join(NODE_MODULES, ...depName.split('/'));
+    if (!fs.existsSync(depPath)) {
+      echo`   ⚠️  Runtime dep "${depName}" not found, skipping`;
+      continue;
+    }
+    const destNM = path.join(workflowOutDir, 'node_modules', depName);
+    if (fs.existsSync(destNM)) continue;
+    try {
+      fs.mkdirSync(normWin(path.dirname(destNM)), { recursive: true });
+      fs.cpSync(normWin(fs.realpathSync(depPath)), normWin(destNM), { recursive: true, dereference: true });
+      echo`   ✅ Copied runtime dep ${depName} for sto-workflow-tool`;
+    } catch (err) {
+      echo`   ⚠️  Skipped ${depName}: ${err.message}`;
+    }
+  }
+
+  echo`   ✅ ${STO_TOOLKIT_DIR}: nested into sto-workflow-tool`;
+}
+
 /**
  * Patch plugin entry JS files so the exported `id` matches openclaw.plugin.json.
  * Some plugins (e.g. wecom) ship with a hardcoded ID in their compiled output
@@ -499,6 +558,8 @@ for (const plugin of PLUGINS) {
     bundleOnePlugin(plugin);
   }
 }
+
+bundleStoToolkitIntoWorkflowTool();
 
 // Save to cache for future builds
 if (cacheKey) {

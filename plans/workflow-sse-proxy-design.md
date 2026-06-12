@@ -9,7 +9,7 @@
 ### 现有 SSE 模式（参考 `/api/events`）
 
 ```
-Renderer: new EventSource('http://127.0.0.1:3210/api/events')
+Renderer: new EventSource('/api/events')
   → Host API Server (electron/api/server.ts)
     → handleAppRoutes (electron/api/routes/app.ts)
       → res.writeHead(200, {'Content-Type': 'text/event-stream'})
@@ -49,7 +49,7 @@ Renderer: subscribeWorkflowStream(runId)
 
 ### 方案 B：直接 EventSource 到 Host API
 
-**原理**：renderer 通过 `new EventSource('http://127.0.0.1:3210/agent/v1/runs/{runId}/stream')` 连接到本地 Host API，Host API 路由代理到后端 SSE。
+**原理**：renderer 通过 `new EventSource('/agent/v1/runs/{runId}/stream')` 连接到本地 Host API，Host API 路由代理到后端 SSE。
 
 **优点**：
 - renderer 代码最简单（标准 EventSource API）
