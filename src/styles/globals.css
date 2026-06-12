@@ -63,6 +63,45 @@
     --sto-sidebar-collapsed-nav-icon-idle: #7a8494;
     --sto-main-inner-max: 1100px;
     --sto-content-pad-x: 20px;
+    /* Grey-9 次要文字（快捷 chip / 手动创建等） */
+    --sto-grey-9: #4e5969;
+    /* MainLayout main `[scrollbar-gutter:stable]` 预留宽度，底纹右出血需一并抵消 */
+    --sto-main-scrollbar-gutter: 15px;
+
+    /* 工作流 Hero 输入复合框（MasterGo 2:7326 #FFFFFF / Grey-4 #E5E6EB） */
+    --sto-wf-hero-input-bg: #ffffff;
+    --sto-wf-hero-input-border: #e5e6eb;
+    --sto-wf-hero-input-ring: 255 140 0;
+
+    /* 工作流页底纹夹层：top 64px（设计稿 Y），高度与切图 workflow-page-shading.png 一致 */
+    --sto-wf-page-shading-top: 64px;
+    --sto-wf-page-shading-h: 330px;
+    --sto-wf-page-shading-tile-w: 1152px;
+
+    /* 工作流卡片封面 pastel（MasterGo 工作流列表稿） */
+    --sto-wf-cover-teal-bg: #e1f5ee;
+    --sto-wf-cover-teal-accent: #9fe1cb;
+    --sto-wf-cover-teal-icon: #0f6e56;
+    --sto-wf-cover-coral-bg: #faece7;
+    --sto-wf-cover-coral-accent: #f5c4b3;
+    --sto-wf-cover-coral-icon: #993c1d;
+    --sto-wf-cover-purple-bg: #eeedfe;
+    --sto-wf-cover-purple-accent: #cecbf6;
+    --sto-wf-cover-purple-icon: #3c3489;
+    --sto-wf-cover-pink-bg: #fbeaf0;
+    --sto-wf-cover-pink-accent: #f4c0d1;
+    --sto-wf-cover-pink-icon: #993556;
+
+    /* 工作流详情弹窗（MasterGo Dialog 2:09392） */
+    --sto-wf-detail-modal-shadow: 0 24px 80px rgba(15, 23, 42, 0.18);
+    --sto-wf-detail-cover-bg: #f0f1f5;
+    --sto-wf-detail-category-bg: #fff6f0;
+    --sto-wf-detail-category-text: #ce7d46;
+    /* 详情弹窗标题「已开启」badge（MasterGo Overlay 2:16910） */
+    --sto-wf-detail-status-on-bg: rgba(136, 188, 157, 0.16);
+    --sto-wf-detail-status-on-text: #5f9274;
+    --sto-wf-detail-status-off-bg: #f0f1f2;
+    --sto-wf-detail-status-off-text: #86909c;
   }
 
   .dark {
@@ -115,6 +154,10 @@
     --sto-sidebar-collapsed-nav-icon-idle: #9aa5b8;
     --sto-main-inner-max: 1100px;
     --sto-content-pad-x: 20px;
+
+    --sto-wf-hero-input-bg: hsl(32 100% 97% / 0.08);
+    --sto-wf-hero-input-border: hsl(var(--primary) / 0.35);
+    --sto-wf-hero-input-ring: 255 140 0;
   }
 }
 
@@ -248,6 +291,12 @@
   .sto-tool-btn {
     @apply inline-flex items-center gap-1.5 rounded-lg border border-[var(--sto-sidebar-border)] bg-white px-2.5 py-2 text-[13px] font-medium text-muted-foreground transition-colors;
     @apply hover:border-[rgba(255,140,0,0.45)] hover:text-[var(--sto-accent)] dark:border-border dark:bg-transparent;
+  }
+}
+
+@layer utilities {
+  .text-sto-grey-9 {
+    color: var(--sto-grey-9) !important;
   }
 }
 

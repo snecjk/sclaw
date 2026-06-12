@@ -21,6 +21,7 @@ import enSprite from './locales/en/sprite.json';
 import enSubscriptions from './locales/en/subscriptions.json';
 import enHome from './locales/en/home.json';
 import enTasks from './locales/en/tasks.json';
+import enWorkflow from './locales/en/workflow.json';
 
 // ZH
 import zhCommon from './locales/zh/common.json';
@@ -37,6 +38,7 @@ import zhSprite from './locales/zh/sprite.json';
 import zhSubscriptions from './locales/zh/subscriptions.json';
 import zhHome from './locales/zh/home.json';
 import zhTasks from './locales/zh/tasks.json';
+import zhWorkflow from './locales/zh/workflow.json';
 
 // JA
 import jaCommon from './locales/ja/common.json';
@@ -76,6 +78,7 @@ const resources = {
         subscriptions: enSubscriptions,
         home: enHome,
         tasks: enTasks,
+        workflow: enWorkflow,
     },
     zh: {
         common: zhCommon,
@@ -92,6 +95,7 @@ const resources = {
         subscriptions: zhSubscriptions,
         home: zhHome,
         tasks: zhTasks,
+        workflow: zhWorkflow,
     },
     ja: {
         common: jaCommon,
@@ -119,7 +123,7 @@ i18n
         fallbackLng: 'en',
         supportedLngs: [...SUPPORTED_LANGUAGE_CODES],
         defaultNS: 'common',
-        ns: ['common', 'settings', 'dashboard', 'chat', 'channels', 'agents', 'skills', 'cron', 'setup', 'auth', 'sprite', 'subscriptions', 'home', 'tasks'],
+        ns: ['common', 'settings', 'dashboard', 'chat', 'channels', 'agents', 'skills', 'cron', 'setup', 'auth', 'sprite', 'subscriptions', 'home', 'tasks', 'workflow'],
         interpolation: {
             escapeValue: false, // React already escapes
         },
