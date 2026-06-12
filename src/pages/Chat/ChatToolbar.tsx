@@ -52,6 +52,7 @@ export function ChatToolbar() {
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessions = useChatStore((s) => s.sessions);
   const loadSessions = useChatStore((s) => s.loadSessions);
+  const refresh = useChatStore((s) => s.refresh);
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
@@ -129,7 +130,11 @@ export function ChatToolbar() {
     setSelectedModelId(modelId);
     setModelSaving(true);
     try {
-      await hostApiFetch('/api/sessions/model', {
+      const result = await hostApiFetch<{
+        model?: string;
+        modelOverride?: string | null;
+        changedModel?: boolean;
+      }>('/api/sessions/model', {
         method: 'POST',
         body: JSON.stringify({
           sessionKey: currentSessionKey,
@@ -139,6 +144,14 @@ export function ChatToolbar() {
           engineType: currentSession?.engineType,
         }),
       });
+      const persistedModel = (result.modelOverride || result.model || modelId).trim();
+      useChatStore.setState((state) => ({
+        sessions: state.sessions.map((session) => (
+          session.key === currentSessionKey
+            ? { ...session, model: persistedModel || modelId }
+            : session
+        )),
+      }));
       void loadSessions();
     } catch (err) {
       toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));

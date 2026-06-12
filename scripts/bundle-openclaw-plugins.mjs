@@ -448,10 +448,37 @@ function patchPluginId(pluginDir, expectedId) {
   }
 }
 
+function syncSharedPluginModules() {
+  const sharedFiles = [
+    'dingtalk-mention.ts',
+    'dingtalk-disclaimer.ts',
+    'dws-send-text.ts',
+    'dingtalk-file-send.ts',
+    'dingtalk-mention-context.ts',
+  ];
+  const pluginTargets = [
+    path.join(STO_PLUGIN_ROOT, 'sto-dingtalk-send-guard', 'shared'),
+  ];
+
+  for (const destDir of pluginTargets) {
+    fs.mkdirSync(destDir, { recursive: true });
+    for (const file of sharedFiles) {
+      const src = path.join(ROOT, 'shared', file);
+      const dest = path.join(destDir, file);
+      if (!fs.existsSync(src)) {
+        throw new Error(`Missing shared module: ${src}`);
+      }
+      fs.copyFileSync(src, dest);
+    }
+    echo`Synced ${sharedFiles.length} shared modules → ${path.relative(ROOT, destDir)}`;
+  }
+}
+
 echo`📦 Bundling OpenClaw plugin mirrors...`;
 
-// Sync shared dingtalk modules into local plugins before hashing / copying
-await $`zx ${path.join(ROOT, 'scripts', 'sync-plugin-shared.mjs')}`.quiet();
+// Sync shared dingtalk modules into local plugins before hashing / copying.
+// Keep this in-process so Windows + WSL shell differences do not break packaging.
+syncSharedPluginModules();
 
 // Check cache first
 const cacheKey = calculatePluginsHash();

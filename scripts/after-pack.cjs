@@ -87,6 +87,24 @@ function validateBundledClaudeSdk(resourcesDir, platform, arch) {
   console.log(`[after-pack] ✅ Claude SDK binary present: ${candidate}`);
 }
 
+function ensureAppRuntimePackages(resourcesDir, packageNames) {
+  const projectNodeModules = join(__dirname, '..', 'node_modules');
+  const packagedNodeModules = join(resourcesDir, 'node_modules');
+  mkdirSync(packagedNodeModules, { recursive: true });
+
+  for (const packageName of packageNames) {
+    const src = join(projectNodeModules, ...packageName.split('/'));
+    const dest = join(packagedNodeModules, ...packageName.split('/'));
+    if (!existsSync(src)) {
+      throw new Error(`[after-pack] Required app runtime package missing in source node_modules: ${src}`);
+    }
+    if (existsSync(dest)) continue;
+    mkdirSync(dirname(dest), { recursive: true });
+    cpSync(src, dest, { recursive: true, dereference: true });
+    console.log(`[after-pack] ✅ Added app runtime package: ${packageName}`);
+  }
+}
+
 function normWin(p) {
   if (process.platform !== 'win32') return p;
   if (p.startsWith('\\\\?\\')) return p;
@@ -1088,5 +1106,15 @@ exports.default = async function afterPack(context) {
     rmSync(pluginsDestRoot, { recursive: true, force: true });
   }
 
+  ensureAppRuntimePackages(resourcesDir, [
+    'ajv',
+    'ajv-formats',
+    'fast-deep-equal',
+    'fast-json-stable-stringify',
+    'fast-uri',
+    'json-schema-traverse',
+    'require-from-string',
+    'uri-js',
+  ]);
   validateBundledClaudeSdk(resourcesDir, platform, arch);
 };

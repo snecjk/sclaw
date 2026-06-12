@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { syncClaudeSkillsForAgent } from '../services/claude-skill-bridge';
@@ -32,6 +33,23 @@ let claudeConfigEnvQueue: Promise<void> = Promise.resolve();
 
 function getClaudeConfigDir(): string {
   return join(getClawXConfigDir(), '.claude');
+}
+
+function getBundledClaudeExecutablePath(): string | undefined {
+  if (!process.resourcesPath) return undefined;
+
+  const binaryName = process.platform === 'win32' ? 'claude.exe' : 'claude';
+  const packageName = `claude-agent-sdk-${process.platform}-${process.arch}`;
+  const candidate = join(
+    process.resourcesPath,
+    'app.asar.unpacked',
+    'node_modules',
+    '@anthropic-ai',
+    packageName,
+    binaryName,
+  );
+
+  return existsSync(candidate) ? candidate : undefined;
 }
 
 async function buildClaudeEnvForAccount(accountId?: string): Promise<NodeJS.ProcessEnv> {
@@ -513,6 +531,7 @@ async function startClaudeQuery(
 
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();
+    const pathToClaudeCodeExecutable = getBundledClaudeExecutablePath();
     await sanitizeClaudeSettingsEnv();
     const query = sdk.query({
       prompt: message,
@@ -527,6 +546,7 @@ async function startClaudeQuery(
           skills: 'all',
           settings: launchSelection.model ? { model: launchSelection.model } : undefined,
           additionalDirectories: options?.additionalDirectories,
+          pathToClaudeCodeExecutable,
         }
         : {
           cwd,
@@ -538,6 +558,7 @@ async function startClaudeQuery(
           skills: 'all',
           settings: launchSelection.model ? { model: launchSelection.model } : undefined,
           additionalDirectories: options?.additionalDirectories,
+          pathToClaudeCodeExecutable,
         },
     });
 
@@ -617,6 +638,7 @@ export const claudeAdapter: EngineAdapter = {
         label: entry.title,
         displayName: entry.title,
         updatedAt: entry.updatedAt,
+        model: entry.model,
         engineType: 'claude',
       });
     }

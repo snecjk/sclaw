@@ -183,12 +183,43 @@ export function ProvidersSettings() {
     validateAccountApiKey,
   } = useProviderStore();
 
-  const hasStoProvider = accounts.some((a) => a.vendorId === 'sto');
+  const hasStoProvider =
+    accounts.some((a) => a.vendorId === 'sto')
+    || statuses.some((status) => status.type === 'sto' || status.id === 'sto');
 
   const handleRetryStoSync = async () => {
     try {
-      await hostApiFetch('/api/sto-model-sync', { method: 'POST' });
+      const result = await hostApiFetch<{
+        success: boolean;
+        error?: string;
+      }>('/api/sto-model-sync', { method: 'POST' });
       await refreshProviderSnapshot();
+      if (result?.error) {
+        if (result.error === 'empty-model-list') {
+          toast.error('获取 STO 模型失败', {
+            description: '远程模型列表为空，请检查网络连接或稍后手动重试',
+          });
+          return;
+        }
+
+        if (result.error.startsWith('fetch-failed')) {
+          toast.error('模型列表同步失败', {
+            description: '无法获取远程模型列表，请检查网络连接后刷新重试',
+          });
+          return;
+        }
+
+        if (result.error === 'no-token') {
+          toast.error('同步失败', {
+            description: '当前登录状态已失效，请重新登录后再试',
+          });
+          return;
+        }
+
+        toast.error('同步失败', { description: result.error });
+        return;
+      }
+
       toast.success('STO 模型同步成功');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
