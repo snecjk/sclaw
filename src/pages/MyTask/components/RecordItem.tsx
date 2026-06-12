@@ -42,7 +42,7 @@ export function RecordItem({ record, onViewDetail }: RecordItemProps) {
           </span>
         </div>
         <div className="mt-[3px] text-[12.5px] text-[#6b7280]">
-          {record.startTime} · {record.status === 'running' ? `已运行 ${record.duration}` : record.status === 'failed' ? `失败${record.failReason ? ` · ${record.failReason}` : ''}` : `耗时 ${record.duration}`}
+          {record.startTime} · {record.status === 'running' ? '进行中' : record.status === 'failed' ? `失败${record.failReason ? ` · ${record.failReason}` : ''}` : `耗时 ${record.duration}`}
         </div>
       </div>
 

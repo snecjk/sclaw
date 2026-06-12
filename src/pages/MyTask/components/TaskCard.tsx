@@ -5,7 +5,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { Clock, Play, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Clock, Play, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { parseScheduleToLabel } from '@/lib/schedule-label';
 import type { TaskViewModel } from '../types';
@@ -23,8 +23,8 @@ interface TaskCardProps {
   onEdit?: (task: TaskCardData) => void;
   /** 删除任务回调 */
   onDelete?: (task: TaskCardData) => void;
-  /** 立即运行回调 */
-  onRun?: (task: TaskCardData) => void;
+  /** 立即运行回调（返回 Promise 以驱动 loading） */
+  onRun?: (task: TaskCardData) => Promise<void> | void;
   /** 开关切换回调 */
   onToggle?: (enabled: boolean) => void;
   /** 点击卡片回调（编辑） */
@@ -33,6 +33,7 @@ interface TaskCardProps {
 
 export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: TaskCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [running, setRunning] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // 点击外部关闭菜单
@@ -79,7 +80,7 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
             title="编辑任务"
           >
             {task.name}
-          </button>
+          </button> 
           {task.workflowName && (
             <span className="inline-flex items-center gap-[4px] ml-[6px] px-[7px] py-[1px] rounded-full text-[11px] font-medium leading-[1.55] text-[#4f46a8] bg-[#eeedfe] border border-[#dcd9f7] whitespace-nowrap">
               {task.workflowName}
@@ -123,14 +124,28 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
         <div className="inline-flex items-center gap-1 shrink-0">
           <button
             type="button"
-            onClick={(e) => {
+            disabled={running}
+            onClick={async (e) => {
               e.stopPropagation();
-              onRun?.(task);
+              if (running) return;
+              setRunning(true);
+              try {
+                await onRun?.(task);
+              } finally {
+                setRunning(false);
+              }
             }}
-            className="inline-flex items-center justify-center min-h-[28px] px-2.5 border-none rounded-lg bg-[#f0f1f3] font-inherit text-xs font-medium text-foreground cursor-pointer transition-colors hover:bg-[#e6e8ec]"
+            className={cn(
+              'inline-flex items-center justify-center min-h-[28px] px-2.5 border-none rounded-lg bg-[#f0f1f3] font-inherit text-xs font-medium text-foreground cursor-pointer transition-colors hover:bg-[#e6e8ec]',
+              running && 'opacity-60 cursor-not-allowed',
+            )}
           >
-            <Play className="h-3 w-3 mr-1" />
-            立即运行
+            {running ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            ) : (
+              <Play className="h-3 w-3 mr-1" />
+            )}
+            {running ? '运行中…' : '立即运行'}
           </button>
           <div className="relative" ref={menuRef} data-menu>
             <button

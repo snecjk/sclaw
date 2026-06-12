@@ -78,6 +78,7 @@ export async function handleScheduledTaskRoutes(
         dingdingGroupName?: string;
         dialogSessionKey?: string;
         openclawGatewayUrl?: string;
+        workflowCode?: string;
       }>(req);
       const service = getScheduledTaskService();
       const task = await service.createTask(input);
@@ -117,6 +118,7 @@ export async function handleScheduledTaskRoutes(
         dingdingId?: string;
         dingdingGroupId?: string;
         dingdingGroupName?: string;
+        workflowCode?: string;
       }>(req);
       const service = getScheduledTaskService();
       const task = await service.updateTask({ taskId: id, ...input });
@@ -194,9 +196,15 @@ export async function handleScheduledTaskRoutes(
       return true;
     }
     try {
-      const service = getScheduledTaskService();
-      const result = await service.triggerTask(id);
+      const parsed = await parseJsonBody(req).catch(() => ({})) as Record<string, unknown>;
+      const extraInfo = (parsed.extraInfo && typeof parsed.extraInfo === 'object')
+        ? parsed.extraInfo as Record<string, unknown>
+        : undefined;
 
+      const service = getScheduledTaskService();
+      const result = await service.triggerTask(id, extraInfo);
+
+			console.log('[ScheduledTasks] Trigger result: =====>', result, id, extraInfo);
       // Start high-frequency poll for this task to catch async completion
       try {
         const { getScheduledTaskResultPoller } = await import('../../services/scheduled-task-result-poller');

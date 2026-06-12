@@ -41,6 +41,7 @@ export interface ExecutionRecord {
 export interface ExecutionRecordQuery {
   taskId?: number;
   status?: RecordStatus;
+  taskName?: string;
   page?: number;
   pageSize?: number;
 }
@@ -49,6 +50,8 @@ export interface ExecutionRecordQuery {
 export interface ExecutionRecordPage {
   items: ExecutionRecord[];
   total: number;
+  page?: number;
+  pageSize?: number;
 }
 
 /** 任务视图模型（扩展 ScheduledTask 以适配卡片展示） */
@@ -64,8 +67,10 @@ export interface TaskViewModel {
   cronExpr: string;
   /** 是否启用 */
   enabled: boolean;
-  /** 非空时显示"工作流任务"标签 */
+  /** 非空时显示“工作流任务”标签 */
   workflowName?: string;
+  /** 关联工作流 code */
+  workflowCode?: string;
   /** 创建时间 */
   createdAt: string;
   /** 更新时间 */

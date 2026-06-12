@@ -35,6 +35,7 @@ export interface ScheduledTask {
   ossObjectKey: string | null;
   dialogSessionKey: string | null;
   openclawGatewayUrl: string | null;
+  workflowCode: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -52,6 +53,7 @@ export interface ScheduledTaskCreateInput {
   dingdingGroupName?: string;
   dialogSessionKey?: string;
   openclawGatewayUrl?: string;
+  workflowCode?: string;
 }
 
 export interface ScheduledTaskUpdateInput {
@@ -64,6 +66,7 @@ export interface ScheduledTaskUpdateInput {
   dingdingId?: string;
   dingdingGroupId?: string;
   dingdingGroupName?: string;
+  workflowCode?: string;
 }
 
 export interface ScheduledTaskRun {
@@ -117,6 +120,7 @@ function mapTask(data: Record<string, unknown>): ScheduledTask {
     ossObjectKey: t.ossObjectKey != null ? String(t.ossObjectKey) : null,
     dialogSessionKey: t.dialogSessionKey != null ? String(t.dialogSessionKey) : null,
     openclawGatewayUrl: t.openclawGatewayUrl != null ? String(t.openclawGatewayUrl) : null,
+    workflowCode: t.workflowCode != null ? String(t.workflowCode) : null,
     createdAt: String(t.createdAt || ''),
     updatedAt: String(t.updatedAt || ''),
   };
@@ -240,6 +244,7 @@ export class ScheduledTaskService {
       ...(input.dingdingGroupName ? { dingding_group_name: input.dingdingGroupName } : {}),
       ...(input.dialogSessionKey ? { dialog_session_key: input.dialogSessionKey } : {}),
       ...(input.openclawGatewayUrl ? { openclaw_gateway_url: input.openclawGatewayUrl } : {}),
+      ...(input.workflowCode ? { work_flow_code: input.workflowCode } : {}),
       ...(robotCode ? { robot_code: robotCode } : {}),
     };
 
@@ -283,6 +288,7 @@ export class ScheduledTaskService {
     if (input.dingdingGroupId !== undefined) body.dingding_group_id = input.dingdingGroupId;
     if (input.dingdingGroupName !== undefined) body.dingding_group_name = input.dingdingGroupName;
     if (input.enabled !== undefined) body.enabled = input.enabled;
+    if (input.workflowCode !== undefined) body.work_flow_code = input.workflowCode;
     if (robotCode !== undefined) body.robot_code = robotCode;
 
     const bodyJson = JSON.stringify(body);
@@ -417,17 +423,22 @@ export class ScheduledTaskService {
   // -----------------------------------------------------------------------
   // Trigger
   // -----------------------------------------------------------------------
-  async triggerTask(taskId: number): Promise<ScheduledTaskTriggerResponse> {
+  async triggerTask(taskId: number, extraInfo?: Record<string, unknown>): Promise<ScheduledTaskTriggerResponse> {
     const baseUrl = await this.resolveBaseUrl();
     const headers = await this.buildHeaders();
     const url = `${baseUrl}/trigger`;
     logger.info(`[ScheduledTaskService] >>> triggerTask url=${url} taskId=${taskId}`);
     logger.info(`[ScheduledTaskService] >>> triggerTask headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
-    const body = JSON.stringify({ task_id: taskId });
+    const reqBody: Record<string, unknown> = { task_id: taskId };
+    if (extraInfo !== undefined) {
+      reqBody.extra_info = extraInfo;
+    }
+    const body = JSON.stringify(reqBody);
     const curlCmd = `curl -X POST "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}" -d '${body}'`;
     logger.info(`[ScheduledTaskService] >>> triggerTask curl=${curlCmd}`);
 
     const controller = new AbortController();
+		// TODO trigger 任务 5s 超时，所以返回了 async_started
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     let res: Response;

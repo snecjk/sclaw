@@ -12,21 +12,30 @@ import type {
   ScheduledTaskTriggerResponse,
 } from '@/types/scheduled-task';
 
+export interface WorkflowOption {
+  value: string;
+  label: string;
+  description?: string;
+}
+
 interface ScheduledTasksState {
   tasks: ScheduledTask[];
+  workflowOptions: WorkflowOption[];
   loading: boolean;
   error: string | null;
 
   fetchTasks: () => Promise<void>;
+  fetchWorkflows: () => Promise<void>;
   createTask: (input: ScheduledTaskCreateInput) => Promise<ScheduledTask>;
   updateTask: (input: ScheduledTaskUpdateInput) => Promise<void>;
   deleteTask: (taskId: number) => Promise<void>;
   toggleTask: (taskId: number, enabled: boolean) => Promise<void>;
-  triggerTask: (taskId: number) => Promise<ScheduledTaskTriggerResponse>;
+  triggerTask: (taskId: number, extraInfo?: Record<string, unknown>) => Promise<ScheduledTaskTriggerResponse>;
 }
 
 export const useScheduledTasksStore = create<ScheduledTasksState>((set) => ({
   tasks: [],
+  workflowOptions: [],
   loading: false,
   error: null,
 
@@ -39,6 +48,24 @@ export const useScheduledTasksStore = create<ScheduledTasksState>((set) => ({
       const message = String(err);
       set({ error: message, loading: false });
       throw err;
+    }
+  },
+
+  fetchWorkflows: async () => {
+    try {
+      const res = await hostApiFetch<{ success: boolean; data: Array<{ id: string; name: string; description?: string }> }>(
+        '/api/my-tasks/workflows/page',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ page: 1, pageSize: 100 }),
+        },
+      );
+      const items = (res?.data ?? []).map((w) => ({ value: w.id, label: w.name, description: w.description ?? '' }));
+      set({ workflowOptions: items });
+    } catch (err) {
+      console.error('[scheduledTasks] fetchWorkflows failed:', err);
+      set({ workflowOptions: [] });
     }
   },
 
@@ -61,6 +88,7 @@ export const useScheduledTasksStore = create<ScheduledTasksState>((set) => ({
     if (input.dingdingGroupId !== undefined) body.dingdingGroupId = input.dingdingGroupId;
     if (input.dingdingGroupName !== undefined) body.dingdingGroupName = input.dingdingGroupName;
     if (input.enabled !== undefined) body.enabled = input.enabled;
+    if (input.workflowCode !== undefined) body.workflowCode = input.workflowCode;
 
     const updated = await hostApiFetch<ScheduledTask>(`/api/scheduled-tasks/${input.taskId}`, {
       method: 'PUT',
@@ -90,10 +118,17 @@ export const useScheduledTasksStore = create<ScheduledTasksState>((set) => ({
     }));
   },
 
-  triggerTask: async (taskId) => {
+  triggerTask: async (taskId, extraInfo) => {
+    const body: Record<string, unknown> = {};
+    if (extraInfo !== undefined) {
+      body.extraInfo = extraInfo;
+    }
     const result = await hostApiFetch<ScheduledTaskTriggerResponse>(
       `/api/scheduled-tasks/${taskId}/trigger`,
-      { method: 'POST' },
+      {
+        method: 'POST',
+        ...(Object.keys(body).length > 0 ? { body: JSON.stringify(body) } : {}),
+      },
     );
     console.log('Scheduled task trigger result:', result);
     return result;

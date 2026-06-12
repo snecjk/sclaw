@@ -3,6 +3,7 @@ import { X, Loader2, ChevronDown, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
 import { DingTalkRecipientField } from '@/components/dingtalk/DingTalkRecipientField';
+import { useScheduledTasksStore } from '@/stores/scheduledTasks';
 import { cn } from '@/lib/utils';
 import type { CronJob, CronJobCreateInput } from '@/types/cron';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
@@ -84,7 +85,7 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState<string>('');
   const workflowRef = useRef<HTMLDivElement>(null);
-  const WORKFLOW_OPTIONS: { value: string; label: string }[] = [];
+  const workflowOptions = useScheduledTasksStore((s) => s.workflowOptions);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -107,14 +108,17 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
         setName(job.name || '');
         setInstructions(job.message || '');
         setSchedule(cronToScheduleValue(job.schedule));
+        setSelectedWorkflow(job.workflowCode || '');
       } else if (initialValues) {
         setName(initialValues.name || '');
         setInstructions(initialValues.message || '');
         setSchedule(initialValues.schedule ? cronToScheduleValue(initialValues.schedule) : defaultScheduleValue());
+        setSelectedWorkflow('');
       } else {
         setName('');
         setInstructions('');
         setSchedule(defaultScheduleValue());
+        setSelectedWorkflow('');
       }
       setRecipients([]);
       setErrors({});
@@ -140,6 +144,7 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
         schedule: scheduleValueToCron(schedule),
         enabled: true,
         dingTalkMentions: recipients.length > 0 ? recipients : undefined,
+        workflowCode: selectedWorkflow || undefined,
       });
       onClose();
     } catch (err) {
@@ -220,23 +225,23 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
                 )}
               >
                 <span className={cn("truncate", !selectedWorkflow && "text-muted-foreground font-normal")}>
-                  {selectedWorkflow ? WORKFLOW_OPTIONS.find(o => o.value === selectedWorkflow)?.label : '请选择'}
+                  {selectedWorkflow ? workflowOptions.find(o => o.value === selectedWorkflow)?.label : '请选择'}
                 </span>
                 <ChevronDown className={cn('h-3 w-3 shrink-0 text-muted-foreground transition-transform', workflowOpen && 'rotate-180')} />
               </button>
               {workflowOpen && (
                 <div className="absolute top-[calc(100%+6px)] left-0 z-20 w-full min-w-[140px]">
                   <div className="flex flex-col gap-0.5 max-h-[280px] p-1.5 overflow-y-auto border border-border rounded-xl bg-background shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
-                    {WORKFLOW_OPTIONS.length === 0 && (
+                    {workflowOptions.length === 0 && (
                       <div className="px-2.5 py-3 text-sm text-muted-foreground text-center">暂无可用工作流</div>
                     )}
-                    {WORKFLOW_OPTIONS.map((opt) => {
+                    {workflowOptions.map((opt) => {
                       const isSelected = selectedWorkflow === opt.value;
                       return (
                         <button
                           key={opt.value}
                           type="button"
-                          onClick={() => { setSelectedWorkflow(opt.value); setWorkflowOpen(false); }}
+                          onClick={() => { setSelectedWorkflow(opt.value); setWorkflowOpen(false); if (opt.description) { setInstructions(opt.description); if (errors.instructions) setErrors(p => ({ ...p, instructions: undefined })); } }}
                           className={cn(
                             'flex items-center justify-between gap-2 w-full min-h-9 px-2.5 py-2 rounded-lg text-sm transition-colors',
                             isSelected ? 'font-semibold' : 'text-foreground'

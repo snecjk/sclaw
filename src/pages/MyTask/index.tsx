@@ -20,7 +20,7 @@ import {
   type TaskCreateInputWithRun,
 } from './components/TaskCreateModal';
 
-import { useMyTaskStore, selectRecordCounts, selectCurrentRecords } from './store';
+import { useMyTaskStore, selectCurrentRecords } from './store';
 import type { TaskView, TaskViewModel, ExecutionRecord, RecommendTask } from './types';
 import type { CronJob } from '@/types/cron';
 
@@ -29,14 +29,16 @@ import { TaskToolbar } from './components/TaskToolbar';
 import { RecordToolbar } from './components/RecordToolbar';
 import { TaskCard } from './components/TaskCard';
 import { TaskEmptyState } from './components/TaskEmptyState';
-import { RecordStatusNav } from './components/RecordStatusNav';
 import { RecordItem } from './components/RecordItem';
 import { RecordDetailModal } from './components/RecordDetailModal';
 
 // ──── 工具函数 ────
 
 /** 将 ScheduledTask 转换为页面 TaskViewModel */
-function toViewModel(task: import('@/types/scheduled-task').ScheduledTask): TaskViewModel {
+function toViewModel(
+  task: import('@/types/scheduled-task').ScheduledTask,
+  workflowMap: Map<string, string>,
+): TaskViewModel {
   return {
     id: String(task.id),
     taskId: task.id,
@@ -44,7 +46,8 @@ function toViewModel(task: import('@/types/scheduled-task').ScheduledTask): Task
     description: task.description || '',
     cronExpr: task.cronExpr,
     enabled: task.enabled,
-    workflowName: task.taskType === 'workflow' ? task.name : undefined,
+    workflowName: task.workflowCode ? workflowMap.get(task.workflowCode) : undefined,
+    workflowCode: task.workflowCode || undefined,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
   };
@@ -80,8 +83,10 @@ export default function MyTask() {
   // ── 定时任务 Store ──
   const {
     tasks,
+    workflowOptions,
     loading: tasksLoading,
     fetchTasks,
+    fetchWorkflows,
     createTask,
     updateTask,
     deleteTask,
@@ -92,16 +97,13 @@ export default function MyTask() {
   // ── 执行记录 Store ──
   const {
     recordsLoading,
-    recordStatus,
     recordType,
     recordSearch,
     fetchRecords,
-    setRecordStatus,
     setRecordType,
     setRecordSearch,
   } = useMyTaskStore();
 
-  const recordCounts = useMyTaskStore(useShallow(selectRecordCounts));
   const currentRecords = useMyTaskStore(useShallow(selectCurrentRecords));
 
   // ── 页面级状态 ──
@@ -119,12 +121,22 @@ export default function MyTask() {
   // ── 初始化加载 ──
   useEffect(() => {
     fetchTasks().catch(() => {});
-    fetchRecords();
+    fetchWorkflows().catch(() => {});
+    fetchRecords({});
     useScheduledTaskUnreadStore.getState().markAllRead();
-  }, [fetchTasks, fetchRecords]);
+  }, [fetchTasks, fetchWorkflows, fetchRecords]);
+
+  // ── 工作流 code → name 映射 ──
+  const workflowMap = useMemo(
+    () => new Map(workflowOptions.map((o) => [o.value, o.label])),
+    [workflowOptions],
+  );
 
   // ── 定时任务视图模型 ──
-  const viewModels = useMemo(() => tasks.map(toViewModel), [tasks]);
+  const viewModels = useMemo(
+    () => tasks.map((t) => toViewModel(t, workflowMap)),
+    [tasks, workflowMap],
+  );
 
   const filteredTasks = useMemo(() => {
     let result = viewModels;
@@ -154,7 +166,13 @@ export default function MyTask() {
   const handleTrigger = useCallback(
     async (task: TaskViewModel) => {
       try {
-        const result = await triggerTask(task.taskId);
+        const extraInfo = {
+          task_id: task.taskId,
+          task_name: task.name,
+          workflow_code: task.workflowCode ?? null,
+          workflow_name: task.workflowName ?? null,
+        };
+        const result = await triggerTask(task.taskId, extraInfo);
         if (result.outcome === 'async_started') {
           toast.success('测试运行已在云端开始执行，结果将通过轮询同步');
         } else if (result.hasSession) {
@@ -183,6 +201,7 @@ export default function MyTask() {
             name: input.name,
             cronExpr: input.schedule,
             description: input.message,
+            workflowCode: input.workflowCode,
           });
           toast.success('任务已更新');
         } else {
@@ -190,6 +209,7 @@ export default function MyTask() {
             name: input.name,
             cronExpr: input.schedule,
             description: input.message,
+            workflowCode: input.workflowCode,
           });
           toast.success('任务已创建');
         }
@@ -265,15 +285,6 @@ export default function MyTask() {
             )}
           </div>
 
-          {/* 执行记录状态筛选导航 */}
-          {!isTasksView && (
-            <RecordStatusNav
-              activeStatus={recordStatus}
-              counts={recordCounts}
-              onStatusChange={setRecordStatus}
-            />
-          )}
-
           {/* ── 定时任务视图 ── */}
           {isTasksView && (
             <section aria-label="定时任务" className="flex-1 flex flex-col">
@@ -322,15 +333,15 @@ export default function MyTask() {
                   该状态下暂无执行记录
                 </div>
               ) : (
-                <div className="flex flex-col gap-2.5">
-                  {currentRecords.map((record) => (
-                    <RecordItem
-                      key={record.id}
-                      record={record}
-                      onViewDetail={setDetailRecord}
-                    />
-                  ))}
-                </div>
+                  <div className="flex flex-col gap-2.5">
+                    {currentRecords.map((record) => (
+                      <RecordItem
+                        key={record.id}
+                        record={record}
+                        onViewDetail={setDetailRecord}
+                      />
+                    ))}
+                  </div>
               )}
             </section>
           )}
@@ -341,7 +352,7 @@ export default function MyTask() {
 
       {/* 新建/编辑任务弹窗 */}
       <TaskCreateModal
-        job={editingJob ? { id: editingJob.id, name: editingJob.name, message: editingJob.description, schedule: editingJob.cronExpr, enabled: editingJob.enabled, createdAt: editingJob.createdAt, updatedAt: editingJob.updatedAt } as CronJob : null}
+        job={editingJob ? { id: editingJob.id, name: editingJob.name, message: editingJob.description, schedule: editingJob.cronExpr, enabled: editingJob.enabled, workflowCode: editingJob.workflowCode, createdAt: editingJob.createdAt, updatedAt: editingJob.updatedAt } as CronJob : null}
         open={createOpen}
         onClose={() => {
           setCreateOpen(false);

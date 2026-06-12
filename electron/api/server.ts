@@ -21,6 +21,7 @@ import { handleDingTalkRoutes } from './routes/dingtalk';
 import { handleStoSyncRoutes } from './routes/sto-sync';
 import { handleTokenQuotaRoutes } from './routes/token-quota';
 import { handleSubscriptionRoutes } from './routes/subscriptions';
+import { handleMyTasksRoutes } from './routes/my-tasks';
 import { sendJson } from './route-utils';
 
 type RouteHandler = (
@@ -48,6 +49,7 @@ const routeHandlers: RouteHandler[] = [
   handleCronRoutes,
   handleScheduledTaskRoutes,
   handleDingTalkRoutes,
+  handleMyTasksRoutes,
   handleLogRoutes,
   handleUsageRoutes,
 ];
