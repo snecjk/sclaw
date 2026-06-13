@@ -36,6 +36,7 @@ interface AssistantTurnMessageProps {
   activeStream?: ActiveTurnStream | null;
   onPreviewFile?: (file: AttachedFileMeta) => void;
   onViewWorkflow?: (workflowId: string) => void;
+  onEditMessage?: (text: string) => void;
 }
 
 export const AssistantTurnMessage = memo(function AssistantTurnMessage({
@@ -46,6 +47,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   activeStream = null,
   onPreviewFile,
   onViewWorkflow,
+  onEditMessage,
 }: AssistantTurnMessageProps) {
   const streamSources = useMemo(() => {
     const sources = [...turnMessages];
@@ -53,7 +55,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       sources.push(activeStream.streamMessage);
     }
     return sources;
-  }, [turnMessages, activeStream?.streamMessage]);
+  }, [turnMessages, activeStream]);
 
   const mergedTimeline = useMemo(
     () => (showThinking ? mergeThinkingTimelines(streamSources) : []),
@@ -86,8 +88,6 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     }
     return fromHistory;
   }, [turnMessages, activeStream]);
-
-  const replyHasText = replyMessage ? extractText(replyMessage).trim().length > 0 : false;
 
   const mentionHints = useMemo(() => {
     if (!precedingUserMessage) return [];
@@ -162,6 +162,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
             streamingTools={[]}
             onPreviewFile={onPreviewFile}
             onViewWorkflow={onViewWorkflow}
+            onEditMessage={onEditMessage}
             hideAvatar
             hideThinkingPanel
           />

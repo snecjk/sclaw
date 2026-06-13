@@ -4,7 +4,7 @@
  * with markdown, thinking sections, images, and tool cards.
  */
 import { useState, useCallback, useEffect, useMemo, memo } from 'react';
-import { Sparkles, Copy, Check, ChevronDown, ChevronRight, Wrench, FileText, Film, Music, FileArchive, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, Table2 } from 'lucide-react';
+import { Sparkles, Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, FileText, Film, Music, FileArchive, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, Table2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -39,6 +39,8 @@ import { submitParameterForm } from '@/components/parameter-form/form-handlers';
 import { AtMentionText, highlightAtMentionsInChildren } from '@/lib/at-mention-highlight';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
 
+const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
+
 interface ChatMessageProps {
   message: RawMessage;
   showThinking: boolean;
@@ -53,6 +55,7 @@ interface ChatMessageProps {
   }>;
   onPreviewFile?: (file: AttachedFileMeta) => void;
   onViewWorkflow?: (workflowId: string) => void;
+  onEditMessage?: (text: string) => void;
   /** Used when rendered inside AssistantTurnMessage */
   hideAvatar?: boolean;
   hideThinkingPanel?: boolean;
@@ -74,6 +77,7 @@ export const ChatMessage = memo(function ChatMessage({
   streamingTools = [],
   onPreviewFile,
   onViewWorkflow,
+  onEditMessage,
   hideAvatar = false,
   hideThinkingPanel = false,
 }: ChatMessageProps) {
@@ -460,11 +464,13 @@ export const ChatMessage = memo(function ChatMessage({
           </div>
         )}
 
-        {/* Hover row for user messages — timestamp only */}
-        {isUser && message.timestamp && (
-          <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none">
-            {formatTimestamp(message.timestamp)}
-          </span>
+        {/* Hover row for user messages — timestamp + quick actions */}
+        {isUser && hasText && (
+          <UserHoverBar
+            text={text}
+            timestamp={message.timestamp}
+            onEditMessage={onEditMessage}
+          />
         )}
 
         {/* Hover row for assistant messages — only when there is real text content */}
@@ -534,6 +540,66 @@ function ToolStatusBar({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function UserHoverBar({
+  text,
+  timestamp,
+  onEditMessage,
+}: {
+  text: string;
+  timestamp?: number;
+  onEditMessage?: (text: string) => void;
+}) {
+  const { t } = useTranslation('chat');
+  const [copied, setCopied] = useState(false);
+
+  const copyContent = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch (error) {
+      console.error('[ChatMessage] Failed to copy user message:', error);
+      toast.error(t('messageActions.copyFailed'));
+    }
+  }, [text, t]);
+
+  const editAgain = useCallback(() => {
+    if (onEditMessage) {
+      onEditMessage(text);
+      return;
+    }
+    window.dispatchEvent(new CustomEvent(CHAT_EDIT_DRAFT_EVENT, { detail: { text } }));
+  }, [onEditMessage, text]);
+
+  return (
+    <div className="flex select-none items-center gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+      {timestamp ? (
+        <span className="mr-1 text-xs text-muted-foreground">
+          {formatTimestamp(timestamp)}
+        </span>
+      ) : null}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 rounded-full border border-border bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-foreground dark:bg-background/70 dark:hover:bg-background"
+        onClick={copyContent}
+        title={t('messageActions.copy')}
+      >
+        {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 rounded-full border border-border bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-foreground dark:bg-background/70 dark:hover:bg-background"
+        onClick={editAgain}
+        title={t('messageActions.editAndResend')}
+      >
+        <Pencil className="h-3 w-3" />
+      </Button>
     </div>
   );
 }

@@ -87,6 +87,12 @@
     "sessionList": {
         "mainSessionTitle": "Main chat"
     },
+    "messageActions": {
+        "copy": "Copy",
+        "copyFailed": "Copy failed",
+        "editAndResend": "Edit and send again",
+        "editUnavailable": "Edit and resend is not available on this page"
+    },
     "historyBuckets": {
         "today": "Today",
         "yesterday": "Yesterday",

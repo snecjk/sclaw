@@ -87,6 +87,12 @@
     "sessionList": {
         "mainSessionTitle": "メインチャット"
     },
+    "messageActions": {
+        "copy": "コピー",
+        "copyFailed": "コピーに失敗しました",
+        "editAndResend": "編集して再送信",
+        "editUnavailable": "このページでは編集して再送信を利用できません"
+    },
     "historyBuckets": {
         "today": "今日",
         "yesterday": "昨日",

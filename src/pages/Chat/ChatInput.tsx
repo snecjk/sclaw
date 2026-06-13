@@ -30,6 +30,8 @@ import { mentionSearchItemToMention } from '@/types/dingtalk-mention';
 
 // ── Types ────────────────────────────────────────────────────────
 
+const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
+
 export interface FileAttachment {
   id: string;
   fileName: string;
@@ -67,6 +69,12 @@ interface ChatInputProps {
   variant?: 'default' | 'embedded';
   /** One-time seed into the textarea (e.g. task subitem default prompt). */
   seedText?: string;
+  /** User-message text selected for editing and sending again. */
+  editDraft?: {
+    text: string;
+    version: number;
+  } | null;
+  onEditDraftApplied?: () => void;
   /** Override default composer placeholder (e.g. site home prompt). */
   placeholder?: string;
   /** Merged onto the outer wrapper (after defaults); use to tune padding, e.g. task subitem bottom inset. */
@@ -145,6 +153,8 @@ export function ChatInput({
   statusTone = 'warning',
   variant = 'default',
   seedText,
+  editDraft = null,
+  onEditDraftApplied,
   placeholder,
   className,
 }: ChatInputProps) {
@@ -230,6 +240,38 @@ export function ChatInput({
       mentionEditorRef.current?.focus();
     }
   }, [disabled]);
+
+  const applyEditDraftText = useCallback((rawText: string) => {
+    const text = rawText.trim();
+    if (!text) return;
+    mentionEditorRef.current?.setPlainText(text);
+    mentionEditorRef.current?.focus();
+    setAttachments([]);
+    setTargetAgentId(null);
+    setPickerOpen(false);
+    setWorkflowPickerOpen(false);
+    setMentionTrigger(null);
+    closeDingTalkMention();
+  }, [closeDingTalkMention]);
+
+  useEffect(() => {
+    if (!editDraft) return;
+    applyEditDraftText(editDraft.text);
+    onEditDraftApplied?.();
+  }, [applyEditDraftText, editDraft, onEditDraftApplied]);
+
+  useEffect(() => {
+    const handleEditDraftEvent = (event: Event) => {
+      const detail = (event as CustomEvent<{ text?: unknown }>).detail;
+      if (typeof detail?.text !== 'string') return;
+      applyEditDraftText(detail.text);
+    };
+
+    window.addEventListener(CHAT_EDIT_DRAFT_EVENT, handleEditDraftEvent);
+    return () => {
+      window.removeEventListener(CHAT_EDIT_DRAFT_EVENT, handleEditDraftEvent);
+    };
+  }, [applyEditDraftText]);
 
   useEffect(() => {
     if (!targetAgentId) return;

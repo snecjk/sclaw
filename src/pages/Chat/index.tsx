@@ -66,6 +66,7 @@ export function Chat() {
   const [splitting, setSplitting] = useState(false);
   const [previewPanelWidth, setPreviewPanelWidth] = useState(480);
   const [isResizing, setIsResizing] = useState(false);
+  const [editDraft, setEditDraft] = useState<{ text: string; version: number } | null>(null);
   const previewPanelRef = useRef<HTMLDivElement>(null);
   const minLoading = useMinLoading(loading && messages.length > 0);
   const { contentRef, scrollRef, scrollToBottom, stopScroll } = useStickToBottomInstant(currentSessionKey);
@@ -232,6 +233,16 @@ export function Chat() {
     useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, dingTalkMentions, workflowId);
   }, []);
 
+  const handleEditMessage = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setEditDraft({ text: trimmed, version: Date.now() });
+  }, []);
+
+  const handleEditDraftApplied = useCallback(() => {
+    setEditDraft(null);
+  }, []);
+
   // ── Resizable panel logic ──
   // Use a full-screen overlay during drag so mouse events are never lost,
   // even when moving quickly outside the resizer or the page container.
@@ -367,6 +378,7 @@ export function Chat() {
                       showThinking={showThinking}
                       onPreviewFile={openArtifactPreview}
                       onViewWorkflow={openWorkflowPreview}
+                      onEditMessage={handleEditMessage}
                     />
                   );
                 }
@@ -377,6 +389,7 @@ export function Chat() {
                     showThinking={showThinking}
                     onPreviewFile={openArtifactPreview}
                     onViewWorkflow={openWorkflowPreview}
+                    onEditMessage={handleEditMessage}
                   />
                 );
               })}
@@ -391,6 +404,7 @@ export function Chat() {
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={openArtifactPreview}
                   onViewWorkflow={openWorkflowPreview}
+                  onEditMessage={handleEditMessage}
                 />
               ) : null}
             </>
@@ -480,6 +494,8 @@ export function Chat() {
         engineType={currentEngineType}
         statusText={composerStatusText}
         statusTone={composerStatusTone}
+        editDraft={editDraft}
+        onEditDraftApplied={handleEditDraftApplied}
       />
 
       {/* Transparent loading overlay */}

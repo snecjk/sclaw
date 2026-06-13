@@ -87,6 +87,12 @@
     "sessionList": {
         "mainSessionTitle": "主会话"
     },
+    "messageActions": {
+        "copy": "复制",
+        "copyFailed": "复制失败",
+        "editAndResend": "编辑再次发送",
+        "editUnavailable": "当前页面暂不支持编辑再次发送"
+    },
     "historyBuckets": {
         "today": "今天",
         "yesterday": "昨天",
