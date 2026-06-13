@@ -7,7 +7,6 @@ import {
   Puzzle,
   Clock,
   Settings as SettingsIcon,
-  Plus,
   Trash2,
   LogOut,
   ChevronLeft,
@@ -18,7 +17,7 @@ import {
   Moon,
   Monitor,
   Bookmark,
-  Home,
+  MessageSquarePlus,
   BarChart3,
   Bot,
   Radio,
@@ -550,7 +549,6 @@ export function Sidebar() {
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const switchSession = useChatStore((s) => s.switchSession);
-  const newSession = useChatStore((s) => s.newSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
   const renameSession = useChatStore((s) => s.renameSession);
   const loadSessions = useChatStore((s) => s.loadSessions);
@@ -595,7 +593,7 @@ export function Sidebar() {
       await loadSessions();
       if (cancelled) return;
 
-      // 首页只需要会话列表用于侧边栏展示，不需要在启动时尝试恢复当前历史，
+      // 主页路径只需要会话列表用于侧边栏展示，不需要在启动时尝试恢复当前历史，
       // 否则会把默认 main 会话继续绑定到 OpenClaw 启动态。
       if (window.location.pathname === '/') {
         const state = useChatStore.getState();
@@ -759,15 +757,6 @@ export function Sidebar() {
     setBucketOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleStartNewChat = useCallback(() => {
-    navigateToMainChatHome(navigate, location.pathname, () => {
-      const { messages, currentSessionKey: activeSessionKey } = useChatStore.getState();
-      if (messages.length > 0 || activeSessionKey !== DEFAULT_SESSION_KEY) {
-        newSession();
-      }
-    });
-  }, [location.pathname, navigate, newSession]);
-
   const primaryNav = useMemo(() => {
     const all: Array<{
       to: string;
@@ -776,7 +765,7 @@ export function Sidebar() {
       label: string;
       badge?: ReactNode;
     }> = [
-      { to: '/', end: true, icon: <Home className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.home') },
+      { to: '/', end: true, icon: <MessageSquarePlus className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.newChat') },
       { to: '/scheduled-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: `${t('common:sidebar.cronTasks')}（云）` },
       { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
       { to: '/skills', icon: <Puzzle className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
@@ -845,15 +834,15 @@ export function Sidebar() {
           sidebarCollapsed ? 'px-0' : 'px-2',
         )}
       >
-        {/* 固定区：首页、定时任务、技能广场、工作区等 */}
+        {/* 固定区：新对话、定时任务、技能广场、工作区等 */}
         <div className="flex shrink-0 flex-col gap-1">
         <div className={cn('flex flex-col gap-1', sidebarCollapsed && 'mt-2')}>
 {primaryNav.map((item) => {
-  // 当有选中非默认会话时，首页不高亮，避免与会话列表项同时高亮
+  // 当有选中非默认会话时，新对话入口不高亮，避免与会话列表项同时高亮
   const shouldDimHome = currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY;
   const homeIsActiveOverride = item.to === '/' && shouldDimHome ? false : undefined;
   
-  // 点击首页时，切换到默认会话并清空消息，让首页显示初始内容
+  // 点击新对话时，切换到默认会话并清空消息，让页面显示初始内容
   const handleHomeClick = item.to === '/'
     ? () => {
         const { messages, currentSessionKey: currKey, loading } = useChatStore.getState();
@@ -955,61 +944,11 @@ export function Sidebar() {
           </div>
         ) : null}
 
-        {!sidebarCollapsed ? (
-          <div className="mt-4 flex items-center justify-between gap-2 px-2">
-            <p className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
-              {t('common:sidebar.sessionList')}
-            </p>
-            <Tooltip delayDuration={200}>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={t('common:sidebar.newChat')}
-                  title={t('common:sidebar.newChat')}
-                  onClick={handleStartNewChat}
-                  className={cn(
-                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-transparent text-muted-foreground transition-colors',
-                    'hover:border-[rgba(255,111,0,0.28)] hover:bg-[var(--sto-accent-soft)] hover:text-[var(--sto-accent)]',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  )}
-                >
-                  <Plus className="h-4 w-4" strokeWidth={2.2} aria-hidden />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right" sideOffset={8} className={SIDEBAR_COLLAPSED_TOOLTIP_SURFACE}>
-                {t('common:sidebar.newChat')}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        ) : (
-          <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
-        )}
-
         {sidebarCollapsed ? (
-          <Tooltip delayDuration={200}>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label={t('common:sidebar.newChat')}
-                title={t('common:sidebar.newChat')}
-                onClick={handleStartNewChat}
-                className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card"
-              >
-                <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent
-              side="right"
-              sideOffset={12}
-              collisionPadding={12}
-              className={SIDEBAR_COLLAPSED_TOOLTIP_SURFACE}
-            >
-              {t('common:sidebar.newChat')}
-            </TooltipContent>
-          </Tooltip>
+          <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
         ) : null}
 
-        <div className="space-y-1 pb-2 pt-1">
+        <div className={cn('space-y-1 pb-2', sidebarCollapsed ? 'pt-1' : 'pt-3')}>
           {sidebarCollapsed && sessionsOrderedForCollapse.length > 0 ? (
             <div className="flex flex-col gap-1">
               {sessionsOrderedForCollapse.map((s) => {
