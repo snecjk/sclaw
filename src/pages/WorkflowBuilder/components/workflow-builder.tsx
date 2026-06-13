@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+/** 工作流编辑器主组件：顶栏 + 侧栏（AI助手/节点库） + 画布 + 各种弹窗/抽屉 */
+import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -6,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { workflowBuilderShell } from '@/lib/surfaces';
-import { AiAssistantPanel } from '@/pages/Workflow/components/ai-assistant-panel';
-import { NodeLibraryPanel } from '@/pages/Workflow/components/node-library-panel';
+import { AiAssistantPanel } from '@/pages/WorkflowBuilder/components/ai-assistant-panel';
+import { NodeLibraryPanel } from '@/pages/WorkflowBuilder/components/node-library-panel';
 import {
   DataTreeModal,
   PublishModal,
@@ -16,17 +17,10 @@ import {
   SkillPickerPopover,
   UnsavedModal,
   VersionDrawer,
-} from '@/pages/Workflow/components/workflow-overlays';
-import { WorkflowCanvas } from '@/pages/Workflow/components/workflow-canvas';
-import { computeInitialLeftX, getUpstreamChain, hasDataSourceConfigured, layoutFlowNodes, layoutNewNodeAtEnd } from '@/pages/Workflow/workflow-layout';
-import { createNodeFromTemplate } from '@/pages/Workflow/node-templates';
-import {
-  MOCK_DATA_TREES,
-  MOCK_FLOW_LINKS,
-  MOCK_FLOW_NODES,
-  MOCK_FLOW_PLAN,
-  MOCK_SKILLS,
-} from '@/pages/Workflow/mock-data';
+} from '@/pages/WorkflowBuilder/components/workflow-overlays';
+import { WorkflowCanvas } from '@/pages/WorkflowBuilder/components/workflow-canvas';
+import { computeInitialLeftX, getUpstreamChain, hasDataSourceConfigured, layoutFlowNodes, layoutNewNodeAtEnd } from '@/pages/WorkflowBuilder/workflow-layout';
+import { createNodeFromTemplate } from '@/pages/WorkflowBuilder/node-templates';
 import type {
   BuilderEntryMode,
   ChatMessage,
@@ -36,8 +30,9 @@ import type {
   WorkflowField,
   WorkflowLink,
   WorkflowNodeData,
-} from '@/pages/Workflow/types';
+} from '@/pages/WorkflowBuilder/types';
 
+/** 延时辅助，用于试运行逐节点模拟 */
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 interface WorkflowBuilderProps {
@@ -51,10 +46,11 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
   const { t } = useTranslation('workflow');
   const canvasWrapRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** 新节点 id 递增计数器，避免与已有节点冲突 */
   const nxCounter = useRef(10);
 
   const [workflowName, setWorkflowName] = useState(initialName);
-  const [savedLabel, setSavedLabel] = useState('2026-05-02 14:30');
+  const [savedLabel, setSavedLabel] = useState('');
   const [dirty, setDirty] = useState(false);
   const [chatExpanded, setChatExpanded] = useState(entryMode !== 'blank');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -62,7 +58,7 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
   const [links, setLinks] = useState<WorkflowLink[]>([]);
   const [hint, setHint] = useState<'ai' | 'blank' | 'hidden'>(entryMode === 'blank' ? 'blank' : 'ai');
   const [zoom, setZoom] = useState(90);
-  const [showReplay, setShowReplay] = useState(false);
+  const [showReplay] = useState(false);
   const [publishPulse, setPublishPulse] = useState(false);
   const [nodeRunStates, setNodeRunStates] = useState<Record<string, NodeRunState>>({});
   const [flashingNodeId, setFlashingNodeId] = useState<string | null>(null);
@@ -85,86 +81,23 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
   const [skillSearch, setSkillSearch] = useState('');
 
   const [treeOpen, setTreeOpen] = useState(false);
-  const [treeMode, setTreeMode] = useState<'sys' | 'online'>('sys');
+  const [treeMode] = useState<'sys' | 'online'>('sys');
   const [treeSelected, setTreeSelected] = useState<Set<string>>(new Set());
-  const [treeTarget, setTreeTarget] = useState<{ nodeId: string; fieldKey: string } | null>(null);
+  const [treeTarget] = useState<{ nodeId: string; fieldKey: string } | null>(null);
   const [fileTarget, setFileTarget] = useState<{ nodeId: string; fieldKey: string } | null>(null);
 
-  const markDirty = useCallback(() => setDirty(true), []);
+  /** 标记有未保存修改，返回时弹出确认 */
+  const markDirty = () => setDirty(true);
 
-  const layoutAndSet = useCallback((sourceNodes: WorkflowNodeData[], sourceLinks: WorkflowLink[]) => {
-    const wrap = canvasWrapRef.current;
-    const startX = computeInitialLeftX(wrap?.clientWidth ?? 1200, zoom / 100);
-    const laid = layoutFlowNodes(sourceNodes, startX);
-    setNodes(laid);
-    setLinks(sourceLinks);
-    setHint(laid.length > 0 ? 'hidden' : hint);
-  }, [hint, zoom]);
+  /** @mock-blocked: AI 生成流程功能尚未开发完成，不使用 MOCK 流程数据 */
+  const runGenerateSequence = async (_prompt: string) => {
+    // @mock-blocked: AI 生成流程功能尚未开发完成，不使用 MOCK 流程数据
+    toast.info(t('assistant.featureNotReady'));
+    setMessages([{ id: 'not-ready', role: 'assistant', content: t('assistant.featureNotReady') }]);
+    setHint('blank');
+  };
 
-  const runGenerateSequence = useCallback(async (prompt: string) => {
-    setMessages([]);
-    setNodes([]);
-    setLinks([]);
-    setHint('ai');
-    setShowReplay(false);
-    setPublishPulse(false);
-    setHasReport(false);
-
-    const push = (msg: ChatMessage) => setMessages((prev) => [...prev, msg]);
-
-    push({ id: 'm1', role: 'assistant', content: t('assistant.welcome') });
-    await wait(500);
-    push({ id: 'm2', role: 'user', content: prompt });
-    await wait(700);
-    push({ id: 'm3', role: 'assistant', content: t('assistant.thinking') });
-    await wait(1100);
-    setMessages((prev) => prev.map((m) => (m.id === 'm3' ? { ...m, content: t('assistant.planIntro') } : m)));
-    await wait(600);
-    push({ id: 'm4', role: 'plan', planSteps: MOCK_FLOW_PLAN });
-    await wait(500);
-    setHint('hidden');
-
-    const startX = computeInitialLeftX(canvasWrapRef.current?.clientWidth ?? 1200, zoom / 100);
-    const order = ['n1', 'n2', 'n3', 'n4', 'n5', 'n6'];
-    const flowNodes = structuredClone(MOCK_FLOW_NODES);
-    let builtNodes: WorkflowNodeData[] = [];
-    let builtLinks: WorkflowLink[] = [];
-
-    for (const id of order) {
-      const node = flowNodes.find((n) => n.id === id);
-      if (!node) continue;
-      const stepId = `step-${id}`;
-      push({ id: stepId, role: 'step', stepText: t('assistant.addingNode', { name: node.title }), stepDone: false });
-      await wait(620);
-      builtNodes = layoutFlowNodes(
-        [...builtNodes, node],
-        startX,
-      );
-      setNodes(builtNodes);
-      await wait(420);
-      const newLinks = MOCK_FLOW_LINKS.filter((l) => l.to === id);
-      builtLinks = [...builtLinks, ...newLinks.filter((nl) => !builtLinks.some((bl) => bl.from === nl.from && bl.to === nl.to))];
-      setLinks([...builtLinks]);
-      setMessages((prev) =>
-        prev.map((m) => (m.id === stepId ? { ...m, stepDone: true, stepText: t('assistant.addedNode', { name: node.title }) } : m)),
-      );
-      await wait(520);
-    }
-
-    const cfgId = 'step-cfg';
-    push({ id: cfgId, role: 'step', stepText: t('assistant.connecting'), stepDone: false });
-    await wait(1100);
-    setMessages((prev) =>
-      prev.map((m) => (m.id === cfgId ? { ...m, stepDone: true, stepText: t('assistant.connected') } : m)),
-    );
-    await wait(500);
-    push({ id: 'done', role: 'assistant', content: t('assistant.done') });
-    setWorkflowName('客户异常监控');
-    setPublishPulse(true);
-    setShowReplay(true);
-    layoutAndSet(flowNodes, MOCK_FLOW_LINKS);
-  }, [layoutAndSet, t, zoom]);
-
+  /** 初始化：根据入口模式设置 AI 消息和画布提示 */
   useEffect(() => {
     if (entryMode === 'generate') {
       void runGenerateSequence(userPrompt || t('generate.chipAbnormal'));
@@ -172,18 +105,20 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
       setMessages([{ id: 'blank', role: 'assistant', content: t('assistant.blankGuide') }]);
       setHint('blank');
     } else {
-      setMessages([{ id: 'edit', role: 'assistant', content: t('assistant.editGuide') }]);
-      layoutAndSet(structuredClone(MOCK_FLOW_NODES), [...MOCK_FLOW_LINKS]);
-      setHint('hidden');
+      toast.info(t('assistant.featureNotReady'));
+      setMessages([{ id: 'not-ready', role: 'assistant', content: t('assistant.featureNotReady') }]);
+      setHint('blank');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
+  /** 返回：有未保存修改时弹确认，否则直接返回列表 */
   const handleBack = () => {
     if (dirty) setUnsavedOpen(true);
     else onBack();
   };
 
+  /** 从节点库添加节点到画布：创建模板 → 布局 → 连线 → toast */
   const addLibNode = (name: string) => {
     setNodeLibOpen(false);
     markDirty();
@@ -213,6 +148,7 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
     });
   };
 
+  /** 试运行全流程：逐节点模拟 running → done，完成后显示报告 */
   const handleTryRunFlow = async () => {
     if (running) {
       setRunOpen(true);
@@ -226,7 +162,7 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
       setRunOpen(true);
       return;
     }
-    const order = ['n1', 'n2', 'n3', 'n4', 'n5'].filter((id) => nodes.some((n) => n.id === id));
+    const order = nodes.filter((n) => n.kind !== 'end').map((n) => n.id);
     if (!order.length) {
       toast.error(t('run.noNodes'));
       return;
@@ -250,9 +186,6 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
       setRunning(false);
       return;
     }
-    if (nodes.some((n) => n.id === 'n6')) {
-      setNodeRunStates((s) => ({ ...s, n6: 'skip' }));
-    }
     setRunning(false);
     setHasReport(true);
     setRunMode('report');
@@ -263,6 +196,7 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
     });
   };
 
+  /** 单节点试运行：回溯上游链路，检查数据源配置，模拟逐节点执行 */
   const handleTryRunNode = async (nodeId: string) => {
     const node = nodes.find((n) => n.id === nodeId);
     if (!node) return;
@@ -307,6 +241,7 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
     toast.success(t('toast.nodeTrySuccess'));
   };
 
+  /** 更新节点指定字段的局部属性（如 value、dataSource 等） */
   const updateNodeField = (nodeId: string, fieldKey: string, patch: Partial<WorkflowField>) => {
     setNodes((prev) =>
       prev.map((n) =>
@@ -317,6 +252,7 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
     );
   };
 
+  /** 多选字段 toggle：选中/取消选中某个 option */
   const toggleMulti = (nodeId: string, fieldKey: string, option: string) => {
     setNodes((prev) =>
       prev.map((n) => {
@@ -354,9 +290,11 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
             }}
             className="h-auto border-transparent bg-transparent px-1.5 text-base font-semibold shadow-none hover:bg-muted focus-visible:border-primary/30 focus-visible:bg-card"
           />
-          <p className="px-1.5 text-xs text-muted-foreground">
-            {t('builder.lastSaved', { time: savedLabel })}
-          </p>
+          {savedLabel ? (
+            <p className="px-1.5 text-xs text-muted-foreground">
+              {t('builder.lastSaved', { time: savedLabel })}
+            </p>
+          ) : null}
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => setVersionOpen(true)}>
@@ -455,15 +393,10 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
           onMultiToggle={toggleMulti}
           onOpenNodeLib={openNodeLibAt}
           onOpenSkillPicker={(nodeId, e) => {
-            const node = nodes.find((n) => n.id === nodeId);
-            const skillRow = node?.summary?.find((r) => r.pick);
-            const selected = new Set(
-              skillRow?.value ? MOCK_SKILLS.filter((s) => skillRow.value.includes(s)) : [],
-            );
             setSkillPicker({
               nodeId,
               pos: { x: Math.min(e.clientX, window.innerWidth - 320), y: Math.min(e.clientY + 12, window.innerHeight - 400) },
-              selected,
+              selected: new Set(),
             });
             setSkillSearch('');
           }}
@@ -475,13 +408,7 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
               fileInputRef.current?.click();
               return;
             }
-            const node = nodes.find((n) => n.id === nodeId);
-            const field = node?.fields.find((f) => f.key === fieldKey);
-            const existing = mode === 'sys' ? field?.dataSource?.sys ?? [] : field?.dataSource?.online ?? [];
-            setTreeTarget({ nodeId, fieldKey });
-            setTreeMode(mode);
-            setTreeSelected(new Set(existing));
-            setTreeOpen(true);
+            toast.info(t('assistant.featureNotReady'));
           }}
           onTryRunNode={handleTryRunNode}
           onDirty={markDirty}
@@ -524,7 +451,7 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
       <SkillPickerPopover
         open={skillPicker !== null}
         position={skillPicker?.pos ?? { x: 0, y: 0 }}
-        skills={MOCK_SKILLS}
+        skills={[]}
         selected={skillPicker?.selected ?? new Set()}
         search={skillSearch}
         onSearch={setSkillSearch}
@@ -538,7 +465,7 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
         onClose={() => setSkillPicker(null)}
         onConfirm={() => {
           if (!skillPicker) return;
-          const names = MOCK_SKILLS.filter((s) => skillPicker.selected.has(s));
+          const names = [...skillPicker.selected];
           setNodes((prev) =>
             prev.map((n) =>
               n.id === skillPicker.nodeId
@@ -557,8 +484,8 @@ export function WorkflowBuilder({ entryMode, initialName, userPrompt, onBack }: 
 
       <DataTreeModal
         open={treeOpen}
-        title={MOCK_DATA_TREES[treeMode].title}
-        groups={MOCK_DATA_TREES[treeMode].groups.map((g) => ({ name: g.name, items: [...g.items] }))}
+        title={treeMode === 'sys' ? t('node.sysSource') : t('node.onlineSource')}
+        groups={[]}
         selected={treeSelected}
         onToggle={(name) => {
           setTreeSelected((prev) => {

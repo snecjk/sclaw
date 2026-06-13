@@ -34,6 +34,7 @@ interface WorkflowCardShellProps {
   children: ReactNode;
 }
 
+/** 流程节点路径行（卡片底部的 flow[] 渲染） */
 function WorkflowFlowRow({ flow }: { flow: string[] }) {
   const { t } = useTranslation('workflow');
   return (
@@ -56,6 +57,7 @@ function WorkflowFlowRow({ flow }: { flow: string[] }) {
   );
 }
 
+/** 卡片通用外壳：头图 + body 区域，点击整体触发 onCardClick */
 function WorkflowCardShell({ id, coverKey, dimmed, onCardClick, children }: WorkflowCardShellProps) {
   return (
     <article
@@ -86,6 +88,7 @@ export interface WorkflowMineListCardProps {
   onMore: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
+/** 「我的工作流」卡片：标题+开关+排期+描述+流程+操作按钮 */
 export function WorkflowMineListCard({
   card,
   isRenaming,
@@ -196,6 +199,7 @@ export interface WorkflowOfficialListCardProps {
   onInstall: () => void;
 }
 
+/** 「官方推荐」卡片：标题+排期+描述+流程+分类标签+预览/安装 */
 export function WorkflowOfficialListCard({
   card,
   onCardClick,

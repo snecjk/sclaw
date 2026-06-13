@@ -60,5 +60,28 @@ export async function handleWorkflowRoutes(
     return true;
   }
 
+  // Mine templates: GET /api/workflow-templates/mine?keyword=&page=&pageSize=
+  if (url.pathname === '/api/workflow-templates/mine' && req.method === 'GET') {
+    try {
+      const keyword = url.searchParams.get('keyword') || undefined;
+      const page = Number(url.searchParams.get('page')) || undefined;
+      const pageSize = Number(url.searchParams.get('pageSize')) || undefined;
+      const service = getWorkflowService();
+      const result = await service.fetchMineTemplates(keyword, page, pageSize);
+      sendJson(res, 200, {
+        success: true,
+        data: result.items,
+        total: result.total,
+        page: result.page,
+        pageSize: result.pageSize,
+        traceId: result.traceId,
+      });
+    } catch (error) {
+      const message = String(error);
+      sendJson(res, mapWorkflowErrorStatus(message), { success: false, error: message });
+    }
+    return true;
+  }
+
   return false;
 }

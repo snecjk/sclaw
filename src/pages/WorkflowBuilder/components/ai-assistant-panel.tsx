@@ -1,10 +1,11 @@
+/** AI 工作流助手侧栏：消息列表（assistant/user/step/plan 四种样式）+ 底部输入框 */
 import { useState } from 'react';
 import { Loader2, Send } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import type { ChatMessage } from '@/pages/Workflow/types';
+import type { ChatMessage } from '@/pages/WorkflowBuilder/types';
 
 interface AiAssistantPanelProps {
   messages: ChatMessage[];
@@ -58,6 +59,7 @@ export function AiAssistantPanel({ messages, onReset, onCollapse }: AiAssistantP
   );
 }
 
+/** 消息气泡：按 role 分支渲染 user（右侧）/step（步骤进度）/plan（方案卡片）/assistant（左侧文字） */
 function MessageBubble({ message }: { message: ChatMessage }) {
   const { t } = useTranslation('workflow');
 

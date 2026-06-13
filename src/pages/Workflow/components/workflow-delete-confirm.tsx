@@ -10,6 +10,7 @@ interface WorkflowDeleteConfirmProps {
   onConfirm: () => void;
 }
 
+/** 删除确认弹窗：警告图标 + 恢复提示 + 取消/确认按钮 */
 export function WorkflowDeleteConfirm({
   open,
   workflowName,

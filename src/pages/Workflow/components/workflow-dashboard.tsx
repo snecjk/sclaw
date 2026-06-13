@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { ArrowUp, Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -37,19 +37,12 @@ import {
   WorkflowOfficialListCard,
 } from '@/pages/Workflow/components/workflow-list-card';
 import { EXAMPLE_CHIPS } from '@/pages/Workflow/constants';
-import { MOCK_OFFICIAL_WORKFLOWS, MOCK_WORKFLOW_DETAILS } from '@/pages/Workflow/mock-data';
 import type { OfficialWorkflowCard, WorkflowCardItem, WorkflowMineListKind } from '@/pages/Workflow/types';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { Button } from '@/components/ui/button';
+import { useWorkflowList } from '@/pages/Workflow/use-workflow-list';
 
 interface WorkflowDashboardProps {
-  cards: WorkflowCardItem[];
-  mineCounts: Record<WorkflowMineListKind, number>;
-  isLoading: boolean;
-  error: string | null;
-  onRetry: () => void;
-  onSearchChange: (keyword: string) => void;
-  onCardsChange: (cards: WorkflowCardItem[]) => void;
   onManualCreate: () => void;
   onGenerate: (prompt: string) => void;
   onEditCard: (name: string) => void;
@@ -58,19 +51,23 @@ interface WorkflowDashboardProps {
 type MineFilter = WorkflowMineListKind;
 type OfficialFilter = 'all' | string;
 
+/** 工作流列表页主面板：Hero 生成区 + Tab 切换（我的/官方） + 卡片网格 + 右键菜单 + 详情弹窗 */
 export function WorkflowDashboard({
-  cards,
-  mineCounts,
-  isLoading,
-  error,
-  onRetry,
-  onSearchChange,
-  onCardsChange,
   onManualCreate,
   onGenerate,
   onEditCard,
 }: WorkflowDashboardProps) {
   const { t } = useTranslation('workflow');
+  const {
+    cards,
+    setCards,
+    isLoading,
+    error,
+    refetch,
+    setSearchKeyword,
+    mineCounts,
+    officialCards,
+  } = useWorkflowList();
   const [prompt, setPrompt] = useState('');
   const [tab, setTab] = useState<'mine' | 'official'>('mine');
   const [search, setSearch] = useState('');
@@ -86,31 +83,32 @@ export function WorkflowDashboard({
   const [detailOfficialCard, setDetailOfficialCard] = useState<OfficialWorkflowCard | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WorkflowCardItem | null>(null);
 
+  /** 快捷提示词 i18n label 映射 */
   const chipLabels: Record<(typeof EXAMPLE_CHIPS)[number], string> = {
     weeklyReconciliation: t('generate.chipWeekly'),
     abnormalCustomer: t('generate.chipAbnormal'),
     dailyRevenue: t('generate.chipDaily'),
   };
 
-  const officialCategories = useMemo(() => {
-    const cats = new Set(MOCK_OFFICIAL_WORKFLOWS.map((c) => c.category));
+  /** 从官方卡片中提取分类列表（含 'all'） */
+  const officialCategories = (() => {
+    const cats = new Set(officialCards.map((c) => c.category).filter(Boolean));
     return ['all', ...Array.from(cats)];
-  }, []);
+  })();
 
-  const officialCounts = useMemo(() => {
-    const map: Record<string, number> = { all: MOCK_OFFICIAL_WORKFLOWS.length };
-    MOCK_OFFICIAL_WORKFLOWS.forEach((c) => {
+  /** 官方推荐各分类数量统计 */
+  const officialCounts: Record<string, number> = (() => {
+    const map: Record<string, number> = { all: officialCards.length };
+    officialCards.forEach((c) => {
       map[c.category] = (map[c.category] ?? 0) + 1;
     });
     return map;
-  }, []);
+  })();
 
-  const filteredMine = useMemo(() => {
-    return cards.filter((c) => c.listKind === mineFilter);
-  }, [cards, mineFilter]);
+  const filteredMine = cards.filter((c) => c.listKind === mineFilter);
 
-  const filteredOfficial = useMemo(() => {
-    let list = MOCK_OFFICIAL_WORKFLOWS;
+  const filteredOfficial = (() => {
+    let list = officialCards;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(
@@ -122,7 +120,7 @@ export function WorkflowDashboard({
     }
     if (officialFilter !== 'all') list = list.filter((c) => c.category === officialFilter);
     return list;
-  }, [officialFilter, search]);
+  })();
 
   const openMenu = (e: React.MouseEvent, index: number) => {
     e.stopPropagation();
@@ -137,7 +135,7 @@ export function WorkflowDashboard({
   const closeMenu = () => setMenuIndex(null);
 
   const updateCard = (index: number, patch: Partial<WorkflowCardItem>) => {
-    onCardsChange(cards.map((c, i) => (i === index ? { ...c, ...patch } : c)));
+    setCards(cards.map((c, i) => (i === index ? { ...c, ...patch } : c)));
   };
 
   const openDetailForMine = (card: WorkflowCardItem) => {
@@ -161,7 +159,8 @@ export function WorkflowDashboard({
   };
 
   const detailCard = detailMineCard ?? detailOfficialCard;
-  const detailData = detailCard ? MOCK_WORKFLOW_DETAILS[detailCard.name] ?? null : null;
+  /** 详情数据暂为 null（待接入详情 API），弹窗已有 null fallback */
+  const detailData = null;
 
   const handleShare = () => {
     toast.success(t('toast.shared'));
@@ -169,7 +168,7 @@ export function WorkflowDashboard({
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
-    onCardsChange(cards.filter((c) => c.id !== deleteTarget.id));
+    setCards(cards.filter((c) => c.id !== deleteTarget.id));
     toast.success(t('toast.deleted', { name: deleteTarget.name }));
     setDeleteTarget(null);
     closeDetail();
@@ -258,7 +257,7 @@ export function WorkflowDashboard({
               onClick={() => {
                 setTab(key);
                 if (key === 'mine') {
-                  onSearchChange(search);
+                  setSearchKeyword(search);
                 }
               }}
               className={workflowListTabClass(tab === key)}
@@ -279,7 +278,7 @@ export function WorkflowDashboard({
               const value = e.target.value;
               setSearch(value);
               if (tab === 'mine') {
-                onSearchChange(value);
+                setSearchKeyword(value);
               }
             }}
             className={workflowListSearchInputClass}
@@ -317,7 +316,7 @@ export function WorkflowDashboard({
         ) : error ? (
           <div className="flex flex-col items-center gap-4 py-16 text-center">
             <p className="text-sm text-muted-foreground">{error}</p>
-            <Button type="button" variant="outline" onClick={onRetry}>
+            <Button type="button" variant="outline" onClick={() => { void refetch(); }}>
               {t('list.retry')}
             </Button>
           </div>

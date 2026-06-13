@@ -1,3 +1,4 @@
+/** 编辑器弹窗/抽屉组件集：发布成功、未保存提醒、数据树、技能选择、版本历史、运行抽屉、运行报告占位 */
 import * as Dialog from '@radix-ui/react-dialog';
 import { Loader2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -5,9 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
-import { MOCK_VERSIONS } from '@/pages/Workflow/mock-data';
-import type { VersionItem } from '@/pages/Workflow/types';
+import type { VersionItem } from '@/pages/WorkflowBuilder/types';
 
+/** 发布成功弹窗：绿色勾图标 + 回到列表/继续编辑按钮 */
 export function PublishModal({
   open,
   workflowName,
@@ -46,6 +47,7 @@ export function PublishModal({
   );
 }
 
+/** 未保存提醒弹窗：警告图标 + 继续编辑/保存并返回 */
 export function UnsavedModal({
   open,
   onContinue,
@@ -80,6 +82,7 @@ export function UnsavedModal({
   );
 }
 
+/** 数据源选择弹窗：分组列表 + checkbox 交互 + 确认/取消 */
 export function DataTreeModal({
   open,
   title,
@@ -150,6 +153,7 @@ export function DataTreeModal({
   );
 }
 
+/** 技能选择浮窗：搜索过滤 + checkbox 列表 + 确认/取消 */
 export function SkillPickerPopover({
   open,
   position,
@@ -228,10 +232,11 @@ export function SkillPickerPopover({
   );
 }
 
+/** 版本历史侧抽屉：当前显示空态提示（待接入版本 API） */
 export function VersionDrawer({
   open,
   onClose,
-  onRestore,
+  onRestore: _onRestore,
 }: {
   open: boolean;
   onClose: () => void;
@@ -248,46 +253,14 @@ export function VersionDrawer({
           </button>
         </div>
         <div className="overflow-auto px-[18px] py-2">
-          {MOCK_VERSIONS.map((v) => (
-            <div key={v.time} className="flex gap-3 border-b border-border py-4 last:border-b-0">
-              <div
-                className={cn(
-                  'mt-1.5 h-2 w-2 shrink-0 rounded-full bg-muted-foreground',
-                  v.ai && 'bg-[#C45BE0]',
-                  v.published && 'bg-success',
-                  v.current && 'bg-primary shadow-[0_0_0_3px] shadow-primary/20',
-                )}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <b className="text-[13.5px] font-semibold text-foreground">{v.type}</b>
-                  {v.current ? (
-                    <span className="rounded-sm bg-primary/10 px-1.5 py-px text-[10.5px] font-semibold text-primary">
-                      {t('version.current')}
-                    </span>
-                  ) : null}
-                  {v.published ? (
-                    <span className="rounded-sm bg-success/10 px-1.5 py-px text-[10.5px] font-semibold text-success">
-                      {t('version.published')}
-                    </span>
-                  ) : null}
-                  <span className="ml-auto text-[11.5px] text-muted-foreground">{v.time}</span>
-                </div>
-                <p className="mt-1 text-[12.5px] leading-relaxed text-foreground/80">{v.description}</p>
-              </div>
-              {!v.current ? (
-                <Button type="button" variant="outline" size="sm" className="shrink-0 self-center" onClick={() => onRestore(v)}>
-                  {t('version.restore')}
-                </Button>
-              ) : null}
-            </div>
-          ))}
+          <p className="py-8 text-center text-sm text-muted-foreground">{t('version.empty')}</p>
         </div>
       </SheetContent>
     </Sheet>
   );
 }
 
+/** 运行抽屉：Sheet 侧栏，支持 loading/report/node-report 三种模式 */
 export function RunDrawer({
   open,
   mode,
@@ -343,34 +316,12 @@ export function RunDrawer({
   );
 }
 
+/** 运行报告占位内容：当前显示「功能未就绪」文案（待接入试运行报告 API） */
 export function RunReportContent() {
-  const metrics = [
-    { label: '监控客户数', value: '1,268', delta: '—' },
-    { label: '异常客户数', value: '57', delta: '较昨日 -8', down: true },
-    { label: '异常占比', value: '4.49%', delta: '较昨日 -0.42pt', down: true },
-    { label: '涉及金额', value: '-26,980.70元', delta: '较昨日 -4,120.60', neg: true },
-    { label: '高风险客户', value: '12个', delta: '较昨日 +2', up: true },
-  ];
-
+  const { t } = useTranslation('workflow');
   return (
-    <div className="space-y-[18px]">
-      <section className="rounded-[14px] border border-border bg-card p-5">
-        <h3 className="mb-3.5 text-[15px] font-semibold text-foreground">今日概览 · AI 总结</h3>
-        <p className="mb-4 text-[13.5px] leading-relaxed text-foreground/80">
-          今日共监控 <b className="text-foreground">1,268</b> 个客户，发现异常客户 <b className="text-foreground">57</b> 个……
-        </p>
-        <div className="grid grid-cols-5 gap-3">
-          {metrics.map((m) => (
-            <div key={m.label} className="rounded-[11px] border border-border bg-muted/20 p-3.5">
-              <div className="mb-2 text-xs text-muted-foreground">{m.label}</div>
-              <div className={cn('text-[22px] font-semibold', m.neg && 'text-destructive')}>{m.value}</div>
-              <div className={cn('mt-2 text-[11.5px] text-muted-foreground', m.up && 'text-destructive', m.down && 'text-success')}>
-                {m.delta}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+    <div className="flex h-full min-h-[320px] flex-col items-center justify-center text-center">
+      <p className="text-sm text-muted-foreground">{t('run.reportNotReady')}</p>
     </div>
   );
 }

@@ -4,8 +4,8 @@ import {
   mapWorkflowSummaryToCardItem,
   pickCoverKeyFromWorkflowId,
 } from '@/pages/Workflow/workflow-mapper';
-import type { WorkflowSummary } from '@/types/workflow-api';
-import { asWorkflowId } from '@/types/ids';
+import type { WorkflowSummary } from '../../shared/workflow-api';
+import { asWorkflowId } from '../../shared/workflow-api';
 
 const t = ((key: string, opts?: Record<string, unknown>) => {
   if (key === 'list.updatedAt' && opts?.time) {

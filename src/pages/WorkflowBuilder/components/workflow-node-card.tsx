@@ -1,3 +1,4 @@
+/** 画布上的单个节点卡片：图标+标题+字段区+数据源区+摘要+试运行按钮+连线端口 */
 import { useState } from 'react';
 import { Loader2, Pencil, Plus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -5,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { FREQ_OPTIONS, NODE_KIND_ICON_CLASS, NOTIFY_CHANNEL_OPTIONS, TIME_OPTIONS } from '@/pages/Workflow/constants';
-import type { NodeRunState, WorkflowField, WorkflowNodeData } from '@/pages/Workflow/types';
+import { FREQ_OPTIONS, NODE_KIND_ICON_CLASS, NOTIFY_CHANNEL_OPTIONS, TIME_OPTIONS } from '@/pages/WorkflowBuilder/constants';
+import type { NodeRunState, WorkflowField, WorkflowNodeData } from '@/pages/WorkflowBuilder/types';
 
 interface WorkflowNodeCardProps {
   node: WorkflowNodeData;
@@ -213,6 +214,7 @@ export function WorkflowNodeCard({
   );
 }
 
+/** 试运行状态徽章：running/done/fail/skip 四种颜色 */
 function RunBadge({ state }: { state: NodeRunState }) {
   const { t } = useTranslation('workflow');
   const label =
@@ -240,6 +242,7 @@ function RunBadge({ state }: { state: NodeRunState }) {
   );
 }
 
+/** 字段渲染区：按 type 分支渲染 dsgroup/textarea/multi/freqtime/text */
 function FieldBlock({
   field,
   onChange,

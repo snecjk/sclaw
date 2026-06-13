@@ -1,11 +1,12 @@
-import { useCallback, useRef, useState } from 'react';
+/** 画布核心组件：可滚动+可拖拽平移的 SVG 画布，渲染连线、节点、空白提示、缩放控制栏 */
+import { useRef, useState } from 'react';
 import { Maximize2, Minus, Plus, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { getCanvasSize } from '@/pages/Workflow/workflow-layout';
-import { WorkflowNodeCard } from '@/pages/Workflow/components/workflow-node-card';
-import type { NodeRunState, WorkflowLink, WorkflowNodeData } from '@/pages/Workflow/types';
+import { getCanvasSize } from '@/pages/WorkflowBuilder/workflow-layout';
+import { WorkflowNodeCard } from '@/pages/WorkflowBuilder/components/workflow-node-card';
+import type { NodeRunState, WorkflowLink, WorkflowNodeData } from '@/pages/WorkflowBuilder/types';
 
 interface WorkflowCanvasProps {
   nodes: WorkflowNodeData[];
@@ -60,32 +61,27 @@ export function WorkflowCanvas({
   const size = getCanvasSize(nodes);
   const scale = zoom / 100;
 
-  const handlePanStart = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.button !== 0) return;
-      const target = e.target as HTMLElement;
-      if (target.closest('.workflow-node,button,input,select,textarea')) return;
-      const wrap = canvasWrapRef.current;
-      if (!wrap) return;
-      setPanning(true);
-      panRef.current = { sx: e.clientX, sy: e.clientY, sl: wrap.scrollLeft, st: wrap.scrollTop };
-      e.preventDefault();
-    },
-    [canvasWrapRef],
-  );
+  /** 鼠标拖拽平移：mousedown 记录起点，mousemove 更新 scrollLeft/scrollTop */
+  const handlePanStart = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('.workflow-node,button,input,select,textarea')) return;
+    const wrap = canvasWrapRef.current;
+    if (!wrap) return;
+    setPanning(true);
+    panRef.current = { sx: e.clientX, sy: e.clientY, sl: wrap.scrollLeft, st: wrap.scrollTop };
+    e.preventDefault();
+  };
 
-  const handlePanMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (!panning) return;
-      const wrap = canvasWrapRef.current;
-      if (!wrap) return;
-      wrap.scrollLeft = panRef.current.sl - (e.clientX - panRef.current.sx);
-      wrap.scrollTop = panRef.current.st - (e.clientY - panRef.current.sy);
-    },
-    [canvasWrapRef, panning],
-  );
+  const handlePanMove = (e: React.MouseEvent) => {
+    if (!panning) return;
+    const wrap = canvasWrapRef.current;
+    if (!wrap) return;
+    wrap.scrollLeft = panRef.current.sl - (e.clientX - panRef.current.sx);
+    wrap.scrollTop = panRef.current.st - (e.clientY - panRef.current.sy);
+  };
 
-  const handlePanEnd = useCallback(() => setPanning(false), []);
+  const handlePanEnd = () => setPanning(false);
 
   return (
     <div className="relative min-h-0 min-w-0 flex-1">

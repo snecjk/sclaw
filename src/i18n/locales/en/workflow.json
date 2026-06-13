@@ -116,6 +116,7 @@
     "done": "✅ Done! Try run to preview, then publish when ready.",
     "blankGuide": "Manual build mode. Pick nodes from the library or tap AI assist.",
     "editGuide": "Existing workflow loaded. Edit on canvas or chat below.",
+    "featureNotReady": "AI workflow generation is not yet available. Please try again later.",
     "published": "✅ Published and active.",
     "planTitle": "📋 Plan",
     "addingNode": "Adding「{{name}}」…",
@@ -164,7 +165,8 @@
     "rerun": "↻ Rerun",
     "noNodes": "No nodes on canvas",
     "completeToast": "Try run complete — click Try run to view",
-    "cancelled": "Try run cancelled"
+    "cancelled": "Try run cancelled",
+    "reportNotReady": "Try run report is not yet available — no data to display"
   },
   "publish": {
     "success": "Published",
@@ -178,7 +180,7 @@
     "continueEdit": "Keep editing",
     "saveAndBack": "Save and leave"
   },
-  "version": { "title": "Version history", "current": "Current", "published": "Published", "restore": "Restore" },
+  "version": { "title": "Version history", "current": "Current", "published": "Published", "restore": "Restore", "empty": "No version history yet — saved or published versions will appear here" },
   "toast": {
     "runStarted": "Started: {{name}}",
     "paused": "Schedule paused",

@@ -51,6 +51,7 @@ import type {
   WorkflowDetailData,
 } from '@/pages/Workflow/types';
 
+/** 详情弹窗的展示模式：installed = 已安装可运行，preview = 官方可安装，draft = 草稿可编辑 */
 export type WorkflowDetailMode = 'installed' | 'preview' | 'draft';
 
 interface WorkflowDetailModalProps {
@@ -69,10 +70,12 @@ interface WorkflowDetailModalProps {
   onDelete?: () => void;
 }
 
+/** 类型守卫：区分「我的」卡片（有 enabled 字段）和「官方」卡片 */
 function isMineCard(card: WorkflowCardItem | OfficialWorkflowCard): card is WorkflowCardItem {
   return 'enabled' in card;
 }
 
+/** 工作流详情弹窗：头图 + 标题/状态 + 信息行 + 步骤时间轴 + Footer 操作按钮（按 mode 切换） */
 export function WorkflowDetailModal({
   open,
   mode,

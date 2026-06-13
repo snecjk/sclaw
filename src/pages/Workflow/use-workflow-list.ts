@@ -1,32 +1,45 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+/** 工作流列表数据 hook：调用 /api/workflow-templates/mine，管理搜索/筛选 */
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { hostApiFetch } from '@/lib/host-api';
 import { normalizeAppError } from '@/lib/error-model';
-import { mapWorkflowSummaryToCardItem, parseWorkflowSummary } from '@/pages/Workflow/workflow-mapper';
+import { mapTemplateMineItemToCardItem, mapTemplateMineItemToOfficialCard, parseTemplateMineItem } from '@/pages/Workflow/workflow-mapper';
 import { useMinLoading } from '@/hooks/use-min-loading';
-import type { WorkflowCardItem, WorkflowMineListKind } from '@/pages/Workflow/types';
+import type { OfficialWorkflowCard, WorkflowCardItem, WorkflowMineListKind } from '@/pages/Workflow/types';
 
-interface WorkflowListApiResponse {
+interface TemplateMineApiResponse {
   success?: boolean;
   data?: Record<string, unknown>[];
   total?: number;
+  page?: number;
+  pageSize?: number;
   traceId?: string;
   error?: string;
 }
 
+/** 搜索关键词 debounce 时长（ms） */
 const SEARCH_DEBOUNCE_MS = 300;
 
 export interface UseWorkflowListResult {
+  /** 当前展示的工作流卡片列表 */
   cards: WorkflowCardItem[];
+  /** 外部可控的 setCards */
   setCards: React.Dispatch<React.SetStateAction<WorkflowCardItem[]>>;
-  appendLocalCard: (card: WorkflowCardItem) => void;
+  /** 数据加载状态（含最小加载时长，防止闪烁） */
   isLoading: boolean;
+  /** 请求错误信息，无错误时为 null */
   error: string | null;
+  /** 手动触发重新拉取工作流列表 */
   refetch: () => Promise<void>;
+  /** 设置搜索关键词（内部 debounce 后触发 API 请求） */
   setSearchKeyword: (keyword: string) => void;
+  /** 各 Tab（published / installed / draft）下的卡片数量，由 cards 派生 */
   mineCounts: Record<WorkflowMineListKind, number>;
+  /** 系统官方推荐的工作流卡片列表 */
+  officialCards: OfficialWorkflowCard[];
 }
 
+/** 按 listKind 统计各 Tab 下的卡片数量 */
 function countByListKind(cards: WorkflowCardItem[]): Record<WorkflowMineListKind, number> {
   return {
     published: cards.filter((c) => c.listKind === 'published').length,
@@ -38,15 +51,14 @@ function countByListKind(cards: WorkflowCardItem[]): Record<WorkflowMineListKind
 export function useWorkflowList(): UseWorkflowListResult {
   const { t } = useTranslation('workflow');
   const [cards, setCards] = useState<WorkflowCardItem[]>([]);
+  const [officialCards, setOfficialCards] = useState<OfficialWorkflowCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [debouncedKeyword, setDebouncedKeyword] = useState('');
-  const [mineCounts, setMineCounts] = useState<Record<WorkflowMineListKind, number>>(
-    countByListKind([]),
-  );
+
+  /** 跟踪 API 刷新时序号，防止旧请求覆盖新结果 */
   const fetchSeq = useRef(0);
-  const localOnlyIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -55,89 +67,60 @@ export function useWorkflowList(): UseWorkflowListResult {
     return () => clearTimeout(timer);
   }, [searchKeyword]);
 
-  const fetchWorkflows = useCallback(async () => {
+  /** 核心数据拉取逻辑，effect 与 refetch 共用 */
+  const doFetch = useCallback(async () => {
     const seq = fetchSeq.current + 1;
     fetchSeq.current = seq;
     setIsLoading(true);
     setError(null);
 
+    const query = debouncedKeyword
+      ? `?keyword=${encodeURIComponent(debouncedKeyword)}`
+      : '';
+
     try {
-      const query = debouncedKeyword
-        ? `?keyword=${encodeURIComponent(debouncedKeyword)}`
-        : '';
-      // @api docs/api-contracts/workflows/page.md
-      const response = await hostApiFetch<WorkflowListApiResponse>(`/api/workflows${query}`);
-
+      // @api docs/api-contracts/workflows/template-mine.md
+      const response = await hostApiFetch<TemplateMineApiResponse>(`/api/workflow-templates/mine${query}`);
       if (fetchSeq.current !== seq) return;
+      if (response.success === false) throw new Error(response.error || t('list.loadFailed'));
 
-      if (response.success === false) {
-        throw new Error(response.error || t('list.loadFailed'));
-      }
+      const rawItems = (response.data ?? []).map(parseTemplateMineItem);
+      const mineItems = rawItems.filter((i) => i.scope === 'personal');
+      const systemItems = rawItems.filter((i) => i.scope === 'system');
 
-      const apiCards = (response.data ?? []).map((item) =>
-        mapWorkflowSummaryToCardItem(parseWorkflowSummary(item), t),
-      );
-
-      setCards((prev) => {
-        const localOnly = prev.filter((c) => localOnlyIdsRef.current.has(c.id));
-        const merged = [...apiCards, ...localOnly];
-        setMineCounts(countByListKind(merged));
-        return merged;
-      });
+      setOfficialCards(systemItems.map(mapTemplateMineItemToOfficialCard));
+      setCards(mineItems.map((item) => mapTemplateMineItemToCardItem(item, t)));
     } catch (err) {
       if (fetchSeq.current !== seq) return;
       const appError = normalizeAppError(err);
       setError(appError.message || t('list.loadFailed'));
-      setCards((prev) => {
-        const localOnly = prev.filter((c) => localOnlyIdsRef.current.has(c.id));
-        setMineCounts(countByListKind(localOnly));
-        return localOnly;
-      });
+      setOfficialCards([]);
+      setCards([]);
     } finally {
-      if (fetchSeq.current === seq) {
-        setIsLoading(false);
-      }
+      if (fetchSeq.current === seq) setIsLoading(false);
     }
   }, [debouncedKeyword, t]);
 
   useEffect(() => {
-    void fetchWorkflows();
-  }, [fetchWorkflows]);
-
-  const appendLocalCard = useCallback((card: WorkflowCardItem) => {
-    localOnlyIdsRef.current.add(card.id);
-    setCards((prev) => {
-      const merged = [...prev, card];
-      setMineCounts(countByListKind(merged));
-      return merged;
+    let cancelled = false;
+    // 将同步 setState 延迟到微任务，避免 effect 内同步触发级联渲染
+    queueMicrotask(() => {
+      if (!cancelled) { void doFetch(); }
     });
-  }, []);
+    return () => { cancelled = true; };
+  }, [doFetch]);
 
-  const setCardsTracked = useCallback<React.Dispatch<React.SetStateAction<WorkflowCardItem[]>>>(
-    (updater) => {
-      setCards((prev) => {
-        const next = typeof updater === 'function' ? updater(prev) : updater;
-        const nextIds = new Set(next.map((c) => c.id));
-        for (const id of localOnlyIdsRef.current) {
-          if (!nextIds.has(id)) {
-            localOnlyIdsRef.current.delete(id);
-          }
-        }
-        setMineCounts(countByListKind(next));
-        return next;
-      });
-    },
-    [],
-  );
+  /** 由 cards 派生各 Tab 下的卡片数量，避免额外 setState */
+  const mineCounts = useMemo(() => countByListKind(cards), [cards]);
 
   return {
     cards,
-    setCards: setCardsTracked,
-    appendLocalCard,
+    setCards,
     isLoading: useMinLoading(isLoading),
     error,
-    refetch: fetchWorkflows,
+    refetch: doFetch,
     setSearchKeyword,
     mineCounts,
+    officialCards,
   };
 }
