@@ -20,7 +20,7 @@ import {
   type TaskCreateInputWithRun,
 } from './components/TaskCreateModal';
 
-import { useMyTaskStore, selectCurrentRecords } from './store';
+import { useMyTaskStore, selectRecordCounts, selectCurrentRecords } from './store';
 import type { TaskView, TaskViewModel, ExecutionRecord, RecommendTask } from './types';
 import type { CronJob } from '@/types/cron';
 
@@ -29,6 +29,7 @@ import { TaskToolbar } from './components/TaskToolbar';
 import { RecordToolbar } from './components/RecordToolbar';
 import { TaskCard } from './components/TaskCard';
 import { TaskEmptyState } from './components/TaskEmptyState';
+import { RecordStatusNav } from './components/RecordStatusNav';
 import { RecordItem } from './components/RecordItem';
 import { RecordDetailModal } from './components/RecordDetailModal';
 
@@ -97,13 +98,16 @@ export default function MyTask() {
   // ── 执行记录 Store ──
   const {
     recordsLoading,
+    recordStatus,
     recordType,
     recordSearch,
     fetchRecords,
+    setRecordStatus,
     setRecordType,
     setRecordSearch,
   } = useMyTaskStore();
 
+  const recordCounts = useMyTaskStore(useShallow(selectRecordCounts));
   const currentRecords = useMyTaskStore(useShallow(selectCurrentRecords));
 
   // ── 页面级状态 ──
@@ -122,9 +126,15 @@ export default function MyTask() {
   useEffect(() => {
     fetchTasks().catch(() => {});
     fetchWorkflows().catch(() => {});
-    fetchRecords({});
     useScheduledTaskUnreadStore.getState().markAllRead();
-  }, [fetchTasks, fetchWorkflows, fetchRecords]);
+  }, [fetchTasks, fetchWorkflows]);
+
+  // ── 切换到执行记录 Tab 时加载 ──
+  useEffect(() => {
+    if (activeView === 'records') {
+      fetchRecords({});
+    }
+  }, [activeView, fetchRecords]);
 
   // ── 工作流 code → name 映射 ──
   const workflowMap = useMemo(
@@ -284,6 +294,15 @@ export default function MyTask() {
               />
             )}
           </div>
+
+          {/* 执行记录状态筛选导航 */}
+          {!isTasksView && (
+            <RecordStatusNav
+              activeStatus={recordStatus}
+              counts={recordCounts}
+              onStatusChange={setRecordStatus}
+            />
+          )}
 
           {/* ── 定时任务视图 ── */}
           {isTasksView && (

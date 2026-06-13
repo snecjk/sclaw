@@ -6,7 +6,7 @@
 
 import { create } from 'zustand';
 import { fetchExecutionRecords } from './api';
-import type { ExecutionRecord, TaskType } from './types';
+import type { ExecutionRecord, RecordStatus, TaskType, StatusCounts } from './types';
 
 interface MyTaskState {
   // ── 执行记录数据 ──
@@ -26,6 +26,8 @@ interface MyTaskState {
   recordTotal: number;
 
   // ── 执行记录筛选状态 ──
+  /** 当前选中的执行状态 Tab */
+  recordStatus: RecordStatus;
   /** 当前选中的任务类型 */
   recordType: TaskType | 'all';
   /** 搜索关键词 */
@@ -34,6 +36,8 @@ interface MyTaskState {
   // ── Actions ──
   /** 从 API 拉取执行记录（支持分页） */
   fetchRecords: (params?: { page?: number; pageSize?: number }) => Promise<void>;
+  /** 切换状态 Tab */
+  setRecordStatus: (status: RecordStatus) => void;
   /** 切换任务类型筛选 */
   setRecordType: (type: TaskType | 'all') => void;
   /** 设置搜索关键词 */
@@ -63,10 +67,25 @@ export function selectFilteredRecords(state: MyTaskState): ExecutionRecord[] {
 }
 
 /**
- * 派生：当前记录列表
+ * 派生：各状态计数（随 type+search 联动）
+ * 用于 RecordStatusNav 显示各状态的数量
+ */
+export function selectRecordCounts(state: MyTaskState): StatusCounts {
+  const filtered = selectFilteredRecords(state);
+  const counts: StatusCounts = { running: 0, success: 0, failed: 0 };
+  for (const r of filtered) {
+    counts[r.status]++;
+  }
+  return counts;
+}
+
+/**
+ * 派生：当前 Tab 状态下的记录列表
+ * 在 filteredRecords 基础上再按 status 过滤
  */
 export function selectCurrentRecords(state: MyTaskState): ExecutionRecord[] {
-  return selectFilteredRecords(state);
+  const filtered = selectFilteredRecords(state);
+  return filtered.filter((r) => r.status === state.recordStatus);
 }
 
 export const useMyTaskStore = create<MyTaskState>((set, get) => ({
@@ -78,6 +97,7 @@ export const useMyTaskStore = create<MyTaskState>((set, get) => ({
   recordPageSize: 100,
   recordTotal: 0,
 
+  recordStatus: 'running',
   recordType: 'all',
   recordSearch: '',
 
@@ -104,6 +124,7 @@ export const useMyTaskStore = create<MyTaskState>((set, get) => ({
     }
   },
 
+  setRecordStatus: (status) => set({ recordStatus: status }),
   setRecordType: (type) => set({ recordType: type }),
   setRecordSearch: (q) => set({ recordSearch: q }),
   setRecordPage: (page) => {
