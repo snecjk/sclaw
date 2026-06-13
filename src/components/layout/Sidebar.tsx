@@ -24,6 +24,7 @@ import {
   Radio,
   ChevronDown,
   Pencil,
+  Workflow,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -56,6 +57,7 @@ import { parseCronSessionKey, parseScheduledTaskAgentSessionKey } from '@/stores
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
+import { useWorkflowUiStore } from '@/stores/workflow-ui';
 
 type SessionBucketKey =
   | 'today'
@@ -585,6 +587,8 @@ export function Sidebar() {
   const isOnHome = location.pathname === '/';
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const workflowEditorActive = useWorkflowUiStore((s) => s.editorActive);
+  const sidebarExpandedBeforeWorkflowRef = useRef<boolean | null>(null);
   const [taskListSectionOpen, setTaskListSectionOpen] = useState(true);
   const [workspaceSectionOpen, setWorkspaceSectionOpen] = useState(true);
   const [bucketOpen, setBucketOpen] = useState<Record<SessionBucketKey, boolean>>({
@@ -600,6 +604,23 @@ export function Sidebar() {
   const { t } = useTranslation(['common', 'chat', 'auth', 'tasks']);
 
   const sidebarVis = useMemo(() => getSidebarVisibility(getSidebarLayoutVariant()), []);
+
+  useEffect(() => {
+    if (workflowEditorActive) {
+      setSidebarCollapsed((prev) => {
+        if (sidebarExpandedBeforeWorkflowRef.current === null) {
+          sidebarExpandedBeforeWorkflowRef.current = !prev;
+        }
+        return true;
+      });
+      return;
+    }
+    if (sidebarExpandedBeforeWorkflowRef.current !== null) {
+      const restoreExpanded = sidebarExpandedBeforeWorkflowRef.current;
+      sidebarExpandedBeforeWorkflowRef.current = null;
+      setSidebarCollapsed(!restoreExpanded);
+    }
+  }, [workflowEditorActive]);
 
   useEffect(() => {
     if (!isGatewayRunning) return;
@@ -772,6 +793,7 @@ export function Sidebar() {
       { to: '/my-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myTasks') },
       { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
       { to: '/skills', icon: <Puzzle className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
+      { to: '/workflow', icon: <Workflow className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.workflow') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
     ];
     return all.filter((item) => {

@@ -24,6 +24,7 @@ import { Setup } from './pages/Setup';
 import { Login } from './pages/Login';
 import { Sprite } from './pages/Sprite';
 import { FloatIcon } from './pages/FloatIcon';
+import { WorkflowTestPage } from './pages/Workflow';
 import { useSettingsStore } from './stores/settings';
 import { useAuthStore } from './stores/auth';
 import { useGatewayStore } from './stores/gateway';
@@ -31,7 +32,6 @@ import { useProviderStore } from './stores/providers';
 import { useChatStore } from './stores/chat';
 import { useScheduledTaskUnreadStore } from './stores/scheduled-task-unread';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
-
 
 /**
  * Error Boundary to catch and display React rendering errors
@@ -56,28 +56,35 @@ class ErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{
-          padding: '40px',
-          color: '#f87171',
-          background: '#0f172a',
-          minHeight: '100vh',
-          fontFamily: 'monospace'
-        }}>
+        <div
+          style={{
+            padding: '40px',
+            color: '#f87171',
+            background: '#0f172a',
+            minHeight: '100vh',
+            fontFamily: 'monospace',
+          }}
+        >
           <h1 style={{ fontSize: '24px', marginBottom: '16px' }}>Something went wrong</h1>
-          <pre style={{
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-all',
-            background: '#1e293b',
-            padding: '16px',
-            borderRadius: '8px',
-            fontSize: '14px'
-          }}>
+          <pre
+            style={{
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+              background: '#1e293b',
+              padding: '16px',
+              borderRadius: '8px',
+              fontSize: '14px',
+            }}
+          >
             {this.state.error?.message}
             {'\n\n'}
             {this.state.error?.stack}
           </pre>
           <button
-            onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
             style={{
               marginTop: '16px',
               padding: '8px 16px',
@@ -85,7 +92,7 @@ class ErrorBoundary extends Component<
               color: 'white',
               border: 'none',
               borderRadius: '6px',
-              cursor: 'pointer'
+              cursor: 'pointer',
             }}
           >
             Reload
@@ -152,7 +159,14 @@ function App() {
     } else if (isAuthenticated && !setupComplete && !location.pathname.startsWith('/setup')) {
       navigate('/setup');
     }
-  }, [isAuthenticated, isAuthInitialized, accessDenied, setupComplete, location.pathname, navigate]);
+  }, [
+    isAuthenticated,
+    isAuthInitialized,
+    accessDenied,
+    setupComplete,
+    location.pathname,
+    navigate,
+  ]);
 
   // Listen for navigation events from main process
   useEffect(() => {
@@ -205,7 +219,10 @@ function App() {
       }
     };
 
-    const unsubscribe = window.electron.ipcRenderer.on('scheduled-task:new-result', handleNewResult);
+    const unsubscribe = window.electron.ipcRenderer.on(
+      'scheduled-task:new-result',
+      handleNewResult
+    );
 
     return () => {
       if (typeof unsubscribe === 'function') {
@@ -224,7 +241,9 @@ function App() {
         action: {
           label: '一键安装',
           onClick: async () => {
-            const result = await invokeIpc('sai.install') as { success?: boolean; path?: string; error?: string } | undefined;
+            const result = (await invokeIpc('sai.install')) as
+              | { success?: boolean; path?: string; error?: string }
+              | undefined;
             if (result?.success) {
               toast.success('SAI CLI 安装成功', { description: result.path });
             } else {
@@ -235,7 +254,10 @@ function App() {
       });
     };
 
-    const unsubscribe = window.electron.ipcRenderer.on('sai:cli-install-failed', handleSaiCliInstallFailed);
+    const unsubscribe = window.electron.ipcRenderer.on(
+      'sai:cli-install-failed',
+      handleSaiCliInstallFailed
+    );
 
     return () => {
       if (typeof unsubscribe === 'function') {
@@ -305,18 +327,14 @@ function App() {
             <Route path="/cron" element={<Cron />} />
             <Route path="/scheduled-tasks" element={<ScheduledTasks />} />
             <Route path="/my-tasks" element={<MyTask />} />
+            <Route path="/workflow" element={<WorkflowTestPage />} />
             <Route path="/settings/*" element={<Settings />} />
           </Route>
         </Routes>
 
         {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
         {location.pathname !== '/float-icon' ? (
-          <Toaster
-            position="bottom-center"
-            richColors
-            closeButton
-            style={{ zIndex: 99999 }}
-          />
+          <Toaster position="bottom-center" richColors closeButton style={{ zIndex: 99999 }} />
         ) : null}
       </TooltipProvider>
     </ErrorBoundary>
