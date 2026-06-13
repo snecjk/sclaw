@@ -4,7 +4,7 @@
  * Rendered in the Header when on the Chat page.
  */
 import { useMemo, useEffect, useState } from 'react';
-import { RefreshCw, Brain, Bot, ChevronDown, Cpu, Check } from 'lucide-react';
+import { RefreshCw, Brain, Bot, ChevronDown, Cpu, Check, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -28,6 +28,7 @@ import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 import { hostApiFetch } from '@/lib/host-api';
 import { toast } from 'sonner';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 
 // ── shared pill style ────────────────────────────────────────────────────────
 const pillBase = cn(
@@ -93,8 +94,15 @@ export function ChatToolbar() {
     return (sto?.metadata?.customModels as string[] | undefined) ?? [];
   }, [accounts]);
 
-  const currentEngineType = currentAgent?.engineType ?? 'openclaw';
-  const currentEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
+  const agentDefaultEngineType = currentAgent?.engineType ?? 'openclaw';
+  const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
+    ? agentDefaultEngineType
+    : currentSession?.engineType ?? agentDefaultEngineType;
+  const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
+  const currentSessionEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
+  const showSessionEngineHint = currentSessionKey !== DEFAULT_SESSION_KEY
+    && currentSession?.engineType != null
+    && currentSession.engineType !== agentDefaultEngineType;
 
   // session override → agent default → workspace default (Settings 页默认模型)
   useEffect(() => {
@@ -208,24 +216,16 @@ export function ChatToolbar() {
   };
 
   const handleEngineSwitch = async (engineType: 'openclaw' | 'claude') => {
-    if (!currentAgentId || engineType === currentEngineType) return;
+    if (!currentAgentId || engineType === agentDefaultEngineType) return;
     setEngineSaving(true);
     try {
       await hostApiFetch(`/api/agents/${encodeURIComponent(currentAgentId)}/engine`, {
         method: 'PUT',
         body: JSON.stringify({ engineType }),
       });
-      useChatStore.setState((state) => ({
-        sessions: state.sessions.map((session) => (
-          session.key === currentSessionKey
-            ? { ...session, engineType }
-            : session
-        )),
-      }));
       await fetchAgents();
-      await useChatStore.getState().loadHistory();
       await loadSessions();
-      toast.success(`已切换到 ${engineType === 'claude' ? 'Claude Agent' : 'OpenClaw'} 引擎`);
+      toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : 'OpenClaw'} 引擎`);
     } catch (err) {
       toast.error(`切换引擎失败: ${String(err)}`);
     } finally {
@@ -237,7 +237,7 @@ export function ChatToolbar() {
   const engineSelectDisabled = sending || !currentAgentId;
 
   return (
-    <div className="flex w-full items-center justify-between gap-3">
+    <div className="flex w-full items-center justify-between gap-3 pt-2">
       <div className="flex min-w-0 items-center gap-2">
         <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-muted-foreground sm:text-[12px]">
           引擎
@@ -247,12 +247,12 @@ export function ChatToolbar() {
             <DropdownMenuTrigger asChild disabled={engineSelectDisabled || engineSaving}>
               <button
                 type="button"
-                title="切换执行引擎"
+                title="切换新会话执行引擎"
                 className={cn(pillBtn, engineSaving && 'opacity-60 pointer-events-none')}
               >
                 <Bot className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
                 <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground/90">
-                  {currentEngineLabel}
+                  {agentDefaultEngineLabel}
                 </span>
                 <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
               </button>
@@ -265,7 +265,7 @@ export function ChatToolbar() {
           >
             {(['openclaw', 'claude'] as const).map((engineType) => {
               const label = engineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
-              const isSelected = currentEngineType === engineType;
+              const isSelected = agentDefaultEngineType === engineType;
               return (
                 <DropdownMenuItem
                   key={engineType}
@@ -279,6 +279,25 @@ export function ChatToolbar() {
             })}
           </DropdownMenuContent>
         </DropdownMenu>
+        {showSessionEngineHint ? (
+          <Tooltip delayDuration={150}>
+            <TooltipTrigger asChild>
+              <div
+                className={cn(
+                  'inline-flex h-8 max-w-[min(36vw,280px)] items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium',
+                  'border-amber-200 bg-amber-50 text-amber-800 shadow-[0_6px_14px_rgba(180,83,9,0.08)]',
+                  'dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200',
+                )}
+              >
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="min-w-0 truncate">当前会话：{currentSessionEngineLabel}</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="start" className="max-w-[280px] text-xs leading-relaxed">
+              当前历史会话继续使用 {currentSessionEngineLabel}。上方引擎下拉只影响新会话。
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
       </div>
 
       <div className="flex items-center gap-2">

@@ -30,14 +30,20 @@ export function useHomeChatEntrySend() {
 
   const handleHubSend = useCallback(
     async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, _dingTalkMentions?: DingTalkMention[], workflowId?: string | null) => {
-      const { currentAgentId } = useChatStore.getState();
-      const targetEngineType = (agents ?? []).find((agent) => agent.id === (targetAgentId || currentAgentId))?.engineType ?? 'openclaw';
+      const { currentAgentId, currentSessionKey, sessions } = useChatStore.getState();
+      const currentSession = sessions.find((session) => session.key === currentSessionKey);
+      const targetEngineType = targetAgentId
+        ? (agents ?? []).find((agent) => agent.id === targetAgentId)?.engineType ?? 'openclaw'
+        : currentSessionKey === DEFAULT_SESSION_KEY
+          ? (agents ?? []).find((agent) => agent.id === currentAgentId)?.engineType ?? 'openclaw'
+          : currentSession?.engineType
+          ?? (agents ?? []).find((agent) => agent.id === currentAgentId)?.engineType
+          ?? 'openclaw';
       if (targetEngineType !== 'claude' && !isGatewayRunning) {
         toast.error(t('assistant.gatewayRequired'));
         return;
       }
 
-      const { currentSessionKey } = useChatStore.getState();
       if (currentSessionKey === DEFAULT_SESSION_KEY) {
         newSession();
       }

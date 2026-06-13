@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { ChatInput } from '@/pages/Chat/ChatInput';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 
 /**
@@ -28,13 +29,21 @@ export function HomeAssistant({
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const sessions = useChatStore((s) => s.sessions);
   const error = useChatStore((s) => s.error);
   const { handleHubSend, handleHubQueue } = useHomeChatEntrySend();
   const currentAgent = useMemo(
     () => agents.find((agent) => agent.id === currentAgentId),
     [agents, currentAgentId],
   );
-  const currentEngineType = currentAgent?.engineType;
+  const currentSession = useMemo(
+    () => sessions.find((session) => session.key === currentSessionKey),
+    [sessions, currentSessionKey],
+  );
+  const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
+    ? currentAgent?.engineType
+    : currentSession?.engineType ?? currentAgent?.engineType;
   const inputProps = useChatInputBindings({
     onSend: onSend || handleHubSend,
     onQueue: handleHubQueue,

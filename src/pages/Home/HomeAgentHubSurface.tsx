@@ -14,6 +14,7 @@ import { HomeHero } from './HomeHero';
 import { HomeMainConversation } from './HomeMainConversation';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { useHomeConversationActive } from './use-home-conversation-active';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 
 /** sto-design Grey-10 主标题 / 默认正文 */
 const TEXT_PRIMARY = 'text-[#1D2129] dark:text-foreground';
@@ -37,6 +38,8 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
   const showConversation = useHomeConversationActive();
 
   const currentAgentId = useChatStore((s) => s.currentAgentId);
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const sessions = useChatStore((s) => s.sessions);
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
@@ -46,7 +49,13 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
     () => agents.find((agent) => agent.id === currentAgentId),
     [agents, currentAgentId],
   );
-  const currentEngineType = currentAgent?.engineType;
+  const currentSession = useMemo(
+    () => sessions.find((session) => session.key === currentSessionKey),
+    [sessions, currentSessionKey],
+  );
+  const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
+    ? currentAgent?.engineType
+    : currentSession?.engineType ?? currentAgent?.engineType;
   useEffect(() => {
     void fetchAgents();
   }, [fetchAgents]);

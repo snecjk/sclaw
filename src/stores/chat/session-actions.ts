@@ -9,6 +9,7 @@ import {
 import { DEFAULT_CANONICAL_PREFIX, DEFAULT_SESSION_KEY, type ChatSession, type RawMessage } from './types';
 import { parseCronSessionKey, parseScheduledTaskAgentSessionKey, parseScheduledTaskSessionKey } from './cron-session-utils';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
+import { useAgentsStore } from '@/stores/agents';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 
 function getAgentIdFromSessionKey(sessionKey: string): string {
@@ -416,8 +417,10 @@ export function createSessionActions(
         && !sessionLabels[currentSessionKey];
       const prefix = getCanonicalPrefixFromSessions(get().sessions) ?? DEFAULT_CANONICAL_PREFIX;
       const newKey = `${prefix}:session-${Date.now()}`;
-      const currentSession = get().sessions.find((session) => session.key === currentSessionKey);
-      const newSessionEntry: ChatSession = { key: newKey, engineType: currentSession?.engineType };
+      const agentId = getAgentIdFromSessionKey(newKey);
+      const agentEngineType = useAgentsStore.getState().agents
+        .find((agent) => agent.id.trim().toLowerCase() === agentId.trim().toLowerCase())?.engineType;
+      const newSessionEntry: ChatSession = { key: newKey, engineType: agentEngineType };
       set((s) => ({
         currentSessionKey: newKey,
         currentAgentId: getAgentIdFromSessionKey(newKey),

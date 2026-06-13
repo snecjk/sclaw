@@ -86,8 +86,11 @@ function resolveEngineTypeForSession(
   sessionKey: string,
   agentId?: string | null,
 ): ChatSession['engineType'] | undefined {
-  return getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey))
-    ?? getSessionEngineType(sessions, sessionKey);
+  if (sessionKey === DEFAULT_SESSION_KEY) {
+    return getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey));
+  }
+  return getSessionEngineType(sessions, sessionKey)
+    ?? getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey));
 }
 
 function normalizeSendMessageOptions(args: unknown[]): import('./chat/types').SendMessageOptions {
@@ -791,7 +794,10 @@ function ensureSessionEntry(sessions: ChatSession[], sessionKey: string): ChatSe
   if (sessions.some((session) => session.key === sessionKey)) {
     return sessions;
   }
-  return [...sessions, { key: sessionKey }];
+  return [...sessions, {
+    key: sessionKey,
+    engineType: getAgentEngineType(getAgentIdFromSessionKey(sessionKey)),
+  }];
 }
 
 function clearSessionEntryFromMap<T extends Record<string, unknown>>(entries: T, sessionKey: string): T {
@@ -1492,7 +1498,10 @@ export const useChatStore = create<ChatState>()(
       ?? DEFAULT_CANONICAL_PREFIX;
     const newKey = `${prefix}:session-${Date.now()}`;
     const newAgentId = getAgentIdFromSessionKey(newKey);
-    const newSessionEntry: ChatSession = { key: newKey };
+    const newSessionEntry: ChatSession = {
+      key: newKey,
+      engineType: getAgentEngineType(newAgentId),
+    };
     set((s) => ({
       currentSessionKey: newKey,
       currentAgentId: newAgentId,

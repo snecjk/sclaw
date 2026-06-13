@@ -23,6 +23,7 @@ import { extractText } from './message-utils';
 import { useMessageQueueStore, createAutoSendWatcher } from '@/stores/message-queue';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { useTranslation } from 'react-i18next';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { cn } from '@/lib/utils';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
@@ -76,7 +77,9 @@ export function Chat() {
     () => agents.find((agent) => agent.id === currentAgentId),
     [agents, currentAgentId],
   );
-  const currentEngineType = currentAgent?.engineType ?? currentSession?.engineType;
+  const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
+    ? currentAgent?.engineType
+    : currentSession?.engineType ?? currentAgent?.engineType;
   const composerRequiresGateway = currentEngineType === 'openclaw';
   const composerDisabled = composerRequiresGateway && !isGatewayRunning;
   const composerStatusText = currentEngineType === 'claude'

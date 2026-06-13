@@ -68,11 +68,17 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
+  const sessions = useChatStore((s) => s.sessions);
   const { handleSend, handleQueue } = useStoTaskSubitemChatSend();
   const currentAgent = useMemo(
     () => agents.find((agent) => agent.id === currentAgentId),
     [agents, currentAgentId],
   );
+  const currentSession = useMemo(
+    () => sessions.find((session) => session.key === currentSessionKey),
+    [sessions, currentSessionKey],
+  );
+  const currentEngineType = currentSession?.engineType ?? currentAgent?.engineType;
 
   // const queue = useMessageQueueStore((s) => s.getQueue(sessionKey));
   // const queueRemove = useCallback((id: string) => useMessageQueueStore.getState().remove(sessionKey, id), [sessionKey]);
@@ -326,7 +332,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
     isEmpty,
     seedText: composeSeed,
     className: 'pb-0',
-    engineType: currentAgent?.engineType,
+    engineType: currentEngineType,
   });
 
   const handlePreviewFile = useCallback((file: AttachedFileMeta) => {
@@ -521,7 +527,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
           onMoveDown={queueMoveDown}
         /> */}
 
-        <ChatInput {...chatInputProps} engineType={currentAgent?.engineType} />
+        <ChatInput {...chatInputProps} engineType={currentEngineType} />
       </div>
 
       {/* Resizer */}

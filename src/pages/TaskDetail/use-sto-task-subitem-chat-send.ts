@@ -32,8 +32,13 @@ export function useStoTaskSubitemChatSend() {
       dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[],
       workflowId?: string | null,
     ) => {
-      const { currentAgentId } = useChatStore.getState();
-      const targetEngineType = (agents ?? []).find((agent) => agent.id === (targetAgentId || currentAgentId))?.engineType ?? 'openclaw';
+      const { currentAgentId, currentSessionKey, sessions } = useChatStore.getState();
+      const currentSession = sessions.find((session) => session.key === currentSessionKey);
+      const targetEngineType = targetAgentId
+        ? (agents ?? []).find((agent) => agent.id === targetAgentId)?.engineType ?? 'openclaw'
+        : currentSession?.engineType
+          ?? (agents ?? []).find((agent) => agent.id === currentAgentId)?.engineType
+          ?? 'openclaw';
       if (targetEngineType !== 'claude' && !isGatewayRunning) {
         toast.error(t('assistant.gatewayRequired'));
         return;
