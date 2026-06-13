@@ -12,6 +12,8 @@ import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/w
 import { useAgentsStore } from '@/stores/agents';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 
+const NEW_SESSION_TEMP_LABEL = '新对话';
+
 function getAgentIdFromSessionKey(sessionKey: string): string {
   if (!sessionKey.startsWith('agent:')) return 'main';
   const [, agentId] = sessionKey.split(':');
@@ -153,7 +155,11 @@ export function createSessionActions(
         );
         const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
         const sessionsWithCurrent = shouldAppendCurrentSession
-          ? [...dedupedSessions, { key: nextSessionKey, engineType: localCurrentSession?.engineType }]
+          ? [...dedupedSessions, {
+            key: nextSessionKey,
+            label: localCurrentSession?.label ?? NEW_SESSION_TEMP_LABEL,
+            engineType: localCurrentSession?.engineType,
+          }]
           : dedupedSessions;
 
         const discoveredActivity = Object.fromEntries(
@@ -420,7 +426,7 @@ export function createSessionActions(
       const agentId = getAgentIdFromSessionKey(newKey);
       const agentEngineType = useAgentsStore.getState().agents
         .find((agent) => agent.id.trim().toLowerCase() === agentId.trim().toLowerCase())?.engineType;
-      const newSessionEntry: ChatSession = { key: newKey, engineType: agentEngineType };
+      const newSessionEntry: ChatSession = { key: newKey, label: NEW_SESSION_TEMP_LABEL, engineType: agentEngineType };
       set((s) => ({
         currentSessionKey: newKey,
         currentAgentId: getAgentIdFromSessionKey(newKey),

@@ -42,6 +42,8 @@ import {
 import { dispatchBuiltinToolResult } from '@/lib/builtin-tool-dispatch';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 
+const NEW_SESSION_TEMP_LABEL = '新对话';
+
 export type {
   AttachedFileMeta,
   ChatSession,
@@ -1330,8 +1332,13 @@ export const useChatStore = create<ChatState>()(
             }
           }
 
+          const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
           const sessionsWithCurrent = !dedupedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
-            ? [...dedupedSessions, { key: nextSessionKey }]
+            ? [...dedupedSessions, {
+              key: nextSessionKey,
+              label: localCurrentSession?.label ?? NEW_SESSION_TEMP_LABEL,
+              engineType: localCurrentSession?.engineType,
+            }]
             : dedupedSessions;
 
           const discoveredActivity = Object.fromEntries(
@@ -1500,6 +1507,7 @@ export const useChatStore = create<ChatState>()(
     const newAgentId = getAgentIdFromSessionKey(newKey);
     const newSessionEntry: ChatSession = {
       key: newKey,
+      label: NEW_SESSION_TEMP_LABEL,
       engineType: getAgentEngineType(newAgentId),
     };
     set((s) => ({
@@ -2013,7 +2021,9 @@ export const useChatStore = create<ChatState>()(
     // Update session label with first user message text as soon as it's sent
     const { sessionLabels, messages } = get();
     const isFirstMessage = !messages.slice(0, -1).some((m) => m.role === 'user');
-    if (!currentSessionKey.endsWith(':main') && isFirstMessage && !sessionLabels[currentSessionKey] && displayText) {
+    const existingSession = get().sessions.find((session) => session.key === currentSessionKey);
+    const hasOnlyTemporaryLabel = existingSession?.label === NEW_SESSION_TEMP_LABEL;
+    if (!currentSessionKey.endsWith(':main') && isFirstMessage && (!sessionLabels[currentSessionKey] || hasOnlyTemporaryLabel) && displayText) {
       const truncated = displayText.length > 50 ? `${displayText.slice(0, 50)}…` : displayText;
       set((s) => ({ sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated } }));
     }

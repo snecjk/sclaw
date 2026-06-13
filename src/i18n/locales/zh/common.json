@@ -3,7 +3,7 @@
         "home": "首页",
         "myData": "我的数据",
         "workspace": "工作台",
-        "sessionList": "对话列表",
+        "sessionList": "历史会话",
         "toggleSidebarCollapse": "收起侧边栏",
         "toggleSidebarExpand": "展开侧边栏",
         "appVersionLabel": "v {{version}}",

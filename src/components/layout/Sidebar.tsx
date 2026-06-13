@@ -104,6 +104,10 @@ function collapsedEntryLabel(full: string): string {
   return `${first}…`;
 }
 
+function isTemporaryAgentSessionKey(key: string): boolean {
+  return /^agent:[^:]+:session-\d+/.test(key);
+}
+
 const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' | 'taskWeeklyPpt' }[] = [
   { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation' },
 ];
@@ -639,6 +643,9 @@ export function Sidebar() {
       if (key.endsWith(':main')) {
         return t('chat:sessionList.mainSessionTitle');
       }
+      if (isTemporaryAgentSessionKey(key)) {
+        return t('common:sidebar.newChat');
+      }
       return key;
     },
     [sessionLabels, t],
@@ -751,6 +758,15 @@ export function Sidebar() {
   const toggleBucket = (key: SessionBucketKey) => {
     setBucketOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  const handleStartNewChat = useCallback(() => {
+    navigateToMainChatHome(navigate, location.pathname, () => {
+      const { messages, currentSessionKey: activeSessionKey } = useChatStore.getState();
+      if (messages.length > 0 || activeSessionKey !== DEFAULT_SESSION_KEY) {
+        newSession();
+      }
+    });
+  }, [location.pathname, navigate, newSession]);
 
   const primaryNav = useMemo(() => {
     const all: Array<{
@@ -939,59 +955,58 @@ export function Sidebar() {
           </div>
         ) : null}
 
-        {sidebarVis.conversationChrome ? (
-          !sidebarCollapsed ? (
-            <p className="mt-4 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+        {!sidebarCollapsed ? (
+          <div className="mt-4 flex items-center justify-between gap-2 px-2">
+            <p className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
               {t('common:sidebar.sessionList')}
             </p>
-          ) : (
-            <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
-          )
-        ) : null}
-
-        {sidebarVis.conversationChrome ? (
-          !sidebarCollapsed ? (
-            <button
-              type="button"
-              onClick={() => {
-                navigateToMainChatHome(navigate, location.pathname, () => {
-                  const { messages } = useChatStore.getState();
-                  if (messages.length > 0) newSession();
-                });
-              }}
-              className="mx-1 mt-1 flex items-center gap-2 rounded-xl border border-[rgba(255,140,0,0.35)] bg-[var(--sto-accent-soft)] px-3 py-2.5 text-left text-[13px] font-semibold text-[var(--sto-accent)] shadow-sm transition-colors hover:opacity-95 dark:bg-amber-950/35"
-            >
-              <Plus className="h-[17px] w-[17px] shrink-0" strokeWidth={2} aria-hidden />
-              <span className="truncate">{t('common:sidebar.newChat')}</span>
-            </button>
-          ) : (
             <Tooltip delayDuration={200}>
               <TooltipTrigger asChild>
                 <button
                   type="button"
                   aria-label={t('common:sidebar.newChat')}
                   title={t('common:sidebar.newChat')}
-                  onClick={() => {
-                    navigateToMainChatHome(navigate, location.pathname, () => {
-                      const { messages } = useChatStore.getState();
-                      if (messages.length > 0) newSession();
-                    });
-                  }}
-                  className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card"
+                  onClick={handleStartNewChat}
+                  className={cn(
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-transparent text-muted-foreground transition-colors',
+                    'hover:border-[rgba(255,111,0,0.28)] hover:bg-[var(--sto-accent-soft)] hover:text-[var(--sto-accent)]',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  )}
                 >
-                  <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  <Plus className="h-4 w-4" strokeWidth={2.2} aria-hidden />
                 </button>
               </TooltipTrigger>
-              <TooltipContent
-                side="right"
-                sideOffset={12}
-                collisionPadding={12}
-                className={SIDEBAR_COLLAPSED_TOOLTIP_SURFACE}
-              >
+              <TooltipContent side="right" sideOffset={8} className={SIDEBAR_COLLAPSED_TOOLTIP_SURFACE}>
                 {t('common:sidebar.newChat')}
               </TooltipContent>
             </Tooltip>
-          )
+          </div>
+        ) : (
+          <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
+        )}
+
+        {sidebarCollapsed ? (
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={t('common:sidebar.newChat')}
+                title={t('common:sidebar.newChat')}
+                onClick={handleStartNewChat}
+                className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card"
+              >
+                <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent
+              side="right"
+              sideOffset={12}
+              collisionPadding={12}
+              className={SIDEBAR_COLLAPSED_TOOLTIP_SURFACE}
+            >
+              {t('common:sidebar.newChat')}
+            </TooltipContent>
+          </Tooltip>
         ) : null}
 
         <div className="space-y-1 pb-2 pt-1">
