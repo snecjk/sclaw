@@ -16,6 +16,13 @@ export interface EngineHistoryResult {
   messages: unknown[];
   thinkingLevel?: string | null;
   isRunning?: boolean;
+  runtimeResult?: {
+    type?: string;
+    subtype?: string;
+    stopReason?: string | null;
+    isError?: boolean;
+    durationMs?: number;
+  } | null;
 }
 
 export interface EngineSendParams {

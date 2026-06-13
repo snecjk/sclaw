@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { RawMessage } from '@/stores/chat';
-import { buildChatDisplayItems, findLastUserMessage, type ChatDisplayItem } from './chat-display';
+import { buildChatDisplayItems, findLastUserMessage, isAssistantRole, type ChatDisplayItem } from './chat-display';
 import type { ActiveTurnStream } from './AssistantTurnMessage';
 import { extractImages, extractThinking, extractToolUse } from './message-utils';
 
@@ -75,6 +75,18 @@ export function useChatDisplay(params: {
           turnMessages: last.messages,
           turnToolResults: last.toolResults,
           precedingUserMessage: last.precedingUserMessage ?? findLastUserMessage(messages),
+          activeStream,
+        },
+      };
+    }
+
+    if (last?.type === 'single' && isAssistantRole(last.message.role)) {
+      return {
+        staticItems: displayItems.slice(0, -1),
+        activeTurn: {
+          turnMessages: [last.message],
+          turnToolResults: [],
+          precedingUserMessage: findLastUserMessage(messages),
           activeStream,
         },
       };

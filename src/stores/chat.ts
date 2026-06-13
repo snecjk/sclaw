@@ -76,6 +76,20 @@ function getSessionEngineType(
   return sessions.find((session) => session.key === sessionKey)?.engineType;
 }
 
+function getAgentEngineType(agentId: string | undefined | null): ChatSession['engineType'] | undefined {
+  const normalizedAgentId = normalizeAgentId(agentId);
+  return useAgentsStore.getState().agents.find((agent) => normalizeAgentId(agent.id) === normalizedAgentId)?.engineType;
+}
+
+function resolveEngineTypeForSession(
+  sessions: ChatSession[],
+  sessionKey: string,
+  agentId?: string | null,
+): ChatSession['engineType'] | undefined {
+  return getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey))
+    ?? getSessionEngineType(sessions, sessionKey);
+}
+
 function normalizeSendMessageOptions(args: unknown[]): import('./chat/types').SendMessageOptions {
   const [first, attachments, targetAgentId, workflowContext] = args;
   if (typeof first === 'string') {
@@ -1112,6 +1126,33 @@ function hasAssistantTextOutput(message: RawMessage | undefined): boolean {
   return false;
 }
 
+function hasPendingToolUse(message: RawMessage | undefined): boolean {
+  if (!message) return false;
+
+  const msg = message as unknown as Record<string, unknown>;
+  const stopReason = msg.stopReason ?? msg.stop_reason;
+  if (String(stopReason ?? '').toLowerCase() === 'tooluse') return true;
+
+  const content = message.content;
+  if (Array.isArray(content)) {
+    if ((content as ContentBlock[]).some((block) => block.type === 'tool_use' || block.type === 'toolCall')) {
+      return true;
+    }
+  }
+
+  const toolCalls = msg.tool_calls ?? msg.toolCalls;
+  return Array.isArray(toolCalls) && toolCalls.length > 0;
+}
+
+function isClaudeRuntimeResultDone(runtimeResult: unknown): boolean {
+  if (!runtimeResult || typeof runtimeResult !== 'object') return false;
+  const result = runtimeResult as Record<string, unknown>;
+  if (result.type !== 'result') return false;
+  if (result.isError === true) return true;
+  const subtype = typeof result.subtype === 'string' ? result.subtype : '';
+  return subtype === '' || subtype === 'success' || subtype.startsWith('error_');
+}
+
 // ── Store ────────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>()(
@@ -1533,7 +1574,11 @@ export const useChatStore = create<ChatState>()(
     }, 15_000);
 
     const loadPromise = (async () => {
-      const applyLoadedMessages = (rawMessages: RawMessage[], thinkingLevel: string | null) => {
+      const applyLoadedMessages = (
+        rawMessages: RawMessage[],
+        thinkingLevel: string | null,
+        runtimeState?: { isRunning?: boolean; runtimeResult?: unknown },
+      ) => {
       if (get().currentSessionKey !== targetSessionKey) return;
 
       absorbWorkflowSchemaFromToolResults(rawMessages);
@@ -1726,6 +1771,11 @@ export const useChatStore = create<ChatState>()(
       if (get().currentSessionKey !== targetSessionKey) return;
 
       const { pendingFinal, lastUserMessageAt, sending: isSendingNow } = get();
+      const activeEngineType = resolveEngineTypeForSession(
+        get().sessions,
+        targetSessionKey,
+        get().currentAgentId,
+      );
 
       // If we're sending but haven't received streaming events, check
       // whether the loaded history reveals intermediate tool-call activity.
@@ -1755,9 +1805,15 @@ export const useChatStore = create<ChatState>()(
 
       if (get().currentSessionKey !== targetSessionKey) return;
 
-      if (recentAssistant || currentRecentAssistant) {
+      const shouldKeepClaudeRunActive = isSendingNow && activeEngineType === 'claude';
+      const claudeRuntimeDone =
+        activeEngineType === 'claude'
+        && runtimeState?.isRunning === false
+        && isClaudeRuntimeResultDone(runtimeState.runtimeResult);
+
+      if ((recentAssistant || currentRecentAssistant) && (!shouldKeepClaudeRunActive || claudeRuntimeDone)) {
         clearHistoryPoll();
-        set({ sending: false, activeRunId: null, pendingFinal: false });
+        set({ sending: false, activeRunId: null, pendingFinal: false, lastUserMessageAt: null });
       } else if (hasRecentAssistantActivity && !pendingFinal) {
         set({ pendingFinal: true });
       }
@@ -1768,7 +1824,11 @@ export const useChatStore = create<ChatState>()(
         let thinkingLevel: string | null = null;
         const data = await useGatewayStore.getState().rpc<Record<string, unknown>>(
           'chat.history',
-          { sessionKey: targetSessionKey, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
+          {
+            sessionKey: targetSessionKey,
+            limit: CHAT_HISTORY_LENGTH_MAX_LIMIT,
+            engineType: resolveEngineTypeForSession(get().sessions, targetSessionKey, get().currentAgentId),
+          },
         );
         if (get().currentSessionKey !== targetSessionKey) return;
 
@@ -1792,7 +1852,10 @@ export const useChatStore = create<ChatState>()(
         }
 
         if (get().currentSessionKey !== targetSessionKey) return;
-        applyLoadedMessages(rawMessages, thinkingLevel);
+        applyLoadedMessages(rawMessages, thinkingLevel, {
+          isRunning: typeof data.isRunning === 'boolean' ? data.isRunning : undefined,
+          runtimeResult: data.runtimeResult,
+        });
       } catch (err) {
         console.warn('Failed to load chat history:', err);
         if (get().currentSessionKey !== targetSessionKey) return;
@@ -1849,7 +1912,11 @@ export const useChatStore = create<ChatState>()(
     }
 
     const currentSessionKey = targetSessionKey;
-    const currentSessionEngineType = getSessionEngineType(get().sessions, currentSessionKey);
+    const currentSessionEngineType = resolveEngineTypeForSession(
+      get().sessions,
+      currentSessionKey,
+      targetAgentId ?? get().currentAgentId,
+    );
 
     let textForGateway = trimmed;
     if (!workflowContext) {
@@ -2075,7 +2142,10 @@ export const useChatStore = create<ChatState>()(
     try {
       await useGatewayStore.getState().rpc(
         'chat.abort',
-        { sessionKey: currentSessionKey, engineType: getSessionEngineType(get().sessions, currentSessionKey) },
+        {
+          sessionKey: currentSessionKey,
+          engineType: resolveEngineTypeForSession(get().sessions, currentSessionKey, get().currentAgentId),
+        },
       );
     } catch (err) {
       set({ error: String(err) });
@@ -2119,7 +2189,9 @@ export const useChatStore = create<ChatState>()(
     const hasUsefulData = resolvedState === 'delta' || resolvedState === 'final'
       || resolvedState === 'error' || resolvedState === 'aborted';
     if (hasUsefulData) {
-      clearHistoryPoll();
+      if (resolvedState !== 'final') {
+        clearHistoryPoll();
+      }
       // Adopt run started from another client (e.g. console at 127.0.0.1:18789):
       // show loading/streaming in the app when this session has an active run.
       const { sending } = get();
@@ -2247,13 +2319,36 @@ export const useChatStore = create<ChatState>()(
           }
           const toolOnly = isToolOnlyMessage(finalMsg);
           const hasOutput = hasNonToolAssistantContent(finalMsg);
+          const currentEngineType = resolveEngineTypeForSession(
+            get().sessions,
+            get().currentSessionKey,
+            get().currentAgentId,
+          );
+          const eventPhase = String(event.phase ?? '').toLowerCase();
+          const isAgentCompletedEvent =
+            eventPhase === 'completed'
+            || eventPhase === 'done'
+            || eventPhase === 'finished'
+            || eventPhase === 'end';
+          const isClaudeRunFragment =
+            currentEngineType === 'claude'
+            && get().sending
+            && !isAgentCompletedEvent;
+          const isTerminalOutput =
+            hasOutput
+            && !hasPendingToolUse(finalMsg)
+            && !isClaudeRunFragment;
           const pendingForDebug = get().pendingWorkflow;
-          console.log('[handleChatEvent:final] hasOutput=%s, pendingWorkflow=%s, msgContent=%s',
-            hasOutput, pendingForDebug ? 'yes' : 'no', typeof finalMsg.content);
-          const msgId = finalMsg.id || (toolOnly ? `run-${runId}-tool-${Date.now()}` : `run-${runId}`);
+          console.log('[handleChatEvent:final] hasOutput=%s, terminal=%s, engine=%s, pendingWorkflow=%s, msgContent=%s',
+            hasOutput, isTerminalOutput, currentEngineType, pendingForDebug ? 'yes' : 'no', typeof finalMsg.content);
+          const msgId = finalMsg.id || (toolOnly
+            ? `run-${runId}-tool-${Date.now()}`
+            : isTerminalOutput
+              ? `run-${runId || 'unknown'}`
+              : `run-${runId || 'unknown'}-part-${Date.now()}-${crypto.randomUUID()}`);
           set((s) => {
             const nextTools = updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools;
-            const streamingTools = hasOutput ? [] : nextTools;
+            const streamingTools = isTerminalOutput ? [] : nextTools;
 
             // Attach any images collected from preceding tool results
             const pendingImgs = s.pendingToolImages;
@@ -2269,7 +2364,7 @@ export const useChatStore = create<ChatState>()(
             // If we are in a workflow guidance phase AND this is the final
             // assistant output (hasOutput=true), append an interactive
             // parameter_form block to the assistant message for the user.
-            if (hasOutput) {
+            if (isTerminalOutput) {
               msgWithImages = maybeAppendWorkflowParameterForm(msgWithImages);
             }
 
@@ -2285,7 +2380,7 @@ export const useChatStore = create<ChatState>()(
                 break;
               }
             }
-            const hasEquivalentAssistantAfterLastUser = hasOutput && incomingText.length > 0
+            const hasEquivalentAssistantAfterLastUser = isTerminalOutput && incomingText.length > 0
               && s.messages.slice(lastUserIndex + 1).some((m) => (
                 m.role === 'assistant'
                 && hasNonToolAssistantContent(m)
@@ -2294,7 +2389,7 @@ export const useChatStore = create<ChatState>()(
             if (alreadyExists) {
               // If message already exists but hasOutput, we still need to append
               // the parameter_form to it. Update the existing message in messages[].
-              if (hasOutput && msgWithImages.content !== s.messages.find(m => m.id === msgId)?.content) {
+              if (isTerminalOutput && msgWithImages.content !== s.messages.find(m => m.id === msgId)?.content) {
                 const updatedMessages = s.messages.map(m =>
                   m.id === msgId ? msgWithImages : m
                 );
@@ -2309,9 +2404,9 @@ export const useChatStore = create<ChatState>()(
                   messages: updatedMessages,
                   streamingText: '',
                   streamingMessage: null,
-                  sending: hasOutput ? false : s.sending,
-                  activeRunId: hasOutput ? null : s.activeRunId,
-                  pendingFinal: hasOutput ? false : true,
+                  sending: isTerminalOutput ? false : s.sending,
+                  activeRunId: isTerminalOutput ? null : s.activeRunId,
+                  pendingFinal: isTerminalOutput ? false : true,
                   streamingTools,
                   ...clearPendingImages,
                 };
@@ -2325,9 +2420,9 @@ export const useChatStore = create<ChatState>()(
               } : {
                 streamingText: '',
                 streamingMessage: null,
-                sending: hasOutput ? false : s.sending,
-                activeRunId: hasOutput ? null : s.activeRunId,
-                pendingFinal: hasOutput ? false : true,
+                sending: isTerminalOutput ? false : s.sending,
+                activeRunId: isTerminalOutput ? null : s.activeRunId,
+                pendingFinal: isTerminalOutput ? false : true,
                 streamingTools,
                 ...clearPendingImages,
               };
@@ -2354,16 +2449,16 @@ export const useChatStore = create<ChatState>()(
               messages: [...s.messages, msgWithImages],
               streamingText: '',
               streamingMessage: null,
-              sending: hasOutput ? false : s.sending,
-              activeRunId: hasOutput ? null : s.activeRunId,
-              pendingFinal: hasOutput ? false : true,
+              sending: isTerminalOutput ? false : s.sending,
+              activeRunId: isTerminalOutput ? null : s.activeRunId,
+              pendingFinal: isTerminalOutput ? false : true,
               streamingTools,
               ...clearPendingImages,
             };
           });
           // After the final response, quietly reload history to surface all intermediate
           // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
-          if (hasOutput && !toolOnly) {
+          if (isTerminalOutput && !toolOnly) {
             clearHistoryPoll();
             void get().loadHistory(true).then(() => {
               const patched = patchLastAssistantWithWorkflowForm(get().messages, getMessageText);

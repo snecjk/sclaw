@@ -29,6 +29,7 @@ const liveClaudeMessages = new Map<string, Array<{
   isError?: boolean;
   receivedAt: number;
 }>>();
+const claudeRuntimeResults = new Map<string, NonNullable<EngineHistoryResult['runtimeResult']>>();
 let claudeConfigEnvQueue: Promise<void> = Promise.resolve();
 
 function getClaudeConfigDir(): string {
@@ -310,6 +311,21 @@ function extractClaudeMessageBlocks(message: unknown): Array<Record<string, unkn
   ));
 }
 
+function toClaudeRuntimeResult(message: Record<string, unknown>): NonNullable<EngineHistoryResult['runtimeResult']> {
+  const stopReason = message.stop_reason ?? message.stopReason;
+  return {
+    type: typeof message.type === 'string' ? message.type : undefined,
+    subtype: typeof message.subtype === 'string' ? message.subtype : undefined,
+    stopReason: typeof stopReason === 'string' ? stopReason : null,
+    isError: typeof message.subtype === 'string' ? message.subtype.startsWith('error_') : false,
+    durationMs: typeof message.duration_ms === 'number'
+      ? message.duration_ms
+      : typeof message.durationMs === 'number'
+        ? message.durationMs
+        : undefined,
+  };
+}
+
 function isSkillReplayText(text: string): boolean {
   return text.includes('Base directory for this skill:')
     || text.includes('ARGUMENTS:')
@@ -404,6 +420,7 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
     messages: mergedMessages,
     thinkingLevel: null,
     isRunning: activeClaudeQueries.has(sessionKey),
+    runtimeResult: claudeRuntimeResults.get(sessionKey) ?? null,
   };
 }
 
@@ -424,6 +441,9 @@ async function consumeClaudeQuery(
   try {
     for await (const message of query) {
       const messageSessionId = typeof message.session_id === 'string' ? message.session_id : sessionId;
+      if (message.type === 'result') {
+        claudeRuntimeResults.set(sessionKey, toClaudeRuntimeResult(message));
+      }
       if (!title && message.type === 'user' && 'message' in message && !shouldHideClaudeUserMessage(message, (message as { message?: unknown }).message)) {
         title = stringifyClaudeContent((message as { message?: unknown }).message);
       }
@@ -527,6 +547,7 @@ async function startClaudeQuery(
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();
     const pathToClaudeCodeExecutable = getBundledClaudeExecutablePath();
+    claudeRuntimeResults.delete(sessionKey);
     await sanitizeClaudeSettingsEnv();
     const query = sdk.query({
       prompt: message,
@@ -601,6 +622,7 @@ export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void
   await ensureClaudeConfigDir();
   const entry = await getEngineSessionRegistryEntry(sessionKey);
   liveClaudeMessages.delete(sessionKey);
+  claudeRuntimeResults.delete(sessionKey);
   if (!entry?.sessionId) {
     await deleteEngineSessionRegistryEntry(sessionKey);
     return;
