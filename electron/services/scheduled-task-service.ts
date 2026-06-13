@@ -120,7 +120,7 @@ function mapTask(data: Record<string, unknown>): ScheduledTask {
     ossObjectKey: t.ossObjectKey != null ? String(t.ossObjectKey) : null,
     dialogSessionKey: t.dialogSessionKey != null ? String(t.dialogSessionKey) : null,
     openclawGatewayUrl: t.openclawGatewayUrl != null ? String(t.openclawGatewayUrl) : null,
-    workflowCode: t.workflowCode != null ? String(t.workflowCode) : null,
+    workflowCode: t.workFlowCode != null ? String(t.workFlowCode) : null,
     createdAt: String(t.createdAt || ''),
     updatedAt: String(t.updatedAt || ''),
   };
@@ -437,9 +437,10 @@ export class ScheduledTaskService {
     const curlCmd = `curl -X POST "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}" -d '${body}'`;
     logger.info(`[ScheduledTaskService] >>> triggerTask curl=${curlCmd}`);
 
-    const controller = new AbortController();
-		// TODO trigger 任务 5s 超时，所以返回了 async_started
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+		// TODO====? 询问这里为什么要做 5s 超时，让状态都变为 async_started
+    // [DISABLED] 移除 5s 超时，避免长时间运行的任务被误判为 async_started
+    // const controller = new AbortController();
+    // const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     let res: Response;
     try {
@@ -447,24 +448,25 @@ export class ScheduledTaskService {
         method: 'POST',
         headers,
         body,
-        signal: controller.signal,
+        // signal: controller.signal,
       });
-      clearTimeout(timeoutId);
+      // clearTimeout(timeoutId);
     } catch (err) {
-      clearTimeout(timeoutId);
-      if (err instanceof Error && err.name === 'AbortError') {
-        logger.info(`[ScheduledTaskService] triggerTask timed out for task ${taskId}, treating as async execution started`);
-        return {
-          taskId,
-          runId: 0,
-          outcome: 'async_started',
-        };
-      }
+      // clearTimeout(timeoutId);
+      // if (err instanceof Error && err.name === 'AbortError') {
+      //   logger.info(`[ScheduledTaskService] triggerTask timed out for task ${taskId}, treating as async execution started`);
+      //   return {
+      //     taskId,
+      //     runId: 0,
+      //     outcome: 'async_started',
+      //   };
+      // }
+      logger.error(`[ScheduledTaskService] triggerTask fetch error for task ${taskId}:`, err);
       throw err;
     }
 
     const bodyText = await res.text();
-    logger.info(`[ScheduledTaskService] <<< triggerTask status=${res.status} body=${bodyText.slice(0, 500)}`);
+    logger.info(`[ScheduledTaskService] <<< triggerTask status=${res.status} body=${bodyText}`);
 
     if (!res.ok) {
       throw new Error(`Scheduled task trigger failed (${res.status}): ${bodyText}`);
