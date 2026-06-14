@@ -7,6 +7,9 @@ import {
   WORKFLOW_SYSTEM_PROMPT,
 } from '../../sto-plugin/claude/sto-workflow-tool/hooks';
 import { createWorkflowMcpServer } from '../../sto-plugin/claude/sto-workflow-tool/tools';
+import {
+  buildStoAgentTelemetryClaudeRuntimeOptions,
+} from '../../sto-plugin/claude/sto-agent-telemetry/sdk';
 import { getStoToken } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
@@ -88,26 +91,46 @@ const workflowToolExtension: ClaudeRuntimeExtension = {
   },
 };
 
+const agentTelemetryExtension: ClaudeRuntimeExtension = {
+  id: 'sto-agent-telemetry',
+  build: ({ sessionKey }) => buildStoAgentTelemetryClaudeRuntimeOptions(sessionKey),
+};
+
 const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
   dingTalkSendGuardExtension,
   workflowToolExtension,
+  agentTelemetryExtension,
 ];
 
 export async function buildClaudeRuntimeOptions(sessionKey: string): Promise<ClaudeRuntimeOptions> {
+  logger.info(`[claude-runtime] building runtime options, sessionKey=${sessionKey}, extensions=${claudeRuntimeExtensions.length} [${claudeRuntimeExtensions.map(e => e.id).join(', ')}]`);
+
   const options: ClaudeRuntimeOptions = {};
   const context: ClaudeRuntimeExtensionContext = { sessionKey };
 
   for (const extension of claudeRuntimeExtensions) {
+    const start = Date.now();
     try {
-      mergeRuntimeOptions(options, await extension.build(context));
+      logger.info(`[claude-runtime] building extension: ${extension.id}`);
+      const built = await extension.build(context);
+      mergeRuntimeOptions(options, built);
+      logger.info(`[claude-runtime] extension ${extension.id} built successfully in ${Date.now() - start}ms`);
     } catch (error) {
-      logger.warn(`[claude-runtime] extension ${extension.id} failed to build`, error);
+      logger.warn(`[claude-runtime] extension ${extension.id} failed to build after ${Date.now() - start}ms`, error);
     }
   }
 
-  return {
+  const result: ClaudeRuntimeOptions = {
     hooks: options.hooks && Object.keys(options.hooks).length > 0 ? options.hooks : undefined,
     systemPromptAppend: options.systemPromptAppend,
     mcpServers: options.mcpServers && Object.keys(options.mcpServers).length > 0 ? options.mcpServers : undefined,
   };
+
+  logger.info(
+    `[claude-runtime] build complete — hooks: ${result.hooks ? Object.keys(result.hooks).join(',') : 'none'}, ` +
+    `systemPromptAppend: ${result.systemPromptAppend ? `${result.systemPromptAppend.length} chars` : 'none'}, ` +
+    `mcpServers: ${result.mcpServers ? Object.keys(result.mcpServers).join(',') : 'none'}`,
+  );
+
+  return result;
 }
