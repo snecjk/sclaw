@@ -7,7 +7,7 @@ import {
   hasPendingUserTurn,
   getLastAssistantStopReason,
   isTranscriptReadyForSync,
-} from "../../sto-plugin/sto-agent-telemetry/transcript-parse";
+} from "../../sto-plugin/openclaw/sto-agent-telemetry/transcript-parse";
 
 describe("extractAllTurnsFromJsonl", () => {
   const sampleJsonl = [

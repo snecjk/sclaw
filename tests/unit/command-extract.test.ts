@@ -3,7 +3,7 @@ import {
   buildToolCommandPayload,
   extractCommandText,
   fromCommandPath,
-} from "../../sto-plugin/sto-agent-telemetry/command-extract";
+} from "../../sto-plugin/openclaw/sto-agent-telemetry/command-extract";
 
 describe("fromCommandPath", () => {
   it("maps sai-cli commandPath to product module action", () => {

@@ -25,10 +25,12 @@ type ActiveClaudeQuery = {
 const activeClaudeQueries = new Map<string, ActiveClaudeQuery>();
 const liveClaudeMessages = new Map<string, Array<{
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'toolresult';
   content: unknown;
   timestamp?: number;
   isError?: boolean;
+  toolCallId?: string;
+  toolName?: string;
   receivedAt: number;
 }>>();
 const claudeRuntimeResults = new Map<string, NonNullable<EngineHistoryResult['runtimeResult']>>();
@@ -308,6 +310,60 @@ function extractClaudeMessageBlocks(message: unknown): Array<Record<string, unkn
   ));
 }
 
+function extractTextContent(content: unknown): string | null {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return null;
+
+  const parts: string[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== 'object') continue;
+    const record = block as Record<string, unknown>;
+    if (typeof record.text === 'string') {
+      parts.push(record.text);
+    } else if (typeof record.content === 'string') {
+      parts.push(record.content);
+    }
+  }
+
+  return parts.length > 0 ? parts.join('\n') : null;
+}
+
+function extractWorkflowToolResult(message: unknown): {
+  content: string;
+  toolCallId?: string;
+  toolName?: string;
+} | null {
+  if (!message || typeof message !== 'object') return null;
+  const candidate = message as Record<string, unknown>;
+  const blocks = Array.isArray(candidate.content) ? candidate.content : [];
+
+  for (const block of blocks) {
+    if (!block || typeof block !== 'object') continue;
+    const source = block as Record<string, unknown>;
+    if (source.type !== 'tool_result') continue;
+
+    const text = extractTextContent(source.content);
+    if (!text) continue;
+
+    try {
+      const parsed = JSON.parse(text) as { type?: unknown; domain?: unknown; success?: unknown };
+      if (parsed.domain !== 'workflow' || typeof parsed.type !== 'string' || typeof parsed.success !== 'boolean') {
+        continue;
+      }
+    } catch {
+      continue;
+    }
+
+    return {
+      content: text,
+      toolCallId: typeof source.tool_use_id === 'string' ? source.tool_use_id : undefined,
+      toolName: typeof source.name === 'string' ? source.name : undefined,
+    };
+  }
+
+  return null;
+}
+
 function toClaudeRuntimeResult(message: Record<string, unknown>): NonNullable<EngineHistoryResult['runtimeResult']> {
   const stopReason = message.stop_reason ?? message.stopReason;
   return {
@@ -371,17 +427,20 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
       if (entry.type === 'assistant') return true;
       if (entry.type !== 'user') return false;
       const entryRecord = entry as Record<string, unknown>;
-      return !shouldHideClaudeUserMessage(entryRecord, entry.message);
+      return shouldKeepClaudeWorkflowToolResult(entry.message)
+        || !shouldHideClaudeUserMessage(entryRecord, entry.message);
     })
     .map((entry) => {
-      const role = entry.type === 'assistant' ? 'assistant' : 'user';
       const entryRecord = entry as Record<string, unknown>;
+      const workflowToolResult = entry.type === 'user' ? extractWorkflowToolResult(entry.message) : null;
       return {
         id: entry.uuid,
-        role,
-        content: toRawContentFromClaudeMessage(entry.message),
+        role: workflowToolResult ? 'toolresult' : entry.type === 'assistant' ? 'assistant' : 'user',
+        content: workflowToolResult?.content ?? toRawContentFromClaudeMessage(entry.message),
         timestamp: toEpochMs(entryRecord.timestamp),
         isError: false,
+        toolCallId: workflowToolResult?.toolCallId,
+        toolName: workflowToolResult?.toolName,
       };
     });
   const cachedMessages = liveClaudeMessages.get(sessionKey) ?? [];
@@ -398,11 +457,21 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
         content: message.content,
         timestamp: message.timestamp,
         isError: message.isError,
+        toolCallId: message.toolCallId,
+        toolName: message.toolName,
         sortKey: persistedMessages.length + index + (message.receivedAt / 1_000_000_000_000),
       })),
   ]
     .sort((left, right) => left.sortKey - right.sortKey)
-    .map(({ id, role, content, timestamp, isError }) => ({ id, role, content, timestamp, isError }));
+    .map(({ id, role, content, timestamp, isError, toolCallId, toolName }) => ({
+      id,
+      role,
+      content,
+      timestamp,
+      isError,
+      toolCallId,
+      toolName,
+    }));
 
   await upsertEngineSessionRegistryEntry({
     sessionKey,
@@ -419,6 +488,10 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
     isRunning: activeClaudeQueries.has(sessionKey),
     runtimeResult: claudeRuntimeResults.get(sessionKey) ?? null,
   };
+}
+
+function shouldKeepClaudeWorkflowToolResult(messagePayload: unknown): boolean {
+  return Boolean(extractWorkflowToolResult(messagePayload));
 }
 
 function extractAgentId(sessionKey: string): string {
@@ -446,6 +519,26 @@ async function consumeClaudeQuery(
       }
       if ((message.type === 'user' || message.type === 'assistant') && 'message' in message) {
         if (message.type === 'user' && shouldHideClaudeUserMessage(message, (message as { message?: unknown }).message)) {
+          const workflowToolResult = extractWorkflowToolResult((message as { message?: unknown }).message);
+          if (workflowToolResult) {
+            const nextEntry = {
+              id: typeof message.uuid === 'string' ? message.uuid : randomUUID(),
+              role: 'toolresult' as const,
+              content: workflowToolResult.content,
+              timestamp: toEpochMs(message.timestamp) ?? Date.now(),
+              toolCallId: workflowToolResult.toolCallId,
+              toolName: workflowToolResult.toolName,
+              receivedAt: Date.now(),
+            };
+            const current = liveClaudeMessages.get(sessionKey) ?? [];
+            const existingIndex = current.findIndex((entry) => entry.id === nextEntry.id);
+            if (existingIndex >= 0) {
+              current[existingIndex] = nextEntry;
+              liveClaudeMessages.set(sessionKey, [...current]);
+            } else {
+              liveClaudeMessages.set(sessionKey, [...current, nextEntry]);
+            }
+          }
           continue;
         }
         const liveMessage = message as {
@@ -553,12 +646,13 @@ async function startClaudeQuery(
       env: await buildClaudeEnvForAccount(launchSelection.accountId),
       permissionMode: 'bypassPermissions' as const,
       allowDangerouslySkipPermissions: true,
-      settingSources: ['user'] as const,
+      settingSources: ['user' as const],
       skills: 'all' as const,
       settings: launchSelection.model ? { model: launchSelection.model } : undefined,
       additionalDirectories: options?.additionalDirectories,
       pathToClaudeCodeExecutable,
       hooks: runtimeOptions.hooks,
+      mcpServers: runtimeOptions.mcpServers,
       plugins: pluginPaths.map((pluginPath) => ({
         type: 'local' as const,
         path: pluginPath,
