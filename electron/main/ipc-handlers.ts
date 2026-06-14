@@ -69,6 +69,7 @@ import { appUpdater } from './updater';
 import { registerHostApiProxyHandlers } from './ipc/host-api-proxy';
 import { registerWorkflowStreamHandlers } from './ipc/workflow-stream-proxy';
 import { getWorkflowExecutionTracker } from './services/workflow-execution-tracker';
+import { syncClaudeDefaultContext } from '../services/claude-context-sync';
 import {
   isLaunchAtStartupKey,
   isProxyKey,
@@ -1117,6 +1118,11 @@ function registerUvHandlers(): void {
       }
       // Always run python setup to ensure it exists in uv's cache
       await setupManagedPython();
+      try {
+        await syncClaudeDefaultContext();
+      } catch (error) {
+        logger.warn('Failed to sync Claude default context after setup:', error);
+      }
       return { success: true };
     } catch (error) {
       console.error('Failed to setup uv/python:', error);

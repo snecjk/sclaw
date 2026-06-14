@@ -23,6 +23,7 @@ import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { loadSiteDepartmentTypes } from '../../services/sto-apollo-config-service';
 import { getClientSiteAccessService } from '../../services/client-site-access-service';
 import type { ClientSiteAccessCheckResult } from '../../../shared/client-site-access';
+import { syncClaudeDefaultContext } from '../../services/claude-context-sync';
 
 const ssoLoginManager = new SsoLoginManager();
 
@@ -53,6 +54,12 @@ async function clearAuthAfterAccessDenied(): Promise<void> {
  */
 function schedulePostLoginBackgroundWork(user: SsoUserInfo, ctx: HostApiContext): void {
   void (async () => {
+    try {
+      await syncClaudeDefaultContext();
+    } catch (err) {
+      logger.warn('[auth] Claude default context sync on login failed:', err);
+    }
+
     try {
       const previousUserCode = await getCurrentActiveUserCode();
       const workspaceResult = await activateUserWorkspace(user.code);

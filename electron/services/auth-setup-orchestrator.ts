@@ -18,6 +18,7 @@ import {
   getStoBizAgentSyncService,
   type StoBizAgentSyncResult,
 } from './sto-biz-agent-sync';
+import { syncClaudeDefaultContext } from './claude-context-sync';
 
 export type AuthenticatedSetupSource = 'login' | 'startup';
 
@@ -194,6 +195,12 @@ async function runSetup(
   const userToSync = user ?? (await getAuthState()).user;
   if (userToSync) {
     await syncSsoAuthToOpenClaw(userToSync);
+  }
+
+  try {
+    await syncClaudeDefaultContext();
+  } catch (err) {
+    logger.warn(`${logPrefix} Claude default context sync failed:`, err);
   }
 
   let needsGatewayRefresh = false;
