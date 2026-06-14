@@ -60,8 +60,17 @@ export type {
 // between tool-result finals and the next delta.
 let _lastChatEventAt = 0;
 
-/** Normalize a timestamp to milliseconds. Handles both seconds and ms. */
-function toMs(ts: number): number {
+/** Normalize a timestamp to milliseconds. Handles seconds, ms, and ISO strings. */
+function toMs(ts: unknown): number {
+  if (typeof ts === 'string') {
+    const numeric = Number(ts);
+    if (Number.isFinite(numeric)) {
+      return numeric < 1e12 ? numeric * 1000 : numeric;
+    }
+    const parsed = Date.parse(ts);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (typeof ts !== 'number' || !Number.isFinite(ts)) return 0;
   // Timestamps < 1e12 are in seconds (before ~2033); >= 1e12 are milliseconds
   return ts < 1e12 ? ts * 1000 : ts;
 }
@@ -128,6 +137,9 @@ const SESSION_LOAD_MIN_INTERVAL_MS = 1_200;
 const HISTORY_LOAD_MIN_INTERVAL_MS = 800;
 const HISTORY_POLL_SILENCE_WINDOW_MS = 2_500;
 const CHAT_EVENT_DEDUPE_TTL_MS = 30_000;
+const SESSION_METADATA_HISTORY_LIMIT = 2;
+const SESSION_METADATA_HYDRATE_LIMIT = 40;
+const SESSION_METADATA_HYDRATE_CONCURRENCY = 4;
 const _chatEventDedupe = new Map<string, number>();
 
 function clearErrorRecoveryTimer(): void {
@@ -765,6 +777,18 @@ function parseSessionUpdatedAtMs(value: unknown): number | undefined {
   return undefined;
 }
 
+async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(limit, 1), items.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex];
+      nextIndex += 1;
+      await task(item);
+    }
+  }));
+}
+
 async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
   if (!isCronSessionKey(sessionKey)) return [];
   try {
@@ -793,6 +817,10 @@ function resolveMainSessionKeyForAgent(agentId: string | undefined | null): stri
   return summary?.mainSessionKey || buildFallbackMainSessionKey(normalizedAgentId);
 }
 
+function isTemporaryAgentSessionKey(key: string): boolean {
+  return /^agent:[^:]+:session-\d+/.test(key);
+}
+
 function ensureSessionEntry(sessions: ChatSession[], sessionKey: string): ChatSession[] {
   if (sessions.some((session) => session.key === sessionKey)) {
     return sessions;
@@ -817,7 +845,7 @@ function buildSessionSwitchPatch(
   // 仅将没有任何历史记录且无活动时间的会话视为空会话。
   // 单纯依赖 messages.length 是不可靠的，因为 switchSession 会在真正调用 loadHistory 前抢先清空当前 messages，
   // 造成竞争条件，使得带有真实历史的会话被判定为空并从侧边栏移除。
-  const leavingEmpty = !state.currentSessionKey.endsWith(':main')
+  const leavingEmpty = isTemporaryAgentSessionKey(state.currentSessionKey)
     && state.messages.length === 0
     && !state.sessionLastActivity[state.currentSessionKey]
     && !state.sessionLabels[state.currentSessionKey];
@@ -1362,40 +1390,52 @@ export const useChatStore = create<ChatState>()(
             void get().loadHistory();
           }
 
-          // Background: fetch first user message for every non-main session to populate labels upfront.
-          // Uses a small limit so it's cheap; runs in parallel and doesn't block anything.
-          const sessionsToLabel = sessionsWithCurrent.filter((s) => !s.key.endsWith(':main'));
-          if (sessionsToLabel.length > 0) {
-            void Promise.all(
-              sessionsToLabel.map(async (session) => {
-                try {
-                  const r = await useGatewayStore.getState().rpc<Record<string, unknown>>(
-                    'chat.history',
-                    { sessionKey: session.key, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
-                  );
-                  const msgs = Array.isArray(r.messages) ? r.messages as RawMessage[] : [];
-                  const firstUser = msgs.find((m) => m.role === 'user');
-                  const lastMsg = msgs[msgs.length - 1];
-                  set((s) => {
-                    const next: Partial<typeof s> = {};
-                    const existingLabel = s.sessionLabels[session.key];
-                    if (firstUser && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
-                      const labelText = deriveSessionLabelFromUserText(getMessageText(firstUser.content));
-                      if (labelText) {
-                        const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
-                        next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
-                      }
+          // Background: hydrate only the first screen of missing metadata.
+          // Avoid the old N * full-history fan-out, which became very expensive
+          // when users had hundreds of sessions.
+          const sessionsToHydrate = sessionsWithCurrent
+            .filter((session) => {
+              if (session.key.endsWith(':main')) return false;
+              const hasUsableTitle = Boolean(session.label?.trim() || session.displayName?.trim() || get().sessionLabels[session.key]);
+              const hasActivity = Boolean(session.updatedAt || get().sessionLastActivity[session.key]);
+              return !hasUsableTitle || !hasActivity;
+            })
+            .sort((left, right) => {
+              const leftAt = left.updatedAt ?? get().sessionLastActivity[left.key] ?? 0;
+              const rightAt = right.updatedAt ?? get().sessionLastActivity[right.key] ?? 0;
+              return rightAt - leftAt;
+            })
+            .slice(0, SESSION_METADATA_HYDRATE_LIMIT);
+
+          if (sessionsToHydrate.length > 0) {
+            void runLimited(sessionsToHydrate, SESSION_METADATA_HYDRATE_CONCURRENCY, async (session) => {
+              try {
+                const r = await useGatewayStore.getState().rpc<Record<string, unknown>>(
+                  'chat.history',
+                  { sessionKey: session.key, limit: SESSION_METADATA_HISTORY_LIMIT },
+                );
+                const msgs = Array.isArray(r.messages) ? r.messages as RawMessage[] : [];
+                const firstUser = msgs.find((m) => m.role === 'user');
+                const lastMsg = msgs[msgs.length - 1];
+                set((s) => {
+                  const next: Partial<typeof s> = {};
+                  const existingLabel = s.sessionLabels[session.key];
+                  if (firstUser && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+                    const labelText = deriveSessionLabelFromUserText(getMessageText(firstUser.content));
+                    if (labelText) {
+                      const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
+                      next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
                     }
-                    if (lastMsg?.timestamp) {
-                      next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: toMs(lastMsg.timestamp) };
-                    }
-                    return next;
-                  });
-                } catch {
-                  // ignore per-session errors
-                }
-              }),
-            );
+                  }
+                  if (lastMsg?.timestamp && !s.sessionLastActivity[session.key]) {
+                    next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: toMs(lastMsg.timestamp) };
+                  }
+                  return next;
+                });
+              } catch {
+                // ignore per-session errors
+              }
+            });
           }
         }
       } catch (err) {
@@ -1497,7 +1537,7 @@ export const useChatStore = create<ChatState>()(
     // conversation history inaccessible when the user switches back to it.
     const { currentSessionKey, messages, sessions, sessionLastActivity, sessionLabels } = get();
     // 仅将没有任何历史记录且无活动时间的会话视为空会话
-    const leavingEmpty = !currentSessionKey.endsWith(':main')
+    const leavingEmpty = isTemporaryAgentSessionKey(currentSessionKey)
       && messages.length === 0
       && !sessionLastActivity[currentSessionKey]
       && !sessionLabels[currentSessionKey];
@@ -1547,7 +1587,7 @@ export const useChatStore = create<ChatState>()(
     // in the sidebar.
     // 同样需要综合检查 sessionLastActivity 和 sessionLabels，
     // 防止因为 switchSession 抢先清空 messages 而误判有历史的会话为空。
-    const isEmptyNonMain = !currentSessionKey.endsWith(':main')
+    const isEmptyNonMain = isTemporaryAgentSessionKey(currentSessionKey)
       && messages.length === 0
       && !sessionLastActivity[currentSessionKey]
       && !sessionLabels[currentSessionKey];
@@ -1765,9 +1805,17 @@ export const useChatStore = create<ChatState>()(
       const lastMsg = finalMessages[finalMessages.length - 1];
       if (lastMsg?.timestamp) {
         const lastAt = toMs(lastMsg.timestamp);
-        set((s) => ({
-          sessionLastActivity: { ...s.sessionLastActivity, [targetSessionKey]: lastAt },
-        }));
+        if (lastAt > 0) {
+          set((s) => {
+            const listedAt = s.sessions.find((session) => session.key === targetSessionKey)?.updatedAt ?? 0;
+            const currentAt = s.sessionLastActivity[targetSessionKey] ?? 0;
+            const nextAt = Math.max(currentAt, listedAt, lastAt);
+            if (nextAt === currentAt) return {};
+            return {
+              sessionLastActivity: { ...s.sessionLastActivity, [targetSessionKey]: nextAt },
+            };
+          });
+        }
       }
 
       // Async: load missing image previews from disk (updates in background)

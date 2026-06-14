@@ -744,12 +744,6 @@ export const claudeAdapter: EngineAdapter = {
     const entries = await listEngineSessionRegistryEntries('claude');
     const sessions: EngineSessionSummary[] = [];
     for (const entry of entries) {
-      if (entry.sessionId) {
-        const configDir = await resolveClaudeSessionConfigDir(entry.cwd!, entry.sessionId);
-        if (!configDir) {
-          continue;
-        }
-      }
       sessions.push({
         key: entry.sessionKey,
         label: entry.title,

@@ -7,8 +7,17 @@ import type { AttachedFileMeta, ChatSession, ContentBlock, RawMessage, ToolStatu
 // between tool-result finals and the next delta.
 let _lastChatEventAt = 0;
 
-/** Normalize a timestamp to milliseconds. Handles both seconds and ms. */
-function toMs(ts: number): number {
+/** Normalize a timestamp to milliseconds. Handles seconds, ms, and ISO strings. */
+function toMs(ts: unknown): number {
+  if (typeof ts === 'string') {
+    const numeric = Number(ts);
+    if (Number.isFinite(numeric)) {
+      return numeric < 1e12 ? numeric * 1000 : numeric;
+    }
+    const parsed = Date.parse(ts);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (typeof ts !== 'number' || !Number.isFinite(ts)) return 0;
   // Timestamps < 1e12 are in seconds (before ~2033); >= 1e12 are milliseconds
   return ts < 1e12 ? ts * 1000 : ts;
 }

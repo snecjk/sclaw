@@ -1,5 +1,4 @@
 import { hostApiFetch } from '@/lib/host-api';
-import { CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
 import {
   getCanonicalPrefixFromSessions,
   getMessageText,
@@ -13,6 +12,9 @@ import { useAgentsStore } from '@/stores/agents';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
+const SESSION_METADATA_HISTORY_LIMIT = 2;
+const SESSION_METADATA_HYDRATE_LIMIT = 40;
+const SESSION_METADATA_HYDRATE_CONCURRENCY = 4;
 
 function getAgentIdFromSessionKey(sessionKey: string): string {
   if (!sessionKey.startsWith('agent:')) return 'main';
@@ -22,6 +24,10 @@ function getAgentIdFromSessionKey(sessionKey: string): string {
 
 function getSessionEngineType(session: ChatSession | undefined): ChatSession['engineType'] | undefined {
   return session?.engineType;
+}
+
+function isTemporaryAgentSessionKey(key: string): boolean {
+  return /^agent:[^:]+:session-\d+/.test(key);
 }
 
 function parseSessionUpdatedAtMs(value: unknown): number | undefined {
@@ -35,6 +41,18 @@ function parseSessionUpdatedAtMs(value: unknown): number | undefined {
     }
   }
   return undefined;
+}
+
+async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(limit, 1), items.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex];
+      nextIndex += 1;
+      await task(item);
+    }
+  }));
 }
 
 export function createSessionActions(
@@ -265,15 +283,26 @@ export function createSessionActions(
           await get().loadHistory();
         }
 
-        // Background: fetch first user message for every session to populate labels upfront.
-        // Uses a small limit so it's cheap; runs in parallel and doesn't block anything.
-        const sessionsToLabel = sessionsWithCurrent;
-        if (sessionsToLabel.length > 0) {
-          void Promise.all(
-            sessionsToLabel.map(async (session) => {
+        // Background: hydrate only the first screen of missing metadata.
+        // Avoid N * full-history fan-out when many sessions exist.
+        const sessionsToHydrate = sessionsWithCurrent
+          .filter((session) => {
+            if (session.key.endsWith(':main')) return false;
+            const hasUsableTitle = Boolean(session.label?.trim() || session.displayName?.trim() || get().sessionLabels[session.key]);
+            const hasActivity = Boolean(session.updatedAt || get().sessionLastActivity[session.key]);
+            return !hasUsableTitle || !hasActivity;
+          })
+          .sort((left, right) => {
+            const leftAt = left.updatedAt ?? get().sessionLastActivity[left.key] ?? 0;
+            const rightAt = right.updatedAt ?? get().sessionLastActivity[right.key] ?? 0;
+            return rightAt - leftAt;
+          })
+          .slice(0, SESSION_METADATA_HYDRATE_LIMIT);
+        if (sessionsToHydrate.length > 0) {
+          void runLimited(sessionsToHydrate, SESSION_METADATA_HYDRATE_CONCURRENCY, async (session) => {
               try {
                 const history = await hostApiFetch<{ success?: boolean; result?: { messages?: RawMessage[] } }>(
-                  `/api/chat/history?sessionKey=${encodeURIComponent(session.key)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`
+                  `/api/chat/history?sessionKey=${encodeURIComponent(session.key)}&limit=${SESSION_METADATA_HISTORY_LIMIT}`
                   + (getSessionEngineType(session) ? `&engineType=${encodeURIComponent(getSessionEngineType(session)!)}`
                     : ''),
                 );
@@ -290,14 +319,13 @@ export function createSessionActions(
                       next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
                     }
                   }
-                  if (lastMsg?.timestamp) {
+                  if (lastMsg?.timestamp && !s.sessionLastActivity[session.key]) {
                     next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: toMs(lastMsg.timestamp) };
                   }
                   return next;
                 });
               } catch { /* ignore per-session errors */ }
-            }),
-          );
+            });
         }
       } catch (err) {
         console.warn('Failed to load sessions:', err);
@@ -311,7 +339,7 @@ export function createSessionActions(
       // 仅将没有任何历史记录且无活动时间的会话视为空会话。
       // 单纯依赖 messages.length 是不可靠的，因为 switchSession 会在真正调用 loadHistory 前抢先清空当前 messages，
       // 造成竞争条件，使得带有真实历史的会话被判定为空并从侧边栏移除。
-      const leavingEmpty = !currentSessionKey.endsWith(':main')
+      const leavingEmpty = isTemporaryAgentSessionKey(currentSessionKey)
         && messages.length === 0
         && !sessionLastActivity[currentSessionKey]
         && !sessionLabels[currentSessionKey];
@@ -417,7 +445,7 @@ export function createSessionActions(
       // conversation history inaccessible when the user switches back to it.
       const { currentSessionKey, messages, sessionLastActivity, sessionLabels } = get();
       // 仅将没有任何历史记录且无活动时间的会话视为空会话
-      const leavingEmpty = !currentSessionKey.endsWith(':main')
+      const leavingEmpty = isTemporaryAgentSessionKey(currentSessionKey)
         && messages.length === 0
         && !sessionLastActivity[currentSessionKey]
         && !sessionLabels[currentSessionKey];
@@ -462,7 +490,7 @@ export function createSessionActions(
       // in the sidebar.
       // 同样需要综合检查 sessionLastActivity 和 sessionLabels，
       // 防止因为 switchSession 抢先清空 messages 而误判有历史的会话为空。
-      const isEmptyNonMain = !currentSessionKey.endsWith(':main')
+      const isEmptyNonMain = isTemporaryAgentSessionKey(currentSessionKey)
         && messages.length === 0
         && !sessionLastActivity[currentSessionKey]
         && !sessionLabels[currentSessionKey];

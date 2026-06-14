@@ -1,4 +1,6 @@
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
+import { join } from 'node:path';
+import { getOpenClawConfigDir } from '../utils/paths';
 import type { EngineAdapter, EngineAdapterContext, EngineSendWithMediaParams, EngineSessionSummary } from './types';
 
 const VISION_MIME_TYPES = new Set([
@@ -12,6 +14,99 @@ const VISION_MIME_TYPES = new Set([
   'image/heif',
   'image/tiff',
 ]);
+const OPENCLAW_SESSION_STAT_CONCURRENCY = 32;
+
+async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(limit, 1), items.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex];
+      nextIndex += 1;
+      await task(item);
+    }
+  }));
+}
+
+function isAbsolutePath(value: string): boolean {
+  return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value);
+}
+
+function resolveSessionFile(
+  sessionsDir: string,
+  entry: unknown,
+): string | null {
+  if (typeof entry === 'string') {
+    return isAbsolutePath(entry) ? entry : join(sessionsDir, entry.endsWith('.jsonl') ? entry : `${entry}.jsonl`);
+  }
+  if (!entry || typeof entry !== 'object') return null;
+  const record = entry as Record<string, unknown>;
+  const direct = record.sessionFile ?? record.file ?? record.fileName ?? record.path;
+  if (typeof direct === 'string' && direct.trim()) {
+    return isAbsolutePath(direct) ? direct : join(sessionsDir, direct.endsWith('.jsonl') ? direct : `${direct}.jsonl`);
+  }
+  const id = record.id ?? record.sessionId;
+  if (typeof id === 'string' && id.trim()) {
+    return join(sessionsDir, id.endsWith('.jsonl') ? id : `${id}.jsonl`);
+  }
+  return null;
+}
+
+async function loadOpenClawSessionUpdatedAt(): Promise<Map<string, number>> {
+  const updatedAtByKey = new Map<string, number>();
+  const agentsDir = join(getOpenClawConfigDir(), 'agents');
+  let entries: Awaited<ReturnType<typeof readdir>>;
+  try {
+    entries = await readdir(agentsDir, { withFileTypes: true });
+  } catch {
+    return updatedAtByKey;
+  }
+  const agentIds = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+
+  await Promise.all(agentIds.map(async (agentId) => {
+    const sessionsDir = join(agentsDir, agentId, 'sessions');
+    const storePath = join(sessionsDir, 'sessions.json');
+    let store: Record<string, unknown>;
+    try {
+      store = JSON.parse(await readFile(storePath, 'utf8')) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+
+    const candidates: Array<{ key: string; filePath: string }> = [];
+    if (Array.isArray(store.sessions)) {
+      for (const item of store.sessions) {
+        if (!item || typeof item !== 'object') continue;
+        const record = item as Record<string, unknown>;
+        const key = typeof record.key === 'string'
+          ? record.key
+          : typeof record.sessionKey === 'string'
+            ? record.sessionKey
+            : '';
+        if (!key) continue;
+        const filePath = resolveSessionFile(sessionsDir, record);
+        if (filePath) candidates.push({ key, filePath });
+      }
+    }
+
+    for (const [key, value] of Object.entries(store)) {
+      if (key === 'sessions' || !key) continue;
+      const filePath = resolveSessionFile(sessionsDir, value);
+      if (filePath) candidates.push({ key, filePath });
+    }
+
+    await runLimited(candidates, OPENCLAW_SESSION_STAT_CONCURRENCY, async ({ key, filePath }) => {
+      try {
+        const fileStat = await stat(filePath);
+        updatedAtByKey.set(key, fileStat.mtimeMs);
+      } catch {
+        // Ignore missing/deleted transcripts; the gateway decides visibility.
+      }
+    });
+  }));
+
+  return updatedAtByKey;
+}
 
 export const openClawAdapter: EngineAdapter = {
   type: 'openclaw',
@@ -19,6 +114,7 @@ export const openClawAdapter: EngineAdapter = {
   async listSessions(ctx: EngineAdapterContext) {
     try {
       const result = await ctx.gatewayManager.rpc<Record<string, unknown>>('sessions.list', {});
+      const updatedAtByKey = await loadOpenClawSessionUpdatedAt();
       const sessions: EngineSessionSummary[] = Array.isArray(result.sessions)
         ? result.sessions
           .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
@@ -28,7 +124,9 @@ export const openClawAdapter: EngineAdapter = {
             displayName: typeof entry.displayName === 'string' ? entry.displayName : undefined,
             thinkingLevel: typeof entry.thinkingLevel === 'string' ? entry.thinkingLevel : undefined,
             model: typeof entry.model === 'string' ? entry.model : undefined,
-            updatedAt: typeof entry.updatedAt === 'number' || typeof entry.updatedAt === 'string' ? entry.updatedAt : undefined,
+            updatedAt: typeof entry.updatedAt === 'number' || typeof entry.updatedAt === 'string'
+              ? entry.updatedAt
+              : updatedAtByKey.get(typeof entry.key === 'string' ? entry.key : ''),
             engineType: 'openclaw',
           }))
           .filter((entry) => Boolean(entry.key))

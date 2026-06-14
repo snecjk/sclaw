@@ -162,7 +162,7 @@ describe('chat history actions', () => {
     });
     const actions = createHistoryActions(h.set as never, h.get as never);
 
-    invokeIpcMock.mockResolvedValueOnce({
+    hostApiFetchMock.mockResolvedValueOnce({
       success: true,
       result: {
         messages: [
@@ -183,5 +183,88 @@ describe('chat history actions', () => {
       '怎么没内容了',
     ]);
     expect(h.read().messages[1]?.isError).toBe(true);
+  });
+
+  it('does not duplicate optimistic user message when loaded history already has matching text', async () => {
+    const { createHistoryActions } = await import('@/stores/chat/history-actions');
+    const h = makeHarness({
+      currentSessionKey: 'agent:main:main',
+      sending: true,
+      lastUserMessageAt: 1710000000000,
+      messages: [
+        {
+          id: 'local-user-1',
+          role: 'user',
+          content: '你是谁',
+          timestamp: 1710000000,
+        },
+      ] as never,
+    });
+    const actions = createHistoryActions(h.set as never, h.get as never);
+
+    hostApiFetchMock.mockResolvedValueOnce({
+      success: true,
+      result: {
+        messages: [
+          {
+            id: 'history-user-1',
+            role: 'user',
+            content: '你是谁',
+          },
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '我是 STO Claw。',
+            timestamp: 1710000003,
+          },
+        ],
+      },
+    });
+
+    await actions.loadHistory(true);
+
+    expect(h.read().messages.map((message) => message.content)).toEqual([
+      '你是谁',
+      '我是 STO Claw。',
+    ]);
+  });
+
+  it('inserts preserved optimistic user message before newer assistant history', async () => {
+    const { createHistoryActions } = await import('@/stores/chat/history-actions');
+    const h = makeHarness({
+      currentSessionKey: 'agent:main:main',
+      sending: true,
+      lastUserMessageAt: 1710000000000,
+      messages: [
+        {
+          id: 'local-user-1',
+          role: 'user',
+          content: '你是谁',
+          timestamp: 1710000000,
+        },
+      ] as never,
+    });
+    const actions = createHistoryActions(h.set as never, h.get as never);
+
+    hostApiFetchMock.mockResolvedValueOnce({
+      success: true,
+      result: {
+        messages: [
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '我是 STO Claw。',
+            timestamp: 1710000003,
+          },
+        ],
+      },
+    });
+
+    await actions.loadHistory(true);
+
+    expect(h.read().messages.map((message) => message.content)).toEqual([
+      '你是谁',
+      '我是 STO Claw。',
+    ]);
   });
 });

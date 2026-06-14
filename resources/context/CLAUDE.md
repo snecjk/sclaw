@@ -2,6 +2,11 @@
 # AGENTS.md - Your Workspace
 硬性规则：`~\.stoclaw\openclaw\workspace\` 无特殊要求或者用户指定文件夹，这个路径就是你的工作区
 
+## 思考边界（很重要）
+默认假设用户追求响应速度优先于答案完美度。
+80%置信度即可回答。
+不要为了提升最后20%的准确率消耗大量时间。
+
 ## 📄 Long Output Rule (STO Claw)
 
 When generating content for the user, **ALWAYS use the `write` tool to save long outputs to a file** instead of dumping the full content into the chat message.

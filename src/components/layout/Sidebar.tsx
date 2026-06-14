@@ -78,6 +78,9 @@ const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS = 'w-48 rounded-[12px] border-0 shadow-
 const SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS = 'rounded-[12px] border-0 shadow-lg';
 const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
   'hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7] dark:hover:bg-muted dark:focus:bg-muted dark:data-[highlighted]:bg-muted dark:data-[state=open]:bg-muted';
+const SIDEBAR_BUCKET_INITIAL_LIMIT = 60;
+const SIDEBAR_BUCKET_LOAD_MORE_COUNT = 60;
+const SIDEBAR_COLLAPSED_SESSION_LIMIT = 40;
 
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   if (!activityMs || activityMs <= 0) return 'older';
@@ -582,6 +585,7 @@ export function Sidebar() {
     older: true,
     cronTasks: true,
   });
+  const [bucketVisibleCounts, setBucketVisibleCounts] = useState<Partial<Record<SessionBucketKey, number>>>({});
 
   const { t } = useTranslation(['common', 'chat', 'auth', 'tasks']);
 
@@ -698,21 +702,28 @@ export function Sidebar() {
     [visibleSessions],
   );
 
-  const getEffectiveActivityMs = (sessionKey: string): number => {
+  const getEffectiveActivityMs = (session: { key: string; updatedAt?: number; label?: string }): number => {
+    const sessionKey = session.key;
     const recorded = sessionLastActivity[sessionKey] ?? 0;
-    if (recorded > 0) return recorded;
-    const isFreshCurrentSession = sessionKey === currentSessionKey && !sessionLabels[sessionKey];
+    const listed = typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt) ? session.updatedAt : 0;
+    const activity = Math.max(recorded, listed);
+    if (activity > 0) return activity;
+    const isFreshCurrentSession = sessionKey === currentSessionKey
+      && isTemporaryAgentSessionKey(sessionKey)
+      && !sessionLabels[sessionKey];
     return isFreshCurrentSession ? nowMs : 0;
   };
 
   for (const session of [...normalSessions].sort((a, b) =>
-    getEffectiveActivityMs(b.key) - getEffectiveActivityMs(a.key),
+    getEffectiveActivityMs(b) - getEffectiveActivityMs(a),
   )) {
-    const bucketKey = getSessionBucket(getEffectiveActivityMs(session.key), nowMs);
+    const bucketKey = getSessionBucket(getEffectiveActivityMs(session), nowMs);
     sessionBucketMap[bucketKey].sessions.push(session);
   }
 
-  const sessionsOrderedForCollapse = sessionBuckets.flatMap((b) => b.sessions);
+  const sessionsOrderedForCollapse = sessionBuckets
+    .flatMap((b) => b.sessions)
+    .slice(0, SIDEBAR_COLLAPSED_SESSION_LIMIT);
 
   // Group scheduled-task sessions by task name for the task-list section
   const scheduledTaskGroups = useMemo(() => {
@@ -755,6 +766,16 @@ export function Sidebar() {
 
   const toggleBucket = (key: SessionBucketKey) => {
     setBucketOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const getBucketVisibleCount = (key: SessionBucketKey) =>
+    bucketVisibleCounts[key] ?? SIDEBAR_BUCKET_INITIAL_LIMIT;
+
+  const showMoreBucketSessions = (key: SessionBucketKey) => {
+    setBucketVisibleCounts((prev) => ({
+      ...prev,
+      [key]: (prev[key] ?? SIDEBAR_BUCKET_INITIAL_LIMIT) + SIDEBAR_BUCKET_LOAD_MORE_COUNT,
+    }));
   };
 
   const primaryNav = useMemo(() => {
@@ -1011,8 +1032,9 @@ export function Sidebar() {
                       aria-hidden
                     />
                   </button>
-                  {bucketOpen[bucket.key] &&
-                    bucket.sessions.map((s) => {
+                  {bucketOpen[bucket.key] ? (
+                    <>
+                    {bucket.sessions.slice(0, getBucketVisibleCount(bucket.key)).map((s) => {
                       const isEditing = editingSessionKey === s.key;
                       const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
                       return (
@@ -1098,6 +1120,20 @@ isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION
                         </div>
                       );
                     })}
+                    {bucket.sessions.length > getBucketVisibleCount(bucket.key) ? (
+                      <button
+                        type="button"
+                        onClick={() => showMoreBucketSessions(bucket.key)}
+                        className="mt-1 w-full rounded-[8px] px-[10px] py-[6px] text-left text-[12px] font-medium text-muted-foreground transition-colors hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]"
+                      >
+                        {t('common:actions.showMore', {
+                          defaultValue: '显示更多（{{count}}）',
+                          count: bucket.sessions.length - getBucketVisibleCount(bucket.key),
+                        })}
+                      </button>
+                    ) : null}
+                    </>
+                  ) : null}
                 </div>
               ) : null
               )}
