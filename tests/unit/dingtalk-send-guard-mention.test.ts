@@ -1,20 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DINGTALK_RECIPIENTS_MARKER } from '../../sto-plugin/sto-dingtalk-send-guard/shared/dingtalk-mention-context';
+import { DINGTALK_RECIPIENTS_MARKER } from '../../sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-mention-context';
+import type { OpenClawPluginApi } from '../../sto-plugin/openclaw/sto-dingtalk-send-guard/api.js';
 
 const { readDingTalkMentionPending, clearDingTalkMentionPending } = vi.hoisted(() => ({
   readDingTalkMentionPending: vi.fn(),
   clearDingTalkMentionPending: vi.fn(),
 }));
 
-vi.mock('../../sto-plugin/sto-dingtalk-send-guard/dingtalk-mention-pending.js', () => ({
+vi.mock('../../sto-plugin/openclaw/sto-dingtalk-send-guard/dingtalk-mention-pending.js', () => ({
   readDingTalkMentionPending,
   clearDingTalkMentionPending,
 }));
 
-import register from '../../sto-plugin/sto-dingtalk-send-guard/index.js';
+import register from '../../sto-plugin/openclaw/sto-dingtalk-send-guard/index.js';
 
 describe('sto-dingtalk-send-guard before_prompt_build', () => {
-  const hooks: Record<string, Function> = {};
+  type HookHandler = (...args: unknown[]) => unknown;
+  const hooks: Record<string, HookHandler> = {};
 
   function buildApi() {
     for (const key of Object.keys(hooks)) delete hooks[key];
@@ -25,7 +27,7 @@ describe('sto-dingtalk-send-guard before_prompt_build', () => {
       id: 'sto-dingtalk-send-guard',
       name: '钉钉发送防护',
       logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn() },
-      on: vi.fn((hookName: string, handler: Function) => {
+      on: vi.fn((hookName: string, handler: HookHandler) => {
         hooks[hookName] = handler;
       }),
     };
@@ -47,7 +49,7 @@ describe('sto-dingtalk-send-guard before_prompt_build', () => {
     clearDingTalkMentionPending.mockResolvedValue(undefined);
 
     const api = buildApi();
-    register.register(api as any);
+    register.register(api as unknown as OpenClawPluginApi);
 
     const result = await hooks.before_prompt_build(
       { prompt: '你好', messages: [] },
@@ -65,7 +67,7 @@ describe('sto-dingtalk-send-guard before_prompt_build', () => {
     readDingTalkMentionPending.mockResolvedValue(null);
 
     const api = buildApi();
-    register.register(api as any);
+    register.register(api as unknown as OpenClawPluginApi);
 
     const result = await hooks.before_prompt_build(
       { prompt: 'hello', messages: [] },

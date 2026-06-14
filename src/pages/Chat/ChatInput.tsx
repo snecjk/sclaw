@@ -32,6 +32,17 @@ import { mentionSearchItemToMention } from '@/types/dingtalk-mention';
 
 const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
 
+function logDingTalkMentionClient(message: string, data: unknown): void {
+  void hostApiFetch('/api/logs/client', {
+    method: 'POST',
+    body: JSON.stringify({
+      level: 'info',
+      message,
+      data,
+    }),
+  }).catch(() => undefined);
+}
+
 export interface FileAttachment {
   id: string;
   fileName: string;
@@ -325,6 +336,19 @@ export function ChatInput({
   const applyDingTalkMention = useCallback((item: MentionSearchItem) => {
     if (!dingTalkTrigger) return;
     const mention = mentionSearchItemToMention(item);
+    logDingTalkMentionClient('[dingtalk-mention] chat-input: select item', {
+      itemType: item.type,
+      itemTitle: item.title,
+      itemHasId: Boolean(item.id),
+      itemHasCorpId: Boolean(item.corpId),
+      mentionType: mention.type,
+      mentionDisplayName: mention.displayName,
+      mentionHasUserId: Boolean(mention.userId),
+      mentionHasOpenConversationId: Boolean(mention.openConversationId),
+      triggerQuery: dingTalkTrigger.query,
+      triggerStartOffset: dingTalkTrigger.startOffset,
+      triggerEndOffset: dingTalkTrigger.endOffset,
+    });
     mentionEditorRef.current?.insertMention(mention, dingTalkTrigger);
     closeDingTalkMention();
     setMentionTrigger(null);
@@ -473,6 +497,34 @@ export function ChatInput({
     const attachmentsToSend = readyAttachments.length > 0 ? readyAttachments : undefined;
     const mentionsToSend = snapshot.mentions.length > 0 ? snapshot.mentions : undefined;
     const workflowIdToSend = snapshot.workflowId;
+    console.info('[dingtalk-mention] chat-input: send snapshot', {
+      textLength: textToSend.length,
+      mentions: snapshot.mentions.map((mention) => ({
+        type: mention.type,
+        displayName: mention.displayName,
+        hasUserId: Boolean(mention.userId),
+        hasOpenConversationId: Boolean(mention.openConversationId),
+        hasCorpId: Boolean(mention.corpId),
+      })),
+      attachmentCount: readyAttachments.length,
+      hasWorkflowId: Boolean(workflowIdToSend),
+      queued: Boolean(sending && onQueue && !workflowIdToSend),
+    });
+    logDingTalkMentionClient('[dingtalk-mention] chat-input: send snapshot', {
+      textLength: textToSend.length,
+      mentionCount: snapshot.mentions.length,
+      mentions: snapshot.mentions.map((mention) => ({
+        type: mention.type,
+        displayName: mention.displayName,
+        hasUserId: Boolean(mention.userId),
+        hasOpenConversationId: Boolean(mention.openConversationId),
+        hasCorpId: Boolean(mention.corpId),
+      })),
+      targetAgentId: targetAgentId ?? null,
+      attachmentCount: readyAttachments.length,
+      hasWorkflowId: Boolean(workflowIdToSend),
+      queued: Boolean(sending && onQueue && !workflowIdToSend),
+    });
     mentionEditorRef.current?.clear();
     setAttachments([]);
     setMentionTrigger(null);

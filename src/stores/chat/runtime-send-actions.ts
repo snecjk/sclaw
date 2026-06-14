@@ -13,6 +13,17 @@ import type { ChatSession, RawMessage } from './types';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
 
+function logDingTalkMentionClient(message: string, data: unknown): void {
+  void hostApiFetch('/api/logs/client', {
+    method: 'POST',
+    body: JSON.stringify({
+      level: 'info',
+      message,
+      data,
+    }),
+  }).catch(() => undefined);
+}
+
 function normalizeAgentId(value: string | undefined | null): string {
   return (value ?? '').trim().toLowerCase() || 'main';
 }
@@ -101,6 +112,33 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
           fileSize: file.fileSize,
         })),
       );
+      console.info('[dingtalk-mention] runtime-send: rpc extras', {
+        mentionCount: dingTalkMentions?.length ?? 0,
+        mentions: dingTalkMentions?.map((mention) => ({
+          type: mention.type,
+          displayName: mention.displayName,
+          hasUserId: Boolean(mention.userId),
+          hasOpenConversationId: Boolean(mention.openConversationId),
+          hasCorpId: Boolean(mention.corpId),
+        })) ?? [],
+        attachmentCount: attachments?.length ?? 0,
+        hasRpcExtras: Boolean(dingTalkRpcExtras),
+        rpcExtraKeys: dingTalkRpcExtras ? Object.keys(dingTalkRpcExtras) : [],
+      });
+      logDingTalkMentionClient('[dingtalk-mention] runtime-send: rpc extras', {
+        mentionCount: dingTalkMentions?.length ?? 0,
+        mentions: dingTalkMentions?.map((mention) => ({
+          type: mention.type,
+          displayName: mention.displayName,
+          hasUserId: Boolean(mention.userId),
+          hasOpenConversationId: Boolean(mention.openConversationId),
+          hasCorpId: Boolean(mention.corpId),
+        })) ?? [],
+        targetAgentId: targetAgentId ?? null,
+        attachmentCount: attachments?.length ?? 0,
+        hasRpcExtras: Boolean(dingTalkRpcExtras),
+        rpcExtraKeys: dingTalkRpcExtras ? Object.keys(dingTalkRpcExtras) : [],
+      });
 
       const targetSessionKey = resolveMainSessionKeyForAgent(targetAgentId) ?? get().currentSessionKey;
       if (targetSessionKey !== get().currentSessionKey) {

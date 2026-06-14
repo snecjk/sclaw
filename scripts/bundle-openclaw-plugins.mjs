@@ -23,6 +23,7 @@ const ROOT = path.resolve(__dirname, '..');
 const OUTPUT_ROOT = path.join(ROOT, 'build', 'openclaw-plugins');
 const NODE_MODULES = path.join(ROOT, 'node_modules');
 const STO_PLUGIN_ROOT = path.join(ROOT, 'sto-plugin');
+const STO_PLUGIN_OPENCLAW_ROOT = path.join(STO_PLUGIN_ROOT, 'openclaw');
 /** Shared library copied beside sto-workflow-tool for ../sto-toolkit imports at runtime. */
 const STO_TOOLKIT_DIR = 'sto-toolkit';
 const CACHE_DIR = path.join(ROOT, '.download-cache', 'openclaw-plugins');
@@ -92,6 +93,14 @@ function normWin(p) {
   return '\\\\?\\' + p.replace(/\//g, '\\');
 }
 
+function resolveLocalPluginSourceDir(localDir) {
+  const candidates = [
+    path.join(STO_PLUGIN_OPENCLAW_ROOT, localDir),
+    path.join(STO_PLUGIN_ROOT, localDir),
+  ];
+  return candidates.find((dir) => fs.existsSync(dir)) || candidates[0];
+}
+
 const PLUGINS = [
   // { type: 'npm', npmName: '@soimy/dingtalk', pluginId: 'dingtalk' },
   // { type: 'npm', npmName: '@wecom/wecom-openclaw-plugin', pluginId: 'wecom' },
@@ -152,7 +161,7 @@ function calculatePluginsHash() {
         }
       } else if (plugin.type === 'local') {
         // local plugins: hash all source file contents for change detection
-        const pluginDir = path.join(STO_PLUGIN_ROOT, plugin.localDir);
+        const pluginDir = resolveLocalPluginSourceDir(plugin.localDir);
         if (fs.existsSync(pluginDir)) {
           hash.update(`local:${plugin.pluginId}:`);
           hashLocalPluginDir(pluginDir, hash);
@@ -322,12 +331,12 @@ function bundleOnePlugin({ npmName, pluginId }) {
 }
 
 /**
- * Bundle a local plugin from sto-plugin/<localDir>/ into the output directory.
+ * Bundle a local plugin from sto-plugin/openclaw/<localDir>/ into the output directory.
  * Copies source files (excluding tests), and if the plugin has npm dependencies,
  * resolves them from the project's node_modules via the same BFS logic.
  */
 function bundleOneLocalPlugin({ localDir, pluginId }) {
-  const sourceDir = path.join(STO_PLUGIN_ROOT, localDir);
+  const sourceDir = resolveLocalPluginSourceDir(localDir);
   if (!fs.existsSync(sourceDir)) {
     throw new Error(`Local plugin directory not found: ${sourceDir}`);
   }
@@ -346,23 +355,6 @@ function bundleOneLocalPlugin({ localDir, pluginId }) {
 
   // 1) Copy plugin source files (excluding test files and node_modules)
   fs.cpSync(sourceDir, outputDir, { recursive: true, filter: bundleCopyFilter });
-
-  // 1b) Ensure shared dingtalk modules are present for send-guard (same as sync-plugin-shared.mjs)
-  if (pluginId === 'sto-dingtalk-send-guard') {
-    const sharedSrcDir = path.join(ROOT, 'shared');
-    const sharedDestDir = path.join(outputDir, 'shared');
-    const sharedFiles = [
-      'dingtalk-mention.ts',
-      'dingtalk-disclaimer.ts',
-      'dws-send-text.ts',
-      'dingtalk-file-send.ts',
-      'dingtalk-mention-context.ts',
-    ];
-    fs.mkdirSync(sharedDestDir, { recursive: true });
-    for (const file of sharedFiles) {
-      fs.copyFileSync(path.join(sharedSrcDir, file), path.join(sharedDestDir, file));
-    }
-  }
 
   // 2) If the plugin has npm dependencies, resolve and copy them
   let copiedCount = 0;
@@ -507,37 +499,7 @@ function patchPluginId(pluginDir, expectedId) {
   }
 }
 
-function syncSharedPluginModules() {
-  const sharedFiles = [
-    'dingtalk-mention.ts',
-    'dingtalk-disclaimer.ts',
-    'dws-send-text.ts',
-    'dingtalk-file-send.ts',
-    'dingtalk-mention-context.ts',
-  ];
-  const pluginTargets = [
-    path.join(STO_PLUGIN_ROOT, 'sto-dingtalk-send-guard', 'shared'),
-  ];
-
-  for (const destDir of pluginTargets) {
-    fs.mkdirSync(destDir, { recursive: true });
-    for (const file of sharedFiles) {
-      const src = path.join(ROOT, 'shared', file);
-      const dest = path.join(destDir, file);
-      if (!fs.existsSync(src)) {
-        throw new Error(`Missing shared module: ${src}`);
-      }
-      fs.copyFileSync(src, dest);
-    }
-    echo`Synced ${sharedFiles.length} shared modules → ${path.relative(ROOT, destDir)}`;
-  }
-}
-
 echo`📦 Bundling OpenClaw plugin mirrors...`;
-
-// Sync shared dingtalk modules into local plugins before hashing / copying.
-// Keep this in-process so Windows + WSL shell differences do not break packaging.
-syncSharedPluginModules();
 
 // Check cache first
 const cacheKey = calculatePluginsHash();

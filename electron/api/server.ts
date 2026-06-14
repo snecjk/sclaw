@@ -61,7 +61,6 @@ export function startHostApiServer(ctx: HostApiContext, port = PORTS.CLAWX_HOST_
       logger.info(`[HostApi] ${req.method} ${requestUrl.pathname} — routing...`);
       for (const handler of routeHandlers) {
         const handled = await handler(req, res, requestUrl, ctx);
-        logger.info(`[HostApi]   ${handler.name} => ${handled}`);
         if (handled) {
           return;
         }

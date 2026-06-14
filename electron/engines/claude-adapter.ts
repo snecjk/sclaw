@@ -8,8 +8,10 @@ import { StoModelSyncService } from '../services/providers/sto-model-sync';
 import { getAgentPreferredModel, getAgentWorkspacePath } from '../utils/agent-config';
 import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
 import { logger } from '../utils/logger';
-import { getClawXConfigDir } from '../utils/paths';
+import { getClaudeConfigDir } from '../utils/paths';
 import { getApiKey } from '../utils/secure-storage';
+import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
+import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, upsertEngineSessionRegistryEntry } from './session-registry';
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EngineSessionSummary } from './types';
 
@@ -31,11 +33,6 @@ const liveClaudeMessages = new Map<string, Array<{
 }>>();
 const claudeRuntimeResults = new Map<string, NonNullable<EngineHistoryResult['runtimeResult']>>();
 let claudeConfigEnvQueue: Promise<void> = Promise.resolve();
-
-function getClaudeConfigDir(): string {
-  return join(getClawXConfigDir(), '.claude');
-}
-
 function getBundledClaudeExecutablePath(): string | undefined {
   if (!process.resourcesPath) return undefined;
 
@@ -547,34 +544,43 @@ async function startClaudeQuery(
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();
     const pathToClaudeCodeExecutable = getBundledClaudeExecutablePath();
+    const runtimeOptions = await buildClaudeRuntimeOptions(sessionKey);
+    const pluginPaths = await listClaudeBridgePluginPaths();
     claudeRuntimeResults.delete(sessionKey);
     await sanitizeClaudeSettingsEnv();
+    const queryBaseOptions = {
+      cwd,
+      env: await buildClaudeEnvForAccount(launchSelection.accountId),
+      permissionMode: 'bypassPermissions' as const,
+      allowDangerouslySkipPermissions: true,
+      settingSources: ['user'] as const,
+      skills: 'all' as const,
+      settings: launchSelection.model ? { model: launchSelection.model } : undefined,
+      additionalDirectories: options?.additionalDirectories,
+      pathToClaudeCodeExecutable,
+      hooks: runtimeOptions.hooks,
+      plugins: pluginPaths.map((pluginPath) => ({
+        type: 'local' as const,
+        path: pluginPath,
+      })),
+      systemPrompt: runtimeOptions.systemPromptAppend
+        ? {
+          type: 'preset' as const,
+          preset: 'claude_code' as const,
+          append: runtimeOptions.systemPromptAppend,
+        }
+        : undefined,
+    };
     const query = sdk.query({
       prompt: message,
       options: existing?.sessionId
         ? {
-          cwd,
-          env: await buildClaudeEnvForAccount(launchSelection.accountId),
+          ...queryBaseOptions,
           resume: existing.sessionId,
-          permissionMode: 'bypassPermissions',
-          allowDangerouslySkipPermissions: true,
-          settingSources: ['user'],
-          skills: 'all',
-          settings: launchSelection.model ? { model: launchSelection.model } : undefined,
-          additionalDirectories: options?.additionalDirectories,
-          pathToClaudeCodeExecutable,
         }
         : {
-          cwd,
-          env: await buildClaudeEnvForAccount(launchSelection.accountId),
+          ...queryBaseOptions,
           sessionId,
-          permissionMode: 'bypassPermissions',
-          allowDangerouslySkipPermissions: true,
-          settingSources: ['user'],
-          skills: 'all',
-          settings: launchSelection.model ? { model: launchSelection.model } : undefined,
-          additionalDirectories: options?.additionalDirectories,
-          pathToClaudeCodeExecutable,
         },
     });
 

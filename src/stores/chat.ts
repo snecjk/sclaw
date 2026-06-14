@@ -10,6 +10,7 @@ import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-
 import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
+import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
 import { buildCronSessionHistoryPath, isCronSessionKey, parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './chat/cron-session-utils';
@@ -1908,7 +1909,7 @@ export const useChatStore = create<ChatState>()(
 
   sendMessage: async (...args: unknown[]) => {
     const options = normalizeSendMessageOptions(args);
-    const { text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
+    const { text, attachments, targetAgentId, dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
 
@@ -1933,6 +1934,15 @@ export const useChatStore = create<ChatState>()(
       get().sessions,
       currentSessionKey,
       targetAgentId ?? get().currentAgentId,
+    );
+    const dingTalkRpcExtras = buildDingTalkMentionRpcExtras(
+      dingTalkMentions,
+      attachments?.map((file) => ({
+        fileName: file.fileName,
+        filePath: file.stagedPath,
+        mimeType: file.mimeType,
+        fileSize: file.fileSize,
+      })),
     );
 
     let textForGateway = trimmed;
@@ -2116,6 +2126,7 @@ export const useChatStore = create<ChatState>()(
                 mimeType: a.mimeType,
                 fileName: a.fileName,
               })),
+              ...dingTalkRpcExtras,
             }),
           },
         );
@@ -2128,6 +2139,7 @@ export const useChatStore = create<ChatState>()(
             deliver: false,
             idempotencyKey,
             engineType: currentSessionEngineType,
+            ...dingTalkRpcExtras,
             // NOTE: workflowId/runId are not forwarded to Gateway chat.send yet
             // because the Gateway schema does not accept them. Workflow state
             // is tracked via SSE + main process polling instead.

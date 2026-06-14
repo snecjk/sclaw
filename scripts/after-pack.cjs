@@ -879,6 +879,14 @@ function bundleLocalPlugin(preBuildDir, rawSourceDir, nodeModulesRoot, destDir) 
   return true;
 }
 
+function resolveLocalPluginSourceDir(localPluginSourceRoot, localDir) {
+  const candidates = [
+    join(localPluginSourceRoot, 'openclaw', localDir),
+    join(localPluginSourceRoot, localDir),
+  ];
+  return candidates.find((dir) => existsSync(join(dir, 'openclaw.plugin.json'))) ?? candidates[0];
+}
+
 // ── Main hook ────────────────────────────────────────────────────────────────
 
 exports.default = async function afterPack(context) {
@@ -960,7 +968,7 @@ exports.default = async function afterPack(context) {
 
     if (plugin.type === 'local') {
       const preBuildDir = join(preBuildRoot, plugin.pluginId);
-      const rawSourceDir = join(localPluginSourceRoot, plugin.localDir);
+      const rawSourceDir = resolveLocalPluginSourceDir(localPluginSourceRoot, plugin.localDir);
       console.log(`[after-pack] Bundling local plugin ${plugin.pluginId} -> ${pluginDestDir}`);
       ok = bundleLocalPlugin(preBuildDir, rawSourceDir, nodeModulesRoot, pluginDestDir);
     } else {

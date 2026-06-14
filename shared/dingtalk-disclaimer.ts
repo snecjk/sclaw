@@ -1,11 +1,10 @@
 /**
- * DingTalk 代发说明底栏：分隔线 + 灰色字（仅 color，勿加 size，避免客户端乱版）。
- * 属性值用单引号，避免 shell `--text "..."` 被内部双引号截断。
+ * DingTalk 代发说明底栏：纯 Markdown 引用，避免 IM 客户端把 HTML 当普通文本展示。
  */
 export const DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER =
-  "<font color='#999999'>本消息由 STO Claw 代为发送，非本人实时回复。</font>";
+  '> *本消息由 STO Claw 代为发送，非本人实时回复。*';
 
-/** @deprecated 旧版双引号属性，规范化时会被替换 */
+/** @deprecated 旧版 HTML 属性，规范化时会被替换 */
 export const DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER_LEGACY =
   '<font color="#999999">本消息由 STO Claw 代为发送，非本人实时回复。</font>';
 
@@ -32,6 +31,7 @@ export function stripDingTalkAgentSendDisclaimerBody(text: string): string {
   return result
     .replace(/\n*<font\s+color=[^\n>]*>[\s\S]*?<\/font>\s*$/gi, '')
     .replace(/\n*<font\s+color=[^\n>]*\s*$/gi, '')
+    .replace(/\n*>\s*\*?[^\n]*STO Claw 代为发送[^\n]*\*?\s*$/gi, '')
     .replace(/\n*#999999>[^\n]*STO Claw 代为发送[^\n]*\s*$/gi, '')
     .replace(/\n*[^\n<]*STO Claw 代为发送[^\n<]*\s*$/gi, '')
     .replace(DISCLAIMER_FONT_BLOCK, '')

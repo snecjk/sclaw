@@ -164,13 +164,28 @@ export async function handleGatewayRoutes(
 
   if (url.pathname === '/api/chat/send' && req.method === 'POST') {
     try {
-      const body = await parseJsonBody<{
+      const rawBody = await parseJsonBody<{
         sessionKey: string;
         message: string;
         deliver?: boolean;
         idempotencyKey: string;
         engineType?: AgentEngineType;
+        dingTalkMentions?: Array<{
+          type: 'user' | 'group';
+          displayName: string;
+          userId?: string;
+          openConversationId?: string;
+          corpId?: string;
+        }>;
+        dingTalkSendFileIntent?: boolean;
+        dingTalkAttachedFiles?: Array<{
+          fileName: string;
+          filePath: string;
+          mimeType: string;
+          fileSize?: number;
+        }>;
       }>(req);
+      const body = await preprocessChatSendParams(rawBody) as typeof rawBody;
       const adapter = await getAdapterForSession(body.sessionKey, parseEngineType(body.engineType));
       const result = await adapter.sendMessage(
         { gatewayManager: ctx.gatewayManager },
@@ -213,7 +228,7 @@ export async function handleGatewayRoutes(
 
   if (url.pathname === '/api/chat/send-with-media' && req.method === 'POST') {
     try {
-      const body = await parseJsonBody<{
+      const rawBody = await parseJsonBody<{
         sessionKey: string;
         message: string;
         deliver?: boolean;
@@ -235,6 +250,7 @@ export async function handleGatewayRoutes(
           fileSize?: number;
         }>;
       }>(req);
+      const body = await preprocessChatSendParams(rawBody) as typeof rawBody;
       const VISION_MIME_TYPES = new Set([
         // Static images
         'image/png', 'image/jpeg', 'image/bmp', 'image/webp',

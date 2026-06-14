@@ -47,9 +47,19 @@ function unescapeDoubleQuotedShell(text: string): string {
   return out;
 }
 
+function stripMistypedDollarPrefix(text: string): string {
+  const trimmed = text.trimStart();
+  if (!trimmed.startsWith('$')) return text;
+  if (trimmed.startsWith("$'")) return text;
+  if (trimmed.startsWith('$"')) return `${text.slice(0, text.indexOf('$'))}${trimmed.slice(1)}`;
+  const next = trimmed[1];
+  if (!next || /\s/.test(next) || next === '{' || next === '(') return text;
+  return `${text.slice(0, text.indexOf('$'))}${trimmed.slice(1)}`;
+}
+
 /** Parse `--text` flag value from a shell script segment (supports embedded `"` in HTML). */
 export function parseDwsSendTextFlagSegment(raw: string): string {
-  const trimmed = raw.trim();
+  const trimmed = stripMistypedDollarPrefix(raw).trim();
   if (!trimmed) return '';
 
   if (trimmed.startsWith("$'") && trimmed.endsWith("'")) {
@@ -89,6 +99,74 @@ export function normalizeDwsChatMessageSendText(text: string): string {
 }
 
 const DWS_CHAT_MSG_SEND = /dws\s+chat\s+message\s+send\b/i;
+
+function tokenizeShellLikeCommand(command: string): string[] {
+  const tokens: string[] = [];
+  let current = '';
+  let quote: '"' | "'" | null = null;
+
+  for (let i = 0; i < command.length; i += 1) {
+    const ch = command[i];
+
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+        continue;
+      }
+      if (quote === '"' && ch === '\\') {
+        const next = command[i + 1];
+        if (next === '"' || next === '\\') {
+          current += next;
+          i += 1;
+        } else {
+          current += ch;
+        }
+        continue;
+      }
+      current += ch;
+      continue;
+    }
+
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+
+    if (/\s/.test(ch)) {
+      if (current) {
+        tokens.push(current);
+        current = '';
+      }
+      continue;
+    }
+
+    if (ch === ';') {
+      if (current) {
+        tokens.push(current);
+        current = '';
+      }
+      break;
+    }
+
+    current += ch;
+  }
+
+  if (current) tokens.push(current);
+  return tokens;
+}
+
+/** Parse a shell command containing `dws chat message send` into dws argv. */
+export function parseDwsChatMessageSendShellCommandArgs(command: string): string[] | null {
+  const match = command.match(DWS_CHAT_MSG_SEND);
+  if (!match || match.index == null) return null;
+
+  const dwsSegment = command.slice(match.index);
+  const tokens = tokenizeShellLikeCommand(dwsSegment);
+  if (tokens.length < 4) return null;
+  if (!/^dws(?:\.exe)?$/i.test(tokens[0])) return null;
+  if (tokens[1] !== 'chat' || tokens[2] !== 'message' || tokens[3] !== 'send') return null;
+  return fixDwsChatMessageSendArgv(tokens.slice(1));
+}
 
 /** Fix `--text` payload inside a shell `-c` script (always re-quote as bash `$'...'`). */
 export function fixDwsChatMessageSendShellScript(script: string): string {
