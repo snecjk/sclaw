@@ -36,6 +36,7 @@ import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 import { isFilePreviewDebugEnabled, logFilePreview } from '@/lib/file-preview-debug';
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
 import { submitParameterForm } from '@/components/parameter-form/form-handlers';
+import { renderUserMessageMentionNodes } from '@/components/dingtalk/DingTalkMentionTag';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
 
 interface ChatMessageProps {
@@ -654,7 +655,9 @@ function MessageBubble({
       )}
 
       {isUser ? (
-        <p className="whitespace-pre-wrap break-words break-all text-sm">{text}</p>
+        <p className="whitespace-pre-wrap break-words break-all text-sm">
+          {renderUserMessageMentionNodes(text)}
+        </p>
       ) : (
         <div className="prose prose-sm max-w-none break-words break-all text-sm leading-normal dark:prose-invert">
           <ReactMarkdown

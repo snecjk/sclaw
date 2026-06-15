@@ -4,6 +4,7 @@ import {
   extractDingTalkSentPreviews,
   formatDingTalkSentTextForChatPreview,
   parseDwsChatMessageSendCommand,
+  splitDingTalkSentPreviewText,
 } from '../../shared/dingtalk-sent-display';
 
 describe('parseDwsChatMessageSendCommand', () => {
@@ -22,8 +23,22 @@ describe('parseDwsChatMessageSendCommand', () => {
     const text = appendDingTalkAgentSendDisclaimer('正文内容');
     const preview = formatDingTalkSentTextForChatPreview(text);
     expect(preview).toContain('正文内容');
-    expect(preview).toContain('> *本消息由 STO Claw 代为发送，非本人实时回复。*');
+    expect(preview).not.toContain('STO Claw 代为发送');
     expect(preview).not.toContain('<font');
+  });
+
+  it('splits malformed font disclaimer for UI footer', () => {
+    const malformed = [
+      '正文内容',
+      '',
+      '---',
+      '',
+      `<font color="'#999999'">本消息由 STO Claw 代为发送，非本人实时回复。</font>`,
+    ].join('\n');
+    const { body, disclaimer } = splitDingTalkSentPreviewText(malformed);
+    expect(body).toBe('正文内容');
+    expect(disclaimer).toBe('本消息由 STO Claw 代为发送，非本人实时回复。');
+    expect(formatDingTalkSentTextForChatPreview(malformed)).toBe('正文内容');
   });
 });
 
