@@ -11,6 +11,7 @@ import {
 } from '../../utils/openclaw-model';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
+import { deleteClaudeScheduledTaskSummarySession } from '../../services/claude-scheduled-task-session-store';
 
 export async function handleSessionRoutes(
   req: IncomingMessage,
@@ -99,7 +100,21 @@ export async function handleSessionRoutes(
     try {
       const body = await parseJsonBody<{ sessionKey: string; engineType?: 'openclaw' | 'claude' }>(req);
       const sessionKey = body.sessionKey;
-      if (!sessionKey || !sessionKey.startsWith('agent:')) {
+      if (!sessionKey) {
+        sendJson(res, 400, { success: false, error: `Invalid sessionKey: ${sessionKey}` });
+        return true;
+      }
+      const sessionEngineType = await resolveSessionEngineType(sessionKey, body.engineType);
+      if (sessionEngineType === 'claude') {
+        if (sessionKey.startsWith('claude-task:')) {
+          await deleteClaudeScheduledTaskSummarySession(sessionKey);
+        } else {
+          await deleteClaudeSessionByKey(sessionKey);
+        }
+        sendJson(res, 200, { success: true });
+        return true;
+      }
+      if (!sessionKey.startsWith('agent:')) {
         sendJson(res, 400, { success: false, error: `Invalid sessionKey: ${sessionKey}` });
         return true;
       }
@@ -109,12 +124,6 @@ export async function handleSessionRoutes(
         return true;
       }
       const agentId = parts[1];
-      const sessionEngineType = await resolveSessionEngineType(sessionKey, body.engineType);
-      if (sessionEngineType === 'claude') {
-        await deleteClaudeSessionByKey(sessionKey);
-        sendJson(res, 200, { success: true });
-        return true;
-      }
       const sessionsDir = join(getOpenClawConfigDir(), 'agents', agentId, 'sessions');
       const sessionsJsonPath = join(sessionsDir, 'sessions.json');
       const fsP = await import('node:fs/promises');

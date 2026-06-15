@@ -18,8 +18,10 @@ import {
   toMs,
 } from './helpers';
 import {
+  buildClaudeScheduledTaskSessionHistoryPath,
   buildCronSessionHistoryPath,
   buildScheduledTaskSessionHistoryPath,
+  isClaudeScheduledTaskSessionKey,
   isCronSessionKey,
   isScheduledTaskSessionKey,
 } from './cron-session-utils';
@@ -108,6 +110,19 @@ async function loadScheduledTaskFallbackMessages(sessionKey: string, limit = CHA
     return Array.isArray(response.messages) ? response.messages : [];
   } catch (error) {
     console.warn('Failed to load scheduled task fallback history:', error);
+    return [];
+  }
+}
+
+async function loadClaudeScheduledTaskFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
+  if (!isClaudeScheduledTaskSessionKey(sessionKey)) return [];
+  try {
+    const response = await hostApiFetch<{ messages?: RawMessage[] }>(
+      buildClaudeScheduledTaskSessionHistoryPath(sessionKey, limit),
+    );
+    return Array.isArray(response.messages) ? response.messages : [];
+  } catch (error) {
+    console.warn('Failed to load Claude scheduled task fallback history:', error);
     return [];
   }
 }
@@ -291,12 +306,18 @@ export function createHistoryActions(
         if (rawMessages.length === 0 && isScheduledTaskSessionKey(currentSessionKey)) {
           rawMessages = await loadScheduledTaskFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
         }
+        if (rawMessages.length === 0 && isClaudeScheduledTaskSessionKey(currentSessionKey)) {
+          rawMessages = await loadClaudeScheduledTaskFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
+        }
         applyLoadedMessages(rawMessages, thinkingLevel);
       } catch (err) {
         console.warn('Failed to load chat history:', err);
         let fallbackMessages = await loadCronFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
         if (fallbackMessages.length === 0) {
           fallbackMessages = await loadScheduledTaskFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
+        }
+        if (fallbackMessages.length === 0) {
+          fallbackMessages = await loadClaudeScheduledTaskFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
         }
         if (fallbackMessages.length > 0) {
           applyLoadedMessages(fallbackMessages, null);

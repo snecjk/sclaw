@@ -1,5 +1,6 @@
 import { matchPath } from 'react-router-dom';
 import { STO_TASK_IDS, type StoTaskId } from '@/lib/sto-tasks';
+import { parseClaudeScheduledTaskSessionKey } from '@/stores/chat/cron-session-utils';
 
 const ENTRY_YMD = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -32,12 +33,18 @@ export function isScheduledTaskSummarySessionKey(sessionKey: string): boolean {
   return /^\d+$/.test(rest);
 }
 
+/** Claude scheduled-task summary session (e.g. claude-task:{taskId}) — hidden because task-list section shows run sessions. */
+export function isClaudeScheduledTaskSummarySessionKey(sessionKey: string): boolean {
+  return parseClaudeScheduledTaskSessionKey(sessionKey) !== null;
+}
+
 /** Sessions that must not appear as rows in the chat sidebar session list. */
 export function isSidebarHiddenChatSessionKey(sessionKey: string): boolean {
   return (
     isHiddenStoTaskSubitemChatSessionKey(sessionKey) ||
     isMainAgentChatSessionKey(sessionKey) ||
-    isScheduledTaskSummarySessionKey(sessionKey)
+    isScheduledTaskSummarySessionKey(sessionKey) ||
+    isClaudeScheduledTaskSummarySessionKey(sessionKey)
   );
 }
 

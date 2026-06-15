@@ -137,6 +137,13 @@ export function getDataDir(): string {
 }
 
 /**
+ * Get StoClaw-managed Claude scheduled tasks directory.
+ */
+export function getClaudeScheduledTasksDir(): string {
+  return join(getClawXConfigDir(), 'claude-scheduled-tasks');
+}
+
+/**
  * Ensure directory exists
  */
 export function ensureDir(dir: string): void {

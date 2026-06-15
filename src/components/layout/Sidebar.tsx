@@ -51,7 +51,11 @@ import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
-import { parseCronSessionKey, parseScheduledTaskAgentSessionKey } from '@/stores/chat/cron-session-utils';
+import {
+  parseClaudeScheduledTaskRunSessionKey,
+  parseCronSessionKey,
+  parseScheduledTaskAgentSessionKey,
+} from '@/stores/chat/cron-session-utils';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
@@ -721,13 +725,21 @@ export function Sidebar() {
 
   // Legacy cron + scheduled-task agent sessions — shown under "任务列表" grouped by task name
   const taskListScheduledSessions = useMemo(
-    () => visibleSessions.filter((s) => parseCronSessionKey(s.key) || parseScheduledTaskAgentSessionKey(s.key)),
+    () => visibleSessions.filter((s) => (
+      parseCronSessionKey(s.key)
+      || parseScheduledTaskAgentSessionKey(s.key)
+      || parseClaudeScheduledTaskRunSessionKey(s.key)
+    )),
     [visibleSessions],
   );
 
   // Normal chat sessions — shown under time buckets (today / yesterday / ...)
   const normalSessions = useMemo(
-    () => visibleSessions.filter((s) => !parseCronSessionKey(s.key) && !parseScheduledTaskAgentSessionKey(s.key)),
+    () => visibleSessions.filter((s) => (
+      !parseCronSessionKey(s.key)
+      && !parseScheduledTaskAgentSessionKey(s.key)
+      && !parseClaudeScheduledTaskRunSessionKey(s.key)
+    )),
     [visibleSessions],
   );
 
@@ -761,6 +773,7 @@ export function Sidebar() {
     for (const session of taskListScheduledSessions) {
       const stParsed = parseScheduledTaskAgentSessionKey(session.key);
       const cronParsed = parseCronSessionKey(session.key);
+      const claudeTaskRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
 
       if (stParsed) {
         const taskName = session.displayName || session.label?.split(' - ')[0] || `定时任务 ${stParsed.taskId}`;
@@ -774,6 +787,13 @@ export function Sidebar() {
         const groupKey = `cron:${cronParsed.jobId}`;
         if (!groups.has(groupKey)) {
           groups.set(groupKey, { key: groupKey, name: jobName, sessions: [] });
+        }
+        groups.get(groupKey)!.sessions.push(session);
+      } else if (claudeTaskRunParsed) {
+        const taskName = session.displayName || session.label || `Claude 定时任务 ${claudeTaskRunParsed.taskId}`;
+        const groupKey = `claude-task:${claudeTaskRunParsed.taskId}`;
+        if (!groups.has(groupKey)) {
+          groups.set(groupKey, { key: groupKey, name: taskName, sessions: [] });
         }
         groups.get(groupKey)!.sessions.push(session);
       }

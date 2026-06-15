@@ -6,7 +6,13 @@ import {
   toMs,
 } from './helpers';
 import { DEFAULT_CANONICAL_PREFIX, DEFAULT_SESSION_KEY, type ChatSession, type RawMessage } from './types';
-import { parseCronSessionKey, parseScheduledTaskAgentSessionKey, parseScheduledTaskSessionKey } from './cron-session-utils';
+import {
+  parseClaudeScheduledTaskRunSessionKey,
+  parseClaudeScheduledTaskSessionKey,
+  parseCronSessionKey,
+  parseScheduledTaskAgentSessionKey,
+  parseScheduledTaskSessionKey,
+} from './cron-session-utils';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 import { useAgentsStore } from '@/stores/agents';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
@@ -76,6 +82,17 @@ export function createSessionActions(
           }
         } catch (err) {
           console.warn('Failed to load scheduled task sessions:', err);
+        }
+
+        try {
+          const claudeTaskResult = await hostApiFetch<{
+            sessions?: Array<{ key: string; label: string; updatedAt?: number; engineType?: 'claude' }>;
+          }>('/api/claude-scheduled-tasks/sessions');
+          if (claudeTaskResult.sessions) {
+            rawSessions = [...rawSessions, ...claudeTaskResult.sessions];
+          }
+        } catch (err) {
+          console.warn('Failed to load Claude scheduled task sessions:', err);
         }
 
         // Also load cron dated sessions from local filesystem (Gateway may prune old ones)
@@ -222,17 +239,35 @@ export function createSessionActions(
           // Ignore scheduled-task name enrichment failure
         }
 
+        try {
+          const tasksResult = await hostApiFetch<Array<{ id: string; name: string }>>('/api/claude-scheduled-tasks');
+          const taskNameMap = new Map(tasksResult.map((task) => [task.id, task.name]));
+          for (const session of sessionsWithCurrent) {
+            const summaryParsed = parseClaudeScheduledTaskSessionKey(session.key);
+            const runParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
+            const taskId = summaryParsed?.taskId ?? runParsed?.taskId;
+            if (!taskId) continue;
+            const name = taskNameMap.get(taskId);
+            if (name) session.displayName = name;
+          }
+        } catch {
+          // Ignore Claude scheduled-task name enrichment failure
+        }
+
         // 2) 再按日期生成 label
         const taskSessionDayCounts = new Map<string, number>();
         for (const session of sessionsWithCurrent) {
           const cronParsed = parseCronSessionKey(session.key);
           const stParsed = parseScheduledTaskAgentSessionKey(session.key);
+          const claudeRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
           let taskId: string | undefined;
           const ts = session.updatedAt;
           if (cronParsed) {
             taskId = `cron:${cronParsed.jobId}`;
           } else if (stParsed) {
             taskId = `st:${stParsed.taskId}`;
+          } else if (claudeRunParsed) {
+            taskId = `claude-task:${claudeRunParsed.taskId}`;
           }
           if (taskId && ts) {
             const d = new Date(ts);
@@ -244,12 +279,15 @@ export function createSessionActions(
         for (const session of sessionsWithCurrent) {
           const cronParsed = parseCronSessionKey(session.key);
           const stParsed = parseScheduledTaskAgentSessionKey(session.key);
+          const claudeRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
           let taskId: string | undefined;
           const ts = session.updatedAt;
           if (cronParsed) {
             taskId = `cron:${cronParsed.jobId}`;
           } else if (stParsed) {
             taskId = `st:${stParsed.taskId}`;
+          } else if (claudeRunParsed) {
+            taskId = `claude-task:${claudeRunParsed.taskId}`;
           }
           if (taskId && ts) {
             const d = new Date(ts);

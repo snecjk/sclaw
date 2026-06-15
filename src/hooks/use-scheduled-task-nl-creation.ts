@@ -49,7 +49,6 @@ export function useScheduledTaskNlCreation(): UseScheduledTaskNlCreationReturn {
   const navigate = useNavigate();
   const createTask = useScheduledTasksStore((s) => s.createTask);
   const fetchTasks = useScheduledTasksStore((s) => s.fetchTasks);
-  
   const [nlModalOpen, setNlModalOpen] = useState(false);
   const [extractedParams, setExtractedParams] = useState<ExtractedTaskParams>({});
 
