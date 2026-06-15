@@ -24,6 +24,7 @@ import {
   type ContentBlock,
   type RawMessage,
   type ToolStatus,
+  type SessionRuntimeState,
 } from './chat/types';
 import type { WorkflowExecutionState } from '@/types/workflow';
 import { mergeLocalWorkflowTurnsFromCurrent, mergeWorkflowTurnsFromMemory } from '@/lib/workflow-local-turn';
@@ -40,6 +41,7 @@ import {
   reconcilePendingWorkflowForSession,
   recoverParameterFormsOnHistoryLoad,
 } from './chat/parameter-form-recovery';
+import type { ChatSet } from './chat/store-api';
 import { dispatchBuiltinToolResult } from '@/lib/builtin-tool-dispatch';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 
@@ -835,10 +837,121 @@ function clearSessionEntryFromMap<T extends Record<string, unknown>>(entries: T,
   return Object.fromEntries(Object.entries(entries).filter(([key]) => key !== sessionKey)) as T;
 }
 
+function createIdleSessionRuntimeState(): SessionRuntimeState {
+  return {
+    sending: false,
+    activeRunId: null,
+    streamingText: '',
+    streamingMessage: null,
+    streamingTools: [],
+    pendingFinal: false,
+    lastUserMessageAt: null,
+    pendingToolImages: [],
+    error: null,
+    updatedAt: 0,
+  };
+}
+
+function runtimePatchFromSessionRuntime(runtime: SessionRuntimeState): Pick<
+  ChatState,
+  | 'sending'
+  | 'activeRunId'
+  | 'streamingText'
+  | 'streamingMessage'
+  | 'streamingTools'
+  | 'pendingFinal'
+  | 'lastUserMessageAt'
+  | 'pendingToolImages'
+  | 'error'
+> {
+  return {
+    sending: runtime.sending,
+    activeRunId: runtime.activeRunId,
+    streamingText: runtime.streamingText,
+    streamingMessage: runtime.streamingMessage,
+    streamingTools: runtime.streamingTools,
+    pendingFinal: runtime.pendingFinal,
+    lastUserMessageAt: runtime.lastUserMessageAt,
+    pendingToolImages: runtime.pendingToolImages,
+    error: runtime.error,
+  };
+}
+
+function captureTopLevelRuntime(state: Pick<
+  ChatState,
+  | 'sending'
+  | 'activeRunId'
+  | 'streamingText'
+  | 'streamingMessage'
+  | 'streamingTools'
+  | 'pendingFinal'
+  | 'lastUserMessageAt'
+  | 'pendingToolImages'
+  | 'error'
+>): SessionRuntimeState {
+  return {
+    sending: state.sending,
+    activeRunId: state.activeRunId,
+    streamingText: state.streamingText,
+    streamingMessage: state.streamingMessage,
+    streamingTools: state.streamingTools,
+    pendingFinal: state.pendingFinal,
+    lastUserMessageAt: state.lastUserMessageAt,
+    pendingToolImages: state.pendingToolImages,
+    error: state.error,
+    updatedAt: Date.now(),
+  };
+}
+
+function getSessionRuntimeState(
+  runtimeBySessionKey: Record<string, SessionRuntimeState>,
+  sessionKey: string,
+): SessionRuntimeState {
+  return runtimeBySessionKey[sessionKey] ?? createIdleSessionRuntimeState();
+}
+
+function patchSessionRuntimeState(
+  state: ChatState,
+  sessionKey: string,
+  patch: Partial<SessionRuntimeState> | ((runtime: SessionRuntimeState) => Partial<SessionRuntimeState>),
+): Partial<ChatState> {
+  const currentRuntime = getSessionRuntimeState(state.runtimeBySessionKey, sessionKey);
+  const partial = typeof patch === 'function' ? patch(currentRuntime) : patch;
+  const nextRuntime: SessionRuntimeState = {
+    ...currentRuntime,
+    ...partial,
+    updatedAt: partial.updatedAt ?? Date.now(),
+  };
+  const nextPatch: Partial<ChatState> = {
+    runtimeBySessionKey: {
+      ...state.runtimeBySessionKey,
+      [sessionKey]: nextRuntime,
+    },
+  };
+  if (sessionKey === state.currentSessionKey) {
+    Object.assign(nextPatch, runtimePatchFromSessionRuntime(nextRuntime));
+  }
+  return nextPatch;
+}
+
 function buildSessionSwitchPatch(
   state: Pick<
     ChatState,
-    'currentSessionKey' | 'messages' | 'sessions' | 'sessionLabels' | 'sessionLastActivity'
+    | 'currentSessionKey'
+    | 'messages'
+    | 'sessions'
+    | 'sessionLabels'
+    | 'sessionLastActivity'
+    | 'runtimeBySessionKey'
+    | 'sending'
+    | 'activeRunId'
+    | 'streamingText'
+    | 'streamingMessage'
+    | 'streamingTools'
+    | 'pendingFinal'
+    | 'lastUserMessageAt'
+    | 'pendingToolImages'
+    | 'error'
   >,
   nextSessionKey: string,
 ): Partial<ChatState> {
@@ -854,10 +967,20 @@ function buildSessionSwitchPatch(
     ? state.sessions.filter((session) => session.key !== state.currentSessionKey)
     : state.sessions;
 
+  const nextRuntimeBySessionKey = {
+    ...state.runtimeBySessionKey,
+    [state.currentSessionKey]: captureTopLevelRuntime(state),
+  };
+  if (leavingEmpty) {
+    delete nextRuntimeBySessionKey[state.currentSessionKey];
+  }
+  const nextRuntime = getSessionRuntimeState(nextRuntimeBySessionKey, nextSessionKey);
+
   return {
     currentSessionKey: nextSessionKey,
     currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
     sessions: ensureSessionEntry(nextSessions, nextSessionKey),
+    runtimeBySessionKey: nextRuntimeBySessionKey,
     sessionLabels: leavingEmpty
       ? clearSessionEntryFromMap(state.sessionLabels, state.currentSessionKey)
       : state.sessionLabels,
@@ -865,17 +988,150 @@ function buildSessionSwitchPatch(
       ? clearSessionEntryFromMap(state.sessionLastActivity, state.currentSessionKey)
       : state.sessionLastActivity,
     messages: [],
-    streamingText: '',
-    streamingMessage: null,
-    streamingTools: [],
-    activeRunId: null,
-    error: null,
-    pendingFinal: false,
-    lastUserMessageAt: null,
-    pendingToolImages: [],
+    ...runtimePatchFromSessionRuntime(nextRuntime),
     workflowCardStates: {},
     pendingWorkflow: null,
   };
+}
+
+function handleBackgroundSessionEvent(
+  set: ChatSet,
+  sessionKey: string,
+  event: Record<string, unknown>,
+  resolvedState: string,
+  runId: string,
+): void {
+  switch (resolvedState) {
+    case 'started': {
+      set((s) => patchSessionRuntimeState(s, sessionKey, {
+        sending: true,
+        activeRunId: runId || getSessionRuntimeState(s.runtimeBySessionKey, sessionKey).activeRunId,
+        error: null,
+      }));
+      break;
+    }
+    case 'delta': {
+      const updates = collectToolUpdates(event.message, resolvedState);
+      set((s) => patchSessionRuntimeState(s, sessionKey, (runtime) => ({
+        sending: true,
+        error: null,
+        streamingMessage: (() => {
+          if (event.message && typeof event.message === 'object') {
+            const msgRole = (event.message as RawMessage).role;
+            if (isToolResultRole(msgRole)) return runtime.streamingMessage;
+          }
+          return event.message ?? runtime.streamingMessage;
+        })(),
+        streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
+      })));
+      break;
+    }
+    case 'final': {
+      const finalMsg = event.message as RawMessage | undefined;
+      if (!finalMsg) {
+        set((s) => patchSessionRuntimeState(s, sessionKey, {
+          pendingFinal: true,
+          streamingText: '',
+          streamingMessage: null,
+        }));
+        break;
+      }
+
+      const updates = collectToolUpdates(finalMsg, resolvedState);
+      if (isToolResultRole(finalMsg.role)) {
+        set((s) => {
+          const runtime = getSessionRuntimeState(s.runtimeBySessionKey, sessionKey);
+          const matchedPath = (runtime.streamingMessage && finalMsg.toolCallId)
+            ? getToolCallFilePath(runtime.streamingMessage as RawMessage, finalMsg.toolCallId)
+            : undefined;
+          const toolFiles: AttachedFileMeta[] = [
+            ...extractImagesAsAttachedFiles(finalMsg.content),
+          ];
+          if (matchedPath) {
+            for (const f of toolFiles) {
+              if (!f.filePath) {
+                f.filePath = matchedPath;
+                f.fileName = matchedPath.split(/[\\/]/).pop() || 'image';
+              }
+            }
+          }
+          const text = getMessageText(finalMsg.content);
+          if (text) {
+            const mediaRefs = extractMediaRefs(text);
+            const mediaRefPaths = new Set(mediaRefs.map((ref) => ref.filePath));
+            for (const ref of mediaRefs) toolFiles.push(makeAttachedFile(ref));
+            for (const ref of extractRawFilePaths(text)) {
+              if (!mediaRefPaths.has(ref.filePath)) toolFiles.push(makeAttachedFile(ref));
+            }
+          }
+          return patchSessionRuntimeState(s, sessionKey, {
+            pendingFinal: true,
+            streamingText: '',
+            streamingMessage: null,
+            pendingToolImages: toolFiles.length > 0
+              ? [...runtime.pendingToolImages, ...toolFiles]
+              : runtime.pendingToolImages,
+            streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
+          });
+        });
+        break;
+      }
+
+      const toolOnly = isToolOnlyMessage(finalMsg);
+      const hasOutput = hasNonToolAssistantContent(finalMsg);
+      set((s) => patchSessionRuntimeState(s, sessionKey, (runtime) => ({
+        sending: hasOutput ? false : runtime.sending,
+        activeRunId: hasOutput ? null : runtime.activeRunId,
+        streamingText: '',
+        streamingMessage: null,
+        streamingTools: hasOutput ? [] : (updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools),
+        pendingFinal: hasOutput ? false : true,
+        pendingToolImages: hasOutput ? [] : runtime.pendingToolImages,
+        lastUserMessageAt: hasOutput ? null : runtime.lastUserMessageAt,
+        error: null,
+      })));
+      if (toolOnly) break;
+      break;
+    }
+    case 'error': {
+      set((s) => patchSessionRuntimeState(s, sessionKey, {
+        sending: false,
+        activeRunId: null,
+        streamingText: '',
+        streamingMessage: null,
+        streamingTools: [],
+        pendingFinal: false,
+        lastUserMessageAt: null,
+        pendingToolImages: [],
+        error: String(event.errorMessage || 'An error occurred'),
+      }));
+      break;
+    }
+    case 'aborted': {
+      set((s) => patchSessionRuntimeState(s, sessionKey, {
+        sending: false,
+        activeRunId: null,
+        streamingText: '',
+        streamingMessage: null,
+        streamingTools: [],
+        pendingFinal: false,
+        lastUserMessageAt: null,
+        pendingToolImages: [],
+        error: null,
+      }));
+      break;
+    }
+    default: {
+      if (event.message && typeof event.message === 'object') {
+        const updates = collectToolUpdates(event.message, 'delta');
+        set((s) => patchSessionRuntimeState(s, sessionKey, (runtime) => ({
+          streamingMessage: event.message ?? runtime.streamingMessage,
+          streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
+        })));
+      }
+      break;
+    }
+  }
 }
 
 function getCanonicalPrefixFromSessionKey(sessionKey: string): string | null {
@@ -1212,6 +1468,7 @@ export const useChatStore = create<ChatState>()(
   sessions: [],
   currentSessionKey: DEFAULT_SESSION_KEY,
   currentAgentId: 'main',
+  runtimeBySessionKey: {},
   sessionLabels: {},
   sessionLastActivity: {},
 
@@ -1502,6 +1759,7 @@ export const useChatStore = create<ChatState>()(
       const next = remaining[0];
       set((s) => ({
         sessions: remaining,
+        runtimeBySessionKey: clearSessionEntryFromMap(s.runtimeBySessionKey, key),
         sessionLabels: Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== key)),
         sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
         messages: [],
@@ -1522,6 +1780,7 @@ export const useChatStore = create<ChatState>()(
     } else {
       set((s) => ({
         sessions: remaining,
+        runtimeBySessionKey: clearSessionEntryFromMap(s.runtimeBySessionKey, key),
         sessionLabels: Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== key)),
         sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
       }));
@@ -1594,6 +1853,7 @@ export const useChatStore = create<ChatState>()(
     if (!isEmptyNonMain) return;
     set((s) => ({
       sessions: s.sessions.filter((sess) => sess.key !== currentSessionKey),
+      runtimeBySessionKey: clearSessionEntryFromMap(s.runtimeBySessionKey, currentSessionKey),
       sessionLabels: Object.fromEntries(
         Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey),
       ),
@@ -1879,9 +2139,19 @@ export const useChatStore = create<ChatState>()(
 
       if ((recentAssistant || currentRecentAssistant) && (!shouldKeepClaudeRunActive || claudeRuntimeDone)) {
         clearHistoryPoll();
-        set({ sending: false, activeRunId: null, pendingFinal: false, lastUserMessageAt: null });
+        set((s) => patchSessionRuntimeState(s, targetSessionKey, {
+          sending: false,
+          activeRunId: null,
+          pendingFinal: false,
+          lastUserMessageAt: null,
+          streamingText: '',
+          streamingMessage: null,
+          streamingTools: [],
+          pendingToolImages: [],
+          error: null,
+        }));
       } else if (hasRecentAssistantActivity && !pendingFinal) {
-        set({ pendingFinal: true });
+        set((s) => patchSessionRuntimeState(s, targetSessionKey, { pendingFinal: true }));
       }
       };
 
@@ -2047,6 +2317,10 @@ export const useChatStore = create<ChatState>()(
         error: formatQuotaExceededMessage(quotaCheck.used_today, quotaCheck.limit),
         sending: false,
       });
+      set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+        sending: false,
+        error: formatQuotaExceededMessage(quotaCheck.used_today, quotaCheck.limit),
+      }));
       return;
     }
 
@@ -2074,6 +2348,17 @@ export const useChatStore = create<ChatState>()(
       streamingTools: [],
       pendingFinal: false,
       lastUserMessageAt: nowMs,
+    }));
+    set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+      sending: true,
+      activeRunId: null,
+      streamingText: '',
+      streamingMessage: null,
+      streamingTools: [],
+      pendingFinal: false,
+      lastUserMessageAt: nowMs,
+      pendingToolImages: [],
+      error: null,
     }));
 
     // Update session label with first user message text as soon as it's sent
@@ -2134,6 +2419,12 @@ export const useChatStore = create<ChatState>()(
         activeRunId: null,
         lastUserMessageAt: null,
       });
+      set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+        sending: false,
+        activeRunId: null,
+        lastUserMessageAt: null,
+        error: 'No response received from the model. The provider may be unavailable or the API key may have insufficient quota. Please check your provider settings.',
+      }));
     };
     setTimeout(checkStuck, 30_000);
 
@@ -2199,13 +2490,30 @@ export const useChatStore = create<ChatState>()(
 
       if (!result.success) {
         clearHistoryPoll();
-        set({ error: result.error || 'Failed to send message', sending: false });
+        set({ error: result.error || 'Failed to send message', sending: false, activeRunId: null, pendingFinal: false });
+        set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+          sending: false,
+          activeRunId: null,
+          pendingFinal: false,
+          error: result.error || 'Failed to send message',
+        }));
       } else if (result.result?.runId) {
         set({ activeRunId: result.result.runId });
+        set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+          sending: true,
+          activeRunId: result.result?.runId ?? null,
+          error: null,
+        }));
       }
     } catch (err) {
       clearHistoryPoll();
-      set({ error: String(err), sending: false });
+      set({ error: String(err), sending: false, activeRunId: null, pendingFinal: false });
+      set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+        sending: false,
+        activeRunId: null,
+        pendingFinal: false,
+        error: String(err),
+      }));
     }
   },
 
@@ -2217,6 +2525,16 @@ export const useChatStore = create<ChatState>()(
     const { currentSessionKey } = get();
     set({ sending: false, streamingText: '', streamingMessage: null, pendingFinal: false, lastUserMessageAt: null, pendingToolImages: [] });
     set({ streamingTools: [] });
+    set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+      sending: false,
+      activeRunId: null,
+      streamingText: '',
+      streamingMessage: null,
+      streamingTools: [],
+      pendingFinal: false,
+      lastUserMessageAt: null,
+      pendingToolImages: [],
+    }));
 
     try {
       await useGatewayStore.getState().rpc(
@@ -2239,8 +2557,20 @@ export const useChatStore = create<ChatState>()(
     const eventSessionKey = event.sessionKey != null ? String(event.sessionKey) : null;
     const { activeRunId, currentSessionKey } = get();
 
-    // Only process events for the current session (when sessionKey is present)
-    if (eventSessionKey != null && eventSessionKey !== currentSessionKey) return;
+    if (eventSessionKey != null && eventSessionKey !== currentSessionKey) {
+      let resolvedState = eventState;
+      if (!resolvedState && event.message && typeof event.message === 'object') {
+        const msg = event.message as Record<string, unknown>;
+        const stopReason = msg.stopReason ?? msg.stop_reason;
+        if (stopReason) {
+          resolvedState = 'final';
+        } else if (msg.role || msg.content) {
+          resolvedState = 'delta';
+        }
+      }
+      handleBackgroundSessionEvent(set, eventSessionKey, event, resolvedState, runId);
+      return;
+    }
 
     // Only process events for the active run (or if no active run set)
     if (activeRunId && runId && runId !== activeRunId) return;
@@ -2653,7 +2983,7 @@ export const useChatStore = create<ChatState>()(
     await Promise.all([loadHistory(), loadSessions()]);
   },
 
-  clearError: () => set({ error: null }),
+  clearError: () => set((s) => patchSessionRuntimeState(s, s.currentSessionKey, { error: null })),
 
   renameSession: (key: string, newName: string) => {
     const trimmed = newName.trim();

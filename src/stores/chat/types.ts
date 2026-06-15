@@ -124,6 +124,19 @@ export interface DailyTokenQuotaStatus {
   checkedAt: string;
 }
 
+export interface SessionRuntimeState {
+  sending: boolean;
+  activeRunId: string | null;
+  streamingText: string;
+  streamingMessage: unknown | null;
+  streamingTools: ToolStatus[];
+  pendingFinal: boolean;
+  lastUserMessageAt: number | null;
+  pendingToolImages: AttachedFileMeta[];
+  error: string | null;
+  updatedAt: number;
+}
+
 export interface ChatState {
   // Messages
   messages: RawMessage[];
@@ -147,6 +160,8 @@ export interface ChatState {
   sessions: ChatSession[];
   currentSessionKey: string;
   currentAgentId: string;
+  /** Runtime state cache per session key so background runs survive session switches. */
+  runtimeBySessionKey: Record<string, SessionRuntimeState>;
   /** First user message text per session key, used as display label */
   sessionLabels: Record<string, string>;
   /** Last message timestamp (ms) per session key, used for sorting */

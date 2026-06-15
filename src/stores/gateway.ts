@@ -160,24 +160,84 @@ function scheduleCompletedRunFinalization(runId: unknown, sessionKey: unknown): 
           const state = useChatStore.getState();
           const matchesCurrentSession = completionSessionKey == null || completionSessionKey === state.currentSessionKey;
           const matchesActiveRun = completionRunId != null && state.activeRunId != null && completionRunId === state.activeRunId;
-          if (!matchesCurrentSession && !matchesActiveRun) return;
+          const backgroundRuntime = completionSessionKey ? state.runtimeBySessionKey[completionSessionKey] : null;
+          const hasBackgroundActiveRuntime = Boolean(backgroundRuntime?.sending);
+          if (!matchesCurrentSession && !matchesActiveRun && !hasBackgroundActiveRuntime) return;
 
-          await state.loadHistory(true);
+          if (matchesCurrentSession || matchesActiveRun) {
+            await state.loadHistory(true);
+          }
 
           if (index !== COMPLETION_HISTORY_RELOAD_DELAYS_MS.length - 1) return;
 
           const latest = useChatStore.getState();
           const stillMatchesCurrentSession = completionSessionKey == null || completionSessionKey === latest.currentSessionKey;
           const stillMatchesActiveRun = completionRunId != null && latest.activeRunId != null && completionRunId === latest.activeRunId;
-          if (!latest.sending || (!stillMatchesCurrentSession && !stillMatchesActiveRun)) return;
-          if (latest.streamingMessage || latest.streamingText) return;
+          if (stillMatchesCurrentSession || stillMatchesActiveRun) {
+            if (!latest.sending) return;
+            if (latest.streamingMessage || latest.streamingText) return;
 
-          useChatStore.setState({
-            sending: false,
-            activeRunId: null,
-            pendingFinal: false,
-            lastUserMessageAt: null,
-          });
+            useChatStore.setState((prev) => ({
+              sending: false,
+              activeRunId: null,
+              pendingFinal: false,
+              lastUserMessageAt: null,
+              runtimeBySessionKey: completionSessionKey
+                ? {
+                    ...prev.runtimeBySessionKey,
+                    [completionSessionKey]: {
+                      ...(prev.runtimeBySessionKey[completionSessionKey] ?? {
+                        sending: false,
+                        activeRunId: null,
+                        streamingText: '',
+                        streamingMessage: null,
+                        streamingTools: [],
+                        pendingFinal: false,
+                        lastUserMessageAt: null,
+                        pendingToolImages: [],
+                        error: null,
+                        updatedAt: 0,
+                      }),
+                      sending: false,
+                      activeRunId: null,
+                      streamingText: '',
+                      streamingMessage: null,
+                      streamingTools: [],
+                      pendingFinal: false,
+                      lastUserMessageAt: null,
+                      pendingToolImages: [],
+                      error: null,
+                      updatedAt: Date.now(),
+                    },
+                  }
+                : prev.runtimeBySessionKey,
+            }));
+            return;
+          }
+
+          if (!completionSessionKey) return;
+          const sessionRuntime = latest.runtimeBySessionKey[completionSessionKey];
+          if (!sessionRuntime?.sending) return;
+          if (sessionRuntime.streamingMessage || sessionRuntime.streamingText) return;
+
+          useChatStore.setState((prev) => ({
+            runtimeBySessionKey: {
+              ...prev.runtimeBySessionKey,
+              [completionSessionKey]: {
+                ...(prev.runtimeBySessionKey[completionSessionKey] ?? sessionRuntime),
+                sending: false,
+                activeRunId: null,
+                streamingText: '',
+                streamingMessage: null,
+                streamingTools: [],
+                pendingFinal: false,
+                lastUserMessageAt: null,
+                pendingToolImages: [],
+                error: null,
+                updatedAt: Date.now(),
+              },
+            },
+          }));
         })
         .catch(() => {});
     }, delayMs);
@@ -252,6 +312,8 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
 
         const matchesCurrentSession = resolvedSessionKey == null || resolvedSessionKey === state.currentSessionKey;
         const matchesActiveRun = runId != null && state.activeRunId != null && String(runId) === state.activeRunId;
+        const backgroundRuntime = resolvedSessionKey ? state.runtimeBySessionKey[resolvedSessionKey] : null;
+        const hasBackgroundActiveRuntime = Boolean(backgroundRuntime?.sending);
 
         if (matchesCurrentSession || matchesActiveRun) {
           maybeLoadHistory(state);
@@ -260,6 +322,18 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
           useChatStore.setState({
             pendingFinal: true,
           });
+          scheduleCompletedRunFinalization(runId, resolvedSessionKey);
+        } else if (resolvedSessionKey && hasBackgroundActiveRuntime) {
+          useChatStore.setState((prev) => ({
+            runtimeBySessionKey: {
+              ...prev.runtimeBySessionKey,
+              [resolvedSessionKey]: {
+                ...prev.runtimeBySessionKey[resolvedSessionKey],
+                pendingFinal: true,
+                updatedAt: Date.now(),
+              },
+            },
+          }));
           scheduleCompletedRunFinalization(runId, resolvedSessionKey);
         }
       })
