@@ -343,18 +343,13 @@ function registerWorkflowSubmitHandler(
       });
       const { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } = await import('@/lib/workflow-local-turn');
       const userText = buildWorkflowStartUserText(schema, values);
+      const startedAtMs = Date.now();
+      const startedAtIso = new Date(startedAtMs).toISOString();
       appendWorkflowStartedLocalTurn({
         userText,
         templateName,
         runId: run.runId,
       });
-      await invokeIpc('workflow:startTracking', {
-        runId: run.runId,
-        workflowId: created.workflowId,
-        sessionKey: chatState.currentSessionKey,
-        agentId: chatState.currentAgentId,
-      });
-      beginWorkflowRunSseTrace(run.runId);
       saveWorkflowExecution({
         sessionKey: chatState.currentSessionKey,
         workflowId: created.workflowId,
@@ -362,8 +357,8 @@ function registerWorkflowSubmitHandler(
         templateId,
         templateName,
         status: 'running',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: startedAtMs,
+        updatedAt: startedAtMs,
         collectedInputs: values,
         paramsSummary: userText,
       });
@@ -373,9 +368,16 @@ function registerWorkflowSubmitHandler(
         status: 'running',
         progress: 0,
         steps: [],
-        startedAt: new Date().toISOString(),
+        startedAt: startedAtIso,
       });
       chatState.clearPendingWorkflow();
+      await invokeIpc('workflow:startTracking', {
+        runId: run.runId,
+        workflowId: created.workflowId,
+        sessionKey: chatState.currentSessionKey,
+        agentId: chatState.currentAgentId,
+      });
+      beginWorkflowRunSseTrace(run.runId);
     } catch (err) {
       const messageErr = err instanceof Error ? err.message : String(err);
       console.error('[parameter-form-recovery] handler error', err);

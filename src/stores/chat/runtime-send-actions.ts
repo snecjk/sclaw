@@ -249,7 +249,8 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
             'chat:sendWithMedia',
             {
               sessionKey: currentSessionKey,
-              message: trimmed || 'Process the attached file(s).',
+              // message: trimmed || 'Process the attached file(s).',
+              message: trimmed || '',
               deliver: false,
               idempotencyKey,
               media: attachments.map((a) => ({

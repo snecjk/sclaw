@@ -188,19 +188,13 @@ export async function createAndStartWorkflowDirect(
 
     const { schema } = cached;
     const userText = buildWorkflowStartUserText(schema, inputs);
+    const startedAtMs = Date.now();
+    const startedAtIso = new Date(startedAtMs).toISOString();
     appendWorkflowStartedLocalTurn({
       userText,
       templateName,
       runId: run.runId,
     });
-
-    await invokeIpc('workflow:startTracking', {
-      runId: run.runId,
-      workflowId: created.workflowId,
-      sessionKey: context.sessionKey,
-      agentId: context.agentId,
-    });
-    beginWorkflowRunSseTrace(run.runId);
 
     updateWorkflowRunMetadata(context.sessionKey, created.workflowId, {
       lastRunId: run.runId,
@@ -214,8 +208,8 @@ export async function createAndStartWorkflowDirect(
       templateId,
       templateName,
       status: 'running',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: startedAtMs,
+      updatedAt: startedAtMs,
       collectedInputs: inputs,
       paramsSummary: userText,
     });
@@ -231,8 +225,16 @@ export async function createAndStartWorkflowDirect(
       status: 'running',
       progress: 0,
       steps: [],
-      startedAt: new Date().toISOString(),
+      startedAt: startedAtIso,
     });
+
+    await invokeIpc('workflow:startTracking', {
+      runId: run.runId,
+      workflowId: created.workflowId,
+      sessionKey: context.sessionKey,
+      agentId: context.agentId,
+    });
+    beginWorkflowRunSseTrace(run.runId);
 
     // Clear pending state
     useChatStore.getState().clearPendingWorkflow();

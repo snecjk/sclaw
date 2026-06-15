@@ -1,0 +1,12 @@
+{
+  "name": "@sto/sto-media-understanding",
+  "version": "2026.6.4",
+  "description": "Registers sto as an OpenClaw media-understanding provider for the image tool.",
+  "type": "module",
+  "dependencies": {},
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

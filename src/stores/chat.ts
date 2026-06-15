@@ -2001,7 +2001,8 @@ export const useChatStore = create<ChatState>()(
             method: 'POST',
             body: JSON.stringify({
               sessionKey: currentSessionKey,
-              message: messageWithContext || 'Process the attached file(s).',
+              // message: messageWithContext || 'Process the attached file(s).',
+              message: messageWithContext || '',
               deliver: false,
               idempotencyKey,
               media: attachments.map((a) => ({

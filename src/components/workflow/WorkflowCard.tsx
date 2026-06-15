@@ -230,7 +230,7 @@ export function WorkflowCard({
               </span>
             </div>
 
-            {durationLabel && (
+            {durationLabel && isRunning && (
               <p className="mt-1 flex items-center gap-1.5 text-xs text-[#86909C]">
                 <span className={cn('inline-block h-1.5 w-1.5 rounded-full', theme.dotClass)} />
                 {durationLabel}

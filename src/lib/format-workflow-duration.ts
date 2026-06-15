@@ -13,6 +13,8 @@ export function pickEarlierWorkflowTimestamp(a?: string, b?: string): string | u
   return aMs <= bMs ? a : b;
 }
 
+const MIN_PLAUSIBLE_WORKFLOW_DURATION_MS = 5_000;
+
 /**
  * Resolve startedAt for duration display. API may return startedAt ≈ completedAt;
  * prefer local track time when it yields a materially longer duration.
@@ -29,14 +31,25 @@ export function resolveWorkflowStartedAt(
     localIso,
   );
   if (!startedAt) return undefined;
+  if (!completedAt) return startedAt;
 
-  if (completedAt && localIso) {
-    const apiDur = getWorkflowDurationMs(startedAt, completedAt) ?? 0;
+  const resolvedDur = getWorkflowDurationMs(startedAt, completedAt) ?? 0;
+  if (resolvedDur < MIN_PLAUSIBLE_WORKFLOW_DURATION_MS) {
+    for (const candidate of [localIso, previous, incoming]) {
+      if (!candidate || candidate === startedAt) continue;
+      const candidateDur = getWorkflowDurationMs(candidate, completedAt) ?? 0;
+      if (candidateDur > resolvedDur + 1_000) {
+        startedAt = candidate;
+        break;
+      }
+    }
+  } else if (localIso) {
     const localDur = getWorkflowDurationMs(localIso, completedAt) ?? 0;
-    if (localDur > apiDur + 5000) {
+    if (localDur > resolvedDur + MIN_PLAUSIBLE_WORKFLOW_DURATION_MS) {
       startedAt = localIso;
     }
   }
+
   return startedAt;
 }
 

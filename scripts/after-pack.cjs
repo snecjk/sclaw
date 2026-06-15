@@ -21,14 +21,34 @@
 
 const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, realpathSync, readFileSync } = require('fs');
 const { join, dirname, basename } = require('path');
-const { createPackage } = require('@electron/asar');
+const { createPackageWithOptions } = require('@electron/asar');
 
 // On Windows, paths in pnpm's virtual store can exceed the default MAX_PATH
 // limit (260 chars). Node.js 18.17+ respects the system LongPathsEnabled
 // registry key, but as a safety net we normalize paths to use the \\?\ prefix
 // on Windows, which bypasses the limit unconditionally.
 // Native modules and prebuilt binaries must stay outside the ASAR archive.
-const OPENCLAW_ASAR_UNPACK = '{**/*.node,**/sharp/**,**/koffi/**,**/@img/**,**/@napi-rs/**}';
+//
+// IMPORTANT: must use createPackageWithOptions (not createPackage) — the latter
+// ignores the unpack option entirely.
+//
+// Match PLATFORM_NATIVE_SCOPES below plus generic binary extensions. Entire
+// package directories must unpack (not only *.node) so sibling .dylib/.dll load
+// via @loader_path (e.g. sharp + libvips).
+const OPENCLAW_ASAR_UNPACK = `{${[
+  '**/*.node',
+  '**/*.dylib',
+  '**/*.so',
+  '**/*.dll',
+  '**/sharp/**',
+  '**/koffi/**',
+  '**/@img/**',
+  '**/@napi-rs/**',
+  '**/@mariozechner/**',
+  '**/@lydell/**',
+  '**/@reflink/**',
+  '**/sqlite-vec-*/**',
+].join(',')}}`;
 
 function countFilesRecursive(dir) {
   let count = 0;
@@ -56,10 +76,69 @@ async function packDirectoryToAsar(sourceDir, asarPath, label) {
   if (existsSync(unpackedPath)) rmSync(unpackedPath, { recursive: true, force: true });
 
   console.log(`[after-pack] 📦 Packing ${label} (${fileCount} files) -> ${asarPath}`);
-  await createPackage(sourceDir, asarPath, { unpack: OPENCLAW_ASAR_UNPACK });
+  await createPackageWithOptions(sourceDir, asarPath, { unpack: OPENCLAW_ASAR_UNPACK });
+  validateAsarNativeUnpack(asarPath, label);
   rmSync(sourceDir, { recursive: true, force: true });
   console.log(`[after-pack] ✅ ${label} packed into ASAR (${basename(asarPath)}).`);
   return true;
+}
+
+/** Fail the build if native modules were not extracted to {asar}.unpacked. */
+function validateAsarNativeUnpack(asarPath, label) {
+  const unpackedRoot = `${asarPath}.unpacked`;
+
+  // Plugin mirrors are mostly TS/JS; native deps are deduped against openclaw
+  // runtime and resolved via NODE_PATH. No .unpacked dir is expected when there
+  // are no matching binary files.
+  if (label !== 'OpenClaw runtime') {
+    if (existsSync(unpackedRoot)) {
+      const unpackedCount = countFilesRecursive(unpackedRoot);
+      console.log(`[after-pack] ✅ ${label}: ${unpackedCount} native file(s) in .unpacked (optional).`);
+    } else {
+      console.log(`[after-pack] ℹ️  ${label}: no .unpacked dir (no native binaries to extract).`);
+    }
+    return;
+  }
+
+  if (!existsSync(unpackedRoot)) {
+    throw new Error(
+      `[after-pack] ${label} ASAR unpack failed: ${unpackedRoot} does not exist. `
+      + 'Native modules (sharp/libvips, koffi, canvas, …) will not load at runtime. '
+      + 'Use createPackageWithOptions with OPENCLAW_ASAR_UNPACK.',
+    );
+  }
+
+  const unpackedCount = countFilesRecursive(unpackedRoot);
+  if (unpackedCount === 0) {
+    throw new Error(`[after-pack] ${label} ASAR unpack failed: ${unpackedRoot} is empty`);
+  }
+
+  // OpenClaw runtime: sharp/libvips is required for multimodal image processing.
+  if (label === 'OpenClaw runtime') {
+    const imgScope = join(unpackedRoot, 'node_modules', '@img');
+    if (!existsSync(imgScope)) {
+      throw new Error(
+        `[after-pack] ${label} ASAR unpack failed: node_modules/@img missing from ${unpackedRoot}`,
+      );
+    }
+    const libvipsDir = readdirSync(imgScope).find((name) => name.startsWith('sharp-libvips-'));
+    if (!libvipsDir) {
+      throw new Error(
+        `[after-pack] ${label} ASAR unpack failed: sharp-libvips-* missing from ${imgScope}`,
+      );
+    }
+    const nativeLibDir = join(imgScope, libvipsDir, 'lib');
+    const nativeLibs = existsSync(nativeLibDir)
+      ? readdirSync(nativeLibDir).filter((f) => /\.(dylib|so|dll)$/i.test(f))
+      : [];
+    if (nativeLibs.length === 0) {
+      throw new Error(
+        `[after-pack] ${label} ASAR unpack failed: no libvips binary in ${nativeLibDir}`,
+      );
+    }
+  }
+
+  console.log(`[after-pack] ✅ ${label}: validated ${unpackedCount} unpacked file(s).`);
 }
 
 function normWin(p) {
@@ -838,6 +917,10 @@ function bundleLocalPlugin(preBuildDir, rawSourceDir, nodeModulesRoot, destDir) 
 
 // ── Main hook ────────────────────────────────────────────────────────────────
 
+exports.OPENCLAW_ASAR_UNPACK = OPENCLAW_ASAR_UNPACK;
+exports.packDirectoryToAsar = packDirectoryToAsar;
+exports.validateAsarNativeUnpack = validateAsarNativeUnpack;
+
 exports.default = async function afterPack(context) {
   const appOutDir = context.appOutDir;
   const platform = context.electronPlatformName; // 'win32' | 'darwin' | 'linux'
@@ -902,6 +985,7 @@ exports.default = async function afterPack(context) {
     { type: 'local', localDir: 'sto-agent-telemetry', pluginId: 'sto-agent-telemetry' },
     { type: 'local', localDir: 'sto-scheduled-task-tool', pluginId: 'sto-scheduled-task-tool' },
     { type: 'local', localDir: 'sto-skill-call-monitor', pluginId: 'sto-skill-call-monitor' },
+    { type: 'local', localDir: 'sto-media-understanding', pluginId: 'sto-media-understanding' },
     { type: 'local', localDir: 'sto-dingtalk-send-guard', pluginId: 'sto-dingtalk-send-guard' },
     { type: 'local', localDir: 'sto-workflow-tool', pluginId: 'sto-workflow-tool' },
   ];

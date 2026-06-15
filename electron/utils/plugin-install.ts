@@ -218,6 +218,7 @@ const LOCAL_PLUGIN_DIRS: Record<string, string> = {
   'sto-scheduled-task-tool': 'sto-scheduled-task-tool',
   'sto-workflow-tool': 'sto-workflow-tool',
   'sto-skill-call-monitor': 'sto-skill-call-monitor',
+  'sto-media-understanding': 'sto-media-understanding',
   'sto-dingtalk-send-guard': 'sto-dingtalk-send-guard',
 };
 
@@ -727,6 +728,14 @@ export function ensureStoSkillCallMonitorPluginInstalled(): { installed: boolean
   );
 }
 
+export function ensureStoMediaUnderstandingPluginInstalled(): { installed: boolean; warning?: string } {
+  return ensurePluginInstalled(
+    'sto-media-understanding',
+    buildCandidateSources('sto-media-understanding'),
+    'STO Media Understanding',
+  );
+}
+
 export function ensureStoDingTalkSendGuardPluginInstalled(): { installed: boolean; warning?: string } {
   return ensurePluginInstalled(
     'sto-dingtalk-send-guard',
@@ -750,6 +759,7 @@ const ALL_BUNDLED_PLUGINS = [
   { fn: ensureStoScheduledTaskToolPluginInstalled, label: 'STO Scheduled Task Tool' },
   { fn: ensureStoWorkflowToolPluginInstalled, label: 'STO Workflow Tool' },
   { fn: ensureStoSkillCallMonitorPluginInstalled, label: 'STO Skill Call Monitor' },
+  { fn: ensureStoMediaUnderstandingPluginInstalled, label: 'STO Media Understanding' },
   { fn: ensureStoDingTalkSendGuardPluginInstalled, label: 'STO DingTalk Send Guard' },
 ] as const;
 
@@ -871,6 +881,7 @@ export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
     { dirName: 'sto-scheduled-task-tool', label: 'STO Scheduled Task Tool' },
     { dirName: 'sto-workflow-tool', label: 'STO Workflow Tool' },
     { dirName: 'sto-skill-call-monitor', label: 'STO Skill Call Monitor' },
+    { dirName: 'sto-media-understanding', label: 'STO Media Understanding' },
     { dirName: 'sto-dingtalk-send-guard', label: 'STO DingTalk Send Guard' },
   ] as const;
 

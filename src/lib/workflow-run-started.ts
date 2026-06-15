@@ -55,20 +55,15 @@ export async function applyWorkflowRunStarted(
     }
   }
 
+  const startedAtMs = Date.now();
+  const startedAtIso = new Date(startedAtMs).toISOString();
+
   appendWorkflowStartedLocalTurn({
     userText: resolvedUserText,
     templateName,
     runId,
     assistantText: assistantText ?? `正在启动工作流「${templateName}」…`,
   });
-
-  await invokeIpc('workflow:startTracking', {
-    runId,
-    workflowId,
-    sessionKey,
-    agentId,
-  });
-  beginWorkflowRunSseTrace(runId);
 
   updateWorkflowRunMetadata(sessionKey, workflowId, {
     lastRunId: runId,
@@ -82,8 +77,8 @@ export async function applyWorkflowRunStarted(
     templateId: wfRecord?.templateId ?? '',
     templateName,
     status: 'running',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: startedAtMs,
+    updatedAt: startedAtMs,
     collectedInputs: inputs,
     paramsSummary: resolvedUserText,
   });
@@ -95,9 +90,17 @@ export async function applyWorkflowRunStarted(
     status: 'running',
     progress: 0,
     steps: [],
-    startedAt: new Date().toISOString(),
+    startedAt: startedAtIso,
   });
   chatStore.clearPendingWorkflow();
+
+  await invokeIpc('workflow:startTracking', {
+    runId,
+    workflowId,
+    sessionKey,
+    agentId,
+  });
+  beginWorkflowRunSseTrace(runId);
 
   return true;
 }

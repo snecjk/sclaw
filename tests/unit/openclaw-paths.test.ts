@@ -83,6 +83,23 @@ describe('OpenClaw packaged paths (ASAR)', () => {
     expect(getOpenClawNodeModulesPath()).toContain(join(RESOURCES, 'openclaw.asar', 'node_modules'));
   });
 
+  it('prepends openclaw.asar.unpacked node_modules to NODE_PATH when present', async () => {
+    const unpackedNm = join(RESOURCES, 'openclaw.asar.unpacked', 'node_modules');
+    mockExistsSync.mockImplementation((p: string) => {
+      const normalized = normalizePath(p);
+      if (normalized.endsWith('/openclaw.asar')) return true;
+      if (normalized.endsWith('/openclaw.asar/openclaw.mjs')) return true;
+      if (normalized === normalizePath(unpackedNm)) return true;
+      if (normalized.endsWith('/openclaw.asar/node_modules')) return true;
+      return false;
+    });
+
+    const { getOpenClawNodeModulesPath } = await import('@electron/utils/paths');
+    const nodePath = getOpenClawNodeModulesPath();
+    expect(nodePath.startsWith(unpackedNm)).toBe(true);
+    expect(nodePath).toContain(join(RESOURCES, 'openclaw.asar', 'node_modules'));
+  });
+
   it('falls back to legacy openclaw/ directory when asar is absent', async () => {
     mockExistsSync.mockImplementation((p: string) => {
       const normalized = normalizePath(p);
