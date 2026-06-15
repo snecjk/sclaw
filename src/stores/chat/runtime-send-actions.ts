@@ -293,11 +293,6 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
 
         let result: { success: boolean; result?: { runId?: string }; error?: string };
 
-        // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
-        const CHAT_SEND_TIMEOUT_MS = 120_000;
-        const MEDIA_SEND_TIMEOUT_MS = 120_000;
-
-
         if (hasMedia) {
           result = await hostApiFetch(
             '/api/chat/send-with-media',
@@ -305,7 +300,7 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
               method: 'POST',
               body: JSON.stringify({
                 sessionKey: currentSessionKey,
-                message: trimmed || 'Process the attached file(s).',
+                message: trimmed || '',
                 deliver: false,
                 idempotencyKey,
                 engineType: currentSessionEngineType,
@@ -317,7 +312,6 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
                 ...dingTalkRpcExtras,
               }),
             },
-            MEDIA_SEND_TIMEOUT_MS,
           ) as { success: boolean; result?: { runId?: string }; error?: string };
         } else {
           result = await hostApiFetch(

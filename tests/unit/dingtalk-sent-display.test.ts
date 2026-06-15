@@ -5,6 +5,7 @@ import {
   formatDingTalkSentTextForChatPreview,
   parseDwsChatMessageSendCommand,
   stripEchoedDingTalkSentBodiesFromAssistantReply,
+  splitDingTalkSentPreviewText,
 } from '../../shared/dingtalk-sent-display';
 
 describe('parseDwsChatMessageSendCommand', () => {
@@ -23,46 +24,22 @@ describe('parseDwsChatMessageSendCommand', () => {
     const text = appendDingTalkAgentSendDisclaimer('正文内容');
     const preview = formatDingTalkSentTextForChatPreview(text);
     expect(preview).toContain('正文内容');
-    expect(preview).toContain('> *本消息由 STO Claw 代为发送，非本人实时回复。*');
+    expect(preview).not.toContain('STO Claw 代为发送');
     expect(preview).not.toContain('<font');
   });
 
-  it('renders single-quoted font disclaimer without raw HTML tags', () => {
-    const text = [
-      '### 上海明日天气',
+  it('splits malformed font disclaimer for UI footer', () => {
+    const malformed = [
+      '正文内容',
       '',
       '---',
       '',
-      "<font color='#999999'>本消息由 STO Claw 代为发送，非本人实时回复。</font>",
+      `<font color="'#999999'">本消息由 STO Claw 代为发送，非本人实时回复。</font>`,
     ].join('\n');
-    const preview = formatDingTalkSentTextForChatPreview(text);
-    expect(preview).toContain('上海明日天气');
-    expect(preview).toContain('> *本消息由 STO Claw 代为发送，非本人实时回复。*');
-    expect(preview).not.toContain('<font');
-  });
-
-  it('always renders proxy-send footer when agent omitted disclaimer in --text', () => {
-    const preview = formatDingTalkSentTextForChatPreview('☀️ 上海明天天气预报\n\n天气晴朗，适合出行！');
-    expect(preview).toContain('上海明天天气预报');
-    expect(preview).toContain('> *本消息由 STO Claw 代为发送，非本人实时回复。*');
-    expect(preview).not.toContain('<font');
-  });
-
-  it('renders shell-mangled font disclaimer without raw HTML tags', () => {
-    const text = [
-      '### 上海明日天气',
-      '',
-      '- **日期**：6月11日',
-      '',
-      '---',
-      '',
-      '<font color=\'"#999999"\'>本消息由 STO Claw 代为发送，非本人实时回复。</font>',
-    ].join('\n');
-    const preview = formatDingTalkSentTextForChatPreview(text);
-    expect(preview).toContain('上海明日天气');
-    expect(preview).toContain('> *本消息由 STO Claw 代为发送，非本人实时回复。*');
-    expect(preview).not.toContain('<font');
-    expect(preview).not.toContain('</font>');
+    const { body, disclaimer } = splitDingTalkSentPreviewText(malformed);
+    expect(body).toBe('正文内容');
+    expect(disclaimer).toBe('本消息由 STO Claw 代为发送，非本人实时回复。');
+    expect(formatDingTalkSentTextForChatPreview(malformed)).toBe('正文内容');
   });
 });
 

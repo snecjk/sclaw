@@ -65,6 +65,8 @@
         "dingtalkLoggingIn": "Signing in…",
         "dingtalkSentPreviewTitle": "Sent to {{name}}",
         "dingtalkSentPreviewTitleGroup": "Sent to group {{name}}",
+        "dingtalkSentPreviewTo": "Sent to",
+        "dingtalkSentPreviewToGroup": "Sent to group",
         "dingtalkSentPreviewMessageTitle": "Title: {{title}}",
         "pickWorkflow": "Choose workflow",
         "workflowPlaceholder": "Search workflow templates...",

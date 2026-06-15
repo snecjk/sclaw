@@ -65,6 +65,8 @@
         "dingtalkLoggingIn": "登录中…",
         "dingtalkSentPreviewTitle": "已发送至 {{name}}",
         "dingtalkSentPreviewTitleGroup": "已发送至群聊 {{name}}",
+        "dingtalkSentPreviewTo": "已发送至",
+        "dingtalkSentPreviewToGroup": "已发送至群聊",
         "dingtalkSentPreviewMessageTitle": "消息标题：{{title}}",
         "pickWorkflow": "选择工作流",
         "workflowPlaceholder": "搜索工作流模板...",

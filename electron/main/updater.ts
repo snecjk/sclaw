@@ -156,6 +156,12 @@ export class AppUpdater extends EventEmitter {
   /** Backup path of the old .app while a manual install is in progress (for rollback). */
   private _backupAppPath: string | null = null;
 
+  /**
+   * manualInstall 会把当前 .app rename 到 .old-*，process.execPath 仍指向备份里的可执行文件。
+   * 服务端回滚版本后若用默认 relaunch，会再次拉起备份中的高版本，需显式指向原路径下的新 .app。
+   */
+  private _relaunchExecPath: string | null = null;
+
   /** Delay (ms) after the new version starts before purging the install backup. */
   private static readonly BACKUP_CLEANUP_DELAY_MS = 60_000;
 
@@ -876,7 +882,10 @@ export class AppUpdater extends EventEmitter {
     const appPath = currentAppPath.endsWith('.app')
       ? currentAppPath
       : path.dirname(path.dirname(path.dirname(process.execPath)));
-    logger.info(`[Updater] manualInstall: target app path = ${appPath}`);
+    this._relaunchExecPath = path.join(appPath, 'Contents/MacOS', path.basename(process.execPath));
+    logger.info(
+      `[Updater] manualInstall: target app path = ${appPath}, relaunch exec = ${this._relaunchExecPath}`,
+    );
 
     const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'stoclaw-install-'));
     let extractedAppPath: string | null = null;
@@ -962,6 +971,7 @@ export class AppUpdater extends EventEmitter {
       await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
 
       this.updateStatus({ status: 'error', error: `安装失败: ${msg}` });
+      this._relaunchExecPath = null;
       throw error;
     }
   }
@@ -1135,16 +1145,17 @@ export class AppUpdater extends EventEmitter {
   }
 
   /**
-   * 重启当前应用。配合 manualInstall() 使用 —— manualInstall 已经把新 .app 放到原位置，
-   * relaunch() 会启动新进程读取新版本，quit() 关掉当前旧进程。
+   * 重启当前应用。manualInstall 完成后新 .app 已在原路径，但 process.execPath 仍指向 .old 备份。
    */
   restartApp(): void {
     logger.info('[Updater] restartApp called');
     setQuitting();
     this.clearRestartCountdownTimer();
+    const execPath = this._relaunchExecPath ?? process.execPath;
+    logger.info(`[Updater] restartApp: relaunch execPath=${execPath}`);
     // 留一点时间让 IPC / 日志 flush
     setTimeout(() => {
-      app.relaunch();
+      app.relaunch({ execPath });
       app.quit();
     }, 100);
   }

@@ -198,11 +198,20 @@ export function getOpenClawProcessCwd(): string {
 /**
  * NODE_PATH entries for Gateway / doctor / plugin module resolution.
  * Includes openclaw runtime node_modules plus dev fallbacks for hoisted deps.
+ *
+ * When openclaw is packed into an ASAR, native modules live under
+ * `{openclaw.asar}.unpacked/node_modules/` — prepend that path so Node can
+ * load .node/.dylib siblings (sharp/libvips, koffi, canvas, …).
  */
 export function getOpenClawNodeModulesPath(): string {
   const delimiter = process.platform === 'win32' ? ';' : ':';
   const paths: string[] = [];
   const openclawDir = getOpenClawDir();
+
+  if (app.isPackaged && openclawDir.endsWith('.asar')) {
+    const unpackedNm = join(`${openclawDir}.unpacked`, 'node_modules');
+    paths.push(unpackedNm);
+  }
 
   paths.push(join(openclawDir, 'node_modules'));
 
@@ -214,6 +223,14 @@ export function getOpenClawNodeModulesPath(): string {
 
   const unique = [...new Set(paths.filter((entry) => existsSync(entry)))];
   return unique.join(delimiter);
+}
+
+/**
+ * OPENCLAW_PACKAGE_ROOT for Gateway child processes.
+ * Extensions under ~/.stoclaw resolve plugin-sdk via createRequire(this + openclaw.mjs).
+ */
+export function getOpenClawPackageRootEnv(): string {
+  return getOpenClawDir();
 }
 
 /**

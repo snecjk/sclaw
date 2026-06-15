@@ -1,0 +1,13 @@
+{
+  "id": "sto-media-understanding",
+  "name": "STO 图片理解",
+  "description": "将 sto 注册为 OpenClaw media-understanding provider，供 image 工具调用多模态模型识图。",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

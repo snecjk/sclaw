@@ -5,7 +5,7 @@
  */
 import { toast } from 'sonner';
 import { registerParameterFormHandler, hasParameterFormHandler } from '@/components/parameter-form/form-handlers';
-import { buildWorkflowFormConfig, buildStartupPreset } from '@/lib/workflow-form-utils';
+import { buildWorkflowFormConfig, buildStartupPreset, buildWorkflowParameterIntroText } from '@/lib/workflow-form-utils';
 import type { WorkflowSchemaReadyData } from '@/lib/builtin-tool-envelope';
 import { parseStoToolEnvelope } from '@/lib/builtin-tool-envelope';
 import { isWorkflowCreationIntent } from '@/hooks/use-workflow-intent';
@@ -337,24 +337,20 @@ function registerWorkflowSubmitHandler(
         collectedInputs: values,
         createdAt: Date.now(),
       });
+      const trackStartMs = Date.now();
       const run = await startWorkflow(created.workflowId, {
         inputs: values,
         idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
       });
       const { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } = await import('@/lib/workflow-local-turn');
       const userText = buildWorkflowStartUserText(schema, values);
+      const startedAtIso = new Date(trackStartMs).toISOString();
       appendWorkflowStartedLocalTurn({
         userText,
         templateName,
         runId: run.runId,
-      });
-      await invokeIpc('workflow:startTracking', {
-        runId: run.runId,
         workflowId: created.workflowId,
-        sessionKey: chatState.currentSessionKey,
-        agentId: chatState.currentAgentId,
       });
-      beginWorkflowRunSseTrace(run.runId);
       saveWorkflowExecution({
         sessionKey: chatState.currentSessionKey,
         workflowId: created.workflowId,
@@ -362,8 +358,8 @@ function registerWorkflowSubmitHandler(
         templateId,
         templateName,
         status: 'running',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: trackStartMs,
+        updatedAt: trackStartMs,
         collectedInputs: values,
         paramsSummary: userText,
       });
@@ -373,9 +369,16 @@ function registerWorkflowSubmitHandler(
         status: 'running',
         progress: 0,
         steps: [],
-        startedAt: new Date().toISOString(),
+        startedAt: startedAtIso,
       });
       chatState.clearPendingWorkflow();
+      await invokeIpc('workflow:startTracking', {
+        runId: run.runId,
+        workflowId: created.workflowId,
+        sessionKey: chatState.currentSessionKey,
+        agentId: chatState.currentAgentId,
+      });
+      beginWorkflowRunSseTrace(run.runId);
     } catch (err) {
       const messageErr = err instanceof Error ? err.message : String(err);
       console.error('[parameter-form-recovery] handler error', err);
@@ -398,9 +401,9 @@ export function sessionHasWorkflowParameterForm(
   });
 }
 
-/** Store schema in pending workflow; injection happens after history sync. */
-export function applyWorkflowSchemaReady(data: WorkflowSchemaReadyData): void {
-  if (!data.templateId || !data.schema) return;
+/** Store schema in pending workflow; form attaches to the model's assistant reply (not a separate bubble). */
+export function applyWorkflowSchemaReady(data: WorkflowSchemaReadyData): boolean {
+  if (!data.templateId || !data.schema) return false;
   const templateName = data.templateName ?? data.matchedLabel ?? data.templateId;
   useChatStore.getState().setPendingWorkflow({
     templateId: data.templateId,
@@ -411,6 +414,7 @@ export function applyWorkflowSchemaReady(data: WorkflowSchemaReadyData): void {
     frontendFormInserted: false,
     modelGuidanceSent: true,
   });
+  return true;
 }
 
 /** Read workflow_schema_ready from gateway history (tool results are filtered from UI). */
@@ -426,11 +430,12 @@ export function absorbWorkflowSchemaFromToolResults(rawMessages: RawMessage[]): 
 }
 
 /**
- * Sync frontendFormInserted when a form is already visible.
- * Does NOT insert a new assistant message — NL flow waits for model output
- * with `<ParameterForm />` marker, then maybeAppend / extractParameterForm render it.
+ * Attach the parameter form to the latest assistant reply when schema is pending.
+ * Never inserts a separate assistant bubble (keeps the model's business summary).
  */
-export function ensureWorkflowParameterFormInjected(): boolean {
+export function ensureWorkflowParameterFormInjected(
+  getMessageText: (content: unknown) => string = defaultGetMessageText,
+): boolean {
   const state = useChatStore.getState();
   const pending = state.pendingWorkflow;
   if (!pending?.templateId || !pending.schema || !pending.schemaHash) return false;
@@ -442,7 +447,24 @@ export function ensureWorkflowParameterFormInjected(): boolean {
     return true;
   }
 
+  if (state.sending) return false;
+
+  const patched = patchLastAssistantWithWorkflowForm(state.messages, getMessageText);
+  if (patched !== state.messages) {
+    useChatStore.setState({ messages: patched });
+    return true;
+  }
+
   return false;
+}
+
+function defaultGetMessageText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return (content as ContentBlock[])
+    .filter((b) => b.type === 'text' && typeof b.text === 'string')
+    .map((b) => b.text as string)
+    .join('\n');
 }
 
 /**
@@ -519,7 +541,13 @@ export function appendWorkflowParameterFormToMessage(
   });
 
   if (Array.isArray(message.content)) {
-    return { ...message, content: [...(strippedContent as ContentBlock[]), newBlock] };
+    const blocks = strippedContent as ContentBlock[];
+    const textBlocks = blocks.filter((b) => b.type === 'text');
+    const otherBlocks = blocks.filter((b) => b.type !== 'text');
+    return {
+      ...message,
+      content: [...textBlocks, ...otherBlocks, newBlock],
+    };
   }
   if (typeof message.content === 'string' && message.content.trim()) {
     return { ...message, content: [{ type: 'text', text: strippedText }, newBlock] };
@@ -603,7 +631,7 @@ export function injectWorkflowParameterForm(params: {
 
   const intro =
     params.introText
-    ?? `请确认「${params.templateName}」工作流的运行参数（可在表单中逐步填写）：`;
+    ?? buildWorkflowParameterIntroText(params.templateName, params.schema);
 
   useChatStore.setState((s) => ({
     messages: [

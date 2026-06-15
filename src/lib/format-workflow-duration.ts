@@ -1,7 +1,7 @@
+import { parseWorkflowTimestampMs } from '../../shared/workflow-timestamp';
+
 export function parseWorkflowTimestamp(value?: string): number | null {
-  if (!value) return null;
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) ? ms : null;
+  return parseWorkflowTimestampMs(value);
 }
 
 /** Keep the earlier of two ISO timestamps (client track start vs API startedAt). */
@@ -15,7 +15,7 @@ export function pickEarlierWorkflowTimestamp(a?: string, b?: string): string | u
 
 /**
  * Resolve startedAt for duration display. API may return startedAt ≈ completedAt;
- * prefer local track time when it yields a materially longer duration.
+ * prefer the client-tracked start and whichever candidate yields the longest duration.
  */
 export function resolveWorkflowStartedAt(
   previous?: string,
@@ -24,20 +24,29 @@ export function resolveWorkflowStartedAt(
   completedAt?: string,
 ): string | undefined {
   const localIso = localStartedAtMs ? new Date(localStartedAtMs).toISOString() : undefined;
-  let startedAt = pickEarlierWorkflowTimestamp(
-    pickEarlierWorkflowTimestamp(previous, incoming),
-    localIso,
+  const candidates = [localIso, previous, incoming].filter(
+    (value, index, list): value is string => Boolean(value) && list.indexOf(value) === index,
   );
-  if (!startedAt) return undefined;
 
-  if (completedAt && localIso) {
-    const apiDur = getWorkflowDurationMs(startedAt, completedAt) ?? 0;
-    const localDur = getWorkflowDurationMs(localIso, completedAt) ?? 0;
-    if (localDur > apiDur + 5000) {
-      startedAt = localIso;
+  if (candidates.length === 0) return undefined;
+  if (!completedAt) {
+    return pickEarlierWorkflowTimestamp(
+      pickEarlierWorkflowTimestamp(previous, incoming),
+      localIso,
+    );
+  }
+
+  let best: string | undefined;
+  let bestDurationMs = -1;
+  for (const candidate of candidates) {
+    const durationMs = getWorkflowDurationMs(candidate, completedAt) ?? 0;
+    if (durationMs > bestDurationMs) {
+      bestDurationMs = durationMs;
+      best = candidate;
     }
   }
-  return startedAt;
+
+  return best ?? candidates[0];
 }
 
 export function getWorkflowDurationMs(

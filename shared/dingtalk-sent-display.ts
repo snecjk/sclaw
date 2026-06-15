@@ -1,5 +1,6 @@
 import {
-  ensureDingTalkAgentSendDisclaimerFormat,
+  DINGTALK_AGENT_SEND_DISCLAIMER_MARKER,
+  DINGTALK_AGENT_SEND_DISCLAIMER_PLAIN_TEXT,
   stripDingTalkAgentSendDisclaimerBody,
 } from './dingtalk-disclaimer';
 import { messageHasDingTalkRecipientContext } from './dingtalk-mention-context';
@@ -255,46 +256,33 @@ export function parseDwsChatMessageSendCommand(
   };
 }
 
-/** Sent-success card preview: body + disclaimer as Markdown quote (no raw HTML). */
-export function formatDingTalkSentTextForChatPreview(text: string): string {
-  const toQuote = (inner: string) => `\n\n> *${inner.trim()}*`;
+export interface DingTalkSentPreviewParts {
+  body: string;
+  disclaimer?: string;
+}
 
-  // Preview always shows the proxy-send footer even when the agent omitted it in --text.
-  let result = ensureDingTalkAgentSendDisclaimerFormat(text).replace(/\r\n/g, '\n');
+/** Split sent `--text` into body and optional agent-send disclaimer for UI cards. */
+export function splitDingTalkSentPreviewText(text: string): DingTalkSentPreviewParts {
+  const normalized = text.replace(/\r\n/g, '\n').trim();
+  if (!normalized) return { body: '' };
 
-  // --- + <font> disclaimer (incl. shell-mangled attrs like color='"#999999"')
-  result = result.replace(
-    /\n*---\n*\s*<font\s+color=[^>\n]*>([\s\S]*?)<\/font>\s*/gi,
-    (_, inner) => toQuote(inner),
-  );
+  const body = stripDingTalkAgentSendDisclaimerBody(normalized).trim();
+  const hasDisclaimer = normalized.includes(DINGTALK_AGENT_SEND_DISCLAIMER_MARKER)
+    || body.length < normalized.length;
 
-  // Remaining <font> disclaimer blocks
-  result = result.replace(
-    /<font\s+color=[^>\n]*>([\s\S]*?)<\/font>/gi,
-    (_, inner) => toQuote(inner),
-  );
-
-  // Broken open tag without </font>
-  result = result.replace(
-    /\n*---\n*\s*<font\s+color=[^>\n]*>([^\n<]*STO Claw 代为发送[^\n<]*)\s*/gi,
-    (_, inner) => toQuote(inner),
-  );
-
-  // Plain disclaimer line after ---
-  result = result.replace(
-    /\n*---\n*\s*([^\n<]*STO Claw 代为发送[^\n<]*)\s*$/i,
-    (_, inner) => toQuote(inner),
-  );
-
-  // Single-quoted font disclaimer (current dws send format)
-  if (!/> \*[^*]*STO Claw 代为发送/.test(result) && /STO Claw 代为发送/.test(result)) {
-    result = result.replace(
-      /<font\s+color=['"]#999999['"][^>]*>([\s\S]*?STO Claw 代为发送[\s\S]*?)<\/font>/gi,
-      (_, inner) => toQuote(inner),
-    );
+  if (!hasDisclaimer) {
+    return { body: normalized };
   }
 
-  return result.trim();
+  return {
+    body,
+    disclaimer: DINGTALK_AGENT_SEND_DISCLAIMER_PLAIN_TEXT,
+  };
+}
+
+/** Sent-success card preview: body only (disclaimer rendered separately in UI). */
+export function formatDingTalkSentTextForChatPreview(text: string): string {
+  return splitDingTalkSentPreviewText(text).body;
 }
 
 /** Remove assistant reply bodies that duplicate DingTalk sent-success preview cards. */

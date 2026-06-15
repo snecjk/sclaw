@@ -1,7 +1,7 @@
 import { app, utilityProcess } from 'electron';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { getOpenClawEntryPath, getOpenClawProcessCwd, getOpenClawNodeModulesPath } from './paths';
+import { getOpenClawEntryPath, getOpenClawProcessCwd, getOpenClawNodeModulesPath, getOpenClawPackageRootEnv } from './paths';
 import { prependNodePathEntry } from './env-path';
 import { logger } from './logger';
 import { getUvMirrorEnv } from './uv-env';
@@ -111,6 +111,7 @@ async function runDoctorCommandWithArgs(
         ...uvEnv,
         PATH: finalPath,
         OPENCLAW_NO_RESPAWN: '1',
+        OPENCLAW_PACKAGE_ROOT: getOpenClawPackageRootEnv(),
       }, getOpenClawNodeModulesPath()) as NodeJS.ProcessEnv,
     });
 

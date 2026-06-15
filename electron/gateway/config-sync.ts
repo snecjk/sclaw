@@ -17,7 +17,7 @@ function fsPath(filePath: string): string {
 import { getAllSettings } from '../utils/store';
 import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-storage';
 import { getProviderEnvVar, getKeyableProviderTypes } from '../utils/provider-registry';
-import { getOpenClawDir, getOpenClawEntryPath, getOpenClawConfigDir, getOpenClawProcessCwd, getOpenClawNodeModulesPath, getBundledPluginSourceCandidates, isOpenClawPresent } from '../utils/paths';
+import { getOpenClawDir, getOpenClawEntryPath, getOpenClawConfigDir, getOpenClawProcessCwd, getOpenClawNodeModulesPath, getOpenClawPackageRootEnv, getBundledPluginSourceCandidates, isOpenClawPresent } from '../utils/paths';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { cleanupDanglingWeChatPluginState, listConfiguredChannels } from '../utils/channel-config';
 import { syncGatewayTokenToConfig, syncBrowserConfigToOpenClaw, syncSessionIdleMinutesToOpenClaw, sanitizeOpenClawConfig } from '../utils/openclaw-auth';
@@ -309,6 +309,7 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     CLAWDBOT_SKIP_CHANNELS: skipChannels ? '1' : '',
     OPENCLAW_NO_RESPAWN: '1',
     OPENCLAW_STATE_DIR: getOpenClawConfigDir(),
+    OPENCLAW_PACKAGE_ROOT: getOpenClawPackageRootEnv(),
   }, getOpenClawNodeModulesPath());
 
   return {

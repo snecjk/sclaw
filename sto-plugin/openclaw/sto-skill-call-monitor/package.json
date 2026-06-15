@@ -1,6 +1,6 @@
 {
   "name": "@sto/sto-skill-call-monitor",
-  "version": "2026.6.3",
+  "version": "2026.6.15",
   "description": "Monitor tool or skill invocations and print structured logs for each agent run.",
   "type": "module",
   "dependencies": {},
