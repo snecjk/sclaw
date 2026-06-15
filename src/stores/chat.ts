@@ -43,6 +43,7 @@ import {
 } from './chat/parameter-form-recovery';
 import { dispatchBuiltinToolResult } from '@/lib/builtin-tool-dispatch';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
+import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 
 export type {
   AttachedFileMeta,
@@ -1808,7 +1809,7 @@ export const useChatStore = create<ChatState>()(
   sendMessage: async (
     options: import('./chat/types').SendMessageOptions,
   ) => {
-    const { text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
+    const { text, attachments, targetAgentId, dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
 
@@ -1995,6 +1996,16 @@ export const useChatStore = create<ChatState>()(
       // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
       const CHAT_SEND_TIMEOUT_MS = 120_000;
 
+      const dingTalkRpcExtras = buildDingTalkMentionRpcExtras(
+        dingTalkMentions,
+        attachments?.map((a) => ({
+          fileName: a.fileName,
+          filePath: a.stagedPath,
+          mimeType: a.mimeType,
+          fileSize: a.fileSize,
+        })),
+      );
+
       if (hasMedia) {
         result = await hostApiFetch<{ success: boolean; result?: { runId?: string }; error?: string }>(
           '/api/chat/send-with-media',
@@ -2011,6 +2022,7 @@ export const useChatStore = create<ChatState>()(
                 mimeType: a.mimeType,
                 fileName: a.fileName,
               })),
+              ...dingTalkRpcExtras,
             }),
           },
         );
@@ -2025,6 +2037,7 @@ export const useChatStore = create<ChatState>()(
             // NOTE: workflowId/runId are not forwarded to Gateway chat.send yet
             // because the Gateway schema does not accept them. Workflow state
             // is tracked via SSE + main process polling instead.
+            ...dingTalkRpcExtras,
           },
           CHAT_SEND_TIMEOUT_MS,
         );

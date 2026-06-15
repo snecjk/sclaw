@@ -11,6 +11,10 @@ export const DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER_LEGACY =
 
 export const DINGTALK_AGENT_SEND_DISCLAIMER_MARKER = 'STO Claw 代为发送';
 
+/** 聊天 UI 展示用纯文案（不含 HTML）。 */
+export const DINGTALK_AGENT_SEND_DISCLAIMER_PLAIN_TEXT =
+  '本消息由 STO Claw 代为发送，非本人实时回复。';
+
 const DISCLAIMER_FONT_BLOCK =
   /<font\s+color=['"]#999999['"][^>]*>[\s\S]*?<\/font>/gi;
 
