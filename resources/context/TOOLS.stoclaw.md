@@ -16,6 +16,34 @@
 - 「帮我创建结算对账工作流」→ `search_workflow_templates` → `get_workflow_schema` → **客户端自动弹出分步表单**；正文仅业务摘要，**禁止**列举字段 key/参数表
 - 「重新执行」「再跑一遍」且会话有 `workflowId` → **必须** `execute_workflow`，禁止 sai-cli/exec。
 
+### 图片识图与 `image` 工具（硬性规则）
+
+**总原则：优先用当前主模型的内联 vision；仅当主模型不具备识图能力时，才用 `image` 工具。**
+
+StoClaw 聊天发图时，客户端会把图片内联进用户消息（多模态 `image` 块 + `[media attached: path (mime) | path]`）。是否调 `image` 工具取决于**当前主模型是否支持 `image` 输入**（见 `models.providers.*.models[].input` 或会话模型能力），不是取决于用户是否说了「分析图片」。
+
+| 主模型 vision | 用户消息 | 正确做法 |
+|---------------|----------|----------|
+| **支持**（如 `sto/qwen3.5-plus`，`input` 含 `image`） | 已附图 / 已内联 `image` 块 | **直接看图回答**；**禁止**对同一张图再调 `image` |
+| **不支持**（仅 `text`） | 有图片路径 / `[media attached: ...]` | **必须**调 `image` 工具（`imageModel` + `sto-media-understanding`） |
+| **支持** | 仅文字 + 路径/URL，无内联附图 | 优先 Gateway 载入后直接答；通常不调 `image` |
+| **不支持** | 仅文字 + 路径/URL | **调 `image` 工具** |
+| 任意 | 用户明确要求对**无内联附图**的磁盘文件用 `image` 分析 | 可调 `image`（即使主模型支持 vision） |
+
+**必须遵守：**
+
+- 主模型**已支持 vision 且消息已内联附图** → 路径 A，**不要**调 `image`（避免重复识图、超时、`Request was aborted`）。
+- 主模型**不支持 vision** → 路径 B，**不要**假装能看图；用 `image` 工具处理 `[media attached: path]` 中的路径。
+- **不要**用 `read` 读二进制图片代替识图。
+- 任一路径识图失败 → 如实告知；**禁止**根据缩略图或会话上下文猜测内容。
+
+**正反例：**
+
+- `qwen3.5-plus` + 附图 +「分析下这个图片」→ 直接输出分析；日志中不应出现 `[tools] image`。
+- 纯文本模型 + `[media attached: ~/.stoclaw/.../a.png]` → 调 `image`，参数用该路径。
+- `qwen3.5-plus` + 无附图 +「用 image 工具看某路径」→ 可按用户要求调 `image`；若用户未指定工具，则优先直接 load 路径识图。
+- 支持 vision + 已附图 + 内联识图说不清 → 说明失败或换模型，**不要**再调 `image` 分析同一张已内联图。
+
 ### ⛔ 禁止的工具调用（安全红线）
 
 以下工具调用**绝对禁止**，系统已在 RPC/HTTP/CLI 三层实施黑名单拦截，Agent 不应尝试绕过：
