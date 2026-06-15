@@ -44,6 +44,8 @@ const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
 interface ChatMessageProps {
   message: RawMessage;
   showThinking: boolean;
+  isSearchMatch?: boolean;
+  isSearchActive?: boolean;
   isStreaming?: boolean;
   streamingTools?: Array<{
     id?: string;
@@ -73,6 +75,8 @@ function imageSrc(img: ExtractedImage): string | null {
 export const ChatMessage = memo(function ChatMessage({
   message,
   showThinking,
+  isSearchMatch = false,
+  isSearchActive = false,
   isStreaming = false,
   streamingTools = [],
   onPreviewFile,
@@ -227,7 +231,11 @@ export const ChatMessage = memo(function ChatMessage({
       <div
         data-chat-message-role="system"
         data-chat-message-id={message.id ?? undefined}
-        className="mx-auto w-full max-w-4xl"
+        className={cn(
+          'mx-auto w-full max-w-4xl rounded-2xl transition-all duration-200',
+          isSearchMatch && 'ring-1 ring-amber-300/70 ring-offset-2 ring-offset-background',
+          isSearchActive && 'ring-2 ring-primary/55 shadow-[0_0_0_4px_rgba(255,111,0,0.08)]',
+        )}
       >
         <div className="rounded-xl border border-amber-200/55 bg-amber-50/72 px-3 py-2 text-[13px] text-amber-900/90 shadow-[0_4px_14px_rgba(245,158,11,0.06)] dark:border-amber-500/15 dark:bg-amber-950/12 dark:text-amber-100/80">
           <div className="flex items-center gap-2">
@@ -276,6 +284,9 @@ export const ChatMessage = memo(function ChatMessage({
       data-chat-message-role={isUser ? 'user' : 'assistant'}
       data-chat-message-id={message.id ?? undefined}
       className={cn(
+        'rounded-[1.6rem] transition-all duration-200',
+        isSearchMatch && 'ring-1 ring-primary/25 ring-offset-2 ring-offset-background',
+        isSearchActive && 'ring-2 ring-primary/55 bg-primary/[0.04] shadow-[0_0_0_4px_rgba(255,111,0,0.08)]',
         isEmbeddedAssistant ? 'w-full' : 'flex gap-3 group',
         !isEmbeddedAssistant && (isUser ? 'flex-row-reverse' : 'flex-row'),
       )}

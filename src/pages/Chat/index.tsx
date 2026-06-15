@@ -4,7 +4,7 @@
  * via gateway:rpc IPC. Session selector, thinking toggle, and refresh
  * are in the toolbar; messages render with markdown + streaming.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowDown, Bot, Cpu, Loader2, Orbit, Sparkles, Workflow } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useChatStore, type RawMessage } from '@/stores/chat';
@@ -17,6 +17,7 @@ import { AssistantTurnMessage } from './AssistantTurnMessage';
 import { useChatDisplay } from './use-chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatToolbar } from './ChatToolbar';
+import { ChatSearchBar } from './ChatSearchBar';
 import { PendingQueuePanel } from './PendingQueuePanel';
 import { ChatPreviewPanel } from './ChatPreviewPanel';
 import { extractText } from './message-utils';
@@ -67,7 +68,12 @@ export function Chat() {
   const [previewPanelWidth, setPreviewPanelWidth] = useState(480);
   const [isResizing, setIsResizing] = useState(false);
   const [editDraft, setEditDraft] = useState<{ text: string; version: number } | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchableMessages, setSearchableMessages] = useState<Array<{ id: string; text: string }>>([]);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(0);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const previewPanelRef = useRef<HTMLDivElement>(null);
+  const deferredSearchQuery = useDeferredValue(searchQuery.trim());
   const minLoading = useMinLoading(loading && messages.length > 0);
   const { contentRef, scrollRef, scrollToBottom, stopScroll } = useStickToBottomInstant(currentSessionKey);
   const currentSession = useMemo(
@@ -201,6 +207,91 @@ export function Chat() {
   useEffect(() => {
     updateJumpToLatestVisibility();
   }, [messages.length, shouldRenderStreaming, pendingFinal, updateJumpToLatestVisibility]);
+
+  useEffect(() => {
+    const contentElement = contentRef.current;
+    if (!contentElement) {
+      setSearchableMessages([]);
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      const nodes = Array.from(contentElement.querySelectorAll<HTMLElement>('[data-chat-message-id]'));
+      const nextSearchableMessages = nodes
+        .map((node) => ({
+          id: node.dataset.chatMessageId?.trim() ?? '',
+          text: (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim(),
+        }))
+        .filter((entry) => entry.id.length > 0 && entry.text.length > 0);
+      setSearchableMessages(nextSearchableMessages);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [contentRef, currentSessionKey, streamContentKey, showThinking, staticItems, activeTurn]);
+
+  const searchMatches = useMemo(() => {
+    if (!deferredSearchQuery) return [];
+    const normalizedQuery = deferredSearchQuery.toLocaleLowerCase();
+    return searchableMessages.filter((entry) => entry.text.toLocaleLowerCase().includes(normalizedQuery));
+  }, [deferredSearchQuery, searchableMessages]);
+
+  useEffect(() => {
+    setActiveSearchIndex(0);
+  }, [deferredSearchQuery]);
+
+  useEffect(() => {
+    if (searchMatches.length === 0) {
+      setActiveSearchIndex(0);
+      return;
+    }
+    setActiveSearchIndex((currentIndex) => Math.min(currentIndex, searchMatches.length - 1));
+  }, [searchMatches]);
+
+  const activeSearchMatch = searchMatches[activeSearchIndex] ?? null;
+  const matchedMessageIds = useMemo(
+    () => new Set(searchMatches.map((entry) => entry.id)),
+    [searchMatches],
+  );
+
+  const scrollToMessageMatch = useCallback((messageId: string, behavior: ScrollBehavior = 'smooth') => {
+    const container = scrollRef.current;
+    const contentElement = contentRef.current;
+    if (!container || !contentElement) return;
+
+    const target = Array.from(contentElement.querySelectorAll<HTMLElement>('[data-chat-message-id]'))
+      .find((node) => node.dataset.chatMessageId === messageId);
+    if (!target) return;
+
+    stopScroll();
+    const delta = target.getBoundingClientRect().top - container.getBoundingClientRect().top - 28;
+    container.scrollBy({ top: delta, behavior });
+  }, [contentRef, scrollRef, stopScroll]);
+
+  useEffect(() => {
+    if (!activeSearchMatch || !deferredSearchQuery) return;
+    scrollToMessageMatch(activeSearchMatch.id, 'smooth');
+  }, [activeSearchMatch, deferredSearchQuery, scrollToMessageMatch]);
+
+  const handleSearchNext = useCallback(() => {
+    if (searchMatches.length === 0) return;
+    setActiveSearchIndex((currentIndex) => (currentIndex + 1) % searchMatches.length);
+  }, [searchMatches.length]);
+
+  const handleSearchPrevious = useCallback(() => {
+    if (searchMatches.length === 0) return;
+    setActiveSearchIndex((currentIndex) => (currentIndex - 1 + searchMatches.length) % searchMatches.length);
+  }, [searchMatches.length]);
+
+  const handleSearchClear = useCallback(() => {
+    setSearchQuery('');
+    setActiveSearchIndex(0);
+  }, []);
+
+  const handleSearchToggle = useCallback(() => {
+    setIsSearchOpen((current) => !current);
+  }, []);
 
   const handleSend = useCallback(async (
     text: string,
@@ -353,8 +444,27 @@ export function Chat() {
       </div>
 
       {/* Toolbar */}
-      <div className="relative z-10 flex shrink-0 items-center justify-between px-6 py-2">
-        <ChatToolbar />
+      <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-6 py-2">
+        <ChatToolbar
+          trailingContent={(
+            <ChatSearchBar
+              isOpen={isSearchOpen}
+              onToggle={handleSearchToggle}
+              value={searchQuery}
+              onChange={(value) => {
+                setSearchQuery(value);
+                if (!isSearchOpen) {
+                  setIsSearchOpen(true);
+                }
+              }}
+              onNext={handleSearchNext}
+              onPrevious={handleSearchPrevious}
+              onClear={handleSearchClear}
+              resultCount={searchMatches.length}
+              activeIndex={searchMatches.length > 0 ? activeSearchIndex : 0}
+            />
+          )}
+        />
       </div>
 
       {/* Messages Area */}
@@ -376,6 +486,8 @@ export function Chat() {
                       turnToolResults={item.toolResults}
                       precedingUserMessage={item.precedingUserMessage}
                       showThinking={showThinking}
+                      matchedMessageIds={matchedMessageIds}
+                      activeMessageId={activeSearchMatch?.id ?? null}
                       onPreviewFile={openArtifactPreview}
                       onViewWorkflow={openWorkflowPreview}
                       onEditMessage={handleEditMessage}
@@ -387,6 +499,8 @@ export function Chat() {
                     key={item.key}
                     message={item.message}
                     showThinking={showThinking}
+                    isSearchMatch={!!item.message.id && matchedMessageIds.has(item.message.id)}
+                    isSearchActive={!!item.message.id && item.message.id === activeSearchMatch?.id}
                     onPreviewFile={openArtifactPreview}
                     onViewWorkflow={openWorkflowPreview}
                     onEditMessage={handleEditMessage}
@@ -401,6 +515,8 @@ export function Chat() {
                   turnToolResults={activeTurn.turnToolResults}
                   precedingUserMessage={activeTurn.precedingUserMessage}
                   showThinking={showThinking}
+                  matchedMessageIds={matchedMessageIds}
+                  activeMessageId={activeSearchMatch?.id ?? null}
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={openArtifactPreview}
                   onViewWorkflow={openWorkflowPreview}

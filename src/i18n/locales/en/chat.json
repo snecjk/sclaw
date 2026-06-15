@@ -26,7 +26,13 @@
         "modelTagBuiltin": "Built-in",
         "modelTagCustom": "Custom",
         "noModels": "No models available",
-        "modelSwitchFailed": "Could not switch model: {{message}}"
+        "modelSwitchFailed": "Could not switch model: {{message}}",
+        "searchToggle": "Search messages",
+        "searchPlaceholder": "Search messages",
+        "searchPrev": "Previous result",
+        "searchNext": "Next result",
+        "searchClear": "Clear search",
+        "searchClose": "Close search"
     },
     "composer": {
         "attachFiles": "Attach files",

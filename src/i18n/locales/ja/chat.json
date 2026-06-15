@@ -26,7 +26,13 @@
         "modelTagBuiltin": "内蔵",
         "modelTagCustom": "カスタム",
         "noModels": "利用可能なモデルがありません",
-        "modelSwitchFailed": "モデルの切り替えに失敗しました：{{message}}"
+        "modelSwitchFailed": "モデルの切り替えに失敗しました：{{message}}",
+        "searchToggle": "会話を検索",
+        "searchPlaceholder": "会話を検索",
+        "searchPrev": "前の結果",
+        "searchNext": "次の結果",
+        "searchClear": "検索をクリア",
+        "searchClose": "検索を閉じる"
     },
     "composer": {
         "attachFiles": "ファイルを添付",

@@ -33,6 +33,8 @@ interface AssistantTurnMessageProps {
   turnToolResults?: RawMessage[];
   precedingUserMessage?: RawMessage | null;
   showThinking: boolean;
+  matchedMessageIds?: ReadonlySet<string>;
+  activeMessageId?: string | null;
   activeStream?: ActiveTurnStream | null;
   onPreviewFile?: (file: AttachedFileMeta) => void;
   onViewWorkflow?: (workflowId: string) => void;
@@ -44,6 +46,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   turnToolResults = [],
   precedingUserMessage = null,
   showThinking,
+  matchedMessageIds,
+  activeMessageId = null,
   activeStream = null,
   onPreviewFile,
   onViewWorkflow,
@@ -158,6 +162,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
           <ChatMessage
             message={replyDisplayMessage}
             showThinking={false}
+            isSearchMatch={!!replyDisplayMessage.id && !!matchedMessageIds?.has(replyDisplayMessage.id)}
+            isSearchActive={!!replyDisplayMessage.id && replyDisplayMessage.id === activeMessageId}
             isStreaming={isStreaming && replyDisplayHasText}
             streamingTools={[]}
             onPreviewFile={onPreviewFile}

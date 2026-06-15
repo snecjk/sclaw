@@ -3,7 +3,7 @@
  * Session selector, model selector, refresh, and thinking toggle.
  * Rendered in the Header when on the Chat page.
  */
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, type ReactNode } from 'react';
 import { RefreshCw, Brain, Bot, ChevronDown, Cpu, Check, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -45,7 +45,7 @@ const pillBtn = cn(
   'disabled:pointer-events-none disabled:opacity-60',
 );
 
-export function ChatToolbar() {
+export function ChatToolbar({ trailingContent }: { trailingContent?: ReactNode }) {
   const loading = useChatStore((s) => s.loading);
   const sending = useChatStore((s) => s.sending);
   const showThinking = useChatStore((s) => s.showThinking);
@@ -279,6 +279,7 @@ export function ChatToolbar() {
             })}
           </DropdownMenuContent>
         </DropdownMenu>
+        {trailingContent}
         {showSessionEngineHint ? (
           <Tooltip delayDuration={150}>
             <TooltipTrigger asChild>
@@ -300,7 +301,7 @@ export function ChatToolbar() {
         ) : null}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         {/* Model selector */}
         <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-muted-foreground sm:text-[12px]">
           {t('toolbar.currentModel')}
@@ -395,6 +396,7 @@ export function ChatToolbar() {
           </TooltipTrigger>
           <TooltipContent><p>{showThinking ? t('toolbar.hideThinking') : t('toolbar.showThinking')}</p></TooltipContent>
         </Tooltip>
+
       </div>
     </div>
   );
