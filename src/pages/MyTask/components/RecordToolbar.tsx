@@ -7,6 +7,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { Search, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  workflowListSearchIconWrapClass,
+  workflowListSearchInputClass,
+  workflowListSearchLabelClass,
+} from '@/lib/surfaces';
 import { RECORD_TYPE_OPTIONS } from '../constants';
 import type { TaskType } from '../types';
 
@@ -47,18 +52,18 @@ export function RecordToolbar({
     RECORD_TYPE_OPTIONS.find((o) => o.value === filterType)?.label || RECORD_TYPE_OPTIONS[0].label;
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="ml-auto flex shrink-0 items-center gap-3">
       {/* 搜索框 */}
-      <label className="relative flex items-center">
+      <label className={workflowListSearchLabelClass}>
         <span className="sr-only">搜索执行记录任务名称</span>
-        <span className="absolute left-3 text-muted-foreground" aria-hidden="true">
+        <span className={workflowListSearchIconWrapClass} aria-hidden="true">
           <Search className="h-3.5 w-3.5" />
         </span>
         <input
           type="search"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="h-[34px] pl-[30px] pr-[10px] w-[184px] text-[13px] rounded-[8px] border border-border bg-[#fff] placeholder:text-muted-foreground focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] focus:ring-0"
+          className={workflowListSearchInputClass}
           placeholder="搜索任务名称"
           autoComplete="off"
         />
@@ -69,7 +74,7 @@ export function RecordToolbar({
         <button
           type="button"
           onClick={() => setFilterOpen(!filterOpen)}
-          className="flex items-center gap-[6px] h-[34px] px-[12px] text-[13px] rounded-[8px] border border-border bg-[#fff] text-foreground hover:border-[#c5cad3] transition-[border-color] font-family-inherit whitespace-nowrap"
+          className="flex h-[34px] items-center gap-[6px] whitespace-nowrap rounded-[8px] border border-border bg-card px-[12px] text-[13px] text-foreground transition-[border-color] hover:border-[#c5cad3]"
           aria-haspopup="listbox"
           aria-expanded={filterOpen}
         >
@@ -87,7 +92,7 @@ export function RecordToolbar({
 
         {filterOpen && (
           <div
-            className="absolute right-0 top-[calc(100%+6px)] min-w-[148px] bg-[#fff] border border-border rounded-[10px] shadow-[0_8px_24px_rgba(15,23,42,0.12)] p-1 z-30"
+            className="absolute right-0 top-[calc(100%+6px)] z-30 min-w-[148px] rounded-[10px] border border-border bg-card p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)]"
             role="listbox"
             aria-label="任务类型"
           >

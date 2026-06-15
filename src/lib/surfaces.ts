@@ -52,11 +52,120 @@ export const glassSegmentTrack = cn(
   'dark:bg-[linear-gradient(180deg,hsl(var(--glass-bg)/0.55),hsl(var(--glass-bg)/0.35))] dark:shadow-[inset_0_1px_0_hsl(var(--glass-highlight)/0.12)]',
 );
 
+/** 首页对话/消息阅读区最大宽（780px） */
+export const stoChatShellHomeClass = 'mx-auto w-full min-w-0 max-w-[var(--sto-chat-max-w-home)]';
+
+/** 非首页对话/内容区最大宽（862px） */
+export const stoChatShellPageClass = 'mx-auto w-full min-w-0 max-w-[var(--sto-chat-max-w-page)]';
+
 /**
- * 列表/设置类页面主内容区：最大 `--sto-main-inner-max`，窗口变宽时两侧留白（非 sm/md/lg 断点）。
+ * 非首页主内容区：最大 862px（与 {@link stoChatShellPageClass} 同源），窗口变宽时两侧留白。
  * @see .cursor/rules/02-styles.mdc §响应式
  */
-export const stoMainInnerShell = 'mx-auto w-full min-w-0 max-w-[var(--sto-main-inner-max)]';
+export const stoMainInnerShell = stoChatShellPageClass;
+
+/**
+ * 列表页主标题（MasterGo：24px / 行高 30px / Semibold / 字间距 0 / #1A1A1A）
+ * 用于：我的任务、定时任务（云/本地）、技能广场
+ */
+export const stoPageTitleClass =
+  'm-0 text-2xl font-semibold leading-[30px] tracking-normal text-[#1A1A1A] dark:text-foreground';
+
+/**
+ * 我的任务页标题行：标题与右侧操作同一高度对齐。
+ */
+export const myTaskPageHeaderRowClass = 'flex min-w-0 items-center justify-between gap-4';
+
+/**
+ * 我的任务页「新建定时任务」：Grey-4（border）底 + Grey-10 文字 + 10px 圆角。
+ */
+export const myTaskCreateButtonClass = cn(
+  'inline-flex shrink-0 items-center gap-1.5 h-[34px] px-3.5 text-sm font-medium',
+  'rounded-[10px] bg-border text-foreground',
+  'transition-colors duration-fast hover:bg-black/[0.04] active:scale-[0.98]',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+);
+
+/** 我的任务卡片外框（MasterGo 容器 7377）：18px 圆角 + 16px 内距 + glow，无描边；等高网格内 h-full */
+export const myTaskCardShellClass = cn(
+  'relative flex h-full min-w-0 flex-col rounded-[18px] bg-card p-4 shadow-glow',
+  'transition-[box-shadow] duration-base hover:shadow-soft',
+);
+
+/** 我的任务卡片顶栏：开关左、更多右（与开关同高，保证开关→标题 18px） */
+export const myTaskCardTopRowClass = 'flex shrink-0 items-start justify-between gap-3';
+
+/** 我的任务卡片标题区：距顶栏开关 18px；标题与描述间距 6px */
+export const myTaskCardBodyClass = 'mt-[18px] flex shrink-0 flex-col gap-1.5';
+
+/** 详情与底栏之间的弹性占位：最小 18px；同行卡片等高时多余高度落在此处 */
+export const myTaskCardDetailFooterGapClass = 'min-h-[18px] flex-1';
+
+/** 我的任务卡片标题：14px / 行高 18 / Medium */
+export const myTaskCardTitleClass = 'm-0 text-sm font-medium leading-[18px] text-foreground';
+
+/** 我的任务卡片描述：12px / 行高 18 / 两行截断 */
+export const myTaskCardDescriptionClass =
+  'm-0 line-clamp-2 text-xs leading-[18px] text-muted-foreground';
+
+/** 我的任务卡片底栏：计划时间左、下次执行右；贴壳层底部，与卡片底边固定 16px（壳层 p-4） */
+export const myTaskCardFooterClass =
+  'flex shrink-0 items-center justify-between gap-3';
+
+/** 我的任务卡片计划时间行 */
+export const myTaskCardScheduleRowClass =
+  'inline-flex min-w-0 items-center gap-1 text-xs leading-[14px] text-foreground/80';
+
+/** 我的任务卡片下次执行文案 */
+export const myTaskCardNextRunClass = 'shrink-0 text-xs leading-[14px] text-muted-foreground';
+
+/** 我的任务卡片更多菜单（图2） */
+export const myTaskCardMenuClass = cn(
+  'absolute right-0 top-full z-10 mt-1.5 min-w-[120px] rounded-[18px] border border-border bg-card p-1.5',
+  'shadow-modal',
+);
+
+/** 我的任务卡片菜单项 */
+export function myTaskCardMenuItemClass(isDestructive = false): string {
+  return cn(
+    'flex w-full items-center rounded-[10px] px-3 py-2 text-left text-sm transition-colors duration-fast',
+    isDestructive ? 'text-destructive hover:bg-muted' : 'text-foreground hover:bg-muted',
+  );
+}
+
+/** 首页对话整列（toolbar + 消息 + 输入同宽居中，最大 780px） */
+export const stoChatShellHomeColumnClass = cn(
+  stoChatShellHomeClass,
+  'flex min-h-0 flex-1 flex-col',
+);
+
+/** 非首页对话整列（toolbar + 消息 + 输入同宽居中，最大 862px） */
+export const stoChatShellPageColumnClass = cn(
+  stoChatShellPageClass,
+  'flex min-h-0 flex-1 flex-col',
+);
+
+/** Hero / 大输入复合框壳层（固定 780px 居中） */
+export const stoHeroInputShellClass =
+  'mx-auto flex w-[var(--sto-hero-input-max-w)] max-w-full min-w-0 flex-col';
+
+/** 三栏模式：对话区（最小占比 30%） */
+export const stoSplitChatPaneClass = 'relative flex min-h-0 min-w-[var(--sto-split-min-chat)] flex-1 flex-col';
+
+/** 三栏模式：预览区（默认/最大 70% 由 width 百分比控制） */
+export const stoSplitPreviewPaneClass =
+  'flex h-full min-h-0 max-w-[var(--sto-split-max-preview)] shrink-0 flex-col overflow-hidden [contain:inline-size]';
+
+/** 三栏预览区分割：预览区宽度占容器百分比，限制在 30%–70% */
+export function clampPreviewPanelPercent(containerWidth: number, previewPx: number): number {
+  if (containerWidth <= 0) return 70;
+  const pct = (previewPx / containerWidth) * 100;
+  return Math.max(30, Math.min(70, pct));
+}
+
+/** 全高页面壳层：TitleBar + main 上下内距 */
+export const stoPageFillBelowTitleClass =
+  'h-[calc(100dvh-var(--sto-header-h)-var(--sto-main-pad-y-total))]';
 
 /**
  * 工作流 Hero 输入复合框（MasterGo 2:7326）：白底 + Grey-4 描边 + 22px 圆角 + 轻阴影。
@@ -71,9 +180,8 @@ export const workflowHeroSectionClass = 'flex flex-col pt-16';
 export const workflowHeroTitleClass =
   'text-center text-2xl font-medium leading-9 tracking-normal text-foreground';
 
-/** Hero 输入框 + 快捷提示行：随容器伸缩，最大 780px 居中 */
-export const workflowHeroInteractiveShellClass =
-  'mx-auto mt-9 flex w-full min-w-0 max-w-[780px] flex-col gap-3';
+/** Hero 输入框 + 快捷提示行：固定 780px 居中 */
+export const workflowHeroInteractiveShellClass = cn(stoHeroInputShellClass, 'mt-9 gap-3');
 
 export const workflowHeroComposer = cn(
   'flex h-[120px] w-full min-w-0 flex-col overflow-hidden rounded-[22px] border border-border bg-card',
@@ -356,14 +464,10 @@ export const workflowDetailModalMoreActionClass = cn(
   'transition-colors duration-fast hover:bg-black/[0.02]',
 );
 
-/** 详情弹窗浮动菜单 */
-export const workflowDetailModalMenuClass =
-  'absolute bottom-[calc(100%+8px)] right-0 z-20 w-[208px] rounded-lg border border-border bg-card p-1.5 shadow-[0_6px_30px_rgba(0,0,0,0.08)]';
-
 /**
- * 工作流编辑器：抵消 main 内距，占满主区可视高度（TitleBar + main py 合计 5rem）。
+ * 工作流编辑器：抵消 main 内距，占满主区可视高度（TitleBar + main py 合计）。
  */
 export const workflowBuilderShell = cn(
   '-mx-[var(--sto-content-pad-x)] -mt-5 flex min-h-0 min-w-0 flex-col',
-  'h-[calc(100dvh-5rem)]',
+  stoPageFillBelowTitleClass,
 );
