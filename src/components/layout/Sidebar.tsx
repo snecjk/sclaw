@@ -602,11 +602,40 @@ export function Sidebar() {
       if (window.location.pathname === '/') {
         const state = useChatStore.getState();
         if (state.currentSessionKey !== DEFAULT_SESSION_KEY || state.messages.length > 0 || state.loading) {
+          const nextRuntimeBySessionKey = {
+            ...state.runtimeBySessionKey,
+            [state.currentSessionKey]: {
+              sending: state.sending,
+              activeRunId: state.activeRunId,
+              streamingText: state.streamingText,
+              streamingMessage: state.streamingMessage,
+              streamingTools: state.streamingTools,
+              pendingFinal: state.pendingFinal,
+              lastUserMessageAt: state.lastUserMessageAt,
+              pendingToolImages: state.pendingToolImages,
+              error: state.error,
+              updatedAt: Date.now(),
+            },
+            [DEFAULT_SESSION_KEY]: {
+              sending: false,
+              activeRunId: null,
+              streamingText: '',
+              streamingMessage: null,
+              streamingTools: [],
+              pendingFinal: false,
+              lastUserMessageAt: null,
+              pendingToolImages: [],
+              error: null,
+              updatedAt: Date.now(),
+            },
+          };
           useChatStore.setState({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: 'main',
+            runtimeBySessionKey: nextRuntimeBySessionKey,
             messages: [],
             loading: false,
+            sending: false,
             streamingText: '',
             streamingMessage: null,
             streamingTools: [],
@@ -866,13 +895,56 @@ export function Sidebar() {
   // 点击新对话时，切换到默认会话并清空消息，让页面显示初始内容
   const handleHomeClick = item.to === '/'
     ? () => {
-        const { messages, currentSessionKey: currKey, loading } = useChatStore.getState();
+        const {
+          messages,
+          currentSessionKey: currKey,
+          loading,
+          sending,
+          activeRunId,
+          streamingText,
+          streamingMessage,
+          streamingTools,
+          pendingFinal,
+          lastUserMessageAt,
+          pendingToolImages,
+          error,
+          runtimeBySessionKey,
+        } = useChatStore.getState();
         if (messages.length > 0 || currKey !== DEFAULT_SESSION_KEY || loading) {
+          const nextRuntimeBySessionKey = {
+            ...runtimeBySessionKey,
+            [currKey]: {
+              sending,
+              activeRunId,
+              streamingText,
+              streamingMessage,
+              streamingTools,
+              pendingFinal,
+              lastUserMessageAt,
+              pendingToolImages,
+              error,
+              updatedAt: Date.now(),
+            },
+            [DEFAULT_SESSION_KEY]: {
+              sending: false,
+              activeRunId: null,
+              streamingText: '',
+              streamingMessage: null,
+              streamingTools: [],
+              pendingFinal: false,
+              lastUserMessageAt: null,
+              pendingToolImages: [],
+              error: null,
+              updatedAt: Date.now(),
+            },
+          };
           useChatStore.setState({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: 'main',
+            runtimeBySessionKey: nextRuntimeBySessionKey,
             messages: [],
             loading: false,
+            sending: false,
             streamingText: '',
             streamingMessage: null,
             streamingTools: [],

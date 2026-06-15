@@ -1810,29 +1810,41 @@ export const useChatStore = create<ChatState>()(
       label: NEW_SESSION_TEMP_LABEL,
       engineType: getAgentEngineType(newAgentId),
     };
-    set((s) => ({
-      currentSessionKey: newKey,
-      currentAgentId: newAgentId,
-      sessions: [
-        ...(leavingEmpty ? s.sessions.filter((sess) => sess.key !== currentSessionKey) : s.sessions),
-        newSessionEntry,
-      ],
-      sessionLabels: leavingEmpty
-        ? Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey))
-        : s.sessionLabels,
-      sessionLastActivity: leavingEmpty
-        ? Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey))
-        : s.sessionLastActivity,
-      messages: [],
-      streamingText: '',
-      streamingMessage: null,
-      streamingTools: [],
-      activeRunId: null,
-      error: null,
-      pendingFinal: false,
-      lastUserMessageAt: null,
-      pendingToolImages: [],
-    }));
+    set((s) => {
+      const nextRuntimeBySessionKey = {
+        ...s.runtimeBySessionKey,
+        [currentSessionKey]: captureTopLevelRuntime(s),
+      };
+      if (leavingEmpty) {
+        delete nextRuntimeBySessionKey[currentSessionKey];
+      }
+      nextRuntimeBySessionKey[newKey] = createIdleSessionRuntimeState();
+      return {
+        currentSessionKey: newKey,
+        currentAgentId: newAgentId,
+        sessions: [
+          ...(leavingEmpty ? s.sessions.filter((sess) => sess.key !== currentSessionKey) : s.sessions),
+          newSessionEntry,
+        ],
+        runtimeBySessionKey: nextRuntimeBySessionKey,
+        sessionLabels: leavingEmpty
+          ? Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey))
+          : s.sessionLabels,
+        sessionLastActivity: leavingEmpty
+          ? Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey))
+          : s.sessionLastActivity,
+        messages: [],
+        sending: false,
+        streamingText: '',
+        streamingMessage: null,
+        streamingTools: [],
+        activeRunId: null,
+        error: null,
+        pendingFinal: false,
+        lastUserMessageAt: null,
+        pendingToolImages: [],
+      };
+    });
     void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
   },
 
