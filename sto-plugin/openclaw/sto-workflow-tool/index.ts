@@ -58,7 +58,7 @@ const WORKFLOW_TOOL_PROMPT = [
 	"- get_workflow_schema：优先传 search 返回的 templates[].id；若无 templateId 可传 query 自动搜索。",
 	"- 重新执行/启动已有实例：execute_workflow（传入 workflowId）。",
 	"- 查询运行状态：get_workflow_status（传入 runId）。",
-	"- 禁止用 exec、shell、sai-cli、sai-cli discover 或读 sai-cli SKILL 处理工作流；「创建文件夹/文件」等普通任务不要调用工作流 tool。",
+	"- 禁止用 exec、shell、工作流相关的 sai-cli 命令、sai-cli discover 或读 sai-cli SKILL 处理工作流；普通非工作流的 sai-cli 命令可以正常使用；「创建文件夹/文件」等普通任务不要调用工作流 tool。",
 ].join("\n");
 
 export default definePluginEntry({
@@ -122,7 +122,7 @@ export default definePluginEntry({
 			label: "执行工作流",
 			description: `启动已创建的工作流实例（POST /workflows/{id}/start）。
 当用户说「执行」「重新执行」「再跑一遍」「用上次参数」且上下文有 workflowId 时必须调用本工具。
-不要用 exec 或 sai-cli。`,
+不要用 exec 或工作流相关的 sai-cli。`,
 			parameters: Type.Object({
 				workflowId: Type.String({ description: "工作流实例 ID，如 wf_xxx" }),
 				inputs: Type.Optional(

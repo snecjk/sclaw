@@ -18,7 +18,7 @@ export const WORKFLOW_SYSTEM_PROMPT = [
   "- Use create_workflow only when the values were explicitly confirmed by the user/client.",
   "- Use execute_workflow to start or rerun a known workflowId.",
   "- Use get_workflow_status to check a known runId.",
-  "- Do not use Bash, exec, sai-cli, or filesystem reads to operate STO workflows.",
+  "- Do not use Bash, exec, or filesystem reads to operate STO workflows. Regular non-workflow sai-cli commands are allowed.",
 ].join("\n");
 
 const WORKFLOW_TOOL_NAMES = new Set([
@@ -60,6 +60,14 @@ function deny(reason: string): HookJSONOutput {
   };
 }
 
+function isWorkflowShellCommand(command: string): boolean {
+  const normalized = command.trim().toLowerCase();
+  if (!normalized) return false;
+
+  return /\bworkflow\b|工作流/.test(normalized)
+    || /\bsai(?:-cli|_cli)?\s+(workflow|workflows)\b/.test(normalized);
+}
+
 export function createWorkflowGuard(): HookCallback {
   let schemaFetchedInTurn = false;
 
@@ -82,7 +90,7 @@ export function createWorkflowGuard(): HookCallback {
 
     if (toolName === "Bash") {
       const command = String(toolInput.command ?? "");
-      if (/sai-cli|workflow|工作流/i.test(command)) {
+      if (isWorkflowShellCommand(command)) {
         return deny(
           "Do not operate STO workflows through shell commands. Use the STO workflow MCP tools instead.",
         );
