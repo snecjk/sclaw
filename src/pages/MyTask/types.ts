@@ -67,6 +67,8 @@ export interface TaskViewModel {
   cronExpr: string;
   /** 是否启用 */
   enabled: boolean;
+  /** 下次执行时间（ISO 8601，来自接口 nextRunAt，仅展示） */
+  nextRunAt: string | null;
   /** 非空时显示“工作流任务”标签 */
   workflowName?: string;
   /** 关联工作流 code */

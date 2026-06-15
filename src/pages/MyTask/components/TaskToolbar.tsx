@@ -1,12 +1,16 @@
 /**
  * TaskToolbar 组件
- * 定时任务视图的工具栏：搜索 + 排序 + 新建按钮
- * 对应原型 .task-page__hero-actions
+ * 定时任务视图工具栏：搜索 + 排序（靠右对齐）
  */
 
 import { useState, useRef, useEffect } from 'react';
 import { Search, ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  workflowListSearchIconWrapClass,
+  workflowListSearchInputClass,
+  workflowListSearchLabelClass,
+} from '@/lib/surfaces';
 import { SORT_OPTIONS } from '../constants';
 
 interface TaskToolbarProps {
@@ -18,8 +22,6 @@ interface TaskToolbarProps {
   sortValue: string;
   /** 排序变化回调 */
   onSortChange: (value: string) => void;
-  /** 新建任务回调 */
-  onCreate: () => void;
 }
 
 export function TaskToolbar({
@@ -27,7 +29,6 @@ export function TaskToolbar({
   onSearchChange,
   sortValue,
   onSortChange,
-  onCreate,
 }: TaskToolbarProps) {
   const [sortOpen, setSortOpen] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
@@ -49,18 +50,18 @@ export function TaskToolbar({
     SORT_OPTIONS.find((o) => o.value === sortValue)?.label || SORT_OPTIONS[0].label;
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="ml-auto flex shrink-0 items-center gap-3">
       {/* 搜索框 */}
-      <label className="relative flex items-center">
+      <label className={workflowListSearchLabelClass}>
         <span className="sr-only">搜索定时任务名称</span>
-        <span className="absolute left-3 text-muted-foreground" aria-hidden="true">
+        <span className={workflowListSearchIconWrapClass} aria-hidden="true">
           <Search className="h-3.5 w-3.5" />
         </span>
         <input
           type="search"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="h-[34px] pl-[30px] pr-[10px] w-[184px] text-[13px] rounded-[8px] border border-border bg-[#fff] placeholder:text-muted-foreground focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] focus:ring-0"
+          className={workflowListSearchInputClass}
           placeholder="搜索任务名称"
           autoComplete="off"
         />
@@ -71,7 +72,7 @@ export function TaskToolbar({
         <button
           type="button"
           onClick={() => setSortOpen(!sortOpen)}
-          className="flex items-center gap-[6px] h-[34px] px-[10px] text-[13px] font-medium rounded-[10px] border border-border bg-[#fff] text-foreground hover:border-[#c5cad3] transition-[border-color,box-shadow] focus-visible:border-[#c5cad3] focus-visible:shadow-[0_0_0_3px_rgba(15,23,42,0.06)]"
+          className="flex items-center gap-[6px] h-[34px] px-[10px] text-[13px] font-medium rounded-[10px] border border-border bg-card text-foreground hover:border-[#c5cad3] transition-[border-color,box-shadow] focus-visible:border-[#c5cad3] focus-visible:shadow-[0_0_0_3px_rgba(15,23,42,0.06)]"
           aria-label="排序方式"
           aria-haspopup="listbox"
           aria-expanded={sortOpen}
@@ -85,7 +86,7 @@ export function TaskToolbar({
           />
         </button>
         {sortOpen && (
-          <div className="absolute right-0 top-[calc(100%+6px)] w-max min-w-full bg-[#fff] border border-border rounded-[12px] shadow-[0_12px_32px_rgba(15,23,42,0.12)] p-[6px] z-30">
+          <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-max min-w-full rounded-[12px] border border-border bg-card p-[6px] shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
             {SORT_OPTIONS.map((opt) => {
               const isSelected = sortValue === opt.value;
               return (
@@ -113,15 +114,6 @@ export function TaskToolbar({
           </div>
         )}
       </div>
-
-      {/* 新建按钮 — 原型：黑底白字 + 投影 */}
-      <button
-        type="button"
-        onClick={onCreate}
-        className="flex items-center gap-1.5 h-[34px] px-[14px] text-[14px] font-semibold rounded-lg bg-[#111] text-white shadow-[0_2px_10px_rgba(0,0,0,0.15)] hover:brightness-[1.08] active:brightness-[0.96] transition-[background,box-shadow,filter] font-family-inherit"
-      >
-        + 新建定时任务
-      </button>
     </div>
   );
 }

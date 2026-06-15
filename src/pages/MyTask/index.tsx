@@ -14,6 +14,14 @@ import { useScheduledTaskUnreadStore } from '@/stores/scheduled-task-unread';
 import { useShallow } from 'zustand/react/shallow';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { cn } from '@/lib/utils';
+import {
+  myTaskCreateButtonClass,
+  myTaskPageHeaderRowClass,
+  stoMainInnerShell,
+  stoPageTitleClass,
+  workflowListToolbarClass,
+} from '@/lib/surfaces';
 import { toast } from 'sonner';
 import {
   TaskCreateModal,
@@ -47,6 +55,7 @@ function toViewModel(
     description: task.description || '',
     cronExpr: task.cronExpr,
     enabled: task.enabled,
+    nextRunAt: task.nextRunAt,
     workflowName: task.workflowCode ? workflowMap.get(task.workflowCode) : undefined,
     workflowCode: task.workflowCode || undefined,
     createdAt: task.createdAt,
@@ -257,35 +266,41 @@ export default function MyTask() {
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col">
-        <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col">
-          {/* 页面标题 */}
+        <div className={cn(stoMainInnerShell, 'flex flex-1 flex-col')}>
+          {/* 页面标题 + 新建按钮 */}
           <header className="mb-6">
-            <h1 className="text-2xl font-bold text-foreground">我的任务</h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <div className={myTaskPageHeaderRowClass}>
+              <h1 className={stoPageTitleClass}>我的任务</h1>
+              {isTasksView ? (
+                <button
+                  type="button"
+                  className={myTaskCreateButtonClass}
+                  onClick={() => {
+                    setEditingJob(null);
+                    setCreateOpen(true);
+                  }}
+                >
+                  + 新建定时任务
+                </button>
+              ) : null}
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
               按计划自动执行任务，也可随时手动触发。在任意对话中描述你想定期做的事，即可快速创建。
             </p>
           </header>
 
-          {/* Tab 行：左侧视图 Tab + 右侧工具栏 */}
-          <div className="flex items-center justify-between gap-4 flex-wrap mb-[26px]">
+          {/* Tab 行：左侧视图 Tab + 右侧搜索/排序 */}
+          <div className={cn(workflowListToolbarClass, 'mb-[26px]')}>
             <ViewTabs activeView={activeView} onViewChange={setActiveView} />
 
-            {/* 定时任务工具栏 */}
-            {isTasksView && (
+            {isTasksView ? (
               <TaskToolbar
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
                 sortValue={sortValue}
                 onSortChange={setSortValue}
-                onCreate={() => {
-                  setEditingJob(null);
-                  setCreateOpen(true);
-                }}
               />
-            )}
-
-            {/* 执行记录工具栏 */}
-            {!isTasksView && (
+            ) : (
               <RecordToolbar
                 searchQuery={recordSearch}
                 onSearchChange={setRecordSearch}
@@ -321,7 +336,7 @@ export default function MyTask() {
                   onRecommendAdd={handleRecommendAdd}
                 />
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[clamp(12px,1.4vw,16px)]">
+                <div className="grid grid-cols-1 items-stretch sm:grid-cols-2 lg:grid-cols-3 gap-[clamp(12px,1.4vw,16px)]">
                   {filteredTasks.map((task) => (
                     <TaskCard
                       key={task.id}

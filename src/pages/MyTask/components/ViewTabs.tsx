@@ -1,10 +1,9 @@
 /**
  * ViewTabs 组件
- * 一级 Tab 切换：定时任务 / 执行记录
- * 对应原型 .task-view-tabs
+ * 一级 Tab 切换：定时任务 / 执行记录（无下划线，与工作流列表主 Tab 一致）
  */
 
-import { cn } from '@/lib/utils';
+import { workflowListTabClass } from '@/lib/surfaces';
 import type { TaskView } from '../types';
 
 interface ViewTabsProps {
@@ -32,13 +31,7 @@ export function ViewTabs({ activeView, onViewChange }: ViewTabsProps) {
             role="tab"
             aria-selected={isActive}
             onClick={() => onViewChange(tab.value)}
-            className={cn(
-              'bg-transparent cursor-pointer text-left transition-[font-weight,color,border-color]',
-              'text-[16px] pt-2 pb-2 font-family-inherit border-b',
-              isActive
-                ? 'font-bold text-foreground border-foreground'
-                : 'font-medium text-muted-foreground hover:text-foreground border-transparent',
-            )}
+            className={workflowListTabClass(isActive)}
           >
             {tab.label}
           </button>
