@@ -3,6 +3,7 @@ import {
   buildWorkflowStartUnavailablePrompt,
   isWorkflowCreationIntent,
   isWorkflowStartIntent,
+  isImperativeWorkflowStartIntent,
   isReExecutionIntent,
   isWorkflowSessionLookupIntent,
   shouldInjectWorkflowSessionHint,
@@ -39,6 +40,13 @@ describe('re-run / start intents', () => {
     expect(isReExecutionIntent('再执行一下')).toBe(true);
     expect(isReExecutionIntent('再来一次执行')).toBe(false);
     expect(isWorkflowStartIntent('运行这个工作流')).toBe(true);
+  });
+
+  it('distinguishes imperative start from analytical workflow phrasing', () => {
+    expect(isImperativeWorkflowStartIntent('执行工作流')).toBe(true);
+    expect(isImperativeWorkflowStartIntent('运行这个工作流')).toBe(true);
+    expect(isImperativeWorkflowStartIntent('分析一下工作流的执行情况')).toBe(false);
+    expect(isWorkflowStartIntent('分析一下工作流的执行情况')).toBe(true);
   });
 
   it('matches workflowId lookup in session', () => {

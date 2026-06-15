@@ -420,10 +420,13 @@ export async function tryResolvePendingWorkflow(
 
   // Detect confirmation / execution intent
   const { isImmediateExecutionIntent } = await import('@/hooks/use-workflow-intent');
+  const trimmedConfirm = text.trim();
+  const isShortReply = trimmedConfirm.length <= 10;
   const isConfirmIntent =
-    isImmediateExecutionIntent(text) ||
-    /(?:确认|执行|开始|帮我执行|启动|运行|好|是的|可以|行|没问题|提交|保存)/i.test(text);
-  const isShortReply = text.length <= 10;
+    isImmediateExecutionIntent(text)
+    || /^(?:确认|提交|保存)(?:参数|配置|表单)?[。.!！]?$/i.test(trimmedConfirm)
+    || (isShortReply
+      && /(?:确认|执行|开始|帮我执行|启动|运行|好|是的|可以|行|没问题|提交|保存)/i.test(trimmedConfirm));
 
   // For re-execution from memory, attempt to extract parameter overrides from natural language
   let inputs: Record<string, unknown> = { ...(pending.collectedInputs ?? {}) };
@@ -610,14 +613,15 @@ export async function tryStartRememberedWorkflowSend(
   if (!trimmed) return false;
 
   const {
-    isWorkflowStartIntent,
+    isImperativeWorkflowStartIntent,
     isReExecutionIntent,
     isImmediateExecutionIntent,
     buildWorkflowStartUnavailablePrompt,
+    hasExplicitWorkflowReference,
   } = await import('@/hooks/use-workflow-intent');
 
   const wantsStart =
-    isWorkflowStartIntent(trimmed)
+    isImperativeWorkflowStartIntent(trimmed)
     || isReExecutionIntent(trimmed)
     || isImmediateExecutionIntent(trimmed);
   if (!wantsStart) return false;
@@ -653,6 +657,12 @@ export async function tryStartRememberedWorkflowSend(
 
   if (!workflowId) {
     if (isImmediateExecutionIntent(trimmed)) {
+      return false;
+    }
+    // Bare re-run phrases (e.g.「重新执行」「再跑一遍」) without workflow context
+    // must not hijack normal chat when this session has no saved workflow memory.
+    const hasExplicitWorkflowRef = hasExplicitWorkflowReference(trimmed);
+    if (isReExecutionIntent(trimmed) && !hasExplicitWorkflowRef) {
       return false;
     }
     appendLocalConversationTurn(trimmed, buildWorkflowStartUnavailablePrompt());

@@ -13,18 +13,40 @@ const WORKFLOW_START_PATTERNS = [
 ];
 
 /**
+ * Imperative command to start/run a saved workflow (POST /workflows/{id}/start).
+ * Excludes analytical phrasing like「分析一下工作流的执行情况」.
+ */
+export function isImperativeWorkflowStartIntent(text: string): boolean {
+  if (!text?.trim()) return false;
+  return WORKFLOW_START_PATTERNS.some((p) => p.test(text));
+}
+
+/**
  * User wants to start/run an already-saved workflow (POST /workflows/{id}/start).
+ * Includes imperative commands plus broad「工作流 + 运行/执行」heuristic for session hints.
  */
 export function isWorkflowStartIntent(text: string): boolean {
   if (!text?.trim()) return false;
   if (isReExecutionIntent(text)) return true;
-  if (WORKFLOW_START_PATTERNS.some((p) => p.test(text))) return true;
+  if (isImperativeWorkflowStartIntent(text)) return true;
 
   const hasWorkflow = /工作流|workflow/i.test(text);
   const hasRunVerb = /运行|执行|启动|跑一遍/i.test(text);
   const hasCreateVerb = /创建|新建|搭建|配置/i.test(text);
 
   return hasWorkflow && hasRunVerb && !hasCreateVerb;
+}
+
+const WORKFLOW_ID_IN_TEXT = /\b(wf_[\w-]+)\b/i;
+
+/** Extract workflow instance id from user text (e.g.「重新执行 wf_68162433」). */
+export function extractWorkflowIdFromText(text: string): string | undefined {
+  return text.match(WORKFLOW_ID_IN_TEXT)?.[1];
+}
+
+/** Text explicitly references a workflow instance or template context. */
+export function hasExplicitWorkflowReference(text: string): boolean {
+  return /工作流|workflow/i.test(text) || !!extractWorkflowIdFromText(text);
 }
 
 /**
@@ -65,13 +87,6 @@ export function isWorkflowCreationIntent(text: string): boolean {
 
   const hasCreateVerb = /创建|新建|搭建|配置|建立/i.test(text);
   return hasWorkflow && hasCreateVerb;
-}
-
-const WORKFLOW_ID_IN_TEXT = /\b(wf_[\w-]+)\b/i;
-
-/** Extract workflow instance id from user text (e.g.「重新执行 wf_68162433」). */
-export function extractWorkflowIdFromText(text: string): string | undefined {
-  return text.match(WORKFLOW_ID_IN_TEXT)?.[1];
 }
 
 /** Short re-run phrases without explicit「工作流」wording (e.g.「再执行一下」). */
