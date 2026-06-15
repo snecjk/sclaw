@@ -568,28 +568,6 @@ export async function tryResolvePendingWorkflow(
   return false;
 }
 
-function appendLocalConversationTurn(userText: string, assistantText: string): void {
-  const now = Date.now() / 1000;
-  useChatStore.setState((s) => ({
-    messages: [
-      ...s.messages,
-      {
-        role: 'user',
-        content: userText,
-        timestamp: now,
-        id: crypto.randomUUID(),
-      } as import('@/stores/chat').RawMessage,
-      {
-        role: 'assistant',
-        content: [{ type: 'text', text: assistantText }],
-        timestamp: now + 0.001,
-        id: crypto.randomUUID(),
-      } as import('@/stores/chat').RawMessage,
-    ],
-    lastUserMessageAt: Date.now(),
-  }));
-}
-
 export interface StartRememberedWorkflowSendOptions {
   text: string;
   context: WorkflowSendContext;
@@ -616,8 +594,6 @@ export async function tryStartRememberedWorkflowSend(
     isImperativeWorkflowStartIntent,
     isReExecutionIntent,
     isImmediateExecutionIntent,
-    buildWorkflowStartUnavailablePrompt,
-    hasExplicitWorkflowReference,
   } = await import('@/hooks/use-workflow-intent');
 
   const wantsStart =
@@ -656,17 +632,8 @@ export async function tryStartRememberedWorkflowSend(
   }
 
   if (!workflowId) {
-    if (isImmediateExecutionIntent(trimmed)) {
-      return false;
-    }
-    // Bare re-run phrases (e.g.「重新执行」「再跑一遍」) without workflow context
-    // must not hijack normal chat when this session has no saved workflow memory.
-    const hasExplicitWorkflowRef = hasExplicitWorkflowReference(trimmed);
-    if (isReExecutionIntent(trimmed) && !hasExplicitWorkflowRef) {
-      return false;
-    }
-    appendLocalConversationTurn(trimmed, buildWorkflowStartUnavailablePrompt());
-    return true;
+    // No saved workflow in this session — let normal chat / model tools handle it.
+    return false;
   }
 
   console.log(

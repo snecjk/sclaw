@@ -32,20 +32,20 @@ describe('tryStartRememberedWorkflowSend', () => {
     expect(useChatStore.getState().messages).toHaveLength(0);
   });
 
-  it('shows unavailable prompt for explicit workflow start without memory', async () => {
+  it('does not intercept explicit workflow start without memory', async () => {
     const sendMessage = vi.fn();
-    const handled = await tryStartRememberedWorkflowSend({
-      text: '运行这个工作流',
-      context: { sessionKey: SESSION_KEY, agentId: 'test' },
-      sendMessage,
-    });
+    for (const text of ['运行这个工作流', '运行这个工作流 / 执行工作流', '执行工作流']) {
+      resetChat();
+      const handled = await tryStartRememberedWorkflowSend({
+        text,
+        context: { sessionKey: SESSION_KEY, agentId: 'test' },
+        sendMessage,
+      });
 
-    expect(handled).toBe(true);
+      expect(handled, text).toBe(false);
+      expect(useChatStore.getState().messages).toHaveLength(0);
+    }
     expect(sendMessage).not.toHaveBeenCalled();
-    expect(useChatStore.getState().messages).toHaveLength(2);
-    expect(
-      (useChatStore.getState().messages[1].content as Array<{ text?: string }>)[0].text,
-    ).toContain('没有可运行的工作流记录');
   });
 
   it('does not intercept analytical workflow discussion without memory', async () => {
