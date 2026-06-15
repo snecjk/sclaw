@@ -3,12 +3,34 @@
  * Ported from OpenClaw's message-extract.ts to handle the various
  * message content formats returned by the Gateway.
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { hostApiFetch } from '@/lib/host-api';
+import { useChatStore } from '@/stores/chat';
+import { sessionHasWorkflowExecution } from '@/stores/workflow-memory';
+import { buildWorkflowFormConfig } from '@/lib/workflow-form-utils';
+import {
+  PARAM_FORM_MARKER_REGEX,
+  parseParameterFormMarker,
+} from '@/lib/parameter-form-marker';
+import { resolveParameterFormId } from '@/components/parameter-form/form-handlers';
 import type { RawMessage, ContentBlock } from '@/stores/chat';
 import {
   stripDingTalkAgentSendDisclaimerForDisplay,
   stripDingTalkMentionContextForDisplay,
 } from '@/lib/dingtalk-mention-context';
+import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
+import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay, WORKFLOW_COMPLETE_TAG } from '@/lib/workflow-context';
+import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
+import {
+  artifactToPreviewFile,
+  extractPreviewableHttpUrls,
+  inferMimeTypeFromUrl,
+  isHttpUrl,
+  isPreviewableArtifactUrl,
+  isPreviewableRemoteUrl,
+  resolveArtifactUrlFromWorkflowStates,
+} from '@/lib/preview-url';
+import type { WorkflowExecutionState } from '@/types/workflow';
 
 /** OpenClaw injects queued system events as `System: [timestamp] ...` lines before user text. */
 const GATEWAY_SYSTEM_EVENT_LINE =
@@ -39,7 +61,15 @@ function cleanUserText(text: string): string {
     .replace(/\n*Current time:\s*[^\n]+/gi, '')
     .replace(/\n*Reference UTC:\s*[^\n]+/gi, '')
     .trim();
-  return stripDingTalkMentionContextForDisplay(cleaned);
+  return stripDingTalkMentionContextForDisplay(
+    stripWorkflowCompleteForDisplay(
+      stripWorkflowSessionHintForDisplay(
+        stripWorkflowContextForDisplay(
+          stripCronTriggerTextForDisplay(cleaned),
+        ),
+      ),
+    ),
+  );
 }
 
 /** Strip dws send metadata that agents should not surface to end users. */
@@ -183,6 +213,137 @@ function cleanThinkingText(text: string): string {
  * Handles both string content and array-of-blocks content.
  * For user messages, strips Gateway-injected metadata.
  */
+export {
+  PARAM_FORM_MARKER_REGEX,
+  parseParameterFormMarker,
+  findParameterFormMarkerInMessage,
+} from '@/lib/parameter-form-marker';
+
+function rawMessageText(message: RawMessage): string {
+  const content = message.content;
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return (content as ContentBlock[])
+    .filter((b) => b.type === 'text' && typeof b.text === 'string')
+    .map((b) => b.text as string)
+    .join('\n');
+}
+
+/** Internal [workflow:complete] trigger — hidden from chat UI. */
+export function isHiddenWorkflowCompleteUserMessage(message: RawMessage): boolean {
+  if (message.role !== 'user') return false;
+  return rawMessageText(message).includes(WORKFLOW_COMPLETE_TAG);
+}
+
+type PendingWorkflowSnapshot = {
+  templateId: string;
+  schema?: import('@/types/workflow').WorkflowSchema;
+  collectedInputs?: Record<string, unknown>;
+} | null;
+
+export function extractParameterForm(
+  message: RawMessage | unknown,
+  pendingOverride?: PendingWorkflowSnapshot,
+): {
+  formId: string;
+  formConfig: import('@/types/user-form').UserFormConfig;
+  formContext: { source: 'workflow' | 'tool' | 'skill'; sourceId: string; schemaHash?: string };
+} | null {
+  if (!message || typeof message !== 'object') return null;
+  const msg = message as Record<string, unknown>;
+  const content = msg.content;
+
+  if (!Array.isArray(content)) return null;
+
+  for (const block of content as import('@/stores/chat').ContentBlock[]) {
+    // First check for native parameter_form block type
+    if (
+      block.type === 'parameter_form' &&
+      (block as any).formId &&
+      (block as any).formConfig &&
+      (block as any).formContext
+    ) {
+      const formId = (block as any).formId;
+      const formContext = (block as any).formContext as {
+        source: 'workflow' | 'tool' | 'skill';
+        sourceId: string;
+        schemaHash?: string;
+      };
+      if (
+        formContext.source === 'workflow'
+        && formContext.sourceId
+        && sessionHasWorkflowExecution(useChatStore.getState().currentSessionKey, formContext.sourceId)
+      ) {
+        return null;
+      }
+      console.log('[extractParameterForm] found native parameter_form block, formId:', formId);
+      return {
+        formId,
+        formConfig: (block as any).formConfig as import('@/types/user-form').UserFormConfig,
+        formContext,
+      };
+    }
+
+    // Check for <ParameterForm ... /> marker in text blocks
+    if (block.type === 'text' && typeof block.text === 'string') {
+      const parsed = parseParameterFormMarker(block.text);
+      if (parsed) {
+        const { templateId, schemaHash } = parsed;
+        const sessionKey = useChatStore.getState().currentSessionKey;
+        if (sessionHasWorkflowExecution(sessionKey, templateId)) {
+          return null;
+        }
+
+        const pendingWorkflow =
+          pendingOverride ?? useChatStore.getState().pendingWorkflow;
+        if (
+          !pendingWorkflow
+          || pendingWorkflow.templateId !== templateId
+          || !pendingWorkflow.schema
+        ) {
+          return null;
+        }
+
+        return {
+          formId: resolveParameterFormId(`workflow-form-${templateId}`),
+          formConfig: buildWorkflowFormConfig(
+            pendingWorkflow.schema,
+            '',
+            pendingWorkflow.collectedInputs,
+          ),
+          formContext: {
+            source: 'workflow',
+            sourceId: templateId,
+            schemaHash,
+          },
+        };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract workflow_card block from a message's content field.
+ */
+export function extractWorkflowCard(message: RawMessage | unknown): { runId: string; templateName: string } | null {
+  if (!message || typeof message !== 'object') return null;
+  const msg = message as Record<string, unknown>;
+  const content = msg.content;
+
+  if (!Array.isArray(content)) return null;
+
+  for (const block of content as import('@/stores/chat').ContentBlock[]) {
+    if (block.type === 'workflow_card' && block.runId) {
+      return {
+        runId: block.runId,
+        templateName: block.templateName ?? '工作流',
+      };
+    }
+  }
+  return null;
+}
+
 export function extractText(message: RawMessage | unknown): string {
   if (!message || typeof message !== 'object') return '';
   const msg = message as Record<string, unknown>;
@@ -210,6 +371,11 @@ export function extractText(message: RawMessage | unknown): string {
   }
 
   const role = typeof msg.role === 'string' ? msg.role.toLowerCase() : '';
+
+  // Strip <ParameterForm ... /> marker from text for clean display
+  if (result) {
+    result = result.replace(PARAM_FORM_MARKER_REGEX, '').trim();
+  }
 
   // Strip Gateway metadata from user messages for clean display
   if (isUser && result) {
@@ -418,22 +584,40 @@ export function extractToolUse(message: RawMessage | unknown): Array<{ id: strin
 
 /**
  * Determine if an attached file is previewable in the side panel.
+ * Covers: text, code, data, Office docs (fallback/external-open).
  */
 const PREVIEWABLE_MIME_PREFIXES = [
   'text/html',
   'text/plain',
   'application/json',
   'text/csv',
+  'text/tab-separated-values',
+  'application/pdf',
+  'text/markdown',
+  // Office docs — currently shown as "open externally" placeholder,
+  // but listed so users can click them in the product panel.
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-powerpoint',
 ];
 
-export function isPreviewableFile(file: { mimeType: string; filePath?: string }): boolean {
+export function isPreviewableFile(file: { mimeType: string; filePath?: string; type?: string }): boolean {
   if (!file.filePath) return false;
-  // Web URLs (http/https) are excluded from built-in preview because they may have
-  // anti-hotlink / X-Frame-Options / CSP blocking, and should open in external browser.
-  if (file.filePath.startsWith('http://') || file.filePath.startsWith('https://')) return false;
-  return PREVIEWABLE_MIME_PREFIXES.some((prefix) =>
+  if (isHttpUrl(file.filePath)) {
+    return isPreviewableRemoteUrl(file.filePath, file.type ?? file.mimeType);
+  }
+  if (file.filePath.startsWith('artifact://')) return false;
+  const ext = file.filePath.split('.').pop()?.toLowerCase() || '';
+  const matched = PREVIEWABLE_MIME_PREFIXES.some((prefix) =>
     prefix.endsWith('/') ? file.mimeType.startsWith(prefix) : file.mimeType === prefix,
   );
+  if (matched) return true;
+  // Fallback: known extensions whose MIME may be application/octet-stream
+  return ['html', 'htm', 'pdf', 'md', 'txt', 'json', 'csv', 'tsv',
+    'xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt'].includes(ext);
 }
 
 function extToMimeType(ext: string): string {
@@ -459,7 +643,7 @@ function extToMimeType(ext: string): string {
     yaml: 'text/plain', yml: 'text/plain', xml: 'text/plain', toml: 'text/plain',
     ini: 'text/plain', conf: 'text/plain', properties: 'text/plain', env: 'text/plain',
     // Data/Log files
-    log: 'text/plain', tsv: 'text/plain',
+    log: 'text/plain', tsv: 'text/tab-separated-values',
     // Web files
     css: 'text/plain', scss: 'text/plain', less: 'text/plain',
     // Shell scripts
@@ -471,13 +655,128 @@ function extToMimeType(ext: string): string {
 
 /** Shared extension list for previewable local file paths (used by extractPreviewableRefs and preprocessTextForPreviewLinks). */
 export const PREVIEWABLE_FILE_EXTS =
-  'html?|sql|py|js|ts|jsx|tsx|java|go|rs|cpp|c|h|cs|rb|php|swift|kt|scala|r|m|mm|json|yaml|yml|xml|toml|ini|conf|properties|env|md|txt|csv|tsv|log|css|scss|less|sh|bash|zsh|fish|ps1|bat|cmd|pdf';
+  'properties|swift|scala|bash|fish|html?|java|jsx|tsx|cpp|php|toml|conf|scss|less|zsh|yaml|json|sql|xml|csv|tsv|txt|log|ini|env|md|htm|py|go|rs|cs|rb|mm|bat|cmd|pdf|kt|css|yml|ts|js|sh|c|h|r|m';
 
-/** Remove fenced code blocks from text so paths inside them are not matched.
- *  Inline code (`path`) is preserved — it often contains actual file paths the user/AI wants to preview.
+/** Match a single line that is only a previewable file path (relative, absolute, or Windows). */
+export const PREVIEWABLE_PATH_LINE_REGEX = new RegExp(
+  `^(?:\\./(?:[^/\\n\\r]+/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|/(?:[^/\\n\\r]+/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\n\\r]+[\\\\/])*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS}))$`,
+  'i',
+);
+
+/** Strip list markers / emoji prefixes so `- 📁 /path` is recognized as a path line. */
+export function normalizePreviewPathLine(line: string): string {
+  return line
+    .trim()
+    .replace(/^[-*+]\s+/, '')
+    .replace(/^[^\s/\\.`[\]()]+\s+/, '') // emoji or short label prefix before path
+    .trim();
+}
+
+export function isPreviewablePathLine(line: string): boolean {
+  let trimmed = normalizePreviewPathLine(line);
+  if (!trimmed) return false;
+  // "链接：/Users/..." or "path: ./foo.md"
+  const colonIdx = Math.max(trimmed.lastIndexOf('：'), trimmed.lastIndexOf(':'));
+  if (colonIdx >= 0) {
+    const afterColon = trimmed.slice(colonIdx + 1).trim();
+    if (afterColon.startsWith('/') || afterColon.startsWith('./') || /^[A-Za-z]:[\\/]/.test(afterColon)) {
+      trimmed = afterColon;
+    }
+  }
+  if (trimmed.startsWith('file://')) {
+    return isPreviewablePathLine(trimmed.slice('file://'.length).replace(/^\/([A-Za-z]:)/, '$1'));
+  }
+  return PREVIEWABLE_PATH_LINE_REGEX.test(trimmed);
+}
+
+export function extractPreviewPathFromLine(line: string): string | null {
+  let trimmed = normalizePreviewPathLine(line);
+  if (!trimmed) return null;
+  const colonIdx = Math.max(trimmed.lastIndexOf('：'), trimmed.lastIndexOf(':'));
+  if (colonIdx >= 0) {
+    const afterColon = trimmed.slice(colonIdx + 1).trim();
+    if (afterColon.startsWith('/') || afterColon.startsWith('./') || /^[A-Za-z]:[\\/]/.test(afterColon)) {
+      trimmed = afterColon;
+    }
+  }
+  if (trimmed.startsWith('file://')) {
+    trimmed = trimmed.slice('file://'.length).replace(/^\/([A-Za-z]:)/, '$1');
+  }
+  return PREVIEWABLE_PATH_LINE_REGEX.test(trimmed) ? trimmed : null;
+}
+
+/** Markdown link for a local/remote previewable path. */
+export function previewMarkdownLinkForPath(filePath: string): string {
+  const path = filePath.trim();
+  const fileName = path.split('/').pop() || path;
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return `[${fileName}](${path})`;
+  }
+  return `[${fileName}](preview://${path})`;
+}
+
+/**
+ * Unwrap AI code blocks / inline code that contain only file paths into preview links.
+ * Models often wrap path lists in ``` fences or `backticks`, which blocks normal path detection.
  */
+export function unwrapPreviewablePathMarkdown(text: string): string {
+  // Fenced blocks: ``` optional-lang + newline + path lines + ```
+  text = text.replace(/```[^\n]*\n([\s\S]*?)```/g, (match, inner: string) => {
+    const lines = inner.split('\n').map((line) => line.trim()).filter(Boolean);
+    if (lines.length === 0 || !lines.every(isPreviewablePathLine)) return match;
+    return lines
+      .map((line) => {
+        const path = extractPreviewPathFromLine(line);
+        return path ? `- ${previewMarkdownLinkForPath(path)}` : line;
+      })
+      .join('\n');
+  });
+
+  // Inline `path` — models often wrap a single absolute path in backticks.
+  text = text.replace(/`([^`\n]+)`/g, (match, inner: string) => {
+    const path = extractPreviewPathFromLine(inner);
+    if (!path) return match;
+    return previewMarkdownLinkForPath(path);
+  });
+
+  return linkifyPreviewPathLines(text);
+}
+
+/** Turn plain path lines (lists, emoji prefixes, "链接：/path") into preview markdown links. */
+export function linkifyPreviewPathLines(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => {
+      if (!isPreviewablePathLine(line)) return line;
+      const path = extractPreviewPathFromLine(line);
+      return path ? previewMarkdownLinkForPath(path) : line;
+    })
+    .join('\n');
+}
+
+/** Remove fenced code blocks from text so paths inside them are not matched. */
 function stripCodeBlocks(text: string): string {
   return text.replace(/```[\s\S]*?```/g, '');
+}
+
+function extractPathsFromPathOnlyCodeBlocks(text: string): string[] {
+  const paths: string[] = [];
+  text.replace(/```[^\n]*\n([\s\S]*?)```/g, (_match, inner: string) => {
+    const lines = inner.split('\n').map((line) => line.trim()).filter(Boolean);
+    if (lines.length > 0 && lines.every(isPreviewablePathLine)) {
+      for (const line of lines) {
+        const path = extractPreviewPathFromLine(line);
+        if (path) paths.push(path);
+      }
+    }
+    return _match;
+  });
+  text.replace(/`([^`\n]+)`/g, (_match, inner: string) => {
+    const path = extractPreviewPathFromLine(inner);
+    if (path) paths.push(path);
+    return _match;
+  });
+  return paths;
 }
 
 /**
@@ -491,6 +790,30 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
   const cleanText = stripCodeBlocks(text);
   const results: Array<{ filePath: string; fileName: string; mimeType: string }> = [];
   const seen = new Set<string>();
+
+  for (const path of extractPathsFromPathOnlyCodeBlocks(text)) {
+    const fileName = path.split('/').pop() || '';
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    if (fileName && ext) {
+      const mimeType = extToMimeType(ext);
+      if (!mimeType.startsWith('image/') && !seen.has(path)) {
+        seen.add(path);
+        results.push({ filePath: path, fileName, mimeType });
+      }
+    }
+  }
+
+  for (const line of text.split('\n')) {
+    const path = extractPreviewPathFromLine(line);
+    if (!path || seen.has(path)) continue;
+    const fileName = path.split('/').pop() || '';
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    if (!ext) continue;
+    const mimeType = extToMimeType(ext);
+    if (mimeType.startsWith('image/')) continue;
+    seen.add(path);
+    results.push({ filePath: path, fileName, mimeType });
+  }
 
   function addIfNotImage(filePath: string, fileName: string, ext: string) {
     const mimeType = extToMimeType(ext);
@@ -515,13 +838,18 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
     addIfNotImage(filePath, fileName, ext);
   }
 
-  // Localhost URLs only (previewable in side panel)
+  // Localhost URLs (previewable in side panel)
   const urlRegex = /(https?:\/\/localhost:[^\s)\]"',;<>]+)/g;
   while ((match = urlRegex.exec(cleanText)) !== null) {
     const url = match[1];
     const fileName = url.split('/').pop() || 'index.html';
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     addIfNotImage(url, fileName, ext);
+  }
+
+  // OSS / CDN http(s) links with previewable extensions
+  for (const ref of extractPreviewableHttpUrls(cleanText)) {
+    addIfNotImage(ref.filePath, ref.fileName, ref.fileName.split('.').pop()?.toLowerCase() || '');
   }
 
   // File paths (relative ./, absolute /, and Windows C:\) — support code, config, doc, and web files
@@ -540,12 +868,92 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
   return results;
 }
 
+// ── Local path existence verification ────────────────────────────
+// Text-extracted paths may point at cloud-runtime locations (e.g. /runtime/outputs/x.html)
+// that do not exist on the user's machine. Verify before rendering preview entries.
+
+/** Module-level cache so the same path is stat-ed at most once per app session. */
+const _pathExistsCache = new Map<string, boolean>();
+
+/**
+ * Batch-verify local (non-http) paths via /api/files/stat.
+ * Returns a map of path → exists; paths still being verified are absent from the map.
+ * On transport failure paths are marked as existing (fail-open, preserves legacy behavior).
+ */
+export function useLocalPathExistence(paths: string[]): Record<string, boolean> {
+  const key = paths.join('\n');
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    const unknown = paths.filter((p) => !_pathExistsCache.has(p));
+    if (unknown.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await hostApiFetch<{ exists: Record<string, boolean> }>('/api/files/stat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paths: unknown }),
+        });
+        for (const p of unknown) {
+          _pathExistsCache.set(p, res?.exists?.[p] === true);
+        }
+      } catch {
+        for (const p of unknown) _pathExistsCache.set(p, true);
+      }
+      if (!cancelled) setVersion((v) => v + 1);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  return useMemo(() => {
+    const out: Record<string, boolean> = {};
+    for (const p of paths) {
+      const v = _pathExistsCache.get(p);
+      if (v !== undefined) out[p] = v;
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, version]);
+}
+
+/**
+ * Resolve a non-http candidate path to its final previewable form:
+ * - exists locally → keep the local path;
+ * - doesn't exist (cloud-runtime path) → map to the matching artifact OSS URL by basename;
+ * - unresolvable → null (do not render a preview entry).
+ */
+export function resolvePreviewCandidate(
+  file: { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null },
+  exists: boolean | undefined,
+  workflowCardStates?: Record<string, WorkflowExecutionState>,
+): { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null } | null {
+  if (isHttpUrl(file.filePath)) return file;
+  if (exists === true) return file;
+  if (exists === undefined) return null; // verification pending
+  const resolved = resolveArtifactUrlFromWorkflowStates(file.filePath, workflowCardStates ?? {});
+  if (resolved && isHttpUrl(resolved)) {
+    return {
+      ...file,
+      filePath: resolved,
+      mimeType: inferMimeTypeFromUrl(resolved, file.mimeType),
+    };
+  }
+  return null;
+}
+
 /**
  * Extract previewable files from an array of messages.
  * Includes both _attachedFiles and references found in message text.
  */
-export function usePreviewableFiles(messages: Array<unknown & { _attachedFiles?: Array<{ mimeType: string; filePath?: string; fileName: string }>; content?: unknown; role?: string }>) {
-  return useMemo(() => {
+export function usePreviewableFiles(
+  messages: Array<unknown & { _attachedFiles?: Array<{ mimeType: string; filePath?: string; fileName: string }>; content?: unknown; role?: string }>,
+  workflowCardStates?: Record<string, WorkflowExecutionState>,
+) {
+  const candidates = useMemo(() => {
     const seen = new Set<string>();
     const result: Array<{ mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }> = [];
 
@@ -553,6 +961,24 @@ export function usePreviewableFiles(messages: Array<unknown & { _attachedFiles?:
       if (seen.has(item.filePath)) return;
       seen.add(item.filePath);
       result.push(item);
+    }
+
+    // Structured workflow artifacts first — authoritative OSS URLs win dedup.
+    if (workflowCardStates) {
+      for (const state of Object.values(workflowCardStates)) {
+        for (const artifact of state.result?.artifacts ?? []) {
+          if (!isPreviewableArtifactUrl(artifact.url, artifact.type)) continue;
+          const previewFile = artifactToPreviewFile(artifact);
+          if (!previewFile.filePath) continue;
+          addItem({
+            mimeType: previewFile.mimeType,
+            filePath: previewFile.filePath,
+            fileName: previewFile.fileName,
+            fileSize: previewFile.fileSize,
+            preview: previewFile.preview,
+          });
+        }
+      }
     }
 
     for (const msg of messages) {
@@ -590,7 +1016,27 @@ export function usePreviewableFiles(messages: Array<unknown & { _attachedFiles?:
     }
 
     return result;
-  }, [messages]);
+  }, [messages, workflowCardStates]);
+
+  // Verify non-http candidates against the local filesystem; cloud-runtime paths
+  // resolve to their artifact OSS URL or are dropped (never rendered as broken cards).
+  const localPaths = useMemo(
+    () => candidates.filter((f) => !isHttpUrl(f.filePath)).map((f) => f.filePath),
+    [candidates],
+  );
+  const existence = useLocalPathExistence(localPaths);
+
+  return useMemo(() => {
+    const seen = new Set<string>();
+    const result: typeof candidates = [];
+    for (const file of candidates) {
+      const resolved = resolvePreviewCandidate(file, existence[file.filePath], workflowCardStates);
+      if (!resolved || seen.has(resolved.filePath)) continue;
+      seen.add(resolved.filePath);
+      result.push(resolved);
+    }
+    return result;
+  }, [candidates, existence, workflowCardStates]);
 }
 
 /**

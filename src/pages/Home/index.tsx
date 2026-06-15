@@ -1,26 +1,29 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { HomeAgentHubSurface } from './HomeAgentHubSurface';
+import { HomeSiteSurface } from './HomeSiteSurface';
 import { HomeHero } from './HomeHero';
 import { HomeSummaryCards } from './HomeSummaryCards';
 import { HomeAssistant } from './HomeAssistant';
 import { HomeMainConversation } from './HomeMainConversation';
 import { useHomeConversationActive } from './use-home-conversation-active';
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useScheduledTasksStore } from '@/stores/scheduledTasks';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
-import { useScheduledTaskToolListener } from '@/hooks/use-scheduled-task-tool-listener';
+import { useBuiltinToolListener } from '@/hooks/use-builtin-tool-listener';
 import { TaskCreateModal } from '@/pages/ScheduledTasks/components/TaskCreateModal';
 import type { TaskCreateInputWithRun } from '@/pages/ScheduledTasks/components/TaskCreateModal';
 
 /**
- * 首页：有 CRM 周报权限时为 Hero + 任务卡片 + 底部助手；无权限时为 Hero + 能力卡片 + 底部输入。
+ * 首页：网点用户为工作流引导卡片；省区白名单用户为经营管理任务卡片；其余为非网点 Agent Hub。
  */
 export function Home() {
+  const user = useAuthStore((s) => s.user);
+  const isSite = isSiteUser(user?.categoryCode);
   const crmWeekReportSurfaceAllowed = useAuthStore((s) => s.crmWeekReportSurfaceAllowed);
   const showConversation = useHomeConversationActive();
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
@@ -28,11 +31,19 @@ export function Home() {
   const createTask = useScheduledTasksStore((s) => s.createTask);
   const fetchTasks = useScheduledTasksStore((s) => s.fetchTasks);
 
-  const {
-    nlModalOpen,
-    nlInitialValues,
-    closeNlModal,
-  } = useScheduledTaskToolListener();
+  const [nlModalOpen, setNlModalOpen] = useState(false);
+  const [nlInitialValues, setNlInitialValues] = useState<import('@/hooks/use-scheduled-task-tool-listener').NlExtractedValues>({});
+  const closeNlModal = useCallback(() => {
+    setNlModalOpen(false);
+    setNlInitialValues({});
+  }, []);
+
+  useBuiltinToolListener({
+    onScheduledTaskConfirmation: (values) => {
+      setNlInitialValues(values);
+      setNlModalOpen(true);
+    },
+  });
 
   const handleNlSave = useCallback(
     async (input: TaskCreateInputWithRun) => {
@@ -64,9 +75,9 @@ export function Home() {
 
   // Handle skill-plaza "Use" navigation with ?q= prompt
   const [searchParams, setSearchParams] = useSearchParams();
-  const seedText = searchParams.get('q')
-    ? decodeURIComponent(searchParams.get('q')!)
-    : undefined;
+  // searchParams.get() is already percent-decoded; decodeURIComponent again throws
+  // URIError when the prompt contains a literal '%' (e.g. "完成率50%").
+  const seedText = searchParams.get('q')?.trim() || undefined;
   const { handleHubSend } = useHomeChatEntrySend();
   const gatewayStatus = useGatewayStore((s) => s.status);
   const hasAutoSentRef = useRef(false);
@@ -80,6 +91,20 @@ export function Home() {
     setSearchParams({}, { replace: true });
     handleHubSend(seedText);
   }, [seedText, gatewayStatus.state, handleHubSend, setSearchParams]);
+
+  if (isSite) {
+    return (
+      <>
+        <HomeSiteSurface seedText={seedText} />
+        <TaskCreateModal
+          open={nlModalOpen}
+          onClose={closeNlModal}
+          onSave={handleNlSave}
+          initialValues={nlInitialValues}
+        />
+      </>
+    );
+  }
 
   if (!crmWeekReportSurfaceAllowed) {
     return (

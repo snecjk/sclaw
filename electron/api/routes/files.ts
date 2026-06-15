@@ -1,7 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { dialog, nativeImage } from 'electron';
 import crypto from 'node:crypto';
-import { extname, join } from 'node:path';
+import { extname, isAbsolute, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { existsSync, readdirSync } from 'node:fs';
+import { copyFile, mkdtemp, readFile, unlink } from 'node:fs/promises';
 import { getOpenClawConfigDir, expandPath } from '../../utils/paths';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
@@ -56,12 +59,77 @@ function mimeToExt(mimeType: string): string {
 
 const OUTBOUND_DIR = join(getOpenClawConfigDir(), 'media', 'outbound');
 
-/** Resolve a relative path starting with ./ to the main agent workspace. */
-function resolveWorkspaceFilePath(filePath: string): string {
-  if (filePath.startsWith('./')) {
-    return expandPath(join(getOpenClawConfigDir(), 'workspace', filePath));
+function decodePathSegments(filePath: string): string {
+  let path = filePath.trim();
+  if (!path.includes('%')) return path;
+  try {
+    const once = decodeURIComponent(path);
+    if (once.includes('%')) {
+      try {
+        return decodeURIComponent(once);
+      } catch {
+        return once;
+      }
+    }
+    return once;
+  } catch {
+    return path;
   }
-  return filePath;
+}
+
+/**
+ * Resolve a preview file path:
+ * - `~` expands to home
+ * - absolute paths pass through (incl. Windows `C:\` / `C:/`, after URI decode)
+ * - relative paths (bare filenames like `USER.md`, or `./report.html`) resolve
+ *   against the agent workspaces (`workspace`, then `workspace-<agentId>`),
+ *   since AI messages reference workspace files by bare name.
+ */
+function resolveWorkspaceFilePath(filePath: string): string {
+  const normalized = decodePathSegments(filePath);
+
+  if (normalized.startsWith('~')) {
+    return expandPath(normalized);
+  }
+  if (isAbsolute(normalized)) {
+    return normalized;
+  }
+
+  const configDir = getOpenClawConfigDir();
+  const candidates = [join(configDir, 'workspace', normalized)];
+  try {
+    for (const entry of readdirSync(configDir)) {
+      if (entry.startsWith('workspace-')) {
+        candidates.push(join(configDir, entry, normalized));
+      }
+    }
+  } catch { /* config dir unreadable — fall through to first candidate */ }
+
+  return candidates.find((p) => existsSync(p)) ?? candidates[0];
+}
+
+/**
+ * Read file with EPERM/EACCES fallback: copy to temp directory and read from there.
+ * macOS sometimes locks files created by other processes (e.g. AI tools).
+ */
+async function readFileWithFallback(filePath: string): Promise<Buffer> {
+  try {
+    return await readFile(filePath);
+  } catch (err: any) {
+    if (err.code === 'EPERM' || err.code === 'EACCES') {
+      const tmpDir = await mkdtemp(join(tmpdir(), 'stoclaw-'));
+      const tmpFile = join(tmpDir, 'tmpfile');
+      try {
+        await copyFile(filePath, tmpFile);
+        const buf = await readFile(tmpFile);
+        await unlink(tmpFile).catch(() => {});
+        return buf;
+      } catch {
+        throw err;
+      }
+    }
+    throw err;
+  }
 }
 
 async function generateImagePreview(filePath: string, mimeType: string): Promise<string | null> {
@@ -167,18 +235,38 @@ export async function handleFileRoutes(
     return true;
   }
 
+  // POST /api/files/stat — batch existence check for local paths (preview gating)
+  if (url.pathname === '/api/files/stat' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ paths: string[] }>(req);
+      const fsP = await import('node:fs/promises');
+      const exists: Record<string, boolean> = {};
+      for (const rawPath of (body.paths || []).slice(0, 200)) {
+        try {
+          const stat = await fsP.stat(resolveWorkspaceFilePath(rawPath));
+          exists[rawPath] = stat.isFile();
+        } catch {
+          exists[rawPath] = false;
+        }
+      }
+      sendJson(res, 200, { exists });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/files/read' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ filePath: string; encoding?: 'utf-8' | 'base64' }>(req);
-      const fsP = await import('node:fs/promises');
       const filePath = resolveWorkspaceFilePath(body.filePath);
       const encoding = body.encoding || 'utf-8';
       if (encoding === 'base64') {
-        const buf = await fsP.readFile(filePath);
+        const buf = await readFileWithFallback(filePath);
         sendJson(res, 200, { content: buf.toString('base64'), encoding: 'base64' });
       } else {
-        const content = await fsP.readFile(filePath, 'utf-8');
-        sendJson(res, 200, { content, encoding: 'utf-8' });
+        const buf = await readFileWithFallback(filePath);
+        sendJson(res, 200, { content: buf.toString('utf-8'), encoding: 'utf-8' });
       }
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -194,8 +282,7 @@ export async function handleFileRoutes(
         return true;
       }
       const filePath = resolveWorkspaceFilePath(rawPath);
-      const fsP = await import('node:fs/promises');
-      const buf = await fsP.readFile(filePath);
+      const buf = await readFileWithFallback(filePath);
       const ext = extname(filePath).toLowerCase();
       const mimeType = getMimeType(ext);
       res.setHeader('Content-Type', mimeType);

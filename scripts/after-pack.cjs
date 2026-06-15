@@ -19,13 +19,49 @@
  *      @mariozechner/clipboard).
  */
 
-const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, realpathSync } = require('fs');
+const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, realpathSync, readFileSync } = require('fs');
 const { join, dirname, basename } = require('path');
+const { createPackage } = require('@electron/asar');
 
 // On Windows, paths in pnpm's virtual store can exceed the default MAX_PATH
 // limit (260 chars). Node.js 18.17+ respects the system LongPathsEnabled
 // registry key, but as a safety net we normalize paths to use the \\?\ prefix
 // on Windows, which bypasses the limit unconditionally.
+// Native modules and prebuilt binaries must stay outside the ASAR archive.
+const OPENCLAW_ASAR_UNPACK = '{**/*.node,**/sharp/**,**/koffi/**,**/@img/**,**/@napi-rs/**}';
+
+function countFilesRecursive(dir) {
+  let count = 0;
+  if (!existsSync(dir)) return 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      count += countFilesRecursive(fullPath);
+    } else if (entry.isFile()) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+async function packDirectoryToAsar(sourceDir, asarPath, label) {
+  if (!existsSync(sourceDir)) {
+    console.warn(`[after-pack] ⚠️  Skipping ${label} ASAR pack — source missing: ${sourceDir}`);
+    return false;
+  }
+
+  const fileCount = countFilesRecursive(sourceDir);
+  const unpackedPath = `${asarPath}.unpacked`;
+  if (existsSync(asarPath)) rmSync(asarPath, { force: true });
+  if (existsSync(unpackedPath)) rmSync(unpackedPath, { recursive: true, force: true });
+
+  console.log(`[after-pack] 📦 Packing ${label} (${fileCount} files) -> ${asarPath}`);
+  await createPackage(sourceDir, asarPath, { unpack: OPENCLAW_ASAR_UNPACK });
+  rmSync(sourceDir, { recursive: true, force: true });
+  console.log(`[after-pack] ✅ ${label} packed into ASAR (${basename(asarPath)}).`);
+  return true;
+}
+
 function normWin(p) {
   if (process.platform !== 'win32') return p;
   if (p.startsWith('\\\\?\\')) return p;
@@ -41,18 +77,69 @@ function resolveArch(archEnum) {
 }
 
 // ── General cleanup ──────────────────────────────────────────────────────────
+// Only remove dev-only dirs/files at npm *package roots* (sibling of package.json).
+// Never delete nested dirs like yaml/dist/doc or zod/v4/locales — those are runtime code.
+
+function normalizePathForCompare(filePath) {
+  return filePath.replace(/\\/g, '/');
+}
+
+function isInsideNodeModules(filePath) {
+  return normalizePathForCompare(filePath).includes('/node_modules/');
+}
+
+/** True when `dirPath` is a direct child of an npm package (parent has package.json). */
+function isNpmPackageRootChild(dirPath) {
+  return existsSync(join(dirname(dirPath), 'package.json'));
+}
+
+/**
+ * OpenClaw runtime resolves workspace bootstrap files from
+ * docs/reference/templates/ (AGENTS.md, SOUL.md, etc.). The rest of docs/ is
+ * dev documentation and safe to drop from the packaged runtime.
+ */
+function pruneOpenclawRuntimeDocs(docsDir) {
+  const templatesDir = join(docsDir, 'reference', 'templates');
+  if (!existsSync(templatesDir)) return false;
+
+  const parentDir = dirname(docsDir);
+  const stagingDir = join(parentDir, '.docs-templates-staging');
+  try {
+    rmSync(stagingDir, { recursive: true, force: true });
+    cpSync(templatesDir, stagingDir, { recursive: true });
+    rmSync(docsDir, { recursive: true, force: true });
+    mkdirSync(join(docsDir, 'reference'), { recursive: true });
+    cpSync(stagingDir, templatesDir, { recursive: true });
+    return true;
+  } finally {
+    rmSync(stagingDir, { recursive: true, force: true });
+  }
+}
 
 function cleanupUnnecessaryFiles(dir) {
   let removedCount = 0;
 
-  const REMOVE_DIRS = new Set([
+  // Do NOT include bare `doc` — packages like `yaml` ship runtime code under dist/doc/.
+  const REMOVE_PACKAGE_ROOT_DIRS = new Set([
     'test', 'tests', '__tests__', '.github', 'examples', 'example',
+    'docs', 'website', 'benchmark', 'benchmarks', 'coverage', '.nyc_output', 'man',
   ]);
-  const REMOVE_FILE_EXTS = ['.d.ts', '.d.ts.map', '.js.map', '.mjs.map', '.ts.map', '.markdown'];
+  const REMOVE_FILE_EXTS = ['.d.ts', '.d.ts.map', '.js.map', '.mjs.map', '.ts.map', '.markdown', '.flow'];
   const REMOVE_FILE_NAMES = new Set([
     '.DS_Store', 'README.md', 'CHANGELOG.md', 'LICENSE.md', 'CONTRIBUTING.md',
+    'History.md', 'HISTORY.md', 'AUTHORS', 'NOTICE', 'License',
     'tsconfig.json', '.npmignore', '.eslintrc', '.prettierrc', '.editorconfig',
   ]);
+  const ENGLISH_LOCALE_RE = /^(en|en[-_].*)\.(json|js|yaml|yml)$/i;
+  const I18N_LOCALE_RESOURCE_RE = /\.(json|yaml|yml)$/i;
+
+  function isEnglishLocaleFile(name) {
+    return ENGLISH_LOCALE_RE.test(name);
+  }
+
+  function isI18nLocaleResourceFile(name) {
+    return I18N_LOCALE_RESOURCE_RE.test(name);
+  }
 
   function walk(currentDir) {
     let entries;
@@ -62,14 +149,37 @@ function cleanupUnnecessaryFiles(dir) {
       const fullPath = join(currentDir, entry.name);
 
       if (entry.isDirectory()) {
-        if (REMOVE_DIRS.has(entry.name)) {
-          try { rmSync(fullPath, { recursive: true, force: true }); removedCount++; } catch { /* */ }
-        } else {
-          walk(fullPath);
+        if (entry.name === 'docs' && !isInsideNodeModules(fullPath)) {
+          // Keep docs/reference/templates for OpenClaw workspace bootstrap; drop the rest.
+          try {
+            if (pruneOpenclawRuntimeDocs(fullPath)) removedCount++;
+          } catch { /* */ }
+          continue;
         }
+        if (
+          REMOVE_PACKAGE_ROOT_DIRS.has(entry.name)
+          && (!isInsideNodeModules(fullPath) || isNpmPackageRootChild(fullPath))
+        ) {
+          try { rmSync(fullPath, { recursive: true, force: true }); removedCount++; } catch { /* */ }
+          continue;
+        }
+        if (
+          (entry.name === 'locale' || entry.name === 'locales')
+          && isNpmPackageRootChild(fullPath)
+        ) {
+          // Package-root i18n only (e.g. moment). Skip zod/dist/... nested locale code trees.
+          try {
+            for (const localeFile of readdirSync(fullPath)) {
+              if (isI18nLocaleResourceFile(localeFile) && !isEnglishLocaleFile(localeFile)) {
+                try { rmSync(join(fullPath, localeFile), { force: true }); removedCount++; } catch { /* */ }
+              }
+            }
+          } catch { /* */ }
+        }
+        walk(fullPath);
       } else if (entry.isFile()) {
         const name = entry.name;
-        if (REMOVE_FILE_NAMES.has(name) || REMOVE_FILE_EXTS.some(e => name.endsWith(e))) {
+        if (REMOVE_FILE_NAMES.has(name) || name === 'LICENSE' || REMOVE_FILE_EXTS.some(e => name.endsWith(e))) {
           try { rmSync(fullPath, { force: true }); removedCount++; } catch { /* */ }
         }
       }
@@ -78,6 +188,192 @@ function cleanupUnnecessaryFiles(dir) {
 
   walk(dir);
   return removedCount;
+}
+
+/** Fail the build early if cleanup removed runtime-critical openclaw paths. */
+// ── Unindexed bundled extensions removal ─────────────────────────────────────
+// OpenClaw ships a precompiled BUNDLED_PLUGIN_METADATA index (in
+// dist/manifest-registry-*.js). Extensions listed there skip on-disk manifest
+// reads entirely. Extensions NOT in the index go through loadPluginManifest's
+// fd-identity check (lstat vs fstat dev/ino), which can NEVER pass inside an
+// ASAR archive: Electron extracts asar entries to temp files on open(), so the
+// identities never match. Shipping unindexed extensions inside openclaw.asar
+// makes the Gateway exit with "Config invalid: unsafe plugin manifest path".
+
+function readBundledPluginIndexDirNames(openclawRoot) {
+  const distDir = join(openclawRoot, 'dist');
+  if (!existsSync(distDir)) return null;
+  const registryFile = readdirSync(distDir).find(
+    (name) => name.startsWith('manifest-registry-') && name.endsWith('.js'),
+  );
+  if (!registryFile) return null;
+  const source = readFileSync(join(distDir, registryFile), 'utf8');
+  const names = new Set();
+  for (const match of source.matchAll(/dirName:\s*"([^"]+)"/g)) {
+    names.add(match[1]);
+  }
+  return names.size > 0 ? names : null;
+}
+
+function removeUnindexedBundledExtensions(openclawRoot) {
+  const extensionsDir = join(openclawRoot, 'dist', 'extensions');
+  if (!existsSync(extensionsDir)) return;
+
+  const indexed = readBundledPluginIndexDirNames(openclawRoot);
+  if (!indexed) {
+    throw new Error(
+      '[after-pack] Could not read BUNDLED_PLUGIN_METADATA index from openclaw dist — '
+      + 'refusing to pack dist/extensions into ASAR (unindexed extensions would crash the Gateway).',
+    );
+  }
+
+  const removed = [];
+  for (const entry of readdirSync(extensionsDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (indexed.has(entry.name)) continue;
+    rmSync(join(extensionsDir, entry.name), { recursive: true, force: true });
+    removed.push(entry.name);
+  }
+  if (removed.length > 0) {
+    console.log(
+      `[after-pack] ✅ Removed ${removed.length} unindexed bundled extensions `
+      + `(ASAR-incompatible manifest check): ${removed.join(', ')}`,
+    );
+  }
+}
+
+function validateOpenclawBundleBeforeAsar(openclawRoot) {
+  const requiredPaths = [
+    'openclaw.mjs',
+    'package.json',
+    join('docs', 'reference', 'templates', 'AGENTS.md'),
+    join('node_modules', 'yaml', 'dist', 'doc', 'directives.js'),
+    join('node_modules', 'yaml', 'dist', 'compose', 'composer.js'),
+    join('node_modules', 'zod', 'v4', 'locales', 'index.js'),
+    join('node_modules', 'zod', 'v4', 'core', 'index.js'),
+  ];
+
+  const missing = requiredPaths.filter((rel) => !existsSync(join(openclawRoot, rel)));
+  if (missing.length > 0) {
+    throw new Error(
+      `[after-pack] OpenClaw bundle validation failed — missing runtime files:\n`
+      + missing.map((p) => `  - ${p}`).join('\n'),
+    );
+  }
+
+  // Every remaining dist/extensions dir MUST be covered by the precompiled
+  // plugin index, otherwise the Gateway fails config validation inside ASAR.
+  const extensionsDir = join(openclawRoot, 'dist', 'extensions');
+  if (existsSync(extensionsDir)) {
+    const indexed = readBundledPluginIndexDirNames(openclawRoot) ?? new Set();
+    const unindexed = readdirSync(extensionsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !indexed.has(entry.name))
+      .map((entry) => entry.name);
+    if (unindexed.length > 0) {
+      throw new Error(
+        `[after-pack] OpenClaw bundle validation failed — unindexed extensions would crash the Gateway inside ASAR:\n`
+        + unindexed.map((p) => `  - dist/extensions/${p}`).join('\n'),
+      );
+    }
+  }
+}
+
+// ── Plugin node_modules dedupe against openclaw runtime ─────────────────────
+// Bundled plugins copy transitive deps into their own node_modules. Packages
+// with the same name+version as openclaw's runtime are removed; Gateway resolves
+// them via NODE_PATH (see getOpenClawNodeModulesPath in electron/utils/paths.ts).
+
+function readPackageVersion(pkgDir) {
+  try {
+    const raw = readFileSync(join(pkgDir, 'package.json'), 'utf8');
+    return JSON.parse(raw).version ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function buildOpenclawPackageIndex(openclawNodeModulesDir) {
+  const index = new Map();
+  if (!existsSync(openclawNodeModulesDir)) return index;
+
+  for (const entry of readdirSync(openclawNodeModulesDir)) {
+    if (entry === '.bin') continue;
+    const fullPath = join(openclawNodeModulesDir, entry);
+    if (entry.startsWith('@')) {
+      let subs;
+      try { subs = readdirSync(fullPath); } catch { continue; }
+      for (const sub of subs) {
+        index.set(`${entry}/${sub}`, readPackageVersion(join(fullPath, sub)));
+      }
+    } else {
+      index.set(entry, readPackageVersion(fullPath));
+    }
+  }
+  return index;
+}
+
+function removeEmptyPluginNodeModules(pluginNodeModulesDir) {
+  if (!existsSync(pluginNodeModulesDir)) return;
+  let entries;
+  try { entries = readdirSync(pluginNodeModulesDir); } catch { return; }
+  if (entries.length === 0 || (entries.length === 1 && entries[0] === '.bin')) {
+    rmSync(pluginNodeModulesDir, { recursive: true, force: true });
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.startsWith('@')) continue;
+    const scopeDir = join(pluginNodeModulesDir, entry);
+    try {
+      if (readdirSync(scopeDir).length === 0) {
+        rmSync(scopeDir, { recursive: true, force: true });
+      }
+    } catch { /* */ }
+  }
+}
+
+function dedupePluginNodeModules(pluginDir, openclawPackageIndex) {
+  const pluginNodeModulesDir = join(pluginDir, 'node_modules');
+  if (!existsSync(pluginNodeModulesDir) || openclawPackageIndex.size === 0) return 0;
+
+  let removed = 0;
+  for (const entry of readdirSync(pluginNodeModulesDir)) {
+    if (entry === '.bin') continue;
+    const fullPath = join(pluginNodeModulesDir, entry);
+    if (entry.startsWith('@')) {
+      let subs;
+      try { subs = readdirSync(fullPath); } catch { continue; }
+      for (const sub of subs) {
+        const pkgName = `${entry}/${sub}`;
+        const runtimeVersion = openclawPackageIndex.get(pkgName);
+        if (runtimeVersion == null) continue;
+        const pluginVersion = readPackageVersion(join(fullPath, sub));
+        if (pluginVersion === runtimeVersion) {
+          try {
+            rmSync(join(fullPath, sub), { recursive: true, force: true });
+            removed++;
+          } catch { /* */ }
+        }
+      }
+      try {
+        if (existsSync(fullPath) && readdirSync(fullPath).length === 0) {
+          rmSync(fullPath, { recursive: true, force: true });
+        }
+      } catch { /* */ }
+    } else {
+      const runtimeVersion = openclawPackageIndex.get(entry);
+      if (runtimeVersion == null) continue;
+      const pluginVersion = readPackageVersion(fullPath);
+      if (pluginVersion === runtimeVersion) {
+        try {
+          rmSync(fullPath, { recursive: true, force: true });
+          removed++;
+        } catch { /* */ }
+      }
+    }
+  }
+
+  removeEmptyPluginNodeModules(pluginNodeModulesDir);
+  return removed;
 }
 
 // ── Platform-specific: koffi ─────────────────────────────────────────────────
@@ -549,8 +845,6 @@ exports.default = async function afterPack(context) {
 
   console.log(`[after-pack] Target: ${platform}/${arch}`);
 
-  const src = join(__dirname, '..', 'build', 'openclaw', 'node_modules');
-
   let resourcesDir;
   if (platform === 'darwin') {
     const appName = context.packager.appInfo.productFilename;
@@ -559,24 +853,36 @@ exports.default = async function afterPack(context) {
     resourcesDir = join(appOutDir, 'resources');
   }
 
+  const buildOpenclawRoot = join(__dirname, '..', 'build', 'openclaw');
   const openclawRoot = join(resourcesDir, 'openclaw');
   const dest = join(openclawRoot, 'node_modules');
   const nodeModulesRoot = join(__dirname, '..', 'node_modules');
   const pluginsDestRoot = join(resourcesDir, 'openclaw-plugins');
 
+  if (!existsSync(buildOpenclawRoot)) {
+    console.warn('[after-pack] ⚠️  build/openclaw not found. Run bundle-openclaw first.');
+    return;
+  }
+
+  console.log('[after-pack] Materializing openclaw package from build/openclaw ...');
+  if (existsSync(openclawRoot)) rmSync(openclawRoot, { recursive: true, force: true });
+  cpSync(buildOpenclawRoot, openclawRoot, { recursive: true, dereference: true });
+
+  const src = join(buildOpenclawRoot, 'node_modules');
   if (!existsSync(src)) {
     console.warn('[after-pack] ⚠️  build/openclaw/node_modules not found. Run bundle-openclaw first.');
     return;
   }
 
-  // 1. Copy node_modules (electron-builder skips it due to .gitignore)
-  const depCount = readdirSync(src, { withFileTypes: true })
-    .filter(d => d.isDirectory() && d.name !== '.bin')
-    .length;
-
-  console.log(`[after-pack] Copying ${depCount} openclaw dependencies to ${dest} ...`);
-  cpSync(src, dest, { recursive: true });
-  console.log('[after-pack] ✅ openclaw node_modules copied.');
+  if (!existsSync(dest)) {
+    console.log('[after-pack] Copying openclaw node_modules (missing after materialize) ...');
+    cpSync(src, dest, { recursive: true });
+  } else {
+    const depCount = readdirSync(src, { withFileTypes: true })
+      .filter(d => d.isDirectory() && d.name !== '.bin')
+      .length;
+    console.log(`[after-pack] ✅ openclaw materialized with ${depCount} dependencies.`);
+  }
 
   // Patch broken modules whose CJS transpiled output sets module.exports = undefined,
   // causing TypeError in Node.js 22+ ESM interop.
@@ -597,10 +903,12 @@ exports.default = async function afterPack(context) {
     { type: 'local', localDir: 'sto-scheduled-task-tool', pluginId: 'sto-scheduled-task-tool' },
     { type: 'local', localDir: 'sto-skill-call-monitor', pluginId: 'sto-skill-call-monitor' },
     { type: 'local', localDir: 'sto-dingtalk-send-guard', pluginId: 'sto-dingtalk-send-guard' },
+    { type: 'local', localDir: 'sto-workflow-tool', pluginId: 'sto-workflow-tool' },
   ];
 
   const localPluginSourceRoot = join(__dirname, '..', 'sto-plugin');
   const preBuildRoot = join(__dirname, '..', 'build', 'openclaw-plugins');
+  const STO_TOOLKIT_DIR = 'sto-toolkit';
 
   mkdirSync(pluginsDestRoot, { recursive: true });
   for (const plugin of BUNDLED_PLUGINS) {
@@ -629,6 +937,43 @@ exports.default = async function afterPack(context) {
     }
   }
 
+  // Nest sto-toolkit inside sto-workflow-tool (OpenClaw scans extensions/* as plugins).
+  const workflowDestDir = join(pluginsDestRoot, 'sto-workflow-tool');
+  const legacyToolkitSibling = join(pluginsDestRoot, STO_TOOLKIT_DIR);
+  if (existsSync(legacyToolkitSibling)) {
+    rmSync(normWin(legacyToolkitSibling), { recursive: true, force: true });
+    console.log(`[after-pack] Removed legacy extensions/${STO_TOOLKIT_DIR} sibling`);
+  }
+  if (existsSync(join(workflowDestDir, 'openclaw.plugin.json'))) {
+    const nestedToolkitDir = join(workflowDestDir, STO_TOOLKIT_DIR);
+    const nestedPreBuild = join(preBuildRoot, 'sto-workflow-tool', STO_TOOLKIT_DIR);
+    const toolkitSourceDir = join(localPluginSourceRoot, STO_TOOLKIT_DIR);
+    const toolkitSource =
+      existsSync(join(nestedPreBuild, 'index.ts'))
+        ? nestedPreBuild
+        : existsSync(join(toolkitSourceDir, 'index.ts'))
+          ? toolkitSourceDir
+          : null;
+    if (toolkitSource) {
+      console.log(`[after-pack] Copying ${STO_TOOLKIT_DIR} -> ${nestedToolkitDir}`);
+      if (existsSync(normWin(nestedToolkitDir))) rmSync(normWin(nestedToolkitDir), { recursive: true, force: true });
+      mkdirSync(normWin(nestedToolkitDir), { recursive: true });
+      cpSync(normWin(toolkitSource), normWin(nestedToolkitDir), {
+        recursive: true,
+        dereference: true,
+        filter: (src) => {
+          const name = basename(src);
+          if (/\.(test|spec)\.(ts|js|mjs)$/.test(name)) return false;
+          if (name === '__tests__' || name === 'node_modules') return false;
+          return true;
+        },
+      });
+      cleanupUnnecessaryFiles(nestedToolkitDir);
+    } else {
+      console.warn(`[after-pack] ⚠️  ${STO_TOOLKIT_DIR} not found; sto-workflow-tool may fail to load`);
+    }
+  }
+
   // 2. General cleanup on the full openclaw directory (not just node_modules)
   console.log('[after-pack] 🧹 Cleaning up unnecessary files ...');
   const removedRoot = cleanupUnnecessaryFiles(openclawRoot);
@@ -651,6 +996,18 @@ exports.default = async function afterPack(context) {
   if (existsSync(llamaCppDir)) {
     rmSync(llamaCppDir, { recursive: true, force: true });
     console.log('[after-pack] ✅ Removed @node-llama-cpp (not needed, using Ollama/vLLM HTTP API instead).');
+  }
+
+  // 5.1 Dedupe plugin node_modules against openclaw runtime (same name + version)
+  const openclawPackageIndex = buildOpenclawPackageIndex(dest);
+  let totalPluginDeduped = 0;
+  for (const plugin of BUNDLED_PLUGINS) {
+    const pluginDestDir = join(pluginsDestRoot, plugin.pluginId);
+    if (!existsSync(pluginDestDir)) continue;
+    totalPluginDeduped += dedupePluginNodeModules(pluginDestDir, openclawPackageIndex);
+  }
+  if (totalPluginDeduped > 0) {
+    console.log(`[after-pack] ✅ Deduped ${totalPluginDeduped} plugin packages already in openclaw runtime.`);
   }
 
   // 6. Remove excluded OpenClaw built-in skills (not needed for StoClaw distribution)
@@ -714,5 +1071,34 @@ exports.default = async function afterPack(context) {
     if (removedDistSkills > 0) {
       console.log(`[after-pack] ✅ Removed ${removedDistSkills} excluded skills from dist/.`);
     }
+  }
+
+  // 7. Validate + pack openclaw + plugins into ASAR archives to reduce NSIS file count.
+  removeUnindexedBundledExtensions(openclawRoot);
+  validateOpenclawBundleBeforeAsar(openclawRoot);
+  console.log('[after-pack] ✅ OpenClaw bundle validation passed (yaml/zod runtime paths present).');
+
+  const looseFileCount = countFilesRecursive(openclawRoot)
+    + countFilesRecursive(pluginsDestRoot);
+  console.log(`[after-pack] Loose resource files before ASAR pack: ${looseFileCount}`);
+
+  await packDirectoryToAsar(openclawRoot, join(resourcesDir, 'openclaw.asar'), 'OpenClaw runtime');
+
+  const hasPlugins = existsSync(pluginsDestRoot)
+    && readdirSync(pluginsDestRoot).some((entry) => {
+      try {
+        return statSync(join(pluginsDestRoot, entry)).isDirectory();
+      } catch {
+        return false;
+      }
+    });
+  if (hasPlugins) {
+    await packDirectoryToAsar(
+      pluginsDestRoot,
+      join(resourcesDir, 'openclaw-plugins.asar'),
+      'OpenClaw plugins',
+    );
+  } else if (existsSync(pluginsDestRoot)) {
+    rmSync(pluginsDestRoot, { recursive: true, force: true });
   }
 };

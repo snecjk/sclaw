@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "plugins": [
+    {
+      "id": "sto-workflow-tool",
+      "localDir": "sto-workflow-tool",
+      "sharedLibs": ["sto-toolkit"],
+      "enabled": true,
+      "tools": [
+        "search_workflow_templates",
+        "get_workflow_schema",
+        "create_workflow",
+        "execute_workflow",
+        "get_workflow_status"
+      ]
+    },
+    {
+      "id": "sto-scheduled-task-tool",
+      "localDir": "sto-scheduled-task-tool",
+      "enabled": false,
+      "tools": ["create_scheduled_task"]
+    }
+  ]
+}

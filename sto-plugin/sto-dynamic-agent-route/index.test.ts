@@ -384,6 +384,7 @@ describe("sto-dynamic-agent-route plugin", () => {
 			);
 
 			expect(result).toBeDefined();
+			expect(result?.appendSystemContext).toContain("产物文件引用规范");
 			expect(result?.appendSystemContext).toContain("当前登录用户信息（已认证）");
 			expect(result?.appendSystemContext).toContain("用户名：test-user");
 			expect(result?.appendSystemContext).toContain("真实姓名：Test User");
@@ -393,7 +394,7 @@ describe("sto-dynamic-agent-route plugin", () => {
 			expect(result?.appendSystemContext).toContain("组织名称（departmentName）：Test Department");
 		});
 
-		it("returns undefined when no SSO auth file exists", async () => {
+		it("injects artifact citation rules but no SSO block when no SSO auth file exists", async () => {
 			const api = buildApi({ ssoAuthPath: join(tempDir, "nonexistent.json") });
 			register.register(api as any);
 
@@ -402,13 +403,15 @@ describe("sto-dynamic-agent-route plugin", () => {
 				{ agentId: "agent-1", sessionKey: "sess-abc", trigger: "user" },
 			);
 
-			expect(result).toBeUndefined();
+			expect(result).toBeDefined();
+			expect(result?.appendSystemContext).toContain("产物文件引用规范");
+			expect(result?.appendSystemContext).not.toContain("当前登录用户信息");
 			expect(api.logger.warn).toHaveBeenCalledWith(
 				expect.stringContaining("failed to read SSO auth"),
 			);
 		});
 
-		it("returns undefined when auth file has no userName", async () => {
+		it("injects artifact citation rules but no SSO block when auth file has no userName", async () => {
 			const ssoPath = join(tempDir, "sso-auth.json");
 			await writeFile(ssoPath, JSON.stringify({ stoToken: "tok-123" }));
 
@@ -420,10 +423,9 @@ describe("sto-dynamic-agent-route plugin", () => {
 				{ agentId: "agent-1", sessionKey: "sess-abc", trigger: "user" },
 			);
 
-			expect(result).toBeUndefined();
-			expect(api.logger.debug).toHaveBeenCalledWith(
-				expect.stringContaining("no SSO auth found, skipping context injection"),
-			);
+			expect(result).toBeDefined();
+			expect(result?.appendSystemContext).toContain("产物文件引用规范");
+			expect(result?.appendSystemContext).not.toContain("当前登录用户信息");
 		});
 	});
 });

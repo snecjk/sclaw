@@ -1,0 +1,57 @@
+{
+  "id": "sto-workflow-tool",
+  "name": "申通工作流内置工具",
+  "description": "提供工作流模板搜索、执行等内置 OpenClaw Tools，直接调用 STO HTTP API",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "description": "STO 后端 base URL"
+      },
+      "ssoAuthPath": {
+        "type": "string",
+        "default": "~/.stoclaw/openclaw/sso-auth.json",
+        "description": "SSO 凭据文件路径"
+      },
+      "timeoutMs": {
+        "type": "number",
+        "default": 30000,
+        "description": "HTTP 超时毫秒"
+      }
+    }
+  },
+  "tools": [
+    "search_workflow_templates",
+    "get_workflow_schema",
+    "create_workflow",
+    "execute_workflow",
+    "get_workflow_status"
+  ],
+  "toolConfig": {
+    "search_workflow_templates": {
+      "label": "查询工作流模板",
+      "help": "用户要创建或查找工作流时，根据自然语言搜索匹配模板"
+    },
+    "get_workflow_schema": {
+      "label": "获取工作流参数模板",
+      "help": "选定模板后获取启动参数 schema"
+    },
+    "create_workflow": {
+      "label": "创建工作流实例",
+      "help": "参数确认后创建工作流，返回 workflowId"
+    },
+    "execute_workflow": {
+      "label": "执行工作流",
+      "help": "启动已创建的工作流实例；用户说执行、重新执行、再跑一遍时必须使用本工具"
+    },
+    "get_workflow_status": {
+      "label": "查询运行状态",
+      "help": "按 runId 查询工作流执行状态"
+    }
+  }
+}

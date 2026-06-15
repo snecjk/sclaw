@@ -122,8 +122,9 @@ export default function ScheduledTasks() {
           // Switch to the per-run agent session (dated) instead of the summary session
           const today = new Date().toISOString().slice(0, 10);
           const agentSessionKey = `agent:main:scheduled-task:${job.id}:${today}`;
-          useChatStore.getState().switchSession(agentSessionKey);
-          navigateToMainChatHome(navigate, location.pathname);
+          navigateToMainChatHome(navigate, location.pathname, () => {
+            useChatStore.getState().switchSession(agentSessionKey);
+          });
           toast.success('测试运行已完成，结果已添加到会话');
           // Refresh sessions so the new agent session appears in the sidebar
           void useChatStore.getState().loadSessions();

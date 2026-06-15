@@ -9,6 +9,7 @@ import {
 } from './helpers';
 import { DEFAULT_CANONICAL_PREFIX, DEFAULT_SESSION_KEY, type ChatSession, type RawMessage } from './types';
 import { parseCronSessionKey, parseScheduledTaskAgentSessionKey, parseScheduledTaskSessionKey } from './cron-session-utils';
+import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 
 function getAgentIdFromSessionKey(sessionKey: string): string {
@@ -59,6 +60,39 @@ export function createSessionActions(
           }
         } catch (err) {
           console.warn('Failed to load scheduled task sessions:', err);
+        }
+
+        // Also load cron dated sessions from local filesystem (Gateway may prune old ones)
+        try {
+          const cronResult = await hostApiFetch<{ sessions?: Array<{ key: string; label: string; updatedAt?: number }> }>(
+            '/api/cron/sessions',
+          );
+          if (cronResult.sessions) {
+            rawSessions = [...rawSessions, ...cronResult.sessions];
+          }
+        } catch (err) {
+          console.warn('Failed to load cron sessions:', err);
+        }
+
+        // If a local cron job has virtual dated sessions, drop its base session
+        // from Gateway to avoid duplicate entries in the sidebar.
+        const cronJobIdsWithDates = new Set<string>();
+        for (const s of rawSessions) {
+          const key = String(s.key || '');
+          const parsed = parseCronSessionKey(key);
+          if (parsed?.date) {
+            cronJobIdsWithDates.add(parsed.jobId);
+          }
+        }
+        if (cronJobIdsWithDates.size > 0) {
+          rawSessions = rawSessions.filter((s) => {
+            const key = String(s.key || '');
+            const parsed = parseCronSessionKey(key);
+            if (parsed && !parsed.date && !parsed.runSessionId && cronJobIdsWithDates.has(parsed.jobId)) {
+              return false;
+            }
+            return true;
+          });
         }
 
         const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
@@ -219,9 +253,9 @@ export function createSessionActions(
           get().loadHistory();
         }
 
-        // Background: fetch first user message for every non-main session to populate labels upfront.
+        // Background: fetch first user message for every session to populate labels upfront.
         // Uses a small limit so it's cheap; runs in parallel and doesn't block anything.
-        const sessionsToLabel = sessionsWithCurrent.filter((s) => !s.key.endsWith(':main'));
+        const sessionsToLabel = sessionsWithCurrent;
         if (sessionsToLabel.length > 0) {
           void Promise.all(
             sessionsToLabel.map(async (session) => {
@@ -237,8 +271,9 @@ export function createSessionActions(
                 const lastMsg = msgs[msgs.length - 1];
                 set((s) => {
                   const next: Partial<typeof s> = {};
-                  if (firstUser && !s.sessionLabels[session.key]) {
-                    const labelText = getMessageText(firstUser.content).trim();
+                  const existingLabel = s.sessionLabels[session.key];
+                  if (firstUser && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+                    const labelText = deriveSessionLabelFromUserText(getMessageText(firstUser.content));
                     if (labelText) {
                       const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
                       next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };

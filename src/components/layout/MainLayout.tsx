@@ -2,22 +2,44 @@
  * Main Layout Component
  * TitleBar at top, then sidebar + content below.
  */
-import { useEffect } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
-import { shouldRestoreMainSessionLeavingTaskSubitem } from '@/lib/sto-task-session';
+import { useEffect, useRef } from 'react';
+import { matchPath, Outlet, useLocation } from 'react-router-dom';
+import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { useChatStore } from '@/stores/chat';
 import { Sidebar } from './Sidebar';
 import { TitleBar } from './TitleBar';
 
 export function MainLayout() {
   const { pathname } = useLocation();
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const switchToAgentMainSession = useChatStore((s) => s.switchToAgentMainSession);
 
+  const prevPathnameRef = useRef(pathname);
+  const prevSessionKeyRef = useRef(currentSessionKey);
+
   useEffect(() => {
-    const { currentSessionKey } = useChatStore.getState();
-    if (!shouldRestoreMainSessionLeavingTaskSubitem(pathname, currentSessionKey)) return;
-    switchToAgentMainSession('main');
-  }, [pathname, switchToAgentMainSession]);
+    const prevPathname = prevPathnameRef.current;
+    const prevSessionKey = prevSessionKeyRef.current;
+
+    const wasOnSubitem = matchPath({ path: '/tasks/:taskId/:entryId', end: true }, prevPathname);
+    const nowOnSubitem = matchPath({ path: '/tasks/:taskId/:entryId', end: true }, pathname);
+
+    // Only reset to main when the user actually *left* a task subitem route
+    // without switching to another session in the same interaction. If
+    // currentSessionKey changed alongside the pathname, it means the user
+    // clicked a sidebar item to switch sessions deliberately; do not reset.
+    if (
+      wasOnSubitem &&
+      !nowOnSubitem &&
+      isHiddenStoTaskSubitemChatSessionKey(prevSessionKey) &&
+      currentSessionKey === prevSessionKey
+    ) {
+      switchToAgentMainSession('main');
+    }
+
+    prevPathnameRef.current = pathname;
+    prevSessionKeyRef.current = currentSessionKey;
+  }, [pathname, currentSessionKey, switchToAgentMainSession]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--sto-page-bg)] dark:bg-background">

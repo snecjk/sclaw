@@ -99,7 +99,7 @@ export function Sprite() {
       setView('chat');
       setAwaitingReply(true);
       msgBaseIndexRef.current = useChatStore.getState().messages.length;
-      sendMessage(text);
+      sendMessage({ text });
     },
     [sendMessage],
   );

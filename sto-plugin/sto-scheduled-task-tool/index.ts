@@ -31,7 +31,7 @@ export default definePluginEntry({
         description: Type.String({ description: "任务描述，说明任务的具体内容" }),
         notifyMode: Type.Optional(Type.String({ description: "通知方式：'none'（不通知）、'dingtalk'（钉钉通知）" })),
       }),
-      execute: async (params, _ctx) => {
+      execute: async (_toolCallId, params) => {
         api.logger.info?.(
           `[sto-scheduled-task-tool] execute: name=${params.name}, cronExpr=${params.cronExpr}`,
         );

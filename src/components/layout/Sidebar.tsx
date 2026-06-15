@@ -49,13 +49,14 @@ import { useTranslation } from 'react-i18next';
 import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
 import logoSvg from '@/assets/logo.svg';
 import packageJson from '../../../package.json';
-import { taskDetailPath, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
+import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
 import { parseCronSessionKey, parseScheduledTaskAgentSessionKey } from '@/stores/chat/cron-session-utils';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
+import { getCurrentEnvConfig } from '../../../shared/env-config';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
 
@@ -106,7 +107,7 @@ function collapsedEntryLabel(full: string): string {
 }
 
 const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' | 'taskWeeklyPpt' }[] = [
-  // { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation' },
+  { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation' },
 ];
 
 function SidebarTaskDateLinks({
@@ -249,11 +250,7 @@ function SidebarTaskGroup({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId]); // Only depend on taskId, not entries
-  const overviewTo = taskOverviewPath(taskId);
-  const underTask =
-    entries.length > 0
-      ? pathname.startsWith(`/tasks/${taskId}`)
-      : pathname === overviewTo || pathname.startsWith(`${overviewTo}/`);
+  const underTask = pathname.startsWith(`/tasks/${taskId}`);
 
   const [open, setOpen] = useState(true);
   const prevUnderTask = useRef<boolean | null>(null);
@@ -268,20 +265,7 @@ function SidebarTaskGroup({
   }, [underTask]);
 
   if (entries.length === 0) {
-    return (
-      <NavLink
-        to={overviewTo}
-        className="flex items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] text-left transition-colors"
-      >
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{label}</span>
-        {hasUnreadSubitem ? (
-          <span
-            className="h-2 w-2 shrink-0 rounded-full bg-[hsl(var(--destructive))]"
-            aria-label={tTasks('unreadBadge', { defaultValue: 'Unread' })}
-          />
-        ) : null}
-      </NavLink>
-    );
+    return null;
   }
 
   const panelId = `sto-sidebar-task-${taskId}-entries`;
@@ -345,6 +329,7 @@ function SidebarScheduledTaskGroup({
   const [open, setOpen] = useState(true);
   const { switchSession, currentSessionKey } = useChatStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation(['common', 'tasks']);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
 
@@ -410,8 +395,7 @@ function SidebarScheduledTaskGroup({
                 <button
                   type="button"
                   onClick={() => {
-                    switchSession(s.key);
-                    navigateToMainChatHome(navigate, location.pathname);
+                    navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
                   }}
                   title={label}
                   className={cn(
@@ -631,26 +615,6 @@ export function Sidebar() {
 
       const hasExistingMessages = useChatStore.getState().messages.length > 0;
       await loadHistory(hasExistingMessages);
-
-      // 刷新后如果在首页路由，重置到首页初始状态，避免同时高亮首页和会话项
-      if (window.location.pathname === '/') {
-        const state = useChatStore.getState();
-        if (state.currentSessionKey !== DEFAULT_SESSION_KEY || state.messages.length > 0) {
-          useChatStore.setState({
-            currentSessionKey: DEFAULT_SESSION_KEY,
-            currentAgentId: 'main',
-            messages: [],
-            streamingText: '',
-            streamingMessage: null,
-            streamingTools: [],
-            activeRunId: null,
-            error: null,
-            pendingFinal: false,
-            lastUserMessageAt: null,
-            pendingToolImages: [],
-          });
-        }
-      }
     })();
     return () => {
       cancelled = true;
@@ -798,7 +762,7 @@ export function Sidebar() {
     ];
     return all.filter((item) => {
       if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
-      if (item.to === '/scheduled-tasks' && import.meta.env.PROD) return false;
+      if (item.to === '/scheduled-tasks' && getCurrentEnvConfig().isProduction) return false;
       return true;
     });
   }, [sidebarVis.primaryMyData, t]);
@@ -855,16 +819,16 @@ export function Sidebar() {
 
       <nav
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden pb-2 pt-2',
+          'flex shrink-0 flex-col gap-1 overflow-hidden pb-2 pt-2',
           sidebarCollapsed ? 'px-0' : 'px-2',
         )}
       >
-        {/* 固定区：避免下方 flex-1 会话占位在滚动叠层时盖住任务子链（如第二条日期药丸） */}
-        <div className="relative z-10 flex shrink-0 flex-col gap-1">
+        {/* 固定区：首页、定时任务、技能广场、工作区等 */}
+        <div className="flex shrink-0 flex-col gap-1">
         <div className={cn('flex flex-col gap-1', sidebarCollapsed && 'mt-2')}>
 {primaryNav.map((item) => {
   // 当有选中非默认会话时，首页不高亮，避免与会话列表项同时高亮
-  const shouldDimHome = isOnHome && currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY;
+  const shouldDimHome = currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY;
   const homeIsActiveOverride = item.to === '/' && shouldDimHome ? false : undefined;
   
   // 点击首页时，切换到默认会话并清空消息，让首页显示初始内容
@@ -905,6 +869,40 @@ export function Sidebar() {
 })}
         </div>
 
+        {sidebarVis.workspace ? (
+          !sidebarCollapsed ? (
+            <SidebarCollapsibleSectionLabel
+              open={workspaceSectionOpen}
+              onToggle={() => setWorkspaceSectionOpen((o) => !o)}
+              label={t('common:sidebar.workspace')}
+              toggleAriaLabel={t('common:sidebar.toggleWorkspaceSection')}
+            />
+          ) : (
+            <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
+          )
+        ) : null}
+        {sidebarVis.workspace && (sidebarCollapsed || workspaceSectionOpen) && (
+        <div className="flex flex-col gap-1">
+          {workspaceNav.map((item) => (
+            <SidebarNavLink
+              key={item.to}
+              to={item.to}
+              icon={item.icon}
+              label={item.label}
+              collapsed={sidebarCollapsed}
+            />
+          ))}
+        </div>
+        )}
+        </div>
+      </nav>
+
+      <div
+        className={cn(
+          'min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden',
+          sidebarCollapsed ? 'px-0' : 'px-2',
+        )}
+      >
         {!sidebarCollapsed ? (
           <SidebarCollapsibleSectionLabel
             open={taskListSectionOpen}
@@ -934,32 +932,6 @@ export function Sidebar() {
           </div>
         ) : null}
 
-        {sidebarVis.workspace ? (
-          !sidebarCollapsed ? (
-            <SidebarCollapsibleSectionLabel
-              open={workspaceSectionOpen}
-              onToggle={() => setWorkspaceSectionOpen((o) => !o)}
-              label={t('common:sidebar.workspace')}
-              toggleAriaLabel={t('common:sidebar.toggleWorkspaceSection')}
-            />
-          ) : (
-            <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
-          )
-        ) : null}
-        {sidebarVis.workspace && (sidebarCollapsed || workspaceSectionOpen) && (
-        <div className="flex flex-col gap-1">
-          {workspaceNav.map((item) => (
-            <SidebarNavLink
-              key={item.to}
-              to={item.to}
-              icon={item.icon}
-              label={item.label}
-              collapsed={sidebarCollapsed}
-            />
-          ))}
-        </div>
-        )}
-
         {sidebarVis.conversationChrome ? (
           !sidebarCollapsed ? (
             <p className="mt-4 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
@@ -975,9 +947,10 @@ export function Sidebar() {
             <button
               type="button"
               onClick={() => {
-                const { messages } = useChatStore.getState();
-                if (messages.length > 0) newSession();
-                navigateToMainChatHome(navigate, location.pathname);
+                navigateToMainChatHome(navigate, location.pathname, () => {
+                  const { messages } = useChatStore.getState();
+                  if (messages.length > 0) newSession();
+                });
               }}
               className="mx-1 mt-1 flex items-center gap-2 rounded-xl border border-[rgba(255,140,0,0.35)] bg-[var(--sto-accent-soft)] px-3 py-2.5 text-left text-[13px] font-semibold text-[var(--sto-accent)] shadow-sm transition-colors hover:opacity-95 dark:bg-amber-950/35"
             >
@@ -992,9 +965,10 @@ export function Sidebar() {
                   aria-label={t('common:sidebar.newChat')}
                   title={t('common:sidebar.newChat')}
                   onClick={() => {
-                    const { messages } = useChatStore.getState();
-                    if (messages.length > 0) newSession();
-                    navigateToMainChatHome(navigate, location.pathname);
+                    navigateToMainChatHome(navigate, location.pathname, () => {
+                      const { messages } = useChatStore.getState();
+                      if (messages.length > 0) newSession();
+                    });
                   }}
                   className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card"
                 >
@@ -1012,9 +986,8 @@ export function Sidebar() {
             </Tooltip>
           )
         ) : null}
-        </div>
 
-        <div className="relative z-0 min-h-0 flex-1 overflow-y-auto overflow-x-hidden space-y-1 pb-2 pt-1">
+        <div className="space-y-1 pb-2 pt-1">
           {sidebarCollapsed && sessionsOrderedForCollapse.length > 0 ? (
             <div className="flex flex-col gap-1">
               {sessionsOrderedForCollapse.map((s) => {
@@ -1027,8 +1000,7 @@ export function Sidebar() {
                       <button
                         type="button"
                         onClick={() => {
-                          switchSession(s.key);
-                          navigateToMainChatHome(navigate, location.pathname);
+                          navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
                         }}
                         className={cn(
                           'mx-auto flex min-h-0 min-w-0 items-center justify-center rounded-[8px] font-medium leading-none transition-colors',
@@ -1111,8 +1083,7 @@ export function Sidebar() {
                             <button
                               type="button"
                               onClick={() => {
-                                switchSession(s.key);
-                                navigateToMainChatHome(navigate, location.pathname);
+                                navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
                               }}
                               title={sessionLabel}
                               className={cn(
@@ -1173,7 +1144,7 @@ isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION
             )
           )}
         </div>
-      </nav>
+      </div>
 
       {authUser ? (
         <div className="shrink-0 bg-[var(--sto-sidebar-bg)] p-2">

@@ -57,3 +57,14 @@ export function prependPathEntry(
     path: nextPath,
   };
 }
+
+export function prependNodePathEntry(
+  env: EnvMap,
+  entry: string,
+): EnvMap {
+  const nextEnv: EnvMap = { ...env };
+  const delimiter = pathDelimiter();
+  const current = nextEnv.NODE_PATH ?? '';
+  nextEnv.NODE_PATH = current ? `${entry}${delimiter}${current}` : entry;
+  return nextEnv;
+}

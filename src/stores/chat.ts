@@ -11,10 +11,9 @@ import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
+import { stripWorkflowContextForDisplay } from '@/lib/workflow-context';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
-import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
-import type { DingTalkMention } from '@/types/dingtalk-mention';
-import { buildCronSessionHistoryPath, isCronSessionKey } from './chat/cron-session-utils';
+import { buildCronSessionHistoryPath, isCronSessionKey, parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './chat/cron-session-utils';
 import { sanitizeSessionDisplayField } from './chat/helpers';
 import {
   DEFAULT_CANONICAL_PREFIX,
@@ -26,6 +25,23 @@ import {
   type RawMessage,
   type ToolStatus,
 } from './chat/types';
+import type { WorkflowExecutionState } from '@/types/workflow';
+import { mergeLocalWorkflowTurnsFromCurrent, mergeWorkflowTurnsFromMemory } from '@/lib/workflow-local-turn';
+import { buildWorkflowCardStatesForSession } from '@/stores/workflow-memory';
+import { hydrateSessionWorkflowCards } from '@/lib/workflow-run-hydration';
+import { upgradeWorkflowParamUserMessages } from '@/lib/workflow-param-messages';
+import {
+  absorbWorkflowSchemaFromToolResults,
+  appendWorkflowParameterFormToMessage,
+  ensureWorkflowParameterFormInjected,
+  mergeParameterFormBlocksFromCurrent,
+  patchLastAssistantWithWorkflowForm,
+  isWorkflowFormInjectionAllowed,
+  reconcilePendingWorkflowForSession,
+  recoverParameterFormsOnHistoryLoad,
+} from './chat/parameter-form-recovery';
+import { dispatchBuiltinToolResult } from '@/lib/builtin-tool-dispatch';
+import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 
 export type {
   AttachedFileMeta,
@@ -33,6 +49,7 @@ export type {
   ContentBlock,
   RawMessage,
   ToolStatus,
+  WorkflowContextBlock,
 } from './chat/types';
 
 // Module-level timestamp tracking the last chat event received.
@@ -784,6 +801,8 @@ function buildSessionSwitchPatch(
     pendingFinal: false,
     lastUserMessageAt: null,
     pendingToolImages: [],
+    workflowCardStates: {},
+    pendingWorkflow: null,
   };
 }
 
@@ -857,6 +876,13 @@ function extractTextFromContent(content: unknown): string {
   }
   return parts.join('\n');
 }
+
+/** Append workflow parameter_form to assistant final when schema is pending. */
+function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
+  return appendWorkflowParameterFormToMessage(message, getMessageText, { allowLivePending: true })
+    ?? message;
+}
+
 
 function summarizeToolOutput(text: string): string | undefined {
   const trimmed = text.trim();
@@ -1093,6 +1119,38 @@ export const useChatStore = create<ChatState>()(
   showThinking: true,
   thinkingLevel: null,
 
+  workflowCardStates: {},
+  setWorkflowCardState: (runId: string, state: WorkflowExecutionState) => {
+    set((s) => ({
+      workflowCardStates: { ...s.workflowCardStates, [runId]: state },
+    }));
+  },
+
+  pendingWorkflow: null,
+  setPendingWorkflow: (pending) => {
+    set({ pendingWorkflow: pending });
+    const sessionKey = get().currentSessionKey;
+    if (pending) {
+      void import('@/stores/workflow-memory').then(({ savePendingWorkflowDraft }) => {
+        savePendingWorkflowDraft(sessionKey, {
+          templateId: pending.templateId,
+          templateName: pending.templateName,
+          schemaHash: pending.schemaHash,
+          collectedInputs: pending.collectedInputs,
+          modelGuidanceSent: pending.modelGuidanceSent,
+        });
+      });
+    }
+  },
+  clearPendingWorkflow: () => {
+    const sessionKey = get().currentSessionKey;
+    const templateId = get().pendingWorkflow?.templateId;
+    set({ pendingWorkflow: null });
+    void import('@/stores/workflow-memory').then(({ clearPendingWorkflowDraft }) => {
+      clearPendingWorkflowDraft(sessionKey, templateId);
+    });
+  },
+
   // ── Load sessions via sessions.list ──
 
   loadSessions: async () => {
@@ -1108,8 +1166,27 @@ export const useChatStore = create<ChatState>()(
     _loadSessionsInFlight = (async () => {
       try {
         const data = await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.list', {});
-        if (data) {
-          const rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
+        let rawSessions: Record<string, unknown>[] = [];
+        if (data && Array.isArray(data.sessions)) {
+          rawSessions = data.sessions;
+        }
+
+        // ── Merge local filesystem sessions (dated cron + scheduled-task runs) ──
+        try {
+          const [stRes, cronRes] = await Promise.all([
+            hostApiFetch('/api/scheduled-tasks/sessions').catch(() => null),
+            hostApiFetch('/api/cron/sessions').catch(() => null),
+          ]);
+          const stData = stRes && typeof stRes === 'object' ? (stRes as Record<string, unknown>) : null;
+          const cronData = cronRes && typeof cronRes === 'object' ? (cronRes as Record<string, unknown>) : null;
+          const stSessions = Array.isArray(stData?.sessions) ? (stData.sessions as Record<string, unknown>[]) : [];
+          const cronSessions = Array.isArray(cronData?.sessions) ? (cronData.sessions as Record<string, unknown>[]) : [];
+          rawSessions = [...rawSessions, ...stSessions, ...cronSessions];
+        } catch {
+          // ignore
+        }
+
+        if (rawSessions.length > 0) {
           const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
             const key = String(s.key || '');
             return {
@@ -1125,8 +1202,29 @@ export const useChatStore = create<ChatState>()(
             };
           }).filter((s: ChatSession) => s.key);
 
-          const canonicalBySuffix = new Map<string, string>();
+          // ── Identify which jobs already have real dated sessions ──
+          const cronDated = new Set<string>();
+          const scheduledTaskDated = new Set<string>();
           for (const session of sessions) {
+            const cronParts = parseCronSessionKey(session.key);
+            if (cronParts && cronParts.date) {
+              cronDated.add(`agent:main:cron:${cronParts.jobId}`);
+            }
+            const stParts = parseScheduledTaskAgentSessionKey(session.key);
+            if (stParts && stParts.date) {
+              scheduledTaskDated.add(`agent:main:scheduled-task:${stParts.taskId}`);
+            }
+          }
+
+          // Filter out base sessions that have dated replacements
+          let filteredSessions = sessions.filter((s) => {
+            if (cronDated.has(s.key)) return false;
+            if (scheduledTaskDated.has(s.key)) return false;
+            return true;
+          });
+
+          const canonicalBySuffix = new Map<string, string>();
+          for (const session of filteredSessions) {
             if (!session.key.startsWith('agent:')) continue;
             const parts = session.key.split(':');
             if (parts.length < 3) continue;
@@ -1138,7 +1236,7 @@ export const useChatStore = create<ChatState>()(
 
           // Deduplicate: if both short and canonical existed, keep canonical only
           const seen = new Set<string>();
-          const dedupedSessions = sessions.filter((s) => {
+          const dedupedSessions = filteredSessions.filter((s) => {
             if (!s.key.startsWith('agent:') && canonicalBySuffix.has(s.key)) return false;
             if (seen.has(s.key)) return false;
             seen.add(s.key);
@@ -1202,8 +1300,9 @@ export const useChatStore = create<ChatState>()(
                   const lastMsg = msgs[msgs.length - 1];
                   set((s) => {
                     const next: Partial<typeof s> = {};
-                    if (firstUser && !s.sessionLabels[session.key]) {
-                      const labelText = getMessageText(firstUser.content).trim();
+                    const existingLabel = s.sessionLabels[session.key];
+                    if (firstUser && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+                      const labelText = deriveSessionLabelFromUserText(getMessageText(firstUser.content));
                       if (labelText) {
                         const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
                         next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
@@ -1414,6 +1513,8 @@ export const useChatStore = create<ChatState>()(
       const applyLoadedMessages = (rawMessages: RawMessage[], thinkingLevel: string | null) => {
       if (get().currentSessionKey !== targetSessionKey) return;
 
+      absorbWorkflowSchemaFromToolResults(rawMessages);
+
       // Before filtering: attach images/files from tool_result messages to the next assistant message
       const messagesWithToolImages = enrichWithToolResultFiles(rawMessages);
       const filteredMessages = messagesWithToolImages.filter((msg) => !isToolResultRole(msg.role));
@@ -1443,17 +1544,128 @@ export const useChatStore = create<ChatState>()(
 
       if (get().currentSessionKey !== targetSessionKey) return;
 
-      set({ messages: finalMessages, thinkingLevel, loading: false });
+      reconcilePendingWorkflowForSession(enrichedMessages, rawMessages, targetSessionKey, getMessageText);
+
+      finalMessages = mergeParameterFormBlocksFromCurrent(
+        finalMessages,
+        get().messages,
+        getMessageText,
+      );
+      finalMessages = mergeLocalWorkflowTurnsFromCurrent(finalMessages, get().messages);
+      finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
+      const restoredCardStates = buildWorkflowCardStatesForSession(targetSessionKey);
+      const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
+        sessionKey: targetSessionKey,
+        get,
+        set,
+        getMessageText,
+        thinkingLevel,
+      });
+      if (formRecovery.deferSet) {
+        const deferredPatched = patchLastAssistantWithWorkflowForm(
+          formRecovery.messages,
+          getMessageText,
+          { rawMessages },
+        );
+        set({
+          messages: deferredPatched,
+          thinkingLevel,
+          loading: false,
+          workflowCardStates: restoredCardStates,
+        });
+        ensureWorkflowParameterFormInjected();
+        void (async () => {
+          const localized = await upgradeWorkflowParamUserMessages(deferredPatched, targetSessionKey);
+          if (get().currentSessionKey !== targetSessionKey) return;
+          const msgs = localized !== deferredPatched ? localized : deferredPatched;
+          const patched = patchLastAssistantWithWorkflowForm(msgs, getMessageText, { rawMessages });
+          if (patched !== msgs) set({ messages: patched });
+          await hydrateSessionWorkflowCards(patched !== msgs ? patched : msgs, {
+            sessionKey: targetSessionKey,
+            agentId: get().currentAgentId,
+          });
+        })();
+        return;
+      }
+      finalMessages = formRecovery.messages;
+      finalMessages = patchLastAssistantWithWorkflowForm(finalMessages, getMessageText, { rawMessages });
+
+      set({
+        messages: finalMessages,
+        thinkingLevel,
+        loading: false,
+        workflowCardStates: restoredCardStates,
+      });
+
+      ensureWorkflowParameterFormInjected();
+
+      void (async () => {
+        const localized = await upgradeWorkflowParamUserMessages(finalMessages, targetSessionKey);
+        if (get().currentSessionKey !== targetSessionKey) return;
+        if (localized !== finalMessages) {
+          set({ messages: localized });
+          finalMessages = localized;
+        }
+        await hydrateSessionWorkflowCards(finalMessages, {
+          sessionKey: targetSessionKey,
+          agentId: get().currentAgentId,
+        });
+      })();
+
+      // Restore in-memory pending workflow from local draft (survives page refresh).
+      if (!get().pendingWorkflow) {
+        void import('@/stores/workflow-memory').then(({ getPendingWorkflowDraft, sessionHasWorkflowExecution, clearPendingWorkflowDraft }) => {
+          const draft = getPendingWorkflowDraft(targetSessionKey);
+          if (!draft) return;
+          if (sessionHasWorkflowExecution(targetSessionKey, draft.templateId)) {
+            clearPendingWorkflowDraft(targetSessionKey, draft.templateId);
+            return;
+          }
+          void import('@/lib/workflow-api').then(({ getStartupSchema }) => {
+            getStartupSchema(draft.templateId).then((startup) => {
+              if (get().currentSessionKey !== targetSessionKey) return;
+              const msgs = get().messages;
+              if (
+                !isWorkflowFormInjectionAllowed(
+                  draft.templateId,
+                  msgs,
+                  getMessageText,
+                  targetSessionKey,
+                  { rawMessages },
+                )
+              ) {
+                clearPendingWorkflowDraft(targetSessionKey, draft.templateId);
+                return;
+              }
+              get().setPendingWorkflow({
+                templateId: draft.templateId,
+                templateName: draft.templateName,
+                schema: startup.schema,
+                schemaHash: startup.schemaHash,
+                collectedInputs: draft.collectedInputs ?? {},
+                modelGuidanceSent: draft.modelGuidanceSent,
+              });
+              const patched = patchLastAssistantWithWorkflowForm(msgs, getMessageText, {
+                rawMessages,
+              });
+              if (patched !== msgs) {
+                set({ messages: patched });
+              }
+            }).catch(() => {});
+          });
+        });
+      }
 
       // Extract first user message text as a session label for display in the toolbar.
       // Only set when there is no existing label so manual renames are preserved.
       // Skip main sessions (key ends with ":main") — they rely on the Gateway-provided
       // displayName (e.g. the configured agent name "StoClaw") instead.
       const isMainSession = targetSessionKey.endsWith(':main');
-      if (!isMainSession && !get().sessionLabels[targetSessionKey]) {
+      if (!isMainSession) {
         const firstUserMsg = finalMessages.find((m) => m.role === 'user');
-        if (firstUserMsg) {
-          const labelText = getMessageText(firstUserMsg.content).trim();
+        const existingLabel = get().sessionLabels[targetSessionKey];
+        if (firstUserMsg && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+          const labelText = deriveSessionLabelFromUserText(getMessageText(firstUserMsg.content));
           if (labelText) {
             const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
             set((s) => ({
@@ -1592,13 +1804,20 @@ export const useChatStore = create<ChatState>()(
   // ── Send message ──
 
   sendMessage: async (
-    text: string,
-    attachments?: Array<{ fileName: string; mimeType: string; fileSize: number; stagedPath: string; preview: string | null }>,
-    targetAgentId?: string | null,
-    dingTalkMentions?: DingTalkMention[],
+    options: import('./chat/types').SendMessageOptions,
   ) => {
+    const { text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
+
+    // Inject hidden workflow context / session hint for AI guidance
+    const { appendWorkflowContext, stripWorkflowContextForDisplay } = await import('@/lib/workflow-context');
+    const {
+      buildWorkflowSessionHint,
+      buildWorkflowCreationHint,
+      appendWorkflowSessionHint,
+      stripWorkflowSessionHintForDisplay,
+    } = await import('@/lib/workflow-session-hint');
 
     const targetSessionKey = resolveMainSessionKeyForAgent(targetAgentId) ?? get().currentSessionKey;
 
@@ -1608,6 +1827,44 @@ export const useChatStore = create<ChatState>()(
     }
 
     const currentSessionKey = targetSessionKey;
+
+    let textForGateway = trimmed;
+    if (!workflowContext) {
+      const {
+        isReExecutionIntent,
+        isWorkflowStartIntent,
+        isWorkflowCreationIntent,
+      } = await import('@/hooks/use-workflow-intent');
+      if (isReExecutionIntent(trimmed) || isWorkflowStartIntent(trimmed)) {
+        const hint = buildWorkflowSessionHint(
+          currentSessionKey,
+          get().messages,
+          get().workflowCardStates,
+        );
+        textForGateway = appendWorkflowSessionHint(trimmed, hint);
+      } else if (isWorkflowCreationIntent(trimmed)) {
+        get().clearPendingWorkflow();
+        let creationHint = buildWorkflowCreationHint(trimmed);
+        try {
+          const { searchWorkflowTemplates } = await import('@/lib/workflow-api');
+          const { extractWorkflowSearchQuery } = await import('@/lib/workflow-session-hint');
+          const searchResult = await searchWorkflowTemplates(extractWorkflowSearchQuery(trimmed), 5);
+          if (searchResult.matchedItems.length > 0) {
+            creationHint = buildWorkflowCreationHint(trimmed, searchResult.matchedItems);
+          }
+        } catch (err) {
+          console.warn('[workflow-trace] creation hint pre-search failed:', err);
+        }
+        textForGateway = appendWorkflowSessionHint(trimmed, creationHint);
+      }
+    }
+
+    console.log('[workflow-trace] sendMessage workflowContext=%s text=%s', workflowContext ? `templateId=${workflowContext.templateId} fields=${workflowContext.fields.length}` : 'null', trimmed.slice(0, 50));
+    const messageWithContext = appendWorkflowContext(textForGateway, workflowContext);
+    const displayText = stripWorkflowSessionHintForDisplay(
+      stripWorkflowContextForDisplay(messageWithContext),
+    );
+    console.log('[workflow-trace] sendMessage injected=%s finalLength=%d', workflowContext ? 'yes' : 'no', messageWithContext.length);
 
     const quotaCheck = await checkDailyTokenQuota();
     if (quotaCheck) {
@@ -1632,7 +1889,7 @@ export const useChatStore = create<ChatState>()(
     const nowMs = Date.now();
     const userMsg: RawMessage = {
       role: 'user',
-      content: trimmed || (attachments?.length ? '(file attached)' : ''),
+      content: displayText || (attachments?.length ? '(file attached)' : ''),
       timestamp: nowMs / 1000,
       id: crypto.randomUUID(),
       _attachedFiles: attachments?.map(a => ({
@@ -1657,8 +1914,8 @@ export const useChatStore = create<ChatState>()(
     // Update session label with first user message text as soon as it's sent
     const { sessionLabels, messages } = get();
     const isFirstMessage = !messages.slice(0, -1).some((m) => m.role === 'user');
-    if (!currentSessionKey.endsWith(':main') && isFirstMessage && !sessionLabels[currentSessionKey] && trimmed) {
-      const truncated = trimmed.length > 50 ? `${trimmed.slice(0, 50)}…` : trimmed;
+    if (!currentSessionKey.endsWith(':main') && isFirstMessage && !sessionLabels[currentSessionKey] && displayText) {
+      const truncated = displayText.length > 50 ? `${displayText.slice(0, 50)}…` : displayText;
       set((s) => ({ sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated } }));
     }
 
@@ -1744,7 +2001,7 @@ export const useChatStore = create<ChatState>()(
             method: 'POST',
             body: JSON.stringify({
               sessionKey: currentSessionKey,
-              message: trimmed || 'Process the attached file(s).',
+              message: messageWithContext || 'Process the attached file(s).',
               deliver: false,
               idempotencyKey,
               media: attachments.map((a) => ({
@@ -1752,15 +2009,6 @@ export const useChatStore = create<ChatState>()(
                 mimeType: a.mimeType,
                 fileName: a.fileName,
               })),
-              ...buildDingTalkMentionRpcExtras(
-                dingTalkMentions,
-                attachments?.map((file) => ({
-                  fileName: file.fileName,
-                  filePath: file.stagedPath,
-                  mimeType: file.mimeType,
-                  fileSize: file.fileSize,
-                })),
-              ),
             }),
           },
         );
@@ -1769,10 +2017,12 @@ export const useChatStore = create<ChatState>()(
           'chat.send',
           {
             sessionKey: currentSessionKey,
-            message: trimmed,
+            message: messageWithContext,
             deliver: false,
             idempotencyKey,
-            ...buildDingTalkMentionRpcExtras(dingTalkMentions),
+            // NOTE: workflowId/runId are not forwarded to Gateway chat.send yet
+            // because the Gateway schema does not accept them. Workflow state
+            // is tracked via SSE + main process polling instead.
           },
           CHAT_SEND_TIMEOUT_MS,
         );
@@ -1895,6 +2145,12 @@ export const useChatStore = create<ChatState>()(
         if (finalMsg) {
           const updates = collectToolUpdates(finalMsg, resolvedState);
           if (isToolResultRole(finalMsg.role)) {
+            void dispatchBuiltinToolResult({
+              id: finalMsg.id,
+              toolCallId: finalMsg.toolCallId,
+              toolName: finalMsg.toolName,
+              content: finalMsg.content,
+            });
             // Resolve file path from the streaming assistant message's matching tool call
             const currentStreamForPath = get().streamingMessage as RawMessage | null;
             const matchedPath = (currentStreamForPath && finalMsg.toolCallId)
@@ -1970,6 +2226,9 @@ export const useChatStore = create<ChatState>()(
           }
           const toolOnly = isToolOnlyMessage(finalMsg);
           const hasOutput = hasNonToolAssistantContent(finalMsg);
+          const pendingForDebug = get().pendingWorkflow;
+          console.log('[handleChatEvent:final] hasOutput=%s, pendingWorkflow=%s, msgContent=%s',
+            hasOutput, pendingForDebug ? 'yes' : 'no', typeof finalMsg.content);
           const msgId = finalMsg.id || (toolOnly ? `run-${runId}-tool-${Date.now()}` : `run-${runId}`);
           set((s) => {
             const nextTools = updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools;
@@ -1977,7 +2236,7 @@ export const useChatStore = create<ChatState>()(
 
             // Attach any images collected from preceding tool results
             const pendingImgs = s.pendingToolImages;
-            const msgWithImages: RawMessage = pendingImgs.length > 0
+            let msgWithImages: RawMessage = pendingImgs.length > 0
               ? {
                 ...finalMsg,
                 role: (finalMsg.role || 'assistant') as RawMessage['role'],
@@ -1985,6 +2244,14 @@ export const useChatStore = create<ChatState>()(
                 _attachedFiles: [...(finalMsg._attachedFiles || []), ...pendingImgs],
               }
               : { ...finalMsg, role: (finalMsg.role || 'assistant') as RawMessage['role'], id: msgId };
+
+            // If we are in a workflow guidance phase AND this is the final
+            // assistant output (hasOutput=true), append an interactive
+            // parameter_form block to the assistant message for the user.
+            if (hasOutput) {
+              msgWithImages = maybeAppendWorkflowParameterForm(msgWithImages);
+            }
+
             const clearPendingImages = { pendingToolImages: [] as AttachedFileMeta[] };
 
             // Check if message already exists (prevent duplicates)
@@ -2004,6 +2271,30 @@ export const useChatStore = create<ChatState>()(
                 && getMessageText(m.content).trim() === incomingText
               ));
             if (alreadyExists) {
+              // If message already exists but hasOutput, we still need to append
+              // the parameter_form to it. Update the existing message in messages[].
+              if (hasOutput && msgWithImages.content !== s.messages.find(m => m.id === msgId)?.content) {
+                const updatedMessages = s.messages.map(m =>
+                  m.id === msgId ? msgWithImages : m
+                );
+                return toolOnly ? {
+                  messages: updatedMessages,
+                  streamingText: '',
+                  streamingMessage: null,
+                  pendingFinal: true,
+                  streamingTools,
+                  ...clearPendingImages,
+                } : {
+                  messages: updatedMessages,
+                  streamingText: '',
+                  streamingMessage: null,
+                  sending: hasOutput ? false : s.sending,
+                  activeRunId: hasOutput ? null : s.activeRunId,
+                  pendingFinal: hasOutput ? false : true,
+                  streamingTools,
+                  ...clearPendingImages,
+                };
+              }
               return toolOnly ? {
                 streamingText: '',
                 streamingMessage: null,
@@ -2053,7 +2344,11 @@ export const useChatStore = create<ChatState>()(
           // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
           if (hasOutput && !toolOnly) {
             clearHistoryPoll();
-            void get().loadHistory(true);
+            void get().loadHistory(true).then(() => {
+              const patched = patchLastAssistantWithWorkflowForm(get().messages, getMessageText);
+              if (patched !== get().messages) set({ messages: patched });
+              ensureWorkflowParameterFormInjected();
+            });
           }
         } else {
           // No message in final event - reload history to get complete data
@@ -2174,5 +2469,7 @@ export const useChatStore = create<ChatState>()(
   },
 }), {
   name: 'stoclaw-chat-session-labels',
-  partialize: (state) => ({ sessionLabels: state.sessionLabels }),
+  partialize: (state) => ({
+    sessionLabels: state.sessionLabels,
+  }),
 }));

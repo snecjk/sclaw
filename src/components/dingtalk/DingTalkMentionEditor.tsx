@@ -11,6 +11,7 @@ import {
   clearMentionEditor,
   detectActiveMentionTrigger,
   insertMentionAtTrigger,
+  insertWorkflowSpan,
   MENTION_SPAN_SELECTOR,
   removeMentionBeforeCaret,
   removeMentionSpan,
@@ -27,6 +28,7 @@ export interface DingTalkMentionEditorHandle {
   getSnapshot: () => MentionComposerSnapshot;
   setMentions: (mentions: DingTalkMention[]) => void;
   insertMention: (mention: DingTalkMention, trigger: ActiveMentionTrigger) => void;
+  insertWorkflow: (workflowId: string, name: string) => void;
 }
 
 interface DingTalkMentionEditorProps {
@@ -36,6 +38,7 @@ interface DingTalkMentionEditorProps {
   onSnapshotChange?: (snapshot: MentionComposerSnapshot) => void;
   onTriggerChange?: (trigger: ActiveMentionTrigger | null) => void;
   onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
+  onKeyUp?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   onPaste?: (event: React.ClipboardEvent<HTMLDivElement>) => void;
   onCompositionStart?: () => void;
   onCompositionEnd?: () => void;
@@ -53,6 +56,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       onSnapshotChange,
       onTriggerChange,
       onKeyDown,
+      onKeyUp,
       onPaste,
       onCompositionStart,
       onCompositionEnd,
@@ -121,6 +125,13 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         syncFromDom();
         onTriggerChange?.(null);
       },
+      insertWorkflow: (workflowId, name) => {
+        const root = editorRef.current;
+        if (!root) return;
+        insertWorkflowSpan(root, workflowId, name);
+        resizeEditor();
+        syncFromDom();
+      },
     }), [onTriggerChange, removableMentions, resizeEditor, syncFromDom]);
 
     useEffect(() => {
@@ -180,6 +191,11 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       onKeyDown?.(event);
     }, [onKeyDown, resizeEditor, syncFromDom]);
 
+    const handleKeyUp = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+      syncFromDom();
+      onKeyUp?.(event);
+    }, [onKeyUp, syncFromDom]);
+
     return (
       <div
         ref={editorRef}
@@ -196,10 +212,10 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         )}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
+        onKeyUp={handleKeyUp}
         onPaste={onPaste}
         onMouseDown={removableMentions ? handleMentionRemove : undefined}
         onClick={() => syncFromDom()}
-        onKeyUp={() => syncFromDom()}
         onCompositionStart={() => {
           isComposingRef.current = true;
           onCompositionStart?.();
