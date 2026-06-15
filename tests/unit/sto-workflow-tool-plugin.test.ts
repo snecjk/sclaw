@@ -136,6 +136,8 @@ describe("sto-workflow-tool plugin", () => {
 		const result = await schemaTool.execute("call_schema", { templateId: "tpl_2b794225" });
 		const envelope = JSON.parse(result.content[0].text);
 		expect(envelope.type).toBe("workflow_schema_ready");
+		expect(envelope.data.confirmSteps).toBeDefined();
+		expect(envelope.data.assistantReplyGuide).toMatch(/禁止/);
 		expect(fetchJsonMock).toHaveBeenCalledWith(
 			"/agent/v1/workflow-templates/tpl_2b794225/startup-schema",
 			expect.objectContaining({ method: "GET" }),

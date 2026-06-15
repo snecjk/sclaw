@@ -3,6 +3,7 @@ import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
 import { createStoApiClient } from "./sto-toolkit/http-client.js";
 import { defineStoTool } from "./sto-toolkit/define-sto-tool.js";
 import { resolveSchemaHash, resolveTemplateId } from "./workflow-params.js";
+import { buildSchemaConfirmationGuidance } from "./workflow-guidance.js";
 import {
 	fetchWorkflowTemplates,
 	resolveTemplateIdWithOptionalSearch,
@@ -53,8 +54,9 @@ type WorkflowRunResponse = {
 
 const WORKFLOW_TOOL_PROMPT = [
 	"工作流内置工具（重要）：",
-	"- 创建/查找工作流：search_workflow_templates → get_workflow_schema 后停止；客户端会自动弹出参数表单供用户填写，**禁止**调用 create_workflow 或用默认值代填。",
-	"- get_workflow_schema 后：简要说明需确认的参数字段，引导用户在聊天中的参数表单里填写并点击继续；不要自行创建或执行。",
+	"- 创建/查找工作流：search_workflow_templates → get_workflow_schema 后**停止**；客户端会**自动弹出分步参数表单**。",
+	"- get_workflow_schema 后：正文最多 3～5 句业务说明（用工具返回的 confirmSteps 标题），引导用户在下方表单逐步确认。",
+	"- **禁止**在对话中输出字段 key/常量名、参数表、Markdown 表格、默认值列表；**禁止**调用 create_workflow 或用默认值代填。",
 	"- get_workflow_schema：优先传 search 返回的 templates[].id；若无 templateId 可传 query 自动搜索。",
 	"- 重新执行/启动已有实例：execute_workflow（传入 workflowId）。",
 	"- 查询运行状态：get_workflow_status（传入 runId）。",
@@ -161,8 +163,8 @@ export default definePluginEntry({
 			domain: "workflow",
 			resultType: "workflow_schema_ready",
 			label: "获取工作流参数模板",
-			description:
-				"获取指定模板的启动参数 schema。有 templateId 时直接查询；无 templateId 时可传 query，将先 POST /agent/v1/workflow-templates 搜索模板再取 schema。",
+			description: `获取指定模板的启动参数 schema。有 templateId 时直接查询；无 templateId 时可传 query 将先搜索模板再取 schema。
+成功后客户端自动展示分步参数表单；你只需用业务语言简要说明 confirmSteps，禁止在正文列举字段 key 或参数表。`,
 			parameters: Type.Object({
 				templateId: Type.Optional(
 					Type.String({ description: "模板 ID（search 结果中的 id" }),
@@ -183,19 +185,22 @@ export default definePluginEntry({
 					`/agent/v1/workflow-templates/${encodeURIComponent(resolved.templateId)}/startup-schema`,
 					{ method: "GET" },
 				);
+				const templateName = resolved.matchedLabel ?? data.templateId;
+				const guidance = buildSchemaConfirmationGuidance(templateName, data.schema);
 				return {
 					templateId: data.templateId,
 					schemaHash: data.schemaHash,
 					schema: data.schema,
-					templateName: resolved.matchedLabel,
+					templateName,
+					confirmSteps: guidance.confirmSteps,
+					assistantReplyGuide: guidance.assistantReplyGuide,
 					...(resolved.resolvedViaSearch
 						? {
 								resolvedViaSearch: true,
 								matchedLabel: resolved.matchedLabel,
 							}
 						: {}),
-					nextStep:
-						"客户端将展示参数表单，请引导用户在表单中确认参数；禁止调用 create_workflow",
+					nextStep: guidance.nextStep,
 				};
 			},
 		});

@@ -13,7 +13,7 @@
 
 **正反例：**
 - 「帮我在桌面创建文件夹」→ **不要** 调用工作流 tool，用普通文件能力。
-- 「帮我创建结算对账工作流」→ `search_workflow_templates` → `get_workflow_schema` → **用户在参数表单中确认**（禁止 `create_workflow`）
+- 「帮我创建结算对账工作流」→ `search_workflow_templates` → `get_workflow_schema` → **客户端自动弹出分步表单**；正文仅业务摘要，**禁止**列举字段 key/参数表
 - 「重新执行」「再跑一遍」且会话有 `workflowId` → **必须** `execute_workflow`，禁止 sai-cli/exec。
 
 ### ⛔ 禁止的工具调用（安全红线）

@@ -24,6 +24,7 @@ export interface WorkflowContextBlock {
   templateId: string;
   templateName: string;
   schemaHash: string;
+  confirmSteps?: string[];
   fields: Array<{
     key: string;
     label: string;

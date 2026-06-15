@@ -27,6 +27,7 @@ import {
 } from './chat/types';
 import type { WorkflowExecutionState } from '@/types/workflow';
 import { mergeLocalWorkflowTurnsFromCurrent, mergeWorkflowTurnsFromMemory } from '@/lib/workflow-local-turn';
+import { ensureWorkflowCardsInMessages } from '@/lib/workflow-card-injection';
 import { buildWorkflowCardStatesForSession } from '@/stores/workflow-memory';
 import { hydrateSessionWorkflowCards } from '@/lib/workflow-run-hydration';
 import { upgradeWorkflowParamUserMessages } from '@/lib/workflow-param-messages';
@@ -1553,6 +1554,7 @@ export const useChatStore = create<ChatState>()(
       );
       finalMessages = mergeLocalWorkflowTurnsFromCurrent(finalMessages, get().messages);
       finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
+      finalMessages = ensureWorkflowCardsInMessages(finalMessages, targetSessionKey, getMessageText);
       const restoredCardStates = buildWorkflowCardStatesForSession(targetSessionKey);
       const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
         sessionKey: targetSessionKey,
@@ -1831,11 +1833,10 @@ export const useChatStore = create<ChatState>()(
     let textForGateway = trimmed;
     if (!workflowContext) {
       const {
-        isReExecutionIntent,
-        isWorkflowStartIntent,
+        shouldInjectWorkflowSessionHint,
         isWorkflowCreationIntent,
       } = await import('@/hooks/use-workflow-intent');
-      if (isReExecutionIntent(trimmed) || isWorkflowStartIntent(trimmed)) {
+      if (shouldInjectWorkflowSessionHint(trimmed)) {
         const hint = buildWorkflowSessionHint(
           currentSessionKey,
           get().messages,
@@ -2146,19 +2147,12 @@ export const useChatStore = create<ChatState>()(
         if (finalMsg) {
           const updates = collectToolUpdates(finalMsg, resolvedState);
           if (isToolResultRole(finalMsg.role)) {
-            void dispatchBuiltinToolResult({
-              id: finalMsg.id,
-              toolCallId: finalMsg.toolCallId,
-              toolName: finalMsg.toolName,
-              content: finalMsg.content,
-            });
-            // Resolve file path from the streaming assistant message's matching tool call
+            // Snapshot streaming assistant turn before handling tool result.
             const currentStreamForPath = get().streamingMessage as RawMessage | null;
             const matchedPath = (currentStreamForPath && finalMsg.toolCallId)
               ? getToolCallFilePath(currentStreamForPath, finalMsg.toolCallId)
               : undefined;
 
-            // Mirror enrichWithToolResultFiles: collect images + file refs for next assistant msg
             const toolFiles: AttachedFileMeta[] = [
               ...extractImagesAsAttachedFiles(finalMsg.content),
             ];
@@ -2180,17 +2174,11 @@ export const useChatStore = create<ChatState>()(
               }
             }
             set((s) => {
-              // Snapshot the current streaming assistant message (thinking + tool_use) into
-              // messages[] before clearing it. The Gateway does NOT send separate 'final'
-              // events for intermediate tool-use turns — it only sends deltas and then the
-              // tool result. Without snapshotting here, the intermediate thinking+tool steps
-              // would be overwritten by the next turn's deltas and never appear in the UI.
               const currentStream = s.streamingMessage as RawMessage | null;
               const snapshotMsgs: RawMessage[] = [];
               if (currentStream) {
                 const streamRole = currentStream.role;
                 if (streamRole === 'assistant' || streamRole === undefined) {
-                  // Use message's own id if available, otherwise derive a stable one from runId
                   const snapId = currentStream.id
                     || `${runId || 'run'}-turn-${s.messages.length}`;
                   if (!s.messages.some(m => m.id === snapId)) {
@@ -2209,8 +2197,6 @@ export const useChatStore = create<ChatState>()(
                 messages: snapshotMsgs.length > 0 ? [...s.messages, ...snapshotMsgs] : s.messages,
                 streamingText: '',
                 streamingMessage: null,
-                // Keep sending/activeRunId unchanged — the agent run is still
-                // in progress; only the intermediate tool turn completed.
                 pendingFinal: true,
                 pendingToolImages: toolFiles.length > 0
                   ? [...s.pendingToolImages, ...toolFiles]
@@ -2218,11 +2204,24 @@ export const useChatStore = create<ChatState>()(
                 streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
               };
             });
-            // Reload history to surface the complete intermediate turn
-            // (with full thinking + tool_use blocks) from the Gateway's
-            // authoritative record. Streaming deltas may not carry these
-            // content blocks, so the snapshot above can be incomplete.
-            void get().loadHistory(true);
+            void (async () => {
+              await dispatchBuiltinToolResult({
+                id: finalMsg.id,
+                toolCallId: finalMsg.toolCallId,
+                toolName: finalMsg.toolName,
+                content: finalMsg.content,
+              });
+              const sessionKey = get().currentSessionKey;
+              const withCards = ensureWorkflowCardsInMessages(
+                get().messages,
+                sessionKey,
+                getMessageText,
+              );
+              if (withCards !== get().messages) {
+                set({ messages: withCards });
+              }
+              void get().loadHistory(true);
+            })();
             break;
           }
           const toolOnly = isToolOnlyMessage(finalMsg);
@@ -2346,9 +2345,14 @@ export const useChatStore = create<ChatState>()(
           if (hasOutput && !toolOnly) {
             clearHistoryPoll();
             void get().loadHistory(true).then(() => {
-              const patched = patchLastAssistantWithWorkflowForm(get().messages, getMessageText);
+              let patched = patchLastAssistantWithWorkflowForm(get().messages, getMessageText);
+              patched = ensureWorkflowCardsInMessages(
+                patched,
+                get().currentSessionKey,
+                getMessageText,
+              );
               if (patched !== get().messages) set({ messages: patched });
-              ensureWorkflowParameterFormInjected();
+              ensureWorkflowParameterFormInjected(getMessageText);
             });
           }
         } else {

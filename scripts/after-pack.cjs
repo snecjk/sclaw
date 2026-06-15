@@ -19,8 +19,10 @@
  *      @mariozechner/clipboard).
  */
 
-const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, realpathSync, readFileSync } = require('fs');
+const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, mkdtempSync, realpathSync, readFileSync } = require('fs');
+const { execSync } = require('child_process');
 const { join, dirname, basename } = require('path');
+const { tmpdir } = require('os');
 const { createPackageWithOptions } = require('@electron/asar');
 
 // On Windows, paths in pnpm's virtual store can exceed the default MAX_PATH
@@ -453,6 +455,67 @@ function dedupePluginNodeModules(pluginDir, openclawPackageIndex) {
 
   removeEmptyPluginNodeModules(pluginNodeModulesDir);
   return removed;
+}
+
+function sharpPkgVersion(sharpPkg, packageName) {
+  return sharpPkg.optionalDependencies?.[packageName]
+    ?? sharpPkg.devDependencies?.[packageName];
+}
+
+/**
+ * Cross-compile: fetch target @img/sharp + libvips before cleanup strips host packages.
+ * npm install rejects foreign os/cpu (EBADPLATFORM); npm pack + extract works on any host.
+ */
+function installSharpPackageViaPack(spec, destFolder) {
+  const tmpPackDir = mkdtempSync(join(tmpdir(), 'sharp-pack-'));
+  try {
+    const output = execSync(`npm pack "${spec}" --pack-destination "${tmpPackDir}"`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'inherit'],
+    });
+    const tgzName = output.trim().split(/\r?\n/).filter(Boolean).pop();
+    if (!tgzName) {
+      throw new Error(`[after-pack] npm pack produced no tarball for ${spec}`);
+    }
+    const tgzPath = join(tmpPackDir, basename(tgzName));
+    mkdirSync(destFolder, { recursive: true });
+    execSync(`tar -xzf "${tgzPath}" -C "${destFolder}" --strip-components=1`, { stdio: 'inherit' });
+  } finally {
+    rmSync(tmpPackDir, { recursive: true, force: true });
+  }
+}
+
+function ensureTargetSharpPackages(nodeModulesDir, platform, arch) {
+  const sharpPkgPath = join(nodeModulesDir, 'sharp', 'package.json');
+  if (!existsSync(sharpPkgPath)) return;
+
+  const sharpPkg = JSON.parse(readFileSync(sharpPkgPath, 'utf8'));
+  const imgDir = join(nodeModulesDir, '@img');
+  const platformToken = platform === 'win32' ? 'win32' : platform === 'darwin' ? 'darwin' : 'linux';
+  const packageNames = [
+    `@img/sharp-${platformToken}-${arch}`,
+    `@img/sharp-libvips-${platformToken}-${arch}`,
+  ];
+
+  const missing = packageNames.filter((name) => {
+    const folder = name.slice('@img/'.length);
+    return !existsSync(join(imgDir, folder));
+  });
+  if (missing.length === 0) return;
+
+  mkdirSync(imgDir, { recursive: true });
+  const specs = missing.map((name) => {
+    const version = sharpPkgVersion(sharpPkg, name);
+    if (!version) {
+      throw new Error(`[after-pack] Cannot resolve version for ${name} from sharp/package.json`);
+    }
+    return `${name}@${version}`;
+  });
+  console.log(`[after-pack] Fetching target sharp packages for ${platform}/${arch}: ${specs.join(', ')}`);
+  for (const spec of specs) {
+    const folder = spec.slice('@img/'.length).replace(/@[^@]+$/, '');
+    installSharpPackageViaPack(spec, join(imgDir, folder));
+  }
 }
 
 // ── Platform-specific: koffi ─────────────────────────────────────────────────
@@ -920,6 +983,7 @@ function bundleLocalPlugin(preBuildDir, rawSourceDir, nodeModulesRoot, destDir) 
 exports.OPENCLAW_ASAR_UNPACK = OPENCLAW_ASAR_UNPACK;
 exports.packDirectoryToAsar = packDirectoryToAsar;
 exports.validateAsarNativeUnpack = validateAsarNativeUnpack;
+exports.ensureTargetSharpPackages = ensureTargetSharpPackages;
 
 exports.default = async function afterPack(context) {
   const appOutDir = context.appOutDir;
@@ -1062,6 +1126,9 @@ exports.default = async function afterPack(context) {
   console.log('[after-pack] 🧹 Cleaning up unnecessary files ...');
   const removedRoot = cleanupUnnecessaryFiles(openclawRoot);
   console.log(`[after-pack] ✅ Removed ${removedRoot} unnecessary files/directories.`);
+
+  // Install target @img/sharp before stripping host-platform native packages (cross-compile).
+  ensureTargetSharpPackages(dest, platform, arch);
 
   // 3. Platform-specific: strip koffi non-target platform binaries
   const koffiRemoved = cleanupKoffi(dest, platform, arch);

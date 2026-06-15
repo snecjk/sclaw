@@ -103,7 +103,10 @@ export function mergeWorkflowTurnsFromMemory(
       {
         role: 'assistant',
         content: [
-          { type: 'text', text: '参数已确认，工作流已在后台启动执行，请稍候查看执行进度。' },
+          {
+            type: 'text',
+            text: `参数已确认，工作流已在后台启动执行（工作流 ID: ${run.workflowId}），请稍候查看执行进度。`,
+          },
           { type: 'workflow_card', runId: run.runId, templateName: run.templateName },
         ],
         timestamp: ts + 0.001,
@@ -147,6 +150,7 @@ export interface WorkflowStartedLocalTurnParams {
   userText: string;
   templateName: string;
   runId: string;
+  workflowId?: string;
   assistantText?: string;
 }
 
@@ -155,7 +159,10 @@ export function appendWorkflowStartedLocalTurn(params: WorkflowStartedLocalTurnP
     userText,
     templateName,
     runId,
-    assistantText = '参数已确认，工作流已在后台启动执行，请稍候查看执行进度。',
+    workflowId,
+    assistantText = workflowId
+      ? `参数已确认，工作流已在后台启动执行（工作流 ID: ${workflowId}），请稍候查看执行进度。`
+      : '参数已确认，工作流已在后台启动执行，请稍候查看执行进度。',
   } = params;
 
   const now = Date.now() / 1000;

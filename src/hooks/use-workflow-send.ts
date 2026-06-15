@@ -22,6 +22,7 @@ import { invokeIpc } from '@/lib/api-client';
 import { canStartWorkflow, useWorkflowsStore } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
 import { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } from '@/lib/workflow-local-turn';
+import { buildWorkflowContextSummary } from '@/lib/workflow-form-utils';
 import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
 import type { WorkflowSchema, WorkflowSchemaField } from '@/types/workflow';
 
@@ -73,28 +74,15 @@ export async function sendWithWorkflow(
     // 2. Get template name from store
     const templateName = useWorkflowsStore.getState().templates.find((t) => t.id === templateId)?.label ?? templateId;
 
-    // 3. Build workflow context for AI model
-    const workflowContext: import('@/stores/chat').WorkflowContextBlock = {
-      type: 'workflow_context',
+    // 3. Build workflow context for AI model (confirm steps only — no field key dump)
+    const workflowContext = buildWorkflowContextSummary(
       templateId,
       templateName,
       schemaHash,
-      fields: schema.fields
-        .filter((f) => {
-          const step = schema.steps.find((s) => s.id === f.group);
-          return f.group === 'confirm' || (step && step.mode === 'confirm');
-        })
-        .map((f) => ({
-          key: f.key,
-          label: f.label,
-          component: f.component,
-          required: f.required,
-          options: f.options?.map((o) => ({ value: String(o.value), label: o.label })),
-          defaultValue: f.defaultValue,
-        })),
-    };
+      schema,
+    );
 
-    // 4. Set pending workflow state (frontendFormInserted=false so model response triggers form).
+    // 4. Set pending workflow; form attaches after the model's assistant reply.
     useChatStore.getState().setPendingWorkflow({
       templateId,
       templateName,
@@ -105,9 +93,7 @@ export async function sendWithWorkflow(
       modelGuidanceSent: false,
     });
 
-    // 5. Send user message to Gateway.
-    // The model will process the workflow context and respond.
-    // After the model responds, maybeAppendWorkflowParameterForm will inject the form.
+    // 5. Send user message to Gateway — model streams a brief business summary, then form is patched in.
     await sendMessage(text, null, null, workflowContext);
     useChatStore.getState().setPendingWorkflow({
       templateId,
@@ -181,6 +167,7 @@ export async function createAndStartWorkflowDirect(
       createdAt: Date.now(),
     });
 
+    const trackStartMs = Date.now();
     const run = await startWorkflow(created.workflowId, {
       inputs,
       idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
@@ -188,12 +175,12 @@ export async function createAndStartWorkflowDirect(
 
     const { schema } = cached;
     const userText = buildWorkflowStartUserText(schema, inputs);
-    const startedAtMs = Date.now();
-    const startedAtIso = new Date(startedAtMs).toISOString();
+    const startedAtIso = new Date(trackStartMs).toISOString();
     appendWorkflowStartedLocalTurn({
       userText,
       templateName,
       runId: run.runId,
+      workflowId: created.workflowId,
     });
 
     updateWorkflowRunMetadata(context.sessionKey, created.workflowId, {
@@ -208,8 +195,8 @@ export async function createAndStartWorkflowDirect(
       templateId,
       templateName,
       status: 'running',
-      createdAt: startedAtMs,
-      updatedAt: startedAtMs,
+      createdAt: trackStartMs,
+      updatedAt: trackStartMs,
       collectedInputs: inputs,
       paramsSummary: userText,
     });
@@ -248,6 +235,27 @@ export async function createAndStartWorkflowDirect(
   }
 }
 
+async function resolveWorkflowTemplateName(
+  sessionKey: string,
+  workflowId: string,
+  fallback?: string,
+): Promise<string> {
+  const { getSessionWorkflows, findWorkflowById } = await import('@/stores/workflow-memory');
+  const record =
+    getSessionWorkflows(sessionKey).find((w) => w.workflowId === workflowId)
+    ?? findWorkflowById(workflowId)?.record;
+  const remembered = record?.templateName?.trim();
+  if (remembered && !remembered.startsWith('tpl_')) return remembered;
+
+  const templateId = record?.templateId;
+  if (templateId) {
+    const fromStore = useWorkflowsStore.getState().templates.find((t) => t.id === templateId)?.label;
+    if (fromStore) return fromStore;
+  }
+
+  return remembered || fallback || '工作流';
+}
+
 /**
  * Start an already-created workflow (used for re-execution from memory).
  */
@@ -279,7 +287,13 @@ export async function startExistingWorkflow(
       idempotencyKey,
     });
 
-    const displayName = _templateName ?? '工作流';
+    const { isReExecutionIntent } = await import('@/hooks/use-workflow-intent');
+    const displayName = await resolveWorkflowTemplateName(
+      context.sessionKey,
+      workflowId,
+      _templateName,
+    );
+    const isReexec = isReExecutionIntent(originalText);
     const { applyWorkflowRunStarted } = await import('@/lib/workflow-run-started');
     return applyWorkflowRunStarted({
       sessionKey: context.sessionKey,
@@ -289,6 +303,9 @@ export async function startExistingWorkflow(
       templateName: displayName,
       inputs,
       userText: originalText,
+      assistantText: isReexec
+        ? `工作流已重新启动执行（工作流 ID: ${workflowId}），请稍候查看执行进度。`
+        : undefined,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -594,22 +611,38 @@ export async function tryStartRememberedWorkflowSend(
 
   const {
     isWorkflowStartIntent,
+    isReExecutionIntent,
     isImmediateExecutionIntent,
     buildWorkflowStartUnavailablePrompt,
   } = await import('@/hooks/use-workflow-intent');
 
-  const wantsStart = isWorkflowStartIntent(trimmed) || isImmediateExecutionIntent(trimmed);
+  const wantsStart =
+    isWorkflowStartIntent(trimmed)
+    || isReExecutionIntent(trimmed)
+    || isImmediateExecutionIntent(trimmed);
   if (!wantsStart) return false;
 
   const chatState = useChatStore.getState();
   const pending = chatState.pendingWorkflow;
 
-  let workflowId = pending?.workflowId;
+  const { extractWorkflowIdFromText } = await import('@/hooks/use-workflow-intent');
+  const { getLatestWorkflow, getSessionWorkflows, findWorkflowById } = await import(
+    '@/stores/workflow-memory'
+  );
+
+  let workflowId = extractWorkflowIdFromText(trimmed) ?? pending?.workflowId;
   let inputs: Record<string, unknown> = pending?.collectedInputs ?? {};
   let templateName = pending?.templateName;
 
-  if (!workflowId) {
-    const { getLatestWorkflow } = await import('@/stores/workflow-memory');
+  if (workflowId) {
+    const record =
+      getSessionWorkflows(context.sessionKey).find((w) => w.workflowId === workflowId)
+      ?? findWorkflowById(workflowId)?.record;
+    if (record) {
+      inputs = record.collectedInputs ?? inputs;
+      templateName = record.templateName ?? templateName;
+    }
+  } else {
     const latest = getLatestWorkflow(context.sessionKey);
     if (latest) {
       workflowId = latest.workflowId;

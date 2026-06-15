@@ -35,6 +35,16 @@ describe('resolveWorkflowStartedAt', () => {
   });
 });
 
+describe('getWorkflowDurationMs', () => {
+  it('handles API completedAt without Z when startedAt is UTC', () => {
+    const startedAt = '2026-06-15T09:04:33.537Z';
+    const completedAt = '2026-06-15T09:11:16';
+    const durationMs = getWorkflowDurationMs(startedAt, completedAt);
+    expect(durationMs).toBeGreaterThanOrEqual(6 * 60 * 1000);
+    expect(durationMs).toBeLessThan(8 * 60 * 1000);
+  });
+});
+
 describe('breakdownWorkflowDurationMs', () => {
   it('rounds sub-second durations up to at least 1 second', () => {
     expect(breakdownWorkflowDurationMs(200)).toEqual({ kind: 'seconds', seconds: 1 });
