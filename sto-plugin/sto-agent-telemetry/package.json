@@ -1,6 +1,6 @@
 {
   "name": "@sto/sto-agent-telemetry",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "申通 Agent 全链路遥测插件，上报工具/模型事件至 memory-center",
   "type": "module",
   "dependencies": {},
