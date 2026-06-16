@@ -14,11 +14,10 @@ import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import type { CronJobCreateInput } from '@/types/cron';
 import type { ManagedLocalTask } from '@/stores/cron';
 import { CronTaskHero } from './components/CronTaskHero';
 import { CronTaskCard } from './components/CronTaskCard';
-import { CronTaskCreateModal } from './components/CronTaskCreateModal';
+import { CronTaskCreateModal, type CronTaskFormInput } from './components/CronTaskCreateModal';
 import { CronTaskEmptyState, type RecommendTask } from './components/CronTaskEmptyState';
 import { filterTasks, sortTasks } from './components/utils';
 
@@ -69,12 +68,12 @@ export function Cron() {
   }, [safeJobs, searchQuery, sortValue]);
 
   const handleSave = useCallback(
-    async (input: CronJobCreateInput & { engineType: 'openclaw' | 'claude' }) => {
+    async (input: CronTaskFormInput) => {
       const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, input.engineType);
       try {
         if (editingJob) {
           if (editingJob.engineType === 'claude') {
-            if (!selectedAgent?.workspace) {
+            if (!selectedAgent?.id) {
               throw new Error('所选 Claude 代理缺少工作区，无法更新本地定时任务');
             }
             await updateJob(editingJob.id, {
@@ -86,7 +85,8 @@ export function Cron() {
                 cronExpr: input.schedule,
                 promptTemplate: input.message,
                 agentId: selectedAgent.id,
-                workspacePath: selectedAgent.workspace,
+                workspacePath: input.claudeWorkspacePath || selectedAgent.workspace,
+                permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
               },
             });
           } else {
@@ -105,7 +105,7 @@ export function Cron() {
           toast.success(t('toast.updated'));
         } else {
           if (input.engineType === 'claude') {
-            if (!selectedAgent.workspace) {
+            if (!selectedAgent?.id) {
               throw new Error('所选 Claude 代理缺少工作区，无法创建本地定时任务');
             }
             await createJob({
@@ -115,7 +115,8 @@ export function Cron() {
                 cronExpr: input.schedule,
                 promptTemplate: input.message,
                 agentId: selectedAgent.id,
-                workspacePath: selectedAgent.workspace,
+                workspacePath: input.claudeWorkspacePath || selectedAgent.workspace,
+                permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
               },
             });
           } else {

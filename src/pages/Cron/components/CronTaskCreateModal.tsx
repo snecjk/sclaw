@@ -11,14 +11,21 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { useAgentsStore } from '@/stores/agents';
 import type { ManagedLocalTask } from '@/stores/cron';
 import type { AgentSummary } from '@/types/agent';
+import type { ClaudeTaskPermissionProfile } from '@/types/scheduled-task';
 
 type TaskEngineType = 'openclaw' | 'claude';
+
+export interface CronTaskFormInput extends CronJobCreateInput {
+  engineType: TaskEngineType;
+  claudeWorkspacePath?: string;
+  claudePermissionProfile?: ClaudeTaskPermissionProfile;
+}
 
 interface CronTaskCreateModalProps {
   job?: ManagedLocalTask | null;
   open: boolean;
   onClose: () => void;
-  onSave: (input: CronJobCreateInput & { engineType: TaskEngineType }) => Promise<void>;
+  onSave: (input: CronTaskFormInput) => Promise<void>;
   initialValues?: { name?: string; message?: string; schedule?: string };
 }
 
@@ -98,6 +105,8 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
         enabled: true,
         dingTalkMentions: !isClaudeTask && recipients.length > 0 ? recipients : undefined,
         engineType,
+        claudeWorkspacePath: undefined,
+        claudePermissionProfile: engineType === 'claude' ? 'dangerous-bypass' : undefined,
       });
       onClose();
     } catch (err) {
@@ -182,7 +191,7 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
             </select>
             <p className="mt-1 text-[11.5px] text-muted-foreground">
               {selectedAgent?.engineType === 'claude'
-                ? '将创建 Claude 本地定时任务，独立在本机运行。'
+                ? '将创建 Claude 本地定时任务，并在工作区基础上额外开放用户目录访问。'
                 : '将创建 OpenClaw 本地定时任务。'}
             </p>
           </div>

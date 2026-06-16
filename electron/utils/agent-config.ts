@@ -153,8 +153,13 @@ interface AgentFeatures {
   preferredModelAccountId?: Record<string, string>;
 }
 
-function normalizeAgentEngineType(value: unknown): AgentEngineType {
-  return value === 'claude' ? 'claude' : 'openclaw';
+function getDefaultAgentEngineType(): AgentEngineType {
+  return process.platform === 'win32' ? 'claude' : 'openclaw';
+}
+
+function normalizeAgentEngineType(value: unknown, fallback: AgentEngineType = getDefaultAgentEngineType()): AgentEngineType {
+  if (value === 'claude' || value === 'openclaw') return value;
+  return fallback;
 }
 
 interface AgentPreferredModel {
@@ -758,6 +763,10 @@ export async function createAgent(
 
     await provisionAgentFilesystem(config, newAgent, { inheritWorkspace: options?.inheritWorkspace });
     await writeOpenClawConfig(config);
+    const features = await readAgentFeatures();
+    features.engineType = features.engineType || {};
+    features.engineType[nextId] = getDefaultAgentEngineType();
+    await writeAgentFeatures(features);
     logger.info('Created agent config entry', { agentId: nextId, inheritWorkspace: !!options?.inheritWorkspace });
     return await buildSnapshotFromConfig(config);
   });
@@ -808,12 +817,15 @@ export async function createAgentWithId(
     await provisionAgentFilesystem(config, newAgent, { inheritWorkspace: options?.inheritWorkspace });
     await writeOpenClawConfig(config);
 
+    const features = await readAgentFeatures();
+    features.engineType = features.engineType || {};
+    features.engineType[id] = getDefaultAgentEngineType();
+
     if (options?.fileTransformByOSS === true) {
-      const features = await readAgentFeatures();
       features.fileTransformByOSS = features.fileTransformByOSS || {};
       features.fileTransformByOSS[id] = true;
-      await writeAgentFeatures(features);
     }
+    await writeAgentFeatures(features);
 
     logger.info('Created agent config entry (explicit ID)', { agentId: id, inheritWorkspace: !!options?.inheritWorkspace });
     return await buildSnapshotFromConfig(config);
