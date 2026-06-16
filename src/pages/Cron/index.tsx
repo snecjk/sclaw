@@ -20,6 +20,7 @@ import { CronTaskCard } from './components/CronTaskCard';
 import { CronTaskCreateModal, type CronTaskFormInput } from './components/CronTaskCreateModal';
 import { CronTaskEmptyState, type RecommendTask } from './components/CronTaskEmptyState';
 import { filterTasks, sortTasks } from './components/utils';
+import { prepareDingTalkAgentTurnMessage } from '@/lib/scheduled-task-recipients';
 
 function resolvePreferredAgentByEngine(
   agents: Array<{ id: string; engineType?: 'openclaw' | 'claude'; workspace: string }>,
@@ -76,6 +77,7 @@ export function Cron() {
             if (!selectedAgent?.id) {
               throw new Error('所选 Claude 代理缺少工作区，无法更新本地定时任务');
             }
+            const promptTemplate = prepareDingTalkAgentTurnMessage(input.message, input.dingTalkMentions);
             await updateJob(editingJob.id, {
               engineType: 'claude',
               payload: {
@@ -83,7 +85,7 @@ export function Cron() {
                 name: input.name,
                 enabled: editingJob.enabled,
                 cronExpr: input.schedule,
-                promptTemplate: input.message,
+                promptTemplate,
                 agentId: selectedAgent.id,
                 workspacePath: input.claudeWorkspacePath || selectedAgent.workspace,
                 permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
@@ -108,12 +110,13 @@ export function Cron() {
             if (!selectedAgent?.id) {
               throw new Error('所选 Claude 代理缺少工作区，无法创建本地定时任务');
             }
+            const promptTemplate = prepareDingTalkAgentTurnMessage(input.message, input.dingTalkMentions);
             await createJob({
               engineType: 'claude',
               payload: {
                 name: input.name,
                 cronExpr: input.schedule,
-                promptTemplate: input.message,
+                promptTemplate,
                 agentId: selectedAgent.id,
                 workspacePath: input.claudeWorkspacePath || selectedAgent.workspace,
                 permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
