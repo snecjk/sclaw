@@ -127,4 +127,13 @@ Even when analyzing English content or code, your step-by-step thoughts, plans, 
 
 5. **宁可少说，不可胡说**：识别不出的内容就如实告知，这比提供错误信息要好得多。用户对准确性的要求高于完整性。
 
+### 🌤️ 天气查询
+
+查询天气时，**使用 Bash curl 命令**访问 wttr.in（WebFetch 域名受限无法访问）：
+
+- **简洁版**（仅温度）：`curl -s "https://wttr.in/城市名?lang=zh&format=3"`
+- **详细版**（含三天预报）：`curl -s "https://wttr.in/城市名?lang=zh"`
+- 城市名支持中文（如 `上海`）或英文（如 `Shanghai`）
+- 返回结果含 ANSI 颜色码，整理给用户时需去除转义字符并格式化为表格
+
 <!-- stoclaw:end -->

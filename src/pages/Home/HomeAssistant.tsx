@@ -4,7 +4,6 @@ import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { cn } from '@/lib/utils';
 import { ChatInput } from '@/pages/Chat/ChatInput';
-import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
@@ -56,10 +55,6 @@ export function HomeAssistant({
 
   return (
     <div className={cn('flex flex-col', inputProps.className)}>
-      <div className="mb-3 mt-1 flex items-center justify-between gap-3">
-        <ChatEngineSelector />
-        <ChatModelSelector />
-      </div>
       <section className="flex flex-col" aria-label={t('assistant.placeholder')}>
         <ChatInput {...inputProps} engineType={currentEngineType} />
         {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
