@@ -17,6 +17,10 @@ const SCHEDULED_TASK_TOOL_NAMES = new Set([
   'trigger_claude_scheduled_task',
 ]);
 
+function isLegacyCronToolName(toolName: string): boolean {
+  return /^Cron[A-Z]/.test(toolName) || toolName === 'Cron';
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? value as Record<string, unknown> : {};
 }
@@ -62,6 +66,12 @@ export function createScheduledTaskGuard(): HookCallback {
 
     const toolName = normalizeToolName(input.tool_name);
     const toolInput = asRecord(input.tool_input);
+
+    if (isLegacyCronToolName(toolName)) {
+      return deny(
+        'Legacy Cron tools are disabled for Claude conversations. Use the claude-scheduled-task-tool MCP tools instead.',
+      );
+    }
 
     if (toolName === 'Bash') {
       const command = String(toolInput.command ?? '');

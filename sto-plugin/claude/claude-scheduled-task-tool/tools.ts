@@ -13,6 +13,7 @@ import { getAgentWorkspacePath } from '../../../electron/utils/agent-config';
 export const CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT = [
   'Claude scheduled task tools:',
   '- Use these tools to create, inspect, update, delete, and trigger Claude local scheduled tasks.',
+  '- Never use legacy CronCreate/CronUpdate/CronDelete/CronList/Cron tools for Claude scheduled task management.',
   '- Translate natural-language schedules into standard 5-field cronExpr values before calling create or update.',
   '- If the requested schedule is ambiguous, ask a concise follow-up question instead of guessing.',
   '- Default to the current Claude conversation agent and workspace unless the user explicitly requests another target.',
