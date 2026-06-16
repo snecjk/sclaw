@@ -195,3 +195,35 @@ export function fixDwsChatMessageSendArgv(args: string[]): string[] {
   copy[textIdx + 1] = fixed;
   return copy;
 }
+
+const TOOL_COMMAND_PARAM_KEYS = [
+  'command',
+  'cmd',
+  'script',
+  'input',
+  'bash_command',
+] as const;
+
+/**
+ * Rewrite tool params so `dws chat message send --text` uses real newlines.
+ * Run after send-guard checks on the original command (guard blocks `$'` upfront).
+ * On Windows leave the shell string unchanged — gateway preload parses argv instead.
+ */
+export function fixDwsChatMessageSendToolParams(
+  params: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!params) return undefined;
+  if (process.platform === 'win32') return undefined;
+
+  for (const key of TOOL_COMMAND_PARAM_KEYS) {
+    const value = params[key];
+    if (typeof value !== 'string') continue;
+    if (!DWS_CHAT_MSG_SEND.test(value) || !/--text\s+/i.test(value)) continue;
+
+    const fixed = fixDwsChatMessageSendShellScript(value);
+    if (fixed !== value) {
+      return { ...params, [key]: fixed };
+    }
+  }
+  return undefined;
+}

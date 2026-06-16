@@ -1,5 +1,6 @@
 import type { HookCallbackMatcher, HookEvent } from '@anthropic-ai/claude-agent-sdk';
 import { buildDingTalkMentionSystemContext } from '../../../../shared/dingtalk-mention-context';
+import { fixDwsChatMessageSendToolParams } from '../../../../shared/dws-send-text';
 import {
   evaluateDingTalkSendGuard,
   handleDingTalkSendGuardAfter,
@@ -109,15 +110,28 @@ const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
                 sessionKey,
               });
 
-              if (decision.allowed) return {};
+              if (!decision.allowed) {
+                return {
+                  hookSpecificOutput: {
+                    hookEventName: 'PreToolUse',
+                    permissionDecision: 'deny',
+                    permissionDecisionReason: decision.reason,
+                  },
+                };
+              }
 
-              return {
-                hookSpecificOutput: {
-                  hookEventName: 'PreToolUse',
-                  permissionDecision: 'deny',
-                  permissionDecisionReason: decision.reason,
-                },
-              };
+              const fixedParams = fixDwsChatMessageSendToolParams(params);
+              if (fixedParams) {
+                logger.debug('[dingtalk-mention] claude-runtime: normalized dws send --text');
+                return {
+                  hookSpecificOutput: {
+                    hookEventName: 'PreToolUse',
+                    updatedInput: fixedParams,
+                  },
+                };
+              }
+
+              return {};
             },
           ],
         },
