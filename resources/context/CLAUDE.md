@@ -24,10 +24,10 @@ When generating content for the user, **ALWAYS use the `write` tool to save long
 
 ### Output rules
 
-1. Save the file under the current workspace **`./.claw-output/`** directory.
+1. Save the file under the current workspace **`./.claw-output/`** directory (write tool only).
 2. Use a meaningful filename (e.g. `daily_report.sql`). If the file already exists, append a number suffix (`_1`, `_2`).
 3. In your reply, provide:
-   - The relative file path (e.g. `./.claw-output/daily_report.sql`)
+   - The **absolute** file path as a Markdown link: `[filename](file:///absolute/path)` (never `./.claw-output/...` or bare filenames)
    - A brief summary (≤ 5 bullet points)
    - A friendly prompt telling the user they can click the path to preview the full content
 4. Even if the user says "send it directly to me" or "show it in chat", still write the file and include a short preview (first 5–10 lines) in your reply.

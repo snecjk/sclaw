@@ -32,13 +32,14 @@ metadata:
 
 ## 输出规范
 
-1. **存储路径**：写入当前 workspace 的 `./.claw-output/` 目录。
+1. **存储路径**：写入当前 workspace 的 `./.claw-output/` 目录（仅 `write` 工具使用，不要在回复里写相对路径）。
 2. **文件名**：
    - 优先使用用户指定的文件名
    - 无指定时根据内容语义命名（如 `daily_report.sql`、`api_routes.yaml`）
    - 文件已存在时自动追加序号（`_1`、`_2`）
 3. **回复格式**：
-   - 提供文件路径（如 `./.claw-output/daily_report.sql`）
+   - 提供**绝对路径** Markdown 链接：`[文件名](file:///绝对路径)`（macOS：`file:///Users/.../workspace/.claw-output/...`；Windows：`file:///C:/Users/.../workspace/.claw-output/...`，用正斜杠）
+   - 禁止回复 `./.claw-output/...`、`[report.md](report.md)` 等相对路径
    - 给出内容摘要（不超过 5 个 bullet points）
    - 说明用户可以点击路径预览完整内容
    - 可附上前 5–10 行作为预览
@@ -62,7 +63,7 @@ metadata:
 用户：帮我写一个查询站点诊断数据的 SQL
 
 回复：
-已生成 SQL 文件：./.claw-output/site_diagnosis_query.sql
+**文件路径**：[site_diagnosis_query.sql](file:///Users/sto/.stoclaw/openclaw/workspace/.claw-output/site_diagnosis_query.sql)
 
 文件概要：
 - 关联 sto_diagnosis_photo_static 和 dim_sto_calendar 表
