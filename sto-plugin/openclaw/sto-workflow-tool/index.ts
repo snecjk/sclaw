@@ -1,13 +1,13 @@
-import { Type } from "@sinclair/typebox";
+import { Type } from "./typebox-shim.js";
 import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
 import { createStoApiClient } from "./sto-toolkit/http-client.js";
 import { defineStoTool } from "./sto-toolkit/define-sto-tool.js";
 import { resolveSchemaHash, resolveTemplateId } from "./workflow-params.js";
 import { buildSchemaConfirmationGuidance } from "./workflow-guidance.js";
 import {
+	assertWorkflowTemplatesFound,
 	fetchWorkflowTemplates,
 	resolveTemplateIdWithOptionalSearch,
-	type TemplateSearchItem,
 } from "./workflow-search.js";
 
 const TAG = "sto-workflow-tool";
@@ -102,17 +102,16 @@ export default definePluginEntry({
 			execute: async (params) => {
 				const pageSize = Math.min(Math.max(params.limit ?? 10, 1), MAX_TEMPLATE_PAGE_SIZE);
 				const items = await fetchWorkflowTemplates(getClient(), params.query, pageSize);
+				assertWorkflowTemplatesFound(items, params.query);
 				const templates = items.map((item) => ({
 					...item,
 					templateId: item.id,
 				}));
-				const first = templates[0];
+				const first = templates[0]!;
 				return {
 					query: params.query,
 					templates,
-					nextStep: first
-						? `请调用 get_workflow_schema，templateId="${first.id}"`
-						: "未找到匹配模板，请调整搜索关键词",
+					nextStep: `请调用 get_workflow_schema，templateId="${first.id}"`,
 				};
 			},
 		});

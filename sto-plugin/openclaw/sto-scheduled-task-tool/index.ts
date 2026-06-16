@@ -1,4 +1,4 @@
-import { Type } from "@sinclair/typebox";
+import { Type } from "./typebox-shim.js";
 import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
 
 export default definePluginEntry({
