@@ -11,6 +11,19 @@ export type TemplateSearchItem = {
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 50;
 
+/** Shown when POST /workflow-templates returns success with an empty list. */
+export const WORKFLOW_TEMPLATES_NO_ACCESS_MESSAGE =
+	"未查询到可访问的工作流模板，您可能没有相关权限。请联系管理员申请工作流访问权限。";
+
+export function assertWorkflowTemplatesFound(
+	items: TemplateSearchItem[],
+	query?: string,
+): void {
+	if (items.length > 0) return;
+	const suffix = query?.trim() ? `（搜索：${query.trim()}）` : "";
+	throw new Error(`${WORKFLOW_TEMPLATES_NO_ACCESS_MESSAGE}${suffix}`);
+}
+
 export async function fetchWorkflowTemplates(
 	client: StoApiClient,
 	query: string,
@@ -42,10 +55,8 @@ export async function resolveTemplateIdWithOptionalSearch(
 			);
 		}
 		const templates = await search(query);
-		const first = templates[0];
-		if (!first?.id) {
-			throw new Error(`未找到匹配的工作流模板：${query}`);
-		}
+		assertWorkflowTemplatesFound(templates, query);
+		const first = templates[0]!;
 		return {
 			templateId: first.id,
 			resolvedViaSearch: true,

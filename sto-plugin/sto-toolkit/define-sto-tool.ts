@@ -1,4 +1,4 @@
-import type { TSchema } from "@sinclair/typebox";
+import type { TSchema } from "./typebox-shim.js";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { stoToolError, toolResultFromEnvelope, type StoToolEnvelope } from "./envelope.js";
 
