@@ -59,8 +59,8 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
       if (job) {
         setName(job.name || '');
         if (job.engineType === 'claude') {
-          setMessage(job.promptTemplate || '');
-          setRecipients([]);
+          setMessage(stripInstructionFromTaskMessage(job.promptTemplate || ''));
+          setRecipients(resolveScheduledTaskMentions(job.promptTemplate || ''));
           setEngineType('claude');
           setSchedule(cronToScheduleValue(job.cronExpr));
         } else {
@@ -103,7 +103,7 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
         message: message.trim(),
         schedule: scheduleValueToCron(schedule),
         enabled: true,
-        dingTalkMentions: !isClaudeTask && recipients.length > 0 ? recipients : undefined,
+        dingTalkMentions: recipients.length > 0 ? recipients : undefined,
         engineType,
         claudeWorkspacePath: undefined,
         claudePermissionProfile: engineType === 'claude' ? 'dangerous-bypass' : undefined,
@@ -222,18 +222,19 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
             <SchedulePicker value={schedule} onChange={setSchedule} />
           </div>
 
-          {!isClaudeTask ? (
-            <div>
-              <label className="block text-[13.5px] font-medium text-foreground mb-1.5">
+          <div>
+            <div className="flex items-center justify-between gap-3 mb-1.5">
+              <label className="block text-[13.5px] font-medium text-foreground">
                 发送对象
               </label>
-              <DingTalkRecipientField value={recipients} onChange={setRecipients} />
+              {isClaudeTask ? (
+                <span className="text-[11.5px] text-muted-foreground">
+                  Claude 任务会将 `@钉钉` 收件人注入执行指令，并保留本地会话记录。
+                </span>
+              ) : null}
             </div>
-          ) : (
-            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-[12px] text-muted-foreground">
-              Claude 本地定时任务会把运行结果写入本地会话与任务列表，不走钉钉发送链路。
-            </div>
-          )}
+            <DingTalkRecipientField value={recipients} onChange={setRecipients} />
+          </div>
         </div>
 
         {/* Footer */}
