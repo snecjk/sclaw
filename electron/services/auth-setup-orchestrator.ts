@@ -204,6 +204,15 @@ async function runSetup(
     logger.warn(`${logPrefix} STO plugins config failed:`, err);
   }
 
+  // ===== 新增：登录后静默获取用户 SK =====
+  try {
+    const { getUserSk } = await import('./providers/user-sk-service');
+    await getUserSk();
+  } catch {
+    // 静默失败，sto-model-sync 会处理无 SK 的情况
+  }
+  // ========================================
+
   const stoSync = getStoModelSyncService();
   if (gatewayManager) {
     stoSync.setGatewayManager(gatewayManager);

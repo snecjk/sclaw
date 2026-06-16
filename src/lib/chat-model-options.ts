@@ -84,9 +84,10 @@ export function shouldSyncSessionToWorkspaceDefault(
 
 export interface ChatModelOption {
   key: string;
-  modelId: string;
+  modelId: string;        // ← 原始值（含前缀），用于发给 Gateway / backend
+  normalizedId: string;   // ← 截断后的值，用于匹配 selectedModelId
   accountId: string;
-  displayName: string;
+  displayName: string;    // ← 截断后的值，UI 展示更干净
   subLabel: string;
   /** true = STO 内置等 */
   isBuiltin: boolean;
@@ -100,24 +101,28 @@ export function buildChatModelOptions(providerItems: ProviderListItem[]): ChatMo
     const isBuiltin = account.vendorId === 'sto';
     const customModels = account.metadata?.customModels as string[] | undefined;
     if (customModels && customModels.length > 0) {
-      for (const modelId of customModels) {
-        if (HIDDEN_PROVIDER_IDS.has(modelId)) continue;
+      for (const rawModelId of customModels) {
+        if (HIDDEN_PROVIDER_IDS.has(rawModelId)) continue;
+        const normalizedId = normalizeModelIdForChat(rawModelId);
         options.push({
-          key: `${account.id}::${modelId}`,
-          modelId,
+          key: `${account.id}::${rawModelId}`,
+          modelId: rawModelId,
+          normalizedId,
           accountId: account.id,
-          displayName: modelId,
+          displayName: normalizedId,
           subLabel,
           isBuiltin,
         });
       }
     } else if (account.model) {
       if (!HIDDEN_PROVIDER_IDS.has(account.model)) {
+        const normalizedId = normalizeModelIdForChat(account.model);
         options.push({
           key: `${account.id}::${account.model}`,
           modelId: account.model,
+          normalizedId,
           accountId: account.id,
-          displayName: account.label || account.model,
+          displayName: account.label || normalizedId,
           subLabel: account.model,
           isBuiltin,
         });

@@ -327,11 +327,23 @@ async function syncCustomProviderAgentModel(
     const models = customModels.length > 0
       ? customModels.map((id) => ({ id, name: id, input: DEFAULT_MODEL_INPUT }))
       : config.model ? [{ id: config.model, name: config.model, input: DEFAULT_MODEL_INPUT }] : [];
+
+    // Path A: write openclaw.json (with headers.secret)
+    await syncProviderConfigToOpenClaw(runtimeProviderKey, config.model, {
+      baseUrl: normalizeProviderBaseUrl(config, config.baseUrl, config.apiProtocol || 'openai-completions'),
+      api: config.apiProtocol || 'openai-completions',
+      apiKeyEnv: 'STO_API_KEY',
+      headers: config.headers,
+      defaultModelInput: DEFAULT_MODEL_INPUT,
+    });
+
+    // Path B: write models.json (with apiKey + authHeader)
     await updateAgentModelProvider(runtimeProviderKey, {
       baseUrl: normalizeProviderBaseUrl(config, config.baseUrl, config.apiProtocol || 'openai-completions'),
       api: config.apiProtocol || 'openai-completions',
       models,
       apiKey: resolvedKey,
+      authHeader: true,
     });
     return;
   }

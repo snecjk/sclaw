@@ -22,7 +22,40 @@ import {
   syncProviderApiKeyToRuntime,
 } from './provider-runtime-sync';
 import { logger } from '../../utils/logger';
-import { buildStoMemoryCenterAuthHeaders } from '../../utils/sto-memory-api-auth';
+import crypto from 'crypto';
+
+// Gateway 消息发送域名（无 api 前缀）
+const NEW_SUPPLIER_DOMAINS: Record<string, string> = {
+  prod: 'https://devops-llmgateway.sto.cn',
+  test: 'https://devops-llmgateway-test.sto.cn',
+};
+
+// SK 查询/创建接口域名（带 api 前缀）
+const SK_API_DOMAINS: Record<string, string> = {
+  prod: 'https://devops-llmgatewayapi.sto.cn',
+  test: 'https://devops-llmgatewayapi-test.sto.cn',
+};
+
+function isTestEnvironment(env?: string | null): boolean {
+  const normalized = env?.trim().toLowerCase() || '';
+  return ['test', 'pre-release', 'daily', 'daily-external'].some(
+    (e) => normalized.includes(e)
+  );
+}
+
+async function resolveSupplierDomain(): Promise<string> {
+  const env = await getSsoEnvironment();
+  return isTestEnvironment(env)
+    ? NEW_SUPPLIER_DOMAINS.test
+    : NEW_SUPPLIER_DOMAINS.prod;
+}
+
+async function resolveSkApiDomain(): Promise<string> {
+  const env = await getSsoEnvironment();
+  return isTestEnvironment(env)
+    ? SK_API_DOMAINS.test
+    : SK_API_DOMAINS.prod;
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -102,23 +135,31 @@ export class StoModelSyncService {
   // -- Remote fetch --------------------------------------------------------
 
   /**
-   * Fetch model list from the STO API using standard OpenAI /v1/models
-   * endpoint. Auth headers 与 client-update 等 Memory Center API 共用 buildStoMemoryCenterAuthHeaders。
+   * Fetch model list from the new supplier SK detail API.
+   * The model list is returned in data[0].models field.
    */
   async fetchRemoteModels(
-    domain: string,
-    token: string,
+    userCode: string,
   ): Promise<StoRemoteModel[]> {
-    const url = `${domain}${STO_MODEL_LIST_PATH}`;
-    const headers = buildStoMemoryCenterAuthHeaders(token);
+    const domain = await resolveSkApiDomain();
+    const url = `${domain}/openapi/key/detail`;
+    const secretHeader = crypto.createHash('md5').update(userCode).digest('hex');
+
     logger.info(`[sto-sync] >>> fetchRemoteModels url=${url}`);
-    logger.info(`[sto-sync] >>> fetchRemoteModels headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
     let response: Response;
     try {
-      response = await fetch(url, { headers, signal: controller.signal });
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          secret: secretHeader,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userCode }),
+        signal: controller.signal,
+      });
     } finally {
       clearTimeout(timeoutId);
     }
@@ -131,13 +172,21 @@ export class StoModelSyncService {
       );
     }
 
-    const data = JSON.parse(bodyText) as {
-      data?: StoRemoteModel[];
-      models?: StoRemoteModel[];
+    const json = JSON.parse(bodyText) as {
+      code: string;
+      msg: string;
+      data?: Array<{
+        models: string[];
+        encryptedKey: string;
+      }>;
     };
 
-    // Support both OpenAI standard format { data: [...] } and legacy { models: [...] }
-    return data.data ?? data.models ?? [];
+    if (json.code !== '0') {
+      throw new Error(`Biz error: ${json.code} ${json.msg}`);
+    }
+
+    const models = json.data?.[0]?.models ?? [];
+    return models.map((id) => ({ id, name: id }));
   }
 
   // -- Core sync -----------------------------------------------------------
@@ -169,20 +218,28 @@ export class StoModelSyncService {
       defaultSet: null,
     };
 
-    // Step 1 — Auth preconditions: get stotoken from SSO state
-    const token = await getStoToken();
-    if (!token) {
-      result.error = 'no-token';
+    // Step 1 — Get user SK
+    const { getUserSk } = await import('../user-sk-service');
+    const sk = await getUserSk();
+    if (!sk) {
+      result.error = 'no-sk';
       return result;
     }
 
-    const env = await getSsoEnvironment();
-    const domain = StoModelSyncService.resolveDomain(env);
+    // Step 2 — Get user code for secret header
+    const { getAuthState } = await import('../../utils/auth-store');
+    const authState = await getAuthState();
+    const userCode = authState.user?.code || '';
+    if (!userCode) {
+      result.error = 'no-user-code';
+      return result;
+    }
+    const secretHeader = crypto.createHash('md5').update(userCode).digest('hex');
 
-    // Step 2 — Fetch remote models via OpenAI-compatible /v1/models
+    // Step 3 — Fetch remote models from SK detail API
     let remoteModels: StoRemoteModel[];
     try {
-      remoteModels = await this.fetchRemoteModels(domain, token);
+      remoteModels = await this.fetchRemoteModels(userCode);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.warn(`[sto-sync] Failed to fetch remote models: ${message}`);
@@ -237,6 +294,7 @@ export class StoModelSyncService {
 
     // Step 4 — Create or update the single STO account
     const existingAccount = allAccounts.find((a) => a.id === STO_ACCOUNT_ID);
+    const domain = await resolveSupplierDomain();
     const expectedBaseUrl = `${domain}/v1`;
     const now = new Date().toISOString();
 
@@ -252,6 +310,9 @@ export class StoModelSyncService {
         model: remoteModelIds[0],
         enabled: true,
         isDefault: false,
+        headers: {
+          secret: secretHeader,
+        },
         metadata: {
           managedBy: 'sto-auto-sync',
           customModels: remoteModelIds,
@@ -261,10 +322,10 @@ export class StoModelSyncService {
       };
 
       try {
-        await providerService.createAccount(account, token);
+        await providerService.createAccount(account, sk);
         await syncSavedProviderToRuntime(
           providerAccountToConfig(account),
-          token,
+          sk,
           runtimeGateway,
         );
         result.created.push(STO_ACCOUNT_ID);
@@ -280,11 +341,13 @@ export class StoModelSyncService {
       const baseUrlChanged = existingAccount.baseUrl !== expectedBaseUrl;
       const currentModelRemoved =
         existingAccount.model && !remoteModelIds.includes(existingAccount.model);
+      const headersChanged = existingAccount.headers?.secret !== secretHeader;
 
-      if (modelsChanged || baseUrlChanged || currentModelRemoved || !existingAccount.enabled) {
+      if (modelsChanged || baseUrlChanged || currentModelRemoved || headersChanged || !existingAccount.enabled) {
         const patch: Partial<ProviderAccount> = {
           baseUrl: expectedBaseUrl,
           enabled: true,
+          headers: { secret: secretHeader },
           metadata: {
             ...existingAccount.metadata,
             managedBy: 'sto-auto-sync',
@@ -298,7 +361,7 @@ export class StoModelSyncService {
         }
 
         try {
-          await providerService.updateAccount(STO_ACCOUNT_ID, patch, token);
+          await providerService.updateAccount(STO_ACCOUNT_ID, patch, sk);
           const updatedAccount = {
             ...existingAccount,
             ...patch,
@@ -306,7 +369,7 @@ export class StoModelSyncService {
           };
           await syncSavedProviderToRuntime(
             providerAccountToConfig(updatedAccount),
-            token,
+            sk,
             runtimeGateway,
           );
           result.updated.push(STO_ACCOUNT_ID);
@@ -314,12 +377,12 @@ export class StoModelSyncService {
           logger.warn(`[sto-sync] Failed to update STO account:`, err);
         }
       } else {
-        // No config change — just make sure the API key (stotoken) is current
+        // No config change — just make sure the API key (SK) is current
         try {
           const currentKey = await getApiKey(STO_ACCOUNT_ID);
-          if (currentKey !== token) {
-            await storeApiKey(STO_ACCOUNT_ID, token);
-            await syncProviderApiKeyToRuntime('sto', STO_ACCOUNT_ID, token);
+          if (currentKey !== sk) {
+            await storeApiKey(STO_ACCOUNT_ID, sk);
+            await syncProviderApiKeyToRuntime('sto', STO_ACCOUNT_ID, sk);
             result.updated.push(STO_ACCOUNT_ID);
           }
         } catch (err) {
@@ -382,6 +445,10 @@ export class StoModelSyncService {
 
   async cleanupOnLogout(): Promise<void> {
     this.stopPeriodicSync();
+
+    // Clear user SK
+    const { clearUserSk } = await import('../user-sk-service');
+    await clearUserSk();
 
     const accounts = await listProviderAccounts();
     const stoAccounts = accounts.filter((a) =>

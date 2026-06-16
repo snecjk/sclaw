@@ -150,21 +150,22 @@ export function ChatToolbar() {
   ]);
 
   const selectedModel = useMemo(
-    () => modelOptions.find((o) => o.modelId === selectedModelId),
+    () => modelOptions.find((o) => o.normalizedId === selectedModelId),
     [modelOptions, selectedModelId],
   );
 
-  const handleModelSwitch = async (modelId: string) => {
-    if (!currentSessionKey || modelId === selectedModelId) return;
-    const opt = modelOptions.find((o) => o.modelId === modelId);
-    setSelectedModelId(modelId);
+  const handleModelSwitch = async (normalizedId: string) => {
+    if (!currentSessionKey || normalizedId === selectedModelId) return;
+    const opt = modelOptions.find((o) => o.normalizedId === normalizedId);
+    const rawModelId = opt?.modelId ?? normalizedId;
+    setSelectedModelId(normalizedId);
     setModelSaving(true);
     try {
       await hostApiFetch('/api/sessions/model', {
         method: 'POST',
         body: JSON.stringify({
           sessionKey: currentSessionKey,
-          model: modelId,
+          model: rawModelId,
           accountId: opt?.accountId,
           agentId: currentAgentId || undefined,
         }),
@@ -179,7 +180,7 @@ export function ChatToolbar() {
         workspaceDefaultModel: workspaceDefaultModelId,
         stoCatalogModelIds,
       });
-      if (resolved) setSelectedModelId(resolved);
+      setSelectedModelId(resolved);
     } finally {
       setModelSaving(false);
     }
