@@ -90,6 +90,8 @@ Main shell routes include the dashboard home (`/`), prototype STO task reports u
 
 When an agent session uses the Claude Agent SDK engine, StoClaw still applies the desktop-side DingTalk recipient/send guard flow: selected DingTalk recipients are staged into Claude runtime instructions, and `dws chat message send` calls made through Claude's Bash tool keep the same anti-batch and post-success rate-limit protections as the OpenClaw plugin path. Image attachments on Claude sessions are sent as native Claude multimodal image blocks instead of path-only prompt text so visual understanding stays aligned with the uploaded pixels.
 
+Claude Agent SDK sessions also expose a built-in `claude-scheduled-task-tool` MCP extension. From a Claude conversation, the agent can now create, inspect, update, delete, list, and trigger local Claude scheduled tasks directly through tool calls without leaving chat. Those task operations default to the current Claude session's agent/workspace context unless the user explicitly requests another target.
+
 Default shell uses the **provincial sidebar** (省区版本样式): home, scheduled tasks, skills, the STO task list block, and time-bucketed conversation history; chat and “my data” stay off the primary rail, the workspace group and conversation-list chrome are hidden, and the large user card is replaced by a compact settings entry (same menu: settings, language, theme, logout). To restore the **full** navigation rail for local builds, set `VITE_STOCLAW_SIDEBAR_LAYOUT=full` in `.env.development.local` or the build environment.
 
 > Note for Moonshot (Kimi): StoClaw keeps Kimi web search enabled by default.  

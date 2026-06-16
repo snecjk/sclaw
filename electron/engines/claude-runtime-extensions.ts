@@ -7,6 +7,11 @@ import {
   WORKFLOW_SYSTEM_PROMPT,
 } from '../../sto-plugin/claude/sto-workflow-tool/hooks';
 import { createWorkflowMcpServer } from '../../sto-plugin/claude/sto-workflow-tool/tools';
+import { buildScheduledTaskHooks } from '../../sto-plugin/claude/claude-scheduled-task-tool/hooks';
+import {
+  CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT,
+  createClaudeScheduledTaskMcpServer,
+} from '../../sto-plugin/claude/claude-scheduled-task-tool/tools';
 import {
   buildStoAgentTelemetryClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-agent-telemetry/sdk';
@@ -91,6 +96,21 @@ const workflowToolExtension: ClaudeRuntimeExtension = {
   },
 };
 
+const scheduledTaskToolExtension: ClaudeRuntimeExtension = {
+  id: 'claude-scheduled-task-tool',
+  async build({ sessionKey }) {
+    return {
+      hooks: buildScheduledTaskHooks(),
+      systemPromptAppend: CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT,
+      mcpServers: {
+        'claude-scheduled-task-tool': createClaudeScheduledTaskMcpServer({
+          sessionKey,
+        }),
+      },
+    };
+  },
+};
+
 const agentTelemetryExtension: ClaudeRuntimeExtension = {
   id: 'sto-agent-telemetry',
   build: ({ sessionKey }) => buildStoAgentTelemetryClaudeRuntimeOptions(sessionKey),
@@ -99,6 +119,7 @@ const agentTelemetryExtension: ClaudeRuntimeExtension = {
 const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
   dingTalkSendGuardExtension,
   workflowToolExtension,
+  scheduledTaskToolExtension,
   agentTelemetryExtension,
 ];
 
