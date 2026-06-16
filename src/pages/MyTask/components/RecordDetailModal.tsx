@@ -116,8 +116,6 @@ export function RecordDetailModal({ record, onClose }: RecordDetailModalProps) {
             </span>
           </DetailRow>
 
-          <DetailRow label="触发方式">{record.triggerMethod}</DetailRow>
-
           <DetailRow label="执行时间">{record.startTime}</DetailRow>
 
           <DetailRow label="执行耗时">{record.duration}</DetailRow>

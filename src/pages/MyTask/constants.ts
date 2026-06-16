@@ -20,13 +20,6 @@ export const RECORD_STATUS_TABS: { value: RecordStatus; label: string }[] = [
   { value: 'failed', label: '执行失败' },
 ];
 
-/** 任务类型筛选选项 */
-export const RECORD_TYPE_OPTIONS = [
-  { value: 'all', label: '全部任务' },
-  { value: 'normal', label: '普通任务' },
-  { value: 'workflow', label: '工作流任务' },
-] as const;
-
 /** 推荐任务（与 HTML 原型一致） */
 export const RECOMMEND_TASKS: RecommendTask[] = [
   {

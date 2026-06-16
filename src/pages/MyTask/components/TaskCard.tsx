@@ -83,13 +83,15 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
 
   const scheduleLabel = task.scheduleText ?? parseScheduleToLabel(task.cronExpr);
   const nextRunLabel = formatNextRunLabel(task.nextRunAt, task.enabled);
+  /** 从 description 中提取 wf_ 开头的工作流 ID */
+  const workflowId = task.description?.match(/wf_\w+/)?.[0] ?? null;
 
   return (
     <article
       className={cn(myTaskCardShellClass, 'cursor-pointer', menuOpen && 'z-30')}
       onClick={handleCardClick}
     >
-      {/* 顶栏：开关（左）+ 更多（右） */}
+      {/* 顶栏：开关（左）+ 未读红点 + 更多（右） */}
       <div className={myTaskCardTopRowClass}>
         <button
           type="button"
@@ -113,6 +115,8 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
             )}
           />
         </button>
+
+        <div className="flex items-center gap-1.5 shrink-0">
 
         <div className="relative shrink-0" ref={menuRef} data-menu>
           <button
@@ -183,11 +187,20 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
             </div>
           ) : null}
         </div>
+        </div>
       </div>
 
       {/* 标题 + 描述 */}
       <div className={myTaskCardBodyClass}>
-        <h3 className={myTaskCardTitleClass}>{task.name}</h3>
+        <h3 className={cn(myTaskCardTitleClass, 'flex items-center gap-0')}>
+          <span className="truncate">{task.name}</span>
+          {workflowId && (
+            <span className="inline-flex items-center gap-[4px] ml-[6px] px-[7px] py-[1px] rounded-full text-[11px] font-medium leading-[1.55] text-[#4f46a8] bg-[#eeedfe] border border-[#dcd9f7] whitespace-nowrap shrink-0">
+              <svg className="w-[11px] h-[11px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="6" cy="6" r="2.1" /><circle cx="18" cy="18" r="2.1" /><path d="M8 6h6.5a3 3 0 0 1 3 3v6.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              工作流
+            </span>
+          )}
+        </h3>
         {task.description ? (
           <p className={myTaskCardDescriptionClass}>{task.description}</p>
         ) : null}

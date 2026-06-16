@@ -439,8 +439,8 @@ export class ScheduledTaskService {
 
 		// TODO====? 询问这里为什么要做 5s 超时，让状态都变为 async_started
     // [DISABLED] 移除 5s 超时，避免长时间运行的任务被误判为 async_started
-    // const controller = new AbortController();
-    // const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     let res: Response;
     try {
@@ -448,19 +448,19 @@ export class ScheduledTaskService {
         method: 'POST',
         headers,
         body,
-        // signal: controller.signal,
+        signal: controller.signal,
       });
-      // clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
     } catch (err) {
-      // clearTimeout(timeoutId);
-      // if (err instanceof Error && err.name === 'AbortError') {
-      //   logger.info(`[ScheduledTaskService] triggerTask timed out for task ${taskId}, treating as async execution started`);
-      //   return {
-      //     taskId,
-      //     runId: 0,
-      //     outcome: 'async_started',
-      //   };
-      // }
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === 'AbortError') {
+        logger.info(`[ScheduledTaskService] triggerTask timed out for task ${taskId}, treating as async execution started`);
+        return {
+          taskId,
+          runId: 0,
+          outcome: 'async_started',
+        };
+      }
       logger.error(`[ScheduledTaskService] triggerTask fetch error for task ${taskId}:`, err);
       throw err;
     }

@@ -3,19 +3,34 @@ import { X, Loader2, ChevronDown, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
 import { DingTalkRecipientField } from '@/components/dingtalk/DingTalkRecipientField';
-import { useScheduledTasksStore } from '@/stores/scheduledTasks';
+import { useMyTaskStore } from '../store';
 import { cn } from '@/lib/utils';
-import type { CronJob, CronJobCreateInput } from '@/types/cron';
+import type { CronJobCreateInput } from '@/types/cron';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { ManagedLocalTask } from '@/stores/cron';
+import { useAgentsStore } from '@/stores/agents';
+import type { AgentSummary } from '@/types/agent';
 
-export type TaskCreateInputWithRun = CronJobCreateInput;
+type TaskEngineType = 'openclaw' | 'claude';
+
+export type TaskCreateInputWithRun = CronJobCreateInput & { engineType: TaskEngineType };
 
 interface TaskCreateModalProps {
-  job?: CronJob | null;
+  job?: ManagedLocalTask | null;
   open: boolean;
   onClose: () => void;
   onSave: (input: TaskCreateInputWithRun) => Promise<void>;
   initialValues?: { name?: string; message?: string; schedule?: string };
+}
+
+function resolvePreferredAgentByEngine(
+  agents: AgentSummary[],
+  defaultAgentId: string,
+  engineType: TaskEngineType,
+): AgentSummary | null {
+  const engineAgents = agents.filter((agent) => (agent.engineType ?? 'openclaw') === engineType);
+  if (engineAgents.length === 0) return null;
+  return engineAgents.find((agent) => agent.id === defaultAgentId) ?? engineAgents[0] ?? null;
 }
 
 function defaultScheduleValue(): ScheduleValue {
@@ -74,18 +89,24 @@ function cronToScheduleValue(cron: string | unknown): ScheduleValue {
 }
 
 export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: TaskCreateModalProps) {
+  const agents = useAgentsStore((s) => s.agents);
+  const defaultAgentId = useAgentsStore((s) => s.defaultAgentId);
   const [name, setName] = useState('');
   const [instructions, setInstructions] = useState('');
   const [schedule, setSchedule] = useState<ScheduleValue>(defaultScheduleValue());
   const [saving, setSaving] = useState(false);
   const [recipients, setRecipients] = useState<DingTalkMention[]>([]);
   const [errors, setErrors] = useState<{ name?: string; instructions?: string }>({});
+  const [engineType, setEngineType] = useState<TaskEngineType>('openclaw');
 
   // 关联工作流下拉
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState<string>('');
   const workflowRef = useRef<HTMLDivElement>(null);
-  const workflowOptions = useScheduledTasksStore((s) => s.workflowOptions);
+  const workflowOptions = useMyTaskStore((s) => s.workflowOptions);
+
+  const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, engineType);
+  const isClaudeTask = job?.engineType === 'claude' || selectedAgent?.engineType === 'claude';
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -101,31 +122,56 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
 
   const isEditing = !!job;
 
+  // 工作流选择联动：选中时自动填充描述框并 disabled
+  const workflowDisabled = !!selectedWorkflow;
+  useEffect(() => {
+    if (selectedWorkflow) {
+      const wf = workflowOptions.find(o => o.value === selectedWorkflow);
+      if (wf) {
+        setInstructions(`帮我执行 id 为：${wf.value} 的工作流 【${wf.label}】`);
+      }
+    } else {
+      // 取消选择工作流时，清空描述框
+      setInstructions('');
+    }
+  }, [selectedWorkflow, workflowOptions]);
+
   useEffect(() => {
     if (open) {
-      /* eslint-disable react-hooks/set-state-in-effect -- Modal form reset on open */
       if (job) {
         setName(job.name || '');
-        setInstructions(job.message || '');
-        setSchedule(cronToScheduleValue(job.schedule));
-        setSelectedWorkflow(job.workflowCode || '');
+        if (job.engineType === 'claude') {
+          setInstructions(job.promptTemplate || '');
+          setRecipients([]);
+          setEngineType('claude');
+          setSchedule(cronToScheduleValue(job.cronExpr));
+        } else {
+          setInstructions(job.message || '');
+          setRecipients([]);
+          setEngineType('openclaw');
+          setSchedule(cronToScheduleValue(job.schedule));
+        }
+        // 编辑模式不回显已选工作流
+        setSelectedWorkflow('');
       } else if (initialValues) {
         setName(initialValues.name || '');
         setInstructions(initialValues.message || '');
         setSchedule(initialValues.schedule ? cronToScheduleValue(initialValues.schedule) : defaultScheduleValue());
         setSelectedWorkflow('');
+        setEngineType(resolvePreferredAgentByEngine(agents, defaultAgentId, 'claude') ? 'claude' : 'openclaw');
       } else {
         setName('');
         setInstructions('');
         setSchedule(defaultScheduleValue());
         setSelectedWorkflow('');
+        setEngineType(resolvePreferredAgentByEngine(agents, defaultAgentId, 'claude') ? 'claude' : 'openclaw');
       }
       setRecipients([]);
       setErrors({});
       setSaving(false);
-      /* eslint-enable react-hooks/set-state-in-effect */
+
     }
-  }, [open, job, initialValues]);
+  }, [open, job, initialValues, defaultAgentId, agents]);
 
   const handleSubmit = async () => {
     const newErrors: typeof errors = {};
@@ -143,8 +189,9 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
         message: instructions.trim(),
         schedule: scheduleValueToCron(schedule),
         enabled: true,
-        dingTalkMentions: recipients.length > 0 ? recipients : undefined,
+        dingTalkMentions: !isClaudeTask && recipients.length > 0 ? recipients : undefined,
         workflowCode: selectedWorkflow || undefined,
+        engineType,
       });
       onClose();
     } catch (err) {
@@ -166,11 +213,11 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[min(820px,100%)] bg-background rounded-[22px] border border-border shadow-2xl overflow-visible my-8"
+        className="w-full max-w-[min(820px,100%)] bg-background rounded-[22px] border border-border shadow-2xl my-8 flex flex-col max-h-[calc(100vh-4rem)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 mb-6 px-[18px] pt-[18px]">
+        <div className="flex items-start justify-between gap-4 mb-6 px-[18px] pt-[18px] flex-shrink-0">
           <div className="min-w-0">
             <h2 className="text-xl font-bold text-foreground tracking-[-0.02em] leading-[1.3] mb-2.5">
               {isEditing ? '编辑定时任务' : '新建定时任务'}
@@ -190,7 +237,7 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
         </div>
 
         {/* Form */}
-        <div className="px-[18px] pb-[16px] flex flex-col gap-5">
+        <div className="px-[18px] pb-[16px] flex flex-col gap-5 flex-1 overflow-y-auto min-h-0">
           {/* Name */}
           <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">
@@ -208,6 +255,28 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
               autoComplete="off"
             />
             {errors.name && <p className="text-xs text-red-600">{errors.name}</p>}
+          </div>
+
+          {/* Engine Type */}
+          <div className="flex flex-col gap-2">
+            <label className="block text-sm font-semibold text-foreground">
+              执行引擎
+            </label>
+            <select
+              value={engineType}
+              onChange={(e) => setEngineType(e.target.value as TaskEngineType)}
+              className="w-full h-[42px] px-3.5 text-sm rounded-[10px] border border-border bg-background focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] transition-colors"
+            >
+              <option value="openclaw">OpenClaw</option>
+              {resolvePreferredAgentByEngine(agents, defaultAgentId, 'claude') ? (
+                <option value="claude">Claude Agent</option>
+              ) : null}
+            </select>
+            <p className="text-[11.5px] text-muted-foreground">
+              {selectedAgent?.engineType === 'claude'
+                ? '将创建 Claude 本地定时任务，独立在本机运行。'
+                : '将创建 OpenClaw 本地定时任务。'}
+            </p>
           </div>
 
           {/* Workflow */}
@@ -241,7 +310,15 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
                         <button
                           key={opt.value}
                           type="button"
-                          onClick={() => { setSelectedWorkflow(opt.value); setWorkflowOpen(false); if (opt.description) { setInstructions(opt.description); if (errors.instructions) setErrors(p => ({ ...p, instructions: undefined })); } }}
+                          onClick={() => {
+                            // 点击已选中的工作流则取消选择
+                            if (isSelected) {
+                              setSelectedWorkflow('');
+                            } else {
+                              setSelectedWorkflow(opt.value);
+                            }
+                            setWorkflowOpen(false);
+                          }}
                           className={cn(
                             'flex items-center justify-between gap-2 w-full min-h-9 px-2.5 py-2 rounded-lg text-sm transition-colors',
                             isSelected ? 'font-semibold' : 'text-foreground'
@@ -270,13 +347,18 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
               value={instructions}
               onChange={(e) => { setInstructions(e.target.value); if (errors.instructions) setErrors(p => ({ ...p, instructions: undefined })); }}
               rows={7}
+              disabled={workflowDisabled}
               placeholder="让 STO Claw 帮你做什么…"
               className={cn(
                 "w-full px-3.5 py-2.5 text-sm rounded-[10px] border bg-background placeholder:text-muted-foreground focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] resize-none transition-colors leading-relaxed",
-                errors.instructions ? "border-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.12)]" : "border-border"
+                errors.instructions ? "border-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.12)]" : "border-border",
+                workflowDisabled && "bg-muted cursor-not-allowed opacity-70"
               )}
             />
             {errors.instructions && <p className="text-xs text-red-600">{errors.instructions}</p>}
+            {workflowDisabled && (
+              <p className="text-xs text-muted-foreground">已关联工作流，描述内容自动生成</p>
+            )}
           </div>
 
           {/* Schedule */}
@@ -288,16 +370,18 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
           </div>
 
           {/* Recipients */}
-          <div className="flex flex-col gap-2">
-            <label className="block text-sm font-semibold text-foreground">
-              发送对象
-            </label>
-            <DingTalkRecipientField value={recipients} onChange={setRecipients} />
-          </div>
+          {!isClaudeTask && (
+            <div className="flex flex-col gap-2">
+              <label className="block text-sm font-semibold text-foreground">
+                发送对象
+              </label>
+              <DingTalkRecipientField value={recipients} onChange={setRecipients} />
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 px-[18px] py-4 border-t border-border bg-muted/20 rounded-b-[22px]">
+        <div className="flex justify-end gap-3 px-[18px] py-4 border-t border-border bg-muted/20 rounded-b-[22px] flex-shrink-0">
           <Button variant="outline" onClick={onClose} className="rounded-[10px] px-5 h-[42px] text-sm">
             取消
           </Button>

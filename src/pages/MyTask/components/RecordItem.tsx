@@ -28,7 +28,7 @@ export function RecordItem({ record, onViewDetail }: RecordItemProps) {
       {/* 内容 */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 text-[14px] font-semibold text-[#111827]">
-          {record.taskName}
+          <span className="truncate">{record.taskName}</span>
           <span className={cn('inline-flex items-center gap-[5px] shrink-0 text-[12.5px] font-medium', statusConfig.textClass)}>
             <span
               className={cn(

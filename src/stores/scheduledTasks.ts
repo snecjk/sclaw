@@ -12,20 +12,12 @@ import type {
   ScheduledTaskTriggerResponse,
 } from '@/types/scheduled-task';
 
-export interface WorkflowOption {
-  value: string;
-  label: string;
-  description?: string;
-}
-
 interface ScheduledTasksState {
   tasks: ScheduledTask[];
-  workflowOptions: WorkflowOption[];
   loading: boolean;
   error: string | null;
 
   fetchTasks: () => Promise<void>;
-  fetchWorkflows: () => Promise<void>;
   createTask: (input: ScheduledTaskCreateInput) => Promise<ScheduledTask>;
   updateTask: (input: ScheduledTaskUpdateInput) => Promise<void>;
   deleteTask: (taskId: number) => Promise<void>;
@@ -35,7 +27,6 @@ interface ScheduledTasksState {
 
 export const useScheduledTasksStore = create<ScheduledTasksState>((set) => ({
   tasks: [],
-  workflowOptions: [],
   loading: false,
   error: null,
 
@@ -48,24 +39,6 @@ export const useScheduledTasksStore = create<ScheduledTasksState>((set) => ({
       const message = String(err);
       set({ error: message, loading: false });
       throw err;
-    }
-  },
-
-  fetchWorkflows: async () => {
-    try {
-      const res = await hostApiFetch<{ success: boolean; data: Array<{ id: string; name: string; description?: string }> }>(
-        '/api/my-tasks/workflows/page',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ page: 1, pageSize: 100 }),
-        },
-      );
-      const items = (res?.data ?? []).map((w) => ({ value: w.id, label: w.name, description: w.description ?? '' }));
-      set({ workflowOptions: items });
-    } catch (err) {
-      console.error('[scheduledTasks] fetchWorkflows failed:', err);
-      set({ workflowOptions: [] });
     }
   },
 

@@ -441,6 +441,10 @@ export const workflowDetailModalSkillTagClass = cn(
   'text-[var(--sto-wf-cover-purple-icon)]',
 );
 
+/** 详情弹窗更多菜单（浮动下拉菜单容器） */
+export const workflowDetailModalMenuClass =
+  'absolute right-0 top-full z-10 mt-1.5 min-w-[160px] rounded-xl border border-border bg-card p-1.5 shadow-[0_8px_40px_rgba(0,0,0,0.16)]';
+
 /** 详情弹窗底栏 */
 export const workflowDetailModalFooterClass =
   'sticky bottom-0 flex items-end justify-between gap-2 bg-card px-[18px] py-4';

@@ -1,10 +1,11 @@
 /**
  * My-Tasks 通用透传代理
  *
- * 将前端 /api/my-tasks/* 请求原样转发至 Python 后端 /agent/v1/*，
- * 自动注入 stoToken 鉴权头。后续新增 /agent/v1 下的接口无需再改 Node 层。
+ * 前端直接写死完整路径 /api/my-tasks/agent/v1/xxx，
+ * Electron 仅截取 /api/my-tasks 后面的部分转发至 Python 后端。
+ * 后续新增 /agent/v1 下的接口无需再改 Node 层。
  *
- * 路径映射规则：/api/my-tasks/{rest} → /agent/v1/{rest}
+ * 路径映射规则：/api/my-tasks/agent/v1/{rest} → /agent/v1/{rest}
  */
 
 import type { IncomingMessage, ServerResponse } from 'http';
@@ -14,9 +15,6 @@ import { getStoToken } from '../../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../../utils/sto-domain';
 import { logger } from '../../utils/logger';
-
-const PREFIX = '/api/my-tasks/';
-const BACKEND_PREFIX = '/agent/v1/';
 
 
 function readRawBody(req: IncomingMessage): Promise<Buffer> {
@@ -34,10 +32,9 @@ export async function handleMyTasksRoutes(
   url: URL,
   _ctx: HostApiContext,
 ): Promise<boolean> {
-  if (!url.pathname.startsWith(PREFIX)) return false;
+  if (!url.pathname.startsWith('/api/my-tasks')) return false;
 
-  const rest = url.pathname.slice(PREFIX.length);
-  const backendPath = `${BACKEND_PREFIX}${rest}`;
+  const backendPath = url.pathname.slice('/api/my-tasks'.length);
 
   try {
     const token = await getStoToken();

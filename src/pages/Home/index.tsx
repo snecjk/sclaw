@@ -73,11 +73,12 @@ export function Home() {
 
   useEffect(() => () => { cleanupEmptySession(); }, [cleanupEmptySession]);
 
-  // Handle skill-plaza "Use" navigation with ?q= prompt
+  // Handle skill-plaza "Use" navigation with ?q= prompt and ?workflowId= template pick
   const [searchParams, setSearchParams] = useSearchParams();
   // searchParams.get() is already percent-decoded; decodeURIComponent again throws
   // URIError when the prompt contains a literal '%' (e.g. "完成率50%").
   const seedText = searchParams.get('q')?.trim() || undefined;
+  const seedWorkflowId = searchParams.get('workflowId')?.trim() || undefined;
   const { handleHubSend } = useHomeChatEntrySend();
   const gatewayStatus = useGatewayStore((s) => s.status);
   const hasAutoSentRef = useRef(false);
@@ -87,10 +88,10 @@ export function Home() {
     if (gatewayStatus.state !== 'running') return;
 
     hasAutoSentRef.current = true;
-    // Clear q from URL so refresh doesn't re-trigger
+    // Clear q and workflowId from URL so refresh doesn't re-trigger
     setSearchParams({}, { replace: true });
-    handleHubSend(seedText);
-  }, [seedText, gatewayStatus.state, handleHubSend, setSearchParams]);
+    handleHubSend(seedText, undefined, undefined, undefined, seedWorkflowId);
+  }, [seedText, seedWorkflowId, gatewayStatus.state, handleHubSend, setSearchParams]);
 
   if (isSite) {
     return (

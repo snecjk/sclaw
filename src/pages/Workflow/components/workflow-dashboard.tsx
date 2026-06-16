@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { ArrowUp, Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -58,6 +59,7 @@ export function WorkflowDashboard({
   onEditCard,
 }: WorkflowDashboardProps) {
   const { t } = useTranslation('workflow');
+  const navigate = useNavigate();
   const {
     cards,
     setCards,
@@ -351,7 +353,10 @@ export function WorkflowDashboard({
                   toast.success(on ? t('toast.resumed') : t('toast.paused'));
                 }}
                 onCardClick={() => openDetailForMine(card)}
-                onRun={() => toast.success(t('toast.runStarted', { name: card.name }))}
+                onRun={() => {
+                  const q = encodeURIComponent(`帮我执行 id 为：${card.id} 的工作流 【${card.name}】`);
+                  navigate(`/?q=${q}`);
+                }}
                 onEdit={() => onEditCard(card.name)}
                 onMore={(e) => openMenu(e, index)}
               />
@@ -392,7 +397,11 @@ export function WorkflowDashboard({
               card={card}
               onCardClick={() => openDetailForOfficial(card)}
               onPreview={() => openDetailForOfficial(card)}
-              onInstall={() => toast.success(t('toast.installed', { name: card.name }))}
+              onInstall={() => {
+                const q = encodeURIComponent(`/${card.name}`);
+                const wid = encodeURIComponent(card.id);
+                navigate(`/?q=${q}&workflowId=${wid}`);
+              }}
             />
           ))}
         </WorkflowListCardGrid>

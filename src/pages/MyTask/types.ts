@@ -6,27 +6,18 @@
 /** 执行记录状态 */
 export type RecordStatus = 'running' | 'success' | 'failed';
 
-/** 任务类型：普通任务 / 工作流任务 */
-export type TaskType = 'normal' | 'workflow';
-
 /** 任务视图：定时任务 / 执行记录 */
 export type TaskView = 'tasks' | 'records';
 
-/** 执行记录 */
+/** 执行记录（全部为工作流执行记录） */
 export interface ExecutionRecord {
   id: string;
-  /** 关联定时任务 ID */
-  taskId: number;
-  /** 任务名称 */
+  /** 任务名称（即工作流名称） */
   taskName: string;
   /** 执行状态 */
   status: RecordStatus;
-  /** 任务类型 */
-  taskType: TaskType;
-  /** 关联工作流名称（仅 workflow 类型） */
-  workflowName?: string;
-  /** 触发方式：'定时触发' | '手动触发' */
-  triggerMethod: string;
+  /** 关联工作流名称 */
+  workflowName: string;
   /** 执行开始时间（ISO 时间字符串） */
   startTime: string;
   /** 人类可读耗时 */
@@ -37,28 +28,9 @@ export interface ExecutionRecord {
   failReason?: string;
 }
 
-/** 执行记录查询参数 */
-export interface ExecutionRecordQuery {
-  taskId?: number;
-  status?: RecordStatus;
-  taskName?: string;
-  page?: number;
-  pageSize?: number;
-}
-
-/** 执行记录分页响应 */
-export interface ExecutionRecordPage {
-  items: ExecutionRecord[];
-  total: number;
-  page?: number;
-  pageSize?: number;
-}
-
-/** 任务视图模型（扩展 ScheduledTask 以适配卡片展示） */
+/** 任务视图模型（基于 ManagedLocalTask 适配卡片展示） */
 export interface TaskViewModel {
   id: string;
-  /** 原始数字 ID */
-  taskId: number;
   /** 任务名称 */
   name: string;
   /** 任务描述 */
@@ -69,7 +41,7 @@ export interface TaskViewModel {
   enabled: boolean;
   /** 下次执行时间（ISO 8601，来自接口 nextRunAt，仅展示） */
   nextRunAt: string | null;
-  /** 非空时显示“工作流任务”标签 */
+  /** 非空时显示"工作流任务"标签 */
   workflowName?: string;
   /** 关联工作流 code */
   workflowCode?: string;
@@ -77,6 +49,10 @@ export interface TaskViewModel {
   createdAt: string;
   /** 更新时间 */
   updatedAt: string;
+  /** 关联 Agent ID */
+  agentId?: string;
+  /** 引擎类型 */
+  engineType: 'openclaw' | 'claude';
 }
 
 /** 推荐任务（空状态展示） */
