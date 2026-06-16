@@ -154,7 +154,8 @@ interface AgentFeatures {
 }
 
 function getDefaultAgentEngineType(): AgentEngineType {
-  return process.platform === 'win32' ? 'claude' : 'openclaw';
+  // return process.platform === 'win32' ? 'claude' : 'openclaw';
+  return 'openclaw';
 }
 
 function normalizeAgentEngineType(value: unknown, fallback: AgentEngineType = getDefaultAgentEngineType()): AgentEngineType {
