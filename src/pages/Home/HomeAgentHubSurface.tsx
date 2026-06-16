@@ -1,28 +1,21 @@
 /**
  * 无 CRM 周报策略权限时的首页：Hero + 能力卡片 + 底部输入（色板对齐 docs/sto-design.md）。
  */
-import { useEffect, useMemo, useState } from 'react';
-import { Bot, Check, ChevronDown, Cpu, Repeat2 } from 'lucide-react';
+import { useMemo } from 'react';
+import { Bot, Cpu, Repeat2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
-import { hostApiFetch } from '@/lib/host-api';
 import { cn } from '@/lib/utils';
 import { ChatInput } from '@/pages/Chat/ChatInput';
+import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 import { HomeHero } from './HomeHero';
 import { HomeMainConversation } from './HomeMainConversation';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { useHomeConversationActive } from './use-home-conversation-active';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
-import { toast } from 'sonner';
 
 /** sto-design Grey-10 主标题 / 默认正文 */
 const TEXT_PRIMARY = 'text-[#1D2129] dark:text-foreground';
@@ -48,14 +41,10 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessions = useChatStore((s) => s.sessions);
-  const loadSessions = useChatStore((s) => s.loadSessions);
-  const sending = useChatStore((s) => s.sending);
   const agents = useAgentsStore((s) => s.agents);
-  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
   const error = useChatStore((s) => s.error);
-  const [engineSaving, setEngineSaving] = useState(false);
   const currentAgent = useMemo(
     () => agents.find((agent) => agent.id === currentAgentId),
     [agents, currentAgentId],
@@ -67,11 +56,6 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
   const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
     ? currentAgent?.engineType
     : currentSession?.engineType ?? currentAgent?.engineType;
-  const agentDefaultEngineType = currentAgent?.engineType ?? 'openclaw';
-  const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
-  useEffect(() => {
-    void fetchAgents();
-  }, [fetchAgents]);
 
   const gatewayLine = useMemo(() => {
     const port = gatewayStatus.port ?? 18789;
@@ -86,68 +70,6 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
   }, [gatewayStatus.port, gatewayStatus.pid, gatewayStatus.state, t]);
 
   const { handleHubSend, handleHubQueue } = useHomeChatEntrySend();
-  const handleEngineSwitch = async (engineType: 'openclaw' | 'claude') => {
-    if (!currentAgentId || engineType === agentDefaultEngineType) return;
-    setEngineSaving(true);
-    try {
-      await hostApiFetch(`/api/agents/${encodeURIComponent(currentAgentId)}/engine`, {
-        method: 'PUT',
-        body: JSON.stringify({ engineType }),
-      });
-      await fetchAgents();
-      await loadSessions();
-      toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : 'OpenClaw'} 引擎`);
-    } catch (err) {
-      toast.error(`切换引擎失败: ${String(err)}`);
-    } finally {
-      setEngineSaving(false);
-    }
-  };
-
-  const engineSelectDisabled = sending || !currentAgentId;
-  const engineAccessory = (
-    <div className="flex items-center gap-2.5">
-      <span className="shrink-0 text-[12px] font-medium text-[#4E5969] dark:text-muted-foreground">
-        引擎
-      </span>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild disabled={engineSelectDisabled || engineSaving}>
-          <button
-            type="button"
-            title="切换新会话执行引擎"
-            className={cn(
-              'inline-flex h-9 min-w-[180px] max-w-full items-center gap-2.5 rounded-full border border-[#E5E6EB] bg-white px-4 text-left shadow-[0_4px_12px_rgba(29,33,41,0.05)] transition-colors',
-              'hover:border-[#FFC17A] hover:bg-[#FFF9F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6F00]/20',
-              'dark:border-border dark:bg-[#131a24] dark:hover:border-[#FFC17A]/90 dark:hover:bg-white/[0.04]',
-              (engineSelectDisabled || engineSaving) && 'pointer-events-none opacity-60',
-            )}
-          >
-            <Bot className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">
-              {agentDefaultEngineLabel}
-            </span>
-            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" side="bottom" className="min-w-[12rem]">
-          {(['openclaw', 'claude'] as const).map((engineType) => {
-            const label = engineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
-            const isSelected = agentDefaultEngineType === engineType;
-            return (
-              <DropdownMenuItem
-                key={engineType}
-                className={cn('flex items-center gap-2', isSelected && 'bg-primary/8 font-medium')}
-                onSelect={() => void handleEngineSwitch(engineType)}
-              >
-                <span className="min-w-0 flex-1 truncate text-[13px]">{label}</span>
-                {isSelected ? <Check className="h-4 w-4 shrink-0 text-primary" /> : null}
-              </DropdownMenuItem>
-            );
-          })}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -156,8 +78,9 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
           <HomeMainConversation className="min-h-0 flex-1" />
         ) : (
           <>
-            <div className="mx-auto mb-3 mt-2 flex w-full max-w-[960px] justify-start">
-              {engineAccessory}
+            <div className="mx-auto mb-3 mt-2 flex w-full max-w-[960px] items-center justify-between">
+              <ChatEngineSelector />
+              <ChatModelSelector />
             </div>
             <div className="mx-auto flex min-h-0 w-full max-w-[960px] flex-1 flex-col justify-center gap-10 overflow-y-auto overscroll-y-contain pb-6">
               <HomeHero />
