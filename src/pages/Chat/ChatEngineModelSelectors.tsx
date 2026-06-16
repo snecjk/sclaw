@@ -25,14 +25,14 @@ import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { toast } from 'sonner';
 
 const pillBase = cn(
-  'flex min-w-0 max-w-[min(100vw-11rem,260px)] flex-1 items-stretch rounded-full border border-border',
-  'bg-[linear-gradient(180deg,rgba(255,255,255,0.10),transparent),rgba(255,255,255,0.24)]',
-  'shadow-[0_8px_18px_rgba(15,23,42,0.06)]',
+  'flex min-w-0 max-w-[min(100vw-11rem,260px)] flex-1 items-stretch rounded-xl border border-border/70',
+  'bg-[linear-gradient(180deg,rgba(255,255,255,0.10),transparent),rgba(255,255,255,0.30)]',
+  'shadow-[0_4px_12px_rgba(15,23,42,0.05)]',
   'dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent),rgba(255,255,255,0.04)]',
 );
 
 const pillBtn = cn(
-  'flex h-8 min-w-0 flex-1 items-center gap-2 rounded-full py-0 pl-2.5 pr-2 text-left outline-none',
+  'flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg py-0 pl-2.5 pr-2 text-left outline-none',
   'transition-colors hover:bg-black/[0.04] focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
   'dark:hover:bg-white/[0.06]',
   'disabled:pointer-events-none disabled:opacity-60',
@@ -91,12 +91,12 @@ export function ChatEngineSelector({ className }: { className?: string }) {
   const engineSelectDisabled = sending || !currentAgentId;
 
   return (
-    <div className={cn('flex min-w-0 items-center gap-2', className)}>
-      <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-muted-foreground sm:text-[12px]">
+    <div className={cn('flex min-w-0 items-center gap-1.5', className)}>
+      <span className="shrink-0 whitespace-nowrap px-1 text-[11px] font-medium text-muted-foreground/90 sm:text-[12px]">
         引擎
       </span>
       <DropdownMenu>
-        <div className={cn(pillBase, 'max-w-[min(100vw-11rem,220px)]')}>
+        <div className={cn(pillBase, 'max-w-[min(100vw-11rem,200px)]')}>
           <DropdownMenuTrigger asChild disabled={engineSelectDisabled || engineSaving}>
             <button
               type="button"
@@ -307,8 +307,8 @@ export function ChatModelSelector({ className }: { className?: string }) {
   const modelSelectDisabled = (currentEngineType === 'openclaw' && !isGatewayRunning) || sending || modelOptions.length === 0;
 
   return (
-    <div className={cn('flex min-w-0 items-center gap-2', className)}>
-      <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-muted-foreground sm:text-[12px]">
+    <div className={cn('flex min-w-0 items-center gap-1.5', className)}>
+      <span className="shrink-0 whitespace-nowrap px-1 text-[11px] font-medium text-muted-foreground/90 sm:text-[12px]">
         {t('toolbar.currentModel')}
       </span>
       <DropdownMenu>
@@ -375,7 +375,13 @@ export function ChatModelSelector({ className }: { className?: string }) {
 
 export function ChatEngineModelSelectors({ className }: { className?: string }) {
   return (
-    <div className={cn('flex min-w-0 flex-wrap items-center gap-3', className)}>
+    <div
+      className={cn(
+        'flex min-w-0 flex-nowrap items-center gap-2 rounded-xl border border-border/60 px-2 py-1',
+        'bg-[hsl(var(--glass-bg)/0.55)] backdrop-blur-sm shadow-[0_6px_14px_rgba(15,23,42,0.05)]',
+        className,
+      )}
+    >
       <ChatEngineSelector />
       <ChatModelSelector />
     </div>
