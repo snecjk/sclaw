@@ -16,6 +16,12 @@ import { ChatSearchBar } from '@/pages/Chat/ChatSearchBar';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { cn } from '@/lib/utils';
+import {
+  clampPreviewPanelPercent,
+  stoChatShellHomeColumnClass,
+  stoSplitChatPaneClass,
+  stoSplitPreviewPaneClass,
+} from '@/lib/surfaces';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
 
 /**
@@ -196,7 +202,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
     [scrollToBottom],
   );
 
-  const [previewPanelWidth, setPreviewPanelWidth] = useState(480);
+  const [previewPanelPercent, setPreviewPanelPercent] = useState(70);
   const [isResizing, setIsResizing] = useState(false);
   const previewPanelRef = useRef<HTMLDivElement>(null);
 
@@ -231,9 +237,10 @@ export function HomeMainConversation({ className }: { className?: string }) {
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
-    const startWidth = previewPanelRef.current?.offsetWidth ?? previewPanelWidth;
+    const startWidth = previewPanelRef.current?.offsetWidth ?? 0;
+    const containerWidth = previewPanelRef.current?.parentElement?.clientWidth ?? window.innerWidth;
     let rafId: number | null = null;
-    let pendingWidth = startWidth;
+    let pendingWidth = startWidth || containerWidth * (previewPanelPercent / 100);
 
     setIsResizing(true);
     document.body.style.userSelect = 'none';
@@ -251,7 +258,8 @@ export function HomeMainConversation({ className }: { className?: string }) {
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = startX - moveEvent.clientX;
-      pendingWidth = Math.max(320, Math.min(900, startWidth + delta));
+      const width = previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth;
+      pendingWidth = Math.max(width * 0.3, Math.min(width * 0.7, startWidth + delta));
       if (rafId === null) {
         rafId = requestAnimationFrame(applyWidth);
       }
@@ -266,7 +274,10 @@ export function HomeMainConversation({ className }: { className?: string }) {
         cancelAnimationFrame(rafId);
         rafId = null;
       }
-      setPreviewPanelWidth(pendingWidth);
+      setPreviewPanelPercent(clampPreviewPanelPercent(
+        previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth,
+        pendingWidth,
+      ));
       setIsResizing(false);
     };
 
@@ -280,7 +291,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
     return () => {
       cleanup();
     };
-  }, [previewPanelWidth]);
+  }, [previewPanelPercent]);
 
   const showLoadingPlaceholder = useMemo(
     () => loading && messages.length === 0,
@@ -288,11 +299,11 @@ export function HomeMainConversation({ className }: { className?: string }) {
   );
 
   return (
-    <div className={cn('-mt-4 relative flex min-h-0 flex-1', className)}>
-      {/* Left: Chat area */}
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className={cn('-mt-4 relative flex min-h-0 flex-1 flex-row overflow-hidden', className)}>
+      <div className={stoSplitChatPaneClass}>
+        <div className={stoChatShellHomeColumnClass}>
         {/* Toolbar */}
-        <div className="relative z-10 flex shrink-0 items-center justify-between px-4 py-2 sm:px-6">
+        <div className="relative z-10 flex shrink-0 items-center justify-between py-2">
           <ChatToolbar
             trailingContent={(
               <ChatSearchBar
@@ -316,9 +327,9 @@ export function HomeMainConversation({ className }: { className?: string }) {
         </div>
       <div
         ref={scrollRef}
-        className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-4 sm:px-6 [scrollbar-gutter:stable]"
+        className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-contain py-4 [scrollbar-gutter:stable]"
       >
-        <div ref={contentRef} className="mx-auto max-w-5xl space-y-4">
+        <div ref={contentRef} className="space-y-4">
           {showLoadingPlaceholder ? (
             <div className="flex justify-center py-12 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
@@ -373,8 +384,8 @@ export function HomeMainConversation({ className }: { className?: string }) {
       </div>
 
       {error ? (
-        <div className="shrink-0 border-t border-destructive/20 bg-destructive/10 px-4 py-2 sm:px-6">
-          <div className="mx-auto flex max-w-5xl items-center justify-between">
+        <div className="shrink-0 border-t border-destructive/20 bg-destructive/10 py-2">
+          <div className="flex items-center justify-between">
             <p className="flex items-center gap-2 text-sm text-destructive">
               <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
               {error}
@@ -392,11 +403,11 @@ export function HomeMainConversation({ className }: { className?: string }) {
 
       <div
         className={cn(
-          'pointer-events-none shrink-0 overflow-hidden px-4 sm:px-6',
+          'pointer-events-none shrink-0 overflow-hidden',
           showJumpToLatest ? 'py-0.5' : 'h-0 py-0',
         )}
       >
-        <div className="mx-auto flex max-w-5xl justify-center">
+        <div className="flex justify-center">
           <motion.button
             type="button"
             onClick={() => scrollToLatest('smooth')}
@@ -419,6 +430,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
       {minLoading && !sending ? (
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-white/10 backdrop-blur-[2px] dark:bg-black/10" />
       ) : null}
+        </div>
       </div>
 
     {/* Resizer */}
@@ -445,8 +457,8 @@ export function HomeMainConversation({ className }: { className?: string }) {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 40 }}
           transition={{ duration: 0.25, ease: 'easeInOut' }}
-          style={{ width: previewPanelWidth }}
-          className="flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-l border-border/40 [contain:inline-size]"
+          style={{ width: `${previewPanelPercent}%` }}
+          className={cn(stoSplitPreviewPaneClass, 'border-l border-border/40')}
         >
           <ChatPreviewPanel
             files={previewableFiles}

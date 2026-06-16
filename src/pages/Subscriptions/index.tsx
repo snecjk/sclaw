@@ -15,7 +15,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useSubscriptionsStore } from '@/stores/subscriptions';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { cn } from '@/lib/utils';
-import { glassSectionSurface, glassNestedCard } from '@/lib/surfaces';
+import { glassSectionSurface, glassNestedCard, stoMainInnerShell } from '@/lib/surfaces';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import type { SubscriptionFeature, FeatureCategory } from '@/types/subscription';
@@ -197,7 +197,7 @@ export function Subscriptions() {
 
   if (loading && safeFeatures.length === 0) {
     return (
-      <div className="mx-auto flex w-full max-w-5xl flex-col pb-10">
+      <div className={cn(stoMainInnerShell, 'flex flex-col pb-10')}>
         <div className="flex min-h-[50vh] items-center justify-center">
           <LoadingSpinner size="lg" />
         </div>
@@ -206,7 +206,7 @@ export function Subscriptions() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
+    <div className={cn(stoMainInnerShell, 'flex flex-col gap-8 pb-10')}>
       {/* Header */}
       <header className="shrink-0 border-b border-border pb-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

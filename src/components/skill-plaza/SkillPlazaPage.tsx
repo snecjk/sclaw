@@ -13,6 +13,7 @@ import { SkillCardList } from './SkillCardList';
 import { SkillDetailModal } from './SkillDetailModal';
 import type { SkillSummary } from '@/types/skill-plaza';
 import { cn } from '@/lib/utils';
+import { stoMainInnerShell } from '@/lib/surfaces';
 
 export function SkillPlazaPage() {
   const { t } = useTranslation('skills');
@@ -88,7 +89,9 @@ export function SkillPlazaPage() {
   }, [uninstallSkill, t]);
 
   return (
-    <div className="h-full flex flex-col p-6 overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-6">
+        <div className={cn(stoMainInnerShell, 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
       <SkillPlazaHeader />
       <SkillPlazaToolbar />
       <SkillPlazaCategoryNav />
@@ -168,6 +171,8 @@ export function SkillPlazaPage() {
         }}
         onCancel={() => setDeleteTarget(null)}
       />
+        </div>
+      </div>
     </div>
   );
 }

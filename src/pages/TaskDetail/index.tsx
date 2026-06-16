@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { isStoTaskId, isYmdEntryId, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { TaskSubitemChatSurface } from '@/pages/TaskDetail/TaskSubitemChatSurface';
-import { stoTaskSubitemChatCanvasBg } from '@/lib/surfaces';
+import { stoTaskSubitemChatCanvasBg, stoPageFillBelowTitleClass, stoChatShellPageClass } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
@@ -49,8 +49,7 @@ export function TaskDetail() {
         className={cn(
           /* Pull into main bottom padding so gateway row sits closer to the window edge. */
           '-mb-5 flex min-h-0 min-w-0 flex-col overflow-hidden',
-          /* TitleBar 2.5rem + main py-5 total 2.5rem vertical padding. */
-          'h-[calc(100dvh-5rem)]',
+          stoPageFillBelowTitleClass,
         )}
       >
         <div
@@ -59,7 +58,7 @@ export function TaskDetail() {
             stoTaskSubitemChatCanvasBg,
           )}
         >
-          <div className="mx-auto w-full max-w-[var(--sto-main-inner-max)] pt-[16px]">
+          <div className={cn(stoChatShellPageClass, 'pt-[16px]')}>
             <Link
               to="/"
               className={cn(
@@ -84,7 +83,7 @@ export function TaskDetail() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[var(--sto-main-inner-max)] pb-10">
+    <div className={cn(stoChatShellPageClass, 'pb-10')}>
       <div className="mb-6">
         <Link
           to="/"

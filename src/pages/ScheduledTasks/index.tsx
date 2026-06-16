@@ -12,6 +12,7 @@ import { useScheduledTaskUnreadStore } from '@/stores/scheduled-task-unread';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { toast } from 'sonner';
+import { stoMainInnerShell } from '@/lib/surfaces';
 import { TaskHero } from './components/TaskHero';
 import { TaskCard } from './components/TaskCard';
 import { TaskCreateModal, type TaskCreateInputWithRun } from './components/TaskCreateModal';
@@ -249,7 +250,7 @@ export default function ScheduledTasks() {
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="max-w-7xl mx-auto">
+        <div className={stoMainInnerShell}>
           <TaskHero
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}

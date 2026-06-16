@@ -32,7 +32,7 @@ import { useSkillsStore } from '@/stores/skills';
 import { useGatewayStore } from '@/stores/gateway';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { cn } from '@/lib/utils';
-import { glassNestedCard, glassSectionSurface } from '@/lib/surfaces';
+import { glassNestedCard, glassSectionSurface, stoMainInnerShell } from '@/lib/surfaces';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { trackUiEvent } from '@/lib/telemetry';
@@ -728,7 +728,7 @@ export function Skills() {
 
   if (loading) {
     return (
-      <div className="mx-auto flex w-full max-w-5xl flex-col pb-10">
+      <div className={cn(stoMainInnerShell, 'flex flex-col pb-10')}>
         <div className="flex min-h-[50vh] items-center justify-center">
           <LoadingSpinner size="lg" />
         </div>
@@ -737,7 +737,7 @@ export function Skills() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
+    <div className={cn(stoMainInnerShell, 'flex flex-col gap-8 pb-10')}>
       <header className="shrink-0 border-b border-border pb-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-3">

@@ -45,15 +45,24 @@
     --link-foreground: 0 0% 100%;
     --link-muted: 228 100% 97%;
 
-    /* STO Claw 壳层（归档设计稿对齐） */
-    --sto-page-bg: #f7f8fa;
-    --sto-sidebar-bg: #f3f4f6;
+    /* STO Claw 壳层（归档设计稿对齐）：侧栏与 gutter 共用 Grey-3 #F1F1F3 */
+    --sto-page-bg: #f1f1f3;
+    --sto-sidebar-bg: var(--sto-page-bg);
     --sto-sidebar-border: #e8eaef;
     --sto-accent: #ff8c00;
     --sto-accent-soft: #fff3e0;
     /* 侧栏主导航选中态：与 docs/sto-design.md Brand-6 一致 */
     --sto-brand-6: #ff6f00;
-    --sto-sidebar-w-expanded: 248px;
+    --sto-header-h: 52px;
+    /* 省区 AppChrome：折叠钮距窗口顶 12px；行高 = inset + 32px 按钮 */
+    --sto-chrome-toggle-inset-top: 12px;
+    --sto-chrome-h: calc(var(--sto-chrome-toggle-inset-top) + 32px);
+    --sto-shell-card-gap: 8px;
+    /* MasterGo 2:23107 主内容卡片：18px 圆角 + 无描边 + 轻阴影（#F7F8FA 与壳层 #F1F1F3 区分 gutter） */
+    --sto-main-card-radius: 18px;
+    --sto-main-card-bg: #f7f8fa;
+    --sto-main-card-shadow: 0 0 16px rgba(0, 0, 0, 0.01);
+    --sto-sidebar-w-expanded: 260px;
     --sto-sidebar-w-collapsed: 72px;
     /* 折叠侧栏主导航项（设计标注：59×28、padding 5px 10px、未选中图标 #7A8494） */
     --sto-sidebar-collapsed-nav-item-w: 59px;
@@ -61,8 +70,15 @@
     --sto-sidebar-collapsed-nav-py: 5px;
     --sto-sidebar-collapsed-nav-px: 10px;
     --sto-sidebar-collapsed-nav-icon-idle: #7a8494;
-    --sto-main-inner-max: 1100px;
     --sto-content-pad-x: 20px;
+    --sto-chat-max-w-home: 780px;
+    --sto-chat-max-w-page: 862px;
+    --sto-main-inner-max: var(--sto-chat-max-w-page);
+    --sto-hero-input-max-w: 780px;
+    --sto-split-min-chat: 30%;
+    --sto-split-max-preview: 70%;
+    --sto-split-default-preview: 70%;
+    --sto-main-pad-y-total: 2.5rem;
     /* Grey-9 次要文字（快捷 chip / 手动创建等） */
     --sto-grey-9: #4e5969;
     /* MainLayout main `[scrollbar-gutter:stable]` 预留宽度，底纹右出血需一并抵消 */
@@ -145,15 +161,29 @@
     --sto-accent: #ff9f2e;
     --sto-accent-soft: hsl(32 45% 14%);
     --sto-brand-6: #ff6f00;
-    --sto-sidebar-w-expanded: 248px;
+    --sto-header-h: 52px;
+    --sto-chrome-toggle-inset-top: 12px;
+    --sto-chrome-h: calc(var(--sto-chrome-toggle-inset-top) + 32px);
+    --sto-shell-card-gap: 8px;
+    --sto-main-card-radius: 18px;
+    --sto-main-card-bg: hsl(var(--card));
+    --sto-main-card-shadow: 0 0 16px rgba(0, 0, 0, 0.2);
+    --sto-sidebar-w-expanded: 260px;
     --sto-sidebar-w-collapsed: 72px;
     --sto-sidebar-collapsed-nav-item-w: 59px;
     --sto-sidebar-collapsed-nav-item-h: 28px;
     --sto-sidebar-collapsed-nav-py: 5px;
     --sto-sidebar-collapsed-nav-px: 10px;
     --sto-sidebar-collapsed-nav-icon-idle: #9aa5b8;
-    --sto-main-inner-max: 1100px;
     --sto-content-pad-x: 20px;
+    --sto-chat-max-w-home: 780px;
+    --sto-chat-max-w-page: 862px;
+    --sto-main-inner-max: var(--sto-chat-max-w-page);
+    --sto-hero-input-max-w: 780px;
+    --sto-split-min-chat: 30%;
+    --sto-split-max-preview: 70%;
+    --sto-split-default-preview: 70%;
+    --sto-main-pad-y-total: 2.5rem;
 
     --sto-wf-hero-input-bg: hsl(32 100% 97% / 0.08);
     --sto-wf-hero-input-border: hsl(var(--primary) / 0.35);
@@ -176,6 +206,11 @@
       radial-gradient(circle at 85% 18%, rgba(229, 230, 235, 0.45), transparent 26%),
       linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 36%);
     background-attachment: fixed;
+  }
+
+  /** 省区 AppShell：无整行顶栏，全高由壳 + 卡片承担 */
+  [data-app-shell='provincial'] {
+    --sto-header-h: 0px;
   }
 
   ::selection {

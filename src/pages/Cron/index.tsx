@@ -13,6 +13,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { toast } from 'sonner';
+import { stoMainInnerShell } from '@/lib/surfaces';
 import { useTranslation } from 'react-i18next';
 import type { CronJobCreateInput } from '@/types/cron';
 import type { ManagedLocalTask } from '@/stores/cron';
@@ -208,7 +209,7 @@ export function Cron() {
     return (
       <div className="h-full flex flex-col">
         <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="max-w-7xl mx-auto">
+          <div className={stoMainInnerShell}>
             <div className="flex items-center justify-center py-20">
               <LoadingSpinner size="lg" />
             </div>
@@ -221,7 +222,7 @@ export function Cron() {
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="max-w-7xl mx-auto">
+        <div className={stoMainInnerShell}>
           <CronTaskHero
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}

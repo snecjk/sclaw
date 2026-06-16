@@ -22,7 +22,7 @@ import { buildProviderListItems } from '@/lib/provider-accounts';
 import { getProviderIconUrl, shouldInvertInDark, HIDDEN_PROVIDER_IDS } from '@/lib/providers';
 import { hostApiFetch } from '@/lib/host-api';
 import { cn, formatRelativeTime } from '@/lib/utils';
-import { glassNestedCard, glassSectionSurface } from '@/lib/surfaces';
+import { glassNestedCard, glassSectionSurface, stoMainInnerShell } from '@/lib/surfaces';
 import { CHANNEL_NAMES } from '@/types/channel';
 import type { AgentSummary } from '@/types/agent';
 import type { CronJob, CronJobCreateInput } from '@/types/cron';
@@ -1251,7 +1251,7 @@ export function AgentDetailPage({ agent, onBack }: AgentDetailPageProps) {
   ];
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 pb-10">
+    <div className={cn(stoMainInnerShell, 'flex flex-col gap-6 pb-10')}>
       {/* Header */}
       <header className="shrink-0 border-b border-border pb-6">
         <div className="flex items-start gap-4">

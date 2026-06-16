@@ -26,6 +26,12 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { cn } from '@/lib/utils';
+import {
+  clampPreviewPanelPercent,
+  stoChatShellPageColumnClass,
+  stoSplitChatPaneClass,
+  stoSplitPreviewPaneClass,
+} from '@/lib/surfaces';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
@@ -65,7 +71,7 @@ export function Chat() {
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [splitting, setSplitting] = useState(false);
-  const [previewPanelWidth, setPreviewPanelWidth] = useState(480);
+  const [previewPanelPercent, setPreviewPanelPercent] = useState(70);
   const [isResizing, setIsResizing] = useState(false);
   const [editDraft, setEditDraft] = useState<{ text: string; version: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -340,9 +346,10 @@ export function Chat() {
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
-    const startWidth = previewPanelRef.current?.offsetWidth ?? previewPanelWidth;
+    const startWidth = previewPanelRef.current?.offsetWidth ?? 0;
+    const containerWidth = previewPanelRef.current?.parentElement?.clientWidth ?? window.innerWidth;
     let rafId: number | null = null;
-    let pendingWidth = startWidth;
+    let pendingWidth = startWidth || containerWidth * (previewPanelPercent / 100);
 
     setIsResizing(true);
     document.body.style.userSelect = 'none';
@@ -361,7 +368,8 @@ export function Chat() {
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = startX - moveEvent.clientX;
-      pendingWidth = Math.max(320, Math.min(900, startWidth + delta));
+      const width = previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth;
+      pendingWidth = Math.max(width * 0.3, Math.min(width * 0.7, startWidth + delta));
       if (rafId === null) {
         rafId = requestAnimationFrame(applyWidth);
       }
@@ -376,7 +384,10 @@ export function Chat() {
         cancelAnimationFrame(rafId);
         rafId = null;
       }
-      setPreviewPanelWidth(pendingWidth);
+      setPreviewPanelPercent(clampPreviewPanelPercent(
+        previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth,
+        pendingWidth,
+      ));
       setIsResizing(false);
     };
 
@@ -391,7 +402,7 @@ export function Chat() {
     return () => {
       cleanup();
     };
-  }, [previewPanelWidth]);
+  }, [previewPanelPercent]);
 
   // Collect previewable files from messages and streaming message
   const allMessagesForPreview = useMemo(() => {
@@ -431,11 +442,12 @@ export function Chat() {
 
   return (
     <div
-      className={cn('relative -m-6 flex min-h-0 min-w-0 overflow-x-hidden transition-colors duration-500')}
-      style={{ height: 'calc(100vh - 2.5rem)' }}
+      className={cn('relative -m-6 flex min-h-0 min-w-0 flex-row overflow-x-hidden transition-colors duration-500')}
+      style={{ height: 'calc(100vh - var(--sto-header-h))' }}
     >
       {/* Left: Chat area */}
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className={stoSplitChatPaneClass}>
+      <div className={stoChatShellPageColumnClass}>
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,140,0,0.06),_transparent_30%),radial-gradient(circle_at_80%_20%,_rgba(229,230,235,0.35),_transparent_26%)]" />
         <div className="absolute inset-0 neural-grid opacity-20" />
@@ -444,7 +456,7 @@ export function Chat() {
       </div>
 
       {/* Toolbar */}
-      <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-6 py-2">
+      <div className="relative z-10 flex shrink-0 items-center justify-between py-2">
         <ChatToolbar
           trailingContent={(
             <ChatSearchBar
@@ -470,9 +482,9 @@ export function Chat() {
       {/* Messages Area */}
       <div
         ref={scrollRef}
-        className="relative z-10 flex-1 overflow-y-auto overscroll-y-contain px-6 py-4 [scrollbar-gutter:stable]"
+        className="relative z-10 flex-1 overflow-y-auto overscroll-y-contain py-4 [scrollbar-gutter:stable]"
       >
-        <div ref={contentRef} className="max-w-5xl mx-auto space-y-4">
+        <div ref={contentRef} className="space-y-4">
           {isEmpty ? (
             <WelcomeScreen />
           ) : (
@@ -530,8 +542,8 @@ export function Chat() {
 
       {/* Error bar */}
       {error && (
-        <div className="px-6 py-2 bg-destructive/10 border-t border-destructive/20">
-          <div className="max-w-5xl mx-auto flex items-center justify-between">
+        <div className="bg-destructive/10 border-t border-destructive/20 py-2">
+          <div className="flex items-center justify-between">
             <p className="text-sm text-destructive flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
               {error}
@@ -549,11 +561,11 @@ export function Chat() {
       {/* Jump to latest — 仅在有提示时占位，高度贴齐按钮 */}
       <div
         className={cn(
-          'pointer-events-none shrink-0 overflow-hidden px-6',
+          'pointer-events-none shrink-0 overflow-hidden',
           showJumpToLatest ? 'py-0.5' : 'h-0 py-0',
         )}
       >
-        <div className="max-w-5xl mx-auto flex justify-center">
+        <div className="flex justify-center">
           <motion.button
             type="button"
             onClick={() => scrollToLatest('smooth')}
@@ -581,9 +593,9 @@ export function Chat() {
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="shrink-0 px-6"
+            className="shrink-0"
           >
-            <div className="max-w-5xl mx-auto flex items-center gap-2 rounded-lg border border-border bg-white/50 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm dark:bg-white/[0.06]">
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-white/50 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm dark:bg-white/[0.06]">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
               <span>{t('splitting')}</span>
             </div>
@@ -623,6 +635,7 @@ export function Chat() {
         </div>
       )}
       </div>
+      </div>
       {/* Resizer */}
       {canShowPreviewPanel && showPreviewPanel && (
         <div
@@ -648,8 +661,8 @@ export function Chat() {
             exit={{ opacity: 0, x: 40 }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
             // className="shrink-0 overflow-hidden"
-            style={{ width: previewPanelWidth }}
-            className="flex h-full min-h-0 shrink-0 flex-col overflow-hidden [contain:inline-size]"
+            style={{ width: `${previewPanelPercent}%` }}
+            className={stoSplitPreviewPaneClass}
           >
             <ChatPreviewPanel
               files={previewableFiles}

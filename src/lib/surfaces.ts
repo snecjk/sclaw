@@ -163,9 +163,38 @@ export function clampPreviewPanelPercent(containerWidth: number, previewPx: numb
   return Math.max(30, Math.min(70, pct));
 }
 
-/** 全高页面壳层：TitleBar + main 上下内距 */
+/** 全高页面壳层：TitleBar + main 上下内距（省区壳内 --sto-header-h 为 0） */
 export const stoPageFillBelowTitleClass =
   'h-[calc(100dvh-var(--sto-header-h)-var(--sto-main-pad-y-total))]';
+
+/** 省区 AppShell：chrome 下方侧栏 + 卡片行 */
+export const stoAppShellBodyClass =
+  'sto-app-shell-body flex min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-hidden';
+
+/** 省区主内容白卡片外层（展开：上/左/下 8px；收起：由 body 四边 8px，此处无 padding） */
+export function stoMainCardWrapClass(isSidebarCollapsed: boolean): string {
+  return cn(
+    'sto-main-card-wrap flex min-h-0 min-w-0 flex-1 flex-col box-border',
+    isSidebarCollapsed ? 'p-0' : 'pt-2 pl-2 pb-2',
+  );
+}
+
+/** 省区壳层 body：收起态四边 8px gutter */
+export function stoAppShellBodyProvincialClass(isSidebarCollapsed: boolean): string {
+  return cn(
+    stoAppShellBodyClass,
+    'no-drag box-border',
+    isSidebarCollapsed && 'p-2',
+  );
+}
+
+/** 省区主内容白卡片：18px 圆角、无描边、MasterGo drop shadow */
+export const stoMainCardShellClass = cn(
+  'min-h-0 min-w-0 flex-1 overflow-auto overscroll-y-contain border-0',
+  'bg-[var(--sto-main-card-bg)] shadow-[var(--sto-main-card-shadow)]',
+  'rounded-[var(--sto-main-card-radius)]',
+  'px-[var(--sto-content-pad-x)] py-5 [overflow-anchor:none] [scrollbar-gutter:stable]',
+);
 
 /**
  * 工作流 Hero 输入复合框（MasterGo 2:7326）：白底 + Grey-4 描边 + 22px 圆角 + 轻阴影。

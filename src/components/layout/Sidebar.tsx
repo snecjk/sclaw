@@ -1,5 +1,7 @@
 /**
- * Sidebar — 单列宽侧栏（248px / 72px），对齐 STO Claw 归档设计稿。
+ * Sidebar — 单列宽侧栏。
+ * 省区布局：展开 260px / 收起 w-0 完全隐藏；折叠钮在侧栏列顶行（无全局顶栏）。
+ * 完整布局：展开 260px / 收起 72px 图标轨。
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
@@ -44,11 +46,12 @@ import { useGatewayStore } from '@/stores/gateway';
 import { useAuthStore } from '@/stores/auth';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { SidebarProvincialChromeRow } from '@/components/layout/sidebar-provincial-chrome-row';
 import { useTranslation } from 'react-i18next';
 import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
 import logoSvg from '@/assets/logo.svg';
 import packageJson from '../../../package.json';
-import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
+import { taskDetailPath, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
@@ -87,6 +90,29 @@ const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
 const SIDEBAR_BUCKET_INITIAL_LIMIT = 60;
 const SIDEBAR_BUCKET_LOAD_MORE_COUNT = 60;
 const SIDEBAR_COLLAPSED_SESSION_LIMIT = 40;
+
+/** MasterGo 2:18620 侧栏正文：PingFang SC 14px / 20px 行高 */
+const SIDEBAR_BODY_TEXT_MEDIUM_CLASS = 'text-sm font-medium leading-5';
+
+/** 侧栏子链 / 会话项 / 任务日期链 — 同正文 14/20 Regular Grey-8 */
+const SIDEBAR_SUBITEM_TEXT_IDLE =
+  'text-sm font-normal leading-5 text-[#86909C] hover:bg-black/[0.04] hover:text-[#4E5969] dark:text-muted-foreground dark:hover:bg-white/[0.08] dark:hover:text-foreground';
+const SIDEBAR_SUBITEM_TEXT_ACTIVE =
+  'text-sm font-medium leading-5 text-[#1D2129] bg-[#E5E6EB] dark:bg-white/[0.12] dark:text-foreground';
+
+/** 展开侧栏主 Nav — MasterGo 2:18620：行高 36px；Grey-9 idle / Grey-4 选中底 */
+const SIDEBAR_NAV_EXPANDED_IDLE =
+  'h-9 min-h-9 rounded-[8px] px-[10px] font-normal leading-5 text-[#4E5969] [&_svg]:stroke-[#4E5969] hover:bg-black/[0.04] hover:text-[#1D2129] hover:[&_svg]:stroke-[#1D2129] dark:text-muted-foreground dark:[&_svg]:stroke-[hsl(var(--muted-foreground))] dark:hover:bg-white/[0.06] dark:hover:text-foreground dark:hover:[&_svg]:stroke-foreground';
+const SIDEBAR_NAV_EXPANDED_ACTIVE =
+  'h-9 min-h-9 rounded-[8px] bg-[#E5E6EB] px-[10px] font-medium leading-5 text-[#1D2129] shadow-none [&_svg]:stroke-[#1D2129] hover:bg-[#DCDEE3] dark:bg-white/[0.12] dark:text-foreground dark:[&_svg]:stroke-foreground';
+
+/** 分区标题（任务 / 最近 / 工作台）— 14/20 Medium Grey-8 */
+const SIDEBAR_SECTION_LABEL_CLASS =
+  'text-sm font-medium leading-5 text-[#86909C] dark:text-muted-foreground';
+
+/** full layout 顶栏：Logo + 版本 + 描边折叠钮（保留原线上样式） */
+const SIDEBAR_FULL_BRAND_TOGGLE_BTN_CLASS =
+  'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card';
 
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   if (!activityMs || activityMs <= 0) return 'older';
@@ -170,10 +196,8 @@ function SidebarTaskDateLinks({
                 if (a > 0) markSubitemReadFromActivity(taskId, entryId, a);
               }}
               className={cn(
-                'relative z-[1] inline-flex w-full max-w-full items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] pr-9 text-left text-xs font-medium transition-colors',
-                active
-                  ? 'bg-[#E5E6EB] text-foreground dark:bg-white/[0.12]'
-                  : 'text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
+                'relative z-[1] inline-flex w-full max-w-full items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] pr-9 text-left transition-colors',
+                active ? SIDEBAR_SUBITEM_TEXT_ACTIVE : SIDEBAR_SUBITEM_TEXT_IDLE,
               )}
             >
               <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -274,8 +298,23 @@ function SidebarTaskGroup({
     prevUnderTask.current = underTask;
   }, [underTask]);
 
+  const overviewTo = taskOverviewPath(taskId);
+
   if (entries.length === 0) {
-    return null;
+    return (
+      <NavLink
+        to={overviewTo}
+        className="flex items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] text-left transition-colors"
+      >
+        <span className={cn('min-w-0 flex-1 truncate text-foreground', SIDEBAR_BODY_TEXT_MEDIUM_CLASS)}>{label}</span>
+        {hasUnreadSubitem ? (
+          <span
+            className="h-2 w-2 shrink-0 rounded-full bg-[hsl(var(--destructive))]"
+            aria-label={tTasks('unreadBadge', { defaultValue: 'Unread' })}
+          />
+        ) : null}
+      </NavLink>
+    );
   }
 
   const panelId = `sto-sidebar-task-${taskId}-entries`;
@@ -288,9 +327,9 @@ function SidebarTaskGroup({
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
-        className="group/sto-task-row flex w-full items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] text-left outline-none ring-offset-2 transition-colors hover:bg-[rgba(229,230,235,0.7)] focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.08]"
+        className="group/sto-task-row flex w-full items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] text-left outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.08]"
       >
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{label}</span>
+        <span className={cn('min-w-0 flex-1 truncate text-foreground', SIDEBAR_BODY_TEXT_MEDIUM_CLASS)}>{label}</span>
         <span className="flex shrink-0 items-center gap-1.5">
           {hasUnreadSubitem ? (
             <span
@@ -364,9 +403,9 @@ function SidebarScheduledTaskGroup({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="group/sto-task-row flex w-full items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] text-left outline-none ring-offset-2 transition-colors hover:bg-[rgba(229,230,235,0.7)] focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.08]"
+        className="group/sto-task-row flex w-full items-center justify-between gap-2 rounded-[8px] px-[10px] py-[6px] text-left outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.08]"
       >
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{displayName}</span>
+        <span className={cn('min-w-0 flex-1 truncate text-foreground', SIDEBAR_BODY_TEXT_MEDIUM_CLASS)}>{displayName}</span>
         <ChevronDown
           className={cn(
             'h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] group-hover/sto-task-row:opacity-100 group-focus-within/sto-task-row:opacity-100',
@@ -409,10 +448,8 @@ function SidebarScheduledTaskGroup({
                   }}
                   title={label}
                   className={cn(
-                    'w-full rounded-[8px] px-[10px] py-[6px] pr-7 text-left text-xs font-medium transition-colors',
-                    active
-                      ? 'bg-[#E5E6EB] text-foreground dark:bg-white/[0.12]'
-                      : 'text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
+                    'w-full rounded-[8px] px-[10px] py-[6px] pr-7 text-left transition-colors',
+                    active ? SIDEBAR_SUBITEM_TEXT_ACTIVE : SIDEBAR_SUBITEM_TEXT_IDLE,
                   )}
                 >
                   <span className="block min-w-0 truncate">{label}</span>
@@ -460,7 +497,10 @@ function SidebarCollapsibleSectionLabel({
         aria-expanded={open}
         aria-label={toggleAriaLabel}
         onClick={onToggle}
-        className="group/sto-sidebar-section-toggle flex w-full items-center rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-[rgba(229,230,235,0.7)] hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.08]"
+        className={cn(
+          'group/sto-sidebar-section-toggle flex w-full items-center rounded-lg px-2 py-1.5 text-left outline-none ring-offset-2 transition-colors hover:bg-black/[0.04] focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/[0.08]',
+          SIDEBAR_SECTION_LABEL_CLASS,
+        )}
       >
         <span className="inline-flex min-w-0 max-w-full items-center gap-1">
           <span className="min-w-0 truncate">{label}</span>
@@ -500,26 +540,24 @@ function SidebarNavLink({
   badge?: ReactNode;
 }) {
   const { pathname } = useLocation();
-  // 使用路径匹配生成 className（字符串），避免 TooltipTrigger asChild 与 NavLink 的函数 className 合并时被破坏，导致选中态（橙底白图标）不生效。
+  // 使用路径匹配生成 className（字符串），避免 TooltipTrigger asChild 与 NavLink 的函数 className 合并时被破坏，导致选中态不生效。
   const isActive = isActiveOverride !== undefined
     ? isActiveOverride
     : matchPath({ path: to, end: Boolean(end), caseSensitive: false }, pathname) != null;
 
   const linkClassName = cn(
-    'relative flex items-center font-medium leading-none transition-[color,background-color,border-radius,filter] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
+    'relative flex items-center transition-[color,background-color,border-radius] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
     collapsed
       ? cn(
-          'mx-auto box-border min-h-0 shrink-0 justify-center gap-0 rounded-[8px] text-[13px]',
+          'mx-auto box-border min-h-0 shrink-0 justify-center gap-0 rounded-[8px] text-sm font-medium leading-5',
           'h-[var(--sto-sidebar-collapsed-nav-item-h)] w-[var(--sto-sidebar-collapsed-nav-item-w)] max-w-[calc(100%-10px)] py-[var(--sto-sidebar-collapsed-nav-py)] px-[var(--sto-sidebar-collapsed-nav-px)]',
           isActive
             ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]'
             : 'text-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]',
         )
       : cn(
-          'shrink-0 gap-[10px] text-[13px]',
-          isActive
-            ? 'min-h-0 rounded-[8px] bg-[linear-gradient(138deg,#FF8F4A_-3%,#FF7A28_33%,#FF6700_71%,#E85A00_103%)] px-[10px] py-[5px] text-white shadow-sm hover:brightness-110 active:brightness-95 [&_svg]:stroke-white'
-            : 'h-[28.5px] min-h-[28.5px] rounded-xl px-[10px] text-[#86909c] [&_svg]:stroke-[#86909c] hover:rounded-[8px] hover:bg-black/[0.04] hover:text-foreground hover:[&_svg]:stroke-foreground dark:text-muted-foreground dark:[&_svg]:stroke-[hsl(var(--muted-foreground))] dark:hover:bg-white/[0.06] dark:hover:text-foreground dark:hover:[&_svg]:stroke-foreground',
+          'shrink-0 gap-[10px] text-sm leading-5',
+          isActive ? SIDEBAR_NAV_EXPANDED_ACTIVE : SIDEBAR_NAV_EXPANDED_IDLE,
         ),
   );
 
@@ -579,7 +617,8 @@ export function Sidebar() {
   const navigate = useNavigate();
   const isOnHome = location.pathname === '/';
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
+  const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
   const workflowEditorActive = useWorkflowUiStore((s) => s.editorActive);
   const sidebarExpandedBeforeWorkflowRef = useRef<boolean | null>(null);
   const [taskListSectionOpen, setTaskListSectionOpen] = useState(true);
@@ -597,16 +636,18 @@ export function Sidebar() {
 
   const { t } = useTranslation(['common', 'chat', 'auth', 'tasks']);
 
-  const sidebarVis = useMemo(() => getSidebarVisibility(getSidebarLayoutVariant()), []);
+  const sidebarLayoutVariant = useMemo(() => getSidebarLayoutVariant(), []);
+  const isProvincialSidebar = sidebarLayoutVariant === 'provincial';
+  const isProvincialFullyHidden = isProvincialSidebar && sidebarCollapsed;
+  const sidebarVis = useMemo(() => getSidebarVisibility(sidebarLayoutVariant), [sidebarLayoutVariant]);
 
   useEffect(() => {
     if (workflowEditorActive) {
-      setSidebarCollapsed((prev) => {
-        if (sidebarExpandedBeforeWorkflowRef.current === null) {
-          sidebarExpandedBeforeWorkflowRef.current = !prev;
-        }
-        return true;
-      });
+      const prev = useSettingsStore.getState().sidebarCollapsed;
+      if (sidebarExpandedBeforeWorkflowRef.current === null) {
+        sidebarExpandedBeforeWorkflowRef.current = !prev;
+      }
+      if (!prev) setSidebarCollapsed(true);
       return;
     }
     if (sidebarExpandedBeforeWorkflowRef.current !== null) {
@@ -614,7 +655,7 @@ export function Sidebar() {
       sidebarExpandedBeforeWorkflowRef.current = null;
       setSidebarCollapsed(!restoreExpanded);
     }
-  }, [workflowEditorActive]);
+  }, [workflowEditorActive, setSidebarCollapsed]);
 
   useEffect(() => {
     if (!isGatewayRunning) return;
@@ -881,10 +922,18 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'flex h-full shrink-0 flex-col border-r border-[var(--sto-sidebar-border)] bg-[var(--sto-sidebar-bg)] transition-[width] duration-200 ease-out',
-        sidebarCollapsed ? 'w-[var(--sto-sidebar-w-collapsed)]' : 'w-[var(--sto-sidebar-w-expanded)]',
+        'flex h-full shrink-0 flex-col bg-[var(--sto-sidebar-bg)] transition-[width,border-color] duration-200 ease-out',
+        isProvincialFullyHidden
+          ? 'pointer-events-none w-0 overflow-hidden border-r-0'
+          : cn(
+              !isProvincialSidebar && 'border-r border-[var(--sto-sidebar-border)]',
+              sidebarCollapsed ? 'w-[var(--sto-sidebar-w-collapsed)]' : 'w-[var(--sto-sidebar-w-expanded)]',
+            ),
       )}
+      aria-hidden={isProvincialFullyHidden}
     >
+      {!isProvincialFullyHidden ? (
+        <>
       {sidebarCollapsed ? (
         <div className="flex shrink-0 flex-col items-center border-b border-transparent px-2 pb-2 pt-3">
           <button
@@ -893,12 +942,12 @@ export function Sidebar() {
             aria-label={t('common:sidebar.toggleSidebarExpand')}
             title={t('common:sidebar.toggleSidebarExpand')}
             onClick={() => setSidebarCollapsed(false)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card"
+            className={SIDEBAR_FULL_BRAND_TOGGLE_BTN_CLASS}
           >
             <ChevronRight className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
           </button>
         </div>
-      ) : (
+      ) : !isProvincialSidebar ? (
         <div className="flex shrink-0 items-start justify-between gap-2 border-b border-[var(--sto-sidebar-border)] px-3 pb-3 pt-3">
           <div className="flex min-w-0 flex-1 items-center gap-2.5 pl-1">
             <img src={logoSvg} alt="" className="h-10 w-10 shrink-0 rounded-[10px] object-contain" width={40} height={40} />
@@ -915,17 +964,19 @@ export function Sidebar() {
             aria-label={t('common:sidebar.toggleSidebarCollapse')}
             title={t('common:sidebar.toggleSidebarCollapse')}
             onClick={() => setSidebarCollapsed(true)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card"
+            className={SIDEBAR_FULL_BRAND_TOGGLE_BTN_CLASS}
           >
             <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
           </button>
         </div>
+      ) : (
+        <SidebarProvincialChromeRow />
       )}
 
       <nav
         className={cn(
-          'flex shrink-0 flex-col gap-1 overflow-hidden pb-2 pt-2',
-          sidebarCollapsed ? 'px-0' : 'px-2',
+          'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden pb-2',
+          sidebarCollapsed ? 'px-0 pt-2' : 'px-2 pt-2',
         )}
       >
         {/* 固定区：新对话、定时任务、技能广场、工作区等 */}
@@ -1081,8 +1132,40 @@ export function Sidebar() {
           </div>
         ) : null}
 
-        {sidebarCollapsed ? (
-          <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
+        {sidebarVis.workspace ? (
+          !sidebarCollapsed ? (
+            <SidebarCollapsibleSectionLabel
+              open={workspaceSectionOpen}
+              onToggle={() => setWorkspaceSectionOpen((o) => !o)}
+              label={t('common:sidebar.workspace')}
+              toggleAriaLabel={t('common:sidebar.toggleWorkspaceSection')}
+            />
+          ) : (
+            <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
+          )
+        ) : null}
+        {sidebarVis.workspace && (sidebarCollapsed || workspaceSectionOpen) && (
+        <div className="flex flex-col gap-1">
+          {workspaceNav.map((item) => (
+            <SidebarNavLink
+              key={item.to}
+              to={item.to}
+              icon={item.icon}
+              label={item.label}
+              collapsed={sidebarCollapsed}
+            />
+          ))}
+        </div>
+        )}
+
+        {sidebarVis.conversationChrome ? (
+          !sidebarCollapsed ? (
+            <p className={cn('mt-4 px-2', SIDEBAR_SECTION_LABEL_CLASS)}>
+              {t('common:sidebar.sessionList')}
+            </p>
+          ) : (
+            <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
+          )
         ) : null}
 
         <div className={cn('space-y-1 pb-2', sidebarCollapsed ? 'pt-1' : 'pt-3')}>
@@ -1101,8 +1184,8 @@ export function Sidebar() {
                           navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
                         }}
                         className={cn(
-                          'mx-auto flex min-h-0 min-w-0 items-center justify-center rounded-[8px] font-medium leading-none transition-colors',
-                          'h-[var(--sto-sidebar-collapsed-nav-item-h)] w-[var(--sto-sidebar-collapsed-nav-item-w)] max-w-[calc(100%-10px)] py-[var(--sto-sidebar-collapsed-nav-py)] px-[var(--sto-sidebar-collapsed-nav-px)] text-[13px]',
+                          'mx-auto flex min-h-0 min-w-0 items-center justify-center rounded-[8px] font-medium leading-5 transition-colors',
+                          'h-[var(--sto-sidebar-collapsed-nav-item-h)] w-[var(--sto-sidebar-collapsed-nav-item-w)] max-w-[calc(100%-10px)] py-[var(--sto-sidebar-collapsed-nav-py)] px-[var(--sto-sidebar-collapsed-nav-px)] text-sm',
                           active
                             ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] dark:bg-[var(--sto-brand-6)]'
                             : 'text-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]',
@@ -1129,7 +1212,7 @@ export function Sidebar() {
           ) : null}
           {!sidebarCollapsed &&
             (visibleSessions.length === 0 ? (
-              <p className="px-2 pt-2 text-center text-[12px] leading-relaxed text-muted-foreground/80">
+              <p className="px-2 pt-2 text-center text-sm leading-5 text-muted-foreground/80">
                 {t('common:sidebar.emptyChatHistory')}
               </p>
             ) : (
@@ -1140,7 +1223,10 @@ export function Sidebar() {
                   <button
                     type="button"
                     onClick={() => toggleBucket(bucket.key)}
-                    className="flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-left text-[12px] font-semibold text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] dark:hover:bg-white/[0.08]"
+                    className={cn(
+                      'flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-left hover:bg-black/[0.04] dark:hover:bg-white/[0.08]',
+                      SIDEBAR_SECTION_LABEL_CLASS,
+                    )}
                   >
                     <span className="truncate">{bucket.label}</span>
                     <ChevronDown
@@ -1174,7 +1260,7 @@ export function Sidebar() {
                                 setEditingSessionKey(null);
                               }}
                               className={cn(
-                                'w-full rounded-[8px] px-[10px] py-[6px] pr-16 text-left text-[13px] transition-colors outline-none',
+                                'w-full rounded-[8px] px-[10px] py-[6px] pr-16 text-left text-sm leading-5 transition-colors outline-none',
                                 'bg-white border border-[var(--sto-brand-6)] text-foreground dark:bg-card',
                               )}
                             />
@@ -1186,10 +1272,10 @@ export function Sidebar() {
                               }}
                               title={sessionLabel}
                               className={cn(
-                                'w-full rounded-[8px] px-[10px] py-[6px] pr-9 text-left text-[13px] transition-colors',
-isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY
-                                  ? 'bg-[#E5E6EB] font-medium text-foreground dark:bg-white/[0.12]'
-                                  : 'text-foreground/80 hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
+                                'w-full rounded-[8px] px-[10px] py-[6px] pr-9 text-left transition-colors',
+                                isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY
+                                  ? SIDEBAR_SUBITEM_TEXT_ACTIVE
+                                  : SIDEBAR_SUBITEM_TEXT_IDLE,
                               )}
                             >
                               <span className="block min-w-0 truncate">{sessionLabel}</span>
@@ -1208,7 +1294,7 @@ isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION
                                 className={cn(
                                   'absolute right-6 flex items-center justify-center rounded p-0.5 transition-opacity',
                                   'opacity-0 group-hover:opacity-100',
-                                  'text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground',
+                                  'text-[#86909C] hover:bg-black/[0.04] hover:text-[#4E5969]',
                                 )}
                               >
                                 <Pencil className="h-3.5 w-3.5" />
@@ -1270,8 +1356,8 @@ isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION
                   sidebarVis.userProfileCard
                     ? sidebarCollapsed
                       ? 'flex-col items-center justify-center gap-0 p-2'
-                      : 'items-center justify-between gap-3 rounded-[8px] bg-[#F5F6F7] p-3 hover:bg-[#E5E6EB] dark:bg-muted/25 dark:hover:bg-muted/50'
-                    : 'items-center justify-center rounded-[8px] p-2 hover:bg-[#F0F2F5] dark:hover:bg-muted/40',
+                      : 'items-center justify-between gap-3 px-2 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.04]'
+                    : 'items-center justify-center rounded-[8px] p-2 hover:bg-black/[0.02] dark:hover:bg-muted/40',
                 )}
                 title={
                   sidebarVis.userProfileCard
@@ -1291,17 +1377,17 @@ isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION
                     ) : (
                       <>
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className="truncate text-sm font-bold leading-tight text-[#1D2129] dark:text-foreground">
+                          <span className="truncate text-sm font-medium leading-[18px] text-[#1D2129] dark:text-foreground">
                             {authUser.realName?.trim() || authUser.userName}
                           </span>
                           {authUser.companyName?.trim() ? (
-                            <span className="truncate text-xs font-normal leading-snug text-[#86909C] dark:text-muted-foreground">
+                            <span className="truncate text-[13px] font-normal leading-[18px] text-[#8B9099] dark:text-muted-foreground">
                               {authUser.companyName.trim()}
                             </span>
                           ) : null}
                         </div>
                         <SettingsIcon
-                          className="h-5 w-5 shrink-0 text-[#86909C] dark:text-muted-foreground"
+                          className="h-5 w-5 shrink-0 text-[#8B9099] dark:text-muted-foreground"
                           strokeWidth={1.5}
                           aria-hidden
                         />
@@ -1309,7 +1395,7 @@ isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION
                     )}
                   </>
                 ) : (
-                  <SettingsIcon className="h-5 w-5 shrink-0 text-[#86909C] dark:text-muted-foreground" strokeWidth={1.75} aria-hidden />
+                  <SettingsIcon className="h-5 w-5 shrink-0 text-[#8B9099] dark:text-muted-foreground" strokeWidth={1.75} aria-hidden />
                 )}
               </button>
             </DropdownMenuTrigger>
@@ -1425,6 +1511,8 @@ isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+      ) : null}
+        </>
       ) : null}
 
       <ConfirmDialog

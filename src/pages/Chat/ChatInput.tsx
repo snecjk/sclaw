@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
+import { stoChatShellHomeClass, stoChatShellPageClass } from '@/lib/surfaces';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
@@ -669,7 +670,7 @@ export function ChatInput({
     <div
       className={cn(
         'w-full transition-all duration-300',
-        isEmbedded ? 'px-0 pb-0 pt-0' : 'mx-auto max-w-5xl px-6 pb-6 pt-2',
+        isEmbedded ? cn('px-0 pb-0 pt-0', stoChatShellHomeClass) : cn(stoChatShellPageClass, 'px-6 pb-6 pt-2'),
         className,
       )}
       onDragOver={handleDragOver}
