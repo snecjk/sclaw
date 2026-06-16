@@ -3,7 +3,7 @@
         "home": "Home",
         "myData": "My data",
         "workspace": "Workspace",
-        "sessionList": "Conversations",
+        "sessionList": "Chat history",
         "toggleSidebarCollapse": "Collapse sidebar",
         "toggleSidebarExpand": "Expand sidebar",
         "appVersionLabel": "v {{version}}",

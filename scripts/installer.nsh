@@ -1,8 +1,6 @@
 ; StoClaw Custom NSIS Installer/Uninstaller Script
 ;
-; Install: enables long paths, clears stale auth data.
 ; Uninstall: optionally deletes user data.
-
 ; ── Compression Settings ─────────────────────────────────────────────────────
 ; Disable solid compression for faster installation.
 ; Solid compression (default) treats all files as one block - faster to compress
@@ -17,7 +15,6 @@ SetCompressor zlib
 !ifndef nsProcess::FindProcess
   !include "nsProcess.nsh"
 !endif
-
 !macro customCheckAppRunning
 
   ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0

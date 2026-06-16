@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CONVERSATION_SYNC_RETRY_SCHEDULE_MS,
   postConversationBatchWithRetries,
-} from "../../sto-plugin/sto-agent-telemetry/conversation-ingest";
+} from "../../sto-plugin/openclaw/sto-agent-telemetry/conversation-ingest";
 
-vi.mock("../../sto-plugin/sto-agent-telemetry/transcript-sync.js", async (importOriginal) => {
+vi.mock("../../sto-plugin/openclaw/sto-agent-telemetry/transcript-sync.js", async (importOriginal) => {
   const actual = await importOriginal<
-    typeof import("../../sto-plugin/sto-agent-telemetry/transcript-sync.js")
+    typeof import("../../sto-plugin/openclaw/sto-agent-telemetry/transcript-sync.js")
   >();
   return {
     ...actual,
@@ -14,9 +14,9 @@ vi.mock("../../sto-plugin/sto-agent-telemetry/transcript-sync.js", async (import
   };
 });
 
-vi.mock("../../sto-plugin/sto-agent-telemetry/transcript-parse.js", async (importOriginal) => {
+vi.mock("../../sto-plugin/openclaw/sto-agent-telemetry/transcript-parse.js", async (importOriginal) => {
   const actual = await importOriginal<
-    typeof import("../../sto-plugin/sto-agent-telemetry/transcript-parse.js")
+    typeof import("../../sto-plugin/openclaw/sto-agent-telemetry/transcript-parse.js")
   >();
   return {
     ...actual,
@@ -25,11 +25,11 @@ vi.mock("../../sto-plugin/sto-agent-telemetry/transcript-parse.js", async (impor
   };
 });
 
-import { readTranscriptContent } from "../../sto-plugin/sto-agent-telemetry/transcript-sync.js";
+import { readTranscriptContent } from "../../sto-plugin/openclaw/sto-agent-telemetry/transcript-sync.js";
 import {
   extractSyncableTurnsFromJsonl,
   isTranscriptReadyForSync,
-} from "../../sto-plugin/sto-agent-telemetry/transcript-parse.js";
+} from "../../sto-plugin/openclaw/sto-agent-telemetry/transcript-parse.js";
 
 const readTranscriptContentMock = vi.mocked(readTranscriptContent);
 const isReadyMock = vi.mocked(isTranscriptReadyForSync);

@@ -5,6 +5,7 @@
 import {
   fixDwsChatMessageSendArgv,
   fixDwsChatMessageSendShellScript,
+  parseDwsChatMessageSendShellCommandArgs,
 } from '../../shared/dws-send-text';
 
 const DWS_CHAT_MSG_SEND = /dws\s+chat\s+message\s+send\b/i;
@@ -152,6 +153,8 @@ function patchChildProcess(): void {
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const EventEmitter = require('events').EventEmitter as typeof import('events').EventEmitter;
+  const originalExecFile = cp.execFile.bind(cp);
+  const originalExecFileSync = cp.execFileSync.bind(cp);
 
   function fakeChild(err: Error) {
     const ch = new EventEmitter() as import('child_process').ChildProcess;
@@ -178,8 +181,31 @@ function patchChildProcess(): void {
 
       if (method === 'exec' || method === 'execFile') {
         if (typeof mutable[0] === 'string' && DWS_CHAT_MSG_SEND.test(mutable[0])) {
-          mutable[0] = fixDwsChatMessageSendShellScript(mutable[0]);
-          cmd = mutable[0] as string;
+          if (process.platform === 'win32') {
+            const parsedArgs = parseDwsChatMessageSendShellCommandArgs(mutable[0]);
+            if (parsedArgs) {
+              const blockedErr = resolveBlockedSpawnError('dws', parsedArgs);
+              if (blockedErr) {
+                for (let i = mutable.length - 1; i >= 1; i -= 1) {
+                  if (typeof mutable[i] === 'function') {
+                    const cb = mutable[i] as (err: Error) => void;
+                    setImmediate(() => cb(blockedErr));
+                    break;
+                  }
+                }
+                return fakeChild(blockedErr);
+              }
+
+              const execFileArgs: unknown[] = ['dws', parsedArgs];
+              for (let i = 1; i < mutable.length; i += 1) {
+                execFileArgs.push(mutable[i]);
+              }
+              return originalExecFile(...(execFileArgs as Parameters<typeof originalExecFile>));
+            }
+          } else {
+            mutable[0] = fixDwsChatMessageSendShellScript(mutable[0]);
+            cmd = mutable[0] as string;
+          }
         }
       } else if (Array.isArray(mutable[1])) {
         mutable[1] = normalizeDwsSendInvocation(cmd, cmdArgs);
@@ -225,8 +251,22 @@ function patchChildProcess(): void {
 
       if (method === 'execSync' || method === 'execFileSync') {
         if (typeof mutable[0] === 'string' && DWS_CHAT_MSG_SEND.test(mutable[0])) {
-          mutable[0] = fixDwsChatMessageSendShellScript(mutable[0]);
-          cmd = mutable[0] as string;
+          if (process.platform === 'win32') {
+            const parsedArgs = parseDwsChatMessageSendShellCommandArgs(mutable[0]);
+            if (parsedArgs) {
+              const blockedErr = resolveBlockedSpawnError('dws', parsedArgs);
+              if (blockedErr) throw blockedErr;
+
+              const execFileArgs: unknown[] = ['dws', parsedArgs];
+              for (let i = 1; i < mutable.length; i += 1) {
+                execFileArgs.push(mutable[i]);
+              }
+              return originalExecFileSync(...(execFileArgs as Parameters<typeof originalExecFileSync>));
+            }
+          } else {
+            mutable[0] = fixDwsChatMessageSendShellScript(mutable[0]);
+            cmd = mutable[0] as string;
+          }
         }
       } else if (Array.isArray(mutable[1])) {
         mutable[1] = normalizeDwsSendInvocation(cmd, cmdArgs);

@@ -1,6 +1,4 @@
-import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
-import { CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
 import {
   getCanonicalPrefixFromSessions,
   getMessageText,
@@ -8,14 +6,34 @@ import {
   toMs,
 } from './helpers';
 import { DEFAULT_CANONICAL_PREFIX, DEFAULT_SESSION_KEY, type ChatSession, type RawMessage } from './types';
-import { parseCronSessionKey, parseScheduledTaskAgentSessionKey, parseScheduledTaskSessionKey } from './cron-session-utils';
+import {
+  parseClaudeScheduledTaskRunSessionKey,
+  parseClaudeScheduledTaskSessionKey,
+  parseCronSessionKey,
+  parseScheduledTaskAgentSessionKey,
+  parseScheduledTaskSessionKey,
+} from './cron-session-utils';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
+import { useAgentsStore } from '@/stores/agents';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
+
+const NEW_SESSION_TEMP_LABEL = '新对话';
+const SESSION_METADATA_HISTORY_LIMIT = 2;
+const SESSION_METADATA_HYDRATE_LIMIT = 40;
+const SESSION_METADATA_HYDRATE_CONCURRENCY = 4;
 
 function getAgentIdFromSessionKey(sessionKey: string): string {
   if (!sessionKey.startsWith('agent:')) return 'main';
   const [, agentId] = sessionKey.split(':');
   return agentId || 'main';
+}
+
+function getSessionEngineType(session: ChatSession | undefined): ChatSession['engineType'] | undefined {
+  return session?.engineType;
+}
+
+function isTemporaryAgentSessionKey(key: string): boolean {
+  return /^agent:[^:]+:session-\d+/.test(key);
 }
 
 function parseSessionUpdatedAtMs(value: unknown): number | undefined {
@@ -31,6 +49,18 @@ function parseSessionUpdatedAtMs(value: unknown): number | undefined {
   return undefined;
 }
 
+async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(limit, 1), items.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex];
+      nextIndex += 1;
+      await task(item);
+    }
+  }));
+}
+
 export function createSessionActions(
   set: ChatSet,
   get: ChatGet,
@@ -38,17 +68,9 @@ export function createSessionActions(
   return {
     loadSessions: async () => {
       try {
-        const result = await invokeIpc(
-          'gateway:rpc',
-          'sessions.list',
-          {}
-        ) as { success: boolean; result?: Record<string, unknown>; error?: string };
-
         let rawSessions: Record<string, unknown>[] = [];
-        if (result.success && result.result) {
-          const data = result.result;
-          rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
-        }
+        const result = await hostApiFetch<{ success?: boolean; sessions?: Record<string, unknown>[] }>('/api/chat/sessions');
+        rawSessions = Array.isArray(result.sessions) ? result.sessions : [];
 
         // Also load scheduled task sessions from local filesystem
         try {
@@ -60,6 +82,17 @@ export function createSessionActions(
           }
         } catch (err) {
           console.warn('Failed to load scheduled task sessions:', err);
+        }
+
+        try {
+          const claudeTaskResult = await hostApiFetch<{
+            sessions?: Array<{ key: string; label: string; updatedAt?: number; engineType?: 'claude' }>;
+          }>('/api/claude-scheduled-tasks/sessions');
+          if (claudeTaskResult.sessions) {
+            rawSessions = [...rawSessions, ...claudeTaskResult.sessions];
+          }
+        } catch (err) {
+          console.warn('Failed to load Claude scheduled task sessions:', err);
         }
 
         // Also load cron dated sessions from local filesystem (Gateway may prune old ones)
@@ -97,6 +130,7 @@ export function createSessionActions(
 
         const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
           const key = String(s.key || '');
+          const engineType: ChatSession['engineType'] = s.engineType === 'claude' ? 'claude' : 'openclaw';
           return {
             key,
             label: s.label ? String(s.label) : undefined,
@@ -107,8 +141,9 @@ export function createSessionActions(
             thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
             model: s.model ? String(s.model) : undefined,
             updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
+            engineType,
           };
-        }).filter((s: ChatSession) => s.key);
+        }).filter((s) => Boolean(s.key)) as ChatSession[];
 
         const canonicalBySuffix = new Map<string, string>();
         for (const session of sessions) {
@@ -130,7 +165,7 @@ export function createSessionActions(
           return true;
         });
 
-        const { currentSessionKey } = get();
+        const { currentSessionKey, sessions: localSessions, sessionLastActivity, sessionLabels } = get();
         let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
         if (!nextSessionKey.startsWith('agent:')) {
           const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
@@ -146,8 +181,20 @@ export function createSessionActions(
           }
         }
 
-        const sessionsWithCurrent = !dedupedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
-          ? [...dedupedSessions, { key: nextSessionKey }]
+        const hasLocalPendingSession = localSessions.some((session) => session.key === nextSessionKey);
+        const hasLocalSessionActivity = Boolean(sessionLastActivity[nextSessionKey] || sessionLabels[nextSessionKey]);
+        const shouldAppendCurrentSession = Boolean(
+          nextSessionKey
+          && !dedupedSessions.find((s) => s.key === nextSessionKey)
+          && (hasLocalPendingSession || hasLocalSessionActivity),
+        );
+        const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
+        const sessionsWithCurrent = shouldAppendCurrentSession
+          ? [...dedupedSessions, {
+            key: nextSessionKey,
+            label: localCurrentSession?.label ?? NEW_SESSION_TEMP_LABEL,
+            engineType: localCurrentSession?.engineType,
+          }]
           : dedupedSessions;
 
         const discoveredActivity = Object.fromEntries(
@@ -192,17 +239,35 @@ export function createSessionActions(
           // Ignore scheduled-task name enrichment failure
         }
 
+        try {
+          const tasksResult = await hostApiFetch<Array<{ id: string; name: string }>>('/api/claude-scheduled-tasks');
+          const taskNameMap = new Map(tasksResult.map((task) => [task.id, task.name]));
+          for (const session of sessionsWithCurrent) {
+            const summaryParsed = parseClaudeScheduledTaskSessionKey(session.key);
+            const runParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
+            const taskId = summaryParsed?.taskId ?? runParsed?.taskId;
+            if (!taskId) continue;
+            const name = taskNameMap.get(taskId);
+            if (name) session.displayName = name;
+          }
+        } catch {
+          // Ignore Claude scheduled-task name enrichment failure
+        }
+
         // 2) 再按日期生成 label
         const taskSessionDayCounts = new Map<string, number>();
         for (const session of sessionsWithCurrent) {
           const cronParsed = parseCronSessionKey(session.key);
           const stParsed = parseScheduledTaskAgentSessionKey(session.key);
+          const claudeRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
           let taskId: string | undefined;
           const ts = session.updatedAt;
           if (cronParsed) {
             taskId = `cron:${cronParsed.jobId}`;
           } else if (stParsed) {
             taskId = `st:${stParsed.taskId}`;
+          } else if (claudeRunParsed) {
+            taskId = `claude-task:${claudeRunParsed.taskId}`;
           }
           if (taskId && ts) {
             const d = new Date(ts);
@@ -214,12 +279,15 @@ export function createSessionActions(
         for (const session of sessionsWithCurrent) {
           const cronParsed = parseCronSessionKey(session.key);
           const stParsed = parseScheduledTaskAgentSessionKey(session.key);
+          const claudeRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
           let taskId: string | undefined;
           const ts = session.updatedAt;
           if (cronParsed) {
             taskId = `cron:${cronParsed.jobId}`;
           } else if (stParsed) {
             taskId = `st:${stParsed.taskId}`;
+          } else if (claudeRunParsed) {
+            taskId = `claude-task:${claudeRunParsed.taskId}`;
           }
           if (taskId && ts) {
             const d = new Date(ts);
@@ -250,23 +318,33 @@ export function createSessionActions(
         }));
 
         if (currentSessionKey !== nextSessionKey) {
-          get().loadHistory();
+          await get().loadHistory();
         }
 
-        // Background: fetch first user message for every session to populate labels upfront.
-        // Uses a small limit so it's cheap; runs in parallel and doesn't block anything.
-        const sessionsToLabel = sessionsWithCurrent;
-        if (sessionsToLabel.length > 0) {
-          void Promise.all(
-            sessionsToLabel.map(async (session) => {
+        // Background: hydrate only the first screen of missing metadata.
+        // Avoid N * full-history fan-out when many sessions exist.
+        const sessionsToHydrate = sessionsWithCurrent
+          .filter((session) => {
+            if (session.key.endsWith(':main')) return false;
+            const hasUsableTitle = Boolean(session.label?.trim() || session.displayName?.trim() || get().sessionLabels[session.key]);
+            const hasActivity = Boolean(session.updatedAt || get().sessionLastActivity[session.key]);
+            return !hasUsableTitle || !hasActivity;
+          })
+          .sort((left, right) => {
+            const leftAt = left.updatedAt ?? get().sessionLastActivity[left.key] ?? 0;
+            const rightAt = right.updatedAt ?? get().sessionLastActivity[right.key] ?? 0;
+            return rightAt - leftAt;
+          })
+          .slice(0, SESSION_METADATA_HYDRATE_LIMIT);
+        if (sessionsToHydrate.length > 0) {
+          void runLimited(sessionsToHydrate, SESSION_METADATA_HYDRATE_CONCURRENCY, async (session) => {
               try {
-                const r = await invokeIpc(
-                  'gateway:rpc',
-                  'chat.history',
-                  { sessionKey: session.key, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
-                ) as { success: boolean; result?: Record<string, unknown> };
-                if (!r.success || !r.result) return;
-                const msgs = Array.isArray(r.result.messages) ? r.result.messages as RawMessage[] : [];
+                const history = await hostApiFetch<{ success?: boolean; result?: { messages?: RawMessage[] } }>(
+                  `/api/chat/history?sessionKey=${encodeURIComponent(session.key)}&limit=${SESSION_METADATA_HISTORY_LIMIT}`
+                  + (getSessionEngineType(session) ? `&engineType=${encodeURIComponent(getSessionEngineType(session)!)}`
+                    : ''),
+                );
+                const msgs = Array.isArray(history.result?.messages) ? history.result.messages : [];
                 const firstUser = msgs.find((m) => m.role === 'user');
                 const lastMsg = msgs[msgs.length - 1];
                 set((s) => {
@@ -279,14 +357,13 @@ export function createSessionActions(
                       next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
                     }
                   }
-                  if (lastMsg?.timestamp) {
+                  if (lastMsg?.timestamp && !s.sessionLastActivity[session.key]) {
                     next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: toMs(lastMsg.timestamp) };
                   }
                   return next;
                 });
               } catch { /* ignore per-session errors */ }
-            }),
-          );
+            });
         }
       } catch (err) {
         console.warn('Failed to load sessions:', err);
@@ -300,7 +377,7 @@ export function createSessionActions(
       // 仅将没有任何历史记录且无活动时间的会话视为空会话。
       // 单纯依赖 messages.length 是不可靠的，因为 switchSession 会在真正调用 loadHistory 前抢先清空当前 messages，
       // 造成竞争条件，使得带有真实历史的会话被判定为空并从侧边栏移除。
-      const leavingEmpty = !currentSessionKey.endsWith(':main')
+      const leavingEmpty = isTemporaryAgentSessionKey(currentSessionKey)
         && messages.length === 0
         && !sessionLastActivity[currentSessionKey]
         && !sessionLabels[currentSessionKey];
@@ -326,7 +403,9 @@ export function createSessionActions(
           ),
         } : {}),
       }));
-      get().loadHistory();
+      void (async () => {
+        await get().loadHistory();
+      })();
     },
 
     // ── Delete session ──
@@ -343,15 +422,22 @@ export function createSessionActions(
       // The main process renames <suffix>.jsonl → <suffix>.deleted.jsonl so that
       // sessions.list skips it automatically.
       try {
-        const result = await invokeIpc('session:delete', key) as {
+        const result = await hostApiFetch<{ success: boolean; error?: string }>('/api/sessions/delete', {
+          method: 'POST',
+          body: JSON.stringify({
+            sessionKey: key,
+            engineType: getSessionEngineType(get().sessions.find((session) => session.key === key)),
+          }),
+        });
+        const typedResult = result as {
           success: boolean;
           error?: string;
         };
-        if (!result.success) {
-          console.warn(`[deleteSession] IPC reported failure for ${key}:`, result.error);
+        if (!typedResult.success) {
+          console.warn(`[deleteSession] API reported failure for ${key}:`, typedResult.error);
         }
       } catch (err) {
-        console.warn(`[deleteSession] IPC call failed for ${key}:`, err);
+        console.warn(`[deleteSession] API call failed for ${key}:`, err);
       }
 
       const { currentSessionKey, sessions } = get();
@@ -377,7 +463,7 @@ export function createSessionActions(
           currentAgentId: getAgentIdFromSessionKey(next?.key ?? DEFAULT_SESSION_KEY),
         }));
         if (next) {
-          get().loadHistory();
+          await get().loadHistory();
         }
       } else {
         set((s) => ({
@@ -397,13 +483,16 @@ export function createSessionActions(
       // conversation history inaccessible when the user switches back to it.
       const { currentSessionKey, messages, sessionLastActivity, sessionLabels } = get();
       // 仅将没有任何历史记录且无活动时间的会话视为空会话
-      const leavingEmpty = !currentSessionKey.endsWith(':main')
+      const leavingEmpty = isTemporaryAgentSessionKey(currentSessionKey)
         && messages.length === 0
         && !sessionLastActivity[currentSessionKey]
         && !sessionLabels[currentSessionKey];
       const prefix = getCanonicalPrefixFromSessions(get().sessions) ?? DEFAULT_CANONICAL_PREFIX;
       const newKey = `${prefix}:session-${Date.now()}`;
-      const newSessionEntry: ChatSession = { key: newKey };
+      const agentId = getAgentIdFromSessionKey(newKey);
+      const agentEngineType = useAgentsStore.getState().agents
+        .find((agent) => agent.id.trim().toLowerCase() === agentId.trim().toLowerCase())?.engineType;
+      const newSessionEntry: ChatSession = { key: newKey, label: NEW_SESSION_TEMP_LABEL, engineType: agentEngineType };
       set((s) => ({
         currentSessionKey: newKey,
         currentAgentId: getAgentIdFromSessionKey(newKey),
@@ -439,7 +528,7 @@ export function createSessionActions(
       // in the sidebar.
       // 同样需要综合检查 sessionLastActivity 和 sessionLabels，
       // 防止因为 switchSession 抢先清空 messages 而误判有历史的会话为空。
-      const isEmptyNonMain = !currentSessionKey.endsWith(':main')
+      const isEmptyNonMain = isTemporaryAgentSessionKey(currentSessionKey)
         && messages.length === 0
         && !sessionLastActivity[currentSessionKey]
         && !sessionLabels[currentSessionKey];

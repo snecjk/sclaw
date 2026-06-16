@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickToolResult } from "../../sto-plugin/sto-agent-telemetry/tool-result-extract.js";
+import { pickToolResult } from "../../sto-plugin/openclaw/sto-agent-telemetry/tool-result-extract.js";
 
 describe("pickToolResult", () => {
   it("prefers result field", () => {

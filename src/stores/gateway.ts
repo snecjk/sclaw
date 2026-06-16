@@ -14,6 +14,7 @@ const gatewayEventDedupe = new Map<string, number>();
 const GATEWAY_EVENT_DEDUPE_TTL_MS = 30_000;
 const LOAD_SESSIONS_MIN_INTERVAL_MS = 1_200;
 const LOAD_HISTORY_MIN_INTERVAL_MS = 800;
+const COMPLETION_HISTORY_RELOAD_DELAYS_MS = [1_000, 3_000, 7_000];
 let lastLoadSessionsAt = 0;
 let lastLoadHistoryAt = 0;
 
@@ -148,6 +149,101 @@ function maybeLoadHistory(
   void state.loadHistory(true);
 }
 
+function scheduleCompletedRunFinalization(runId: unknown, sessionKey: unknown): void {
+  const completionRunId = runId != null ? String(runId) : null;
+  const completionSessionKey = sessionKey != null ? String(sessionKey) : null;
+
+  for (const [index, delayMs] of COMPLETION_HISTORY_RELOAD_DELAYS_MS.entries()) {
+    setTimeout(() => {
+      import('./chat')
+        .then(async ({ useChatStore }) => {
+          const state = useChatStore.getState();
+          const matchesCurrentSession = completionSessionKey == null || completionSessionKey === state.currentSessionKey;
+          const matchesActiveRun = completionRunId != null && state.activeRunId != null && completionRunId === state.activeRunId;
+          const backgroundRuntime = completionSessionKey ? state.runtimeBySessionKey[completionSessionKey] : null;
+          const hasBackgroundActiveRuntime = Boolean(backgroundRuntime?.sending);
+          if (!matchesCurrentSession && !matchesActiveRun && !hasBackgroundActiveRuntime) return;
+
+          if (matchesCurrentSession || matchesActiveRun) {
+            await state.loadHistory(true);
+          }
+
+          if (index !== COMPLETION_HISTORY_RELOAD_DELAYS_MS.length - 1) return;
+
+          const latest = useChatStore.getState();
+          const stillMatchesCurrentSession = completionSessionKey == null || completionSessionKey === latest.currentSessionKey;
+          const stillMatchesActiveRun = completionRunId != null && latest.activeRunId != null && completionRunId === latest.activeRunId;
+          if (stillMatchesCurrentSession || stillMatchesActiveRun) {
+            if (!latest.sending) return;
+            if (latest.streamingMessage || latest.streamingText) return;
+
+            useChatStore.setState((prev) => ({
+              sending: false,
+              activeRunId: null,
+              pendingFinal: false,
+              lastUserMessageAt: null,
+              runtimeBySessionKey: completionSessionKey
+                ? {
+                    ...prev.runtimeBySessionKey,
+                    [completionSessionKey]: {
+                      ...(prev.runtimeBySessionKey[completionSessionKey] ?? {
+                        sending: false,
+                        activeRunId: null,
+                        streamingText: '',
+                        streamingMessage: null,
+                        streamingTools: [],
+                        pendingFinal: false,
+                        lastUserMessageAt: null,
+                        pendingToolImages: [],
+                        error: null,
+                        updatedAt: 0,
+                      }),
+                      sending: false,
+                      activeRunId: null,
+                      streamingText: '',
+                      streamingMessage: null,
+                      streamingTools: [],
+                      pendingFinal: false,
+                      lastUserMessageAt: null,
+                      pendingToolImages: [],
+                      error: null,
+                      updatedAt: Date.now(),
+                    },
+                  }
+                : prev.runtimeBySessionKey,
+            }));
+            return;
+          }
+
+          if (!completionSessionKey) return;
+          const sessionRuntime = latest.runtimeBySessionKey[completionSessionKey];
+          if (!sessionRuntime?.sending) return;
+          if (sessionRuntime.streamingMessage || sessionRuntime.streamingText) return;
+
+          useChatStore.setState((prev) => ({
+            runtimeBySessionKey: {
+              ...prev.runtimeBySessionKey,
+              [completionSessionKey]: {
+                ...(prev.runtimeBySessionKey[completionSessionKey] ?? sessionRuntime),
+                sending: false,
+                activeRunId: null,
+                streamingText: '',
+                streamingMessage: null,
+                streamingTools: [],
+                pendingFinal: false,
+                lastUserMessageAt: null,
+                pendingToolImages: [],
+                error: null,
+                updatedAt: Date.now(),
+              },
+            },
+          }));
+        })
+        .catch(() => {});
+    }, delayMs);
+  }
+}
+
 function handleGatewayNotification(notification: { method?: string; params?: Record<string, unknown> } | undefined): void {
   const payload = notification;
   if (!payload || payload.method !== 'agent' || !payload.params || typeof payload.params !== 'object') {
@@ -216,17 +312,29 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
 
         const matchesCurrentSession = resolvedSessionKey == null || resolvedSessionKey === state.currentSessionKey;
         const matchesActiveRun = runId != null && state.activeRunId != null && String(runId) === state.activeRunId;
+        const backgroundRuntime = resolvedSessionKey ? state.runtimeBySessionKey[resolvedSessionKey] : null;
+        const hasBackgroundActiveRuntime = Boolean(backgroundRuntime?.sending);
 
         if (matchesCurrentSession || matchesActiveRun) {
           maybeLoadHistory(state);
         }
         if ((matchesCurrentSession || matchesActiveRun) && state.sending) {
           useChatStore.setState({
-            sending: false,
-            activeRunId: null,
-            pendingFinal: false,
-            lastUserMessageAt: null,
+            pendingFinal: true,
           });
+          scheduleCompletedRunFinalization(runId, resolvedSessionKey);
+        } else if (resolvedSessionKey && hasBackgroundActiveRuntime) {
+          useChatStore.setState((prev) => ({
+            runtimeBySessionKey: {
+              ...prev.runtimeBySessionKey,
+              [resolvedSessionKey]: {
+                ...prev.runtimeBySessionKey[resolvedSessionKey],
+                pendingFinal: true,
+                updatedAt: Date.now(),
+              },
+            },
+          }));
+          scheduleCompletedRunFinalization(runId, resolvedSessionKey);
         }
       })
       .catch(() => {});

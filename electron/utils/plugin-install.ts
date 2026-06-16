@@ -9,7 +9,6 @@ import { app } from 'electron';
 import path from 'node:path';
 import { existsSync, cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, readdirSync, realpathSync } from 'node:fs';
 import { cp as cpAsync, mkdir as mkdirAsync, rm as rmAsync } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { logger } from './logger';
 import { getOpenClawConfigDir, getBundledPluginSourceCandidates } from './paths';
@@ -222,6 +221,15 @@ const LOCAL_PLUGIN_DIRS: Record<string, string> = {
   'sto-dingtalk-send-guard': 'sto-dingtalk-send-guard',
 };
 
+function getLocalPluginSourceCandidates(localDir: string): string[] {
+  return [
+    join(process.cwd(), 'sto-plugin', 'openclaw', localDir),
+    join(app.getAppPath(), 'sto-plugin', 'openclaw', localDir),
+    join(process.cwd(), 'sto-plugin', localDir),
+    join(app.getAppPath(), 'sto-plugin', localDir),
+  ];
+}
+
 /** Shared library copied beside workflow-tool for ../sto-toolkit imports at runtime. */
 const STO_TOOLKIT_DIR = 'sto-toolkit';
 
@@ -386,10 +394,11 @@ function pickPluginSourceDir(
   if (!app.isPackaged) {
     const localDir = LOCAL_PLUGIN_DIRS[pluginDirName];
     if (localDir) {
-      const localSourceDir = join(process.cwd(), 'sto-plugin', localDir);
-      if (existsSync(fsPath(join(localSourceDir, 'openclaw.plugin.json')))) {
-        const version = readPluginVersion(join(localSourceDir, 'package.json'));
-        if (version) ranked.push({ dir: localSourceDir, version });
+      for (const localSourceDir of getLocalPluginSourceCandidates(localDir)) {
+        if (existsSync(fsPath(join(localSourceDir, 'openclaw.plugin.json')))) {
+          const version = readPluginVersion(join(localSourceDir, 'package.json'));
+          if (version) ranked.push({ dir: localSourceDir, version });
+        }
       }
     }
   }
@@ -627,41 +636,42 @@ export function ensurePluginInstalled(
     // Dev mode fallback for local plugins: copy from sto-plugin/ directory
     const localDir = LOCAL_PLUGIN_DIRS[pluginDirName];
     if (localDir) {
-      const localSourceDir = join(process.cwd(), 'sto-plugin', localDir);
-      if (existsSync(fsPath(join(localSourceDir, 'openclaw.plugin.json')))) {
-        const installedVersion = existsSync(fsPath(targetPkgJson)) ? readPluginVersion(targetPkgJson) : null;
-        const sourceVersion = readPluginVersion(join(localSourceDir, 'package.json'));
-        if (sourceVersion && (!installedVersion || sourceVersion !== installedVersion)) {
-          logger.info(
-            `[plugin] ${installedVersion ? 'Upgrading' : 'Installing'} ${pluginLabel} plugin: ` +
-            `${installedVersion ? `${installedVersion} → ${sourceVersion}` : sourceVersion} (dev/sto-plugin)`,
-          );
-          try {
-            mkdirSync(fsPath(join(getOpenClawConfigDir(), 'extensions')), { recursive: true });
-            rmSync(fsPath(targetDir), { recursive: true, force: true });
-            cpSync(fsPath(localSourceDir), fsPath(targetDir), {
-              recursive: true,
-              filter: (src: string) => {
-                const base = path.basename(src);
-                if (/\.(test|spec)\.(ts|js)$/.test(base)) return false;
-                if (base === '__tests__' || base === 'node_modules') return false;
-                return true;
-              },
-            });
-            fixupPluginManifest(targetDir);
-            if (existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) {
-              afterStoPluginInstall(pluginDirName);
-              return { installed: true };
-            }
-          } catch (err) {
-            logger.warn(
-              `[plugin] Failed to install ${pluginLabel} from sto-plugin/`,
-              toErrorDiagnostic(err),
+      for (const localSourceDir of getLocalPluginSourceCandidates(localDir)) {
+        if (existsSync(fsPath(join(localSourceDir, 'openclaw.plugin.json')))) {
+          const installedVersion = existsSync(fsPath(targetPkgJson)) ? readPluginVersion(targetPkgJson) : null;
+          const sourceVersion = readPluginVersion(join(localSourceDir, 'package.json'));
+          if (sourceVersion && (!installedVersion || sourceVersion !== installedVersion)) {
+            logger.info(
+              `[plugin] ${installedVersion ? 'Upgrading' : 'Installing'} ${pluginLabel} plugin: ` +
+              `${installedVersion ? `${installedVersion} → ${sourceVersion}` : sourceVersion} (dev/local sto-plugin source)`,
             );
+            try {
+              mkdirSync(fsPath(join(getOpenClawConfigDir(), 'extensions')), { recursive: true });
+              rmSync(fsPath(targetDir), { recursive: true, force: true });
+              cpSync(fsPath(localSourceDir), fsPath(targetDir), {
+                recursive: true,
+                filter: (src: string) => {
+                  const base = path.basename(src);
+                  if (/\.(test|spec)\.(ts|js)$/.test(base)) return false;
+                  if (base === '__tests__' || base === 'node_modules') return false;
+                  return true;
+                },
+              });
+              fixupPluginManifest(targetDir);
+              if (existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) {
+                afterStoPluginInstall(pluginDirName);
+                return { installed: true };
+              }
+            } catch (err) {
+              logger.warn(
+                `[plugin] Failed to install ${pluginLabel} from local sto-plugin source`,
+                toErrorDiagnostic(err),
+              );
+            }
+          } else if (existsSync(fsPath(targetManifest))) {
+            afterStoPluginInstall(pluginDirName);
+            return { installed: true }; // same version, already installed
           }
-        } else if (existsSync(fsPath(targetManifest))) {
-          afterStoPluginInstall(pluginDirName);
-          return { installed: true }; // same version, already installed
         }
       }
     }

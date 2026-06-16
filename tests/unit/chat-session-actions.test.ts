@@ -52,7 +52,7 @@ function makeHarness(initial?: Partial<ChatLikeState>) {
 describe('chat session actions', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    invokeIpcMock.mockResolvedValue({ success: true });
+    invokeIpcMock.mockResolvedValue({ success: true, ok: true, status: 200, json: { success: true } });
   });
 
   it('switchSession preserves non-main session that has activity history', async () => {
@@ -109,7 +109,15 @@ describe('chat session actions', () => {
 
     await actions.deleteSession('agent:foo:session-a');
     const next = h.read();
-    expect(invokeIpcMock).toHaveBeenCalledWith('session:delete', 'agent:foo:session-a');
+    expect(invokeIpcMock).toHaveBeenCalledWith('hostapi:fetch', {
+      path: '/api/sessions/delete',
+      method: 'POST',
+      headers: {},
+      body: JSON.stringify({
+        sessionKey: 'agent:foo:session-a',
+        engineType: undefined,
+      }),
+    });
     expect(next.currentSessionKey).toBe('agent:foo:main');
     expect(next.sessions.map((s) => s.key)).toEqual(['agent:foo:main']);
     expect(next.sessionLabels['agent:foo:session-a']).toBeUndefined();
@@ -151,7 +159,10 @@ describe('chat session actions', () => {
 
     invokeIpcMock.mockResolvedValueOnce({
       success: true,
-      result: {
+      ok: true,
+      status: 200,
+      json: {
+        success: true,
         sessions: [
           {
             key: 'agent:main:main',

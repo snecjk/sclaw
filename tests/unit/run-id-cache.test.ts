@@ -11,7 +11,7 @@ import {
   takePendingAgentRunEnd,
   takePendingModelCalls,
   takePendingModelEnded,
-} from "../../sto-plugin/sto-agent-telemetry/run-id-cache";
+} from "../../sto-plugin/openclaw/sto-agent-telemetry/run-id-cache";
 
 describe("run-id-cache", () => {
   beforeEach(() => {

@@ -6,49 +6,79 @@ import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
 import { scheduleValueToCron, cronToScheduleValue, defaultScheduleValue } from './schedule-utils';
 import { resolveScheduledTaskMentions, stripInstructionFromTaskMessage } from '@/lib/scheduled-task-recipients';
 import { cn } from '@/lib/utils';
-import type { CronJob, CronJobCreateInput } from '@/types/cron';
+import type { CronJobCreateInput } from '@/types/cron';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import { useAgentsStore } from '@/stores/agents';
+import type { ManagedLocalTask } from '@/stores/cron';
+import type { AgentSummary } from '@/types/agent';
+
+type TaskEngineType = 'openclaw' | 'claude';
 
 interface CronTaskCreateModalProps {
-  job?: CronJob | null;
+  job?: ManagedLocalTask | null;
   open: boolean;
   onClose: () => void;
-  onSave: (input: CronJobCreateInput) => Promise<void>;
+  onSave: (input: CronJobCreateInput & { engineType: TaskEngineType }) => Promise<void>;
   initialValues?: { name?: string; message?: string; schedule?: string };
 }
 
+function resolvePreferredAgentByEngine(
+  agents: AgentSummary[],
+  defaultAgentId: string,
+  engineType: TaskEngineType,
+): AgentSummary | null {
+  const engineAgents = agents.filter((agent) => (agent.engineType ?? 'openclaw') === engineType);
+  if (engineAgents.length === 0) return null;
+  return engineAgents.find((agent) => agent.id === defaultAgentId) ?? engineAgents[0] ?? null;
+}
+
 export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues }: CronTaskCreateModalProps) {
+  const agents = useAgentsStore((s) => s.agents);
+  const defaultAgentId = useAgentsStore((s) => s.defaultAgentId);
   const [name, setName] = useState('');
   const [message, setMessage] = useState('');
   const [schedule, setSchedule] = useState<ScheduleValue>(defaultScheduleValue());
   const [recipients, setRecipients] = useState<DingTalkMention[]>([]);
+  const [engineType, setEngineType] = useState<TaskEngineType>('openclaw');
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; message?: string }>({});
 
   const isEditing = !!job;
+  const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, engineType);
+  const isClaudeTask = job?.engineType === 'claude' || selectedAgent?.engineType === 'claude';
 
   useEffect(() => {
     if (open) {
       if (job) {
         setName(job.name || '');
-        setMessage(stripInstructionFromTaskMessage(job.message || ''));
-        setRecipients(resolveScheduledTaskMentions(job.message || ''));
-        setSchedule(cronToScheduleValue(job.schedule));
+        if (job.engineType === 'claude') {
+          setMessage(job.promptTemplate || '');
+          setRecipients([]);
+          setEngineType('claude');
+          setSchedule(cronToScheduleValue(job.cronExpr));
+        } else {
+          setMessage(stripInstructionFromTaskMessage(job.message || ''));
+          setRecipients(resolveScheduledTaskMentions(job.message || ''));
+          setEngineType('openclaw');
+          setSchedule(cronToScheduleValue(job.schedule));
+        }
       } else if (initialValues) {
         setName(initialValues.name || '');
         setMessage(initialValues.message || '');
         setRecipients([]);
         setSchedule(initialValues.schedule ? cronToScheduleValue(initialValues.schedule) : defaultScheduleValue());
+        setEngineType(resolvePreferredAgentByEngine(agents, defaultAgentId, 'claude') ? 'claude' : 'openclaw');
       } else {
         setName('');
         setMessage('');
         setRecipients([]);
         setSchedule(defaultScheduleValue());
+        setEngineType(resolvePreferredAgentByEngine(agents, defaultAgentId, 'claude') ? 'claude' : 'openclaw');
       }
       setErrors({});
       setSaving(false);
     }
-  }, [open, job, initialValues]);
+  }, [open, job, initialValues, defaultAgentId, agents]);
 
   const handleSubmit = async () => {
     const newErrors: typeof errors = {};
@@ -66,7 +96,8 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
         message: message.trim(),
         schedule: scheduleValueToCron(schedule),
         enabled: true,
-        dingTalkMentions: recipients.length > 0 ? recipients : undefined,
+        dingTalkMentions: !isClaudeTask && recipients.length > 0 ? recipients : undefined,
+        engineType,
       });
       onClose();
     } catch (err) {
@@ -135,6 +166,27 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
             {errors.name && <p className="text-[12px] text-destructive mt-1">{errors.name}</p>}
           </div>
 
+          <div>
+            <label className="block text-[13.5px] font-medium text-foreground mb-1.5">
+              执行引擎
+            </label>
+            <select
+              value={engineType}
+              onChange={(e) => setEngineType(e.target.value as TaskEngineType)}
+              className="w-full h-10 px-3 text-[13px] rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+            >
+              <option value="openclaw">OpenClaw</option>
+              {resolvePreferredAgentByEngine(agents, defaultAgentId, 'claude') ? (
+                <option value="claude">Claude Agent</option>
+              ) : null}
+            </select>
+            <p className="mt-1 text-[11.5px] text-muted-foreground">
+              {selectedAgent?.engineType === 'claude'
+                ? '将创建 Claude 本地定时任务，独立在本机运行。'
+                : '将创建 OpenClaw 本地定时任务。'}
+            </p>
+          </div>
+
           {/* Instructions */}
           <div>
             <label className="block text-[13.5px] font-medium text-foreground mb-1.5">
@@ -161,13 +213,18 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
             <SchedulePicker value={schedule} onChange={setSchedule} />
           </div>
 
-          {/* Recipients */}
-          <div>
-            <label className="block text-[13.5px] font-medium text-foreground mb-1.5">
-              发送对象
-            </label>
-            <DingTalkRecipientField value={recipients} onChange={setRecipients} />
-          </div>
+          {!isClaudeTask ? (
+            <div>
+              <label className="block text-[13.5px] font-medium text-foreground mb-1.5">
+                发送对象
+              </label>
+              <DingTalkRecipientField value={recipients} onChange={setRecipients} />
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-[12px] text-muted-foreground">
+              Claude 本地定时任务会把运行结果写入本地会话与任务列表，不走钉钉发送链路。
+            </div>
+          )}
         </div>
 
         {/* Footer */}

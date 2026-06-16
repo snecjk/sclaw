@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
+import { useAgentsStore } from '@/stores/agents';
 import { useMessageQueueStore } from '@/stores/message-queue';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
@@ -16,6 +17,7 @@ export function useHomeChatEntrySend() {
   const { t } = useTranslation('home');
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
+  const agents = useAgentsStore((s) => s.agents);
   const newSession = useChatStore((s) => s.newSession);
 
   const handleHubQueue = useCallback(
@@ -28,12 +30,20 @@ export function useHomeChatEntrySend() {
 
   const handleHubSend = useCallback(
     async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, _dingTalkMentions?: DingTalkMention[], workflowId?: string | null) => {
-      if (!isGatewayRunning) {
+      const { currentAgentId, currentSessionKey, sessions } = useChatStore.getState();
+      const currentSession = sessions.find((session) => session.key === currentSessionKey);
+      const targetEngineType = targetAgentId
+        ? (agents ?? []).find((agent) => agent.id === targetAgentId)?.engineType ?? 'openclaw'
+        : currentSessionKey === DEFAULT_SESSION_KEY
+          ? (agents ?? []).find((agent) => agent.id === currentAgentId)?.engineType ?? 'openclaw'
+          : currentSession?.engineType
+          ?? (agents ?? []).find((agent) => agent.id === currentAgentId)?.engineType
+          ?? 'openclaw';
+      if (targetEngineType !== 'claude' && !isGatewayRunning) {
         toast.error(t('assistant.gatewayRequired'));
         return;
       }
 
-      const { currentSessionKey } = useChatStore.getState();
       if (currentSessionKey === DEFAULT_SESSION_KEY) {
         newSession();
       }
@@ -44,7 +54,7 @@ export function useHomeChatEntrySend() {
         toast.error(t('assistant.sendFailed'));
       }
     },
-    [isGatewayRunning, newSession, t],
+    [agents, isGatewayRunning, newSession, t],
   );
 
   return {

@@ -1,12 +1,17 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { join } from 'node:path';
 import { getOpenClawConfigDir } from '../../utils/paths';
+import { deleteClaudeSessionByKey } from '../../engines/claude-adapter';
+import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry } from '../../engines/session-registry';
+import { getAgentIdFromSessionKey, rememberSessionEngineType, resolveSessionEngineType } from '../../engines/session-engine';
+import { getAgentPreferredModel, getAgentWorkspacePath } from '../../utils/agent-config';
 import {
   qualifyChatModelRef,
   setSessionModelViaGateway,
 } from '../../utils/openclaw-model';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
+import { deleteClaudeScheduledTaskSummarySession } from '../../services/claude-scheduled-task-session-store';
 
 export async function handleSessionRoutes(
   req: IncomingMessage,
@@ -22,6 +27,7 @@ export async function handleSessionRoutes(
         model: string;
         accountId?: string;
         agentId?: string;
+        engineType?: 'openclaw' | 'claude';
       }>(req);
       const sessionKey = (body.sessionKey ?? '').trim();
       const rawModel = (body.model ?? '').trim();
@@ -31,6 +37,37 @@ export async function handleSessionRoutes(
       }
       if (!rawModel) {
         sendJson(res, 400, { success: false, error: 'model is required' });
+        return true;
+      }
+      const sessionEngineType = await resolveSessionEngineType(sessionKey, body.engineType);
+      await rememberSessionEngineType(sessionKey, sessionEngineType);
+      if (sessionEngineType === 'claude') {
+        const agentId = body.agentId?.trim() || getAgentIdFromSessionKey(sessionKey);
+        const existing = await getEngineSessionRegistryEntry(sessionKey);
+        const preferredModel = await getAgentPreferredModel(agentId);
+        const cwd = existing?.cwd || await getAgentWorkspacePath(agentId);
+        if (!cwd) {
+          sendJson(res, 404, { success: false, error: `Agent '${agentId}' workspace not found` });
+          return true;
+        }
+        await upsertEngineSessionRegistryEntry({
+          sessionKey,
+          sessionId: existing?.sessionId,
+          cwd,
+          agentId,
+          engineType: 'claude',
+          updatedAt: Date.now(),
+          title: existing?.title,
+          model: rawModel,
+          accountId: body.accountId?.trim() || existing?.accountId || preferredModel.accountId,
+        });
+        sendJson(res, 200, {
+          success: true,
+          sessionKey,
+          model: rawModel,
+          modelOverride: rawModel,
+          changedModel: true,
+        });
         return true;
       }
 
@@ -61,9 +98,23 @@ export async function handleSessionRoutes(
 
   if (url.pathname === '/api/sessions/delete' && req.method === 'POST') {
     try {
-      const body = await parseJsonBody<{ sessionKey: string }>(req);
+      const body = await parseJsonBody<{ sessionKey: string; engineType?: 'openclaw' | 'claude' }>(req);
       const sessionKey = body.sessionKey;
-      if (!sessionKey || !sessionKey.startsWith('agent:')) {
+      if (!sessionKey) {
+        sendJson(res, 400, { success: false, error: `Invalid sessionKey: ${sessionKey}` });
+        return true;
+      }
+      const sessionEngineType = await resolveSessionEngineType(sessionKey, body.engineType);
+      if (sessionEngineType === 'claude') {
+        if (sessionKey.startsWith('claude-task:')) {
+          await deleteClaudeScheduledTaskSummarySession(sessionKey);
+        } else {
+          await deleteClaudeSessionByKey(sessionKey);
+        }
+        sendJson(res, 200, { success: true });
+        return true;
+      }
+      if (!sessionKey.startsWith('agent:')) {
         sendJson(res, 400, { success: false, error: `Invalid sessionKey: ${sessionKey}` });
         return true;
       }
@@ -134,6 +185,7 @@ export async function handleSessionRoutes(
         delete json2[sessionKey];
       }
       await fsP.writeFile(sessionsJsonPath, JSON.stringify(json2, null, 2), 'utf8');
+      await deleteEngineSessionRegistryEntry(sessionKey).catch(() => {});
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

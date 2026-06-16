@@ -6,6 +6,7 @@ import {
 } from '../../shared/dingtalk-mention-context';
 import { prepareDingTalkAgentTurnMessage } from '../../shared/dingtalk-recipient-message';
 import { writeDingTalkMentionPending } from './dingtalk-mention-pending';
+import { logger } from './logger';
 
 type ChatSendParams = Record<string, unknown> & {
   sessionKey?: string;
@@ -37,6 +38,16 @@ function asAttachedFiles(value: unknown): DingTalkAttachedFileHint[] | undefined
   return files.length > 0 ? files : undefined;
 }
 
+function summarizeMentions(mentions?: DingTalkMention[]): Array<Record<string, unknown>> {
+  return mentions?.map((mention) => ({
+    type: mention.type,
+    displayName: mention.displayName,
+    hasUserId: Boolean(mention.userId?.trim()),
+    hasOpenConversationId: Boolean(mention.openConversationId?.trim()),
+    hasCorpId: Boolean(mention.corpId?.trim()),
+  })) ?? [];
+}
+
 /**
  * Inject DingTalk @ mention context into the Gateway message (Agent reads this),
  * stage pending metadata for the plugin, and strip IPC-only fields.
@@ -51,13 +62,25 @@ export async function preprocessChatSendParams(params: unknown): Promise<unknown
   const mentions = asDingTalkMentions(chatParams.dingTalkMentions);
   const attachedFiles = asAttachedFiles(chatParams.dingTalkAttachedFiles);
   const sendFileIntent = shouldIncludeDingTalkFileSendWorkflow(mentions, attachedFiles);
+  const resolvedMentions = hasResolvedDingTalkMentions(mentions);
+
+  logger.info('[dingtalk-mention] preprocess: parsed params', {
+    sessionKey: sessionKey || '(none)',
+    rawMentionCount: Array.isArray(chatParams.dingTalkMentions) ? chatParams.dingTalkMentions.length : 0,
+    acceptedMentionCount: mentions?.length ?? 0,
+    mentions: summarizeMentions(mentions),
+    resolvedMentions,
+    attachedFileCount: attachedFiles?.length ?? 0,
+    sendFileIntent,
+    messageLength: message.length,
+  });
 
   // Gateway chat.send schema rejects unknown root properties.
   delete chatParams.dingTalkMentions;
   delete chatParams.dingTalkSendFileIntent;
   delete chatParams.dingTalkAttachedFiles;
 
-  if (sessionKey && hasResolvedDingTalkMentions(mentions)) {
+  if (sessionKey && resolvedMentions) {
     chatParams.message = prepareDingTalkAgentTurnMessage(message, mentions, {
       sendFileIntent,
       attachedFiles: sendFileIntent ? attachedFiles : undefined,
@@ -65,6 +88,20 @@ export async function preprocessChatSendParams(params: unknown): Promise<unknown
     await writeDingTalkMentionPending(sessionKey, mentions!, message, {
       sendFileIntent,
       attachedFiles: sendFileIntent ? attachedFiles : undefined,
+    });
+    logger.info('[dingtalk-mention] preprocess: injected context and wrote pending cache', {
+      sessionKey,
+      mentionCount: mentions!.length,
+      sendFileIntent,
+      attachedFileCount: sendFileIntent ? attachedFiles?.length ?? 0 : 0,
+      injectedMessageLength: typeof chatParams.message === 'string' ? chatParams.message.length : 0,
+    });
+  } else if (Array.isArray((params as ChatSendParams).dingTalkMentions) && (params as ChatSendParams).dingTalkMentions!.length > 0) {
+    logger.warn('[dingtalk-mention] preprocess: skipped injection for unresolved mentions or missing sessionKey', {
+      sessionKey: sessionKey || '(none)',
+      acceptedMentionCount: mentions?.length ?? 0,
+      mentions: summarizeMentions(mentions),
+      resolvedMentions,
     });
   }
 

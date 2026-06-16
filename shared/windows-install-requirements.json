@@ -1,0 +1,20 @@
+{
+  "minRamGb": 16,
+  "minDiskTotalGb": 256,
+  "minDiskFreeGb": 10,
+  "minCpuCores": 4,
+  "minWin10Build": 17763,
+  "ssoHostByBuildEnv": {
+    "production": "baseinfo-usercenterserviceapi.sto.cn",
+    "test": "baseinfo-usercenterserviceapi-hq-test.sto.cn",
+    "staging": "pre-baseinfo-usercenterservice-api-hq.sto.cn",
+    "development": "baseinfo-usercenterserviceapi-hq-test.sto.cn"
+  },
+  "softCheckHosts": [
+    {
+      "id": "dws-github",
+      "host": "github.com",
+      "label": "DWS CLI（GitHub Releases）"
+    }
+  ]
+}

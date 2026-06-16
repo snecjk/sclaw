@@ -70,6 +70,10 @@ let authStoreInstance: any = null;
 let saiAuthWatcher: AsyncIterable<{ filename: string | null }> | null = null;
 let isWatcherActive = false;
 
+function getCompiledSsoEnvironment(): SsoEnvironment {
+  return getCurrentEnvConfig().ssoEnvironment as SsoEnvironment;
+}
+
 async function getAuthStore() {
   if (!authStoreInstance) {
     const Store = (await import('electron-store')).default;
@@ -81,16 +85,31 @@ async function getAuthStore() {
   return authStoreInstance;
 }
 
+async function getEffectiveSsoEnvironment(): Promise<SsoEnvironment> {
+  const envConfig = getCurrentEnvConfig();
+  const compiledEnv = envConfig.ssoEnvironment as SsoEnvironment;
+
+  // Non-dev builds stay pinned to the compile-time environment to avoid
+  // cross-install auth-store state sending test/staging builds to prod.
+  if (!envConfig.isDevelopment) {
+    return compiledEnv;
+  }
+
+  const store = await getAuthStore();
+  return store.get('ssoEnvironment', compiledEnv) as SsoEnvironment;
+}
+
 export async function getAuthState(): Promise<AuthState> {
   // Primary: read from ~/.sai/sso-auth.json as the single source of truth
   const saiAuthPath = join(homedir(), '.sai', 'sso-auth.json');
   const saiAuth = await readSaiCliSsoAuthFile(saiAuthPath);
+  const ssoEnvironment = await getEffectiveSsoEnvironment();
   
   if (saiAuth?.stoToken && saiAuth?.expiresAt) {
     const userInfo = isPlainObject(saiAuth.userInfo) ? saiAuth.userInfo : {};
     return {
       isAuthenticated: true,
-      ssoEnvironment: getCurrentEnvConfig().ssoEnvironment as SsoEnvironment,
+      ssoEnvironment,
       user: {
         id: String(saiAuth.userId ?? ''),
         userName: String(userInfo.UserName ?? ''),
@@ -118,7 +137,6 @@ export async function getAuthState(): Promise<AuthState> {
   
   // Fallback: electron-store for backward compatibility (migration scenario)
   const store = await getAuthStore();
-  const defaultSsoEnv = getCurrentEnvConfig().ssoEnvironment as SsoEnvironment;
   const storedUser = store.get('user', null) as SsoUserInfo | null;
   if (storedUser?.stoToken && storedUser.stoTokenExpiresAt) {
     // Migrate to ~/.sai/sso-auth.json
@@ -126,7 +144,7 @@ export async function getAuthState(): Promise<AuthState> {
   }
   return {
     isAuthenticated: store.get('isAuthenticated', false),
-    ssoEnvironment: store.get('ssoEnvironment', defaultSsoEnv),
+    ssoEnvironment,
     user: storedUser,
     systemCode: store.get('systemCode', SYSTEM_CODE),
   };
@@ -156,14 +174,19 @@ export async function clearAuthUser(): Promise<void> {
 }
 
 export async function getSsoEnvironment(): Promise<SsoEnvironment> {
-  // 始终以编译时环境为准，避免旧 auth store 中存储的 ssoEnvironment
-  // 导致测试包打到生产服务器（auth store 跨安装共享）
-  return getCurrentEnvConfig().ssoEnvironment as SsoEnvironment;
+  return getEffectiveSsoEnvironment();
 }
 
 export async function setSsoEnvironment(env: SsoEnvironment): Promise<void> {
   const store = await getAuthStore();
-  store.set('ssoEnvironment', env);
+  const compiledEnv = getCompiledSsoEnvironment();
+  if (getCurrentEnvConfig().isDevelopment) {
+    store.set('ssoEnvironment', env);
+    return;
+  }
+
+  // Keep non-dev builds pinned to their compile-time environment.
+  store.set('ssoEnvironment', compiledEnv);
 }
 
 /**

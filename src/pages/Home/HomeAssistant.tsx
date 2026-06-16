@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { ChatInput } from '@/pages/Chat/ChatInput';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 
 /**
@@ -26,9 +27,23 @@ export function HomeAssistant({
 }) {
   const { t } = useTranslation('home');
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
+  const agents = useAgentsStore((s) => s.agents);
+  const currentAgentId = useChatStore((s) => s.currentAgentId);
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const sessions = useChatStore((s) => s.sessions);
   const error = useChatStore((s) => s.error);
   const { handleHubSend, handleHubQueue } = useHomeChatEntrySend();
-
+  const currentAgent = useMemo(
+    () => agents.find((agent) => agent.id === currentAgentId),
+    [agents, currentAgentId],
+  );
+  const currentSession = useMemo(
+    () => sessions.find((session) => session.key === currentSessionKey),
+    [sessions, currentSessionKey],
+  );
+  const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
+    ? currentAgent?.engineType
+    : currentSession?.engineType ?? currentAgent?.engineType;
   const inputProps = useChatInputBindings({
     onSend: onSend || handleHubSend,
     onQueue: handleHubQueue,
@@ -36,6 +51,7 @@ export function HomeAssistant({
     seedText,
     className,
     placeholder: placeholderKey ? t(placeholderKey) : undefined,
+    engineType: currentEngineType,
   });
 
   useEffect(() => {
@@ -45,7 +61,7 @@ export function HomeAssistant({
   return (
     <div className={cn('flex flex-col', inputProps.className)}>
       <section className="flex flex-col" aria-label={t('assistant.placeholder')}>
-        <ChatInput {...inputProps} />
+        <ChatInput {...inputProps} engineType={currentEngineType} />
         {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
       </section>
       <p className="mt-3 text-right text-xs leading-relaxed text-[#86909C] dark:text-muted-foreground">

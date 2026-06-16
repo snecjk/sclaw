@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { logger } from '../../utils/logger';
 import type { HostApiContext } from '../context';
-import { sendJson } from '../route-utils';
+import { parseJsonBody, sendJson } from '../route-utils';
 
 export async function handleLogRoutes(
   req: IncomingMessage,
@@ -9,6 +9,25 @@ export async function handleLogRoutes(
   url: URL,
   _ctx: HostApiContext,
 ): Promise<boolean> {
+  if (url.pathname === '/api/logs/client' && req.method === 'POST') {
+    const body = await parseJsonBody<{
+      level?: 'debug' | 'info' | 'warn' | 'error';
+      message?: string;
+      data?: unknown;
+    }>(req);
+    const level = body.level === 'debug'
+      || body.level === 'warn'
+      || body.level === 'error'
+      ? body.level
+      : 'info';
+    const message = typeof body.message === 'string' && body.message.trim()
+      ? body.message.trim()
+      : '[client-log]';
+    logger[level](message, body.data);
+    sendJson(res, 200, { success: true });
+    return true;
+  }
+
   if (url.pathname === '/api/logs' && req.method === 'GET') {
     const tailLines = Number(url.searchParams.get('tailLines') || '100');
     sendJson(res, 200, { content: await logger.readLogFile(Number.isFinite(tailLines) ? tailLines : 100) });

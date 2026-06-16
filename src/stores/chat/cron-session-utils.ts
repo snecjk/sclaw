@@ -109,3 +109,49 @@ export function parseScheduledTaskAgentSessionKey(sessionKey: string): Scheduled
 export function isScheduledTaskAgentSessionKey(sessionKey: string): boolean {
   return parseScheduledTaskAgentSessionKey(sessionKey) !== null;
 }
+
+// ---------------------------------------------------------------------------
+// Claude Scheduled Task Session Keys
+// ---------------------------------------------------------------------------
+
+export interface ClaudeScheduledTaskSessionKeyParts {
+  taskId: string;
+}
+
+export function parseClaudeScheduledTaskSessionKey(sessionKey: string): ClaudeScheduledTaskSessionKeyParts | null {
+  if (!sessionKey.startsWith('claude-task:')) return null;
+  const taskId = sessionKey.slice('claude-task:'.length).trim();
+  if (!taskId) return null;
+  return { taskId };
+}
+
+export function isClaudeScheduledTaskSessionKey(sessionKey: string): boolean {
+  return parseClaudeScheduledTaskSessionKey(sessionKey) != null;
+}
+
+export function buildClaudeScheduledTaskSessionHistoryPath(sessionKey: string, limit = CHAT_HISTORY_LIMIT): string {
+  const params = new URLSearchParams({ sessionKey });
+  if (Number.isFinite(limit) && limit > 0) {
+    params.set('limit', String(Math.floor(limit)));
+  }
+  return `/api/claude-scheduled-tasks/session-history?${params.toString()}`;
+}
+
+export interface ClaudeScheduledTaskRunSessionKeyParts {
+  taskId: string;
+  runId: string;
+}
+
+export function parseClaudeScheduledTaskRunSessionKey(sessionKey: string): ClaudeScheduledTaskRunSessionKeyParts | null {
+  if (!sessionKey.startsWith('claude-task-run:')) return null;
+  const parts = sessionKey.split(':');
+  if (parts.length !== 3) return null;
+  const taskId = parts[1]?.trim();
+  const runId = parts[2]?.trim();
+  if (!taskId || !runId) return null;
+  return { taskId, runId };
+}
+
+export function isClaudeScheduledTaskRunSessionKey(sessionKey: string): boolean {
+  return parseClaudeScheduledTaskRunSessionKey(sessionKey) != null;
+}

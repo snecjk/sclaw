@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import register from "../../sto-plugin/sto-media-understanding/index.js";
+import register from "../../sto-plugin/openclaw/sto-media-understanding/index.js";
 
 describe("sto-media-understanding bundled plugin", () => {
 	it("registers sto as media-understanding provider", () => {
@@ -16,7 +16,7 @@ describe("sto-media-understanding bundled plugin", () => {
 
 	it("resolves plugin-sdk via OPENCLAW_PACKAGE_ROOT when set", async () => {
 		const { requireOpenClawPluginSdk } = await import(
-			"../../sto-plugin/sto-media-understanding/openclaw-sdk.js"
+			"../../sto-plugin/openclaw/sto-media-understanding/openclaw-sdk.js"
 		);
 		const { join, dirname } = await import("node:path");
 		const { fileURLToPath } = await import("node:url");

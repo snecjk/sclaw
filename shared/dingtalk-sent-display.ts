@@ -173,7 +173,9 @@ function parseTextFlag(command: string): string | undefined {
 }
 
 function previewDedupeKey(parsed: Omit<DingTalkSentMessagePreview, 'toolCallId'>): string {
-  const body = formatDingTalkSentTextForChatPreview(parsed.text);
+  const body = stripDingTalkAgentSendDisclaimerBody(parsed.text)
+    .replace(/\s+/g, ' ')
+    .trim();
   return `${parsed.recipientLabel}\0${body}`;
 }
 
@@ -219,12 +221,21 @@ function inferRecipient(
   return { kind: 'unknown', label: '钉钉' };
 }
 
+function sanitizeRecipientLabel(label: string): string {
+  const trimmed = label.trim();
+  if (!trimmed) return trimmed;
+  if (/^cid[A-Za-z0-9+/=_=-]{8,}$/i.test(trimmed)) return '群聊';
+  if (/^\d{12,}$/.test(trimmed)) return '联系人';
+  return trimmed;
+}
+
 function enrichRecipientLabel(label: string, mentionHints: string[] = []): string {
-  if (!GENERIC_RECIPIENT_LABELS.has(label)) return label;
+  const sanitized = sanitizeRecipientLabel(label);
+  if (!GENERIC_RECIPIENT_LABELS.has(sanitized)) return sanitized;
   const hints = mentionHints.map((name) => name.trim()).filter(Boolean);
   if (hints.length === 1) return hints[0];
   if (hints.length > 1) return hints.join('、');
-  return label;
+  return sanitized;
 }
 
 /** Parse `dws chat message send` from a shell / bash tool command string. */
@@ -272,6 +283,31 @@ export function splitDingTalkSentPreviewText(text: string): DingTalkSentPreviewP
 /** Sent-success card preview: body only (disclaimer rendered separately in UI). */
 export function formatDingTalkSentTextForChatPreview(text: string): string {
   return splitDingTalkSentPreviewText(text).body;
+}
+
+/** Remove assistant reply bodies that duplicate DingTalk sent-success preview cards. */
+export function stripEchoedDingTalkSentBodiesFromAssistantReply(
+  replyText: string,
+  previews: DingTalkSentMessagePreview[],
+): string {
+  if (!replyText?.trim() || previews.length === 0) return replyText;
+
+  let result = replyText;
+  for (const preview of previews) {
+    const body = stripDingTalkAgentSendDisclaimerBody(preview.text).trim();
+    if (!body) continue;
+
+    if (result.includes(body)) {
+      result = result.split(body).join('').trim();
+    }
+
+    const formatted = formatDingTalkSentTextForChatPreview(preview.text).trim();
+    if (formatted && result.includes(formatted)) {
+      result = result.split(formatted).join('').trim();
+    }
+  }
+
+  return result.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function extractToolResultText(message: DingTalkSentDisplayMessage): string {

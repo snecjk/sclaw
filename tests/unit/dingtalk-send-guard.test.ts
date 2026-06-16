@@ -7,8 +7,9 @@ import {
   isBlockedDwsSendSpamCommand,
   isSuccessfulDwsChatMessageSendResult,
   rememberPendingDingTalkSend,
+  resolveDwsChatMessageSendTextFormatProblem,
   resetDingTalkSendRateLimitForTests,
-} from '../../sto-plugin/sto-dingtalk-send-guard/dingtalk-send-guard';
+} from '../../sto-plugin/openclaw/sto-dingtalk-send-guard/dingtalk-send-guard';
 
 describe('isBatchDwsChatMessageSend', () => {
   it('detects for-loop batch send', () => {
@@ -153,5 +154,39 @@ describe('evaluateDingTalkSendGuard', () => {
     if (!result.allowed) {
       expect(result.reason).toContain('循环或批量');
     }
+  });
+
+  it('blocks Bash ANSI-C quoted --text before it reaches Windows exec', () => {
+    const params = {
+      command:
+        "dws chat message send --user u1 --title \"消息\" --text $'你好\\n\\n---\\n\\n> *本消息由 STO Claw 代为发送，非本人实时回复。*' --format json",
+    };
+    const result = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) {
+      expect(result.reason).toContain('OpenClaw/Windows');
+      expect(result.reason).toContain('$');
+    }
+    expect(resolveDwsChatMessageSendTextFormatProblem(params.command)).toContain('--text');
+  });
+
+  it('blocks shell variable --text because it can collapse to --format', () => {
+    const params = {
+      command:
+        'powershell -NoProfile -Command "$nl = [Environment]::NewLine; $text = \'你好\' + $nl + $nl + \'---\' + $nl + $nl + \'> *本消息由 STO Claw 代为发送，非本人实时回复。*\'; dws chat message send --user u1 --title \'消息\' --text $text --format json"',
+    };
+    const result = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
+    expect(result.allowed).toBe(false);
+    expect(resolveDwsChatMessageSendTextFormatProblem(params.command)).toContain('--format');
+  });
+
+  it('allows direct quoted text with literal newline escapes for gateway argv normalization', () => {
+    const params = {
+      command:
+        'dws chat message send --user u1 --title "消息" --text "你好\\n\\n---\\n\\n> *本消息由 STO Claw 代为发送，非本人实时回复。*" --format json',
+    };
+    const result = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
+    expect(result.allowed).toBe(true);
+    expect(resolveDwsChatMessageSendTextFormatProblem(params.command)).toBeNull();
   });
 });

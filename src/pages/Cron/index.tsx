@@ -7,36 +7,58 @@ import { AlertCircle } from 'lucide-react';
 import { useCronStore } from '@/stores/cron';
 import { useGatewayStore } from '@/stores/gateway';
 import { useChatStore } from '@/stores/chat';
+import { useAgentsStore } from '@/stores/agents';
+import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import type { CronJob, CronJobCreateInput } from '@/types/cron';
+import type { CronJobCreateInput } from '@/types/cron';
+import type { ManagedLocalTask } from '@/stores/cron';
 import { CronTaskHero } from './components/CronTaskHero';
 import { CronTaskCard } from './components/CronTaskCard';
 import { CronTaskCreateModal } from './components/CronTaskCreateModal';
 import { CronTaskEmptyState, type RecommendTask } from './components/CronTaskEmptyState';
 import { filterTasks, sortTasks } from './components/utils';
 
+function resolvePreferredAgentByEngine(
+  agents: Array<{ id: string; engineType?: 'openclaw' | 'claude'; workspace: string }>,
+  defaultAgentId: string,
+  engineType: 'openclaw' | 'claude',
+) {
+  const engineAgents = agents.filter((agent) => (agent.engineType ?? 'openclaw') === engineType);
+  if (engineAgents.length === 0) return null;
+  return engineAgents.find((agent) => agent.id === defaultAgentId) ?? engineAgents[0] ?? null;
+}
+
 export function Cron() {
   const { t } = useTranslation('cron');
   const { jobs, loading, error, fetchJobs, createJob, updateJob, toggleJob, deleteJob, triggerJob } = useCronStore();
+  const agents = useAgentsStore((state) => state.agents);
+  const defaultAgentId = useAgentsStore((state) => state.defaultAgentId);
   const gatewayStatus = useGatewayStore((state) => state.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [sortValue, setSortValue] = useState('created-desc');
   const [createOpen, setCreateOpen] = useState(false);
-  const [editingJob, setEditingJob] = useState<CronJob | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<CronJob | null>(null);
+  const [editingJob, setEditingJob] = useState<ManagedLocalTask | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ManagedLocalTask | null>(null);
   const [recommendInitialValues, setRecommendInitialValues] = useState<{ name?: string; message?: string } | undefined>(undefined);
 
   // Fetch jobs on mount
+  const hasClaudeAgent = useMemo(
+    () => agents.some((agent) => agent.engineType === 'claude'),
+    [agents],
+  );
+  const canCreateTasks = isGatewayRunning || hasClaudeAgent;
+
   useEffect(() => {
-    if (isGatewayRunning) {
-      fetchJobs();
-    }
-  }, [fetchJobs, isGatewayRunning]);
+    fetchJobs();
+  }, [fetchJobs]);
 
   const safeJobs = useMemo(() => (Array.isArray(jobs) ? jobs : []), [jobs]);
 
@@ -47,16 +69,67 @@ export function Cron() {
   }, [safeJobs, searchQuery, sortValue]);
 
   const handleSave = useCallback(
-    async (input: CronJobCreateInput) => {
+    async (input: CronJobCreateInput & { engineType: 'openclaw' | 'claude' }) => {
+      const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, input.engineType);
       try {
         if (editingJob) {
-          await updateJob(editingJob.id, {
-            ...input,
-            agentId: editingJob.agentId ?? undefined,
-          });
+          if (editingJob.engineType === 'claude') {
+            if (!selectedAgent?.workspace) {
+              throw new Error('所选 Claude 代理缺少工作区，无法更新本地定时任务');
+            }
+            await updateJob(editingJob.id, {
+              engineType: 'claude',
+              payload: {
+                id: editingJob.id,
+                name: input.name,
+                enabled: editingJob.enabled,
+                cronExpr: input.schedule,
+                promptTemplate: input.message,
+                agentId: selectedAgent.id,
+                workspacePath: selectedAgent.workspace,
+              },
+            });
+          } else {
+            await updateJob(editingJob.id, {
+              engineType: 'openclaw',
+              payload: {
+                name: input.name,
+                message: input.message,
+                schedule: input.schedule,
+                enabled: input.enabled,
+                dingTalkMentions: input.dingTalkMentions,
+                agentId: editingJob.agentId ?? undefined,
+              },
+            });
+          }
           toast.success(t('toast.updated'));
         } else {
-          await createJob(input);
+          if (input.engineType === 'claude') {
+            if (!selectedAgent.workspace) {
+              throw new Error('所选 Claude 代理缺少工作区，无法创建本地定时任务');
+            }
+            await createJob({
+              engineType: 'claude',
+              payload: {
+                name: input.name,
+                cronExpr: input.schedule,
+                promptTemplate: input.message,
+                agentId: selectedAgent.id,
+                workspacePath: selectedAgent.workspace,
+              },
+            });
+          } else {
+            await createJob({
+              engineType: 'openclaw',
+              payload: {
+                name: input.name,
+                message: input.message,
+                schedule: input.schedule,
+                enabled: input.enabled,
+                dingTalkMentions: input.dingTalkMentions,
+              },
+            });
+          }
           toast.success(t('toast.created'));
         }
         await fetchJobs().catch(() => {});
@@ -72,13 +145,13 @@ export function Cron() {
         throw err;
       }
     },
-    [editingJob, createJob, updateJob, fetchJobs, t]
+    [agents, defaultAgentId, editingJob, createJob, updateJob, fetchJobs, t]
   );
 
   const handleToggle = useCallback(
-    async (id: string, enabled: boolean) => {
+    async (id: string, enabled: boolean, engineType: 'openclaw' | 'claude') => {
       try {
-        await toggleJob(id, enabled);
+        await toggleJob(id, enabled, engineType);
         toast.success(enabled ? t('toast.enabled') : t('toast.paused'));
       } catch {
         toast.error(t('toast.failedUpdate'));
@@ -88,25 +161,34 @@ export function Cron() {
   );
 
   const handleTrigger = useCallback(
-    async (job: CronJob) => {
+    async (job: ManagedLocalTask) => {
       try {
-        await triggerJob(job.id);
-        const sessionKey = `agent:${job.agentId ?? 'main'}:cron:${job.id}`;
-        useChatStore.getState().switchSession(sessionKey);
-        void useChatStore.getState().loadSessions();
+        const result = await triggerJob(job.id, job.engineType);
+        if (job.engineType === 'claude' && result && 'sessionKey' in result) {
+          navigateToMainChatHome(navigate, location.pathname, () => {
+            useChatStore.getState().switchSession(result.sessionKey);
+          });
+          void useChatStore.getState().loadSessions();
+        } else {
+          const sessionKey = `agent:${job.agentId ?? 'main'}:cron:${job.id}`;
+          navigateToMainChatHome(navigate, location.pathname, () => {
+            useChatStore.getState().switchSession(sessionKey);
+          });
+          void useChatStore.getState().loadSessions();
+        }
         toast.success(t('toast.triggered'));
       } catch (error) {
         console.error('Failed to trigger cron job:', error);
         toast.error(t('toast.failedTrigger', { error: error instanceof Error ? error.message : String(error) }));
       }
     },
-    [triggerJob, t]
+    [triggerJob, t, navigate, location.pathname]
   );
 
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) return;
     try {
-      await deleteJob(deleteTarget.id);
+      await deleteJob(deleteTarget.id, deleteTarget.engineType);
       toast.success(t('toast.deleted'));
       await fetchJobs().catch(() => {});
     } catch {
@@ -147,14 +229,14 @@ export function Cron() {
             onSortChange={setSortValue}
             onCreate={() => { setEditingJob(null); setRecommendInitialValues(undefined); setCreateOpen(true); }}
             totalCount={safeJobs.length}
-            isGatewayRunning={isGatewayRunning}
+            isGatewayRunning={canCreateTasks}
           />
 
           {!isGatewayRunning && (
             <div className="flex items-center gap-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-4 mb-6">
               <AlertCircle className="h-5 w-5 shrink-0 text-yellow-600 dark:text-yellow-400" />
               <span className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
-                {t('gatewayWarning')}
+                {hasClaudeAgent ? 'Gateway 未连接，现有本地任务不可用；Claude 本地任务仍可查看和创建。' : t('gatewayWarning')}
               </span>
             </div>
           )}
@@ -176,9 +258,9 @@ export function Cron() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredTasks.map((job) => (
                 <CronTaskCard
-                  key={job.id}
+                  key={`${job.engineType}:${job.id}`}
                   job={job}
-                  onToggle={(newEnabled) => handleToggle(job.id, newEnabled)}
+                  onToggle={(newEnabled) => handleToggle(job.id, newEnabled, job.engineType)}
                   onEdit={() => { setEditingJob(job); setRecommendInitialValues(undefined); setCreateOpen(true); }}
                   onDelete={() => setDeleteTarget(job)}
                   onTrigger={() => handleTrigger(job)}

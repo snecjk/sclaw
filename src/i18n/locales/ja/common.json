@@ -3,7 +3,7 @@
         "home": "ホーム",
         "myData": "マイデータ",
         "workspace": "ワークスペース",
-        "sessionList": "会話一覧",
+        "sessionList": "会話履歴",
         "toggleSidebarCollapse": "サイドバーを折りたたむ",
         "toggleSidebarExpand": "サイドバーを展開",
         "appVersionLabel": "v {{version}}",

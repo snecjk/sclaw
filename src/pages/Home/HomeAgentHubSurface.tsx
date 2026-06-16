@@ -1,9 +1,10 @@
 /**
  * 无 CRM 周报策略权限时的首页：Hero + 能力卡片 + 底部输入（色板对齐 docs/sto-design.md）。
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Bot, Cpu, Repeat2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
@@ -13,6 +14,7 @@ import { HomeHero } from './HomeHero';
 import { HomeMainConversation } from './HomeMainConversation';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { useHomeConversationActive } from './use-home-conversation-active';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 
 /** sto-design Grey-10 主标题 / 默认正文 */
 const TEXT_PRIMARY = 'text-[#1D2129] dark:text-foreground';
@@ -35,9 +37,28 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
   const { t } = useTranslation('home');
   const showConversation = useHomeConversationActive();
 
+  const currentAgentId = useChatStore((s) => s.currentAgentId);
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const sessions = useChatStore((s) => s.sessions);
+  const agents = useAgentsStore((s) => s.agents);
+  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
   const error = useChatStore((s) => s.error);
+  const currentAgent = useMemo(
+    () => agents.find((agent) => agent.id === currentAgentId),
+    [agents, currentAgentId],
+  );
+  const currentSession = useMemo(
+    () => sessions.find((session) => session.key === currentSessionKey),
+    [sessions, currentSessionKey],
+  );
+  const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
+    ? currentAgent?.engineType
+    : currentSession?.engineType ?? currentAgent?.engineType;
+  useEffect(() => {
+    void fetchAgents();
+  }, [fetchAgents]);
 
   const gatewayLine = useMemo(() => {
     const port = gatewayStatus.port ?? 18789;
@@ -139,15 +160,24 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
                 onQueue: handleHubQueue,
                 variant: 'embedded',
                 seedText,
+                engineType: currentEngineType,
               })}
+              engineType={currentEngineType}
             />
             {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
           </section>
           <div className={cn('mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-t pt-4 text-xs', BORDER_DEFAULT, TEXT_SECONDARY)}>
-            <span className="flex items-center gap-2">
-              <span className={cn('h-2 w-2 shrink-0 rounded-full', isGatewayRunning ? DOT_SUCCESS : 'bg-[#FAAD14]')} aria-hidden />
-              {gatewayLine}
-            </span>
+            {currentEngineType === 'openclaw' ? (
+              <span className="flex items-center gap-2">
+                <span className={cn('h-2 w-2 shrink-0 rounded-full', isGatewayRunning ? DOT_SUCCESS : 'bg-[#FAAD14]')} aria-hidden />
+                {gatewayLine}
+              </span>
+            ) : currentEngineType === 'claude' ? (
+              <span className="flex items-center gap-2">
+                <span className={cn('h-2 w-2 shrink-0 rounded-full', DOT_SUCCESS)} aria-hidden />
+                {t('agentHub.claudeLineConnected')}
+              </span>
+            ) : <span />}
             <span className="text-center">{t('assistant.footerDisclaimer')}</span>
             <span className="justify-self-end tabular-nums text-right text-[#4E5969] dark:text-muted-foreground">{t('agentHub.usageHint')}</span>
           </div>

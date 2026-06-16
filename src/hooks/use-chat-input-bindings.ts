@@ -4,7 +4,7 @@
  * 统一管理 ChatInput 组件的绑定逻辑，减少各页面的重复代码。
  *
  * 统一处理：
- * - Gateway 运行状态检查（disabled）
+ * - Gateway 运行状态检查（仅 openclaw disabled）
  * - 发送中状态（sending）
  * - 停止运行回调（onStop -> abortRun）
  * - 可选的 isEmpty、seedText、className、variant
@@ -65,6 +65,8 @@ export interface ChatInputBindingsOptions {
   placeholder?: string;
   /** 外层 className */
   className?: string;
+  /** 当前输入面板所属引擎；仅 openclaw 依赖 Gateway 在线 */
+  engineType?: 'openclaw' | 'claude';
 }
 
 export interface ChatInputBindingsResult {
@@ -94,7 +96,7 @@ export interface ChatInputBindingsResult {
  * 获取 ChatInput 组件的绑定 props。
  *
  * 自动处理：
- * - disabled: 基于 Gateway 是否运行
+ * - disabled: 仅 openclaw 基于 Gateway 是否运行
  * - sending: 来自 chat store
  * - onStop: 自动绑定 abortRun
  */
@@ -103,13 +105,14 @@ export function useChatInputBindings(options: ChatInputBindingsOptions): ChatInp
   const sending = useChatStore((s) => s.sending);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
+  const requiresGateway = options.engineType !== 'claude';
 
   return useMemo(
     () => ({
       onSend: options.onSend,
       onStop: () => void abortRun(),
       onQueue: options.onQueue,
-      disabled: !isGatewayRunning,
+      disabled: requiresGateway && !isGatewayRunning,
       sending,
       isEmpty: options.isEmpty,
       variant: options.variant ?? 'default',
@@ -125,7 +128,9 @@ export function useChatInputBindings(options: ChatInputBindingsOptions): ChatInp
       options.seedText,
       options.placeholder,
       options.className,
+      options.engineType,
       abortRun,
+      requiresGateway,
       isGatewayRunning,
       sending,
     ],

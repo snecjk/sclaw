@@ -1,4 +1,3 @@
-import { invokeIpc } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
@@ -19,13 +18,75 @@ import {
   toMs,
 } from './helpers';
 import {
+  buildClaudeScheduledTaskSessionHistoryPath,
   buildCronSessionHistoryPath,
   buildScheduledTaskSessionHistoryPath,
+  isClaudeScheduledTaskSessionKey,
   isCronSessionKey,
   isScheduledTaskSessionKey,
 } from './cron-session-utils';
 import type { RawMessage } from './types';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
+
+function normalizeUserMessageText(content: unknown): string {
+  return getMessageText(content)
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getAttachmentKeys(message: RawMessage): string[] {
+  return (message._attachedFiles ?? [])
+    .map((file) => file.filePath || file.fileName)
+    .filter(Boolean)
+    .sort();
+}
+
+function attachmentsMatch(a: RawMessage, b: RawMessage): boolean {
+  const aKeys = getAttachmentKeys(a);
+  const bKeys = getAttachmentKeys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every((key, index) => key === bKeys[index]);
+}
+
+function isSameUserMessage(candidate: RawMessage, optimistic: RawMessage, userMessageAt: number): boolean {
+  if (candidate.role !== 'user') return false;
+  if (candidate.id && optimistic.id && candidate.id === optimistic.id) return true;
+
+  const candidateMs = typeof candidate.timestamp === 'number' ? toMs(candidate.timestamp) : NaN;
+  const optimisticMs = typeof optimistic.timestamp === 'number' ? toMs(optimistic.timestamp) : userMessageAt;
+  const hasCandidateTime = Number.isFinite(candidateMs);
+  const referenceMs = Number.isFinite(optimisticMs) ? optimisticMs : userMessageAt;
+
+  if (hasCandidateTime && Number.isFinite(referenceMs)) {
+    if (Math.abs(candidateMs - referenceMs) < 5000) return true;
+    // A reliable timestamp far from the active send should not be treated as
+    // the same turn just because the user asked the same short question again.
+    if (Math.abs(candidateMs - referenceMs) > 60_000) return false;
+  }
+
+  const candidateText = normalizeUserMessageText(candidate.content);
+  const optimisticText = normalizeUserMessageText(optimistic.content);
+  return candidateText.length > 0
+    && candidateText === optimisticText
+    && attachmentsMatch(candidate, optimistic);
+}
+
+function insertOptimisticUserMessage(messages: RawMessage[], optimistic: RawMessage): RawMessage[] {
+  const optimisticMs = typeof optimistic.timestamp === 'number' ? toMs(optimistic.timestamp) : NaN;
+  if (!Number.isFinite(optimisticMs)) return [...messages, optimistic];
+
+  const insertAt = messages.findIndex((message) => {
+    if (typeof message.timestamp !== 'number') return false;
+    return toMs(message.timestamp) > optimisticMs;
+  });
+
+  if (insertAt === -1) return [...messages, optimistic];
+  return [
+    ...messages.slice(0, insertAt),
+    optimistic,
+    ...messages.slice(insertAt),
+  ];
+}
 
 async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
   if (!isCronSessionKey(sessionKey)) return [];
@@ -53,6 +114,19 @@ async function loadScheduledTaskFallbackMessages(sessionKey: string, limit = CHA
   }
 }
 
+async function loadClaudeScheduledTaskFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
+  if (!isClaudeScheduledTaskSessionKey(sessionKey)) return [];
+  try {
+    const response = await hostApiFetch<{ messages?: RawMessage[] }>(
+      buildClaudeScheduledTaskSessionHistoryPath(sessionKey, limit),
+    );
+    return Array.isArray(response.messages) ? response.messages : [];
+  } catch (error) {
+    console.warn('Failed to load Claude scheduled task fallback history:', error);
+    return [];
+  }
+}
+
 export function createHistoryActions(
   set: ChatSet,
   get: ChatGet,
@@ -60,7 +134,8 @@ export function createHistoryActions(
   return {
     loadHistory: async (quiet = false) => {
       console.log('[loadHistory] called, quiet=%s', quiet);
-      const { currentSessionKey } = get();
+      const { currentSessionKey, sessions } = get();
+      const currentSession = sessions.find((session) => session.key === currentSessionKey);
       if (!quiet) set({ loading: true, error: null });
 
       const applyLoadedMessages = (rawMessages: RawMessage[], thinkingLevel: string | null) => {
@@ -76,17 +151,16 @@ export function createHistoryActions(
         let finalMessages = enrichedMessages;
         const userMsgAt = get().lastUserMessageAt;
         if (userMsgAt) {
-          const userMsMs = toMs(userMsgAt);
-          const hasRecentUser = enrichedMessages.some(
-            (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000,
-          );
           const currentMsgs = get().messages;
           const optimistic = [...currentMsgs].reverse().find(
-            (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000,
+            (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsgAt) < 5000,
           );
+          const hasRecentUser = optimistic
+            ? enrichedMessages.some((message) => isSameUserMessage(message, optimistic, userMsgAt))
+            : false;
           const shouldPreserveOptimistic = !!optimistic && (get().sending || optimistic.isError);
           if (!hasRecentUser && shouldPreserveOptimistic && optimistic) {
-            finalMessages = [...enrichedMessages, optimistic];
+            finalMessages = insertOptimisticUserMessage(enrichedMessages, optimistic);
           }
         }
 
@@ -130,9 +204,17 @@ export function createHistoryActions(
         const lastMsg = finalMessages[finalMessages.length - 1];
         if (lastMsg?.timestamp) {
           const lastAt = toMs(lastMsg.timestamp);
-          set((s) => ({
-            sessionLastActivity: { ...s.sessionLastActivity, [currentSessionKey]: lastAt },
-          }));
+          if (lastAt > 0) {
+            set((s) => {
+              const listedAt = s.sessions.find((session) => session.key === currentSessionKey)?.updatedAt ?? 0;
+              const currentAt = s.sessionLastActivity[currentSessionKey] ?? 0;
+              const nextAt = Math.max(currentAt, listedAt, lastAt);
+              if (nextAt === currentAt) return {};
+              return {
+                sessionLastActivity: { ...s.sessionLastActivity, [currentSessionKey]: nextAt },
+              };
+            });
+          }
         }
 
         // Async: load missing image previews from disk (updates in background)
@@ -189,13 +271,16 @@ export function createHistoryActions(
       try {
         // Gateway chat.history does not support offset; load up to the hard max in one call.
         let thinkingLevel: string | null = null;
-        const result = await invokeIpc(
-          'gateway:rpc',
-          'chat.history',
-          { sessionKey: currentSessionKey, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT }
-        ) as { success: boolean; result?: Record<string, unknown>; error?: string };
+        const result = await hostApiFetch<{
+          success?: boolean;
+          result?: Record<string, unknown>;
+          error?: string;
+        }>(
+          `/api/chat/history?sessionKey=${encodeURIComponent(currentSessionKey)}&limit=${CHAT_HISTORY_LENGTH_MAX_LIMIT}`
+          + (currentSession?.engineType ? `&engineType=${encodeURIComponent(currentSession.engineType)}` : ''),
+        );
 
-        if (!result.success || !result.result) {
+        if (result.success === false || !result.result) {
           throw new Error(result.error || 'Gateway RPC failed: chat.history');
         }
 
@@ -221,6 +306,9 @@ export function createHistoryActions(
         if (rawMessages.length === 0 && isScheduledTaskSessionKey(currentSessionKey)) {
           rawMessages = await loadScheduledTaskFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
         }
+        if (rawMessages.length === 0 && isClaudeScheduledTaskSessionKey(currentSessionKey)) {
+          rawMessages = await loadClaudeScheduledTaskFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
+        }
         applyLoadedMessages(rawMessages, thinkingLevel);
       } catch (err) {
         console.warn('Failed to load chat history:', err);
@@ -228,10 +316,13 @@ export function createHistoryActions(
         if (fallbackMessages.length === 0) {
           fallbackMessages = await loadScheduledTaskFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
         }
+        if (fallbackMessages.length === 0) {
+          fallbackMessages = await loadClaudeScheduledTaskFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
+        }
         if (fallbackMessages.length > 0) {
           applyLoadedMessages(fallbackMessages, null);
         } else {
-          set({ messages: [], loading: false });
+          set({ messages: [], loading: false, error: String(err) });
         }
       }
     },

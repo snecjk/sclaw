@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchJsonMock = vi.fn();
 
-vi.mock("../../sto-plugin/sto-workflow-tool/sto-toolkit/http-client.js", () => ({
+vi.mock("../../sto-plugin/sto-toolkit/http-client.js", () => ({
 	createStoApiClient: () => ({
 		fetchJson: fetchJsonMock,
 		getBaseUrl: () => "https://sto.example.com",
 	}),
 }));
 
-import register from "../../sto-plugin/sto-workflow-tool/index.js";
+import register from "../../sto-plugin/openclaw/sto-workflow-tool/index.js";
 
 describe("sto-workflow-tool plugin", () => {
 	const registerTool = vi.fn();

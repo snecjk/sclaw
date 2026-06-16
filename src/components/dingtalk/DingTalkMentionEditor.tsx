@@ -26,6 +26,7 @@ export interface DingTalkMentionEditorHandle {
   focus: () => void;
   clear: () => void;
   getSnapshot: () => MentionComposerSnapshot;
+  setPlainText: (text: string) => void;
   setMentions: (mentions: DingTalkMention[]) => void;
   insertMention: (mention: DingTalkMention, trigger: ActiveMentionTrigger) => void;
   insertWorkflow: (workflowId: string, name: string) => void;
@@ -109,6 +110,14 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         const root = editorRef.current;
         if (!root) return { plainText: '', mentions: [], isEmpty: true };
         return serializeMentionEditor(root);
+      },
+      setPlainText: (text) => {
+        const root = editorRef.current;
+        if (!root) return;
+        seedAppliedRef.current = false;
+        setMentionEditorPlainText(root, text);
+        resizeEditor();
+        syncFromDom();
       },
       setMentions: (mentions) => {
         const root = editorRef.current;

@@ -8,7 +8,7 @@ import {
 import {
   fixDwsChatMessageSendArgv,
   fixDwsChatMessageSendShellScript,
-  normalizeDwsChatMessageSendText,
+  parseDwsChatMessageSendShellCommandArgs,
 } from '../../shared/dws-send-text';
 
 describe('ensureDingTalkAgentSendDisclaimerFormat', () => {
@@ -23,7 +23,7 @@ describe('ensureDingTalkAgentSendDisclaimerFormat', () => {
   it('inserts divider when footer exists without --- (scheduled task case)', () => {
     const bodyOnlyFooter = `### 任务结果\n\n- 条目一\n\n${DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER}`;
     const result = ensureDingTalkAgentSendDisclaimerFormat(bodyOnlyFooter);
-    expect(result).toMatch(/条目一\n\n---\n\n<font color='#999999'>/);
+    expect(result).toMatch(/条目一\n\n---\n\n> \*本消息由 STO Claw 代为发送/);
     expect(hasDingTalkDisclaimerDivider(result)).toBe(true);
   });
 
@@ -88,5 +88,64 @@ describe('normalizeDwsChatMessageSendText', () => {
     const text = args[args.indexOf('--text') + 1];
     expect(typeof text).toBe('string');
     expect(hasDingTalkDisclaimerDivider(text as string)).toBe(true);
+  });
+
+  it('unwraps bash $ quote and literal newlines in argv --text', () => {
+    const raw = "$'### 标题\\n\\n| 指标 | 数值 |\\n| --- | --- |'";
+    const args = fixDwsChatMessageSendArgv([
+      'chat',
+      'message',
+      'send',
+      '--text',
+      raw,
+      '--format',
+      'json',
+    ]);
+    const text = args[args.indexOf('--text') + 1] as string;
+    expect(text.startsWith('$')).toBe(false);
+    expect(text).toContain('### 标题');
+    expect(text).toContain('| 指标 | 数值 |');
+    expect(text).not.toContain('\\n');
+    expect(hasDingTalkDisclaimerDivider(text)).toBe(true);
+  });
+
+  it('fixes OpenClaw mistyped dollar prefix with literal newlines in argv --text', () => {
+    const raw = '$你吃午饭了吗\\n\\n---\\n\\n> 本消息由 STO Claw 代为发送，非本人实时回复。';
+    const args = fixDwsChatMessageSendArgv([
+      'chat',
+      'message',
+      'send',
+      '--text',
+      raw,
+      '--format',
+      'json',
+    ]);
+    const text = args[args.indexOf('--text') + 1] as string;
+    expect(text.startsWith('$')).toBe(false);
+    expect(text).toContain('你吃午饭了吗');
+    expect(text).not.toContain('\\n');
+    expect(text).toContain('\n\n---\n\n> *本消息由 STO Claw 代为发送，非本人实时回复。*');
+  });
+
+  it('unwraps bash $ quote in shell script --text', () => {
+    const script =
+      "dws chat message send --user uid-1 --title \"消息\" --text $'### 标题\\n\\n正文' --format json";
+    const fixed = fixDwsChatMessageSendShellScript(script);
+    expect(fixed).toContain("$'");
+    expect(fixed).not.toMatch(/\$'### 标题\\n\\n正文'/);
+    expect(fixed).toMatch(/\$'[\s\S]*### 标题[\s\S]*正文/);
+  });
+
+  it('parses Windows shell command into dws argv and keeps --format out of --text', () => {
+    const command =
+      'dws chat message send --user uid-1 --title "消息" --text "你好\\n\\n---\\n\\n> *本消息由 STO Claw 代为发送，非本人实时回复。*" --format json';
+    const args = parseDwsChatMessageSendShellCommandArgs(command);
+    expect(args).toBeTruthy();
+    expect(args?.[0]).toBe('chat');
+    const text = args?.[(args?.indexOf('--text') ?? -2) + 1] as string;
+    expect(text).toContain('你好');
+    expect(text).toContain('\n\n---\n\n');
+    expect(text).not.toBe('--format');
+    expect(args?.includes('--format')).toBe(true);
   });
 });

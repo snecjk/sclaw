@@ -526,6 +526,16 @@ async function initialize(): Promise<void> {
     scheduledTaskPoller.stop();
   });
 
+  const { getClaudeScheduledTaskService } = await import('../services/claude-scheduled-task-service');
+  const claudeScheduledTaskService = getClaudeScheduledTaskService();
+  claudeScheduledTaskService.startScheduler();
+  void claudeScheduledTaskService.refreshSchedule().catch((error) => {
+    logger.warn('[claude-task] initial schedule refresh failed:', error);
+  });
+  app.on('before-quit', () => {
+    claudeScheduledTaskService.stopScheduler();
+  });
+
   hostApiServer = startHostApiServer({
     gatewayManager: gm,
     clawHubService: chs,

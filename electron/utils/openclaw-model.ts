@@ -46,6 +46,15 @@ function parseSessionModelFromToolOutput(output: unknown): SessionModelOverrideR
   };
 }
 
+function shouldRetryWithBareModel(model: string, error: string): boolean {
+  return model.includes('/') && /model not allowed/i.test(error);
+}
+
+function toBareModel(model: string): string {
+  const index = model.lastIndexOf('/');
+  return index >= 0 ? model.slice(index + 1) : model;
+}
+
 /** Apply a per-session model override via Gateway sessions.patch (0322+) or tools.invoke fallback (5.22+). */
 export async function setSessionModelViaGateway(
   gatewayManager: GatewayManager,
@@ -63,8 +72,7 @@ export async function setSessionModelViaGateway(
     return { ok: false, error: 'Gateway not running' };
   }
 
-  // OpenClaw 0322: sessions.patch writes session store modelOverride (no Gateway restart).
-  try {
+  const applyViaSessionsPatch = async (model: string): Promise<SessionModelOverrideResult> => {
     const patchResult = await gatewayManager.rpc<{
       ok?: boolean;
       key?: string;
@@ -72,11 +80,11 @@ export async function setSessionModelViaGateway(
       resolved?: { model?: string; modelProvider?: string };
     }>('sessions.patch', {
       key: opts.sessionKey,
-      model: opts.model,
+      model,
     });
 
     const provider = patchResult?.entry?.providerOverride ?? patchResult?.resolved?.modelProvider;
-    const modelName = patchResult?.resolved?.model ?? patchResult?.entry?.modelOverride ?? opts.model;
+    const modelName = patchResult?.resolved?.model ?? patchResult?.entry?.modelOverride ?? model;
     const displayModel = provider && modelName && !modelName.includes('/')
       ? `${provider}/${modelName}`
       : modelName;
@@ -87,31 +95,55 @@ export async function setSessionModelViaGateway(
       modelOverride: patchResult?.entry?.modelOverride ?? displayModel,
       changedModel: true,
     };
+  };
+
+  // OpenClaw 0322: sessions.patch writes session store modelOverride (no Gateway restart).
+  try {
+    return await applyViaSessionsPatch(opts.model);
   } catch (patchErr) {
     const patchMessage = patchErr instanceof Error ? patchErr.message : String(patchErr);
     const patchUnsupported = /unknown method.*sessions\.patch/i.test(patchMessage);
+    if (shouldRetryWithBareModel(opts.model, patchMessage)) {
+      try {
+        return await applyViaSessionsPatch(toBareModel(opts.model));
+      } catch (retryErr) {
+        const retryMessage = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        return { ok: false, error: retryMessage };
+      }
+    }
     if (!patchUnsupported) {
       return { ok: false, error: patchMessage };
     }
   }
 
-  // OpenClaw 5.22+: session_status via tools.invoke
-  const invokeResult = await gatewayManager.rpc<{
-    ok?: boolean;
-    output?: unknown;
-    error?: { message?: string };
-  }>('tools.invoke', {
-    name: 'session_status',
-    args: {
+  const invokeWithModel = async (model: string) => {
+    return gatewayManager.rpc<{
+      ok?: boolean;
+      output?: unknown;
+      error?: { message?: string };
+    }>('tools.invoke', {
+      name: 'session_status',
+      args: {
+        sessionKey: opts.sessionKey,
+        model,
+      },
       sessionKey: opts.sessionKey,
-      model: opts.model,
-    },
-    sessionKey: opts.sessionKey,
-    ...(opts.agentId ? { agentId: opts.agentId } : {}),
-  });
+      ...(opts.agentId ? { agentId: opts.agentId } : {}),
+    });
+  };
+
+  // OpenClaw 5.22+: session_status via tools.invoke
+  let invokeResult = await invokeWithModel(opts.model);
 
   if (invokeResult?.ok === false) {
     const message = invokeResult.error?.message ?? 'tools.invoke failed';
+    if (shouldRetryWithBareModel(opts.model, message)) {
+      invokeResult = await invokeWithModel(toBareModel(opts.model));
+      if (invokeResult?.ok === false) {
+        return { ok: false, error: invokeResult.error?.message ?? 'tools.invoke failed' };
+      }
+      return parseSessionModelFromToolOutput(invokeResult?.output);
+    }
     return { ok: false, error: message };
   }
 

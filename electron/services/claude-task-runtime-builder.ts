@@ -1,0 +1,242 @@
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { syncClaudeSkillsForAgent } from './claude-skill-bridge';
+import { listClaudeBridgePluginPaths } from './claude-plugin-bridge';
+import { getDefaultProviderAccountId, getProviderAccount } from './providers/provider-store';
+import { StoModelSyncService } from './providers/sto-model-sync';
+import { getAgentPreferredModel, getAgentWorkspacePath } from '../utils/agent-config';
+import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
+import { logger } from '../utils/logger';
+import { expandPath, getClaudeConfigDir } from '../utils/paths';
+import { getApiKey } from '../utils/secure-storage';
+import { buildClaudeRuntimeOptions } from '../engines/claude-runtime-extensions';
+import type {
+  ClaudeScheduledTaskDefinition,
+  ClaudeTaskPermissionProfile,
+} from './claude-scheduled-task-store';
+
+export interface ClaudeTaskRuntimeContext {
+  accountId?: string;
+  agentId: string;
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  model?: string;
+  pathToClaudeCodeExecutable?: string;
+  permissionMode?: 'bypassPermissions';
+  plugins: Array<{ type: 'local'; path: string }>;
+  runtimeOptions: Awaited<ReturnType<typeof buildClaudeRuntimeOptions>>;
+  sessionKey: string;
+  sessionId: string;
+}
+
+async function resolveTaskWorkspacePath(definition: ClaudeScheduledTaskDefinition): Promise<string> {
+  const configured = definition.workspacePath?.trim();
+  if (configured) {
+    const expanded = expandPath(configured);
+    if (existsSync(expanded)) {
+      return expanded;
+    }
+    logger.warn('[claude-task] configured workspace path does not exist, falling back to agent workspace', {
+      taskId: definition.id,
+      agentId: definition.agentId,
+      workspacePath: configured,
+      expandedWorkspacePath: expanded,
+    });
+  }
+
+  const agentWorkspace = await getAgentWorkspacePath(definition.agentId);
+  if (agentWorkspace) {
+    return agentWorkspace;
+  }
+
+  if (configured) {
+    return expandPath(configured);
+  }
+
+  throw new Error(`Claude task ${definition.id} is missing workspace path`);
+}
+
+let claudeConfigEnvQueue: Promise<void> = Promise.resolve();
+let ensureClaudeConfigDirPromise: Promise<void> | null = null;
+
+function getBundledClaudeExecutablePath(): string | undefined {
+  if (!process.resourcesPath) return undefined;
+
+  const binaryName = process.platform === 'win32' ? 'claude.exe' : 'claude';
+  const packageName = `claude-agent-sdk-${process.platform}-${process.arch}`;
+  const candidate = join(
+    process.resourcesPath,
+    'app.asar.unpacked',
+    'node_modules',
+    '@anthropic-ai',
+    packageName,
+    binaryName,
+  );
+
+  return existsSync(candidate) ? candidate : undefined;
+}
+
+async function ensureClaudeConfigDir(): Promise<void> {
+  if (ensureClaudeConfigDirPromise) {
+    await ensureClaudeConfigDirPromise;
+    return;
+  }
+  ensureClaudeConfigDirPromise = mkdir(getClaudeConfigDir(), { recursive: true })
+    .catch((error) => {
+      logger.warn('Failed to ensure Claude config directory:', error);
+    })
+    .then(() => {});
+  await ensureClaudeConfigDirPromise;
+}
+
+async function withClaudeConfigDirEnv<T>(configDir: string, task: () => Promise<T>): Promise<T> {
+  const next = claudeConfigEnvQueue.then(async () => {
+    const previous = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = configDir;
+    try {
+      return await task();
+    } finally {
+      if (typeof previous === 'string') {
+        process.env.CLAUDE_CONFIG_DIR = previous;
+      } else {
+        delete process.env.CLAUDE_CONFIG_DIR;
+      }
+    }
+  });
+
+  claudeConfigEnvQueue = next.then(() => undefined, () => undefined);
+  return next;
+}
+
+async function sanitizeClaudeSettingsEnv(): Promise<void> {
+  const settingsPath = join(getClaudeConfigDir(), 'settings.json');
+  try {
+    const raw = await readFile(settingsPath, 'utf8');
+    const settings = JSON.parse(raw) as Record<string, unknown>;
+    const env = settings.env as Record<string, unknown> | undefined;
+    if (!env || typeof env !== 'object') return;
+
+    let changed = false;
+    for (const key of Object.keys(env)) {
+      if (key.startsWith('ANTHROPIC_')) {
+        delete env[key];
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      settings.env = env;
+      await writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+      logger.info('[claude-task] stripped ANTHROPIC_* env vars from settings.json');
+    }
+  } catch {
+    // Ignore missing or unreadable settings.
+  }
+}
+
+async function buildClaudeEnvForAccount(accountId?: string): Promise<NodeJS.ProcessEnv> {
+  const base: NodeJS.ProcessEnv = {
+    ...process.env,
+    CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
+  };
+
+  if (!accountId) {
+    return base;
+  }
+
+  const account = await getProviderAccount(accountId);
+  if (!account) {
+    return base;
+  }
+
+  if (account.vendorId === 'sto') {
+    const token = await getStoToken();
+    const ssoEnv = await getSsoEnvironment();
+    const domain = StoModelSyncService.resolveDomain(ssoEnv);
+    if (token) {
+      const baseUrl = `${domain}/v1/anthropic`;
+      base.ANTHROPIC_BASE_URL = baseUrl;
+      base.ANTHROPIC_API_KEY = token;
+      base.ANTHROPIC_AUTH_TOKEN = token;
+    }
+    return base;
+  }
+
+  const apiKey = await getApiKey(accountId);
+  if (account.baseUrl) {
+    base.ANTHROPIC_BASE_URL = account.baseUrl;
+  }
+  if (apiKey) {
+    base.ANTHROPIC_API_KEY = apiKey;
+    base.ANTHROPIC_AUTH_TOKEN = apiKey;
+  }
+
+  return base;
+}
+
+async function resolveLaunchSelection(definition: ClaudeScheduledTaskDefinition): Promise<{
+  accountId?: string;
+  model?: string;
+}> {
+  let accountId = definition.providerAccountId;
+  let model = definition.model;
+
+  const preferred = await getAgentPreferredModel(definition.agentId);
+  accountId = accountId ?? preferred.accountId ?? await getDefaultProviderAccountId();
+  model = model ?? preferred.model;
+
+  if (!model && accountId) {
+    const account = await getProviderAccount(accountId);
+    model = account?.model;
+  }
+
+  return { accountId, model };
+}
+
+function mapPermissionProfile(
+  permissionProfile: ClaudeTaskPermissionProfile,
+): 'bypassPermissions' | undefined {
+  return permissionProfile === 'dangerous-bypass' ? 'bypassPermissions' : undefined;
+}
+
+export async function buildClaudeTaskRuntimeContext(
+  definition: ClaudeScheduledTaskDefinition,
+  run: {
+    runId: string;
+    sessionKey: string;
+    sessionId: string;
+  },
+): Promise<ClaudeTaskRuntimeContext> {
+  await ensureClaudeConfigDir();
+  await sanitizeClaudeSettingsEnv();
+
+  const cwd = await resolveTaskWorkspacePath(definition);
+
+  const launch = await resolveLaunchSelection(definition);
+  await syncClaudeSkillsForAgent(definition.agentId, cwd).catch((error) => {
+    logger.warn('[claude-task] failed to sync Claude skills before run', error);
+  });
+
+  const pluginPaths = await listClaudeBridgePluginPaths();
+  const runtimeOptions = await withClaudeConfigDirEnv(getClaudeConfigDir(), async () => (
+    buildClaudeRuntimeOptions(run.sessionKey)
+  ));
+
+  return {
+    accountId: launch.accountId,
+    agentId: definition.agentId,
+    cwd,
+    env: await buildClaudeEnvForAccount(launch.accountId),
+    model: launch.model,
+    pathToClaudeCodeExecutable: getBundledClaudeExecutablePath(),
+    permissionMode: mapPermissionProfile(definition.permissionProfile),
+    plugins: pluginPaths.map((pluginPath) => ({
+      type: 'local' as const,
+      path: pluginPath,
+    })),
+    runtimeOptions,
+    sessionKey: run.sessionKey,
+    sessionId: run.sessionId,
+  };
+}

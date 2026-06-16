@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useMessageQueueStore } from '@/stores/message-queue';
@@ -13,6 +14,7 @@ export function useStoTaskSubitemChatSend() {
   const { t } = useTranslation('home');
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
+  const agents = useAgentsStore((s) => s.agents);
 
   const handleQueue = useCallback(
     (text: string, attachments?: FileAttachment[], targetAgentId?: string | null) => {
@@ -30,7 +32,14 @@ export function useStoTaskSubitemChatSend() {
       dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[],
       workflowId?: string | null,
     ) => {
-      if (!isGatewayRunning) {
+      const { currentAgentId, currentSessionKey, sessions } = useChatStore.getState();
+      const currentSession = sessions.find((session) => session.key === currentSessionKey);
+      const targetEngineType = targetAgentId
+        ? (agents ?? []).find((agent) => agent.id === targetAgentId)?.engineType ?? 'openclaw'
+        : currentSession?.engineType
+          ?? (agents ?? []).find((agent) => agent.id === currentAgentId)?.engineType
+          ?? 'openclaw';
+      if (targetEngineType !== 'claude' && !isGatewayRunning) {
         toast.error(t('assistant.gatewayRequired'));
         return;
       }
@@ -41,7 +50,7 @@ export function useStoTaskSubitemChatSend() {
         toast.error(t('assistant.sendFailed'));
       }
     },
-    [isGatewayRunning, t],
+    [agents, isGatewayRunning, t],
   );
 
   return { handleSend, handleQueue };
