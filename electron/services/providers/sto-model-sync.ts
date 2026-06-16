@@ -23,12 +23,18 @@ import {
 } from './provider-runtime-sync';
 import { logger } from '../../utils/logger';
 import { buildStoMemoryCenterAuthHeaders } from '../../utils/sto-memory-api-auth';
+import { removeProviderFromOpenClaw } from '../../utils/openclaw-auth';
+import {
+  OPENCLAW_STO_PLACEHOLDER_KEYS_TO_SCRUB,
+  shouldDeleteStaleStoPlaceholder,
+  STO_CANONICAL_ACCOUNT_ID,
+} from './sto-placeholder-utils';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const STO_ACCOUNT_ID = 'sto';
+const STO_ACCOUNT_ID = STO_CANONICAL_ACCOUNT_ID;
 
 /** Legacy prefix used before the single-account refactor. */
 const STO_LEGACY_ACCOUNT_ID_PREFIX = 'sto-model-';
@@ -201,19 +207,15 @@ export class StoModelSyncService {
     const providerService = getProviderService();
     const allAccounts = await listProviderAccounts();
 
-    // Step 3 — Migrate legacy sto-model-* accounts (one-time)
-    const legacyAccounts = allAccounts.filter((a) =>
-      a.id.startsWith(STO_LEGACY_ACCOUNT_ID_PREFIX),
-    );
+    // Step 3 — Delete stale STO placeholder accounts (legacy sto-model-*, custom-sto, etc.)
+    const staleAccounts = allAccounts.filter(shouldDeleteStaleStoPlaceholder);
 
     let legacyDefaultWasSto = false;
-    if (legacyAccounts.length > 0) {
+    if (staleAccounts.length > 0) {
       const currentDefault = await getDefaultProviderAccountId();
-      legacyDefaultWasSto = Boolean(
-        currentDefault && currentDefault.startsWith(STO_LEGACY_ACCOUNT_ID_PREFIX),
-      );
+      legacyDefaultWasSto = staleAccounts.some((account) => account.id === currentDefault);
 
-      for (const account of legacyAccounts) {
+      for (const account of staleAccounts) {
         try {
           const config = providerAccountToConfig(account);
           await providerService.deleteAccount(account.id);
@@ -225,14 +227,23 @@ export class StoModelSyncService {
           result.deleted.push(account.id);
         } catch (err) {
           logger.warn(
-            `[sto-sync] Failed to delete legacy account ${account.id}:`,
+            `[sto-sync] Failed to delete stale placeholder account ${account.id}:`,
             err,
           );
         }
       }
       logger.info(
-        `[sto-sync] Migrated ${legacyAccounts.length} legacy sto-model-* account(s)`,
+        `[sto-sync] Removed ${staleAccounts.length} stale STO placeholder account(s)`,
       );
+    }
+
+    for (const openClawKey of OPENCLAW_STO_PLACEHOLDER_KEYS_TO_SCRUB) {
+      try {
+        await removeProviderFromOpenClaw(openClawKey);
+        logger.info(`[sto-sync] Scrubbed stale openclaw.json provider key "${openClawKey}"`);
+      } catch (err) {
+        logger.warn(`[sto-sync] Failed to scrub openclaw provider "${openClawKey}":`, err);
+      }
     }
 
     // Step 4 — Create or update the single STO account

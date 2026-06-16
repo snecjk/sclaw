@@ -5,6 +5,11 @@ import type {
   ProviderVendorInfo,
   ProviderWithKeyInfo,
 } from '@/lib/providers';
+import {
+  HIDDEN_PROVIDER_IDS,
+  isStaleStoProviderPlaceholder,
+  isStoProviderCatalogReady,
+} from '@/lib/providers';
 
 export interface ProviderSnapshot {
   accounts: ProviderAccount[];
@@ -92,6 +97,27 @@ export function legacyProviderToAccount(provider: ProviderWithKeyInfo): Provider
   };
 }
 
+export function hasReadyStoModelCatalog(accounts: ProviderAccount[]): boolean {
+  return accounts.some((account) => isStoProviderCatalogReady(account));
+}
+
+/** Drop internal / incomplete STO rows; keep user-configured non-STO providers. */
+export function filterVisibleProviderAccounts(
+  accounts: ProviderAccount[],
+  options?: { hideStaleStoPlaceholders?: boolean },
+): ProviderAccount[] {
+  const hideStale = options?.hideStaleStoPlaceholders ?? true;
+  return accounts.filter((account) => {
+    if (HIDDEN_PROVIDER_IDS.has(account.id) || HIDDEN_PROVIDER_IDS.has(account.vendorId)) {
+      return false;
+    }
+    if (hideStale && isStaleStoProviderPlaceholder(account)) {
+      return false;
+    }
+    return true;
+  });
+}
+
 export function buildProviderListItems(
   accounts: ProviderAccount[],
   statuses: ProviderWithKeyInfo[],
@@ -105,7 +131,7 @@ export function buildProviderListItems(
   const statusMap = new Map(safeStatuses.map((status) => [status.id, status]));
 
   if (safeAccounts.length > 0) {
-    return safeAccounts
+    return filterVisibleProviderAccounts(safeAccounts)
       .map((account) => ({
         account,
         vendor: vendorMap.get(account.vendorId),

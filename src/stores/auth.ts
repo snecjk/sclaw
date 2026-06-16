@@ -113,7 +113,7 @@ async function refreshProviderSnapshot(): Promise<void> {
   }
 }
 async function syncStoModelsAndRefreshProviders(context: 'init' | 'login'): Promise<void> {
-  const maxAttempts = context === 'login' ? 2 : 1;
+  const maxAttempts = 2;
 
   try {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -336,7 +336,7 @@ export const useAuthStore = create<AuthState>()(
             });
 
             showStoSyncErrorToasts(data.stoSync);
-            void refreshProviderSnapshot();
+            void syncStoModelsAndRefreshProviders('login');
             void get().refreshCrmWeekReportPolicy();
 
             // Warm site-department-types cache in renderer
