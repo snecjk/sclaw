@@ -5,6 +5,7 @@ import type {
   WorkflowRunNodeRun,
   WorkflowRunStatus,
 } from '../src/types/workflow';
+import { normalizeWorkflowTimestamp, parseWorkflowTimestampMs } from './workflow-timestamp';
 
 /** Raw GET /runs payload — fields may be omitted while run is starting or on older backends. */
 export interface WorkflowRunApiPayload {
@@ -199,6 +200,54 @@ function collectArtifactsFromOutput(output: unknown): WorkflowRunArtifact[] {
   return normalizeRunArtifacts(raw as WorkflowRunApiPayload['artifacts']);
 }
 
+function parseRunTimestampMs(value?: string | null): number | null {
+  return parseWorkflowTimestampMs(value);
+}
+
+/** Earliest node start time from GET /runs nodeRuns. */
+export function earliestNodeRunStartedAt(
+  nodeRuns?: WorkflowRunApiPayload['nodeRuns'],
+): string | undefined {
+  let earliestMs: number | null = null;
+  let earliestIso: string | undefined;
+  for (const node of nodeRuns ?? []) {
+    const ms = parseRunTimestampMs(node.startedAt);
+    if (ms === null) continue;
+    if (earliestMs === null || ms < earliestMs) {
+      earliestMs = ms;
+      earliestIso = node.startedAt;
+    }
+  }
+  return earliestIso;
+}
+
+/** Prefer node timeline when API run.startedAt ≈ completedAt. */
+export function resolveWorkflowRunStartedAt(run: WorkflowRunApiPayload): string | undefined {
+  const completedMs = parseRunTimestampMs(run.completedAt);
+  const candidates = [earliestNodeRunStartedAt(run.nodeRuns), run.startedAt].filter(
+    (value, index, list): value is string => Boolean(value) && list.indexOf(value) === index,
+  );
+
+  if (candidates.length === 0) return undefined;
+  if (completedMs === null) {
+    return earliestNodeRunStartedAt(run.nodeRuns) ?? run.startedAt;
+  }
+
+  let best: string | undefined;
+  let bestDurationMs = -1;
+  for (const candidate of candidates) {
+    const startMs = parseRunTimestampMs(candidate);
+    if (startMs === null || startMs > completedMs) continue;
+    const durationMs = completedMs - startMs;
+    if (durationMs > bestDurationMs) {
+      bestDurationMs = durationMs;
+      best = candidate;
+    }
+  }
+
+  return best ?? earliestNodeRunStartedAt(run.nodeRuns) ?? run.startedAt;
+}
+
 /** Map GET /runs `data` to UI execution state (null-safe for Main + Renderer). */
 export function workflowRunResponseToExecutionState(run: WorkflowRunApiPayload): WorkflowExecutionState {
   const nodeRuns = run.nodeRuns ?? [];
@@ -216,8 +265,11 @@ export function workflowRunResponseToExecutionState(run: WorkflowRunApiPayload):
     status,
     progress,
     currentStep: nodeRuns.find((n) => normalizeWorkflowStepStatus(n.status) === 'running')?.nodeId,
-    startedAt: run.startedAt,
-    completedAt: run.completedAt ?? undefined,
+    startedAt: (() => {
+      const resolved = resolveWorkflowRunStartedAt(run);
+      return resolved ? normalizeWorkflowTimestamp(resolved) : undefined;
+    })(),
+    completedAt: run.completedAt ? normalizeWorkflowTimestamp(run.completedAt) : undefined,
     steps: nodeRuns.map((n) => ({
       name: n.nodeId,
       status: normalizeWorkflowStepStatus(n.status),

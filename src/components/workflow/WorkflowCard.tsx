@@ -100,7 +100,6 @@ function useDurationLabel(
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, [isRunning, startedAt]);
-
   return useMemo(() => {
     const durationMs = getWorkflowDurationMs(startedAt, completedAt, now);
     if (durationMs === null) return null;
@@ -230,7 +229,7 @@ export function WorkflowCard({
               </span>
             </div>
 
-            {durationLabel && (
+            {durationLabel && (isRunning || (isTerminal && display.completedAt)) && (
               <p className="mt-1 flex items-center gap-1.5 text-xs text-[#86909C]">
                 <span className={cn('inline-block h-1.5 w-1.5 rounded-full', theme.dotClass)} />
                 {durationLabel}

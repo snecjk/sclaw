@@ -1362,6 +1362,7 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
       'sto-scheduled-task-tool',
       'sto-workflow-tool',
       'sto-skill-call-monitor',
+      'sto-media-understanding',
       DINGTALK_SEND_GUARD_PLUGIN_ID,
     ]) {
       if (!allow.includes(pluginId)) {
@@ -1415,6 +1416,10 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
         ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
         timeoutMs: 5000,
       },
+    };
+    entries['sto-media-understanding'] = {
+      enabled: true,
+      config: {},
     };
     entries[DINGTALK_SEND_GUARD_PLUGIN_ID] = {
       enabled: true,

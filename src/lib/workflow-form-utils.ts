@@ -512,9 +512,87 @@ export function buildWorkflowValues(
 }
 
 /**
+ * Collect user-facing confirm step titles from workflow schema (API-driven).
+ */
+export function collectWorkflowConfirmStepTitles(schema: WorkflowSchema): string[] {
+  const confirmStepIds = new Set(
+    schema.steps.filter((s) => s.mode === 'confirm').map((s) => s.id),
+  );
+
+  const fromSteps = schema.steps
+    .filter((s) => confirmStepIds.has(s.id))
+    .sort((a, b) => a.order - b.order)
+    .map((s) => s.title.trim())
+    .filter(Boolean);
+
+  if (fromSteps.length > 0) return fromSteps;
+
+  const seen = new Set<string>();
+  const fromGroups: string[] = [];
+  for (const field of [...schema.fields].sort((a, b) => a.order - b.order)) {
+    const title = field.groupTitle?.trim() || field.label.trim();
+    if (!title || seen.has(title)) continue;
+    seen.add(title);
+    fromGroups.push(title);
+  }
+  return fromGroups;
+}
+
+/** Short intro shown above the inline parameter form card. */
+export function buildWorkflowParameterIntroText(
+  templateName: string,
+  schema: WorkflowSchema,
+): string {
+  const steps = collectWorkflowConfirmStepTitles(schema);
+  if (steps.length === 0) {
+    return `请在下方的分步表单中确认「${templateName}」的运行参数：`;
+  }
+  const stepLines = steps.map((title, index) => `${index + 1}. ${title}`).join('\n');
+  return [
+    `即将运行工作流「${templateName}」，请在下方表单中逐步确认以下环节：`,
+    '',
+    stepLines,
+    '',
+    '点击「继续」逐项确认；无需在对话中重复填写参数。',
+  ].join('\n');
+}
+
+/** Hidden model guidance from confirm step titles only. */
+export function buildWorkflowParameterModelGuidanceFromSteps(
+  templateName: string,
+  confirmSteps: string[],
+): string {
+  const stepLines = confirmSteps.length
+    ? confirmSteps.map((title, index) => `${index + 1}. ${title}`).join('\n')
+    : '（客户端分步表单将展示具体参数）';
+
+  return [
+    `工作流「${templateName}」：参数由客户端分步表单展示。`,
+    '需确认的业务环节：',
+    stepLines,
+    '',
+    '回复要求（必须遵守）：',
+    '- 正文最多 3～5 句业务说明，概括上述环节',
+    '- 禁止输出字段 key/常量名、参数对照表、Markdown 表格、默认值列表',
+    '- 引导用户「在下方表单中逐步确认」',
+    '- 末尾可单独一行输出 <ParameterForm templateId="..." schemaHash="..." />（客户端也可能已自动注入表单）',
+  ].join('\n');
+}
+
+/** Hidden model guidance — business steps only, no field keys / default tables. */
+export function buildWorkflowParameterModelGuidance(
+  templateName: string,
+  schema: WorkflowSchema,
+): string {
+  return buildWorkflowParameterModelGuidanceFromSteps(
+    templateName,
+    collectWorkflowConfirmStepTitles(schema),
+  );
+}
+
+/**
  * Build natural language guidance text for AI from workflow schema.
- * This text is injected into the conversation context so the AI can guide
- * the user to confirm parameters naturally.
+ * @deprecated Prefer buildWorkflowParameterModelGuidance — avoids listing raw field keys.
  */
 export function buildWorkflowGuidanceText(
   templateName: string,
@@ -586,6 +664,7 @@ export function buildWorkflowContextSummary(
     templateId,
     templateName,
     schemaHash,
+    confirmSteps: collectWorkflowConfirmStepTitles(schema),
     fields: fieldsSummary,
   };
 }

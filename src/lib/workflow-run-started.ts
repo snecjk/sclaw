@@ -13,6 +13,8 @@ import {
   updateWorkflowRunMetadata,
 } from '@/stores/workflow-memory';
 
+export type WorkflowRunPresentation = 'local_turn' | 'patch_assistant';
+
 export interface ApplyWorkflowRunStartedOptions {
   sessionKey: string;
   agentId: string;
@@ -22,6 +24,8 @@ export interface ApplyWorkflowRunStartedOptions {
   inputs?: Record<string, unknown>;
   userText?: string;
   assistantText?: string;
+  /** patch_assistant: attach card to model reply; local_turn: client-only turn (form submit). */
+  presentation?: WorkflowRunPresentation;
 }
 
 /** After POST /workflows/{id}/start — card, tracker, memory (no Gateway send). */
@@ -37,6 +41,7 @@ export async function applyWorkflowRunStarted(
     inputs = {},
     userText,
     assistantText,
+    presentation = 'local_turn',
   } = options;
 
   if (!canStartWorkflow()) {
@@ -55,20 +60,20 @@ export async function applyWorkflowRunStarted(
     }
   }
 
-  appendWorkflowStartedLocalTurn({
-    userText: resolvedUserText,
-    templateName,
-    runId,
-    assistantText: assistantText ?? `正在启动工作流「${templateName}」…`,
-  });
+  const startedAtMs = Date.now();
+  const startedAtIso = new Date(startedAtMs).toISOString();
 
-  await invokeIpc('workflow:startTracking', {
-    runId,
-    workflowId,
-    sessionKey,
-    agentId,
-  });
-  beginWorkflowRunSseTrace(runId);
+  if (presentation === 'local_turn') {
+    appendWorkflowStartedLocalTurn({
+      userText: resolvedUserText,
+      templateName,
+      runId,
+      workflowId,
+      assistantText:
+        assistantText
+        ?? `正在启动工作流「${templateName}」（工作流 ID: ${workflowId}）…`,
+    });
+  }
 
   updateWorkflowRunMetadata(sessionKey, workflowId, {
     lastRunId: runId,
@@ -82,8 +87,8 @@ export async function applyWorkflowRunStarted(
     templateId: wfRecord?.templateId ?? '',
     templateName,
     status: 'running',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: startedAtMs,
+    updatedAt: startedAtMs,
     collectedInputs: inputs,
     paramsSummary: resolvedUserText,
   });
@@ -95,9 +100,17 @@ export async function applyWorkflowRunStarted(
     status: 'running',
     progress: 0,
     steps: [],
-    startedAt: new Date().toISOString(),
+    startedAt: startedAtIso,
   });
   chatStore.clearPendingWorkflow();
+
+  await invokeIpc('workflow:startTracking', {
+    runId,
+    workflowId,
+    sessionKey,
+    agentId,
+  });
+  beginWorkflowRunSseTrace(runId);
 
   return true;
 }

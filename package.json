@@ -1,19 +1,29 @@
 {
-  "name": "stoclaw",
-  "version": "2026.6.11-GA.2",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@discordjs/opus",
-      "@whiskeysockets/baileys",
-      "electron",
-      "esbuild",
-      "koffi",
-      "protobufjs",
-      "sharp"
-    ],
-    "overrides": {
-      "isbinaryfile": "^5.0.0",
-      "https-proxy-agent": "7.0.6"
+    "name": "stoclaw",
+    "version": "2026.6.15-GA.2",
+    "pnpm": {
+        "onlyBuiltDependencies": [
+            "@discordjs/opus",
+            "@whiskeysockets/baileys",
+            "electron",
+            "esbuild",
+            "koffi",
+            "protobufjs",
+            "sharp"
+        ],
+        "overrides": {
+            "isbinaryfile": "^5.0.0",
+            "https-proxy-agent": "7.0.6"
+        },
+        "supportedArchitectures": {
+            "os": [
+                "current"
+            ],
+            "cpu": [
+                "x64",
+                "arm64"
+            ]
+        }
     },
     "supportedArchitectures": {
       "os": [
@@ -23,8 +33,7 @@
         "x64",
         "arm64"
       ]
-    }
-  },
+    },
   "description": "StoClaw - Graphical AI Assistant based on OpenClaw",
   "main": "dist-electron/main/index.js",
   "author": "StoClaw Team",

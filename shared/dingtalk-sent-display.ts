@@ -1,3 +1,8 @@
+import {
+  DINGTALK_AGENT_SEND_DISCLAIMER_MARKER,
+  DINGTALK_AGENT_SEND_DISCLAIMER_PLAIN_TEXT,
+  stripDingTalkAgentSendDisclaimerBody,
+} from './dingtalk-disclaimer';
 import { messageHasDingTalkRecipientContext } from './dingtalk-mention-context';
 import { parseDwsSendTextFlagSegment, unescapeLiteralDwsSendText } from './dws-send-text';
 
@@ -240,16 +245,33 @@ export function parseDwsChatMessageSendCommand(
   };
 }
 
-/** Sent-success card preview: body + disclaimer as Markdown quote (no raw HTML). */
+export interface DingTalkSentPreviewParts {
+  body: string;
+  disclaimer?: string;
+}
+
+/** Split sent `--text` into body and optional agent-send disclaimer for UI cards. */
+export function splitDingTalkSentPreviewText(text: string): DingTalkSentPreviewParts {
+  const normalized = text.replace(/\r\n/g, '\n').trim();
+  if (!normalized) return { body: '' };
+
+  const body = stripDingTalkAgentSendDisclaimerBody(normalized).trim();
+  const hasDisclaimer = normalized.includes(DINGTALK_AGENT_SEND_DISCLAIMER_MARKER)
+    || body.length < normalized.length;
+
+  if (!hasDisclaimer) {
+    return { body: normalized };
+  }
+
+  return {
+    body,
+    disclaimer: DINGTALK_AGENT_SEND_DISCLAIMER_PLAIN_TEXT,
+  };
+}
+
+/** Sent-success card preview: body only (disclaimer rendered separately in UI). */
 export function formatDingTalkSentTextForChatPreview(text: string): string {
-  return text
-    .replace(/\r\n/g, '\n')
-    .replace(
-      /\n*---\n*\s*<font color=['"]#999999['"]>([\s\S]*?)<\/font>\s*/gi,
-      '\n\n> *$1*',
-    )
-    .replace(/<font color=['"]#999999['"]>([\s\S]*?)<\/font>/gi, '\n\n> *$1*')
-    .trim();
+  return splitDingTalkSentPreviewText(text).body;
 }
 
 function extractToolResultText(message: DingTalkSentDisplayMessage): string {

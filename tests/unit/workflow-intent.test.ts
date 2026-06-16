@@ -3,7 +3,11 @@ import {
   buildWorkflowStartUnavailablePrompt,
   isWorkflowCreationIntent,
   isWorkflowStartIntent,
+  isImperativeWorkflowStartIntent,
   isReExecutionIntent,
+  isWorkflowSessionLookupIntent,
+  shouldInjectWorkflowSessionHint,
+  extractWorkflowIdFromText,
 } from '@/hooks/use-workflow-intent';
 import { buildWorkflowCreationHint } from '@/lib/workflow-session-hint';
 
@@ -33,7 +37,27 @@ describe('isWorkflowCreationIntent', () => {
 describe('re-run / start intents', () => {
   it('matches re-execution phrases', () => {
     expect(isReExecutionIntent('再跑一遍')).toBe(true);
+    expect(isReExecutionIntent('再执行一下')).toBe(true);
+    expect(isReExecutionIntent('再来一次执行')).toBe(false);
     expect(isWorkflowStartIntent('运行这个工作流')).toBe(true);
+  });
+
+  it('distinguishes imperative start from analytical workflow phrasing', () => {
+    expect(isImperativeWorkflowStartIntent('执行工作流')).toBe(true);
+    expect(isImperativeWorkflowStartIntent('运行这个工作流')).toBe(true);
+    expect(isImperativeWorkflowStartIntent('分析一下工作流的执行情况')).toBe(false);
+    expect(isWorkflowStartIntent('分析一下工作流的执行情况')).toBe(true);
+  });
+
+  it('matches workflowId lookup in session', () => {
+    expect(isWorkflowSessionLookupIntent('帮我找一下会话中的 workflowId')).toBe(true);
+    expect(isWorkflowSessionLookupIntent('工作流 ID 是多少')).toBe(true);
+    expect(shouldInjectWorkflowSessionHint('再执行一下')).toBe(true);
+    expect(shouldInjectWorkflowSessionHint('帮我找一下会话中的 workflowId')).toBe(true);
+  });
+
+  it('extracts workflowId from re-execution text', () => {
+    expect(extractWorkflowIdFromText('重新执行 wf_68162433')).toBe('wf_68162433');
   });
 
   it('builds unavailable prompt when no workflow memory', () => {

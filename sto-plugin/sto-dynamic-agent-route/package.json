@@ -1,6 +1,6 @@
 {
   "name": "@sto/sto-dynamic-agent-route",
-  "version": "2026.3.13",
+  "version": "2026.6.15",
   "description": "申通动态模型路由插件，可以before_model_resolve时候动态切换指定 model provider ",
   "type": "module",
   "dependencies": {

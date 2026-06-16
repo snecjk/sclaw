@@ -13,18 +13,40 @@ const WORKFLOW_START_PATTERNS = [
 ];
 
 /**
+ * Imperative command to start/run a saved workflow (POST /workflows/{id}/start).
+ * Excludes analytical phrasing like「分析一下工作流的执行情况」.
+ */
+export function isImperativeWorkflowStartIntent(text: string): boolean {
+  if (!text?.trim()) return false;
+  return WORKFLOW_START_PATTERNS.some((p) => p.test(text));
+}
+
+/**
  * User wants to start/run an already-saved workflow (POST /workflows/{id}/start).
+ * Includes imperative commands plus broad「工作流 + 运行/执行」heuristic for session hints.
  */
 export function isWorkflowStartIntent(text: string): boolean {
   if (!text?.trim()) return false;
   if (isReExecutionIntent(text)) return true;
-  if (WORKFLOW_START_PATTERNS.some((p) => p.test(text))) return true;
+  if (isImperativeWorkflowStartIntent(text)) return true;
 
   const hasWorkflow = /工作流|workflow/i.test(text);
   const hasRunVerb = /运行|执行|启动|跑一遍/i.test(text);
   const hasCreateVerb = /创建|新建|搭建|配置/i.test(text);
 
   return hasWorkflow && hasRunVerb && !hasCreateVerb;
+}
+
+const WORKFLOW_ID_IN_TEXT = /\b(wf_[\w-]+)\b/i;
+
+/** Extract workflow instance id from user text (e.g.「重新执行 wf_68162433」). */
+export function extractWorkflowIdFromText(text: string): string | undefined {
+  return text.match(WORKFLOW_ID_IN_TEXT)?.[1];
+}
+
+/** Text explicitly references a workflow instance or template context. */
+export function hasExplicitWorkflowReference(text: string): boolean {
+  return /工作流|workflow/i.test(text) || !!extractWorkflowIdFromText(text);
 }
 
 /**
@@ -67,14 +89,40 @@ export function isWorkflowCreationIntent(text: string): boolean {
   return hasWorkflow && hasCreateVerb;
 }
 
+/** Short re-run phrases without explicit「工作流」wording (e.g.「再执行一下」). */
+const SHORT_RERUN_PATTERN = /^再(?:来)?(?:执行|跑|运行|启动)(?:一下|一遍|一次)?[。.!！]?$/i;
+
 /**
  * Check if user message is a re-execution intent for a remembered workflow.
  * Only acted on when session has saved workflow memory or model calls execute_workflow.
  */
 export function isReExecutionIntent(text: string): boolean {
   if (!text) return false;
-  const reExecPatterns = /(?:执行刚才的|再跑一遍|再执行一次|重新执行|用上次参数|继续执行)|(?:运行|执行|启动)这个(?:工作流|workflow)/i;
-  return reExecPatterns.test(text);
+  const trimmed = text.trim();
+  if (SHORT_RERUN_PATTERN.test(trimmed)) return true;
+  const reExecPatterns =
+    /(?:执行刚才的|再跑一遍|再执行(?:一下|一次)?|重新执行|用上次参数|继续执行)|(?:运行|执行|启动)这个(?:工作流|workflow)/i;
+  return reExecPatterns.test(trimmed);
+}
+
+/**
+ * User asks which workflowId/runId exists in the current session.
+ * Inject session memory hint so the model can answer or call execute_workflow.
+ */
+export function isWorkflowSessionLookupIntent(text: string): boolean {
+  if (!text?.trim()) return false;
+  return /(?:workflow\s*id|workflowId|工作流\s*(?:实例)?\s*(?:id|ID)|(?:找|查|获取).*(?:workflow|工作流).*(?:id|ID)|会话.*(?:workflow|工作流))/i.test(
+    text.trim(),
+  );
+}
+
+/** True when sendMessage should attach saved workflowId/runId session hint for the model. */
+export function shouldInjectWorkflowSessionHint(text: string): boolean {
+  return (
+    isReExecutionIntent(text)
+    || isWorkflowStartIntent(text)
+    || isWorkflowSessionLookupIntent(text)
+  );
 }
 
 /** Prompt when user wants to run but no saved workflow exists in session. */

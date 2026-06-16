@@ -51,6 +51,8 @@
         "dingtalkLoggingIn": "ログイン中…",
         "dingtalkSentPreviewTitle": "{{name}} に送信済み",
         "dingtalkSentPreviewTitleGroup": "グループ {{name}} に送信済み",
+        "dingtalkSentPreviewTo": "送信先",
+        "dingtalkSentPreviewToGroup": "グループ送信先",
         "dingtalkSentPreviewMessageTitle": "タイトル：{{title}}",
         "pickWorkflow": "ワークフローを選択",
         "workflowPlaceholder": "ワークフローテンプレートを検索...",

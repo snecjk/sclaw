@@ -14,7 +14,6 @@ import { applyWorkflowRunStarted } from '@/lib/workflow-run-started';
 import { useChatStore } from '@/stores/chat';
 import {
   applyWorkflowSchemaReady,
-  ensureWorkflowParameterFormInjected,
 } from '@/stores/chat/parameter-form-recovery';
 import { saveWorkflowRecord } from '@/stores/workflow-memory';
 
@@ -47,8 +46,7 @@ function messageDedupeKey(msg: BuiltinToolResultMessage): string | null {
 }
 
 function handleWorkflowSchemaReady(data: WorkflowSchemaReadyData): void {
-  applyWorkflowSchemaReady(data);
-  const injected = ensureWorkflowParameterFormInjected();
+  const injected = applyWorkflowSchemaReady(data);
   console.log(
     '[builtin-tool] workflow_schema_ready templateId=%s formInjected=%s',
     data.templateId,
@@ -89,6 +87,7 @@ async function handleWorkflowExecutionStarted(
     workflowId: data.workflowId,
     runId: data.runId,
     templateName: data.templateName ?? '工作流',
+    presentation: 'patch_assistant',
   });
 }
 
