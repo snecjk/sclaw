@@ -12,7 +12,7 @@ import { cp as cpAsync, mkdir as mkdirAsync, rm as rmAsync } from 'node:fs/promi
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { logger } from './logger';
-import { getOpenClawConfigDir, getBundledPluginSourceCandidates } from './paths';
+import { getOpenClawConfigDir, getBundledPluginSourceCandidates, getOpenClawNodeModulesPath } from './paths';
 
 function isAsarPath(filePath: string): boolean {
   return /\.asar([\\/]|$)/.test(filePath);
@@ -243,20 +243,32 @@ const PLUGIN_RUNTIME_DEPS: Record<string, readonly string[]> = {
   'sto-scheduled-task-tool': ['@sinclair/typebox'],
 };
 
+function pluginRuntimeDepNodeModuleRoots(): string[] {
+  const roots = [
+    join(process.cwd(), 'node_modules'),
+    join(app.getAppPath(), 'node_modules'),
+  ];
+  const openclawNodeModules = getOpenClawNodeModulesPath();
+  if (openclawNodeModules) {
+    const delimiter = process.platform === 'win32' ? ';' : ':';
+    for (const entry of openclawNodeModules.split(delimiter)) {
+      if (entry.trim()) roots.push(entry.trim());
+    }
+  }
+  return roots;
+}
+
 function copyPluginRuntimeDeps(pluginDirName: string, pluginDir: string): void {
   const depNames = PLUGIN_RUNTIME_DEPS[pluginDirName];
   if (!depNames?.length) return;
 
-  const nodeModuleRoots = [
-    join(process.cwd(), 'node_modules'),
-    join(app.getAppPath(), 'node_modules'),
-  ];
+  const nodeModuleRoots = pluginRuntimeDepNodeModuleRoots();
   const outputNM = join(pluginDir, 'node_modules');
   mkdirSync(fsPath(outputNM), { recursive: true });
 
   for (const depName of depNames) {
     const dest = join(outputNM, depName);
-    if (existsSync(fsPath(dest))) continue;
+    if (existsSync(fsPath(join(dest, 'package.json')))) continue;
 
     let copied = false;
     for (const root of nodeModuleRoots) {
@@ -289,7 +301,7 @@ function removeLegacyStoToolkitExtensionSibling(): void {
   }
 }
 
-const STO_WORKFLOW_DEV_SYNC_FILES = ['index.ts', 'api.ts', 'openclaw-sdk.ts', 'workflow-params.ts', 'workflow-search.ts', 'openclaw.plugin.json', 'package.json'] as const;
+const STO_WORKFLOW_DEV_SYNC_FILES = ['index.ts', 'api.ts', 'openclaw-sdk.ts', 'typebox-shim.ts', 'workflow-params.ts', 'workflow-search.ts', 'openclaw.plugin.json', 'package.json'] as const;
 
 function ensurePluginRuntimeDeps(pluginDirName: string): void {
   const targetDir = join(getOpenClawConfigDir(), 'extensions', pluginDirName);

@@ -73,6 +73,22 @@ describe("sto-workflow-tool plugin", () => {
 		);
 	});
 
+	it("search_workflow_templates returns permission error when API returns empty list", async () => {
+		fetchJsonMock.mockResolvedValueOnce([]);
+
+		const api = buildApi();
+		register.register(api as never);
+		const searchTool = registerTool.mock.calls.find(
+			(c) => (c[0] as { id: string }).id === "search_workflow_templates",
+		)?.[0] as { execute: Function };
+
+		const result = await searchTool.execute("call_search", { query: "客户异常监控", limit: 10 });
+		const envelope = JSON.parse(result.content[0].text);
+		expect(envelope.success).toBe(false);
+		expect(envelope.error.message).toMatch(/没有相关权限/);
+		expect(envelope.error.message).toMatch(/客户异常监控/);
+	});
+
 	it("get_workflow_schema rejects missing templateId and query", async () => {
 		const api = buildApi();
 		register.register(api as never);
