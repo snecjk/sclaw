@@ -31,6 +31,17 @@ function resolvePreferredAgentByEngine(
   return agents.find((agent) => agent.id === defaultAgentId) ?? agents[0] ?? null;
 }
 
+function toTriggerErrorMessage(error: unknown, t: (key: string, options?: Record<string, unknown>) => string): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes('already running')) {
+    return t('toast.alreadyRunning');
+  }
+
+  return t('toast.failedTrigger', { error: message });
+}
+
 export function Cron() {
   const { t } = useTranslation('cron');
   const { jobs, loading, error, fetchJobs, createJob, updateJob, toggleJob, deleteJob, triggerJob } = useCronStore();
@@ -179,7 +190,7 @@ export function Cron() {
         toast.success(t('toast.triggered'));
       } catch (error) {
         console.error('Failed to trigger cron job:', error);
-        toast.error(t('toast.failedTrigger', { error: error instanceof Error ? error.message : String(error) }));
+        toast.error(toTriggerErrorMessage(error, t));
       }
     },
     [triggerJob, t, navigate, location.pathname]
