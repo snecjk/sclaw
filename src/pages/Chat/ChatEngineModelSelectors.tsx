@@ -164,6 +164,7 @@ export function ChatModelSelector({ className }: { className?: string }) {
   const sessions = useChatStore((s) => s.sessions);
   const loadSessions = useChatStore((s) => s.loadSessions);
   const agents = useAgentsStore((s) => s.agents);
+  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
   const { t } = useTranslation('chat');
@@ -257,6 +258,7 @@ export function ChatModelSelector({ className }: { className?: string }) {
           },
         );
         persistedModel = result.snapshot?.agents?.find((agent) => agent.id === currentAgentId)?.modelDisplay?.trim() || modelId;
+        await fetchAgents();
       } else {
         const result = await hostApiFetch<{
           model?: string;
