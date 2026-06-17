@@ -311,5 +311,36 @@ export async function handleWorkflowRoutes(
     return true;
   }
 
+  // 7. PUT /agent/v1/workflows/:workflowId/name
+  const renameMatch = pathname.match(/^\/agent\/v1\/workflows\/([^/]+)\/name$/);
+  if (renameMatch && req.method === 'PUT') {
+    try {
+      const body = await parseJsonBody<{ name: string }>(req);
+      logger.info('[workflow-trace] PUT %s name=%s', pathname, body.name);
+      await proxyWorkflowRequest(req, res, pathname, body);
+    } catch (error) {
+      logger.error('[WorkflowRoutes] rename workflow failed:', error);
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ success: false, error: String(error) }));
+    }
+    return true;
+  }
+
+  // 8. DELETE /agent/v1/workflows/:workflowId
+  const deleteMatch = pathname.match(/^\/agent\/v1\/workflows\/([^/]+)$/);
+  if (deleteMatch && req.method === 'DELETE') {
+    try {
+      logger.info('[workflow-trace] DELETE %s workflowId=%s', pathname, deleteMatch[1]);
+      await proxyWorkflowRequest(req, res, pathname);
+    } catch (error) {
+      logger.error('[WorkflowRoutes] delete workflow failed:', error);
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ success: false, error: String(error) }));
+    }
+    return true;
+  }
+
   return false;
 }

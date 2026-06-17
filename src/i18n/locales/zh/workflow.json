@@ -46,6 +46,7 @@
     "install": "安装",
     "tryRun": "试运行",
     "customTag": "自建",
+    "systemTag": "系统",
     "pausedLabel": "· 已暂停",
     "statusSuccess": "成功",
     "statusPaused": "暂停",

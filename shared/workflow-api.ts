@@ -17,6 +17,7 @@ export type WorkflowTemplateScope = 'system' | 'personal';
 export interface WorkflowSummary {
   id: WorkflowId;
   name: string;
+  templateId: string | null;
   version: number;
   lifecycleStatus: WorkflowLifecycleStatus;
   versionStatus: WorkflowVersionStatus;

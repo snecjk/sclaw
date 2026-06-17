@@ -31,7 +31,10 @@ import {
 } from './components/TaskCreateModal';
 
 import { useMyTaskStore, selectRecordCounts, selectCurrentRecords } from './store';
-import type { TaskView, TaskViewModel, ExecutionRecord, RecommendTask } from './types';
+import type { TaskView, TaskViewModel, ExecutionRecord } from './types';
+import { listWorkflowTemplates } from '@/lib/workflow-api';
+import { mapTemplateMineItemToOfficialCard } from '@/pages/Workflow/workflow-mapper';
+import type { OfficialWorkflowCard } from '@/pages/Workflow/types';
 import { ViewTabs } from './components/ViewTabs';
 import { TaskToolbar } from './components/TaskToolbar';
 import { RecordToolbar } from './components/RecordToolbar';
@@ -166,14 +169,33 @@ export default function MyTask() {
   const [editingJob, setEditingJob] = useState<ManagedLocalTask | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ManagedLocalTask | null>(null);
   const [detailRecord, setDetailRecord] = useState<ExecutionRecord | null>(null);
-  const [recommendInitialValues, setRecommendInitialValues] = useState<
-    { name?: string; message?: string } | undefined
-  >(undefined);
+  const [officialCards, setOfficialCards] = useState<OfficialWorkflowCard[]>([]);
 
   // ── 初始化加载 ──
   useEffect(() => {
     fetchJobs().catch(() => {});
     fetchWorkflowOptions().catch(() => {});
+    // 拉取官方推荐工作流模版（与 Workflow 页面逻辑一致）
+    listWorkflowTemplates({ page: 1, pageSize: 100 })
+      .then((result) => {
+        const officialItems = (result.items ?? []).map((item) => ({
+          id: String(item.id ?? ''),
+          label: String(item.label ?? ''),
+          description: item.description != null ? String(item.description) : null,
+          category: item.category != null ? String(item.category) : null,
+          scope: 'system' as const,
+          ownerUserId: null,
+          createdAt: null,
+          updatedAt: null,
+          nodeCount: Number(item.nodeCount) || 0,
+          nodes: Array.isArray(item.nodes) ? item.nodes as Record<string, unknown>[] : [],
+          edges: Array.isArray(item.edges) ? item.edges as Record<string, unknown>[] : [],
+        }));
+        setOfficialCards(officialItems.map(mapTemplateMineItemToOfficialCard));
+      })
+      .catch(() => {
+        setOfficialCards([]);
+      });
   }, [fetchJobs, fetchWorkflowOptions]);
 
   // ── 切换到执行记录 Tab 时加载 ──
@@ -339,11 +361,11 @@ export default function MyTask() {
     }
   }, [deleteTarget, deleteJob, fetchJobs]);
 
-  const handleRecommendAdd = useCallback((task: RecommendTask) => {
-    setRecommendInitialValues({ name: task.title, message: task.desc });
-    setEditingJob(null);
-    setCreateOpen(true);
-  }, []);
+  const handleTemplateInstall = useCallback((card: OfficialWorkflowCard) => {
+    const q = encodeURIComponent(`/${card.name}`);
+    const wid = encodeURIComponent(card.id);
+    navigate(`/?q=${q}&workflowId=${wid}`);
+  }, [navigate]);
 
   // ── 渲染 ──
   const isTasksView = activeView === 'tasks';
@@ -416,7 +438,8 @@ export default function MyTask() {
                     setEditingJob(null);
                     setCreateOpen(true);
                   }}
-                  onRecommendAdd={handleRecommendAdd}
+                  officialCards={officialCards}
+                  onTemplateInstall={handleTemplateInstall}
                 />
               ) : (
                 <div className="grid grid-cols-1 items-stretch sm:grid-cols-2 lg:grid-cols-3 gap-[clamp(12px,1.4vw,16px)]">
@@ -475,15 +498,8 @@ export default function MyTask() {
       <TaskCreateModal
         job={editingJob}
         open={createOpen}
-        onClose={() => {
-          setCreateOpen(false);
-          setRecommendInitialValues(undefined);
-        }}
-        onSave={(input) => {
-          setRecommendInitialValues(undefined);
-          return handleSave(input);
-        }}
-        initialValues={recommendInitialValues}
+        onClose={() => setCreateOpen(false)}
+        onSave={(input) => handleSave(input)}
       />
 
       {/* 删除确认弹窗 */}

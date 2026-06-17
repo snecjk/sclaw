@@ -53,6 +53,19 @@
       "placeholder": "帮我做一份客户异常监控"
     }
   },
+  "homeWorkflowCard": {
+    "createPrompt": "{{label}} 创建工作流",
+    "startPrompt": "启动 {{label}}",
+    "bodyDetail": "点击配置并启动该工作流",
+    "stat1Label": "状态",
+    "stat1Value": "待启动",
+    "stat2Label": "节点",
+    "stat2Value": "-",
+    "stat3Label": "最近运行",
+    "stat3Value": "-",
+    "footerTeam": "工作流团队",
+    "footerHint": "点击启动"
+  },
   "hero": {
     "title": "STO Claw，让经营管理更高效",
     "subtitle": "搭载AI智能工作台，驱动组织高效协同，赋能经营管理新价值"

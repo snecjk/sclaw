@@ -77,6 +77,7 @@ export function parseWorkflowSummary(raw: Record<string, unknown>): WorkflowSumm
   return {
     id: asWorkflowId(String(raw.id ?? '')),
     name: String(raw.name ?? ''),
+    templateId: raw.templateId != null ? String(raw.templateId) : null,
     version: Number(raw.version) || 1,
     lifecycleStatus: String(raw.lifecycleStatus ?? 'draft') as WorkflowSummary['lifecycleStatus'],
     versionStatus: String(raw.versionStatus ?? 'draft') as WorkflowSummary['versionStatus'],
