@@ -327,7 +327,7 @@ function App() {
             <Route path="/cron" element={<Cron />} />
             <Route path="/scheduled-tasks" element={<ScheduledTasks />} />
             <Route path="/my-tasks" element={<MyTask />} />
-            <Route path="/workflow" element={<WorkflowTestPage />} />
+            <Route path="/workflow/*" element={<WorkflowTestPage />} />
             <Route path="/settings/*" element={<Settings />} />
           </Route>
         </Routes>

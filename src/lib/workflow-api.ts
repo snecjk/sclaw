@@ -439,6 +439,37 @@ export function beginWorkflowRunSseTrace(runId: string): void {
   );
 }
 
+// ── 8. Save / publish workflow definition (designer) ─────────────
+
+export async function saveWorkflowDefinition(
+  workflowId: string,
+  workflow: Record<string, unknown>,
+): Promise<import('@/pages/WorkflowDesigner/types').WorkflowDefinition> {
+  const { definitionFromDetail } = await import('@/lib/workflow-designer-adapter');
+  const data = await unwrap(
+    hostApiFetch<ApiResponse<WorkflowDetailResponse>>(`/agent/v1/workflows/${workflowId}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify(workflow),
+    }),
+  );
+  return definitionFromDetail(data);
+}
+
+export async function publishWorkflowDefinition(
+  workflowId: string,
+): Promise<import('@/pages/WorkflowDesigner/types').WorkflowDefinition> {
+  const { definitionFromDetail } = await import('@/lib/workflow-designer-adapter');
+  const data = await unwrap(
+    hostApiFetch<ApiResponse<WorkflowDetailResponse>>(`/agent/v1/workflows/${workflowId}/publish`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: '{}',
+    }),
+  );
+  return definitionFromDetail(data);
+}
+
 // ── Legacy compatibility: query execution status (fallback) ─────
 
 export async function fetchWorkflowStatus(runId: string): Promise<WorkflowExecutionState | null> {

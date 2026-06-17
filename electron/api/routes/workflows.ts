@@ -176,6 +176,53 @@ export async function handleWorkflowRoutes(
   const pathname = url.pathname;
   logger.info(`[WorkflowRoutes] checking ${req.method} ${pathname}`);
 
+  // 0. workflow/v1 studio API (memory-center-web parity)
+  if (pathname === '/workflow/v1/workflow-templates' && req.method === 'GET') {
+    try {
+      logger.info('[workflow-trace] GET /workflow/v1/workflow-templates (proxy)');
+      await proxyWorkflowRequest(req, res, '/workflow/v1/workflow-templates');
+    } catch (error) {
+      logger.error('[WorkflowRoutes] workflow studio templates failed:', error);
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ success: false, error: String(error) }));
+    }
+    return true;
+  }
+
+  if (pathname === '/workflow/v1/workflows' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<Record<string, unknown>>(req);
+      logger.info(
+        '[workflow-trace] POST /workflow/v1/workflows templateId=%s name=%s',
+        body.templateId,
+        body.name,
+      );
+      await proxyWorkflowRequest(req, res, '/workflow/v1/workflows', body);
+    } catch (error) {
+      logger.error('[WorkflowRoutes] workflow studio create failed:', error);
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ success: false, error: String(error) }));
+    }
+    return true;
+  }
+
+  // 0b. GET /workflow/v1/workflow-templates/:templateId
+  const studioTemplateMatch = pathname.match(/^\/workflow\/v1\/workflow-templates\/([^/]+)$/);
+  if (studioTemplateMatch && req.method === 'GET') {
+    try {
+      logger.info('[workflow-trace] GET /workflow/v1/workflow-templates/%s (proxy)', studioTemplateMatch[1]);
+      await proxyWorkflowRequest(req, res, pathname);
+    } catch (error) {
+      logger.error('[WorkflowRoutes] workflow studio template detail failed:', error);
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ success: false, error: String(error) }));
+    }
+    return true;
+  }
+
   // 1. POST /agent/v1/workflow-templates
   if (pathname === '/agent/v1/workflow-templates' && req.method === 'POST') {
     try {
@@ -253,14 +300,31 @@ export async function handleWorkflowRoutes(
     return true;
   }
 
-  // 4. GET /agent/v1/workflows/:workflowId
+  // 4. GET|PUT /agent/v1/workflows/:workflowId
   const workflowDetailMatch = pathname.match(/^\/agent\/v1\/workflows\/([^/]+)$/);
-  if (workflowDetailMatch && req.method === 'GET') {
+  if (workflowDetailMatch && (req.method === 'GET' || req.method === 'PUT')) {
     try {
-      logger.info('[workflow-trace] GET %s (proxy) workflowId=%s', pathname, workflowDetailMatch[1]);
-      await proxyWorkflowRequest(req, res, pathname);
+      const body =
+        req.method === 'PUT' ? await parseJsonBody<Record<string, unknown>>(req) : undefined;
+      logger.info('[workflow-trace] %s %s (proxy) workflowId=%s', req.method, pathname, workflowDetailMatch[1]);
+      await proxyWorkflowRequest(req, res, pathname, body);
     } catch (error) {
-      logger.error('[WorkflowRoutes] get workflow detail failed:', error);
+      logger.error('[WorkflowRoutes] workflow detail %s failed:', req.method, error);
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ success: false, error: String(error) }));
+    }
+    return true;
+  }
+
+  // 4b. POST /agent/v1/workflows/:workflowId/publish
+  const publishMatch = pathname.match(/^\/agent\/v1\/workflows\/([^/]+)\/publish$/);
+  if (publishMatch && req.method === 'POST') {
+    try {
+      logger.info('[workflow-trace] POST %s (proxy) workflowId=%s', pathname, publishMatch[1]);
+      await proxyWorkflowRequest(req, res, pathname, {});
+    } catch (error) {
+      logger.error('[WorkflowRoutes] publish workflow failed:', error);
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.end(JSON.stringify({ success: false, error: String(error) }));

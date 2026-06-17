@@ -165,7 +165,7 @@ export function clampPreviewPanelPercent(containerWidth: number, previewPx: numb
 
 /** 全高页面壳层：TitleBar + main 上下内距 */
 export const stoPageFillBelowTitleClass =
-  'h-[calc(100dvh-var(--sto-header-h)-var(--sto-main-pad-y-total))]';
+  'h-[calc(100dvh-var(--sto-header-h,40px)-var(--sto-main-pad-y-total,40px))]';
 
 /**
  * 工作流 Hero 输入复合框（MasterGo 2:7326）：白底 + Grey-4 描边 + 22px 圆角 + 轻阴影。
