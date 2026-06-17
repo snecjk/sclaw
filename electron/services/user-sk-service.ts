@@ -2,6 +2,8 @@
  * 用户个人 SK 管理服务
  * 登录后从申通内部接口动态获取，作为 STO AI provider 的调用密钥
  * 支持"查无则创"：查询无 SK 时自动调用创建接口
+ *
+ * 注意：接口返回的 encryptedKey 是 AES-128-ECB 加密的，需要解密后才能使用
  */
 
 import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
@@ -11,11 +13,26 @@ import crypto from 'crypto';
 
 const SK_PROVIDER_ID = 'sto';
 
+// AES-128-ECB 解密密钥（与服务端一致）
+const AES_DECRYPT_KEY = '2074c2350686f0e4';
+
 // SK 查询/创建接口域名（带 api 前缀）
 const SK_API_DOMAINS: Record<string, string> = {
   prod: 'https://devops-llmgatewayapi.sto.cn',
   test: 'https://devops-llmgatewayapi-test.sto.cn',
 };
+
+/**
+ * AES-128-ECB 解密（Base64 输入 → 明文输出）
+ * 对应 Java 端 AesEncryptUtil.decrypt
+ */
+function decryptSk(encryptedBase64: string): string {
+  const keyBuffer = Buffer.from(AES_DECRYPT_KEY, 'utf-8');
+  const decipher = crypto.createDecipheriv('aes-128-ecb', keyBuffer, null);
+  let decrypted = decipher.update(encryptedBase64, 'base64', 'utf-8');
+  decrypted += decipher.final('utf-8');
+  return decrypted;
+}
 
 function isTestEnvironment(env?: string | null): boolean {
   const normalized = env?.trim().toLowerCase() || '';
@@ -86,9 +103,19 @@ async function fetchSkFromApi(
       return null;
     }
 
-    const sk = json.data?.[0]?.encryptedKey;
-    if (!sk) {
+    const encryptedKey = json.data?.[0]?.encryptedKey;
+    if (!encryptedKey) {
       logger.warn(`[user-sk] ${type} response missing encryptedKey`);
+      return null;
+    }
+
+    // 解密 encryptedKey（AES-128-ECB + Base64）
+    let sk: string;
+    try {
+      sk = decryptSk(encryptedKey);
+      logger.info(`[user-sk] ${type} SK decrypted successfully (len=${sk.length})`);
+    } catch (err) {
+      logger.warn(`[user-sk] ${type} AES decrypt failed:`, err);
       return null;
     }
 
