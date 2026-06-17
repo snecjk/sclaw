@@ -9,6 +9,7 @@ import {
   readDingTalkMentionPending,
 } from './dingtalk-mention-pending.js';
 import { buildDingTalkMentionSystemContext } from './shared/dingtalk-mention-context';
+import { fixDwsChatMessageSendToolParams } from './shared/dws-send-text';
 
 const TAG = 'sto-dingtalk-send-guard';
 
@@ -78,6 +79,12 @@ export default definePluginEntry({
             ctx.sessionKey ?? ctx.sessionId,
             decision.category,
           );
+        }
+
+        const fixedParams = fixDwsChatMessageSendToolParams(event.params);
+        if (fixedParams) {
+          api.logger.debug?.(`[${TAG}] normalized dws chat message send --text for tool=${event.toolName}`);
+          return { params: fixedParams };
         }
       },
       { priority: 100 },

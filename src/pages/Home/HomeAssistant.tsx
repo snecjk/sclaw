@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
@@ -26,7 +26,6 @@ export function HomeAssistant({
   placeholderKey?: string;
 }) {
   const { t } = useTranslation('home');
-  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
@@ -53,10 +52,6 @@ export function HomeAssistant({
     placeholder: placeholderKey ? t(placeholderKey) : undefined,
     engineType: currentEngineType,
   });
-
-  useEffect(() => {
-    void fetchAgents();
-  }, [fetchAgents]);
 
   return (
     <div className={cn('flex flex-col', inputProps.className)}>

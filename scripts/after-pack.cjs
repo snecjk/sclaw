@@ -110,21 +110,42 @@ function validateBundledClaudeSdk(resourcesDir, platform, arch) {
   console.log(`[after-pack] ✅ Claude SDK binary present: ${candidate}`);
 }
 
-function ensureAppRuntimePackages(resourcesDir, packageNames) {
+function resolveRuntimePackageSource(projectNodeModules, resolvedSources, entry) {
+  if (entry.resolveFromPackageName) {
+    const parentSource = resolvedSources.get(entry.resolveFromPackageName);
+    if (parentSource) {
+      const parentRealPath = realpathSync(parentSource);
+      const nestedSource = join(dirname(parentRealPath), ...entry.packageName.split('/'));
+      if (existsSync(nestedSource)) {
+        return realpathSync(nestedSource);
+      }
+    }
+  }
+
+  const rootSource = join(projectNodeModules, ...entry.packageName.split('/'));
+  if (existsSync(rootSource)) {
+    return realpathSync(rootSource);
+  }
+
+  throw new Error(`[after-pack] Required app runtime package missing in source node_modules: ${rootSource}`);
+}
+
+function ensureAppRuntimePackages(resourcesDir, packageEntries) {
   const projectNodeModules = join(__dirname, '..', 'node_modules');
   const packagedNodeModules = join(resourcesDir, 'node_modules');
+  const resolvedSources = new Map();
   mkdirSync(packagedNodeModules, { recursive: true });
 
-  for (const packageName of packageNames) {
-    const src = join(projectNodeModules, ...packageName.split('/'));
+  for (const entry of packageEntries) {
+    const normalizedEntry = typeof entry === 'string' ? { packageName: entry } : entry;
+    const { packageName } = normalizedEntry;
+    const src = resolveRuntimePackageSource(projectNodeModules, resolvedSources, normalizedEntry);
     const dest = join(packagedNodeModules, ...packageName.split('/'));
-    if (!existsSync(src)) {
-      throw new Error(`[after-pack] Required app runtime package missing in source node_modules: ${src}`);
-    }
     if (existsSync(dest)) continue;
     mkdirSync(dirname(dest), { recursive: true });
     cpSync(src, dest, { recursive: true, dereference: true });
-    console.log(`[after-pack] ✅ Added app runtime package: ${packageName}`);
+    resolvedSources.set(packageName, src);
+    console.log(`[after-pack] ✅ Added app runtime package: ${packageName} <- ${src}`);
   }
 }
 
@@ -1305,13 +1326,13 @@ exports.default = async function afterPack(context) {
   }
 
   ensureAppRuntimePackages(resourcesDir, [
-    'ajv',
     'ajv-formats',
-    'fast-deep-equal',
+    { packageName: 'ajv', resolveFromPackageName: 'ajv-formats' },
+    { packageName: 'fast-deep-equal', resolveFromPackageName: 'ajv' },
     'fast-json-stable-stringify',
-    'fast-uri',
-    'json-schema-traverse',
-    'require-from-string',
+    { packageName: 'fast-uri', resolveFromPackageName: 'ajv' },
+    { packageName: 'json-schema-traverse', resolveFromPackageName: 'ajv' },
+    { packageName: 'require-from-string', resolveFromPackageName: 'ajv' },
     'uri-js',
   ]);
   validateBundledClaudeSdk(resourcesDir, platform, arch);

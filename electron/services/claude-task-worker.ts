@@ -60,6 +60,7 @@ async function executeClaudeTask(params: {
     prompt: params.definition.promptTemplate,
     options: {
       cwd: runtime.cwd,
+      additionalDirectories: runtime.additionalDirectories,
       env: runtime.env,
       sessionId: runtime.sessionId,
       settings: runtime.model ? { model: runtime.model } : undefined,

@@ -44,10 +44,11 @@ const LONG_OUTPUT_CONSTRAINT = [
   '',
   '### Output rules',
   '',
-  '1. Save the file under the current workspace **`./.claw-output/`** directory.',
+  '1. Save the file under the current workspace **`./.claw-output/`** directory (write tool only — do not use this relative path in user-facing replies).',
   '2. Use a meaningful filename (e.g. `daily_report.sql`). If the file already exists, append a number suffix (`_1`, `_2`).',
   '3. In your reply, provide:',
-  '   - The relative file path (e.g. `./.claw-output/daily_report.sql`)',
+  '   - The **absolute** file path as a Markdown link: `[filename](file:///absolute/path)` (macOS/Linux: `file:///Users/.../workspace/.claw-output/foo.md`; Windows: `file:///C:/Users/.../workspace/.claw-output/foo.md` with forward slashes).',
+  '   - Never reply with relative paths (`./.claw-output/...`, `report.md`, `outputs/...`).',
   '   - A brief summary (≤ 5 bullet points)',
   '   - A friendly prompt telling the user they can click the path to preview the full content',
   '4. Even if the user says "send it directly to me" or "show it in chat", still write the file and include a short preview (first 5–10 lines) in your reply.',
@@ -153,8 +154,14 @@ interface AgentFeatures {
   preferredModelAccountId?: Record<string, string>;
 }
 
-function normalizeAgentEngineType(value: unknown): AgentEngineType {
-  return value === 'claude' ? 'claude' : 'openclaw';
+function getDefaultAgentEngineType(): AgentEngineType {
+  // return process.platform === 'win32' ? 'claude' : 'openclaw';
+  return 'openclaw';
+}
+
+function normalizeAgentEngineType(value: unknown, fallback: AgentEngineType = getDefaultAgentEngineType()): AgentEngineType {
+  if (value === 'claude' || value === 'openclaw') return value;
+  return fallback;
 }
 
 interface AgentPreferredModel {
@@ -758,6 +765,10 @@ export async function createAgent(
 
     await provisionAgentFilesystem(config, newAgent, { inheritWorkspace: options?.inheritWorkspace });
     await writeOpenClawConfig(config);
+    const features = await readAgentFeatures();
+    features.engineType = features.engineType || {};
+    features.engineType[nextId] = getDefaultAgentEngineType();
+    await writeAgentFeatures(features);
     logger.info('Created agent config entry', { agentId: nextId, inheritWorkspace: !!options?.inheritWorkspace });
     return await buildSnapshotFromConfig(config);
   });
@@ -808,12 +819,15 @@ export async function createAgentWithId(
     await provisionAgentFilesystem(config, newAgent, { inheritWorkspace: options?.inheritWorkspace });
     await writeOpenClawConfig(config);
 
+    const features = await readAgentFeatures();
+    features.engineType = features.engineType || {};
+    features.engineType[id] = getDefaultAgentEngineType();
+
     if (options?.fileTransformByOSS === true) {
-      const features = await readAgentFeatures();
       features.fileTransformByOSS = features.fileTransformByOSS || {};
       features.fileTransformByOSS[id] = true;
-      await writeAgentFeatures(features);
     }
+    await writeAgentFeatures(features);
 
     logger.info('Created agent config entry (explicit ID)', { agentId: id, inheritWorkspace: !!options?.inheritWorkspace });
     return await buildSnapshotFromConfig(config);

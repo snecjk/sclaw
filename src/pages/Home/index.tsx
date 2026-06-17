@@ -10,6 +10,7 @@ import { HomeSummaryCards } from './HomeSummaryCards';
 import { HomeAssistant } from './HomeAssistant';
 import { HomeMainConversation } from './HomeMainConversation';
 import { useHomeConversationActive } from './use-home-conversation-active';
+import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
@@ -132,10 +133,16 @@ export function Home() {
           {showConversation ? (
             <HomeMainConversation className="min-h-0 flex-1" />
           ) : (
-            <div className={cn(stoChatShellHomeClass, 'mx-auto flex min-h-0 flex-1 flex-col justify-center gap-8 overflow-y-auto py-6 md:gap-10')}>
-              <HomeHero />
-              <HomeSummaryCards />
-            </div>
+            <>
+              <div className="mb-3 mt-2 flex w-full items-center justify-between px-4 sm:px-6">
+                <ChatEngineSelector />
+                <ChatModelSelector />
+              </div>
+              <div className={cn(stoChatShellHomeClass, 'mx-auto flex min-h-0 flex-1 flex-col justify-center gap-8 overflow-y-auto py-6 md:gap-10')}>
+                <HomeHero />
+                <HomeSummaryCards />
+              </div>
+            </>
           )}
         </div>
         <div className="sticky z-10 shrink-0 bg-[var(--sto-page-bg)] pt-6 dark:bg-background">

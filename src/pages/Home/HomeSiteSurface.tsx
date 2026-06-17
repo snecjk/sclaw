@@ -7,6 +7,7 @@ import { HomeAssistant } from './HomeAssistant';
 import { HomeMainConversation } from './HomeMainConversation';
 import { useHomeConversationActive } from './use-home-conversation-active';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
+import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
 
 export function HomeSiteSurface({ seedText }: { seedText?: string }) {
   const showConversation = useHomeConversationActive();
@@ -18,10 +19,16 @@ export function HomeSiteSurface({ seedText }: { seedText?: string }) {
         {showConversation ? (
           <HomeMainConversation className="min-h-0 flex-1" />
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col justify-center gap-8 overflow-y-auto py-6 md:gap-10">
-            <HomeHero variant="site" />
-            <HomeWorkflowGuideCards onSend={handleHubSend} />
-          </div>
+          <>
+            <div className="mb-3 mt-2 flex w-full items-center justify-between px-4 sm:px-6">
+              <ChatEngineSelector />
+              <ChatModelSelector />
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col justify-center gap-8 overflow-y-auto py-6 md:gap-10">
+              <HomeHero variant="site" />
+              <HomeWorkflowGuideCards onSend={handleHubSend} />
+            </div>
+          </>
         )}
       </div>
       <div className="sticky z-10 shrink-0 bg-[var(--sto-page-bg)] pt-6 dark:bg-background">

@@ -14,6 +14,8 @@ import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, upsertEngineSessionRegistryEntry } from './session-registry';
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EngineSessionSummary } from './types';
+import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { ImageBlockParam, MessageParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
 
 type ActiveClaudeQuery = {
   close: () => void;
@@ -35,6 +37,13 @@ const liveClaudeMessages = new Map<string, Array<{
 }>>();
 const claudeRuntimeResults = new Map<string, NonNullable<EngineHistoryResult['runtimeResult']>>();
 let claudeConfigEnvQueue: Promise<void> = Promise.resolve();
+const CLAUDE_VISION_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+]);
+
 function getBundledClaudeExecutablePath(): string | undefined {
   if (!process.resourcesPath) return undefined;
 
@@ -227,6 +236,65 @@ function getAdditionalDirectories(cwd: string, media: Array<{ filePath: string }
     }
   }
   return [...directories];
+}
+
+function toClaudePromptStream(message: SDKUserMessage): AsyncIterable<SDKUserMessage> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      yield message;
+    },
+  };
+}
+
+async function buildClaudeUserMessage(
+  text: string,
+  media: Array<{ filePath: string; mimeType: string; fileName: string }>,
+): Promise<SDKUserMessage> {
+  const content: Array<ImageBlockParam | TextBlockParam> = [];
+  const fallbackRefs: string[] = [];
+
+  for (const item of media) {
+    if (CLAUDE_VISION_MIME_TYPES.has(item.mimeType)) {
+      const fileBuffer = await readFile(item.filePath);
+      content.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: item.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+          data: fileBuffer.toString('base64'),
+        },
+      });
+      continue;
+    }
+
+    fallbackRefs.push(`[media attached: ${resolve(item.filePath)} (${item.mimeType}) | ${resolve(item.filePath)}]`);
+  }
+
+  const textParts = [text.trim(), fallbackRefs.join('\n')].filter(Boolean);
+  if (textParts.length > 0) {
+    content.push({
+      type: 'text',
+      text: textParts.join('\n\n'),
+    });
+  }
+
+  if (content.length === 0) {
+    content.push({
+      type: 'text',
+      text: '(file attached)',
+    });
+  }
+
+  const message: MessageParam = {
+    role: 'user',
+    content,
+  };
+
+  return {
+    type: 'user',
+    message,
+    parent_tool_use_id: null,
+  };
 }
 
 function stringifyClaudeContent(content: unknown): string {
@@ -606,7 +674,7 @@ async function ensureClaudeRegistryEntry(sessionKey: string) {
 
 async function startClaudeQuery(
   sessionKey: string,
-  message: string,
+  prompt: string | AsyncIterable<SDKUserMessage>,
   options?: {
     additionalDirectories?: string[];
   },
@@ -666,7 +734,7 @@ async function startClaudeQuery(
         : undefined,
     };
     const query = sdk.query({
-      prompt: message,
+      prompt,
       options: existing?.sessionId
         ? {
           ...queryBaseOptions,
@@ -775,17 +843,14 @@ export const claudeAdapter: EngineAdapter = {
   },
 
   async sendMessageWithMedia(_ctx, params) {
-    const mediaPreamble = (params.media ?? [])
-      .map((item) => `[media attached: ${resolve(item.filePath)} (${item.mimeType}) | ${resolve(item.filePath)}]`)
-      .join('\n');
-    const nextMessage = mediaPreamble ? `${params.message}\n\n${mediaPreamble}` : params.message;
     const entry = await ensureClaudeRegistryEntry(params.sessionKey);
     const cwd = entry?.cwd;
     if (!cwd) {
       return { success: false, error: `Claude session ${params.sessionKey} is missing workspace cwd` };
     }
     const additionalDirectories = getAdditionalDirectories(cwd, params.media ?? []);
-    return startClaudeQuery(params.sessionKey, nextMessage, { additionalDirectories });
+    const prompt = await buildClaudeUserMessage(params.message, params.media ?? []);
+    return startClaudeQuery(params.sessionKey, toClaudePromptStream(prompt), { additionalDirectories });
   },
 
   async abortRun(_ctx, params) {

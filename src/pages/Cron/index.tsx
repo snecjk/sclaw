@@ -15,22 +15,32 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { toast } from 'sonner';
 import { stoMainInnerShell } from '@/lib/surfaces';
 import { useTranslation } from 'react-i18next';
-import type { CronJobCreateInput } from '@/types/cron';
 import type { ManagedLocalTask } from '@/stores/cron';
 import { CronTaskHero } from './components/CronTaskHero';
 import { CronTaskCard } from './components/CronTaskCard';
-import { CronTaskCreateModal } from './components/CronTaskCreateModal';
+import { CronTaskCreateModal, type CronTaskFormInput } from './components/CronTaskCreateModal';
 import { CronTaskEmptyState, type RecommendTask } from './components/CronTaskEmptyState';
 import { filterTasks, sortTasks } from './components/utils';
+import { prepareDingTalkAgentTurnMessage } from '@/lib/scheduled-task-recipients';
 
 function resolvePreferredAgentByEngine(
   agents: Array<{ id: string; engineType?: 'openclaw' | 'claude'; workspace: string }>,
   defaultAgentId: string,
-  engineType: 'openclaw' | 'claude',
+  _engineType: 'openclaw' | 'claude',
 ) {
-  const engineAgents = agents.filter((agent) => (agent.engineType ?? 'openclaw') === engineType);
-  if (engineAgents.length === 0) return null;
-  return engineAgents.find((agent) => agent.id === defaultAgentId) ?? engineAgents[0] ?? null;
+  if (agents.length === 0) return null;
+  return agents.find((agent) => agent.id === defaultAgentId) ?? agents[0] ?? null;
+}
+
+function toTriggerErrorMessage(error: unknown, t: (key: string, options?: Record<string, unknown>) => string): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes('already running')) {
+    return t('toast.alreadyRunning');
+  }
+
+  return t('toast.failedTrigger', { error: message });
 }
 
 export function Cron() {
@@ -51,11 +61,8 @@ export function Cron() {
   const [recommendInitialValues, setRecommendInitialValues] = useState<{ name?: string; message?: string } | undefined>(undefined);
 
   // Fetch jobs on mount
-  const hasClaudeAgent = useMemo(
-    () => agents.some((agent) => agent.engineType === 'claude'),
-    [agents],
-  );
-  const canCreateTasks = isGatewayRunning || hasClaudeAgent;
+  const hasAnyAgent = useMemo(() => agents.length > 0, [agents]);
+  const canCreateTasks = isGatewayRunning || hasAnyAgent;
 
   useEffect(() => {
     fetchJobs();
@@ -70,14 +77,15 @@ export function Cron() {
   }, [safeJobs, searchQuery, sortValue]);
 
   const handleSave = useCallback(
-    async (input: CronJobCreateInput & { engineType: 'openclaw' | 'claude' }) => {
+    async (input: CronTaskFormInput) => {
       const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, input.engineType);
       try {
         if (editingJob) {
           if (editingJob.engineType === 'claude') {
-            if (!selectedAgent?.workspace) {
+            if (!selectedAgent?.id) {
               throw new Error('所选 Claude 代理缺少工作区，无法更新本地定时任务');
             }
+            const promptTemplate = prepareDingTalkAgentTurnMessage(input.message, input.dingTalkMentions);
             await updateJob(editingJob.id, {
               engineType: 'claude',
               payload: {
@@ -85,9 +93,10 @@ export function Cron() {
                 name: input.name,
                 enabled: editingJob.enabled,
                 cronExpr: input.schedule,
-                promptTemplate: input.message,
+                promptTemplate,
                 agentId: selectedAgent.id,
-                workspacePath: selectedAgent.workspace,
+                workspacePath: input.claudeWorkspacePath || selectedAgent.workspace,
+                permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
               },
             });
           } else {
@@ -106,17 +115,19 @@ export function Cron() {
           toast.success(t('toast.updated'));
         } else {
           if (input.engineType === 'claude') {
-            if (!selectedAgent.workspace) {
+            if (!selectedAgent?.id) {
               throw new Error('所选 Claude 代理缺少工作区，无法创建本地定时任务');
             }
+            const promptTemplate = prepareDingTalkAgentTurnMessage(input.message, input.dingTalkMentions);
             await createJob({
               engineType: 'claude',
               payload: {
                 name: input.name,
                 cronExpr: input.schedule,
-                promptTemplate: input.message,
+                promptTemplate,
                 agentId: selectedAgent.id,
-                workspacePath: selectedAgent.workspace,
+                workspacePath: input.claudeWorkspacePath || selectedAgent.workspace,
+                permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
               },
             });
           } else {
@@ -180,7 +191,7 @@ export function Cron() {
         toast.success(t('toast.triggered'));
       } catch (error) {
         console.error('Failed to trigger cron job:', error);
-        toast.error(t('toast.failedTrigger', { error: error instanceof Error ? error.message : String(error) }));
+        toast.error(toTriggerErrorMessage(error, t));
       }
     },
     [triggerJob, t, navigate, location.pathname]
@@ -237,7 +248,7 @@ export function Cron() {
             <div className="flex items-center gap-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-4 mb-6">
               <AlertCircle className="h-5 w-5 shrink-0 text-yellow-600 dark:text-yellow-400" />
               <span className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
-                {hasClaudeAgent ? 'Gateway 未连接，现有本地任务不可用；Claude 本地任务仍可查看和创建。' : t('gatewayWarning')}
+                {hasAnyAgent ? 'Gateway 未连接，现有 OpenClaw 本地任务不可用；仍可创建和查看 Claude 本地任务。' : t('gatewayWarning')}
               </span>
             </div>
           )}

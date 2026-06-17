@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { syncClaudeSkillsForAgent } from './claude-skill-bridge';
 import { listClaudeBridgePluginPaths } from './claude-plugin-bridge';
 import { getDefaultProviderAccountId, getProviderAccount } from './providers/provider-store';
@@ -18,6 +19,7 @@ import type {
 
 export interface ClaudeTaskRuntimeContext {
   accountId?: string;
+  additionalDirectories?: string[];
   agentId: string;
   cwd: string;
   env: NodeJS.ProcessEnv;
@@ -55,6 +57,19 @@ async function resolveTaskWorkspacePath(definition: ClaudeScheduledTaskDefinitio
   }
 
   throw new Error(`Claude task ${definition.id} is missing workspace path`);
+}
+
+function buildAdditionalDirectories(cwd: string): string[] {
+  const directories = new Set<string>();
+  const userHome = expandPath('~') || homedir();
+  const normalizedCwd = cwd.trim();
+  const normalizedHome = userHome.trim();
+
+  if (normalizedHome && normalizedHome !== normalizedCwd) {
+    directories.add(normalizedHome);
+  }
+
+  return [...directories];
 }
 
 let claudeConfigEnvQueue: Promise<void> = Promise.resolve();
@@ -225,6 +240,7 @@ export async function buildClaudeTaskRuntimeContext(
 
   return {
     accountId: launch.accountId,
+    additionalDirectories: buildAdditionalDirectories(cwd),
     agentId: definition.agentId,
     cwd,
     env: await buildClaudeEnvForAccount(launch.accountId),

@@ -1241,6 +1241,7 @@ interface AgentDetailPageProps {
 export function AgentDetailPage({ agent, onBack }: AgentDetailPageProps) {
   const { t } = useTranslation('agents');
   const [tab, setTab] = useState('info');
+  const hiddenTabs = new Set(['skills', 'tasks']);
 
   const tabs = [
     { value: 'info', label: t('detail.tabInfo'), icon: <FileText className="h-4 w-4" /> },
@@ -1285,7 +1286,7 @@ export function AgentDetailPage({ agent, onBack }: AgentDetailPageProps) {
       {/* Tabs */}
       <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList className="flex h-auto w-full items-stretch gap-0 rounded-none border-t-0 border-x-0 border-b border-border/40 bg-transparent p-0">
-          {tabs.map((tb) => (
+          {tabs.filter((tb) => !hiddenTabs.has(tb.value)).map((tb) => (
             <TabsTrigger key={tb.value} value={tb.value}
               className={cn(
                 'group relative -mb-px flex items-center gap-2 rounded-none border-b-2 border-transparent bg-transparent px-5 py-3 text-[13px] font-medium text-muted-foreground/60 transition-colors duration-150',

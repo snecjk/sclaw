@@ -1,7 +1,7 @@
 /**
  * 无 CRM 周报策略权限时的首页：Hero + 能力卡片 + 底部输入（色板对齐 docs/sto-design.md）。
  */
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Bot, Cpu, Repeat2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAgentsStore } from '@/stores/agents';
@@ -10,6 +10,7 @@ import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
 import { stoChatShellHomeClass } from '@/lib/surfaces';
 import { ChatInput } from '@/pages/Chat/ChatInput';
+import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 import { HomeHero } from './HomeHero';
 import { HomeMainConversation } from './HomeMainConversation';
@@ -42,7 +43,6 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessions = useChatStore((s) => s.sessions);
   const agents = useAgentsStore((s) => s.agents);
-  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
   const error = useChatStore((s) => s.error);
@@ -57,9 +57,6 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
   const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
     ? currentAgent?.engineType
     : currentSession?.engineType ?? currentAgent?.engineType;
-  useEffect(() => {
-    void fetchAgents();
-  }, [fetchAgents]);
 
   const gatewayLine = useMemo(() => {
     const port = gatewayStatus.port ?? 18789;
@@ -81,74 +78,80 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
         {showConversation ? (
           <HomeMainConversation className="min-h-0 flex-1" />
         ) : (
-        <div className={cn(stoChatShellHomeClass, 'flex min-h-full flex-col justify-center gap-10 overflow-y-auto overscroll-y-contain py-6')}>
-        <HomeHero />
+          <>
+            <div className={cn(stoChatShellHomeClass, 'mb-3 mt-2 flex w-full items-center justify-between')}>
+              <ChatEngineSelector />
+              <ChatModelSelector />
+            </div>
+            <div className={cn(stoChatShellHomeClass, 'flex min-h-full flex-col justify-center gap-10 overflow-y-auto overscroll-y-contain py-6')}>
+              <HomeHero />
 
-        <div className="grid w-full gap-4 sm:grid-cols-3">
-          {(
-            [
-              {
-                icon: Cpu,
-                titleKey: 'agentHub.cardTasksTitle' as const,
-                descKey: 'agentHub.cardTasksDesc' as const,
-              },
-              {
-                icon: Repeat2,
-                titleKey: 'agentHub.cardExecTitle' as const,
-                descKey: 'agentHub.cardExecDesc' as const,
-              },
-              {
-                icon: Bot,
-                titleKey: 'agentHub.cardMultiTitle' as const,
-                descKey: 'agentHub.cardMultiDesc' as const,
-              },
-            ] as const
-          ).map(({ icon: Icon, titleKey, descKey }) => (
-            <div
-              key={titleKey}
-              className={cn(
-                'flex flex-col rounded-2xl border bg-white p-5 shadow-[0_4px_20px_rgba(29,33,41,0.06)] dark:bg-card',
-                BORDER_DEFAULT,
-              )}
-            >
-              <div className="flex items-start gap-3">
-                <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-xl', INFO_ICON_WRAP)}>
-                  <Icon className="h-6 w-6" strokeWidth={1.75} aria-hidden />
-                </div>
-                <div className="min-w-0 flex-1 text-left">
-                  <span className={TAG_FUNCTION}>{t('agentHub.functionTag')}</span>
-                  <h3 className={cn('mt-2 text-base font-semibold', TEXT_PRIMARY)}>{t(titleKey)}</h3>
-                  <p className={cn('mt-1 text-sm leading-relaxed', TEXT_SECONDARY)}>{t(descKey)}</p>
-                </div>
+              <div className="grid w-full gap-4 sm:grid-cols-3">
+                {(
+                  [
+                    {
+                      icon: Cpu,
+                      titleKey: 'agentHub.cardTasksTitle' as const,
+                      descKey: 'agentHub.cardTasksDesc' as const,
+                    },
+                    {
+                      icon: Repeat2,
+                      titleKey: 'agentHub.cardExecTitle' as const,
+                      descKey: 'agentHub.cardExecDesc' as const,
+                    },
+                    {
+                      icon: Bot,
+                      titleKey: 'agentHub.cardMultiTitle' as const,
+                      descKey: 'agentHub.cardMultiDesc' as const,
+                    },
+                  ] as const
+                ).map(({ icon: Icon, titleKey, descKey }) => (
+                  <div
+                    key={titleKey}
+                    className={cn(
+                      'flex flex-col rounded-2xl border bg-white p-5 shadow-[0_4px_20px_rgba(29,33,41,0.06)] dark:bg-card',
+                      BORDER_DEFAULT,
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-xl', INFO_ICON_WRAP)}>
+                        <Icon className="h-6 w-6" strokeWidth={1.75} aria-hidden />
+                      </div>
+                      <div className="min-w-0 flex-1 text-left">
+                        <span className={TAG_FUNCTION}>{t('agentHub.functionTag')}</span>
+                        <h3 className={cn('mt-2 text-base font-semibold', TEXT_PRIMARY)}>{t(titleKey)}</h3>
+                        <p className={cn('mt-1 text-sm leading-relaxed', TEXT_SECONDARY)}>{t(descKey)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap justify-center gap-3">
+                {(
+                  [
+                    { dot: DOT_SUCCESS, label: t('agentHub.statusLabel'), value: t('agentHub.statusReady') },
+                    { dot: DOT_BRAND, label: t('agentHub.collabLabel'), value: t('agentHub.collabValue') },
+                    { dot: DOT_BRAND, label: t('agentHub.toolsLabel'), value: t('agentHub.toolsValue') },
+                  ] as const
+                ).map((row) => (
+                  <div
+                    key={row.label}
+                    className={cn(
+                      'flex items-center gap-2 rounded-xl border bg-[#F5F6F7] px-4 py-2.5 text-xs dark:bg-muted/60',
+                      BORDER_DEFAULT,
+                    )}
+                  >
+                    <span className={cn('font-medium text-[#4E5969] dark:text-muted-foreground')}>{row.label}</span>
+                    <span className="flex items-center gap-1.5 font-semibold text-[#1D2129] dark:text-foreground">
+                      <span className={cn('h-2 w-2 shrink-0 rounded-full', row.dot)} aria-hidden />
+                      {row.value}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap justify-center gap-3">
-          {(
-            [
-              { dot: DOT_SUCCESS, label: t('agentHub.statusLabel'), value: t('agentHub.statusReady') },
-              { dot: DOT_BRAND, label: t('agentHub.collabLabel'), value: t('agentHub.collabValue') },
-              { dot: DOT_BRAND, label: t('agentHub.toolsLabel'), value: t('agentHub.toolsValue') },
-            ] as const
-          ).map((row) => (
-            <div
-              key={row.label}
-              className={cn(
-                'flex items-center gap-2 rounded-xl border bg-[#F5F6F7] px-4 py-2.5 text-xs dark:bg-muted/60',
-                BORDER_DEFAULT,
-              )}
-            >
-              <span className={cn('font-medium text-[#4E5969] dark:text-muted-foreground')}>{row.label}</span>
-              <span className="flex items-center gap-1.5 font-semibold text-[#1D2129] dark:text-foreground">
-                <span className={cn('h-2 w-2 shrink-0 rounded-full', row.dot)} aria-hidden />
-                {row.value}
-              </span>
-            </div>
-          ))}
-        </div>
-        </div>
+          </>
         )}
       </div>
 
