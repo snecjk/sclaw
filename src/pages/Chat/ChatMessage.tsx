@@ -222,6 +222,44 @@ export const ChatMessage = memo(function ChatMessage({
 
   const hasStreamingToolStatus = isStreaming && streamingTools.length > 0;
   if (!hasText && !showThinkingPanel && images.length === 0 && visibleTools.length === 0 && !hasRenderableFiles && extractedRefs.length === 0 && !hasStreamingToolStatus && !parameterForm) return null;
+  const showRenderDebugPanel = !isUser && isFilePreviewDebugEnabled();
+  const debugMarkdownSource = useMemo(
+    () => (onPreviewFile ? preprocessTextForPreviewLinks(text) : text),
+    [text, onPreviewFile],
+  );
+  const debugLinks = useMemo(() => {
+    if (!showRenderDebugPanel) return [];
+    const refs = new Set<string>();
+    const regex = /\[([^\]]*)\]\(([^)]+)\)/g;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(debugMarkdownSource)) !== null) {
+      const label = (match[1] || '').trim();
+      const href = (match[2] || '').trim();
+      if (!href) continue;
+      refs.add(`${label || '(empty label)'} -> ${href}`);
+    }
+    return Array.from(refs);
+  }, [debugMarkdownSource, showRenderDebugPanel]);
+  const copyDebugSnapshot = useCallback(async () => {
+    const snapshot = [
+      '[StoClaw Render Debug Snapshot]',
+      '',
+      '[Raw text]',
+      text || '(empty)',
+      '',
+      '[Rendered markdown source]',
+      debugMarkdownSource || '(empty)',
+      '',
+      '[Detected markdown links]',
+      debugLinks.length > 0 ? debugLinks.join('\n') : '(none)',
+    ].join('\n');
+    try {
+      await navigator.clipboard.writeText(snapshot);
+      toast.success('已复制渲染调试快照');
+    } catch {
+      toast.error('复制失败，请重试');
+    }
+  }, [debugLinks, debugMarkdownSource, text]);
 
   if (isSystem) {
     const compactText = text.replace(/\s+/g, ' ').trim();
@@ -487,7 +525,11 @@ export const ChatMessage = memo(function ChatMessage({
 
         {/* Hover row for assistant messages — only when there is real text content */}
         {!isUser && hasText && (
-          <AssistantHoverBar text={text} timestamp={message.timestamp} />
+          <AssistantHoverBar
+            text={text}
+            timestamp={message.timestamp}
+            onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
+          />
         )}
       </div>
 
@@ -618,7 +660,15 @@ function UserHoverBar({
 
 // ── Assistant hover bar (timestamp + copy, shown on group hover) ─
 
-function AssistantHoverBar({ text, timestamp }: { text: string; timestamp?: number }) {
+function AssistantHoverBar({
+  text,
+  timestamp,
+  onCopyDebugSnapshot,
+}: {
+  text: string;
+  timestamp?: number;
+  onCopyDebugSnapshot?: () => Promise<void> | void;
+}) {
   const [copied, setCopied] = useState(false);
 
   const copyContent = useCallback(() => {
@@ -637,6 +687,11 @@ function AssistantHoverBar({ text, timestamp }: { text: string; timestamp?: numb
         size="icon"
         className="h-7 w-7 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]"
         onClick={copyContent}
+        onDoubleClick={() => {
+          if (!onCopyDebugSnapshot) return;
+          void onCopyDebugSnapshot();
+        }}
+        title={onCopyDebugSnapshot ? '单击复制内容，双击复制调试快照' : undefined}
       >
         {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
       </Button>

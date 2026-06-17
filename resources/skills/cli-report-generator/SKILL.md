@@ -29,7 +29,7 @@ uv run python scripts/generate_report.py \
 ## 输出约束
 
 生成文件后：
-- 在回答中输出生成的文件绝对路径
+- 在回答中用 Markdown 链接输出**绝对路径**：`[report.html](file:///绝对路径)`（禁止 `./.claw-output/...` 或 `[report.html](report.html)`）
 - **绝对不要**执行 `open` 命令或自动唤起浏览器
 - **绝对不要**说"已在浏览器中打开"、"已为您打开"等暗示已自动打开的话
 - 对话界面会自动识别文件路径并支持右侧预览

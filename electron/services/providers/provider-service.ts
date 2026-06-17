@@ -28,10 +28,25 @@ import {
   setDefaultProvider,
   storeApiKey,
 } from '../../utils/secure-storage';
-import { getActiveOpenClawProviders, getOpenClawProvidersConfig } from '../../utils/openclaw-auth';
+import { getActiveOpenClawProviders, getOpenClawProvidersConfig, removeProviderFromOpenClaw } from '../../utils/openclaw-auth';
 import { getOpenClawProviderKeyForType } from '../../utils/provider-keys';
 import type { ProviderWithKeyInfo } from '../../shared/providers/types';
 import { logger } from '../../utils/logger';
+import { getStoToken } from '../../utils/auth-store';
+import {
+  isStaleStoPlaceholderAccount,
+  isStoInternalOpenClawKey,
+} from './sto-placeholder-utils';
+
+async function filterAccountsForAuthenticatedStoSync(
+  accounts: ProviderAccount[],
+): Promise<ProviderAccount[]> {
+  const token = await getStoToken();
+  if (!token) {
+    return accounts;
+  }
+  return accounts.filter((account) => !isStaleStoPlaceholderAccount(account));
+}
 
 function maskApiKey(apiKey: string | null): string | null {
   if (!apiKey) return null;
@@ -70,7 +85,7 @@ export class ProviderService {
       if (activeProviders.size > 0) {
         accounts = await this.seedAccountsFromOpenClawConfig();
       }
-      return accounts;
+      return filterAccountsForAuthenticatedStoSync(accounts);
     }
 
     // Sync check: hide accounts whose provider no longer exists in OpenClaw
@@ -121,7 +136,7 @@ export class ProviderService {
       }
     }
 
-    return accounts;
+    return filterAccountsForAuthenticatedStoSync(accounts);
   }
 
   /**
@@ -167,6 +182,7 @@ export class ProviderService {
 
     for (const [key, entry] of Object.entries(providers)) {
       if (existingIds.has(key)) continue;
+      if (isStoInternalOpenClawKey(key)) continue;
 
       const definition = getProviderDefinition(key);
       const isBuiltin = (BUILTIN_PROVIDER_TYPES as readonly string[]).includes(key);

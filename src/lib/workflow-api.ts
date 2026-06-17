@@ -96,12 +96,19 @@ export async function listWorkflowTemplates(
   };
 }
 
+const WORKFLOW_TEMPLATES_NO_ACCESS_MESSAGE =
+  '未查询到可访问的工作流模板，您可能没有相关权限。请联系管理员申请工作流访问权限。';
+
 /** Query templates by keyword; adapts paginated API to legacy matchedItems shape. */
 export async function searchWorkflowTemplates(
   query: string,
   pageSize = 3,
 ): Promise<WorkflowTemplateSearchResponse> {
-  const result = await listWorkflowTemplates({ query, page: 1, pageSize });
+  const trimmed = query.trim();
+  const result = await listWorkflowTemplates({ query: trimmed, page: 1, pageSize });
+  if (trimmed && result.items.length === 0) {
+    throw new Error(`${WORKFLOW_TEMPLATES_NO_ACCESS_MESSAGE}（搜索：${trimmed}）`);
+  }
   return {
     matchedItems: result.items,
     recommendedItems: [],

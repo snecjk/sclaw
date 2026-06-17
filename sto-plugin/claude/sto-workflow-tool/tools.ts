@@ -75,6 +75,8 @@ interface WorkflowRunResponse {
 
 const MAX_PAGE_SIZE = 50;
 const DEFAULT_TIMEOUT_MS = 30_000;
+const WORKFLOW_TEMPLATES_NO_ACCESS_MESSAGE =
+  "未查询到可访问的工作流模板，您可能没有相关权限。请联系管理员申请工作流访问权限。";
 
 function normalizeBaseUrl(baseUrl: string): string {
   const normalized = baseUrl.trim().replace(/\/+$/, "");
@@ -184,7 +186,12 @@ async function searchTemplates(
       body: JSON.stringify({ query, page: 1, pageSize: clampPageSize(limit) }),
     },
   );
-  return items ?? [];
+  const templates = items ?? [];
+  if (templates.length === 0) {
+    const suffix = query.trim() ? `（搜索：${query.trim()}）` : "";
+    throw new Error(`${WORKFLOW_TEMPLATES_NO_ACCESS_MESSAGE}${suffix}`);
+  }
+  return templates;
 }
 
 async function resolveTemplate(

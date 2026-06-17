@@ -192,7 +192,42 @@ export function shouldInvertInDark(_type: ProviderType | string): boolean {
  * Model / provider IDs that should be hidden from all user-facing lists.
  * These are internal routing providers not intended for direct selection.
  */
-export const HIDDEN_PROVIDER_IDS = new Set(['sto-dynamic-agent-route']);
+export const HIDDEN_PROVIDER_IDS = new Set([
+  'sto-dynamic-agent-route',
+  /** Legacy OpenClaw runtime key for mis-typed custom/sto provider imports */
+  'custom-sto',
+]);
+
+/** True when the account is STO-managed (SSO sync), not a user-added custom provider. */
+export function isStoManagedProviderAccount(account: Pick<ProviderAccount, 'id' | 'vendorId'>): boolean {
+  return (
+    account.vendorId === 'sto'
+    || account.id === 'sto'
+    || account.id.startsWith('sto-model-')
+  );
+}
+
+/** STO catalog is ready only after remote /v1/models sync populated customModels. */
+export function isStoProviderCatalogReady(account: ProviderAccount): boolean {
+  return isStoManagedProviderAccount(account) && (account.metadata?.customModels?.length ?? 0) > 0;
+}
+
+/**
+ * Incomplete STO artifacts from openclaw.json import or a failed first sync.
+ * Hide these until SSO model sync succeeds so users do not see Figure-1 placeholder cards.
+ */
+export function isStaleStoProviderPlaceholder(account: ProviderAccount): boolean {
+  if (account.id === 'custom-sto' || account.id.startsWith('custom-sto')) {
+    return true;
+  }
+  if (account.vendorId === 'custom' && account.id.toLowerCase().includes('sto')) {
+    return true;
+  }
+  if (isStoManagedProviderAccount(account) && !isStoProviderCatalogReady(account)) {
+    return true;
+  }
+  return false;
+}
 
 /** Provider list shown in the Setup wizard */
 export const SETUP_PROVIDERS = PROVIDER_TYPE_INFO;
