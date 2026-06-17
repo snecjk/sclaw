@@ -8,7 +8,6 @@ import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
-import { stoChatShellHomeClass } from '@/lib/surfaces';
 import { ChatInput } from '@/pages/Chat/ChatInput';
 import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
@@ -79,11 +78,11 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
           <HomeMainConversation className="min-h-0 flex-1" />
         ) : (
           <>
-            <div className={cn(stoChatShellHomeClass, 'mb-3 mt-2 flex w-full items-center justify-between')}>
+            <div className="mx-auto mb-3 mt-2 flex w-full max-w-[960px] items-center justify-between">
               <ChatEngineSelector />
               <ChatModelSelector />
             </div>
-            <div className={cn(stoChatShellHomeClass, 'flex min-h-full flex-col justify-center gap-10 overflow-y-auto overscroll-y-contain py-6')}>
+            <div className="mx-auto flex min-h-0 w-full max-w-[960px] flex-1 flex-col justify-center gap-10 overflow-y-auto overscroll-y-contain pb-6">
               <HomeHero />
 
               <div className="grid w-full gap-4 sm:grid-cols-3">
@@ -156,7 +155,7 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
       </div>
 
       <div className="shrink-0 bg-[var(--sto-page-bg)] px-4 pb-4 pt-4 sm:px-6 dark:bg-background">
-        <div className={cn(stoChatShellHomeClass, 'w-full')}>
+        <div className="mx-auto w-full max-w-[960px]">
           <section className="flex flex-col" aria-label={t('assistant.placeholder')}>
             <ChatInput
               {...useChatInputBindings({

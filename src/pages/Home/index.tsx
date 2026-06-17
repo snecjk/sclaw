@@ -1,8 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
-import { stoChatShellHomeClass } from '@/lib/surfaces';
 import { HomeAgentHubSurface } from './HomeAgentHubSurface';
 import { HomeSiteSurface } from './HomeSiteSurface';
 import { HomeHero } from './HomeHero';
@@ -138,7 +136,7 @@ export function Home() {
                 <ChatEngineSelector />
                 <ChatModelSelector />
               </div>
-              <div className={cn(stoChatShellHomeClass, 'mx-auto flex min-h-0 flex-1 flex-col justify-center gap-8 overflow-y-auto py-6 md:gap-10')}>
+              <div className="flex min-h-0 flex-1 flex-col justify-center gap-8 overflow-y-auto py-6 md:gap-10">
                 <HomeHero />
                 <HomeSummaryCards />
               </div>
@@ -146,9 +144,7 @@ export function Home() {
           )}
         </div>
         <div className="sticky z-10 shrink-0 bg-[var(--sto-page-bg)] pt-6 dark:bg-background">
-          <div className={stoChatShellHomeClass}>
-            <HomeAssistant seedText={seedText} onSend={handleHubSend} />
-          </div>
+          <HomeAssistant seedText={seedText} onSend={handleHubSend} />
         </div>
       </div>
       <TaskCreateModal
