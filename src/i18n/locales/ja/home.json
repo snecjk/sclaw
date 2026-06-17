@@ -53,6 +53,19 @@
       "placeholder": "本社精算照合表を作成してください"
     }
   },
+  "homeWorkflowCard": {
+    "createPrompt": "{{label}} ワークフローを作成",
+    "startPrompt": "{{label}} を起動",
+    "bodyDetail": "クリックしてワークフローを設定・起動",
+    "stat1Label": "状態",
+    "stat1Value": "待機中",
+    "stat2Label": "ノード",
+    "stat2Value": "-",
+    "stat3Label": "最終実行",
+    "stat3Value": "-",
+    "footerTeam": "ワークフローチーム",
+    "footerHint": "クリックして起動"
+  },
   "hero": {
     "title": "STO Claw — 経営管理をより効率的に",
     "subtitle": "AI ワークスペースで組織の連携と現場オペレーションを強化します。"

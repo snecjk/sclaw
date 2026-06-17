@@ -55,13 +55,6 @@ export interface TaskViewModel {
   engineType: 'openclaw' | 'claude';
 }
 
-/** 推荐任务（空状态展示） */
-export interface RecommendTask {
-  title: string;
-  desc: string;
-  schedule: string;
-}
-
 /** 状态计数 */
 export interface StatusCounts {
   running: number;

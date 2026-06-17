@@ -470,6 +470,49 @@ export async function publishWorkflowDefinition(
   return definitionFromDetail(data);
 }
 
+// ── 9. Rename workflow ──────────────────────────────────────────
+
+export async function renameWorkflow(workflowId: string, name: string): Promise<void> {
+  console.log(
+    '[workflow-trace] PUT /agent/v1/workflows/%s/name name=%s',
+    workflowId,
+    name,
+  );
+  const init: RequestInit = {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify({ name }),
+  };
+  await unwrap(
+    hostApiFetch<ApiResponse<{ workflowId: string; name: string }>>(`/agent/v1/workflows/${workflowId}/name`, init),
+  );
+  console.log(
+    '[workflow-trace] PUT /agent/v1/workflows/%s/name ok name=%s',
+    workflowId,
+    name,
+  );
+}
+
+// ── 10. Delete workflow ──────────────────────────────────────────
+
+export async function deleteWorkflow(workflowId: string): Promise<void> {
+  console.log(
+    '[workflow-trace] DELETE /agent/v1/workflows/%s',
+    workflowId,
+  );
+  const init: RequestInit = {
+    method: 'DELETE',
+    headers: authHeaders(),
+  };
+  await unwrap(
+    hostApiFetch<ApiResponse<null>>(`/agent/v1/workflows/${workflowId}`, init),
+  );
+  console.log(
+    '[workflow-trace] DELETE /agent/v1/workflows/%s ok',
+    workflowId,
+  );
+}
+
 // ── Legacy compatibility: query execution status (fallback) ─────
 
 export async function fetchWorkflowStatus(runId: string): Promise<WorkflowExecutionState | null> {

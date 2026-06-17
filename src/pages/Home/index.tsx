@@ -94,6 +94,7 @@ export function Home() {
     handleHubSend(seedText, undefined, undefined, undefined, seedWorkflowId);
   }, [seedText, seedWorkflowId, gatewayStatus.state, handleHubSend, setSearchParams]);
 
+	// 网点用户看到 首页 UI 
   if (isSite) {
     return (
       <>

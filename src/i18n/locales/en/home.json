@@ -53,6 +53,19 @@
       "placeholder": "Help me prepare an HQ settlement reconciliation sheet"
     }
   },
+  "homeWorkflowCard": {
+    "createPrompt": "{{label}} — create workflow",
+    "startPrompt": "Start {{label}}",
+    "bodyDetail": "Click to configure and start this workflow",
+    "stat1Label": "Status",
+    "stat1Value": "Pending",
+    "stat2Label": "Nodes",
+    "stat2Value": "-",
+    "stat3Label": "Last run",
+    "stat3Value": "-",
+    "footerTeam": "Workflow team",
+    "footerHint": "Click to start"
+  },
   "hero": {
     "title": "STO Claw — smarter business management",
     "subtitle": "An AI workspace that drives team collaboration and stronger day-to-day operations."
