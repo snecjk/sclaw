@@ -21,11 +21,18 @@
         "switchAgentTitle": "切换到该 Agent 的主会话；新对话也会在该 Agent 下进行",
         "defaultAgentMark": "（默认）",
         "currentModel": "模型",
+        "modelNotConfigured": "未配置",
         "switchModelTitle": "切换对话模型",
         "modelTagBuiltin": "内置",
         "modelTagCustom": "自定义",
         "noModels": "暂无可用模型",
-        "modelSwitchFailed": "切换模型失败：{{message}}"
+        "modelSwitchFailed": "切换模型失败：{{message}}",
+        "searchToggle": "搜索会话记录",
+        "searchPlaceholder": "搜索会话消息",
+        "searchPrev": "上一条",
+        "searchNext": "下一条",
+        "searchClear": "清空搜索",
+        "searchClose": "关闭搜索"
     },
     "composer": {
         "attachFiles": "添加文件",
@@ -38,6 +45,8 @@
         "send": "发送",
         "stop": "停止",
         "gatewayConnected": "已连接",
+        "claudeReady": "Claude Agent 已就绪",
+        "claudeReadyDetail": "Claude Agent 直连可用，不受 OpenClaw 网关启动状态限制",
         "gatewayStatus": "gateway {{state}} | port: {{port}} {{pid}}",
         "retryFailedAttachments": "重试失败的附件",
         "dingtalkMentionTitle": "选择钉钉联系人或群",
@@ -85,6 +94,12 @@
     },
     "sessionList": {
         "mainSessionTitle": "主会话"
+    },
+    "messageActions": {
+        "copy": "复制",
+        "copyFailed": "复制失败",
+        "editAndResend": "编辑再次发送",
+        "editUnavailable": "当前页面暂不支持编辑再次发送"
     },
     "historyBuckets": {
         "today": "今天",

@@ -12,6 +12,7 @@ import {
   splitDingTalkSentPreviewText,
   type DingTalkSentMessagePreview,
 } from '../../../shared/dingtalk-sent-display';
+import { maskDwsSensitiveIdsForDisplay } from './message-utils';
 
 interface DingTalkSentPreviewProps {
   previews: DingTalkSentMessagePreview[];
@@ -30,6 +31,8 @@ export const DingTalkSentPreview = memo(function DingTalkSentPreview({
     <div className={cn('w-full space-y-2', className)}>
       {previews.map((preview, index) => {
         const { body, disclaimer } = splitDingTalkSentPreviewText(preview.text);
+        const maskedBody = maskDwsSensitiveIdsForDisplay(body);
+        const recipientLabel = maskDwsSensitiveIdsForDisplay(preview.recipientLabel);
         const footerText = disclaimer || DINGTALK_AGENT_SEND_DISCLAIMER_PLAIN_TEXT;
         return (
           <div
@@ -45,19 +48,21 @@ export const DingTalkSentPreview = memo(function DingTalkSentPreview({
                     : t('composer.dingtalkSentPreviewTo')}
                 </span>
                 <DingTalkMentionTag
-                  name={preview.recipientLabel}
+                  name={recipientLabel}
                   kind={preview.recipientKind === 'group' ? 'group' : 'user'}
                 />
               </div>
               {preview.title && preview.title !== '消息' ? (
                 <div className="truncate pl-5">
-                  {t('composer.dingtalkSentPreviewMessageTitle', { title: preview.title })}
+                  {t('composer.dingtalkSentPreviewMessageTitle', {
+                    title: maskDwsSensitiveIdsForDisplay(preview.title),
+                  })}
                 </div>
               ) : null}
             </div>
-            {body ? (
+            {maskedBody ? (
               <div className="prose prose-sm max-w-none text-sm leading-relaxed text-foreground dark:prose-invert">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{maskedBody}</ReactMarkdown>
               </div>
             ) : null}
             <p className="mt-2 border-t border-border/60 pt-2 text-xs leading-relaxed text-[#999999] dark:text-muted-foreground">

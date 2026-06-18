@@ -11,7 +11,6 @@ import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
-import { stripWorkflowContextForDisplay } from '@/lib/workflow-context';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
 import { buildCronSessionHistoryPath, isCronSessionKey, parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './chat/cron-session-utils';
 import { sanitizeSessionDisplayField } from './chat/helpers';
@@ -24,6 +23,7 @@ import {
   type ContentBlock,
   type RawMessage,
   type ToolStatus,
+  type SessionRuntimeState,
 } from './chat/types';
 import type { WorkflowExecutionState } from '@/types/workflow';
 import { mergeLocalWorkflowTurnsFromCurrent, mergeWorkflowTurnsFromMemory } from '@/lib/workflow-local-turn';
@@ -41,9 +41,12 @@ import {
   reconcilePendingWorkflowForSession,
   recoverParameterFormsOnHistoryLoad,
 } from './chat/parameter-form-recovery';
+import type { ChatSet } from './chat/store-api';
 import { dispatchBuiltinToolResult } from '@/lib/builtin-tool-dispatch';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
+
+const NEW_SESSION_TEMP_LABEL = '新对话';
 
 export type {
   AttachedFileMeta,
@@ -60,8 +63,17 @@ export type {
 // between tool-result finals and the next delta.
 let _lastChatEventAt = 0;
 
-/** Normalize a timestamp to milliseconds. Handles both seconds and ms. */
-function toMs(ts: number): number {
+/** Normalize a timestamp to milliseconds. Handles seconds, ms, and ISO strings. */
+function toMs(ts: unknown): number {
+  if (typeof ts === 'string') {
+    const numeric = Number(ts);
+    if (Number.isFinite(numeric)) {
+      return numeric < 1e12 ? numeric * 1000 : numeric;
+    }
+    const parsed = Date.parse(ts);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (typeof ts !== 'number' || !Number.isFinite(ts)) return 0;
   // Timestamps < 1e12 are in seconds (before ~2033); >= 1e12 are milliseconds
   return ts < 1e12 ? ts * 1000 : ts;
 }
@@ -70,6 +82,45 @@ function toNumberIfFinite(value: unknown): number | undefined {
   if (typeof value !== 'number') return undefined;
   if (!Number.isFinite(value)) return undefined;
   return value;
+}
+
+function getSessionEngineType(
+  sessions: ChatSession[],
+  sessionKey: string,
+): ChatSession['engineType'] | undefined {
+  return sessions.find((session) => session.key === sessionKey)?.engineType;
+}
+
+function getAgentEngineType(agentId: string | undefined | null): ChatSession['engineType'] | undefined {
+  const normalizedAgentId = normalizeAgentId(agentId);
+  return useAgentsStore.getState().agents.find((agent) => normalizeAgentId(agent.id) === normalizedAgentId)?.engineType;
+}
+
+function resolveEngineTypeForSession(
+  sessions: ChatSession[],
+  sessionKey: string,
+  agentId?: string | null,
+): ChatSession['engineType'] | undefined {
+  if (sessionKey === DEFAULT_SESSION_KEY) {
+    return getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey));
+  }
+  return getSessionEngineType(sessions, sessionKey)
+    ?? getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey));
+}
+
+function normalizeSendMessageOptions(args: unknown[]): import('./chat/types').SendMessageOptions {
+  const [first, attachments, targetAgentId, workflowContext] = args;
+  if (typeof first === 'string') {
+    return {
+      text: first,
+      attachments: Array.isArray(attachments)
+        ? attachments as import('./chat/types').SendMessageOptions['attachments']
+        : undefined,
+      targetAgentId: typeof targetAgentId === 'string' ? targetAgentId : undefined,
+      workflowContext: workflowContext as import('./chat/types').WorkflowContextBlock | undefined,
+    };
+  }
+  return first as import('./chat/types').SendMessageOptions;
 }
 
 // Timer for fallback history polling during active sends.
@@ -89,6 +140,9 @@ const SESSION_LOAD_MIN_INTERVAL_MS = 1_200;
 const HISTORY_LOAD_MIN_INTERVAL_MS = 800;
 const HISTORY_POLL_SILENCE_WINDOW_MS = 2_500;
 const CHAT_EVENT_DEDUPE_TTL_MS = 30_000;
+const SESSION_METADATA_HISTORY_LIMIT = 2;
+const SESSION_METADATA_HYDRATE_LIMIT = 40;
+const SESSION_METADATA_HYDRATE_CONCURRENCY = 4;
 const _chatEventDedupe = new Map<string, number>();
 
 function clearErrorRecoveryTimer(): void {
@@ -726,6 +780,18 @@ function parseSessionUpdatedAtMs(value: unknown): number | undefined {
   return undefined;
 }
 
+async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(limit, 1), items.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex];
+      nextIndex += 1;
+      await task(item);
+    }
+  }));
+}
+
 async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
   if (!isCronSessionKey(sessionKey)) return [];
   try {
@@ -754,28 +820,146 @@ function resolveMainSessionKeyForAgent(agentId: string | undefined | null): stri
   return summary?.mainSessionKey || buildFallbackMainSessionKey(normalizedAgentId);
 }
 
+function isTemporaryAgentSessionKey(key: string): boolean {
+  return /^agent:[^:]+:session-\d+/.test(key);
+}
+
 function ensureSessionEntry(sessions: ChatSession[], sessionKey: string): ChatSession[] {
   if (sessions.some((session) => session.key === sessionKey)) {
     return sessions;
   }
-  return [...sessions, { key: sessionKey }];
+  return [...sessions, {
+    key: sessionKey,
+    engineType: getAgentEngineType(getAgentIdFromSessionKey(sessionKey)),
+  }];
 }
 
 function clearSessionEntryFromMap<T extends Record<string, unknown>>(entries: T, sessionKey: string): T {
   return Object.fromEntries(Object.entries(entries).filter(([key]) => key !== sessionKey)) as T;
 }
 
+function createIdleSessionRuntimeState(): SessionRuntimeState {
+  return {
+    sending: false,
+    activeRunId: null,
+    streamingText: '',
+    streamingMessage: null,
+    streamingTools: [],
+    pendingFinal: false,
+    lastUserMessageAt: null,
+    pendingToolImages: [],
+    error: null,
+    updatedAt: 0,
+  };
+}
+
+function runtimePatchFromSessionRuntime(runtime: SessionRuntimeState): Pick<
+  ChatState,
+  | 'sending'
+  | 'activeRunId'
+  | 'streamingText'
+  | 'streamingMessage'
+  | 'streamingTools'
+  | 'pendingFinal'
+  | 'lastUserMessageAt'
+  | 'pendingToolImages'
+  | 'error'
+> {
+  return {
+    sending: runtime.sending,
+    activeRunId: runtime.activeRunId,
+    streamingText: runtime.streamingText,
+    streamingMessage: runtime.streamingMessage,
+    streamingTools: runtime.streamingTools,
+    pendingFinal: runtime.pendingFinal,
+    lastUserMessageAt: runtime.lastUserMessageAt,
+    pendingToolImages: runtime.pendingToolImages,
+    error: runtime.error,
+  };
+}
+
+function captureTopLevelRuntime(state: Pick<
+  ChatState,
+  | 'sending'
+  | 'activeRunId'
+  | 'streamingText'
+  | 'streamingMessage'
+  | 'streamingTools'
+  | 'pendingFinal'
+  | 'lastUserMessageAt'
+  | 'pendingToolImages'
+  | 'error'
+>): SessionRuntimeState {
+  return {
+    sending: state.sending,
+    activeRunId: state.activeRunId,
+    streamingText: state.streamingText,
+    streamingMessage: state.streamingMessage,
+    streamingTools: state.streamingTools,
+    pendingFinal: state.pendingFinal,
+    lastUserMessageAt: state.lastUserMessageAt,
+    pendingToolImages: state.pendingToolImages,
+    error: state.error,
+    updatedAt: Date.now(),
+  };
+}
+
+function getSessionRuntimeState(
+  runtimeBySessionKey: Record<string, SessionRuntimeState>,
+  sessionKey: string,
+): SessionRuntimeState {
+  return runtimeBySessionKey[sessionKey] ?? createIdleSessionRuntimeState();
+}
+
+function patchSessionRuntimeState(
+  state: ChatState,
+  sessionKey: string,
+  patch: Partial<SessionRuntimeState> | ((runtime: SessionRuntimeState) => Partial<SessionRuntimeState>),
+): Partial<ChatState> {
+  const currentRuntime = getSessionRuntimeState(state.runtimeBySessionKey, sessionKey);
+  const partial = typeof patch === 'function' ? patch(currentRuntime) : patch;
+  const nextRuntime: SessionRuntimeState = {
+    ...currentRuntime,
+    ...partial,
+    updatedAt: partial.updatedAt ?? Date.now(),
+  };
+  const nextPatch: Partial<ChatState> = {
+    runtimeBySessionKey: {
+      ...state.runtimeBySessionKey,
+      [sessionKey]: nextRuntime,
+    },
+  };
+  if (sessionKey === state.currentSessionKey) {
+    Object.assign(nextPatch, runtimePatchFromSessionRuntime(nextRuntime));
+  }
+  return nextPatch;
+}
+
 function buildSessionSwitchPatch(
   state: Pick<
     ChatState,
-    'currentSessionKey' | 'messages' | 'sessions' | 'sessionLabels' | 'sessionLastActivity'
+    | 'currentSessionKey'
+    | 'messages'
+    | 'sessions'
+    | 'sessionLabels'
+    | 'sessionLastActivity'
+    | 'runtimeBySessionKey'
+    | 'sending'
+    | 'activeRunId'
+    | 'streamingText'
+    | 'streamingMessage'
+    | 'streamingTools'
+    | 'pendingFinal'
+    | 'lastUserMessageAt'
+    | 'pendingToolImages'
+    | 'error'
   >,
   nextSessionKey: string,
 ): Partial<ChatState> {
   // 仅将没有任何历史记录且无活动时间的会话视为空会话。
   // 单纯依赖 messages.length 是不可靠的，因为 switchSession 会在真正调用 loadHistory 前抢先清空当前 messages，
   // 造成竞争条件，使得带有真实历史的会话被判定为空并从侧边栏移除。
-  const leavingEmpty = !state.currentSessionKey.endsWith(':main')
+  const leavingEmpty = isTemporaryAgentSessionKey(state.currentSessionKey)
     && state.messages.length === 0
     && !state.sessionLastActivity[state.currentSessionKey]
     && !state.sessionLabels[state.currentSessionKey];
@@ -784,10 +968,20 @@ function buildSessionSwitchPatch(
     ? state.sessions.filter((session) => session.key !== state.currentSessionKey)
     : state.sessions;
 
+  const nextRuntimeBySessionKey = {
+    ...state.runtimeBySessionKey,
+    [state.currentSessionKey]: captureTopLevelRuntime(state),
+  };
+  if (leavingEmpty) {
+    delete nextRuntimeBySessionKey[state.currentSessionKey];
+  }
+  const nextRuntime = getSessionRuntimeState(nextRuntimeBySessionKey, nextSessionKey);
+
   return {
     currentSessionKey: nextSessionKey,
     currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
     sessions: ensureSessionEntry(nextSessions, nextSessionKey),
+    runtimeBySessionKey: nextRuntimeBySessionKey,
     sessionLabels: leavingEmpty
       ? clearSessionEntryFromMap(state.sessionLabels, state.currentSessionKey)
       : state.sessionLabels,
@@ -795,17 +989,150 @@ function buildSessionSwitchPatch(
       ? clearSessionEntryFromMap(state.sessionLastActivity, state.currentSessionKey)
       : state.sessionLastActivity,
     messages: [],
-    streamingText: '',
-    streamingMessage: null,
-    streamingTools: [],
-    activeRunId: null,
-    error: null,
-    pendingFinal: false,
-    lastUserMessageAt: null,
-    pendingToolImages: [],
+    ...runtimePatchFromSessionRuntime(nextRuntime),
     workflowCardStates: {},
     pendingWorkflow: null,
   };
+}
+
+function handleBackgroundSessionEvent(
+  set: ChatSet,
+  sessionKey: string,
+  event: Record<string, unknown>,
+  resolvedState: string,
+  runId: string,
+): void {
+  switch (resolvedState) {
+    case 'started': {
+      set((s) => patchSessionRuntimeState(s, sessionKey, {
+        sending: true,
+        activeRunId: runId || getSessionRuntimeState(s.runtimeBySessionKey, sessionKey).activeRunId,
+        error: null,
+      }));
+      break;
+    }
+    case 'delta': {
+      const updates = collectToolUpdates(event.message, resolvedState);
+      set((s) => patchSessionRuntimeState(s, sessionKey, (runtime) => ({
+        sending: true,
+        error: null,
+        streamingMessage: (() => {
+          if (event.message && typeof event.message === 'object') {
+            const msgRole = (event.message as RawMessage).role;
+            if (isToolResultRole(msgRole)) return runtime.streamingMessage;
+          }
+          return event.message ?? runtime.streamingMessage;
+        })(),
+        streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
+      })));
+      break;
+    }
+    case 'final': {
+      const finalMsg = event.message as RawMessage | undefined;
+      if (!finalMsg) {
+        set((s) => patchSessionRuntimeState(s, sessionKey, {
+          pendingFinal: true,
+          streamingText: '',
+          streamingMessage: null,
+        }));
+        break;
+      }
+
+      const updates = collectToolUpdates(finalMsg, resolvedState);
+      if (isToolResultRole(finalMsg.role)) {
+        set((s) => {
+          const runtime = getSessionRuntimeState(s.runtimeBySessionKey, sessionKey);
+          const matchedPath = (runtime.streamingMessage && finalMsg.toolCallId)
+            ? getToolCallFilePath(runtime.streamingMessage as RawMessage, finalMsg.toolCallId)
+            : undefined;
+          const toolFiles: AttachedFileMeta[] = [
+            ...extractImagesAsAttachedFiles(finalMsg.content),
+          ];
+          if (matchedPath) {
+            for (const f of toolFiles) {
+              if (!f.filePath) {
+                f.filePath = matchedPath;
+                f.fileName = matchedPath.split(/[\\/]/).pop() || 'image';
+              }
+            }
+          }
+          const text = getMessageText(finalMsg.content);
+          if (text) {
+            const mediaRefs = extractMediaRefs(text);
+            const mediaRefPaths = new Set(mediaRefs.map((ref) => ref.filePath));
+            for (const ref of mediaRefs) toolFiles.push(makeAttachedFile(ref));
+            for (const ref of extractRawFilePaths(text)) {
+              if (!mediaRefPaths.has(ref.filePath)) toolFiles.push(makeAttachedFile(ref));
+            }
+          }
+          return patchSessionRuntimeState(s, sessionKey, {
+            pendingFinal: true,
+            streamingText: '',
+            streamingMessage: null,
+            pendingToolImages: toolFiles.length > 0
+              ? [...runtime.pendingToolImages, ...toolFiles]
+              : runtime.pendingToolImages,
+            streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
+          });
+        });
+        break;
+      }
+
+      const toolOnly = isToolOnlyMessage(finalMsg);
+      const hasOutput = hasNonToolAssistantContent(finalMsg);
+      set((s) => patchSessionRuntimeState(s, sessionKey, (runtime) => ({
+        sending: hasOutput ? false : runtime.sending,
+        activeRunId: hasOutput ? null : runtime.activeRunId,
+        streamingText: '',
+        streamingMessage: null,
+        streamingTools: hasOutput ? [] : (updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools),
+        pendingFinal: hasOutput ? false : true,
+        pendingToolImages: hasOutput ? [] : runtime.pendingToolImages,
+        lastUserMessageAt: hasOutput ? null : runtime.lastUserMessageAt,
+        error: null,
+      })));
+      if (toolOnly) break;
+      break;
+    }
+    case 'error': {
+      set((s) => patchSessionRuntimeState(s, sessionKey, {
+        sending: false,
+        activeRunId: null,
+        streamingText: '',
+        streamingMessage: null,
+        streamingTools: [],
+        pendingFinal: false,
+        lastUserMessageAt: null,
+        pendingToolImages: [],
+        error: String(event.errorMessage || 'An error occurred'),
+      }));
+      break;
+    }
+    case 'aborted': {
+      set((s) => patchSessionRuntimeState(s, sessionKey, {
+        sending: false,
+        activeRunId: null,
+        streamingText: '',
+        streamingMessage: null,
+        streamingTools: [],
+        pendingFinal: false,
+        lastUserMessageAt: null,
+        pendingToolImages: [],
+        error: null,
+      }));
+      break;
+    }
+    default: {
+      if (event.message && typeof event.message === 'object') {
+        const updates = collectToolUpdates(event.message, 'delta');
+        set((s) => patchSessionRuntimeState(s, sessionKey, (runtime) => ({
+          streamingMessage: event.message ?? runtime.streamingMessage,
+          streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
+        })));
+      }
+      break;
+    }
+  }
 }
 
 function getCanonicalPrefixFromSessionKey(sessionKey: string): string | null {
@@ -1093,6 +1420,33 @@ function hasAssistantTextOutput(message: RawMessage | undefined): boolean {
   return false;
 }
 
+function hasPendingToolUse(message: RawMessage | undefined): boolean {
+  if (!message) return false;
+
+  const msg = message as unknown as Record<string, unknown>;
+  const stopReason = msg.stopReason ?? msg.stop_reason;
+  if (String(stopReason ?? '').toLowerCase() === 'tooluse') return true;
+
+  const content = message.content;
+  if (Array.isArray(content)) {
+    if ((content as ContentBlock[]).some((block) => block.type === 'tool_use' || block.type === 'toolCall')) {
+      return true;
+    }
+  }
+
+  const toolCalls = msg.tool_calls ?? msg.toolCalls;
+  return Array.isArray(toolCalls) && toolCalls.length > 0;
+}
+
+function isClaudeRuntimeResultDone(runtimeResult: unknown): boolean {
+  if (!runtimeResult || typeof runtimeResult !== 'object') return false;
+  const result = runtimeResult as Record<string, unknown>;
+  if (result.type !== 'result') return false;
+  if (result.isError === true) return true;
+  const subtype = typeof result.subtype === 'string' ? result.subtype : '';
+  return subtype === '' || subtype === 'success' || subtype.startsWith('error_');
+}
+
 // ── Store ────────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>()(
@@ -1115,6 +1469,7 @@ export const useChatStore = create<ChatState>()(
   sessions: [],
   currentSessionKey: DEFAULT_SESSION_KEY,
   currentAgentId: 'main',
+  runtimeBySessionKey: {},
   sessionLabels: {},
   sessionLastActivity: {},
 
@@ -1191,6 +1546,7 @@ export const useChatStore = create<ChatState>()(
         if (rawSessions.length > 0) {
           const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
             const key = String(s.key || '');
+            const engineType: ChatSession['engineType'] = s.engineType === 'claude' ? 'claude' : 'openclaw';
             return {
               key,
               label: s.label ? String(s.label) : undefined,
@@ -1201,6 +1557,7 @@ export const useChatStore = create<ChatState>()(
               thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
               model: s.model ? String(s.model) : undefined,
               updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
+              engineType,
             };
           }).filter((s: ChatSession) => s.key);
 
@@ -1262,8 +1619,13 @@ export const useChatStore = create<ChatState>()(
             }
           }
 
+          const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
           const sessionsWithCurrent = !dedupedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
-            ? [...dedupedSessions, { key: nextSessionKey }]
+            ? [...dedupedSessions, {
+              key: nextSessionKey,
+              label: localCurrentSession?.label ?? NEW_SESSION_TEMP_LABEL,
+              engineType: localCurrentSession?.engineType,
+            }]
             : dedupedSessions;
 
           const discoveredActivity = Object.fromEntries(
@@ -1286,40 +1648,52 @@ export const useChatStore = create<ChatState>()(
             void get().loadHistory();
           }
 
-          // Background: fetch first user message for every non-main session to populate labels upfront.
-          // Uses a small limit so it's cheap; runs in parallel and doesn't block anything.
-          const sessionsToLabel = sessionsWithCurrent.filter((s) => !s.key.endsWith(':main'));
-          if (sessionsToLabel.length > 0) {
-            void Promise.all(
-              sessionsToLabel.map(async (session) => {
-                try {
-                  const r = await useGatewayStore.getState().rpc<Record<string, unknown>>(
-                    'chat.history',
-                    { sessionKey: session.key, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
-                  );
-                  const msgs = Array.isArray(r.messages) ? r.messages as RawMessage[] : [];
-                  const firstUser = msgs.find((m) => m.role === 'user');
-                  const lastMsg = msgs[msgs.length - 1];
-                  set((s) => {
-                    const next: Partial<typeof s> = {};
-                    const existingLabel = s.sessionLabels[session.key];
-                    if (firstUser && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
-                      const labelText = deriveSessionLabelFromUserText(getMessageText(firstUser.content));
-                      if (labelText) {
-                        const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
-                        next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
-                      }
+          // Background: hydrate only the first screen of missing metadata.
+          // Avoid the old N * full-history fan-out, which became very expensive
+          // when users had hundreds of sessions.
+          const sessionsToHydrate = sessionsWithCurrent
+            .filter((session) => {
+              if (session.key.endsWith(':main')) return false;
+              const hasUsableTitle = Boolean(session.label?.trim() || session.displayName?.trim() || get().sessionLabels[session.key]);
+              const hasActivity = Boolean(session.updatedAt || get().sessionLastActivity[session.key]);
+              return !hasUsableTitle || !hasActivity;
+            })
+            .sort((left, right) => {
+              const leftAt = left.updatedAt ?? get().sessionLastActivity[left.key] ?? 0;
+              const rightAt = right.updatedAt ?? get().sessionLastActivity[right.key] ?? 0;
+              return rightAt - leftAt;
+            })
+            .slice(0, SESSION_METADATA_HYDRATE_LIMIT);
+
+          if (sessionsToHydrate.length > 0) {
+            void runLimited(sessionsToHydrate, SESSION_METADATA_HYDRATE_CONCURRENCY, async (session) => {
+              try {
+                const r = await useGatewayStore.getState().rpc<Record<string, unknown>>(
+                  'chat.history',
+                  { sessionKey: session.key, limit: SESSION_METADATA_HISTORY_LIMIT },
+                );
+                const msgs = Array.isArray(r.messages) ? r.messages as RawMessage[] : [];
+                const firstUser = msgs.find((m) => m.role === 'user');
+                const lastMsg = msgs[msgs.length - 1];
+                set((s) => {
+                  const next: Partial<typeof s> = {};
+                  const existingLabel = s.sessionLabels[session.key];
+                  if (firstUser && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+                    const labelText = deriveSessionLabelFromUserText(getMessageText(firstUser.content));
+                    if (labelText) {
+                      const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
+                      next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
                     }
-                    if (lastMsg?.timestamp) {
-                      next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: toMs(lastMsg.timestamp) };
-                    }
-                    return next;
-                  });
-                } catch {
-                  // ignore per-session errors
-                }
-              }),
-            );
+                  }
+                  if (lastMsg?.timestamp && !s.sessionLastActivity[session.key]) {
+                    next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: toMs(lastMsg.timestamp) };
+                  }
+                  return next;
+                });
+              } catch {
+                // ignore per-session errors
+              }
+            });
           }
         }
       } catch (err) {
@@ -1386,6 +1760,7 @@ export const useChatStore = create<ChatState>()(
       const next = remaining[0];
       set((s) => ({
         sessions: remaining,
+        runtimeBySessionKey: clearSessionEntryFromMap(s.runtimeBySessionKey, key),
         sessionLabels: Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== key)),
         sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
         messages: [],
@@ -1406,6 +1781,7 @@ export const useChatStore = create<ChatState>()(
     } else {
       set((s) => ({
         sessions: remaining,
+        runtimeBySessionKey: clearSessionEntryFromMap(s.runtimeBySessionKey, key),
         sessionLabels: Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== key)),
         sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
       }));
@@ -1421,7 +1797,7 @@ export const useChatStore = create<ChatState>()(
     // conversation history inaccessible when the user switches back to it.
     const { currentSessionKey, messages, sessions, sessionLastActivity, sessionLabels } = get();
     // 仅将没有任何历史记录且无活动时间的会话视为空会话
-    const leavingEmpty = !currentSessionKey.endsWith(':main')
+    const leavingEmpty = isTemporaryAgentSessionKey(currentSessionKey)
       && messages.length === 0
       && !sessionLastActivity[currentSessionKey]
       && !sessionLabels[currentSessionKey];
@@ -1430,30 +1806,46 @@ export const useChatStore = create<ChatState>()(
       ?? DEFAULT_CANONICAL_PREFIX;
     const newKey = `${prefix}:session-${Date.now()}`;
     const newAgentId = getAgentIdFromSessionKey(newKey);
-    const newSessionEntry: ChatSession = { key: newKey };
-    set((s) => ({
-      currentSessionKey: newKey,
-      currentAgentId: newAgentId,
-      sessions: [
-        ...(leavingEmpty ? s.sessions.filter((sess) => sess.key !== currentSessionKey) : s.sessions),
-        newSessionEntry,
-      ],
-      sessionLabels: leavingEmpty
-        ? Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey))
-        : s.sessionLabels,
-      sessionLastActivity: leavingEmpty
-        ? Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey))
-        : s.sessionLastActivity,
-      messages: [],
-      streamingText: '',
-      streamingMessage: null,
-      streamingTools: [],
-      activeRunId: null,
-      error: null,
-      pendingFinal: false,
-      lastUserMessageAt: null,
-      pendingToolImages: [],
-    }));
+    const newSessionEntry: ChatSession = {
+      key: newKey,
+      label: NEW_SESSION_TEMP_LABEL,
+      engineType: getAgentEngineType(newAgentId),
+    };
+    set((s) => {
+      const nextRuntimeBySessionKey = {
+        ...s.runtimeBySessionKey,
+        [currentSessionKey]: captureTopLevelRuntime(s),
+      };
+      if (leavingEmpty) {
+        delete nextRuntimeBySessionKey[currentSessionKey];
+      }
+      nextRuntimeBySessionKey[newKey] = createIdleSessionRuntimeState();
+      return {
+        currentSessionKey: newKey,
+        currentAgentId: newAgentId,
+        sessions: [
+          ...(leavingEmpty ? s.sessions.filter((sess) => sess.key !== currentSessionKey) : s.sessions),
+          newSessionEntry,
+        ],
+        runtimeBySessionKey: nextRuntimeBySessionKey,
+        sessionLabels: leavingEmpty
+          ? Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey))
+          : s.sessionLabels,
+        sessionLastActivity: leavingEmpty
+          ? Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey))
+          : s.sessionLastActivity,
+        messages: [],
+        sending: false,
+        streamingText: '',
+        streamingMessage: null,
+        streamingTools: [],
+        activeRunId: null,
+        error: null,
+        pendingFinal: false,
+        lastUserMessageAt: null,
+        pendingToolImages: [],
+      };
+    });
     void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
   },
 
@@ -1467,13 +1859,14 @@ export const useChatStore = create<ChatState>()(
     // in the sidebar.
     // 同样需要综合检查 sessionLastActivity 和 sessionLabels，
     // 防止因为 switchSession 抢先清空 messages 而误判有历史的会话为空。
-    const isEmptyNonMain = !currentSessionKey.endsWith(':main')
+    const isEmptyNonMain = isTemporaryAgentSessionKey(currentSessionKey)
       && messages.length === 0
       && !sessionLastActivity[currentSessionKey]
       && !sessionLabels[currentSessionKey];
     if (!isEmptyNonMain) return;
     set((s) => ({
       sessions: s.sessions.filter((sess) => sess.key !== currentSessionKey),
+      runtimeBySessionKey: clearSessionEntryFromMap(s.runtimeBySessionKey, currentSessionKey),
       sessionLabels: Object.fromEntries(
         Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey),
       ),
@@ -1512,7 +1905,11 @@ export const useChatStore = create<ChatState>()(
     }, 15_000);
 
     const loadPromise = (async () => {
-      const applyLoadedMessages = (rawMessages: RawMessage[], thinkingLevel: string | null) => {
+      const applyLoadedMessages = (
+        rawMessages: RawMessage[],
+        thinkingLevel: string | null,
+        runtimeState?: { isRunning?: boolean; runtimeResult?: unknown },
+      ) => {
       if (get().currentSessionKey !== targetSessionKey) return;
 
       absorbWorkflowSchemaFromToolResults(rawMessages);
@@ -1682,9 +2079,17 @@ export const useChatStore = create<ChatState>()(
       const lastMsg = finalMessages[finalMessages.length - 1];
       if (lastMsg?.timestamp) {
         const lastAt = toMs(lastMsg.timestamp);
-        set((s) => ({
-          sessionLastActivity: { ...s.sessionLastActivity, [targetSessionKey]: lastAt },
-        }));
+        if (lastAt > 0) {
+          set((s) => {
+            const listedAt = s.sessions.find((session) => session.key === targetSessionKey)?.updatedAt ?? 0;
+            const currentAt = s.sessionLastActivity[targetSessionKey] ?? 0;
+            const nextAt = Math.max(currentAt, listedAt, lastAt);
+            if (nextAt === currentAt) return {};
+            return {
+              sessionLastActivity: { ...s.sessionLastActivity, [targetSessionKey]: nextAt },
+            };
+          });
+        }
       }
 
       // Async: load missing image previews from disk (updates in background)
@@ -1706,6 +2111,11 @@ export const useChatStore = create<ChatState>()(
       if (get().currentSessionKey !== targetSessionKey) return;
 
       const { pendingFinal, lastUserMessageAt, sending: isSendingNow } = get();
+      const activeEngineType = resolveEngineTypeForSession(
+        get().sessions,
+        targetSessionKey,
+        get().currentAgentId,
+      );
 
       // If we're sending but haven't received streaming events, check
       // whether the loaded history reveals intermediate tool-call activity.
@@ -1735,11 +2145,27 @@ export const useChatStore = create<ChatState>()(
 
       if (get().currentSessionKey !== targetSessionKey) return;
 
-      if (recentAssistant || currentRecentAssistant) {
+      const shouldKeepClaudeRunActive = isSendingNow && activeEngineType === 'claude';
+      const claudeRuntimeDone =
+        activeEngineType === 'claude'
+        && runtimeState?.isRunning === false
+        && isClaudeRuntimeResultDone(runtimeState.runtimeResult);
+
+      if ((recentAssistant || currentRecentAssistant) && (!shouldKeepClaudeRunActive || claudeRuntimeDone)) {
         clearHistoryPoll();
-        set({ sending: false, activeRunId: null, pendingFinal: false });
+        set((s) => patchSessionRuntimeState(s, targetSessionKey, {
+          sending: false,
+          activeRunId: null,
+          pendingFinal: false,
+          lastUserMessageAt: null,
+          streamingText: '',
+          streamingMessage: null,
+          streamingTools: [],
+          pendingToolImages: [],
+          error: null,
+        }));
       } else if (hasRecentAssistantActivity && !pendingFinal) {
-        set({ pendingFinal: true });
+        set((s) => patchSessionRuntimeState(s, targetSessionKey, { pendingFinal: true }));
       }
       };
 
@@ -1748,7 +2174,11 @@ export const useChatStore = create<ChatState>()(
         let thinkingLevel: string | null = null;
         const data = await useGatewayStore.getState().rpc<Record<string, unknown>>(
           'chat.history',
-          { sessionKey: targetSessionKey, limit: CHAT_HISTORY_LENGTH_MAX_LIMIT },
+          {
+            sessionKey: targetSessionKey,
+            limit: CHAT_HISTORY_LENGTH_MAX_LIMIT,
+            engineType: resolveEngineTypeForSession(get().sessions, targetSessionKey, get().currentAgentId),
+          },
         );
         if (get().currentSessionKey !== targetSessionKey) return;
 
@@ -1772,7 +2202,10 @@ export const useChatStore = create<ChatState>()(
         }
 
         if (get().currentSessionKey !== targetSessionKey) return;
-        applyLoadedMessages(rawMessages, thinkingLevel);
+        applyLoadedMessages(rawMessages, thinkingLevel, {
+          isRunning: typeof data.isRunning === 'boolean' ? data.isRunning : undefined,
+          runtimeResult: data.runtimeResult,
+        });
       } catch (err) {
         console.warn('Failed to load chat history:', err);
         if (get().currentSessionKey !== targetSessionKey) return;
@@ -1806,9 +2239,8 @@ export const useChatStore = create<ChatState>()(
 
   // ── Send message ──
 
-  sendMessage: async (
-    options: import('./chat/types').SendMessageOptions,
-  ) => {
+  sendMessage: async (...args: unknown[]) => {
+    const options = normalizeSendMessageOptions(args);
     const { text, attachments, targetAgentId, dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
@@ -1830,6 +2262,20 @@ export const useChatStore = create<ChatState>()(
     }
 
     const currentSessionKey = targetSessionKey;
+    const currentSessionEngineType = resolveEngineTypeForSession(
+      get().sessions,
+      currentSessionKey,
+      targetAgentId ?? get().currentAgentId,
+    );
+    const dingTalkRpcExtras = buildDingTalkMentionRpcExtras(
+      dingTalkMentions,
+      attachments?.map((file) => ({
+        fileName: file.fileName,
+        filePath: file.stagedPath,
+        mimeType: file.mimeType,
+        fileSize: file.fileSize,
+      })),
+    );
 
     let textForGateway = trimmed;
     if (!workflowContext) {
@@ -1884,6 +2330,10 @@ export const useChatStore = create<ChatState>()(
         error: formatQuotaExceededMessage(quotaCheck.used_today, quotaCheck.limit),
         sending: false,
       });
+      set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+        sending: false,
+        error: formatQuotaExceededMessage(quotaCheck.used_today, quotaCheck.limit),
+      }));
       return;
     }
 
@@ -1912,11 +2362,24 @@ export const useChatStore = create<ChatState>()(
       pendingFinal: false,
       lastUserMessageAt: nowMs,
     }));
+    set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+      sending: true,
+      activeRunId: null,
+      streamingText: '',
+      streamingMessage: null,
+      streamingTools: [],
+      pendingFinal: false,
+      lastUserMessageAt: nowMs,
+      pendingToolImages: [],
+      error: null,
+    }));
 
     // Update session label with first user message text as soon as it's sent
     const { sessionLabels, messages } = get();
     const isFirstMessage = !messages.slice(0, -1).some((m) => m.role === 'user');
-    if (!currentSessionKey.endsWith(':main') && isFirstMessage && !sessionLabels[currentSessionKey] && displayText) {
+    const existingSession = get().sessions.find((session) => session.key === currentSessionKey);
+    const hasOnlyTemporaryLabel = existingSession?.label === NEW_SESSION_TEMP_LABEL;
+    if (!currentSessionKey.endsWith(':main') && isFirstMessage && (!sessionLabels[currentSessionKey] || hasOnlyTemporaryLabel) && displayText) {
       const truncated = displayText.length > 50 ? `${displayText.slice(0, 50)}…` : displayText;
       set((s) => ({ sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated } }));
     }
@@ -1969,6 +2432,12 @@ export const useChatStore = create<ChatState>()(
         activeRunId: null,
         lastUserMessageAt: null,
       });
+      set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+        sending: false,
+        activeRunId: null,
+        lastUserMessageAt: null,
+        error: 'No response received from the model. The provider may be unavailable or the API key may have insufficient quota. Please check your provider settings.',
+      }));
     };
     setTimeout(checkStuck, 30_000);
 
@@ -1993,19 +2462,6 @@ export const useChatStore = create<ChatState>()(
 
       let result: { success: boolean; result?: { runId?: string }; error?: string };
 
-      // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
-      const CHAT_SEND_TIMEOUT_MS = 120_000;
-
-      const dingTalkRpcExtras = buildDingTalkMentionRpcExtras(
-        dingTalkMentions,
-        attachments?.map((a) => ({
-          fileName: a.fileName,
-          filePath: a.stagedPath,
-          mimeType: a.mimeType,
-          fileSize: a.fileSize,
-        })),
-      );
-
       if (hasMedia) {
         result = await hostApiFetch<{ success: boolean; result?: { runId?: string }; error?: string }>(
           '/api/chat/send-with-media',
@@ -2017,6 +2473,7 @@ export const useChatStore = create<ChatState>()(
               message: messageWithContext || '',
               deliver: false,
               idempotencyKey,
+              engineType: currentSessionEngineType,
               media: attachments.map((a) => ({
                 filePath: a.stagedPath,
                 mimeType: a.mimeType,
@@ -2034,12 +2491,12 @@ export const useChatStore = create<ChatState>()(
             message: messageWithContext,
             deliver: false,
             idempotencyKey,
+            engineType: currentSessionEngineType,
+            ...dingTalkRpcExtras,
             // NOTE: workflowId/runId are not forwarded to Gateway chat.send yet
             // because the Gateway schema does not accept them. Workflow state
             // is tracked via SSE + main process polling instead.
-            ...dingTalkRpcExtras,
           },
-          CHAT_SEND_TIMEOUT_MS,
         );
         result = { success: true, result: rpcResult };
       }
@@ -2047,13 +2504,30 @@ export const useChatStore = create<ChatState>()(
 
       if (!result.success) {
         clearHistoryPoll();
-        set({ error: result.error || 'Failed to send message', sending: false });
+        set({ error: result.error || 'Failed to send message', sending: false, activeRunId: null, pendingFinal: false });
+        set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+          sending: false,
+          activeRunId: null,
+          pendingFinal: false,
+          error: result.error || 'Failed to send message',
+        }));
       } else if (result.result?.runId) {
         set({ activeRunId: result.result.runId });
+        set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+          sending: true,
+          activeRunId: result.result?.runId ?? null,
+          error: null,
+        }));
       }
     } catch (err) {
       clearHistoryPoll();
-      set({ error: String(err), sending: false });
+      set({ error: String(err), sending: false, activeRunId: null, pendingFinal: false });
+      set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+        sending: false,
+        activeRunId: null,
+        pendingFinal: false,
+        error: String(err),
+      }));
     }
   },
 
@@ -2065,11 +2539,24 @@ export const useChatStore = create<ChatState>()(
     const { currentSessionKey } = get();
     set({ sending: false, streamingText: '', streamingMessage: null, pendingFinal: false, lastUserMessageAt: null, pendingToolImages: [] });
     set({ streamingTools: [] });
+    set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+      sending: false,
+      activeRunId: null,
+      streamingText: '',
+      streamingMessage: null,
+      streamingTools: [],
+      pendingFinal: false,
+      lastUserMessageAt: null,
+      pendingToolImages: [],
+    }));
 
     try {
       await useGatewayStore.getState().rpc(
         'chat.abort',
-        { sessionKey: currentSessionKey },
+        {
+          sessionKey: currentSessionKey,
+          engineType: resolveEngineTypeForSession(get().sessions, currentSessionKey, get().currentAgentId),
+        },
       );
     } catch (err) {
       set({ error: String(err) });
@@ -2084,8 +2571,20 @@ export const useChatStore = create<ChatState>()(
     const eventSessionKey = event.sessionKey != null ? String(event.sessionKey) : null;
     const { activeRunId, currentSessionKey } = get();
 
-    // Only process events for the current session (when sessionKey is present)
-    if (eventSessionKey != null && eventSessionKey !== currentSessionKey) return;
+    if (eventSessionKey != null && eventSessionKey !== currentSessionKey) {
+      let resolvedState = eventState;
+      if (!resolvedState && event.message && typeof event.message === 'object') {
+        const msg = event.message as Record<string, unknown>;
+        const stopReason = msg.stopReason ?? msg.stop_reason;
+        if (stopReason) {
+          resolvedState = 'final';
+        } else if (msg.role || msg.content) {
+          resolvedState = 'delta';
+        }
+      }
+      handleBackgroundSessionEvent(set, eventSessionKey, event, resolvedState, runId);
+      return;
+    }
 
     // Only process events for the active run (or if no active run set)
     if (activeRunId && runId && runId !== activeRunId) return;
@@ -2113,7 +2612,9 @@ export const useChatStore = create<ChatState>()(
     const hasUsefulData = resolvedState === 'delta' || resolvedState === 'final'
       || resolvedState === 'error' || resolvedState === 'aborted';
     if (hasUsefulData) {
-      clearHistoryPoll();
+      if (resolvedState !== 'final') {
+        clearHistoryPoll();
+      }
       // Adopt run started from another client (e.g. console at 127.0.0.1:18789):
       // show loading/streaming in the app when this session has an active run.
       const { sending } = get();
@@ -2239,13 +2740,36 @@ export const useChatStore = create<ChatState>()(
           }
           const toolOnly = isToolOnlyMessage(finalMsg);
           const hasOutput = hasNonToolAssistantContent(finalMsg);
+          const currentEngineType = resolveEngineTypeForSession(
+            get().sessions,
+            get().currentSessionKey,
+            get().currentAgentId,
+          );
+          const eventPhase = String(event.phase ?? '').toLowerCase();
+          const isAgentCompletedEvent =
+            eventPhase === 'completed'
+            || eventPhase === 'done'
+            || eventPhase === 'finished'
+            || eventPhase === 'end';
+          const isClaudeRunFragment =
+            currentEngineType === 'claude'
+            && get().sending
+            && !isAgentCompletedEvent;
+          const isTerminalOutput =
+            hasOutput
+            && !hasPendingToolUse(finalMsg)
+            && !isClaudeRunFragment;
           const pendingForDebug = get().pendingWorkflow;
-          console.log('[handleChatEvent:final] hasOutput=%s, pendingWorkflow=%s, msgContent=%s',
-            hasOutput, pendingForDebug ? 'yes' : 'no', typeof finalMsg.content);
-          const msgId = finalMsg.id || (toolOnly ? `run-${runId}-tool-${Date.now()}` : `run-${runId}`);
+          console.log('[handleChatEvent:final] hasOutput=%s, terminal=%s, engine=%s, pendingWorkflow=%s, msgContent=%s',
+            hasOutput, isTerminalOutput, currentEngineType, pendingForDebug ? 'yes' : 'no', typeof finalMsg.content);
+          const msgId = finalMsg.id || (toolOnly
+            ? `run-${runId}-tool-${Date.now()}`
+            : isTerminalOutput
+              ? `run-${runId || 'unknown'}`
+              : `run-${runId || 'unknown'}-part-${Date.now()}-${crypto.randomUUID()}`);
           set((s) => {
             const nextTools = updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools;
-            const streamingTools = hasOutput ? [] : nextTools;
+            const streamingTools = isTerminalOutput ? [] : nextTools;
 
             // Attach any images collected from preceding tool results
             const pendingImgs = s.pendingToolImages;
@@ -2261,7 +2785,7 @@ export const useChatStore = create<ChatState>()(
             // If we are in a workflow guidance phase AND this is the final
             // assistant output (hasOutput=true), append an interactive
             // parameter_form block to the assistant message for the user.
-            if (hasOutput) {
+            if (isTerminalOutput) {
               msgWithImages = maybeAppendWorkflowParameterForm(msgWithImages);
             }
 
@@ -2277,7 +2801,7 @@ export const useChatStore = create<ChatState>()(
                 break;
               }
             }
-            const hasEquivalentAssistantAfterLastUser = hasOutput && incomingText.length > 0
+            const hasEquivalentAssistantAfterLastUser = isTerminalOutput && incomingText.length > 0
               && s.messages.slice(lastUserIndex + 1).some((m) => (
                 m.role === 'assistant'
                 && hasNonToolAssistantContent(m)
@@ -2286,7 +2810,7 @@ export const useChatStore = create<ChatState>()(
             if (alreadyExists) {
               // If message already exists but hasOutput, we still need to append
               // the parameter_form to it. Update the existing message in messages[].
-              if (hasOutput && msgWithImages.content !== s.messages.find(m => m.id === msgId)?.content) {
+              if (isTerminalOutput && msgWithImages.content !== s.messages.find(m => m.id === msgId)?.content) {
                 const updatedMessages = s.messages.map(m =>
                   m.id === msgId ? msgWithImages : m
                 );
@@ -2301,9 +2825,9 @@ export const useChatStore = create<ChatState>()(
                   messages: updatedMessages,
                   streamingText: '',
                   streamingMessage: null,
-                  sending: hasOutput ? false : s.sending,
-                  activeRunId: hasOutput ? null : s.activeRunId,
-                  pendingFinal: hasOutput ? false : true,
+                  sending: isTerminalOutput ? false : s.sending,
+                  activeRunId: isTerminalOutput ? null : s.activeRunId,
+                  pendingFinal: isTerminalOutput ? false : true,
                   streamingTools,
                   ...clearPendingImages,
                 };
@@ -2317,9 +2841,9 @@ export const useChatStore = create<ChatState>()(
               } : {
                 streamingText: '',
                 streamingMessage: null,
-                sending: hasOutput ? false : s.sending,
-                activeRunId: hasOutput ? null : s.activeRunId,
-                pendingFinal: hasOutput ? false : true,
+                sending: isTerminalOutput ? false : s.sending,
+                activeRunId: isTerminalOutput ? null : s.activeRunId,
+                pendingFinal: isTerminalOutput ? false : true,
                 streamingTools,
                 ...clearPendingImages,
               };
@@ -2346,16 +2870,16 @@ export const useChatStore = create<ChatState>()(
               messages: [...s.messages, msgWithImages],
               streamingText: '',
               streamingMessage: null,
-              sending: hasOutput ? false : s.sending,
-              activeRunId: hasOutput ? null : s.activeRunId,
-              pendingFinal: hasOutput ? false : true,
+              sending: isTerminalOutput ? false : s.sending,
+              activeRunId: isTerminalOutput ? null : s.activeRunId,
+              pendingFinal: isTerminalOutput ? false : true,
               streamingTools,
               ...clearPendingImages,
             };
           });
           // After the final response, quietly reload history to surface all intermediate
           // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
-          if (hasOutput && !toolOnly) {
+          if (isTerminalOutput && !toolOnly) {
             clearHistoryPoll();
             void get().loadHistory(true).then(() => {
               let patched = patchLastAssistantWithWorkflowForm(get().messages, getMessageText);
@@ -2476,7 +3000,7 @@ export const useChatStore = create<ChatState>()(
     await Promise.all([loadHistory(), loadSessions()]);
   },
 
-  clearError: () => set({ error: null }),
+  clearError: () => set((s) => patchSessionRuntimeState(s, s.currentSessionKey, { error: null })),
 
   renameSession: (key: string, newName: string) => {
     const trimmed = newName.trim();

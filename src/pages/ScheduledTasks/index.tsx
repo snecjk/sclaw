@@ -187,7 +187,7 @@ export default function ScheduledTasks() {
               const errorData = JSON.parse(message.substring(jsonStart));
               if (errorData.detail && Array.isArray(errorData.detail)) {
                 // 提取验证错误字段
-                const fieldErrors = errorData.detail.map((d: any) => {
+                const fieldErrors = errorData.detail.map((d: { msg?: string; loc?: unknown[] }) => {
                   if (d.msg) {
                     // 将技术性的错误消息转换为用户友好的提示
                     if (d.msg.includes('String should have at most')) {

@@ -3,11 +3,11 @@ import { Clock, MoreHorizontal, Play, Pencil, Trash2, Loader2 } from 'lucide-rea
 import { Switch } from '@/components/ui/switch';
 
 import { stripInstructionFromTaskMessage } from '@/lib/scheduled-task-recipients';
-import type { CronJob } from '@/types/cron';
+import type { ManagedLocalTask } from '@/stores/cron';
 import { parseScheduleLabel } from './utils';
 
 interface CronTaskCardProps {
-  job: CronJob;
+  job: ManagedLocalTask;
   onToggle: (enabled: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -31,8 +31,8 @@ export function CronTaskCard({ job, onToggle, onEdit, onDelete, onTrigger }: Cro
     }
   }, [menuOpen]);
 
-  const scheduleLabel = parseScheduleLabel(job.schedule);
-  const displayMessage = stripInstructionFromTaskMessage(job.message || '');
+  const scheduleLabel = parseScheduleLabel(job.engineType === 'claude' ? job.cronExpr : job.schedule);
+  const displayMessage = stripInstructionFromTaskMessage(job.engineType === 'claude' ? job.promptTemplate || '' : job.message || '');
 
   const handleTrigger = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -52,6 +52,14 @@ export function CronTaskCard({ job, onToggle, onEdit, onDelete, onTrigger }: Cro
           <Clock className="h-[18px] w-[18px]" strokeWidth={1.75} />
         </div>
         <div className="flex-1 min-w-0">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              {job.engineType === 'claude' ? 'Claude 本地' : '本地任务'}
+            </span>
+            {job.engineType === 'claude' && job.agentId ? (
+              <span className="truncate text-[11px] text-muted-foreground">Agent: {job.agentId}</span>
+            ) : null}
+          </div>
           <h2 className="text-[15px] font-semibold text-foreground leading-snug">
             <button
               type="button"

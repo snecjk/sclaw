@@ -85,6 +85,70 @@ async function packDirectoryToAsar(sourceDir, asarPath, label) {
   return true;
 }
 
+function getClaudeBinaryFileName(platform) {
+  return platform === 'win32' ? 'claude.exe' : 'claude';
+}
+
+function getClaudeOptionalPackageName(platform, arch) {
+  return `@anthropic-ai/claude-agent-sdk-${platform}-${arch}`;
+}
+
+function validateBundledClaudeSdk(resourcesDir, platform, arch) {
+  const packageName = getClaudeOptionalPackageName(platform, arch);
+  const binaryName = getClaudeBinaryFileName(platform);
+  const unpackedRoot = join(resourcesDir, 'app.asar.unpacked');
+  const candidate = join(unpackedRoot, 'node_modules', ...packageName.split('/'), binaryName);
+
+  if (!existsSync(candidate)) {
+    throw new Error(
+      `[after-pack] Claude SDK validation failed — missing unpacked binary for ${platform}/${arch}: ${candidate}\n`
+      + `Ensure electron-builder asarUnpack includes node_modules/@anthropic-ai/claude-agent-sdk-*/** `
+      + `and the target platform optional dependency is installed before packaging.`,
+    );
+  }
+
+  console.log(`[after-pack] ✅ Claude SDK binary present: ${candidate}`);
+}
+
+function resolveRuntimePackageSource(projectNodeModules, resolvedSources, entry) {
+  if (entry.resolveFromPackageName) {
+    const parentSource = resolvedSources.get(entry.resolveFromPackageName);
+    if (parentSource) {
+      const parentRealPath = realpathSync(parentSource);
+      const nestedSource = join(dirname(parentRealPath), ...entry.packageName.split('/'));
+      if (existsSync(nestedSource)) {
+        return realpathSync(nestedSource);
+      }
+    }
+  }
+
+  const rootSource = join(projectNodeModules, ...entry.packageName.split('/'));
+  if (existsSync(rootSource)) {
+    return realpathSync(rootSource);
+  }
+
+  throw new Error(`[after-pack] Required app runtime package missing in source node_modules: ${rootSource}`);
+}
+
+function ensureAppRuntimePackages(resourcesDir, packageEntries) {
+  const projectNodeModules = join(__dirname, '..', 'node_modules');
+  const packagedNodeModules = join(resourcesDir, 'node_modules');
+  const resolvedSources = new Map();
+  mkdirSync(packagedNodeModules, { recursive: true });
+
+  for (const entry of packageEntries) {
+    const normalizedEntry = typeof entry === 'string' ? { packageName: entry } : entry;
+    const { packageName } = normalizedEntry;
+    const src = resolveRuntimePackageSource(projectNodeModules, resolvedSources, normalizedEntry);
+    const dest = join(packagedNodeModules, ...packageName.split('/'));
+    if (existsSync(dest)) continue;
+    mkdirSync(dirname(dest), { recursive: true });
+    cpSync(src, dest, { recursive: true, dereference: true });
+    resolvedSources.set(packageName, src);
+    console.log(`[after-pack] ✅ Added app runtime package: ${packageName} <- ${src}`);
+  }
+}
+
 /** Fail the build if native modules were not extracted to {asar}.unpacked. */
 function validateAsarNativeUnpack(asarPath, label) {
   const unpackedRoot = `${asarPath}.unpacked`;
@@ -978,6 +1042,14 @@ function bundleLocalPlugin(preBuildDir, rawSourceDir, nodeModulesRoot, destDir) 
   return true;
 }
 
+function resolveLocalPluginSourceDir(localPluginSourceRoot, localDir) {
+  const candidates = [
+    join(localPluginSourceRoot, 'openclaw', localDir),
+    join(localPluginSourceRoot, localDir),
+  ];
+  return candidates.find((dir) => existsSync(join(dir, 'openclaw.plugin.json'))) ?? candidates[0];
+}
+
 // ── Main hook ────────────────────────────────────────────────────────────────
 
 exports.OPENCLAW_ASAR_UNPACK = OPENCLAW_ASAR_UNPACK;
@@ -1065,7 +1137,7 @@ exports.default = async function afterPack(context) {
 
     if (plugin.type === 'local') {
       const preBuildDir = join(preBuildRoot, plugin.pluginId);
-      const rawSourceDir = join(localPluginSourceRoot, plugin.localDir);
+      const rawSourceDir = resolveLocalPluginSourceDir(localPluginSourceRoot, plugin.localDir);
       console.log(`[after-pack] Bundling local plugin ${plugin.pluginId} -> ${pluginDestDir}`);
       ok = bundleLocalPlugin(preBuildDir, rawSourceDir, nodeModulesRoot, pluginDestDir);
     } else {
@@ -1252,4 +1324,16 @@ exports.default = async function afterPack(context) {
   } else if (existsSync(pluginsDestRoot)) {
     rmSync(pluginsDestRoot, { recursive: true, force: true });
   }
+
+  ensureAppRuntimePackages(resourcesDir, [
+    'ajv-formats',
+    { packageName: 'ajv', resolveFromPackageName: 'ajv-formats' },
+    { packageName: 'fast-deep-equal', resolveFromPackageName: 'ajv' },
+    'fast-json-stable-stringify',
+    { packageName: 'fast-uri', resolveFromPackageName: 'ajv' },
+    { packageName: 'json-schema-traverse', resolveFromPackageName: 'ajv' },
+    { packageName: 'require-from-string', resolveFromPackageName: 'ajv' },
+    'uri-js',
+  ]);
+  validateBundledClaudeSdk(resourcesDir, platform, arch);
 };

@@ -40,6 +40,9 @@ afterPack: ./scripts/after-pack.cjs
 asar: true
 asarUnpack:
   - "**/*.node"
+  # Claude Agent SDK ships a platform-specific CLI binary (claude/claude.exe).
+  # Keep the full optional package outside app.asar so the SDK can resolve and spawn it.
+  - "node_modules/@anthropic-ai/claude-agent-sdk-*/**"
 
 # Disable native module rebuilding.
 # The Electron renderer/main process has no native (.node) dependencies.

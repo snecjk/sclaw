@@ -20,7 +20,19 @@
         "switchAgentAria": "Switch conversation agent",
         "switchAgentTitle": "Open this agent's main session; new chats stay under this agent",
         "defaultAgentMark": "(default)",
-        "modelSwitchFailed": "Could not switch model: {{message}}"
+        "currentModel": "Model",
+        "modelNotConfigured": "Not configured",
+        "switchModelTitle": "Switch conversation model",
+        "modelTagBuiltin": "Built-in",
+        "modelTagCustom": "Custom",
+        "noModels": "No models available",
+        "modelSwitchFailed": "Could not switch model: {{message}}",
+        "searchToggle": "Search messages",
+        "searchPlaceholder": "Search messages",
+        "searchPrev": "Previous result",
+        "searchNext": "Next result",
+        "searchClear": "Clear search",
+        "searchClose": "Close search"
     },
     "composer": {
         "attachFiles": "Attach files",
@@ -33,6 +45,8 @@
         "send": "Send",
         "stop": "Stop",
         "gatewayConnected": "connected",
+        "claudeReady": "Claude Agent ready",
+        "claudeReadyDetail": "Claude Agent direct connection available, unaffected by OpenClaw gateway status",
         "gatewayStatus": "gateway {{state}} | port: {{port}} {{pid}}",
         "retryFailedAttachments": "Retry failed attachments",
         "dingtalkMentionTitle": "Mention a DingTalk contact or group",
@@ -80,6 +94,12 @@
     },
     "sessionList": {
         "mainSessionTitle": "Main chat"
+    },
+    "messageActions": {
+        "copy": "Copy",
+        "copyFailed": "Copy failed",
+        "editAndResend": "Edit and send again",
+        "editUnavailable": "Edit and resend is not available on this page"
     },
     "historyBuckets": {
         "today": "Today",

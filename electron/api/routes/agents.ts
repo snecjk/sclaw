@@ -12,7 +12,10 @@ import {
   updateAgentName,
   updateAgentModel,
   getAgentWorkspacePath,
+  setAgentEngineType,
+  setAgentPreferredModel,
 } from '../../utils/agent-config';
+import { resolveAgentEngineType } from '../../engines/manager';
 
 /** Filenames allowed for workspace-file read/write (security allow-list). */
 const ALLOWED_WORKSPACE_FILES = new Set([
@@ -175,6 +178,18 @@ export async function handleAgentRoutes(
       }
       return true;
     }
+
+    if (parts.length === 2 && parts[1] === 'engine') {
+      try {
+        const body = await parseJsonBody<{ engineType: 'openclaw' | 'claude' }>(req);
+        const agentId = decodeURIComponent(parts[0]);
+        const snapshot = await setAgentEngineType(agentId, body.engineType);
+        sendJson(res, 200, { success: true, ...snapshot });
+      } catch (error) {
+        sendJson(res, 500, { success: false, error: String(error) });
+      }
+      return true;
+    }
   }
 
   if (url.pathname.startsWith('/api/agents/') && req.method === 'DELETE') {
@@ -317,6 +332,15 @@ export async function handleAgentRoutes(
         const rawModel = (body.model ?? '').trim();
         if (!rawModel) {
           sendJson(res, 400, { success: false, error: 'model is required' });
+          return true;
+        }
+        const agentEngineType = await resolveAgentEngineType(agentId);
+        if (agentEngineType === 'claude') {
+          const snapshot = await setAgentPreferredModel(agentId, {
+            model: rawModel,
+            accountId: body.accountId,
+          });
+          sendJson(res, 200, { success: true, snapshot });
           return true;
         }
 

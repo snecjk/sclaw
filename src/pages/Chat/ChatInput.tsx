@@ -30,6 +30,19 @@ import { mentionSearchItemToMention } from '@/types/dingtalk-mention';
 
 // ── Types ────────────────────────────────────────────────────────
 
+const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
+
+function logDingTalkMentionClient(message: string, data: unknown): void {
+  void hostApiFetch('/api/logs/client', {
+    method: 'POST',
+    body: JSON.stringify({
+      level: 'info',
+      message,
+      data,
+    }),
+  }).catch(() => undefined);
+}
+
 export interface FileAttachment {
   id: string;
   fileName: string;
@@ -60,10 +73,19 @@ interface ChatInputProps {
   disabled?: boolean;
   sending?: boolean;
   isEmpty?: boolean;
+  engineType?: AgentSummary['engineType'];
+  statusText?: string;
+  statusTone?: 'ready' | 'warning';
   /** Full-width embed (e.g. home agent hub): no page gutters, hide gateway/quota footer row. */
   variant?: 'default' | 'embedded';
   /** One-time seed into the textarea (e.g. task subitem default prompt). */
   seedText?: string;
+  /** User-message text selected for editing and sending again. */
+  editDraft?: {
+    text: string;
+    version: number;
+  } | null;
+  onEditDraftApplied?: () => void;
   /** Override default composer placeholder (e.g. site home prompt). */
   placeholder?: string;
   /** Merged onto the outer wrapper (after defaults); use to tune padding, e.g. task subitem bottom inset. */
@@ -137,8 +159,13 @@ export function ChatInput({
   disabled = false,
   sending = false,
   isEmpty: _isEmpty = false,
+  engineType,
+  statusText,
+  statusTone = 'warning',
   variant = 'default',
   seedText,
+  editDraft = null,
+  onEditDraftApplied,
   placeholder,
   className,
 }: ChatInputProps) {
@@ -199,7 +226,7 @@ export function ChatInput({
   } = useDingTalkMention(mentionTrigger);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { templates, prefetchTemplates } = useWorkflowsStore();
-  const composerPlaceholder = disabled
+  const composerPlaceholder = disabled && engineType === 'openclaw'
     ? t('composer.gatewayDisconnectedPlaceholder')
     : placeholder?.trim() || t('composer.messagePlaceholder', { agent: currentAgentName });
   const dailyTokenQuotaText = useMemo(() => {
@@ -224,6 +251,38 @@ export function ChatInput({
       mentionEditorRef.current?.focus();
     }
   }, [disabled]);
+
+  const applyEditDraftText = useCallback((rawText: string) => {
+    const text = rawText.trim();
+    if (!text) return;
+    mentionEditorRef.current?.setPlainText(text);
+    mentionEditorRef.current?.focus();
+    setAttachments([]);
+    setTargetAgentId(null);
+    setPickerOpen(false);
+    setWorkflowPickerOpen(false);
+    setMentionTrigger(null);
+    closeDingTalkMention();
+  }, [closeDingTalkMention]);
+
+  useEffect(() => {
+    if (!editDraft) return;
+    applyEditDraftText(editDraft.text);
+    onEditDraftApplied?.();
+  }, [applyEditDraftText, editDraft, onEditDraftApplied]);
+
+  useEffect(() => {
+    const handleEditDraftEvent = (event: Event) => {
+      const detail = (event as CustomEvent<{ text?: unknown }>).detail;
+      if (typeof detail?.text !== 'string') return;
+      applyEditDraftText(detail.text);
+    };
+
+    window.addEventListener(CHAT_EDIT_DRAFT_EVENT, handleEditDraftEvent);
+    return () => {
+      window.removeEventListener(CHAT_EDIT_DRAFT_EVENT, handleEditDraftEvent);
+    };
+  }, [applyEditDraftText]);
 
   useEffect(() => {
     if (!targetAgentId) return;
@@ -277,6 +336,19 @@ export function ChatInput({
   const applyDingTalkMention = useCallback((item: MentionSearchItem) => {
     if (!dingTalkTrigger) return;
     const mention = mentionSearchItemToMention(item);
+    logDingTalkMentionClient('[dingtalk-mention] chat-input: select item', {
+      itemType: item.type,
+      itemTitle: item.title,
+      itemHasId: Boolean(item.id),
+      itemHasCorpId: Boolean(item.corpId),
+      mentionType: mention.type,
+      mentionDisplayName: mention.displayName,
+      mentionHasUserId: Boolean(mention.userId),
+      mentionHasOpenConversationId: Boolean(mention.openConversationId),
+      triggerQuery: dingTalkTrigger.query,
+      triggerStartOffset: dingTalkTrigger.startOffset,
+      triggerEndOffset: dingTalkTrigger.endOffset,
+    });
     mentionEditorRef.current?.insertMention(mention, dingTalkTrigger);
     closeDingTalkMention();
     setMentionTrigger(null);
@@ -425,6 +497,34 @@ export function ChatInput({
     const attachmentsToSend = readyAttachments.length > 0 ? readyAttachments : undefined;
     const mentionsToSend = snapshot.mentions.length > 0 ? snapshot.mentions : undefined;
     const workflowIdToSend = snapshot.workflowId;
+    console.info('[dingtalk-mention] chat-input: send snapshot', {
+      textLength: textToSend.length,
+      mentions: snapshot.mentions.map((mention) => ({
+        type: mention.type,
+        displayName: mention.displayName,
+        hasUserId: Boolean(mention.userId),
+        hasOpenConversationId: Boolean(mention.openConversationId),
+        hasCorpId: Boolean(mention.corpId),
+      })),
+      attachmentCount: readyAttachments.length,
+      hasWorkflowId: Boolean(workflowIdToSend),
+      queued: Boolean(sending && onQueue && !workflowIdToSend),
+    });
+    logDingTalkMentionClient('[dingtalk-mention] chat-input: send snapshot', {
+      textLength: textToSend.length,
+      mentionCount: snapshot.mentions.length,
+      mentions: snapshot.mentions.map((mention) => ({
+        type: mention.type,
+        displayName: mention.displayName,
+        hasUserId: Boolean(mention.userId),
+        hasOpenConversationId: Boolean(mention.openConversationId),
+        hasCorpId: Boolean(mention.corpId),
+      })),
+      targetAgentId: targetAgentId ?? null,
+      attachmentCount: readyAttachments.length,
+      hasWorkflowId: Boolean(workflowIdToSend),
+      queued: Boolean(sending && onQueue && !workflowIdToSend),
+    });
     mentionEditorRef.current?.clear();
     setAttachments([]);
     setMentionTrigger(null);
@@ -799,18 +899,30 @@ export function ChatInput({
         </div>
         {!isEmbedded ? (
           <div className="mt-2.5 flex items-center justify-between gap-2 px-4 text-[11px] text-muted-foreground/60">
-            <div className="flex items-center gap-1.5">
-              <div className={cn("w-1.5 h-1.5 rounded-full", gatewayStatus.state === 'running' ? "bg-green-500/80" : "bg-red-500/80")} />
-              <span>
-                {t('composer.gatewayStatus', {
-                  state: gatewayStatus.state === 'running'
-                    ? t('composer.gatewayConnected')
-                    : gatewayStatus.state,
-                  port: gatewayStatus.port,
-                  pid: gatewayStatus.pid ? `| pid: ${gatewayStatus.pid}` : '',
-                })}
-              </span>
-            </div>
+            {engineType === 'openclaw' ? (
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={cn(
+                    'h-1.5 w-1.5 rounded-full',
+                    statusTone === 'ready' ? 'bg-green-500/80' : 'bg-red-500/80',
+                  )}
+                />
+                <span>
+                  {statusText ?? t('composer.gatewayStatus', {
+                    state: gatewayStatus.state === 'running'
+                      ? t('composer.gatewayConnected')
+                      : gatewayStatus.state,
+                    port: gatewayStatus.port,
+                    pid: gatewayStatus.pid ? `| pid: ${gatewayStatus.pid}` : '',
+                  })}
+                </span>
+              </div>
+            ) : engineType === 'claude' ? (
+              <div className="flex items-center gap-1.5">
+                <div className="h-1.5 w-1.5 rounded-full bg-green-500/80" />
+                <span>{statusText ?? t('composer.claudeReady')}</span>
+              </div>
+            ) : <div />}
             <div className="flex items-center gap-3">
               {dailyTokenQuotaText ? (
                 <span

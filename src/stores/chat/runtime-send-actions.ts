@@ -1,4 +1,3 @@
-import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { useAgentsStore } from '@/stores/agents';
 import {
@@ -13,6 +12,17 @@ import {
 import type { ChatSession, RawMessage } from './types';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
+
+function logDingTalkMentionClient(message: string, data: unknown): void {
+  void hostApiFetch('/api/logs/client', {
+    method: 'POST',
+    body: JSON.stringify({
+      level: 'info',
+      message,
+      data,
+    }),
+  }).catch(() => undefined);
+}
 
 function normalizeAgentId(value: string | undefined | null): string {
   return (value ?? '').trim().toLowerCase() || 'main';
@@ -40,6 +50,10 @@ function ensureSessionEntry(sessions: ChatSession[], sessionKey: string): ChatSe
     return sessions;
   }
   return [...sessions, { key: sessionKey }];
+}
+
+function getSessionEngineType(sessions: ChatSession[], sessionKey: string): ChatSession['engineType'] | undefined {
+  return sessions.find((session) => session.key === sessionKey)?.engineType;
 }
 
 type TokenQuotaCheckResult = {
@@ -89,6 +103,43 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       const trimmed = text.trim();
       if (!trimmed && (!attachments || attachments.length === 0)) return;
 
+      const dingTalkRpcExtras = buildDingTalkMentionRpcExtras(
+        dingTalkMentions,
+        attachments?.map((file) => ({
+          fileName: file.fileName,
+          filePath: file.stagedPath,
+          mimeType: file.mimeType,
+          fileSize: file.fileSize,
+        })),
+      );
+      console.info('[dingtalk-mention] runtime-send: rpc extras', {
+        mentionCount: dingTalkMentions?.length ?? 0,
+        mentions: dingTalkMentions?.map((mention) => ({
+          type: mention.type,
+          displayName: mention.displayName,
+          hasUserId: Boolean(mention.userId),
+          hasOpenConversationId: Boolean(mention.openConversationId),
+          hasCorpId: Boolean(mention.corpId),
+        })) ?? [],
+        attachmentCount: attachments?.length ?? 0,
+        hasRpcExtras: Boolean(dingTalkRpcExtras),
+        rpcExtraKeys: dingTalkRpcExtras ? Object.keys(dingTalkRpcExtras) : [],
+      });
+      logDingTalkMentionClient('[dingtalk-mention] runtime-send: rpc extras', {
+        mentionCount: dingTalkMentions?.length ?? 0,
+        mentions: dingTalkMentions?.map((mention) => ({
+          type: mention.type,
+          displayName: mention.displayName,
+          hasUserId: Boolean(mention.userId),
+          hasOpenConversationId: Boolean(mention.openConversationId),
+          hasCorpId: Boolean(mention.corpId),
+        })) ?? [],
+        targetAgentId: targetAgentId ?? null,
+        attachmentCount: attachments?.length ?? 0,
+        hasRpcExtras: Boolean(dingTalkRpcExtras),
+        rpcExtraKeys: dingTalkRpcExtras ? Object.keys(dingTalkRpcExtras) : [],
+      });
+
       const targetSessionKey = resolveMainSessionKeyForAgent(targetAgentId) ?? get().currentSessionKey;
       if (targetSessionKey !== get().currentSessionKey) {
         const current = get();
@@ -120,6 +171,7 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       }
 
       const currentSessionKey = targetSessionKey;
+      const currentSessionEngineType = getSessionEngineType(get().sessions, currentSessionKey);
 
       const quotaCheck = await checkDailyTokenQuota();
       if (quotaCheck) {
@@ -241,50 +293,40 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
 
         let result: { success: boolean; result?: { runId?: string }; error?: string };
 
-        // Longer timeout for chat sends to tolerate high-latency networks (avoids connect error)
-        const CHAT_SEND_TIMEOUT_MS = 120_000;
-        const MEDIA_SEND_TIMEOUT_MS = 120_000;
-
-        const dingTalkRpcExtras = buildDingTalkMentionRpcExtras(
-          dingTalkMentions,
-          attachments?.map((a) => ({
-            fileName: a.fileName,
-            filePath: a.stagedPath,
-            mimeType: a.mimeType,
-            fileSize: a.fileSize,
-          })),
-        );
-
         if (hasMedia) {
-          result = await invokeIpc(
-            'chat:sendWithMedia',
+          result = await hostApiFetch(
+            '/api/chat/send-with-media',
             {
-              sessionKey: currentSessionKey,
-              // message: trimmed || 'Process the attached file(s).',
-              message: trimmed || '',
-              deliver: false,
-              idempotencyKey,
-              media: attachments.map((a) => ({
-                filePath: a.stagedPath,
-                mimeType: a.mimeType,
-                fileName: a.fileName,
-              })),
-              ...dingTalkRpcExtras,
+              method: 'POST',
+              body: JSON.stringify({
+                sessionKey: currentSessionKey,
+                message: trimmed || '',
+                deliver: false,
+                idempotencyKey,
+                engineType: currentSessionEngineType,
+                media: attachments.map((a) => ({
+                  filePath: a.stagedPath,
+                  mimeType: a.mimeType,
+                  fileName: a.fileName,
+                })),
+                ...dingTalkRpcExtras,
+              }),
             },
-            MEDIA_SEND_TIMEOUT_MS,
           ) as { success: boolean; result?: { runId?: string }; error?: string };
         } else {
-          result = await invokeIpc(
-            'gateway:rpc',
-            'chat.send',
+          result = await hostApiFetch(
+            '/api/chat/send',
             {
-              sessionKey: currentSessionKey,
-              message: trimmed,
-              deliver: false,
-              idempotencyKey,
-              ...dingTalkRpcExtras,
+              method: 'POST',
+              body: JSON.stringify({
+                sessionKey: currentSessionKey,
+                message: trimmed,
+                deliver: false,
+                idempotencyKey,
+                engineType: currentSessionEngineType,
+                ...dingTalkRpcExtras,
+              }),
             },
-            CHAT_SEND_TIMEOUT_MS,
           ) as { success: boolean; result?: { runId?: string }; error?: string };
         }
 
@@ -331,11 +373,13 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       set({ streamingTools: [] });
 
       try {
-        await invokeIpc(
-          'gateway:rpc',
-          'chat.abort',
-          { sessionKey: currentSessionKey },
-        );
+        await hostApiFetch<{ success?: boolean; error?: string }>('/api/chat/abort', {
+          method: 'POST',
+          body: JSON.stringify({
+            sessionKey: currentSessionKey,
+            engineType: getSessionEngineType(get().sessions, currentSessionKey),
+          }),
+        });
       } catch (err) {
         set({ error: String(err) });
       }

@@ -4,7 +4,7 @@
  * with markdown, thinking sections, images, and tool cards.
  */
 import { useState, useCallback, useEffect, useMemo, memo } from 'react';
-import { Sparkles, Copy, Check, ChevronDown, ChevronRight, Wrench, FileText, Film, Music, FileArchive, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, Table2 } from 'lucide-react';
+import { Sparkles, Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, FileText, Film, Music, FileArchive, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, Table2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -36,12 +36,17 @@ import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 import { isFilePreviewDebugEnabled, logFilePreview } from '@/lib/file-preview-debug';
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
 import { submitParameterForm } from '@/components/parameter-form/form-handlers';
+import { highlightAtMentionsInChildren } from '@/lib/at-mention-highlight';
 import { renderUserMessageMentionNodes } from '@/components/dingtalk/DingTalkMentionTag';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
+
+const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
 
 interface ChatMessageProps {
   message: RawMessage;
   showThinking: boolean;
+  isSearchMatch?: boolean;
+  isSearchActive?: boolean;
   isStreaming?: boolean;
   streamingTools?: Array<{
     id?: string;
@@ -53,6 +58,7 @@ interface ChatMessageProps {
   }>;
   onPreviewFile?: (file: AttachedFileMeta) => void;
   onViewWorkflow?: (workflowId: string) => void;
+  onEditMessage?: (text: string) => void;
   /** Used when rendered inside AssistantTurnMessage */
   hideAvatar?: boolean;
   hideThinkingPanel?: boolean;
@@ -70,10 +76,13 @@ function imageSrc(img: ExtractedImage): string | null {
 export const ChatMessage = memo(function ChatMessage({
   message,
   showThinking,
+  isSearchMatch = false,
+  isSearchActive = false,
   isStreaming = false,
   streamingTools = [],
   onPreviewFile,
   onViewWorkflow,
+  onEditMessage,
   hideAvatar = false,
   hideThinkingPanel = false,
 }: ChatMessageProps) {
@@ -213,6 +222,44 @@ export const ChatMessage = memo(function ChatMessage({
 
   const hasStreamingToolStatus = isStreaming && streamingTools.length > 0;
   if (!hasText && !showThinkingPanel && images.length === 0 && visibleTools.length === 0 && !hasRenderableFiles && extractedRefs.length === 0 && !hasStreamingToolStatus && !parameterForm) return null;
+  const showRenderDebugPanel = !isUser && isFilePreviewDebugEnabled();
+  const debugMarkdownSource = useMemo(
+    () => (onPreviewFile ? preprocessTextForPreviewLinks(text) : text),
+    [text, onPreviewFile],
+  );
+  const debugLinks = useMemo(() => {
+    if (!showRenderDebugPanel) return [];
+    const refs = new Set<string>();
+    const regex = /\[([^\]]*)\]\(([^)]+)\)/g;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(debugMarkdownSource)) !== null) {
+      const label = (match[1] || '').trim();
+      const href = (match[2] || '').trim();
+      if (!href) continue;
+      refs.add(`${label || '(empty label)'} -> ${href}`);
+    }
+    return Array.from(refs);
+  }, [debugMarkdownSource, showRenderDebugPanel]);
+  const copyDebugSnapshot = useCallback(async () => {
+    const snapshot = [
+      '[StoClaw Render Debug Snapshot]',
+      '',
+      '[Raw text]',
+      text || '(empty)',
+      '',
+      '[Rendered markdown source]',
+      debugMarkdownSource || '(empty)',
+      '',
+      '[Detected markdown links]',
+      debugLinks.length > 0 ? debugLinks.join('\n') : '(none)',
+    ].join('\n');
+    try {
+      await navigator.clipboard.writeText(snapshot);
+      toast.success('已复制渲染调试快照');
+    } catch {
+      toast.error('复制失败，请重试');
+    }
+  }, [debugLinks, debugMarkdownSource, text]);
 
   if (isSystem) {
     const compactText = text.replace(/\s+/g, ' ').trim();
@@ -223,7 +270,11 @@ export const ChatMessage = memo(function ChatMessage({
       <div
         data-chat-message-role="system"
         data-chat-message-id={message.id ?? undefined}
-        className="mx-auto w-full max-w-4xl"
+        className={cn(
+          'mx-auto w-full max-w-4xl rounded-2xl transition-all duration-200',
+          isSearchMatch && 'ring-1 ring-amber-300/70 ring-offset-2 ring-offset-background',
+          isSearchActive && 'ring-2 ring-primary/55 shadow-[0_0_0_4px_rgba(255,111,0,0.08)]',
+        )}
       >
         <div className="rounded-xl border border-amber-200/55 bg-amber-50/72 px-3 py-2 text-[13px] text-amber-900/90 shadow-[0_4px_14px_rgba(245,158,11,0.06)] dark:border-amber-500/15 dark:bg-amber-950/12 dark:text-amber-100/80">
           <div className="flex items-center gap-2">
@@ -272,6 +323,9 @@ export const ChatMessage = memo(function ChatMessage({
       data-chat-message-role={isUser ? 'user' : 'assistant'}
       data-chat-message-id={message.id ?? undefined}
       className={cn(
+        'rounded-[1.6rem] transition-all duration-200',
+        isSearchMatch && 'ring-1 ring-primary/25 ring-offset-2 ring-offset-background',
+        isSearchActive && 'ring-2 ring-primary/55 bg-primary/[0.04] shadow-[0_0_0_4px_rgba(255,111,0,0.08)]',
         isEmbeddedAssistant ? 'w-full' : 'flex gap-3 group',
         !isEmbeddedAssistant && (isUser ? 'flex-row-reverse' : 'flex-row'),
       )}
@@ -460,16 +514,22 @@ export const ChatMessage = memo(function ChatMessage({
           </div>
         )}
 
-        {/* Hover row for user messages — timestamp only */}
-        {isUser && message.timestamp && (
-          <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none">
-            {formatTimestamp(message.timestamp)}
-          </span>
+        {/* Hover row for user messages — timestamp + quick actions */}
+        {isUser && hasText && (
+          <UserHoverBar
+            text={text}
+            timestamp={message.timestamp}
+            onEditMessage={onEditMessage}
+          />
         )}
 
         {/* Hover row for assistant messages — only when there is real text content */}
         {!isUser && hasText && (
-          <AssistantHoverBar text={text} timestamp={message.timestamp} />
+          <AssistantHoverBar
+            text={text}
+            timestamp={message.timestamp}
+            onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
+          />
         )}
       </div>
 
@@ -538,9 +598,77 @@ function ToolStatusBar({
   );
 }
 
+function UserHoverBar({
+  text,
+  timestamp,
+  onEditMessage,
+}: {
+  text: string;
+  timestamp?: number;
+  onEditMessage?: (text: string) => void;
+}) {
+  const { t } = useTranslation('chat');
+  const [copied, setCopied] = useState(false);
+
+  const copyContent = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch (error) {
+      console.error('[ChatMessage] Failed to copy user message:', error);
+      toast.error(t('messageActions.copyFailed'));
+    }
+  }, [text, t]);
+
+  const editAgain = useCallback(() => {
+    if (onEditMessage) {
+      onEditMessage(text);
+      return;
+    }
+    window.dispatchEvent(new CustomEvent(CHAT_EDIT_DRAFT_EVENT, { detail: { text } }));
+  }, [onEditMessage, text]);
+
+  return (
+    <div className="flex select-none items-center gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+      {timestamp ? (
+        <span className="mr-1 text-xs text-muted-foreground">
+          {formatTimestamp(timestamp)}
+        </span>
+      ) : null}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 rounded-full border border-border bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-foreground dark:bg-background/70 dark:hover:bg-background"
+        onClick={copyContent}
+        title={t('messageActions.copy')}
+      >
+        {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 rounded-full border border-border bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-foreground dark:bg-background/70 dark:hover:bg-background"
+        onClick={editAgain}
+        title={t('messageActions.editAndResend')}
+      >
+        <Pencil className="h-3 w-3" />
+      </Button>
+    </div>
+  );
+}
+
 // ── Assistant hover bar (timestamp + copy, shown on group hover) ─
 
-function AssistantHoverBar({ text, timestamp }: { text: string; timestamp?: number }) {
+function AssistantHoverBar({
+  text,
+  timestamp,
+  onCopyDebugSnapshot,
+}: {
+  text: string;
+  timestamp?: number;
+  onCopyDebugSnapshot?: () => Promise<void> | void;
+}) {
   const [copied, setCopied] = useState(false);
 
   const copyContent = useCallback(() => {
@@ -559,6 +687,11 @@ function AssistantHoverBar({ text, timestamp }: { text: string; timestamp?: numb
         size="icon"
         className="h-7 w-7 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]"
         onClick={copyContent}
+        onDoubleClick={() => {
+          if (!onCopyDebugSnapshot) return;
+          void onCopyDebugSnapshot();
+        }}
+        title={onCopyDebugSnapshot ? '单击复制内容，双击复制调试快照' : undefined}
       >
         {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
       </Button>
@@ -664,6 +797,12 @@ function MessageBubble({
             remarkPlugins={[remarkGfm]}
             urlTransform={previewUrlTransform}
             components={{
+              p({ children }) {
+                return <p>{highlightAtMentionsInChildren(children)}</p>;
+              },
+              li({ children }) {
+                return <li>{highlightAtMentionsInChildren(children)}</li>;
+              },
               code({ className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || '');
                 const isInline = !match && !className;

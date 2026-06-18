@@ -47,6 +47,19 @@
 - **Memory**: 4GB RAM minimum (8GB recommended)
 - **Storage**: 1GB available disk space
 
+**Windows only** — run `pnpm run preflight:win` (or `scripts/preflight-windows.ps1`) **before** downloading `Setup.exe` to check hardware and network. The NSIS installer repeats the same hard checks on fresh install (auto-updates are exempt):
+
+| Check | Threshold | Blocks install |
+|-------|-----------|----------------|
+| Windows | 10 1809+ (64-bit) | Yes |
+| Physical RAM | 16 GB | Yes |
+| Disk total / free on install drive | 256 GB / 10 GB | Yes |
+| Physical CPU cores | 4 | Yes |
+| SSO (`baseinfo-usercenterserviceapi*.sto.cn`, see `sso-service.ts`) | TCP 443 reachable | Yes |
+| GitHub (DWS CLI) | TCP 443 reachable | No — warning only |
+
+macOS and Linux installers are unchanged.
+
 ### Installation
 
 #### Build from Source
@@ -73,7 +86,11 @@ When you launch StoClaw for the first time, the **Setup Wizard** will guide you 
 
 The wizard preselects your system language when it is supported, and falls back to English otherwise.
 
-Main shell routes include the dashboard home (`/`), prototype STO task reports under `/tasks/:taskId` (overview) and per-day chat subitems at `/tasks/:taskId/YYYY-MM-DD` (navigable key: `hq-reconciliation`; subitems are listed under the sidebar “任务列表”, and the first home overview card ensures today’s subitem if needed then opens the **latest** persisted subitem by date so that row is selected by default), and main-agent chat on the home route (`/`; legacy `/chat` redirects to home). Each task subitem uses its own persisted OpenClaw session key (`agent:main:session-sto-*`, stored locally per day) so its transcript stays isolated from the main agent chat; those sessions do not appear as separate rows in the chat session list. Deleting a dated subitem from the sidebar (trash on hover, same as history sessions) soft-deletes that transcript and removes the subitem from the persisted task list. The CRM home may still show three data-overview cards; only the first links into `/tasks/*` while the other two stay behind a “coming soon” overlay until their task entries are re-enabled in the sidebar list. **CRM week-report surface:** after SSO login, the app loads a policy whitelist from the STO policy service; the policy API host is chosen from **`VITE_APP_ENV`** only (`development`/`test` → `zc-test.sto.cn`, `staging` → `pre-zc.sto.cn`, `production` → `zc.sto.cn`). Only users whose SSO `userName` matches a whitelist `userCode` see the home task summary cards and can stay on `/tasks/*`; otherwise the home shows the legacy layout and `/tasks/*` redirects to `/`. Failed or timed-out policy requests are treated as **not** whitelisted (fail-closed).
+Main shell routes include the dashboard home (`/`), prototype STO task reports under `/tasks/:taskId` (overview) and per-day chat subitems at `/tasks/:taskId/YYYY-MM-DD` (navigable key: `hq-reconciliation`; subitems are listed under the sidebar “任务列表”, and the first home overview card ensures today’s subitem if needed then opens the **latest** persisted subitem by date so that row is selected by default), and main-agent chat on the home route (`/`; legacy `/chat` redirects to home). Main-agent chat now includes an inline in-session search bar that scans the currently rendered transcript and jumps between matching message records. Each task subitem uses its own persisted OpenClaw session key (`agent:main:session-sto-*`, stored locally per day) so its transcript stays isolated from the main agent chat; those sessions do not appear as separate rows in the chat session list. Deleting a dated subitem from the sidebar (trash on hover, same as history sessions) soft-deletes that transcript and removes the subitem from the persisted task list. The CRM home may still show three data-overview cards; only the first links into `/tasks/*` while the other two stay behind a “coming soon” overlay until their task entries are re-enabled in the sidebar list. **CRM week-report surface:** after SSO login, the app loads a policy whitelist from the STO policy service; the policy API host is chosen from **`VITE_APP_ENV`** only (`development`/`test` → `zc-test.sto.cn`, `staging` → `pre-zc.sto.cn`, `production` → `zc.sto.cn`). Only users whose SSO `userName` matches a whitelist `userCode` see the home task summary cards and can stay on `/tasks/*`; otherwise the home shows the legacy layout and `/tasks/*` redirects to `/`. Failed or timed-out policy requests are treated as **not** whitelisted (fail-closed).
+
+When an agent session uses the Claude Agent SDK engine, StoClaw still applies the desktop-side DingTalk recipient/send guard flow: selected DingTalk recipients are staged into Claude runtime instructions, and `dws chat message send` calls made through Claude's Bash tool keep the same anti-batch and post-success rate-limit protections as the OpenClaw plugin path. Image attachments on Claude sessions are sent as native Claude multimodal image blocks instead of path-only prompt text so visual understanding stays aligned with the uploaded pixels.
+
+Claude Agent SDK sessions also expose a built-in `claude-scheduled-task-tool` MCP extension. From a Claude conversation, the agent can now create, inspect, update, delete, list, and trigger local Claude scheduled tasks directly through tool calls without leaving chat. Those task operations default to the current Claude session's agent/workspace context unless the user explicitly requests another target. Claude scheduled tasks created from the StoClaw task dialog can also carry selected DingTalk `@` recipients; StoClaw injects that recipient context into the saved Claude prompt so the same guarded DingTalk send flow remains available during scheduled runs.
 
 Default shell uses the **provincial sidebar** (省区版本样式): home, scheduled tasks, skills, the STO task list block, and time-bucketed conversation history; chat and “my data” stay off the primary rail, the workspace group and conversation-list chrome are hidden, and the large user card is replaced by a compact settings entry (same menu: settings, language, theme, logout). To restore the **full** navigation rail for local builds, set `VITE_STOCLAW_SIDEBAR_LAYOUT=full` in `.env.development.local` or the build environment.
 

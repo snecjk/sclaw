@@ -7,6 +7,8 @@ import { buildStoMemoryCenterAuthHeaders } from '../../utils/sto-memory-api-auth
 import { resolveStoBaseUrl } from '../../utils/sto-domain';
 import { listAgentsSnapshot } from '../../utils/agent-config';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
+import { getAdapterForSession, listEngineSessions } from '../../engines/manager';
+import type { AgentEngineType } from '../../engines/types';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { preprocessChatSendParams } from '../../utils/dingtalk-mention-send';
@@ -17,6 +19,9 @@ export async function handleGatewayRoutes(
   url: URL,
   ctx: HostApiContext,
 ): Promise<boolean> {
+  const parseEngineType = (value: string | null | undefined): AgentEngineType | undefined => (
+    value === 'claude' || value === 'openclaw' ? value : undefined
+  );
   const BIZ_AGENT_TEMP_UPLOAD_PATH = '/agent/v1/biz-agent/attachments/upload';
   const getAgentIdFromSessionKey = (sessionKey: string): string => {
     if (!sessionKey.startsWith('agent:')) return 'main';
@@ -123,13 +128,112 @@ export async function handleGatewayRoutes(
     return true;
   }
 
-  if (url.pathname === '/api/chat/send-with-media' && req.method === 'POST') {
+  if (url.pathname === '/api/chat/sessions' && req.method === 'GET') {
     try {
-      const body = await parseJsonBody<{
+      const sessions = await listEngineSessions({ gatewayManager: ctx.gatewayManager });
+      sendJson(res, 200, { success: true, sessions });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/chat/history' && req.method === 'GET') {
+    try {
+      const sessionKey = (url.searchParams.get('sessionKey') ?? '').trim();
+      const limit = Number(url.searchParams.get('limit') ?? '1000');
+      if (!sessionKey) {
+        sendJson(res, 400, { success: false, error: 'sessionKey is required' });
+        return true;
+      }
+      const adapter = await getAdapterForSession(sessionKey, parseEngineType(url.searchParams.get('engineType')));
+      const result = await adapter.getHistory(
+        { gatewayManager: ctx.gatewayManager },
+        { sessionKey, limit: Number.isFinite(limit) && limit > 0 ? limit : 1000 },
+      );
+      if (!result.success) {
+        sendJson(res, 500, result);
+        return true;
+      }
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/chat/send' && req.method === 'POST') {
+    try {
+      const rawBody = await parseJsonBody<{
         sessionKey: string;
         message: string;
         deliver?: boolean;
         idempotencyKey: string;
+        engineType?: AgentEngineType;
+        dingTalkMentions?: Array<{
+          type: 'user' | 'group';
+          displayName: string;
+          userId?: string;
+          openConversationId?: string;
+          corpId?: string;
+        }>;
+        dingTalkSendFileIntent?: boolean;
+        dingTalkAttachedFiles?: Array<{
+          fileName: string;
+          filePath: string;
+          mimeType: string;
+          fileSize?: number;
+        }>;
+      }>(req);
+      const body = await preprocessChatSendParams(rawBody) as typeof rawBody;
+      const adapter = await getAdapterForSession(body.sessionKey, parseEngineType(body.engineType));
+      const result = await adapter.sendMessage(
+        { gatewayManager: ctx.gatewayManager },
+        {
+          sessionKey: body.sessionKey,
+          message: body.message,
+          deliver: body.deliver,
+          idempotencyKey: body.idempotencyKey,
+        },
+      );
+      if (!result.success) {
+        sendJson(res, 500, result);
+        return true;
+      }
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/chat/abort' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ sessionKey: string; engineType?: AgentEngineType }>(req);
+      const adapter = await getAdapterForSession(body.sessionKey, parseEngineType(body.engineType));
+      const result = await adapter.abortRun(
+        { gatewayManager: ctx.gatewayManager },
+        { sessionKey: body.sessionKey },
+      );
+      if (!result.success) {
+        sendJson(res, 500, result);
+        return true;
+      }
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/chat/send-with-media' && req.method === 'POST') {
+    try {
+      const rawBody = await parseJsonBody<{
+        sessionKey: string;
+        message: string;
+        deliver?: boolean;
+        idempotencyKey: string;
+        engineType?: AgentEngineType;
         media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
         dingTalkMentions?: Array<{
           type: 'user' | 'group';
@@ -146,6 +250,7 @@ export async function handleGatewayRoutes(
           fileSize?: number;
         }>;
       }>(req);
+      const body = await preprocessChatSendParams(rawBody) as typeof rawBody;
       const VISION_MIME_TYPES = new Set([
         // Static images
         'image/png', 'image/jpeg', 'image/bmp', 'image/webp',
@@ -157,6 +262,25 @@ export async function handleGatewayRoutes(
       const imageAttachments: Array<{ content: string; mimeType: string; fileName: string }> = [];
       const fileReferences: string[] = [];
       const transformByOSS = await shouldTransformAttachmentsByOSS(body.sessionKey);
+      const adapter = await getAdapterForSession(body.sessionKey, parseEngineType(body.engineType));
+      if (adapter.type !== 'openclaw') {
+        const result = await adapter.sendMessageWithMedia(
+          { gatewayManager: ctx.gatewayManager },
+          {
+            sessionKey: body.sessionKey,
+            message: body.message,
+            deliver: body.deliver,
+            idempotencyKey: body.idempotencyKey,
+            media: body.media,
+          },
+        );
+        if (!result.success) {
+          sendJson(res, 500, result);
+          return true;
+        }
+        sendJson(res, 200, result);
+        return true;
+      }
       if (body.media && body.media.length > 0) {
         const fsP = await import('node:fs/promises');
         for (const m of body.media) {
@@ -198,9 +322,15 @@ export async function handleGatewayRoutes(
       if (body.dingTalkAttachedFiles?.length) {
         rpcParams.dingTalkAttachedFiles = body.dingTalkAttachedFiles;
       }
-      const enrichedParams = await preprocessChatSendParams(rpcParams);
-      const result = await ctx.gatewayManager.rpc('chat.send', enrichedParams, 120000);
-      sendJson(res, 200, { success: true, result });
+      const result = await adapter.sendMessage(
+        { gatewayManager: ctx.gatewayManager },
+        rpcParams as { sessionKey: string; message: string; deliver?: boolean; idempotencyKey: string },
+      );
+      if (!result.success) {
+        sendJson(res, 500, result);
+        return true;
+      }
+      sendJson(res, 200, result);
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

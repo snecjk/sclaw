@@ -44,10 +44,11 @@ const LONG_OUTPUT_CONSTRAINT = [
   '',
   '### Output rules',
   '',
-  '1. Save the file under the current workspace **`./.claw-output/`** directory.',
+  '1. Save the file under the current workspace **`./.claw-output/`** directory (write tool only — do not use this relative path in user-facing replies).',
   '2. Use a meaningful filename (e.g. `daily_report.sql`). If the file already exists, append a number suffix (`_1`, `_2`).',
   '3. In your reply, provide:',
-  '   - The relative file path (e.g. `./.claw-output/daily_report.sql`)',
+  '   - The **absolute** file path as a Markdown link: `[filename](file:///absolute/path)` (macOS/Linux: `file:///Users/.../workspace/.claw-output/foo.md`; Windows: `file:///C:/Users/.../workspace/.claw-output/foo.md` with forward slashes).',
+  '   - Never reply with relative paths (`./.claw-output/...`, `report.md`, `outputs/...`).',
   '   - A brief summary (≤ 5 bullet points)',
   '   - A friendly prompt telling the user they can click the path to preview the full content',
   '4. Even if the user says "send it directly to me" or "show it in chat", still write the file and include a short preview (first 5–10 lines) in your reply.',
@@ -124,12 +125,14 @@ export interface AgentSummary {
   name: string;
   isDefault: boolean;
   modelDisplay: string;
+  modelAccountId?: string;
   inheritedModel: boolean;
   workspace: string;
   agentDir: string;
   mainSessionKey: string;
   channelTypes: string[];
   fileTransformByOSS: boolean;
+  engineType?: AgentEngineType;
 }
 
 export interface AgentsSnapshot {
@@ -142,8 +145,28 @@ export interface AgentsSnapshot {
 
 // ── Agent Features (stored outside openclaw.json to avoid schema violations) ──
 
+export type AgentEngineType = 'openclaw' | 'claude';
+
 interface AgentFeatures {
   fileTransformByOSS?: Record<string, boolean>;
+  engineType?: Record<string, AgentEngineType>;
+  preferredModel?: Record<string, string>;
+  preferredModelAccountId?: Record<string, string>;
+}
+
+function getDefaultAgentEngineType(): AgentEngineType {
+  // return process.platform === 'win32' ? 'claude' : 'openclaw';
+  return 'openclaw';
+}
+
+function normalizeAgentEngineType(value: unknown, fallback: AgentEngineType = getDefaultAgentEngineType()): AgentEngineType {
+  if (value === 'claude' || value === 'openclaw') return value;
+  return fallback;
+}
+
+interface AgentPreferredModel {
+  model?: string;
+  accountId?: string;
 }
 
 const AGENT_FEATURES_FILE = join(getClawXConfigDir(), 'agent-features.json');
@@ -638,8 +661,14 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
   const defaultModelLabel = formatModelLabel((config.agents as AgentsConfig | undefined)?.defaults?.model);
   const features = await readAgentFeatures();
   const agents: AgentSummary[] = entries.map((entry) => {
-    const modelLabel = formatModelLabel(entry.model) || defaultModelLabel || 'Not configured';
-    const inheritedModel = !formatModelLabel(entry.model) && Boolean(defaultModelLabel);
+    const engineType = normalizeAgentEngineType(features.engineType?.[entry.id]);
+    const preferredModel = features.preferredModel?.[entry.id];
+    const modelLabel = engineType === 'claude'
+      ? formatModelLabel(preferredModel) || 'Not configured'
+      : (formatModelLabel(entry.model) || defaultModelLabel || 'Not configured');
+    const inheritedModel = engineType === 'claude'
+      ? false
+      : (!formatModelLabel(entry.model) && Boolean(defaultModelLabel));
     const entryIdNorm = normalizeAgentIdForBinding(entry.id);
     const ownedChannels = agentChannelSets.get(entryIdNorm) ?? new Set<string>();
     return {
@@ -647,6 +676,7 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
       name: entry.name || (entry.id === MAIN_AGENT_ID ? MAIN_AGENT_NAME : entry.id),
       isDefault: entry.id === defaultAgentId,
       modelDisplay: modelLabel,
+      modelAccountId: engineType === 'claude' ? features.preferredModelAccountId?.[entry.id] : undefined,
       inheritedModel,
       workspace: entry.workspace || (entry.id === MAIN_AGENT_ID ? getDefaultWorkspacePath(config) : `~/.stoclaw/openclaw/workspace-${entry.id}`),
       agentDir: entry.agentDir || getDefaultAgentDirPath(entry.id),
@@ -655,6 +685,7 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
         .filter((ct) => ownedChannels.has(ct))
         .map((channelType) => toUiChannelType(channelType)),
       fileTransformByOSS: features.fileTransformByOSS?.[entry.id] === true || entry.fileTransformByOSS === true,
+      engineType,
     };
   });
 
@@ -734,6 +765,10 @@ export async function createAgent(
 
     await provisionAgentFilesystem(config, newAgent, { inheritWorkspace: options?.inheritWorkspace });
     await writeOpenClawConfig(config);
+    const features = await readAgentFeatures();
+    features.engineType = features.engineType || {};
+    features.engineType[nextId] = getDefaultAgentEngineType();
+    await writeAgentFeatures(features);
     logger.info('Created agent config entry', { agentId: nextId, inheritWorkspace: !!options?.inheritWorkspace });
     return await buildSnapshotFromConfig(config);
   });
@@ -784,12 +819,15 @@ export async function createAgentWithId(
     await provisionAgentFilesystem(config, newAgent, { inheritWorkspace: options?.inheritWorkspace });
     await writeOpenClawConfig(config);
 
+    const features = await readAgentFeatures();
+    features.engineType = features.engineType || {};
+    features.engineType[id] = getDefaultAgentEngineType();
+
     if (options?.fileTransformByOSS === true) {
-      const features = await readAgentFeatures();
       features.fileTransformByOSS = features.fileTransformByOSS || {};
       features.fileTransformByOSS[id] = true;
-      await writeAgentFeatures(features);
     }
+    await writeAgentFeatures(features);
 
     logger.info('Created agent config entry (explicit ID)', { agentId: id, inheritWorkspace: !!options?.inheritWorkspace });
     return await buildSnapshotFromConfig(config);
@@ -810,6 +848,60 @@ export async function setAgentFileTransformByOSS(agentId: string, enabled: boole
     await writeAgentFeatures(features);
 
     logger.info('Updated agent fileTransformByOSS', { agentId, enabled });
+    return await buildSnapshotFromConfig(config);
+  });
+}
+
+export async function setAgentEngineType(agentId: string, engineType: AgentEngineType): Promise<AgentsSnapshot> {
+  return withConfigLock(async () => {
+    const config = await readOpenClawConfig() as AgentConfigDocument;
+    const { entries } = normalizeAgentsConfig(config);
+    if (!entries.some((entry) => entry.id === agentId)) {
+      throw new Error(`Agent "${agentId}" not found`);
+    }
+
+    const features = await readAgentFeatures();
+    features.engineType = features.engineType || {};
+    features.engineType[agentId] = normalizeAgentEngineType(engineType);
+    await writeAgentFeatures(features);
+
+    logger.info('Updated agent engineType', { agentId, engineType });
+    return await buildSnapshotFromConfig(config);
+  });
+}
+
+export async function getAgentPreferredModel(agentId: string): Promise<AgentPreferredModel> {
+  const features = await readAgentFeatures();
+  return {
+    model: features.preferredModel?.[agentId],
+    accountId: features.preferredModelAccountId?.[agentId],
+  };
+}
+
+export async function setAgentPreferredModel(
+  agentId: string,
+  selection: { model: string; accountId?: string },
+): Promise<AgentsSnapshot> {
+  return withConfigLock(async () => {
+    const config = await readOpenClawConfig() as AgentConfigDocument;
+    const { entries } = normalizeAgentsConfig(config);
+    if (!entries.some((entry) => entry.id === agentId)) {
+      throw new Error(`Agent "${agentId}" not found`);
+    }
+
+    const features = await readAgentFeatures();
+    features.preferredModel = features.preferredModel || {};
+    features.preferredModel[agentId] = selection.model.trim();
+
+    features.preferredModelAccountId = features.preferredModelAccountId || {};
+    if (selection.accountId?.trim()) {
+      features.preferredModelAccountId[agentId] = selection.accountId.trim();
+    } else {
+      delete features.preferredModelAccountId[agentId];
+    }
+
+    await writeAgentFeatures(features);
+    logger.info('Updated agent preferred model', { agentId, model: selection.model.trim(), accountId: selection.accountId?.trim() });
     return await buildSnapshotFromConfig(config);
   });
 }

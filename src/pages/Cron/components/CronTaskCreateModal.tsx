@@ -6,14 +6,24 @@ import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
 import { scheduleValueToCron, cronToScheduleValue, defaultScheduleValue } from './schedule-utils';
 import { resolveScheduledTaskMentions, stripInstructionFromTaskMessage } from '@/lib/scheduled-task-recipients';
 import { cn } from '@/lib/utils';
-import type { CronJob, CronJobCreateInput } from '@/types/cron';
+import type { CronJobCreateInput } from '@/types/cron';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { ManagedLocalTask } from '@/stores/cron';
+import type { ClaudeTaskPermissionProfile } from '@/types/scheduled-task';
+
+type TaskEngineType = 'openclaw' | 'claude';
+
+export interface CronTaskFormInput extends CronJobCreateInput {
+  engineType: TaskEngineType;
+  claudeWorkspacePath?: string;
+  claudePermissionProfile?: ClaudeTaskPermissionProfile;
+}
 
 interface CronTaskCreateModalProps {
-  job?: CronJob | null;
+  job?: ManagedLocalTask | null;
   open: boolean;
   onClose: () => void;
-  onSave: (input: CronJobCreateInput) => Promise<void>;
+  onSave: (input: CronTaskFormInput) => Promise<void>;
   initialValues?: { name?: string; message?: string; schedule?: string };
 }
 
@@ -22,28 +32,40 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
   const [message, setMessage] = useState('');
   const [schedule, setSchedule] = useState<ScheduleValue>(defaultScheduleValue());
   const [recipients, setRecipients] = useState<DingTalkMention[]>([]);
+  const [engineType, setEngineType] = useState<TaskEngineType>('openclaw');
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; message?: string }>({});
 
   const isEditing = !!job;
+  const isClaudeTask = engineType === 'claude';
 
   useEffect(() => {
     if (open) {
       if (job) {
         setName(job.name || '');
-        setMessage(stripInstructionFromTaskMessage(job.message || ''));
-        setRecipients(resolveScheduledTaskMentions(job.message || ''));
-        setSchedule(cronToScheduleValue(job.schedule));
+        if (job.engineType === 'claude') {
+          setMessage(stripInstructionFromTaskMessage(job.promptTemplate || ''));
+          setRecipients(resolveScheduledTaskMentions(job.promptTemplate || ''));
+          setEngineType('claude');
+          setSchedule(cronToScheduleValue(job.cronExpr));
+        } else {
+          setMessage(stripInstructionFromTaskMessage(job.message || ''));
+          setRecipients(resolveScheduledTaskMentions(job.message || ''));
+          setEngineType('openclaw');
+          setSchedule(cronToScheduleValue(job.schedule));
+        }
       } else if (initialValues) {
         setName(initialValues.name || '');
         setMessage(initialValues.message || '');
         setRecipients([]);
         setSchedule(initialValues.schedule ? cronToScheduleValue(initialValues.schedule) : defaultScheduleValue());
+        setEngineType('openclaw');
       } else {
         setName('');
         setMessage('');
         setRecipients([]);
         setSchedule(defaultScheduleValue());
+        setEngineType('openclaw');
       }
       setErrors({});
       setSaving(false);
@@ -67,6 +89,9 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
         schedule: scheduleValueToCron(schedule),
         enabled: true,
         dingTalkMentions: recipients.length > 0 ? recipients : undefined,
+        engineType,
+        claudeWorkspacePath: undefined,
+        claudePermissionProfile: engineType === 'claude' ? 'dangerous-bypass' : undefined,
       });
       onClose();
     } catch (err) {
@@ -87,11 +112,11 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center pt-[10vh] px-4 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg bg-background rounded-2xl border border-border shadow-2xl overflow-visible my-8"
+        className="w-full max-w-3xl max-h-[calc(100vh-2rem)] bg-background rounded-2xl border border-border shadow-2xl overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -115,7 +140,7 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
         </div>
 
         {/* Form */}
-        <div className="px-6 py-4 space-y-5">
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
           {/* Name */}
           <div>
             <label className="block text-[13.5px] font-medium text-foreground mb-1.5">
@@ -133,6 +158,25 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
               autoComplete="off"
             />
             {errors.name && <p className="text-[12px] text-destructive mt-1">{errors.name}</p>}
+          </div>
+
+          <div>
+            <label className="block text-[13.5px] font-medium text-foreground mb-1.5">
+              执行引擎
+            </label>
+            <select
+              value={engineType}
+              onChange={(e) => setEngineType(e.target.value as TaskEngineType)}
+              className="w-full h-10 px-3 text-[13px] rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+            >
+              <option value="openclaw">OpenClaw</option>
+              <option value="claude">Claude Agent</option>
+            </select>
+            <p className="mt-1 text-[11.5px] text-muted-foreground">
+              {engineType === 'claude'
+                ? '将创建 Claude 本地定时任务，并在工作区基础上额外开放用户目录访问。'
+                : '将创建 OpenClaw 本地定时任务。'}
+            </p>
           </div>
 
           {/* Instructions */}
@@ -161,11 +205,12 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
             <SchedulePicker value={schedule} onChange={setSchedule} />
           </div>
 
-          {/* Recipients */}
           <div>
-            <label className="block text-[13.5px] font-medium text-foreground mb-1.5">
-              发送对象
-            </label>
+            <div className="flex items-center justify-between gap-3 mb-1.5">
+              <label className="block text-[13.5px] font-medium text-foreground">
+                发送对象
+              </label>
+            </div>
             <DingTalkRecipientField value={recipients} onChange={setRecipients} />
           </div>
         </div>

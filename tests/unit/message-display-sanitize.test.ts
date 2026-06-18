@@ -28,6 +28,16 @@ describe('message display sanitize', () => {
     expect(extractText({ role: 'assistant', content: input })).toBe('✅ 已将《月》这首诗发送给 **李峥**');
   });
 
+  it('strips Gateway timestamp prefix from user messages', () => {
+    const input = '[Wed 2026-06-10 11:33 GMT+8] 安装';
+    expect(extractText({ role: 'user', content: input })).toBe('安装');
+  });
+
+  it('strips Gateway timestamp prefix regardless of user role casing', () => {
+    const input = '[Wed 2026-06-10 11:33 GMT+8] hello';
+    expect(extractText({ role: 'User', content: input })).toBe('hello');
+  });
+
   it('strips task id from thinking timeline process messages', () => {
     const input =
       '✅ 已将《月》这首诗发送给 **李峥**, 任务 ID: qxWlh4mus0ApRwHKyj0IGVw2W6zQndUjMAnhnNpvaj8=';

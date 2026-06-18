@@ -102,6 +102,27 @@ export function getClawXConfigDir(): string {
 }
 
 /**
+ * Get StoClaw-managed Claude config directory.
+ */
+export function getClaudeConfigDir(): string {
+  return join(getClawXConfigDir(), '.claude');
+}
+
+/**
+ * Get Claude skills directory managed by StoClaw.
+ */
+export function getClaudeSkillsDir(): string {
+  return join(getClaudeConfigDir(), 'skills');
+}
+
+/**
+ * Get Claude plugins directory managed by StoClaw.
+ */
+export function getClaudePluginsDir(): string {
+  return join(getClaudeConfigDir(), 'plugins');
+}
+
+/**
  * Get StoClaw logs directory
  */
 export function getLogsDir(): string {
@@ -113,6 +134,13 @@ export function getLogsDir(): string {
  */
 export function getDataDir(): string {
   return app.getPath('userData');
+}
+
+/**
+ * Get StoClaw-managed Claude scheduled tasks directory.
+ */
+export function getClaudeScheduledTasksDir(): string {
+  return join(getClawXConfigDir(), 'claude-scheduled-tasks');
 }
 
 /**
@@ -224,6 +252,26 @@ export function getBundledPluginSourceCandidates(pluginDirName: string): string[
     join(`${pluginsAsar}.unpacked`, pluginDirName),
     join(root, 'openclaw-plugins', pluginDirName),
     join(root, 'app.asar.unpacked', 'openclaw-plugins', pluginDirName),
+  ];
+}
+
+/**
+ * Candidate directories for bundled Claude plugin mirrors in packaged builds.
+ */
+export function getBundledClaudePluginSourceCandidates(pluginDirName: string): string[] {
+  if (!app.isPackaged) {
+    return [
+      join(app.getAppPath(), 'resources', 'claude-plugins', pluginDirName),
+      join(process.cwd(), 'resources', 'claude-plugins', pluginDirName),
+      join(__dirname, '../../resources/claude-plugins', pluginDirName),
+    ];
+  }
+
+  const root = process.resourcesPath;
+  return [
+    join(root, 'resources', 'claude-plugins', pluginDirName),
+    join(root, 'claude-plugins', pluginDirName),
+    join(root, 'app.asar.unpacked', 'resources', 'claude-plugins', pluginDirName),
   ];
 }
 

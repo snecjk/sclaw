@@ -7,7 +7,6 @@ import {
   Puzzle,
   Clock,
   Settings as SettingsIcon,
-  Plus,
   Trash2,
   LogOut,
   ChevronLeft,
@@ -18,7 +17,7 @@ import {
   Moon,
   Monitor,
   Bookmark,
-  Home,
+  MessageSquarePlus,
   BarChart3,
   Bot,
   Radio,
@@ -52,7 +51,11 @@ import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
-import { parseCronSessionKey, parseScheduledTaskAgentSessionKey } from '@/stores/chat/cron-session-utils';
+import {
+  parseClaudeScheduledTaskRunSessionKey,
+  parseCronSessionKey,
+  parseScheduledTaskAgentSessionKey,
+} from '@/stores/chat/cron-session-utils';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
@@ -79,6 +82,9 @@ const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS = 'w-48 rounded-[12px] border-0 shadow-
 const SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS = 'rounded-[12px] border-0 shadow-lg';
 const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
   'hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7] dark:hover:bg-muted dark:focus:bg-muted dark:data-[highlighted]:bg-muted dark:data-[state=open]:bg-muted';
+const SIDEBAR_BUCKET_INITIAL_LIMIT = 60;
+const SIDEBAR_BUCKET_LOAD_MORE_COUNT = 60;
+const SIDEBAR_COLLAPSED_SESSION_LIMIT = 40;
 
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   if (!activityMs || activityMs <= 0) return 'older';
@@ -102,6 +108,10 @@ function collapsedEntryLabel(full: string): string {
   if (!s) return '…';
   const first = [...s][0];
   return `${first}…`;
+}
+
+function isTemporaryAgentSessionKey(key: string): boolean {
+  return /^agent:[^:]+:session-\d+/.test(key);
 }
 
 const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' | 'taskWeeklyPpt' }[] = [
@@ -546,7 +556,6 @@ export function Sidebar() {
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const switchSession = useChatStore((s) => s.switchSession);
-  const newSession = useChatStore((s) => s.newSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
   const renameSession = useChatStore((s) => s.renameSession);
   const loadSessions = useChatStore((s) => s.loadSessions);
@@ -580,19 +589,78 @@ export function Sidebar() {
     older: true,
     cronTasks: true,
   });
+  const [bucketVisibleCounts, setBucketVisibleCounts] = useState<Partial<Record<SessionBucketKey, number>>>({});
 
   const { t } = useTranslation(['common', 'chat', 'auth', 'tasks']);
 
   const sidebarVis = useMemo(() => getSidebarVisibility(getSidebarLayoutVariant()), []);
 
   useEffect(() => {
-    if (!isGatewayRunning) return;
     let cancelled = false;
     (async () => {
       await loadSessions();
       if (cancelled) return;
 
-      const hasExistingMessages = useChatStore.getState().messages.length > 0;
+      // 主页路径只需要会话列表用于侧边栏展示，不需要在启动时尝试恢复当前历史，
+      // 否则会把默认 main 会话继续绑定到 OpenClaw 启动态。
+      if (window.location.pathname === '/') {
+        const state = useChatStore.getState();
+        if (state.currentSessionKey !== DEFAULT_SESSION_KEY || state.messages.length > 0 || state.loading) {
+          const nextRuntimeBySessionKey = {
+            ...state.runtimeBySessionKey,
+            [state.currentSessionKey]: {
+              sending: state.sending,
+              activeRunId: state.activeRunId,
+              streamingText: state.streamingText,
+              streamingMessage: state.streamingMessage,
+              streamingTools: state.streamingTools,
+              pendingFinal: state.pendingFinal,
+              lastUserMessageAt: state.lastUserMessageAt,
+              pendingToolImages: state.pendingToolImages,
+              error: state.error,
+              updatedAt: Date.now(),
+            },
+            [DEFAULT_SESSION_KEY]: {
+              sending: false,
+              activeRunId: null,
+              streamingText: '',
+              streamingMessage: null,
+              streamingTools: [],
+              pendingFinal: false,
+              lastUserMessageAt: null,
+              pendingToolImages: [],
+              error: null,
+              updatedAt: Date.now(),
+            },
+          };
+          useChatStore.setState({
+            currentSessionKey: DEFAULT_SESSION_KEY,
+            currentAgentId: 'main',
+            runtimeBySessionKey: nextRuntimeBySessionKey,
+            messages: [],
+            loading: false,
+            sending: false,
+            streamingText: '',
+            streamingMessage: null,
+            streamingTools: [],
+            activeRunId: null,
+            error: null,
+            pendingFinal: false,
+            lastUserMessageAt: null,
+            pendingToolImages: [],
+          });
+        }
+        return;
+      }
+
+      const state = useChatStore.getState();
+      const currentSession = state.sessions.find((session) => session.key === state.currentSessionKey);
+      const shouldLoadHistory = isGatewayRunning || currentSession?.engineType === 'claude';
+      if (!shouldLoadHistory) {
+        return;
+      }
+
+      const hasExistingMessages = state.messages.length > 0;
       await loadHistory(hasExistingMessages);
     })();
     return () => {
@@ -609,6 +677,9 @@ export function Sidebar() {
       if (dn && !looksLikeTechnicalSessionDisplay(dn) && dn !== key) return dn;
       if (key.endsWith(':main')) {
         return t('chat:sessionList.mainSessionTitle');
+      }
+      if (isTemporaryAgentSessionKey(key)) {
+        return t('common:sidebar.newChat');
       }
       return key;
     },
@@ -654,31 +725,46 @@ export function Sidebar() {
 
   // Legacy cron + scheduled-task agent sessions — shown under "任务列表" grouped by task name
   const taskListScheduledSessions = useMemo(
-    () => visibleSessions.filter((s) => parseCronSessionKey(s.key) || parseScheduledTaskAgentSessionKey(s.key)),
+    () => visibleSessions.filter((s) => (
+      parseCronSessionKey(s.key)
+      || parseScheduledTaskAgentSessionKey(s.key)
+      || parseClaudeScheduledTaskRunSessionKey(s.key)
+    )),
     [visibleSessions],
   );
 
   // Normal chat sessions — shown under time buckets (today / yesterday / ...)
   const normalSessions = useMemo(
-    () => visibleSessions.filter((s) => !parseCronSessionKey(s.key) && !parseScheduledTaskAgentSessionKey(s.key)),
+    () => visibleSessions.filter((s) => (
+      !parseCronSessionKey(s.key)
+      && !parseScheduledTaskAgentSessionKey(s.key)
+      && !parseClaudeScheduledTaskRunSessionKey(s.key)
+    )),
     [visibleSessions],
   );
 
-  const getEffectiveActivityMs = (sessionKey: string): number => {
+  const getEffectiveActivityMs = (session: { key: string; updatedAt?: number; label?: string }): number => {
+    const sessionKey = session.key;
     const recorded = sessionLastActivity[sessionKey] ?? 0;
-    if (recorded > 0) return recorded;
-    const isFreshCurrentSession = sessionKey === currentSessionKey && !sessionLabels[sessionKey];
+    const listed = typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt) ? session.updatedAt : 0;
+    const activity = Math.max(recorded, listed);
+    if (activity > 0) return activity;
+    const isFreshCurrentSession = sessionKey === currentSessionKey
+      && isTemporaryAgentSessionKey(sessionKey)
+      && !sessionLabels[sessionKey];
     return isFreshCurrentSession ? nowMs : 0;
   };
 
   for (const session of [...normalSessions].sort((a, b) =>
-    getEffectiveActivityMs(b.key) - getEffectiveActivityMs(a.key),
+    getEffectiveActivityMs(b) - getEffectiveActivityMs(a),
   )) {
-    const bucketKey = getSessionBucket(getEffectiveActivityMs(session.key), nowMs);
+    const bucketKey = getSessionBucket(getEffectiveActivityMs(session), nowMs);
     sessionBucketMap[bucketKey].sessions.push(session);
   }
 
-  const sessionsOrderedForCollapse = sessionBuckets.flatMap((b) => b.sessions);
+  const sessionsOrderedForCollapse = sessionBuckets
+    .flatMap((b) => b.sessions)
+    .slice(0, SIDEBAR_COLLAPSED_SESSION_LIMIT);
 
   // Group scheduled-task sessions by task name for the task-list section
   const scheduledTaskGroups = useMemo(() => {
@@ -687,6 +773,7 @@ export function Sidebar() {
     for (const session of taskListScheduledSessions) {
       const stParsed = parseScheduledTaskAgentSessionKey(session.key);
       const cronParsed = parseCronSessionKey(session.key);
+      const claudeTaskRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
 
       if (stParsed) {
         const taskName = session.displayName || session.label?.split(' - ')[0] || `定时任务 ${stParsed.taskId}`;
@@ -700,6 +787,13 @@ export function Sidebar() {
         const groupKey = `cron:${cronParsed.jobId}`;
         if (!groups.has(groupKey)) {
           groups.set(groupKey, { key: groupKey, name: jobName, sessions: [] });
+        }
+        groups.get(groupKey)!.sessions.push(session);
+      } else if (claudeTaskRunParsed) {
+        const taskName = session.displayName || session.label || `Claude 定时任务 ${claudeTaskRunParsed.taskId}`;
+        const groupKey = `claude-task:${claudeTaskRunParsed.taskId}`;
+        if (!groups.has(groupKey)) {
+          groups.set(groupKey, { key: groupKey, name: taskName, sessions: [] });
         }
         groups.get(groupKey)!.sessions.push(session);
       }
@@ -723,6 +817,16 @@ export function Sidebar() {
     setBucketOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const getBucketVisibleCount = (key: SessionBucketKey) =>
+    bucketVisibleCounts[key] ?? SIDEBAR_BUCKET_INITIAL_LIMIT;
+
+  const showMoreBucketSessions = (key: SessionBucketKey) => {
+    setBucketVisibleCounts((prev) => ({
+      ...prev,
+      [key]: (prev[key] ?? SIDEBAR_BUCKET_INITIAL_LIMIT) + SIDEBAR_BUCKET_LOAD_MORE_COUNT,
+    }));
+  };
+
   const primaryNav = useMemo(() => {
     const all: Array<{
       to: string;
@@ -731,7 +835,7 @@ export function Sidebar() {
       label: string;
       badge?: ReactNode;
     }> = [
-      { to: '/', end: true, icon: <Home className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.home') },
+      { to: '/', end: true, icon: <MessageSquarePlus className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.newChat') },
       { to: '/scheduled-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: `${t('common:sidebar.cronTasks')}（云）` },
       { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
       { to: '/skills', icon: <Puzzle className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
@@ -800,23 +904,67 @@ export function Sidebar() {
           sidebarCollapsed ? 'px-0' : 'px-2',
         )}
       >
-        {/* 固定区：首页、定时任务、技能广场、工作区等 */}
+        {/* 固定区：新对话、定时任务、技能广场、工作区等 */}
         <div className="flex shrink-0 flex-col gap-1">
         <div className={cn('flex flex-col gap-1', sidebarCollapsed && 'mt-2')}>
 {primaryNav.map((item) => {
-  // 当有选中非默认会话时，首页不高亮，避免与会话列表项同时高亮
+  // 当有选中非默认会话时，新对话入口不高亮，避免与会话列表项同时高亮
   const shouldDimHome = currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY;
   const homeIsActiveOverride = item.to === '/' && shouldDimHome ? false : undefined;
   
-  // 点击首页时，切换到默认会话并清空消息，让首页显示初始内容
+  // 点击新对话时，切换到默认会话并清空消息，让页面显示初始内容
   const handleHomeClick = item.to === '/'
     ? () => {
-        const { messages, currentSessionKey: currKey } = useChatStore.getState();
-        if (messages.length > 0 || currKey !== DEFAULT_SESSION_KEY) {
+        const {
+          messages,
+          currentSessionKey: currKey,
+          loading,
+          sending,
+          activeRunId,
+          streamingText,
+          streamingMessage,
+          streamingTools,
+          pendingFinal,
+          lastUserMessageAt,
+          pendingToolImages,
+          error,
+          runtimeBySessionKey,
+        } = useChatStore.getState();
+        if (messages.length > 0 || currKey !== DEFAULT_SESSION_KEY || loading) {
+          const nextRuntimeBySessionKey = {
+            ...runtimeBySessionKey,
+            [currKey]: {
+              sending,
+              activeRunId,
+              streamingText,
+              streamingMessage,
+              streamingTools,
+              pendingFinal,
+              lastUserMessageAt,
+              pendingToolImages,
+              error,
+              updatedAt: Date.now(),
+            },
+            [DEFAULT_SESSION_KEY]: {
+              sending: false,
+              activeRunId: null,
+              streamingText: '',
+              streamingMessage: null,
+              streamingTools: [],
+              pendingFinal: false,
+              lastUserMessageAt: null,
+              pendingToolImages: [],
+              error: null,
+              updatedAt: Date.now(),
+            },
+          };
           useChatStore.setState({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: 'main',
+            runtimeBySessionKey: nextRuntimeBySessionKey,
             messages: [],
+            loading: false,
+            sending: false,
             streamingText: '',
             streamingMessage: null,
             streamingTools: [],
@@ -909,62 +1057,11 @@ export function Sidebar() {
           </div>
         ) : null}
 
-        {sidebarVis.conversationChrome ? (
-          !sidebarCollapsed ? (
-            <p className="mt-4 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
-              {t('common:sidebar.sessionList')}
-            </p>
-          ) : (
-            <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
-          )
+        {sidebarCollapsed ? (
+          <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
         ) : null}
 
-        {sidebarVis.conversationChrome ? (
-          !sidebarCollapsed ? (
-            <button
-              type="button"
-              onClick={() => {
-                navigateToMainChatHome(navigate, location.pathname, () => {
-                  const { messages } = useChatStore.getState();
-                  if (messages.length > 0) newSession();
-                });
-              }}
-              className="mx-1 mt-1 flex items-center gap-2 rounded-xl border border-[rgba(255,140,0,0.35)] bg-[var(--sto-accent-soft)] px-3 py-2.5 text-left text-[13px] font-semibold text-[var(--sto-accent)] shadow-sm transition-colors hover:opacity-95 dark:bg-amber-950/35"
-            >
-              <Plus className="h-[17px] w-[17px] shrink-0" strokeWidth={2} aria-hidden />
-              <span className="truncate">{t('common:sidebar.newChat')}</span>
-            </button>
-          ) : (
-            <Tooltip delayDuration={200}>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={t('common:sidebar.newChat')}
-                  title={t('common:sidebar.newChat')}
-                  onClick={() => {
-                    navigateToMainChatHome(navigate, location.pathname, () => {
-                      const { messages } = useChatStore.getState();
-                      if (messages.length > 0) newSession();
-                    });
-                  }}
-                  className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card"
-                >
-                  <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent
-                side="right"
-                sideOffset={12}
-                collisionPadding={12}
-                className={SIDEBAR_COLLAPSED_TOOLTIP_SURFACE}
-              >
-                {t('common:sidebar.newChat')}
-              </TooltipContent>
-            </Tooltip>
-          )
-        ) : null}
-
-        <div className="space-y-1 pb-2 pt-1">
+        <div className={cn('space-y-1 pb-2', sidebarCollapsed ? 'pt-1' : 'pt-3')}>
           {sidebarCollapsed && sessionsOrderedForCollapse.length > 0 ? (
             <div className="flex flex-col gap-1">
               {sessionsOrderedForCollapse.map((s) => {
@@ -1027,8 +1124,9 @@ export function Sidebar() {
                       aria-hidden
                     />
                   </button>
-                  {bucketOpen[bucket.key] &&
-                    bucket.sessions.map((s) => {
+                  {bucketOpen[bucket.key] ? (
+                    <>
+                    {bucket.sessions.slice(0, getBucketVisibleCount(bucket.key)).map((s) => {
                       const isEditing = editingSessionKey === s.key;
                       const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
                       return (
@@ -1114,6 +1212,20 @@ isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION
                         </div>
                       );
                     })}
+                    {bucket.sessions.length > getBucketVisibleCount(bucket.key) ? (
+                      <button
+                        type="button"
+                        onClick={() => showMoreBucketSessions(bucket.key)}
+                        className="mt-1 w-full rounded-[8px] px-[10px] py-[6px] text-left text-[12px] font-medium text-muted-foreground transition-colors hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]"
+                      >
+                        {t('common:actions.showMore', {
+                          defaultValue: '显示更多（{{count}}）',
+                          count: bucket.sessions.length - getBucketVisibleCount(bucket.key),
+                        })}
+                      </button>
+                    ) : null}
+                    </>
+                  ) : null}
                 </div>
               ) : null
               )}

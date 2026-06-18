@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveSchemaHash, resolveTemplateId } from '../../sto-plugin/sto-workflow-tool/workflow-params';
+import { resolveSchemaHash, resolveTemplateId } from '../../sto-plugin/openclaw/sto-workflow-tool/workflow-params';
 
 describe('resolveTemplateId', () => {
   it('accepts templateId', () => {

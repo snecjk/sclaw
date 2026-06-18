@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toCanonicalHook } from "../../sto-plugin/sto-agent-telemetry/envelope.js";
+import { toCanonicalHook } from "../../sto-plugin/openclaw/sto-agent-telemetry/envelope.js";
 
 describe("toCanonicalHook", () => {
   it("maps 0322 llm_output to model_call_ended", () => {

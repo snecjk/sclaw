@@ -13,6 +13,11 @@ export function normalizeModelIdForChat(raw: string | undefined | null): string 
   return lastSlash >= 0 ? trimmed.slice(lastSlash + 1) : trimmed;
 }
 
+export function isConcreteModelId(raw: string | undefined | null): boolean {
+  const normalized = normalizeModelIdForChat(raw);
+  return Boolean(normalized) && normalized.toLowerCase() !== 'not configured';
+}
+
 /** Workspace default model from the default provider account (normalized for UI). */
 export function getWorkspaceDefaultModelId(
   accounts: ProviderAccount[],

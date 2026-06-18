@@ -13,7 +13,7 @@ import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { logger } from '../../utils/logger';
 import { getStoModelSyncService } from '../../services/providers/sto-model-sync';
-import { runAuthenticatedSetup } from '../../services/auth-setup-orchestrator';
+import { runAuthenticatedSetup, type AuthenticatedSetupResult } from '../../services/auth-setup-orchestrator';
 import { runPendingInstallReport } from '../../services/client-update-platform';
 import { activateUserWorkspace, getCurrentActiveUserCode } from '../../services/user-skill-workspace';
 import { removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-auth';
@@ -23,6 +23,7 @@ import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { loadSiteDepartmentTypes } from '../../services/sto-apollo-config-service';
 import { getClientSiteAccessService } from '../../services/client-site-access-service';
 import type { ClientSiteAccessCheckResult } from '../../../shared/client-site-access';
+import { syncClaudeDefaultContext } from '../../services/claude-context-sync';
 
 const ssoLoginManager = new SsoLoginManager();
 
@@ -48,11 +49,18 @@ async function clearAuthAfterAccessDenied(): Promise<void> {
 }
 
 /**
- * Heavy post-login work (skill workspace sync, SAI CLI, model/biz-agent setup).
- * Runs in the background so POST /api/auth/login can return immediately after SSO.
+ * Heavy post-login work that can safely continue after the login response.
+ * Critical STO provider/model sync is awaited in the login route so the first
+ * model-page snapshot is already consistent when the renderer redirects.
  */
 function schedulePostLoginBackgroundWork(user: SsoUserInfo, ctx: HostApiContext): void {
   void (async () => {
+    try {
+      await syncClaudeDefaultContext();
+    } catch (err) {
+      logger.warn('[auth] Claude default context sync on login failed:', err);
+    }
+
     try {
       const previousUserCode = await getCurrentActiveUserCode();
       const workspaceResult = await activateUserWorkspace(user.code);
@@ -74,17 +82,6 @@ function schedulePostLoginBackgroundWork(user: SsoUserInfo, ctx: HostApiContext)
     } catch (err) {
       logger.warn('SAI CLI auto-install on login failed:', err);
     }
-
-    try {
-      await runAuthenticatedSetup({
-        user,
-        gatewayManager: ctx.gatewayManager,
-        source: 'login',
-      });
-    } catch (err) {
-      logger.warn('[auth] Post-login authenticated setup failed:', err);
-    }
-
     void runPendingInstallReport(app.getVersion(), process.platform);
   })();
 }
@@ -184,12 +181,29 @@ export async function handleAuthRoutes(
 
       await setAuthUser(user);
 
-      getStoModelSyncService().startPeriodicSync();
+      const stoSyncService = getStoModelSyncService();
+      if (ctx.gatewayManager) {
+        stoSyncService.setGatewayManager(ctx.gatewayManager);
+      }
+
+      let setupResult: AuthenticatedSetupResult | undefined;
+      try {
+        setupResult = await runAuthenticatedSetup({
+          user,
+          gatewayManager: ctx.gatewayManager,
+          source: 'login',
+        });
+      } catch (err) {
+        logger.warn('[auth] Synchronous post-login authenticated setup failed:', err);
+      }
+
+      stoSyncService.startPeriodicSync();
       schedulePostLoginBackgroundWork(user, ctx);
 
       sendJson(res, 200, {
         success: true,
         user,
+        stoSync: setupResult?.stoSync,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

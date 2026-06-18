@@ -2,7 +2,7 @@
  * Providers Settings Component
  * Manage AI provider configurations and API keys
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Plus,
@@ -48,6 +48,7 @@ import {
   buildProviderAccountId,
   buildProviderListItems,
   hasConfiguredCredentials,
+  hasReadyStoModelCatalog,
   type ProviderListItem,
 } from '@/lib/provider-accounts';
 import { getWorkspaceDefaultModelId } from '@/lib/chat-model-options';
@@ -183,12 +184,41 @@ export function ProvidersSettings() {
     validateAccountApiKey,
   } = useProviderStore();
 
-  const hasStoProvider = accounts.some((a) => a.vendorId === 'sto');
+  const hasStoModelCatalog = hasReadyStoModelCatalog(accounts);
 
   const handleRetryStoSync = async () => {
     try {
-      await hostApiFetch('/api/sto-model-sync', { method: 'POST' });
+      const result = await hostApiFetch<{
+        success: boolean;
+        error?: string;
+      }>('/api/sto-model-sync', { method: 'POST' });
       await refreshProviderSnapshot();
+      if (result?.error) {
+        if (result.error === 'empty-model-list') {
+          toast.error('获取 STO 模型失败', {
+            description: '远程模型列表为空，请检查网络连接或稍后手动重试',
+          });
+          return;
+        }
+
+        if (result.error.startsWith('fetch-failed')) {
+          toast.error('模型列表同步失败', {
+            description: '无法获取远程模型列表，请检查网络连接后刷新重试',
+          });
+          return;
+        }
+
+        if (result.error === 'no-token') {
+          toast.error('同步失败', {
+            description: '当前登录状态已失效，请重新登录后再试',
+          });
+          return;
+        }
+
+        toast.error('同步失败', { description: result.error });
+        return;
+      }
+
       toast.success('STO 模型同步成功');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -207,10 +237,36 @@ export function ProvidersSettings() {
     [accounts, statuses, vendors, defaultAccountId],
   );
 
+  const [stoSyncing, setStoSyncing] = useState(false);
+  const stoAutoSyncAttempts = useRef(0);
+
+  const runStoSyncWithRefresh = async () => {
+    setStoSyncing(true);
+    try {
+      await handleRetryStoSync();
+    } finally {
+      setStoSyncing(false);
+    }
+  };
+
   // Fetch providers on mount
   useEffect(() => {
-    refreshProviderSnapshot();
+    void refreshProviderSnapshot();
   }, [refreshProviderSnapshot]);
+
+  // After login, remote model list may still be empty on the first attempt.
+  // Auto-retry (max 2) so users do not see stale openclaw.json placeholder providers.
+  useEffect(() => {
+    if (!isAuthenticated || hasStoModelCatalog || loading || stoSyncing) {
+      return;
+    }
+    if (stoAutoSyncAttempts.current >= 2) {
+      return;
+    }
+    stoAutoSyncAttempts.current += 1;
+    void runStoSyncWithRefresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, hasStoModelCatalog, loading, stoSyncing]);
 
   const handleAddProvider = async (
     type: ProviderType,
@@ -333,33 +389,41 @@ export function ProvidersSettings() {
         </Button>
       </div>
 
-      {/* STO 模型同步失败提示 */}
-      {!loading && isAuthenticated && !hasStoProvider && (
+      {/* STO 模型同步失败 / 进行中 */}
+      {!loading && isAuthenticated && !hasStoModelCatalog && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            {stoSyncing ? (
+              <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-amber-600 dark:text-amber-400" />
+            ) : (
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            )}
             <div className="flex-1">
               <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                获取 STO 模型失败
+                {stoSyncing ? '正在同步 STO 模型…' : '获取 STO 模型失败'}
               </p>
               <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                远程模型列表为空，可能是网络波动或服务端异常。您可以稍后自动重试，或点击下方按钮手动同步。
+                {stoSyncing
+                  ? '正在从服务端拉取模型列表，请稍候。'
+                  : '远程模型列表尚未就绪，可能是网络波动或服务端异常。您可以稍后自动重试，或点击下方按钮手动同步。'}
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3 h-8 border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-900/50"
-                onClick={handleRetryStoSync}
-              >
-                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                重新同步 STO 模型
-              </Button>
+              {!stoSyncing && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 h-8 border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-900/50"
+                  onClick={() => void runStoSyncWithRefresh()}
+                >
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                  重新同步 STO 模型
+                </Button>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {loading ? (
+      {loading || (isAuthenticated && !hasStoModelCatalog && stoSyncing) ? (
         <div className="flex items-center justify-center rounded-md border border-dashed border-border bg-white/50 py-12 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>

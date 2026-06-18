@@ -8,6 +8,8 @@ import { homedir } from 'node:os';
 import { join, extname, basename } from 'node:path';
 import crypto from 'node:crypto';
 import { GatewayManager } from '../gateway/manager';
+import { getAdapterForSession, listEngineSessions } from '../engines/manager';
+import type { AgentEngineType } from '../engines/types';
 import { ClawHubService, ClawHubSearchParams, ClawHubInstallParams, ClawHubUninstallParams } from '../gateway/clawhub';
 import {
   type ProviderConfig,
@@ -67,6 +69,7 @@ import { appUpdater } from './updater';
 import { registerHostApiProxyHandlers } from './ipc/host-api-proxy';
 import { registerWorkflowStreamHandlers } from './ipc/workflow-stream-proxy';
 import { getWorkflowExecutionTracker } from './services/workflow-execution-tracker';
+import { syncClaudeDefaultContext } from '../services/claude-context-sync';
 import {
   isLaunchAtStartupKey,
   isProxyKey,
@@ -151,6 +154,10 @@ export function registerIpcHandlers(
 
   // Float icon handlers (desktop floating launcher)
   registerFloatIconHandlers(getFloatIconWindow);
+}
+
+function parseEngineType(value: unknown): AgentEngineType | undefined {
+  return value === 'claude' || value === 'openclaw' ? value : undefined;
 }
 
 function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
@@ -1111,6 +1118,11 @@ function registerUvHandlers(): void {
       }
       // Always run python setup to ensure it exists in uv's cache
       await setupManagedPython();
+      try {
+        await syncClaudeDefaultContext();
+      } catch (error) {
+        logger.warn('Failed to sync Claude default context after setup:', error);
+      }
       return { success: true };
     } catch (error) {
       console.error('Failed to setup uv/python:', error);
@@ -1254,6 +1266,69 @@ function registerGatewayHandlers(
       const rpcParams = method === 'chat.send'
         ? await preprocessChatSendParams(params)
         : params;
+
+      if (method === 'sessions.list') {
+        const result = await listEngineSessions({ gatewayManager });
+        return { success: true, result: { sessions: result } };
+      }
+
+      if (method === 'chat.history') {
+        const body = (rpcParams && typeof rpcParams === 'object' ? rpcParams : {}) as {
+          sessionKey?: string;
+          limit?: number;
+          engineType?: AgentEngineType;
+        };
+        const adapter = await getAdapterForSession(body.sessionKey ?? '', parseEngineType(body.engineType));
+        const result = await adapter.getHistory(
+          { gatewayManager },
+          { sessionKey: body.sessionKey ?? '', limit: Number.isFinite(body.limit) && (body.limit ?? 0) > 0 ? Number(body.limit) : 1000 },
+        );
+        if (!result.success) {
+          return { success: false, error: result.error || 'chat.history failed' };
+        }
+        return { success: true, result: result.result };
+      }
+
+      if (method === 'chat.send') {
+        const body = (rpcParams && typeof rpcParams === 'object' ? rpcParams : {}) as {
+          sessionKey?: string;
+          message?: string;
+          deliver?: boolean;
+          idempotencyKey?: string;
+          engineType?: AgentEngineType;
+        };
+        const adapter = await getAdapterForSession(body.sessionKey ?? '', parseEngineType(body.engineType));
+        const result = await adapter.sendMessage(
+          { gatewayManager },
+          {
+            sessionKey: body.sessionKey ?? '',
+            message: body.message ?? '',
+            deliver: body.deliver,
+            idempotencyKey: body.idempotencyKey ?? crypto.randomUUID(),
+          },
+        );
+        if (!result.success) {
+          return { success: false, error: result.error || 'chat.send failed' };
+        }
+        return { success: true, result: result.result };
+      }
+
+      if (method === 'chat.abort') {
+        const body = (rpcParams && typeof rpcParams === 'object' ? rpcParams : {}) as {
+          sessionKey?: string;
+          engineType?: AgentEngineType;
+        };
+        const adapter = await getAdapterForSession(body.sessionKey ?? '', parseEngineType(body.engineType));
+        const result = await adapter.abortRun(
+          { gatewayManager },
+          { sessionKey: body.sessionKey ?? '' },
+        );
+        if (!result.success) {
+          return { success: false, error: result.error || 'chat.abort failed' };
+        }
+        return { success: true, result: result.result };
+      }
+
       const result = await gatewayManager.rpc(method, rpcParams, timeoutMs);
       return { success: true, result };
     } catch (error) {

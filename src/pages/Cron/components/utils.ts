@@ -1,5 +1,6 @@
 import { stripInstructionFromTaskMessage } from '@/lib/scheduled-task-recipients';
 import type { CronJob } from '@/types/cron';
+import type { ManagedLocalTask } from '@/stores/cron';
 
 function parseCronStringLabel(cron: string): string {
   const parts = cron.split(' ');
@@ -59,16 +60,16 @@ export function parseScheduleLabel(schedule: CronJob['schedule']): string {
   return String(schedule);
 }
 
-export function filterTasks(tasks: CronJob[], query: string): CronJob[] {
+export function filterTasks(tasks: ManagedLocalTask[], query: string): ManagedLocalTask[] {
   if (!query.trim()) return tasks;
   const q = query.trim().toLowerCase();
   return tasks.filter((t) => {
-    const message = stripInstructionFromTaskMessage(t.message || '');
+    const message = stripInstructionFromTaskMessage(t.engineType === 'claude' ? t.promptTemplate || '' : t.message || '');
     return t.name.toLowerCase().includes(q) || message.toLowerCase().includes(q);
   });
 }
 
-export function sortTasks(tasks: CronJob[], sort: string): CronJob[] {
+export function sortTasks(tasks: ManagedLocalTask[], sort: string): ManagedLocalTask[] {
   const sorted = [...tasks];
   switch (sort) {
     case 'created-asc':

@@ -4,7 +4,7 @@
  * via gateway:rpc IPC. Session selector, thinking toggle, and refresh
  * are in the toolbar; messages render with markdown + streaming.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowDown, Bot, Cpu, Loader2, Orbit, Sparkles, Workflow } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useChatStore, type RawMessage } from '@/stores/chat';
@@ -17,12 +17,14 @@ import { AssistantTurnMessage } from './AssistantTurnMessage';
 import { useChatDisplay } from './use-chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatToolbar } from './ChatToolbar';
+import { ChatSearchBar } from './ChatSearchBar';
 import { PendingQueuePanel } from './PendingQueuePanel';
 import { ChatPreviewPanel } from './ChatPreviewPanel';
 import { extractText } from './message-utils';
 import { useMessageQueueStore, createAutoSendWatcher } from '@/stores/message-queue';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { useTranslation } from 'react-i18next';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { cn } from '@/lib/utils';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
@@ -37,6 +39,8 @@ export function Chat() {
 
   const messages = useChatStore((s) => s.messages);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const currentAgentId = useChatStore((s) => s.currentAgentId);
+  const sessions = useChatStore((s) => s.sessions);
   const loading = useChatStore((s) => s.loading);
   const sending = useChatStore((s) => s.sending);
   const error = useChatStore((s) => s.error);
@@ -47,6 +51,7 @@ export function Chat() {
   const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
+  const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
@@ -62,9 +67,38 @@ export function Chat() {
   const [splitting, setSplitting] = useState(false);
   const [previewPanelWidth, setPreviewPanelWidth] = useState(480);
   const [isResizing, setIsResizing] = useState(false);
+  const [editDraft, setEditDraft] = useState<{ text: string; version: number } | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchableMessages, setSearchableMessages] = useState<Array<{ id: string; text: string }>>([]);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(0);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const previewPanelRef = useRef<HTMLDivElement>(null);
+  const deferredSearchQuery = useDeferredValue(searchQuery.trim());
   const minLoading = useMinLoading(loading && messages.length > 0);
   const { contentRef, scrollRef, scrollToBottom, stopScroll } = useStickToBottomInstant(currentSessionKey);
+  const currentSession = useMemo(
+    () => sessions.find((session) => session.key === currentSessionKey),
+    [sessions, currentSessionKey],
+  );
+  const currentAgent = useMemo(
+    () => agents.find((agent) => agent.id === currentAgentId),
+    [agents, currentAgentId],
+  );
+  const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
+    ? currentAgent?.engineType
+    : currentSession?.engineType ?? currentAgent?.engineType;
+  const composerRequiresGateway = currentEngineType === 'openclaw';
+  const composerDisabled = composerRequiresGateway && !isGatewayRunning;
+  const composerStatusText = currentEngineType === 'claude'
+    ? t('composer.claudeReadyDetail')
+    : t('composer.gatewayStatus', {
+        state: gatewayStatus.state === 'running'
+          ? t('composer.gatewayConnected')
+          : gatewayStatus.state,
+        port: gatewayStatus.port,
+        pid: gatewayStatus.pid ? `| pid: ${gatewayStatus.pid}` : '',
+      });
+  const composerStatusTone = currentEngineType === 'claude' || isGatewayRunning ? 'ready' : 'warning';
 
   // Load data when gateway is running.
   // When the store already holds messages for this session (i.e. the user
@@ -174,6 +208,91 @@ export function Chat() {
     updateJumpToLatestVisibility();
   }, [messages.length, shouldRenderStreaming, pendingFinal, updateJumpToLatestVisibility]);
 
+  useEffect(() => {
+    const contentElement = contentRef.current;
+    if (!contentElement) {
+      setSearchableMessages([]);
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      const nodes = Array.from(contentElement.querySelectorAll<HTMLElement>('[data-chat-message-id]'));
+      const nextSearchableMessages = nodes
+        .map((node) => ({
+          id: node.dataset.chatMessageId?.trim() ?? '',
+          text: (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim(),
+        }))
+        .filter((entry) => entry.id.length > 0 && entry.text.length > 0);
+      setSearchableMessages(nextSearchableMessages);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [contentRef, currentSessionKey, streamContentKey, showThinking, staticItems, activeTurn]);
+
+  const searchMatches = useMemo(() => {
+    if (!deferredSearchQuery) return [];
+    const normalizedQuery = deferredSearchQuery.toLocaleLowerCase();
+    return searchableMessages.filter((entry) => entry.text.toLocaleLowerCase().includes(normalizedQuery));
+  }, [deferredSearchQuery, searchableMessages]);
+
+  useEffect(() => {
+    setActiveSearchIndex(0);
+  }, [deferredSearchQuery]);
+
+  useEffect(() => {
+    if (searchMatches.length === 0) {
+      setActiveSearchIndex(0);
+      return;
+    }
+    setActiveSearchIndex((currentIndex) => Math.min(currentIndex, searchMatches.length - 1));
+  }, [searchMatches]);
+
+  const activeSearchMatch = searchMatches[activeSearchIndex] ?? null;
+  const matchedMessageIds = useMemo(
+    () => new Set(searchMatches.map((entry) => entry.id)),
+    [searchMatches],
+  );
+
+  const scrollToMessageMatch = useCallback((messageId: string, behavior: ScrollBehavior = 'smooth') => {
+    const container = scrollRef.current;
+    const contentElement = contentRef.current;
+    if (!container || !contentElement) return;
+
+    const target = Array.from(contentElement.querySelectorAll<HTMLElement>('[data-chat-message-id]'))
+      .find((node) => node.dataset.chatMessageId === messageId);
+    if (!target) return;
+
+    stopScroll();
+    const delta = target.getBoundingClientRect().top - container.getBoundingClientRect().top - 28;
+    container.scrollBy({ top: delta, behavior });
+  }, [contentRef, scrollRef, stopScroll]);
+
+  useEffect(() => {
+    if (!activeSearchMatch || !deferredSearchQuery) return;
+    scrollToMessageMatch(activeSearchMatch.id, 'smooth');
+  }, [activeSearchMatch, deferredSearchQuery, scrollToMessageMatch]);
+
+  const handleSearchNext = useCallback(() => {
+    if (searchMatches.length === 0) return;
+    setActiveSearchIndex((currentIndex) => (currentIndex + 1) % searchMatches.length);
+  }, [searchMatches.length]);
+
+  const handleSearchPrevious = useCallback(() => {
+    if (searchMatches.length === 0) return;
+    setActiveSearchIndex((currentIndex) => (currentIndex - 1 + searchMatches.length) % searchMatches.length);
+  }, [searchMatches.length]);
+
+  const handleSearchClear = useCallback(() => {
+    setSearchQuery('');
+    setActiveSearchIndex(0);
+  }, []);
+
+  const handleSearchToggle = useCallback(() => {
+    setIsSearchOpen((current) => !current);
+  }, []);
+
   const handleSend = useCallback(async (
     text: string,
     attachments?: import('./ChatInput').FileAttachment[],
@@ -203,6 +322,16 @@ export function Chat() {
   ) => {
     const { currentSessionKey } = useChatStore.getState();
     useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, dingTalkMentions, workflowId);
+  }, []);
+
+  const handleEditMessage = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setEditDraft({ text: trimmed, version: Date.now() });
+  }, []);
+
+  const handleEditDraftApplied = useCallback(() => {
+    setEditDraft(null);
   }, []);
 
   // ── Resizable panel logic ──
@@ -315,8 +444,27 @@ export function Chat() {
       </div>
 
       {/* Toolbar */}
-      <div className="relative z-10 flex shrink-0 items-center justify-between px-6 py-2">
-        <ChatToolbar />
+      <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-6 py-2">
+        <ChatToolbar
+          trailingContent={(
+            <ChatSearchBar
+              isOpen={isSearchOpen}
+              onToggle={handleSearchToggle}
+              value={searchQuery}
+              onChange={(value) => {
+                setSearchQuery(value);
+                if (!isSearchOpen) {
+                  setIsSearchOpen(true);
+                }
+              }}
+              onNext={handleSearchNext}
+              onPrevious={handleSearchPrevious}
+              onClear={handleSearchClear}
+              resultCount={searchMatches.length}
+              activeIndex={searchMatches.length > 0 ? activeSearchIndex : 0}
+            />
+          )}
+        />
       </div>
 
       {/* Messages Area */}
@@ -338,8 +486,11 @@ export function Chat() {
                       turnToolResults={item.toolResults}
                       precedingUserMessage={item.precedingUserMessage}
                       showThinking={showThinking}
+                      matchedMessageIds={matchedMessageIds}
+                      activeMessageId={activeSearchMatch?.id ?? null}
                       onPreviewFile={openArtifactPreview}
                       onViewWorkflow={openWorkflowPreview}
+                      onEditMessage={handleEditMessage}
                     />
                   );
                 }
@@ -348,8 +499,11 @@ export function Chat() {
                     key={item.key}
                     message={item.message}
                     showThinking={showThinking}
+                    isSearchMatch={!!item.message.id && matchedMessageIds.has(item.message.id)}
+                    isSearchActive={!!item.message.id && item.message.id === activeSearchMatch?.id}
                     onPreviewFile={openArtifactPreview}
                     onViewWorkflow={openWorkflowPreview}
+                    onEditMessage={handleEditMessage}
                   />
                 );
               })}
@@ -361,9 +515,12 @@ export function Chat() {
                   turnToolResults={activeTurn.turnToolResults}
                   precedingUserMessage={activeTurn.precedingUserMessage}
                   showThinking={showThinking}
+                  matchedMessageIds={matchedMessageIds}
+                  activeMessageId={activeSearchMatch?.id ?? null}
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={openArtifactPreview}
                   onViewWorkflow={openWorkflowPreview}
+                  onEditMessage={handleEditMessage}
                 />
               ) : null}
             </>
@@ -447,9 +604,14 @@ export function Chat() {
         onSend={handleSend}
         onStop={abortRun}
         onQueue={handleQueue}
-        disabled={!isGatewayRunning}
+        disabled={composerDisabled}
         sending={sending}
         isEmpty={isEmpty}
+        engineType={currentEngineType}
+        statusText={composerStatusText}
+        statusTone={composerStatusTone}
+        editDraft={editDraft}
+        onEditDraftApplied={handleEditDraftApplied}
       />
 
       {/* Transparent loading overlay */}

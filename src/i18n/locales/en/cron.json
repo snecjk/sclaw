@@ -63,6 +63,7 @@
         "paused": "Task paused",
         "deleted": "Task deleted",
         "triggered": "Task started. Check the task list after it finishes.",
+        "alreadyRunning": "This task is already running. Please try again later.",
         "failedTrigger": "Failed to trigger task: {{error}}",
         "failedUpdate": "Failed to update task",
         "failedDelete": "Failed to delete task",

@@ -35,6 +35,7 @@ vi.mock('@/stores/chat/helpers', () => ({
 
 type ChatLikeState = {
   currentSessionKey: string;
+  sessions: Array<{ key: string; engineType?: 'openclaw' | 'claude' }>;
   messages: Array<{ role: string; timestamp?: number; content?: unknown; _attachedFiles?: unknown[]; isError?: boolean }>;
   loading: boolean;
   error: string | null;
@@ -50,6 +51,7 @@ type ChatLikeState = {
 function makeHarness(initial?: Partial<ChatLikeState>) {
   let state: ChatLikeState = {
     currentSessionKey: 'agent:main:main',
+    sessions: [{ key: 'agent:main:main', engineType: 'openclaw' }],
     messages: [],
     loading: false,
     error: null,
@@ -75,16 +77,21 @@ describe('chat history actions', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     invokeIpcMock.mockResolvedValue({ success: true, result: { messages: [] } });
-    hostApiFetchMock.mockResolvedValue({ messages: [] });
+    hostApiFetchMock.mockResolvedValue({ success: true, result: { messages: [] } });
   });
 
   it('uses cron session fallback when gateway history is empty', async () => {
     const { createHistoryActions } = await import('@/stores/chat/history-actions');
     const h = makeHarness({
       currentSessionKey: 'agent:main:cron:job-1',
+      sessions: [{ key: 'agent:main:cron:job-1', engineType: 'openclaw' }],
     });
     const actions = createHistoryActions(h.set as never, h.get as never);
 
+    hostApiFetchMock.mockResolvedValueOnce({
+      success: true,
+      result: { messages: [] },
+    });
     hostApiFetchMock.mockResolvedValueOnce({
       messages: [
         {
@@ -104,6 +111,10 @@ describe('chat history actions', () => {
 
     await actions.loadHistory();
 
+    expect(hostApiFetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/chat/history?sessionKey=agent%3Amain%3Acron%3Ajob-1&limit=1000&engineType=openclaw',
+    );
     expect(hostApiFetchMock).toHaveBeenCalledWith(
       '/api/cron/session-history?sessionKey=agent%3Amain%3Acron%3Ajob-1&limit=50',
     );
@@ -119,12 +130,15 @@ describe('chat history actions', () => {
     const { createHistoryActions } = await import('@/stores/chat/history-actions');
     const h = makeHarness({
       currentSessionKey: 'agent:main:main',
+      sessions: [{ key: 'agent:main:main', engineType: 'openclaw' }],
     });
     const actions = createHistoryActions(h.set as never, h.get as never);
 
     await actions.loadHistory();
 
-    expect(hostApiFetchMock).not.toHaveBeenCalled();
+    expect(hostApiFetchMock).toHaveBeenCalledWith(
+      '/api/chat/history?sessionKey=agent%3Amain%3Amain&limit=1000&engineType=openclaw',
+    );
     expect(h.read().messages).toEqual([]);
     expect(h.read().loading).toBe(false);
   });
@@ -148,7 +162,7 @@ describe('chat history actions', () => {
     });
     const actions = createHistoryActions(h.set as never, h.get as never);
 
-    invokeIpcMock.mockResolvedValueOnce({
+    hostApiFetchMock.mockResolvedValueOnce({
       success: true,
       result: {
         messages: [
@@ -169,5 +183,88 @@ describe('chat history actions', () => {
       '怎么没内容了',
     ]);
     expect(h.read().messages[1]?.isError).toBe(true);
+  });
+
+  it('does not duplicate optimistic user message when loaded history already has matching text', async () => {
+    const { createHistoryActions } = await import('@/stores/chat/history-actions');
+    const h = makeHarness({
+      currentSessionKey: 'agent:main:main',
+      sending: true,
+      lastUserMessageAt: 1710000000000,
+      messages: [
+        {
+          id: 'local-user-1',
+          role: 'user',
+          content: '你是谁',
+          timestamp: 1710000000,
+        },
+      ] as never,
+    });
+    const actions = createHistoryActions(h.set as never, h.get as never);
+
+    hostApiFetchMock.mockResolvedValueOnce({
+      success: true,
+      result: {
+        messages: [
+          {
+            id: 'history-user-1',
+            role: 'user',
+            content: '你是谁',
+          },
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '我是 STO Claw。',
+            timestamp: 1710000003,
+          },
+        ],
+      },
+    });
+
+    await actions.loadHistory(true);
+
+    expect(h.read().messages.map((message) => message.content)).toEqual([
+      '你是谁',
+      '我是 STO Claw。',
+    ]);
+  });
+
+  it('inserts preserved optimistic user message before newer assistant history', async () => {
+    const { createHistoryActions } = await import('@/stores/chat/history-actions');
+    const h = makeHarness({
+      currentSessionKey: 'agent:main:main',
+      sending: true,
+      lastUserMessageAt: 1710000000000,
+      messages: [
+        {
+          id: 'local-user-1',
+          role: 'user',
+          content: '你是谁',
+          timestamp: 1710000000,
+        },
+      ] as never,
+    });
+    const actions = createHistoryActions(h.set as never, h.get as never);
+
+    hostApiFetchMock.mockResolvedValueOnce({
+      success: true,
+      result: {
+        messages: [
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '我是 STO Claw。',
+            timestamp: 1710000003,
+          },
+        ],
+      },
+    });
+
+    await actions.loadHistory(true);
+
+    expect(h.read().messages.map((message) => message.content)).toEqual([
+      '你是谁',
+      '我是 STO Claw。',
+    ]);
   });
 });

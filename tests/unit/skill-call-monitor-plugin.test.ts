@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import register from "../../sto-plugin/sto-skill-call-monitor/index.js";
+import register from "../../sto-plugin/openclaw/sto-skill-call-monitor/index.js";
 
 describe("sto-skill-call-monitor fallback reporting", () => {
   const registeredHooks = new Map<string, Function>();
