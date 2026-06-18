@@ -281,8 +281,8 @@ export function ChatToolbar() {
               modelOptions.map((opt) => (
                 <DropdownMenuItem
                   key={opt.key}
-                  className={cn('flex items-center gap-2', opt.modelId === selectedModelId && 'bg-primary/8 font-medium')}
-                  onSelect={() => void handleModelSwitch(opt.modelId)}
+                  className={cn('flex items-center gap-2', opt.normalizedId === selectedModelId && 'bg-primary/8 font-medium')}
+                  onSelect={() => void handleModelSwitch(opt.normalizedId)}
                 >
                   <span className="min-w-0 flex-1 truncate text-[13px]">{opt.displayName}</span>
                   <span className={cn(

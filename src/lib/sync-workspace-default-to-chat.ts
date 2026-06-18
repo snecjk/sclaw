@@ -5,6 +5,7 @@
 import { hostApiFetch } from '@/lib/host-api';
 import {
   getWorkspaceDefaultModelId,
+  getWorkspaceDefaultRawModelId,
   normalizeModelIdForChat,
   shouldSyncSessionToWorkspaceDefault,
 } from '@/lib/chat-model-options';
@@ -64,16 +65,20 @@ export async function applyWorkspaceDefaultToNewSession(
   if (!trimmedKey) return;
 
   const { accounts, defaultAccountId } = useProviderStore.getState();
-  const modelId = getWorkspaceDefaultModelId(accounts, defaultAccountId);
   const accountId = defaultAccountId?.trim() ?? '';
-  if (!modelId || !accountId) return;
+  if (!accountId) return;
+
+  // Use raw model ID (preserves supplier sub-prefix like "dashscope/kimi-k2.6")
+  // so the value sent to backend / Gateway matches what is registered in models.json.
+  const rawModelId = getWorkspaceDefaultRawModelId(accounts, defaultAccountId);
+  if (!rawModelId) return;
 
   try {
     await hostApiFetch('/api/sessions/model', {
       method: 'POST',
       body: JSON.stringify({
         sessionKey: trimmedKey,
-        model: modelId,
+        model: rawModelId,
         accountId,
         agentId: agentId.trim() || undefined,
       }),
@@ -81,7 +86,7 @@ export async function applyWorkspaceDefaultToNewSession(
     useChatStore.setState((state) => ({
       sessions: state.sessions.map((session) => (
         session.key === trimmedKey
-          ? { ...session, model: modelId }
+          ? { ...session, model: rawModelId }
           : session
       )),
     }));

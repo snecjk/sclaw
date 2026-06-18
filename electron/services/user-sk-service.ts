@@ -168,6 +168,105 @@ export async function getUserSk(forceRefresh = false): Promise<string | null> {
 }
 
 /**
+ * 获取用户 SK 详情（包含 spend / maxBudget 等元数据，不解密 SK）
+ */
+export async function getUserSkDetail(): Promise<{ tokenId: string; spend: number; maxBudget: number } | null> {
+  const { getAuthState } = await import('../utils/auth-store');
+  const authState = await getAuthState();
+  const userCode = authState.user?.code || '';
+  if (!userCode) {
+    logger.warn('[user-sk] No userCode available for detail');
+    return null;
+  }
+
+  const token = await getStoToken();
+  if (!token) return null;
+
+  const domain = await resolveSkApiDomain();
+  const url = `${domain}/openapi/key/detail`;
+  const secretHeader = crypto.createHash('md5').update(userCode).digest('hex');
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        secret: secretHeader,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ userCode }),
+    });
+
+    if (!response.ok) {
+      logger.warn(`[user-sk] detail HTTP failed: ${response.status}`);
+      return null;
+    }
+
+    const json = await response.json() as SkDetailResponse;
+
+    if (json.code !== '0') {
+      logger.info(`[user-sk] detail biz code=${json.code}, msg=${json.msg}`);
+      return null;
+    }
+
+    const detail = json.data?.[0];
+    if (!detail) {
+      logger.warn('[user-sk] detail response missing data');
+      return null;
+    }
+
+    return {
+      tokenId: detail.tokenId,
+      spend: detail.spend ?? 0,
+      maxBudget: detail.maxBudget ?? 0,
+    };
+  } catch (err) {
+    logger.warn('[user-sk] detail error:', err);
+    return null;
+  }
+}
+
+/**
+ * 扩容用户 Key 额度
+ */
+export async function expandUserSkQuota(
+  tokenId: string,
+  quotaAmount: number,
+): Promise<{ success: boolean; message?: string }> {
+  const domain = await resolveSkApiDomain();
+  const url = `${domain}/openapi/key/quota/expansion`;
+  const secretHeader = crypto.createHash('md5').update(tokenId).digest('hex');
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        secret: secretHeader,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ tokenId, quotaAmount }),
+    });
+
+    if (!response.ok) {
+      logger.warn(`[user-sk] expansion HTTP failed: ${response.status}`);
+      return { success: false, message: `HTTP ${response.status}` };
+    }
+
+    const json = await response.json() as { code: string; msg: string; detailMsg?: string };
+
+    if (json.code !== '0') {
+      logger.warn(`[user-sk] expansion biz failed: ${json.code} ${json.msg}`);
+      return { success: false, message: json.msg || json.detailMsg || `Code ${json.code}` };
+    }
+
+    logger.info(`[user-sk] Quota expanded to ${quotaAmount} for token ${tokenId.slice(0, 8)}...`);
+    return { success: true };
+  } catch (err) {
+    logger.warn('[user-sk] expansion error:', err);
+    return { success: false, message: String(err) };
+  }
+}
+
+/**
  * 登出时清理用户 SK
  */
 export async function clearUserSk(): Promise<void> {

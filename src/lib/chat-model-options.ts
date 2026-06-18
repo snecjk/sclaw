@@ -13,7 +13,7 @@ export function normalizeModelIdForChat(raw: string | undefined | null): string 
   return lastSlash >= 0 ? trimmed.slice(lastSlash + 1) : trimmed;
 }
 
-/** Workspace default model from the default provider account. */
+/** Workspace default model from the default provider account (normalized for UI). */
 export function getWorkspaceDefaultModelId(
   accounts: ProviderAccount[],
   defaultAccountId: string | null,
@@ -26,6 +26,25 @@ export function getWorkspaceDefaultModelId(
   const customModels = account.metadata?.customModels as string[] | undefined;
   const first = customModels?.find((m) => !HIDDEN_PROVIDER_IDS.has(m));
   return first ? normalizeModelIdForChat(first) : '';
+}
+
+/**
+ * Workspace default model — raw value (preserves supplier sub-prefix).
+ * Use this when sending the model ID to the backend / Gateway, where the
+ * full original name (e.g. "dashscope/kimi-k2.6") is required.
+ */
+export function getWorkspaceDefaultRawModelId(
+  accounts: ProviderAccount[],
+  defaultAccountId: string | null,
+): string {
+  if (!defaultAccountId) return '';
+  const account = accounts.find((a) => a.id === defaultAccountId);
+  if (!account) return '';
+  const model = account.model?.trim();
+  if (model) return model;
+  const customModels = account.metadata?.customModels as string[] | undefined;
+  const first = customModels?.find((m) => !HIDDEN_PROVIDER_IDS.has(m));
+  return first ?? '';
 }
 
 /**
