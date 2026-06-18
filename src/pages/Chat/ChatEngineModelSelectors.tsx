@@ -171,6 +171,7 @@ export function ChatModelSelector({ className }: { className?: string }) {
   const { t } = useTranslation('chat');
 
   const { accounts, statuses, vendors, defaultAccountId, init } = useProviderStore();
+  const pendingNewSessionModel = useChatStore((s) => s.pendingNewSessionModel);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [modelSaving, setModelSaving] = useState(false);
 
@@ -206,6 +207,15 @@ export function ChatModelSelector({ className }: { className?: string }) {
 
   useEffect(() => {
     if (modelSaving) return;
+    // On the new-conversation page (DEFAULT_SESSION_KEY), show the user's
+    // pending choice or the workspace default — NOT the agent's explicit model,
+    // because the user expects new conversations to start with the global default.
+    if (currentSessionKey === DEFAULT_SESSION_KEY && currentEngineType !== 'claude') {
+      const pending = normalizeModelIdForChat(pendingNewSessionModel);
+      const resolved = pending || workspaceDefaultModelId || '';
+      setSelectedModelId(resolved);
+      return;
+    }
     const resolved = currentEngineType === 'claude'
       ? (
         isConcreteModelId(currentAgent?.modelDisplay)
@@ -221,8 +231,10 @@ export function ChatModelSelector({ className }: { className?: string }) {
       });
     setSelectedModelId(resolved || '');
   }, [
+    currentSessionKey,
     currentEngineType,
     modelSaving,
+    pendingNewSessionModel,
     currentSession?.model,
     currentAgent?.modelDisplay,
     currentAgent?.inheritedModel,
