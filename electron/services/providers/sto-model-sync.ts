@@ -29,7 +29,11 @@ import {
   shouldDeleteStaleStoPlaceholder,
   STO_CANONICAL_ACCOUNT_ID,
 } from './sto-placeholder-utils';
+import { isSiteUser } from '../../../shared/site-user-utils';
 import crypto from 'crypto';
+
+/** 非网点用户的固定租户编码 */
+const DEFAULT_TENANT_CODE = 'enterprise-Intelligence';
 
 // Gateway 消息发送域名（无 api 前缀）
 const NEW_SUPPLIER_DOMAINS: Record<string, string> = {
@@ -147,12 +151,18 @@ export class StoModelSyncService {
    */
   async fetchRemoteModels(
     userCode: string,
+    tenantCode?: string,
   ): Promise<StoRemoteModel[]> {
     const domain = await resolveSkApiDomain();
     const url = `${domain}/openapi/key/detail`;
     const secretHeader = crypto.createHash('md5').update(userCode).digest('hex');
 
-    logger.info(`[sto-sync] >>> fetchRemoteModels url=${url}`);
+    const requestBody: Record<string, string> = { userCode };
+    if (tenantCode) {
+      requestBody.tenantCode = tenantCode;
+    }
+
+    logger.info(`[sto-sync] >>> fetchRemoteModels url=${url} tenantCode=${tenantCode ?? '(none)'}`);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -164,7 +174,7 @@ export class StoModelSyncService {
           secret: secretHeader,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userCode }),
+        body: JSON.stringify(requestBody),
         signal: controller.signal,
       });
     } finally {
@@ -233,7 +243,7 @@ export class StoModelSyncService {
       return result;
     }
 
-    // Step 2 — Get user code for secret header
+    // Step 2 — Get user code for secret header + determine tenantCode
     const { getAuthState } = await import('../../utils/auth-store');
     const authState = await getAuthState();
     const userCode = authState.user?.code || '';
@@ -243,10 +253,14 @@ export class StoModelSyncService {
     }
     const secretHeader = crypto.createHash('md5').update(userCode).digest('hex');
 
+    // 非网点用户携带固定租户编码
+    const categoryCode = authState.user?.categoryCode;
+    const tenantCode = isSiteUser(categoryCode) ? undefined : DEFAULT_TENANT_CODE;
+
     // Step 3 — Fetch remote models from SK detail API
     let remoteModels: StoRemoteModel[];
     try {
-      remoteModels = await this.fetchRemoteModels(userCode);
+      remoteModels = await this.fetchRemoteModels(userCode, tenantCode);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.warn(`[sto-sync] Failed to fetch remote models: ${message}`);

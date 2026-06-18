@@ -9,9 +9,13 @@
 import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
 import { storeApiKey, getApiKey, deleteApiKey } from '../utils/secure-storage';
 import { logger } from '../utils/logger';
+import { isSiteUser } from '../../shared/site-user-utils';
 import crypto from 'crypto';
 
 const SK_PROVIDER_ID = 'sto';
+
+/** 非网点用户的固定租户编码 */
+const DEFAULT_TENANT_CODE = 'enterprise-Intelligence';
 
 // AES-128-ECB 解密密钥（与服务端一致）
 const AES_DECRYPT_KEY = '2074c2350686f0e4';
@@ -70,12 +74,18 @@ async function fetchSkFromApi(
   type: 'query' | 'create',
   token: string,
   userCode: string,
+  tenantCode?: string,
 ): Promise<string | null> {
   const domain = await resolveSkApiDomain();
   const path = type === 'create' ? '/openapi/key/create' : '/openapi/key/detail';
   const url = `${domain}${path}`;
 
   const secretHeader = crypto.createHash('md5').update(userCode).digest('hex');
+
+  const requestBody: Record<string, string> = { userCode };
+  if (tenantCode) {
+    requestBody.tenantCode = tenantCode;
+  }
 
   try {
     const response = await fetch(url, {
@@ -84,7 +94,7 @@ async function fetchSkFromApi(
         secret: secretHeader,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ userCode }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -144,16 +154,20 @@ export async function getUserSk(forceRefresh = false): Promise<string | null> {
     return null;
   }
 
+  // 非网点用户携带固定租户编码
+  const categoryCode = authState.user?.categoryCode;
+  const tenantCode = isSiteUser(categoryCode) ? undefined : DEFAULT_TENANT_CODE;
+
   const token = await getStoToken();
   if (!token) return null;
 
   // Step 1: 查询
-  let sk = await fetchSkFromApi('query', token, userCode);
+  let sk = await fetchSkFromApi('query', token, userCode, tenantCode);
 
   // Step 2: 没有则创建
   if (!sk) {
     logger.info('[user-sk] SK not found, creating...');
-    sk = await fetchSkFromApi('create', token, userCode);
+    sk = await fetchSkFromApi('create', token, userCode, tenantCode);
     if (sk) {
       logger.info('[user-sk] SK created successfully');
     }
@@ -182,9 +196,18 @@ export async function getUserSkDetail(): Promise<{ tokenId: string; spend: numbe
   const token = await getStoToken();
   if (!token) return null;
 
+  // 非网点用户携带固定租户编码
+  const categoryCode = authState.user?.categoryCode;
+  const tenantCode = isSiteUser(categoryCode) ? undefined : DEFAULT_TENANT_CODE;
+
   const domain = await resolveSkApiDomain();
   const url = `${domain}/openapi/key/detail`;
   const secretHeader = crypto.createHash('md5').update(userCode).digest('hex');
+
+  const requestBody: Record<string, string> = { userCode };
+  if (tenantCode) {
+    requestBody.tenantCode = tenantCode;
+  }
 
   try {
     const response = await fetch(url, {
@@ -193,7 +216,7 @@ export async function getUserSkDetail(): Promise<{ tokenId: string; spend: numbe
         secret: secretHeader,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ userCode }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
