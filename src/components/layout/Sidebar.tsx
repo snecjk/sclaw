@@ -390,9 +390,9 @@ function SidebarScheduledTaskGroup({
                 const h = String(d.getHours()).padStart(2, '0');
                 const min = String(d.getMinutes()).padStart(2, '0');
                 const sec = String(d.getSeconds()).padStart(2, '0');
-                label = `${y}年${m}月${day}日${h}时${min}分${sec}秒 的材料`;
+                label = `${y}年${m}月${day}日${h}时${min}分${sec}秒`; // 产品说：定时任务去掉【的材料】这3个字
               } else {
-                label = `${y}年${m}月${day}日 的材料`;
+                label = `${y}年${m}月${day}日`; // 产品说：定时任务去掉【的材料】这3个字
               }
             } else {
               label = s.label || s.displayName || s.key;
