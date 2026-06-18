@@ -79,7 +79,7 @@ export function ChatEngineSelector({ className }: { className?: string }) {
         body: JSON.stringify({ engineType }),
       });
       await fetchAgents();
-      // await loadSessions(); // 这个会出现问题：新对话中切换引擎，会跳转到下方最近一次的对话框中
+      // await loadSessions(); // 这行代码会出现个BUG：新对话中切换引擎，会跳转到下方最近一次的对话框中
       toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : 'OpenClaw'} 引擎`);
     } catch (err) {
       toast.error(`切换引擎失败: ${String(err)}`);
@@ -162,6 +162,7 @@ export function ChatModelSelector({ className }: { className?: string }) {
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessions = useChatStore((s) => s.sessions);
+  // const loadSessions = useChatStore((s) => s.loadSessions);
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
@@ -281,6 +282,7 @@ export function ChatModelSelector({ className }: { className?: string }) {
             : session
         )),
       }));
+      // void loadSessions(); // 这行代码会出现个BUG：新对话中切换模型，会跳转到下方最近一次的对话框中
     } catch (err) {
       toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));
       const resolved = currentEngineType === 'claude'
