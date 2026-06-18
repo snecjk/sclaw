@@ -12,9 +12,11 @@ interface PollerStoreSchema {
   lastSyncTime?: string;
   lastPolledAt: Record<string, string>;
   processedRunIds: string[];
+  deletedSessions: string[];
 }
 
 const MAX_PROCESSED_RUN_IDS = 1000;
+const MAX_DELETED_SESSIONS = 5000;
 
 async function getPollerStore() {
   if (!pollerStoreInstance) {
@@ -24,6 +26,7 @@ async function getPollerStore() {
       defaults: {
         lastPolledAt: {},
         processedRunIds: [],
+        deletedSessions: [],
       },
     });
   }
@@ -65,4 +68,42 @@ export async function markRunProcessed(runId: number | string): Promise<void> {
     next.splice(0, next.length - MAX_PROCESSED_RUN_IDS);
   }
   store.set('processedRunIds', next);
+}
+
+/**
+ * Check whether a session key has been explicitly deleted by the user.
+ * Used to suppress virtual sessions (e.g. cron dated sessions generated from
+ * run logs) from being re-created on next sessions list refresh.
+ */
+export async function isSessionDeleted(sessionKey: string): Promise<boolean> {
+  const store = await getPollerStore();
+  const keys = store.get('deletedSessions') as string[];
+  return keys.includes(sessionKey);
+}
+
+/**
+ * Mark a session key as deleted so that virtual session generators can skip it.
+ */
+export async function markSessionDeleted(sessionKey: string): Promise<void> {
+  const store = await getPollerStore();
+  const keys = store.get('deletedSessions') as string[];
+  if (keys.includes(sessionKey)) return;
+  const next = [...keys, sessionKey];
+  if (next.length > MAX_DELETED_SESSIONS) {
+    next.splice(0, next.length - MAX_DELETED_SESSIONS);
+  }
+  store.set('deletedSessions', next);
+}
+
+/**
+ * Remove a deleted-session marker (e.g. when user explicitly revives a session
+ * or when the underlying data source is permanently removed).
+ */
+export async function unmarkSessionDeleted(sessionKey: string): Promise<void> {
+  const store = await getPollerStore();
+  const keys = store.get('deletedSessions') as string[];
+  const next = keys.filter((k) => k !== sessionKey);
+  if (next.length !== keys.length) {
+    store.set('deletedSessions', next);
+  }
 }

@@ -8,6 +8,7 @@ import type { DingTalkMention } from '../../../shared/dingtalk-mention';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { getOpenClawConfigDir } from '../../utils/paths';
+import { isSessionDeleted } from '../../utils/scheduled-task-poller-store';
 
 interface GatewayCronJob {
   id: string;
@@ -351,6 +352,20 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
   }
 
   sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+
+  // Drop sessions the user explicitly deleted (persisted in deletedSessions store).
+  // This prevents virtual dated cron sessions — regenerated from cron/runs/*.jsonl on
+  // each refresh — from re-appearing in the sidebar after deletion.
+  if (sessions.length > 0) {
+    const deletionChecks = await Promise.all(
+      sessions.map(async (s) => ({ keep: !(await isSessionDeleted(s.key)), session: s })),
+    );
+    const filtered = deletionChecks
+      .filter(({ keep }) => keep)
+      .map(({ session }) => session);
+    return filtered;
+  }
+
   return sessions;
 }
 
@@ -517,6 +532,13 @@ export async function handleCronRoutes(
     const parsedSession = parseCronSessionKey(sessionKey);
     if (!parsedSession) {
       sendJson(res, 400, { success: false, error: `Invalid cron sessionKey: ${sessionKey}` });
+      return true;
+    }
+
+    // If user explicitly deleted this session, return empty history so the renderer
+    // shows nothing instead of regenerated fallback history from cron/runs logs.
+    if (await isSessionDeleted(sessionKey)) {
+      sendJson(res, 200, { success: true, result: { messages: [], thinkingLevel: null } });
       return true;
     }
 
