@@ -17,6 +17,7 @@ import {
   buildChatModelOptions,
   getWorkspaceDefaultModelId,
   isConcreteModelId,
+  normalizeModelIdForChat,
   resolveChatToolbarModelId,
 } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
@@ -208,7 +209,7 @@ export function ChatModelSelector({ className }: { className?: string }) {
     const resolved = currentEngineType === 'claude'
       ? (
         isConcreteModelId(currentAgent?.modelDisplay)
-          ? currentAgent?.modelDisplay?.trim()
+          ? normalizeModelIdForChat(currentAgent?.modelDisplay?.trim())
           : (workspaceDefaultModelId || '')
       )
       : resolveChatToolbarModelId({
@@ -230,7 +231,7 @@ export function ChatModelSelector({ className }: { className?: string }) {
   ]);
 
   const selectedModel = useMemo(
-    () => modelOptions.find((option) => option.modelId === selectedModelId),
+    () => modelOptions.find((option) => option.normalizedId === selectedModelId),
     [modelOptions, selectedModelId],
   );
   const claudeModelConfigured = isConcreteModelId(currentAgent?.modelDisplay);
@@ -239,25 +240,26 @@ export function ChatModelSelector({ className }: { className?: string }) {
       ? (workspaceDefaultModelId || t('toolbar.modelNotConfigured'))
       : t('toolbar.currentModel'));
 
-  const handleModelSwitch = async (modelId: string) => {
-    if (!currentSessionKey || modelId === selectedModelId) return;
-    const option = modelOptions.find((item) => item.modelId === modelId);
-    setSelectedModelId(modelId);
+  const handleModelSwitch = async (normalizedId: string) => {
+    if (!currentSessionKey || normalizedId === selectedModelId) return;
+    const option = modelOptions.find((item) => item.normalizedId === normalizedId);
+    const rawModelId = option?.modelId ?? normalizedId;
+    setSelectedModelId(normalizedId);
     setModelSaving(true);
     try {
-      let persistedModel = modelId;
+      let persistedModel = rawModelId;
       if (currentEngineType === 'claude' && currentAgentId) {
         const result = await hostApiFetch<{ snapshot?: { agents?: Array<{ id: string; modelDisplay?: string }> } }>(
           `/api/agents/${encodeURIComponent(currentAgentId)}/model`,
           {
             method: 'PUT',
             body: JSON.stringify({
-              model: modelId,
+              model: rawModelId,
               accountId: option?.accountId,
             }),
           },
         );
-        persistedModel = result.snapshot?.agents?.find((agent) => agent.id === currentAgentId)?.modelDisplay?.trim() || modelId;
+        persistedModel = result.snapshot?.agents?.find((agent) => agent.id === currentAgentId)?.modelDisplay?.trim() || rawModelId;
         await fetchAgents();
       } else {
         const result = await hostApiFetch<{
@@ -267,18 +269,18 @@ export function ChatModelSelector({ className }: { className?: string }) {
           method: 'POST',
           body: JSON.stringify({
             sessionKey: currentSessionKey,
-            model: modelId,
+            model: rawModelId,
             accountId: option?.accountId,
             agentId: currentAgentId || undefined,
             engineType: currentSession?.engineType,
           }),
         });
-        persistedModel = (result.modelOverride || result.model || modelId).trim();
+        persistedModel = (result.modelOverride || result.model || rawModelId).trim();
       }
       useChatStore.setState((state) => ({
         sessions: state.sessions.map((session) => (
           session.key === currentSessionKey
-            ? { ...session, model: persistedModel || modelId }
+            ? { ...session, model: persistedModel || rawModelId }
             : session
         )),
       }));
@@ -288,7 +290,7 @@ export function ChatModelSelector({ className }: { className?: string }) {
       const resolved = currentEngineType === 'claude'
         ? (
           isConcreteModelId(currentAgent?.modelDisplay)
-            ? currentAgent?.modelDisplay?.trim()
+            ? normalizeModelIdForChat(currentAgent?.modelDisplay?.trim())
             : (workspaceDefaultModelId || '')
         )
         : resolveChatToolbarModelId({
@@ -350,8 +352,8 @@ export function ChatModelSelector({ className }: { className?: string }) {
             modelOptions.map((option) => (
               <DropdownMenuItem
                 key={option.key}
-                className={cn('flex items-center gap-2', option.modelId === selectedModelId && 'bg-primary/8 font-medium')}
-                onSelect={() => void handleModelSwitch(option.modelId)}
+                className={cn('flex items-center gap-2', option.normalizedId === selectedModelId && 'bg-primary/8 font-medium')}
+                onSelect={() => void handleModelSwitch(option.normalizedId)}
               >
                 <span className="min-w-0 flex-1 truncate text-[13px]">{option.displayName}</span>
                 <span className={cn(

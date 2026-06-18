@@ -2172,12 +2172,12 @@ export const useChatStore = create<ChatState>()(
       try {
         // Gateway chat.history does not support offset; load up to the hard max in one call.
         let thinkingLevel: string | null = null;
+        // engineType is not accepted by Gateway chat.history schema
         const data = await useGatewayStore.getState().rpc<Record<string, unknown>>(
           'chat.history',
           {
             sessionKey: targetSessionKey,
             limit: CHAT_HISTORY_LENGTH_MAX_LIMIT,
-            engineType: resolveEngineTypeForSession(get().sessions, targetSessionKey, get().currentAgentId),
           },
         );
         if (get().currentSessionKey !== targetSessionKey) return;
@@ -2484,6 +2484,8 @@ export const useChatStore = create<ChatState>()(
           },
         );
       } else {
+        // engineType is used only by Main-process routes to select the adapter;
+        // Gateway chat.send schema does not accept it, so we must NOT forward it.
         const rpcResult = await useGatewayStore.getState().rpc<{ runId?: string }>(
           'chat.send',
           {
@@ -2491,7 +2493,6 @@ export const useChatStore = create<ChatState>()(
             message: messageWithContext,
             deliver: false,
             idempotencyKey,
-            engineType: currentSessionEngineType,
             ...dingTalkRpcExtras,
             // NOTE: workflowId/runId are not forwarded to Gateway chat.send yet
             // because the Gateway schema does not accept them. Workflow state
@@ -2551,11 +2552,11 @@ export const useChatStore = create<ChatState>()(
     }));
 
     try {
+      // engineType is not accepted by Gateway chat.abort schema
       await useGatewayStore.getState().rpc(
         'chat.abort',
         {
           sessionKey: currentSessionKey,
-          engineType: resolveEngineTypeForSession(get().sessions, currentSessionKey, get().currentAgentId),
         },
       );
     } catch (err) {
