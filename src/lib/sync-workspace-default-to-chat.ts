@@ -57,13 +57,43 @@ export async function syncWorkspaceDefaultModelToChat(opts: {
   }
 }
 
-/** Apply workspace default model to a newly created session (toolbar + gateway). */
+/** Apply workspace default model to a newly created session (toolbar + gateway).
+ *  If the session already carries a model (e.g. from pendingNewSessionModel),
+ *  that user-chosen model wins over the global workspace default. */
 export async function applyWorkspaceDefaultToNewSession(
   sessionKey: string,
   agentId: string,
 ): Promise<void> {
   const trimmedKey = sessionKey.trim();
   if (!trimmedKey) return;
+
+  // If the session already has a model (carried from pendingNewSessionModel),
+  // use that instead of the global default — the user explicitly chose it.
+  const existingSession = useChatStore.getState().sessions.find((s) => s.key === trimmedKey);
+  if (existingSession?.model) {
+    const { accounts, defaultAccountId } = useProviderStore.getState();
+    const accountId = defaultAccountId?.trim() ?? '';
+    if (!accountId) return;
+
+    try {
+      await hostApiFetch('/api/sessions/model', {
+        method: 'POST',
+        body: JSON.stringify({
+          sessionKey: trimmedKey,
+          model: existingSession.model,
+          accountId,
+          agentId: agentId.trim() || undefined,
+          engineType: existingSession.engineType,
+        }),
+      });
+      void useChatStore.getState().loadSessions();
+    } catch (err) {
+      console.warn('[applyWorkspaceDefaultToNewSession] failed to persist user-chosen model:', err);
+    }
+    // Clear the pending state since it has been carried into the session
+    useChatStore.getState().setPendingNewSessionModel(null);
+    return;
+  }
 
   const { accounts, defaultAccountId } = useProviderStore.getState();
   const accountId = defaultAccountId?.trim() ?? '';

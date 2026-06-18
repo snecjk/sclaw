@@ -1483,6 +1483,11 @@ export const useChatStore = create<ChatState>()(
     }));
   },
 
+  pendingNewSessionModel: null,
+  setPendingNewSessionModel: (model) => {
+    set({ pendingNewSessionModel: model });
+  },
+
   pendingWorkflow: null,
   setPendingWorkflow: (pending) => {
     set({ pendingWorkflow: pending });
@@ -1810,6 +1815,7 @@ export const useChatStore = create<ChatState>()(
       key: newKey,
       label: NEW_SESSION_TEMP_LABEL,
       engineType: getAgentEngineType(newAgentId),
+      model: get().pendingNewSessionModel ?? undefined,
     };
     set((s) => {
       const nextRuntimeBySessionKey = {

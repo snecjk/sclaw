@@ -245,6 +245,16 @@ export function ChatModelSelector({ className }: { className?: string }) {
     const option = modelOptions.find((item) => item.normalizedId === normalizedId);
     const rawModelId = option?.modelId ?? normalizedId;
     setSelectedModelId(normalizedId);
+
+    // On the new-conversation page (DEFAULT_SESSION_KEY), /api/sessions/model
+    // will reject because the key does not start with 'agent:'.  Instead,
+    // store the chosen model as pendingNewSessionModel so newSession() carries
+    // it into the real session created when the user sends the first message.
+    if (currentSessionKey === DEFAULT_SESSION_KEY) {
+      useChatStore.getState().setPendingNewSessionModel(rawModelId);
+      return;
+    }
+
     setModelSaving(true);
     try {
       let persistedModel = rawModelId;

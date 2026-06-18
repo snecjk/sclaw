@@ -172,6 +172,12 @@ export interface ChatState {
   showThinking: boolean;
   thinkingLevel: string | null;
 
+  /** Model selected on the new-conversation page (DEFAULT_SESSION_KEY) before sending.
+   *  Carried into the real session created by newSession() so the user's choice
+   *  is preserved instead of reverting to the global default. */
+  pendingNewSessionModel: string | null;
+  setPendingNewSessionModel: (model: string | null) => void;
+
   // Workflow
   workflowCardStates: Record<string, WorkflowExecutionState>;
   setWorkflowCardState: (runId: string, state: WorkflowExecutionState) => void;
