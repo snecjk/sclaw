@@ -356,9 +356,15 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
   // Drop sessions the user explicitly deleted (persisted in deletedSessions store).
   // This prevents virtual dated cron sessions — regenerated from cron/runs/*.jsonl on
   // each refresh — from re-appearing in the sidebar after deletion.
+  // Passes the session's updatedAt so that if a newer run exists (e.g. the user
+  // triggered a cron task on a date whose dated session was previously deleted),
+  // the session "revives" and is shown again.
   if (sessions.length > 0) {
     const deletionChecks = await Promise.all(
-      sessions.map(async (s) => ({ keep: !(await isSessionDeleted(s.key)), session: s })),
+      sessions.map(async (s) => ({
+        keep: !(await isSessionDeleted(s.key, s.updatedAt)),
+        session: s,
+      })),
     );
     const filtered = deletionChecks
       .filter(({ keep }) => keep)
@@ -535,13 +541,6 @@ export async function handleCronRoutes(
       return true;
     }
 
-    // If user explicitly deleted this session, return empty history so the renderer
-    // shows nothing instead of regenerated fallback history from cron/runs logs.
-    if (await isSessionDeleted(sessionKey)) {
-      sendJson(res, 200, { success: true, result: { messages: [], thinkingLevel: null } });
-      return true;
-    }
-
     const rawLimit = Number(url.searchParams.get('limit') || String(CHAT_HISTORY_LIMIT));
     const limit = Number.isFinite(rawLimit)
       ? Math.min(Math.max(Math.floor(rawLimit), 1), CHAT_HISTORY_LIMIT)
@@ -578,6 +577,24 @@ export async function handleCronRoutes(
       sendJson(res, 200, { messages });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/cron/local-job-names' && req.method === 'GET') {
+    // Reads cron job names directly from cron/jobs.json (no Gateway dependency).
+    // Used as a fallback when /api/cron/jobs (Gateway-backed) is temporarily
+    // unavailable — e.g. during a cron trigger race window.
+    try {
+      const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
+      const raw = await readFile(jobsFile, 'utf8');
+      const data = JSON.parse(raw) as { jobs?: Array<{ id: string; name?: string }> };
+      const jobs = (data.jobs ?? [])
+        .filter((j) => j.id && j.name)
+        .map((j) => ({ id: j.id, name: j.name! }));
+      sendJson(res, 200, jobs);
+    } catch {
+      sendJson(res, 200, []);
     }
     return true;
   }

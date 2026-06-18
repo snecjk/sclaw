@@ -210,11 +210,40 @@ export function createSessionActions(
         try {
           const jobsResult = await hostApiFetch<Array<{ id: string; name: string }>>('/api/cron/jobs');
           const jobNameMap = new Map(jobsResult.map((j) => [j.id, j.name]));
+
+          // Identify cron sessions whose name was not resolved from the
+          // Gateway-backed /api/cron/jobs list — these will be resolved
+          // from the local cron/jobs.json fallback below.
+          const unresolvedCronJobIds = new Set<string>();
           for (const session of sessionsWithCurrent) {
             const parsed = parseCronSessionKey(session.key);
             if (parsed) {
               const name = jobNameMap.get(parsed.jobId);
-              if (name) session.displayName = name;
+              if (name) {
+                session.displayName = name;
+              } else {
+                unresolvedCronJobIds.add(parsed.jobId);
+              }
+            }
+          }
+
+          // Fallback: if any cron session name was not resolved from the
+          // Gateway, read names from the local cron/jobs.json file. This
+          // handles the race window where /api/cron/jobs is temporarily
+          // empty (e.g. during a cron.trigger provider-sync re-init).
+          if (unresolvedCronJobIds.size > 0) {
+            try {
+              const fallbackJobs = await hostApiFetch<Array<{ id: string; name: string }>>('/api/cron/local-job-names');
+              const fallbackMap = new Map(fallbackJobs.map((j) => [j.id, j.name]));
+              for (const session of sessionsWithCurrent) {
+                const parsed = parseCronSessionKey(session.key);
+                if (parsed && unresolvedCronJobIds.has(parsed.jobId) && !session.displayName) {
+                  const fallbackName = fallbackMap.get(parsed.jobId);
+                  if (fallbackName) session.displayName = fallbackName;
+                }
+              }
+            } catch {
+              // Fallback is best-effort; ignore errors.
             }
           }
         } catch {

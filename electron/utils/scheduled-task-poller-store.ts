@@ -13,6 +13,7 @@ interface PollerStoreSchema {
   lastPolledAt: Record<string, string>;
   processedRunIds: string[];
   deletedSessions: string[];
+  deletedSessionTimestamps: Record<string, number>;
 }
 
 const MAX_PROCESSED_RUN_IDS = 1000;
@@ -27,6 +28,7 @@ async function getPollerStore() {
         lastPolledAt: {},
         processedRunIds: [],
         deletedSessions: [],
+        deletedSessionTimestamps: {},
       },
     });
   }
@@ -74,11 +76,25 @@ export async function markRunProcessed(runId: number | string): Promise<void> {
  * Check whether a session key has been explicitly deleted by the user.
  * Used to suppress virtual sessions (e.g. cron dated sessions generated from
  * run logs) from being re-created on next sessions list refresh.
+ *
+ * If `updatedAt` is provided and greater than the recorded deletion time,
+ * the session is considered "revived" by newer activity — returns false.
+ * This handles the case where a cron task is triggered on the same date
+ * a previously-deleted dated session had: the new run has a newer timestamp,
+ * so the dated session correctly reappears in the sidebar.
  */
-export async function isSessionDeleted(sessionKey: string): Promise<boolean> {
+export async function isSessionDeleted(sessionKey: string, updatedAt?: number): Promise<boolean> {
   const store = await getPollerStore();
   const keys = store.get('deletedSessions') as string[];
-  return keys.includes(sessionKey);
+  if (!keys.includes(sessionKey)) return false;
+  if (typeof updatedAt === 'number' && Number.isFinite(updatedAt) && updatedAt > 0) {
+    const timestamps = store.get('deletedSessionTimestamps') as Record<string, number>;
+    const deletedAt = timestamps[sessionKey];
+    // No timestamp recorded for legacy entries: treat deletedAt as 0 (session stays hidden)
+    if (typeof deletedAt !== 'number') return true;
+    return deletedAt >= updatedAt;
+  }
+  return true;
 }
 
 /**
@@ -87,12 +103,15 @@ export async function isSessionDeleted(sessionKey: string): Promise<boolean> {
 export async function markSessionDeleted(sessionKey: string): Promise<void> {
   const store = await getPollerStore();
   const keys = store.get('deletedSessions') as string[];
-  if (keys.includes(sessionKey)) return;
-  const next = [...keys, sessionKey];
-  if (next.length > MAX_DELETED_SESSIONS) {
-    next.splice(0, next.length - MAX_DELETED_SESSIONS);
+  if (!keys.includes(sessionKey)) {
+    const next = [...keys, sessionKey];
+    if (next.length > MAX_DELETED_SESSIONS) {
+      next.splice(0, next.length - MAX_DELETED_SESSIONS);
+    }
+    store.set('deletedSessions', next);
   }
-  store.set('deletedSessions', next);
+  const timestamps = store.get('deletedSessionTimestamps') as Record<string, number>;
+  store.set('deletedSessionTimestamps', { ...timestamps, [sessionKey]: Date.now() });
 }
 
 /**
@@ -102,8 +121,13 @@ export async function markSessionDeleted(sessionKey: string): Promise<void> {
 export async function unmarkSessionDeleted(sessionKey: string): Promise<void> {
   const store = await getPollerStore();
   const keys = store.get('deletedSessions') as string[];
-  const next = keys.filter((k) => k !== sessionKey);
-  if (next.length !== keys.length) {
-    store.set('deletedSessions', next);
+  if (keys.includes(sessionKey)) {
+    store.set('deletedSessions', keys.filter((k) => k !== sessionKey));
+  }
+  const timestamps = store.get('deletedSessionTimestamps') as Record<string, number>;
+  if (sessionKey in timestamps) {
+    const next = { ...timestamps };
+    delete next[sessionKey];
+    store.set('deletedSessionTimestamps', next);
   }
 }
