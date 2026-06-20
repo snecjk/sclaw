@@ -100,8 +100,13 @@ function showStoSyncErrorToasts(stoSync?: StoSyncResponse | null): void {
     toast.error('模型列表同步失败', {
       description: '无法获取远程模型列表，请检查网络连接后刷新重试',
     });
+    return;
   }
-  // no-token 由主进程 auth:token-expired 事件处理，这里不重复操作
+
+  if (stoSync.error === 'no-token') {
+    useAuthStore.setState({ isAuthenticated: false, user: null });
+    return;
+  }
 }
 
 async function refreshProviderSnapshot(): Promise<void> {
@@ -136,7 +141,10 @@ async function syncStoModelsAndRefreshProviders(context: 'init' | 'login'): Prom
               description: '无法获取远程模型列表，请检查网络连接后刷新重试',
             });
           }
-          // no-token 由主进程 auth:token-expired 事件处理，这里不重复操作
+          // no-token 由主进程 auth:token-expired 事件处理，这里也同步清理渲染层状态
+          if (result.error === 'no-token') {
+            useAuthStore.setState({ isAuthenticated: false, user: null });
+          }
         }
         break;
       } catch (error) {

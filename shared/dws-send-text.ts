@@ -227,3 +227,35 @@ export function fixDwsChatMessageSendToolParams(
   }
   return undefined;
 }
+
+/** Agent-facing `--text` value: JSON double-quoted string with `\n` escape sequences. */
+export function formatDwsChatMessageSendTextForAgentCommand(text: string): string {
+  return JSON.stringify(text);
+}
+
+export interface DwsChatMessageSendAgentCommandOptions {
+  recipientKind: 'user' | 'group';
+  recipientId: string;
+  title?: string;
+  text: string;
+}
+
+/**
+ * Build a pre-normalization `dws chat message send` command for agent prompts.
+ * Matches input accepted by fixDwsChatMessageSendShellScript / fixDwsChatMessageSendToolParams.
+ */
+export function buildDwsChatMessageSendAgentCommandExample(
+  options: DwsChatMessageSendAgentCommandOptions,
+): string {
+  const flag = options.recipientKind === 'user' ? '--user' : '--group';
+  const title = options.title ?? '消息';
+  const textArg = formatDwsChatMessageSendTextForAgentCommand(options.text);
+  return `dws chat message send ${flag} ${options.recipientId} --title ${JSON.stringify(title)} --text ${textArg} --format json`;
+}
+
+/**
+ * Prompt rule: how agents compose `--text` and how StoClaw normalizes before execution.
+ * Keep in sync with fixDwsChatMessageSendShellScript / fixDwsChatMessageSendToolParams.
+ */
+export const DWS_CHAT_MESSAGE_SEND_AGENT_FORMAT_RULE =
+  '**--text 写法**（须与下方预填示例一致）：用普通双引号包裹正文，段落换行写 `\\n`（勿在 shell 命令里写真实换行、勿用 shell 变量如 `--text $text`、勿手写 Bash `$\\\'...\\\'`）。StoClaw 会在工具调用/执行前自动解析 `--text`、把 `\\n` 转为真实换行，并补全缺失的代发说明；按示例格式构造命令即可。';

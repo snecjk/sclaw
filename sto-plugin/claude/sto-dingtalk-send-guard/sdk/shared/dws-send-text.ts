@@ -1,0 +1,261 @@
+import { ensureDingTalkAgentSendDisclaimerFormat } from './dingtalk-disclaimer';
+
+/**
+ * Normalize `dws chat message send --text` payloads.
+ * Models often copy JSON.stringify output into shell commands; bash does not
+ * expand `\n` inside double quotes, so DingTalk receives literal backslash-n.
+ */
+
+/** Turn literal `\n` / `\t` / `\r` sequences into real whitespace. */
+export function unescapeLiteralDwsSendText(text: string): string {
+  if (!text || !/[\\][ntr]/.test(text)) return text;
+  return text
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+    .replace(/\\r/g, '\r');
+}
+
+function unescapeBashDollarQuoted(text: string): string {
+  return text
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+    .replace(/\\r/g, '\r')
+    .replace(/\\'/g, "'")
+    .replace(/\\\\/g, '\\');
+}
+
+function unescapeDoubleQuotedShell(text: string): string {
+  let escaped = false;
+  let out = '';
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (escaped) {
+      if (ch === 'n') out += '\n';
+      else if (ch === 't') out += '\t';
+      else if (ch === 'r') out += '\r';
+      else if (ch === '"') out += '"';
+      else out += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\') {
+      escaped = true;
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+function stripMistypedDollarPrefix(text: string): string {
+  const trimmed = text.trimStart();
+  if (!trimmed.startsWith('$')) return text;
+  if (trimmed.startsWith("$'")) return text;
+  if (trimmed.startsWith('$"')) return `${text.slice(0, text.indexOf('$'))}${trimmed.slice(1)}`;
+  const next = trimmed[1];
+  if (!next || /\s/.test(next) || next === '{' || next === '(') return text;
+  return `${text.slice(0, text.indexOf('$'))}${trimmed.slice(1)}`;
+}
+
+/** Parse `--text` flag value from a shell script segment (supports embedded `"` in HTML). */
+export function parseDwsSendTextFlagSegment(raw: string): string {
+  const trimmed = stripMistypedDollarPrefix(raw).trim();
+  if (!trimmed) return '';
+
+  if (trimmed.startsWith("$'") && trimmed.endsWith("'")) {
+    return unescapeBashDollarQuoted(trimmed.slice(2, -1));
+  }
+
+  if (trimmed.startsWith('"')) {
+    const lastQuote = trimmed.lastIndexOf('"');
+    if (lastQuote > 0) {
+      return unescapeDoubleQuotedShell(trimmed.slice(1, lastQuote));
+    }
+  }
+
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1);
+  }
+
+  return unescapeLiteralDwsSendText(trimmed);
+}
+
+/** Bash $'...' form so `\n` in the command line becomes a real newline. */
+export function shellQuoteDwsSendTextForBash(text: string): string {
+  const escaped = text
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t');
+  return `$'${escaped}'`;
+}
+
+/** Parse shell/$' wrappers, unescape literals, then ensure `---` + 唯一代发说明底栏。 */
+export function normalizeDwsChatMessageSendText(text: string): string {
+  const parsed = parseDwsSendTextFlagSegment(text);
+  if (!parsed) return ensureDingTalkAgentSendDisclaimerFormat('');
+  return ensureDingTalkAgentSendDisclaimerFormat(parsed);
+}
+
+const DWS_CHAT_MSG_SEND = /dws\s+chat\s+message\s+send\b/i;
+
+function tokenizeShellLikeCommand(command: string): string[] {
+  const tokens: string[] = [];
+  let current = '';
+  let quote: '"' | "'" | null = null;
+
+  for (let i = 0; i < command.length; i += 1) {
+    const ch = command[i];
+
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+        continue;
+      }
+      if (quote === '"' && ch === '\\') {
+        const next = command[i + 1];
+        if (next === '"' || next === '\\') {
+          current += next;
+          i += 1;
+        } else {
+          current += ch;
+        }
+        continue;
+      }
+      current += ch;
+      continue;
+    }
+
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+
+    if (/\s/.test(ch)) {
+      if (current) {
+        tokens.push(current);
+        current = '';
+      }
+      continue;
+    }
+
+    if (ch === ';') {
+      if (current) {
+        tokens.push(current);
+        current = '';
+      }
+      break;
+    }
+
+    current += ch;
+  }
+
+  if (current) tokens.push(current);
+  return tokens;
+}
+
+/** Parse a shell command containing `dws chat message send` into dws argv. */
+export function parseDwsChatMessageSendShellCommandArgs(command: string): string[] | null {
+  const match = command.match(DWS_CHAT_MSG_SEND);
+  if (!match || match.index == null) return null;
+
+  const dwsSegment = command.slice(match.index);
+  const tokens = tokenizeShellLikeCommand(dwsSegment);
+  if (tokens.length < 4) return null;
+  if (!/^dws(?:\.exe)?$/i.test(tokens[0])) return null;
+  if (tokens[1] !== 'chat' || tokens[2] !== 'message' || tokens[3] !== 'send') return null;
+  return fixDwsChatMessageSendArgv(tokens.slice(1));
+}
+
+/** Fix `--text` payload inside a shell `-c` script (always re-quote as bash `$'...'`). */
+export function fixDwsChatMessageSendShellScript(script: string): string {
+  if (!DWS_CHAT_MSG_SEND.test(script) || !/--text\s+/i.test(script)) return script;
+
+  return script.replace(
+    /--text\s+([\s\S]*?)(?=\s+--(?:format|uuid|dry-run|media|msg-type|dentry-id|space-id|file-name|file-type|file-path|file-size|open-dingtalk-id)\b|$)/gi,
+    (full, rawValue: string) => {
+      const normalized = normalizeDwsChatMessageSendText(rawValue);
+      if (!normalized) return full;
+      return `--text ${shellQuoteDwsSendTextForBash(normalized)}`;
+    },
+  );
+}
+
+/** Normalize argv for `spawn('dws', ['chat', 'message', 'send', '--text', value])`. */
+export function fixDwsChatMessageSendArgv(args: string[]): string[] {
+  if (!Array.isArray(args)) return args;
+  const textIdx = args.findIndex((arg) => arg === '--text');
+  if (textIdx < 0 || textIdx + 1 >= args.length) return args;
+  const next = args[textIdx + 1];
+  if (typeof next !== 'string') return args;
+  const fixed = normalizeDwsChatMessageSendText(next);
+  if (fixed === next) return args;
+  const copy = [...args];
+  copy[textIdx + 1] = fixed;
+  return copy;
+}
+
+const TOOL_COMMAND_PARAM_KEYS = [
+  'command',
+  'cmd',
+  'script',
+  'input',
+  'bash_command',
+] as const;
+
+/**
+ * Rewrite tool params so `dws chat message send --text` uses real newlines.
+ * Run after send-guard checks on the original command (guard blocks `$'` upfront).
+ * On Windows leave the shell string unchanged — gateway preload parses argv instead.
+ */
+export function fixDwsChatMessageSendToolParams(
+  params: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!params) return undefined;
+  if (process.platform === 'win32') return undefined;
+
+  for (const key of TOOL_COMMAND_PARAM_KEYS) {
+    const value = params[key];
+    if (typeof value !== 'string') continue;
+    if (!DWS_CHAT_MSG_SEND.test(value) || !/--text\s+/i.test(value)) continue;
+
+    const fixed = fixDwsChatMessageSendShellScript(value);
+    if (fixed !== value) {
+      return { ...params, [key]: fixed };
+    }
+  }
+  return undefined;
+}
+
+/** Agent-facing `--text` value: JSON double-quoted string with `\n` escape sequences. */
+export function formatDwsChatMessageSendTextForAgentCommand(text: string): string {
+  return JSON.stringify(text);
+}
+
+export interface DwsChatMessageSendAgentCommandOptions {
+  recipientKind: 'user' | 'group';
+  recipientId: string;
+  title?: string;
+  text: string;
+}
+
+/**
+ * Build a pre-normalization `dws chat message send` command for agent prompts.
+ * Matches input accepted by fixDwsChatMessageSendShellScript / fixDwsChatMessageSendToolParams.
+ */
+export function buildDwsChatMessageSendAgentCommandExample(
+  options: DwsChatMessageSendAgentCommandOptions,
+): string {
+  const flag = options.recipientKind === 'user' ? '--user' : '--group';
+  const title = options.title ?? '消息';
+  const textArg = formatDwsChatMessageSendTextForAgentCommand(options.text);
+  return `dws chat message send ${flag} ${options.recipientId} --title ${JSON.stringify(title)} --text ${textArg} --format json`;
+}
+
+/**
+ * Prompt rule: how agents compose `--text` and how StoClaw normalizes before execution.
+ * Keep in sync with fixDwsChatMessageSendShellScript / fixDwsChatMessageSendToolParams.
+ */
+export const DWS_CHAT_MESSAGE_SEND_AGENT_FORMAT_RULE =
+  '**--text 写法**（须与下方预填示例一致）：用普通双引号包裹正文，段落换行写 `\\n`（勿在 shell 命令里写真实换行、勿用 shell 变量如 `--text $text`、勿手写 Bash `$\\\'...\\\'`）。StoClaw 会在工具调用/执行前自动解析 `--text`、把 `\\n` 转为真实换行，并补全缺失的代发说明；按示例格式构造命令即可。';

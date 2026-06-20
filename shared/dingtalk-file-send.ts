@@ -31,7 +31,7 @@ export function buildDingTalkFileSendWorkflowContext(
     }
     if (mention.type === 'user' && mention.userId) {
       return [
-        `- ${mention.displayName}: dws chat conversation-info --user ${mention.userId} --format json`,
+        `- ${mention.displayName}: dws chat conversation-info --open-dingtalk-id ${mention.userId} --format json`,
       ];
     }
     return [];
@@ -50,11 +50,10 @@ export function buildDingTalkFileSendWorkflowContext(
     '**目标：文字 + 文件合成一条消息发送。** 钉钉 IM 不支持单条消息同时含文字和文件附件，所以采用「文字正文中嵌入钉盘文件下载链接」的方式，收件人点击链接即可下载文件。',
     '',
     '非图片文件（pdf/doc/ppt/zip 等）**必须**按顺序执行，禁止猜测 dentryId/spaceId：',
-    '1. `dws chat conversation-info` 取 `newCSpaceIdIM` 作为 `--space-id`（群用 `--group`，单聊用 `--user`）→ 同时记录收件人 `userId`（群聊取群成员 userId，单聊即目标用户 userId）',
-    '2. `dws drive upload --file <本地路径> --space-id <spaceId> -y --format json` → 从返回 JSON 中取 `fileId` 和 `downloadUrl`（钉盘文件下载链接）',
-    '3. **单聊场景**（`--user`）：调用 `dws api POST /v1.0/storage/files/sendToUser --data \'{"operator_userid":"<当前用户userId>","userids":["<收件人userId>"],"storage_file_id":"<fileId>","space_id":"<spaceId>"}\'` 授予收件人文件访问权限',
-    '4. 将 `downloadUrl` 用 **DingTalk IM Markdown 链接格式** 嵌入文字正文：`[📎 文件名.pptx](downloadUrl)`',
-    '5. `dws chat message send --group|--user <收件人ID> --title "消息" --text <含文件链接的完整正文含代发说明> --format json`',
+    '1. `dws chat conversation-info` 取 `newCSpaceIdIM` 作为 `--space-id`（群用 `--group`，单聊用 `--open-dingtalk-id`）→ **必须**使用返回的 `newCSpaceIdIM`，这是会话共享空间，收件人天然有访问权限',
+    '2. `dws drive upload --file <本地路径> --space-id <newCSpaceIdIM> -y --format json` → 从返回 JSON 中取 `fileId` 和 `downloadUrl`（钉盘文件下载链接）',
+    '3. 将 `downloadUrl` 用 **DingTalk IM Markdown 链接格式** 嵌入文字正文：`[📎 文件名.pptx](downloadUrl)`',
+    '4. `dws chat message send --group|--open-dingtalk-id <收件人ID> --title "消息" --text <含文件链接的完整正文含代发说明> --format json`',
     '',
     '最终合成示例（`--text` 值）：',
     '```',

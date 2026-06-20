@@ -57,6 +57,7 @@ import { cn } from '@/lib/utils';
 import { glassNestedCard } from '@/lib/surfaces';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { invokeIpc } from '@/lib/api-client';
 import { useSettingsStore } from '@/stores/settings';
 import { useAuthStore } from '@/stores/auth';
@@ -185,6 +186,7 @@ export function ProvidersSettings() {
   } = useProviderStore();
 
   const hasStoModelCatalog = hasReadyStoModelCatalog(accounts);
+  const navigate = useNavigate();
 
   const handleRetryStoSync = async () => {
     try {
@@ -209,9 +211,9 @@ export function ProvidersSettings() {
         }
 
         if (result.error === 'no-token') {
-          toast.error('同步失败', {
-            description: '当前登录状态已失效，请重新登录后再试',
-          });
+          toast.error('登录已过期，请重新登录');
+          useAuthStore.setState({ isAuthenticated: false, user: null });
+          navigate('/login');
           return;
         }
 

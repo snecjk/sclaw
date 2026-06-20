@@ -182,6 +182,10 @@ function App() {
         crmWeekReportSurfaceAllowed: false,
         crmWeekReportPolicyStatus: 'idle',
       });
+      // Clear both top-level and session-level chat errors so the error bar
+      // doesn't persist after re-login
+      useChatStore.setState({ error: null });
+      useChatStore.getState().clearError();
     };
 
     const unsubscribe = window.electron.ipcRenderer.on('auth:token-expired', handleTokenExpired);
