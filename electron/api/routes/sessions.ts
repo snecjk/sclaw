@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { join } from 'node:path';
 import { getOpenClawConfigDir } from '../../utils/paths';
 import { deleteClaudeSessionByKey } from '../../engines/claude-adapter';
+import { applyClaudeSessionModelSwitch } from '../../engines/claude-session-model';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry } from '../../engines/session-registry';
 import { getAgentIdFromSessionKey, rememberSessionEngineType, resolveSessionEngineType } from '../../engines/session-engine';
 import { getAgentPreferredModel, getAgentWorkspacePath } from '../../utils/agent-config';
@@ -39,7 +40,14 @@ export async function handleSessionRoutes(
         sendJson(res, 400, { success: false, error: 'model is required' });
         return true;
       }
-      const sessionEngineType = await resolveSessionEngineType(sessionKey, body.engineType);
+      // Route strictly by explicit engineType when provided. Claude and OpenClaw use
+      // different backends (registry vs Gateway sessions.patch); registry inference alone
+      // can mis-route OpenClaw requests after Claude in-session model switches.
+      const requestedEngine = body.engineType === 'claude' || body.engineType === 'openclaw'
+        ? body.engineType
+        : undefined;
+      const sessionEngineType = requestedEngine
+        ?? await resolveSessionEngineType(sessionKey);
       await rememberSessionEngineType(sessionKey, sessionEngineType);
       if (sessionEngineType === 'claude') {
         const agentId = body.agentId?.trim() || getAgentIdFromSessionKey(sessionKey);
@@ -50,23 +58,21 @@ export async function handleSessionRoutes(
           sendJson(res, 404, { success: false, error: `Agent '${agentId}' workspace not found` });
           return true;
         }
-        await upsertEngineSessionRegistryEntry({
+        const accountId = body.accountId?.trim() || existing?.accountId || preferredModel.accountId;
+        const { model, modelChanged } = await applyClaudeSessionModelSwitch({
           sessionKey,
-          sessionId: existing?.sessionId,
-          cwd,
           agentId,
-          engineType: 'claude',
-          updatedAt: Date.now(),
+          cwd,
+          rawModel,
+          accountId,
           title: existing?.title,
-          model: rawModel,
-          accountId: body.accountId?.trim() || existing?.accountId || preferredModel.accountId,
         });
         sendJson(res, 200, {
           success: true,
           sessionKey,
-          model: rawModel,
-          modelOverride: rawModel,
-          changedModel: true,
+          model,
+          modelOverride: model,
+          changedModel: modelChanged,
         });
         return true;
       }

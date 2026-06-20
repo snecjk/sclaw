@@ -8,6 +8,7 @@ import {
   normalizeModelIdForChat,
   shouldSyncSessionToWorkspaceDefault,
 } from '@/lib/chat-model-options';
+import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useProviderStore } from '@/stores/providers';
@@ -32,6 +33,9 @@ export async function syncWorkspaceDefaultModelToChat(opts: {
     return;
   }
 
+  const agent = useAgentsStore.getState().agents.find((item) => item.id === currentAgentId);
+  const engineType = resolveChatSessionEngineType(session, agent?.engineType, currentSessionKey);
+
   const target = normalizeModelIdForChat(modelId);
   const current = normalizeModelIdForChat(session?.model);
   if (current === target) return;
@@ -47,7 +51,7 @@ export async function syncWorkspaceDefaultModelToChat(opts: {
         model: modelId,
         accountId,
         agentId: currentAgentId || undefined,
-        engineType: session?.engineType,
+        engineType,
       }),
     });
     void loadSessions();
@@ -64,6 +68,14 @@ export async function applyWorkspaceDefaultToNewSession(
   const trimmedKey = sessionKey.trim();
   if (!trimmedKey) return;
 
+  // If the session already has a model (e.g. carried over from home page selection),
+  // don't overwrite it with the workspace default.
+  const existingSession = useChatStore.getState().sessions.find((s) => s.key === trimmedKey);
+  if (existingSession?.model) return;
+
+  const agent = useAgentsStore.getState().agents.find((item) => item.id === agentId);
+  const engineType = resolveChatSessionEngineType(existingSession, agent?.engineType, trimmedKey);
+
   const { accounts, defaultAccountId } = useProviderStore.getState();
   const modelId = getWorkspaceDefaultModelId(accounts, defaultAccountId);
   const accountId = defaultAccountId?.trim() ?? '';
@@ -77,7 +89,7 @@ export async function applyWorkspaceDefaultToNewSession(
         model: modelId,
         accountId,
         agentId: agentId.trim() || undefined,
-        engineType: useChatStore.getState().sessions.find((session) => session.key === trimmedKey)?.engineType,
+        engineType,
       }),
     });
     useChatStore.setState((state) => ({

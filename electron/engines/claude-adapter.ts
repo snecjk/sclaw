@@ -12,7 +12,7 @@ import { getClaudeConfigDir } from '../utils/paths';
 import { getApiKey } from '../utils/secure-storage';
 import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
-import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, upsertEngineSessionRegistryEntry } from './session-registry';
+import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, upsertEngineSessionRegistryEntry, type EngineSessionRegistryEntry } from './session-registry';
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EngineSessionSummary } from './types';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ImageBlockParam, MessageParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
@@ -116,8 +116,9 @@ async function resolveClaudeLaunchSelection(
   } | null,
 ): Promise<{ model?: string; accountId?: string }> {
   const preferredModel = await getAgentPreferredModel(agentId);
-  let model = preferredModel.model ?? existing?.model;
-  let accountId = preferredModel.accountId ?? existing?.accountId;
+  // Session-level override wins when the user switched models inside an active dialog.
+  let model = existing?.model ?? preferredModel.model;
+  let accountId = existing?.accountId ?? preferredModel.accountId;
 
   if (!accountId) {
     accountId = await getDefaultProviderAccountId();
@@ -246,6 +247,21 @@ function toClaudePromptStream(message: SDKUserMessage): AsyncIterable<SDKUserMes
   };
 }
 
+function buildClaudeUserMessageFromContent(
+  content: Array<ImageBlockParam | TextBlockParam>,
+): SDKUserMessage {
+  const message: MessageParam = {
+    role: 'user',
+    content,
+  };
+
+  return {
+    type: 'user',
+    message,
+    parent_tool_use_id: null,
+  };
+}
+
 async function buildClaudeUserMessage(
   text: string,
   media: Array<{ filePath: string; mimeType: string; fileName: string }>,
@@ -285,16 +301,7 @@ async function buildClaudeUserMessage(
     });
   }
 
-  const message: MessageParam = {
-    role: 'user',
-    content,
-  };
-
-  return {
-    type: 'user',
-    message,
-    parent_tool_use_id: null,
-  };
+  return buildClaudeUserMessageFromContent(content);
 }
 
 function stringifyClaudeContent(content: unknown): string {
@@ -453,6 +460,12 @@ function isSkillReplayText(text: string): boolean {
     || text.includes('Base directory for this command:');
 }
 
+const HISTORY_BRIDGE_SYSTEM_MARKER = '[System: The user switched to a new model mid-conversation.';
+
+function isHistoryBridgeUserText(text: string): boolean {
+  return text.includes(HISTORY_BRIDGE_SYSTEM_MARKER);
+}
+
 function shouldHideClaudeUserMessage(
   entryRecord: Record<string, unknown>,
   messagePayload: unknown,
@@ -473,24 +486,38 @@ function shouldHideClaudeUserMessage(
     .filter(Boolean)
     .join('\n');
 
-  if (combinedText && isSkillReplayText(combinedText)) {
+  if (combinedText && (isSkillReplayText(combinedText) || isHistoryBridgeUserText(combinedText))) {
     return true;
   }
 
-  if (typeof messagePayload === 'string' && isSkillReplayText(messagePayload)) {
+  if (typeof messagePayload === 'string' && (isSkillReplayText(messagePayload) || isHistoryBridgeUserText(messagePayload))) {
     return true;
   }
 
   return false;
 }
 
-async function buildHistory(sessionKey: string, sessionId: string, cwd: string): Promise<EngineHistoryResult> {
+type ClaudeDisplayMessage = {
+  id: string;
+  role: 'user' | 'assistant' | 'toolresult';
+  content: unknown;
+  timestamp?: number;
+  isError: boolean;
+  toolCallId?: string;
+  toolName?: string;
+};
+
+async function loadPersistedClaudeMessagesForSdkSession(
+  sdkSessionId: string,
+  cwd: string,
+): Promise<ClaudeDisplayMessage[]> {
   const sdk = await import('@anthropic-ai/claude-agent-sdk');
-  const configDir = await resolveClaudeSessionConfigDir(cwd, sessionId) ?? getClaudeConfigDir();
+  const configDir = await resolveClaudeSessionConfigDir(cwd, sdkSessionId) ?? getClaudeConfigDir();
   const sessionMessages = await withClaudeConfigDirEnv(configDir, async () => (
-    sdk.getSessionMessages(sessionId, { dir: cwd, includeSystemMessages: false })
+    sdk.getSessionMessages(sdkSessionId, { dir: cwd, includeSystemMessages: false })
   ));
-  const persistedMessages = sessionMessages
+
+  return sessionMessages
     .filter((entry) => {
       if (entry.type === 'assistant') return true;
       if (entry.type !== 'user') return false;
@@ -503,7 +530,7 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
       const workflowToolResult = entry.type === 'user' ? extractWorkflowToolResult(entry.message) : null;
       return {
         id: entry.uuid,
-        role: workflowToolResult ? 'toolresult' : entry.type === 'assistant' ? 'assistant' : 'user',
+        role: workflowToolResult ? 'toolresult' as const : entry.type === 'assistant' ? 'assistant' as const : 'user' as const,
         content: workflowToolResult?.content ?? toRawContentFromClaudeMessage(entry.message),
         timestamp: toEpochMs(entryRecord.timestamp),
         isError: false,
@@ -511,6 +538,90 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
         toolName: workflowToolResult?.toolName,
       };
     });
+}
+
+function formatClaudeMessageForBridge(role: string, content: unknown): string {
+  const text = typeof content === 'string' ? content : stringifyClaudeContent(content);
+  if (!text.trim()) return '';
+  const label = role === 'assistant' ? 'Assistant' : role === 'user' ? 'User' : 'Tool';
+  return `${label}: ${text.trim()}`;
+}
+
+const HISTORY_BRIDGE_MAX_CHARS = 24_000;
+const HISTORY_BRIDGE_MAX_MESSAGES = 40;
+
+async function buildClaudeHistoryBridge(
+  entry: EngineSessionRegistryEntry,
+): Promise<string | null> {
+  const cwd = entry.cwd;
+  const archivedIds = entry.archivedClaudeSessionIds ?? [];
+  if (!cwd || archivedIds.length === 0) return null;
+
+  const persistedById = new Map<string, ClaudeDisplayMessage>();
+  for (const sdkSessionId of archivedIds) {
+    const batch = await loadPersistedClaudeMessagesForSdkSession(sdkSessionId, cwd);
+    for (const message of batch) {
+      if (message.id && !persistedById.has(message.id)) {
+        persistedById.set(message.id, message);
+      }
+    }
+  }
+
+  const lines = [...persistedById.values()]
+    .sort((left, right) => (left.timestamp ?? 0) - (right.timestamp ?? 0))
+    .slice(-HISTORY_BRIDGE_MAX_MESSAGES)
+    .map((message) => formatClaudeMessageForBridge(message.role, message.content))
+    .filter(Boolean);
+
+  if (lines.length === 0) return null;
+
+  let body = lines.join('\n\n');
+  if (body.length > HISTORY_BRIDGE_MAX_CHARS) {
+    body = body.slice(body.length - HISTORY_BRIDGE_MAX_CHARS);
+  }
+
+  return [
+    `${HISTORY_BRIDGE_SYSTEM_MARKER} Continue seamlessly with full awareness of the transcript below. Do not repeat or quote this transcript back to the user unless they ask.]`,
+    '',
+    body,
+  ].join('\n');
+}
+
+/** Inject bridged history via system prompt only — never as a user message. */
+async function consumePendingHistoryBridgeAppend(sessionKey: string): Promise<string | null> {
+  const entry = await getEngineSessionRegistryEntry(sessionKey);
+  if (!entry?.pendingHistoryBridge) return null;
+
+  const bridge = await buildClaudeHistoryBridge(entry);
+  await upsertEngineSessionRegistryEntry({
+    sessionKey,
+    pendingHistoryBridge: false,
+  });
+
+  return bridge;
+}
+
+async function buildHistory(sessionKey: string, sessionId: string, cwd: string): Promise<EngineHistoryResult> {
+  const entry = await getEngineSessionRegistryEntry(sessionKey);
+  const archivedIds = entry?.archivedClaudeSessionIds ?? [];
+  const sessionIdsToLoad = [
+    ...archivedIds,
+    ...(sessionId ? [sessionId] : []),
+  ];
+
+  const persistedById = new Map<string, ClaudeDisplayMessage>();
+  for (const sdkSessionId of sessionIdsToLoad) {
+    const batch = await loadPersistedClaudeMessagesForSdkSession(sdkSessionId, cwd);
+    for (const message of batch) {
+      if (message.id && !persistedById.has(message.id)) {
+        persistedById.set(message.id, message);
+      }
+    }
+  }
+
+  const persistedMessages = [...persistedById.values()]
+    .sort((left, right) => (left.timestamp ?? 0) - (right.timestamp ?? 0));
+
   const cachedMessages = liveClaudeMessages.get(sessionKey) ?? [];
   const mergedMessages = [
     ...persistedMessages.map((message, index) => ({
@@ -543,11 +654,15 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
 
   await upsertEngineSessionRegistryEntry({
     sessionKey,
-    sessionId,
+    sessionId: sessionId || entry?.sessionId,
     cwd,
     agentId: extractAgentId(sessionKey),
     engineType: 'claude',
     updatedAt: Date.now(),
+    model: entry?.model,
+    accountId: entry?.accountId,
+    archivedClaudeSessionIds: entry?.archivedClaudeSessionIds,
+    pendingHistoryBridge: entry?.pendingHistoryBridge,
   });
 
   return {
@@ -709,6 +824,10 @@ async function startClaudeQuery(
     const pluginPaths = await listClaudeBridgePluginPaths();
     claudeRuntimeResults.delete(sessionKey);
     await sanitizeClaudeSettingsEnv();
+    const historyBridgeAppend = await consumePendingHistoryBridgeAppend(sessionKey);
+    const systemPromptAppend = [runtimeOptions.systemPromptAppend, historyBridgeAppend]
+      .filter(Boolean)
+      .join('\n\n');
     const queryBaseOptions = {
       cwd,
       env: await buildClaudeEnvForAccount(launchSelection.accountId),
@@ -725,11 +844,11 @@ async function startClaudeQuery(
         type: 'local' as const,
         path: pluginPath,
       })),
-      systemPrompt: runtimeOptions.systemPromptAppend
+      systemPrompt: systemPromptAppend
         ? {
           type: 'preset' as const,
           preset: 'claude_code' as const,
-          append: runtimeOptions.systemPromptAppend,
+          append: systemPromptAppend,
         }
         : undefined,
     };
@@ -826,12 +945,19 @@ export const claudeAdapter: EngineAdapter = {
 
   async getHistory(_ctx, params) {
     const entry = await getEngineSessionRegistryEntry(params.sessionKey);
-    if (!entry?.sessionId) {
+    if (!entry?.cwd) {
+      return { success: true, result: { messages: [], thinkingLevel: null } };
+    }
+    if (!entry.sessionId && !(entry.archivedClaudeSessionIds?.length)) {
       return { success: true, result: { messages: [], thinkingLevel: null } };
     }
 
     try {
-      const result = await buildHistory(params.sessionKey, entry.sessionId!, entry.cwd!);
+      const result = await buildHistory(
+        params.sessionKey,
+        entry.sessionId ?? '',
+        entry.cwd,
+      );
       return { success: true, result };
     } catch (error) {
       return { success: false, error: String(error) };

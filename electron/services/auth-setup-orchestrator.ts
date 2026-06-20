@@ -60,6 +60,7 @@ export function resolvePostAuthGatewayRefresh(params: {
     return 'none';
   }
 
+  const forceRefresh = stoResult.needsForcedGatewayRefresh === true;
   const status = gatewayManager.getStatus();
   const connectedForMs = status.connectedAt
     ? Date.now() - status.connectedAt
@@ -74,12 +75,12 @@ export function resolvePostAuthGatewayRefresh(params: {
     ) {
       return 'none';
     }
-    if (status.state === 'running' && connectedForMs < MIN_CONNECTED_BEFORE_RESTART_MS) {
+    if (!forceRefresh && status.state === 'running' && connectedForMs < MIN_CONNECTED_BEFORE_RESTART_MS) {
       return 'none';
     }
     const modelsChanged = stoSyncChangedConfig(stoResult);
     const bizCreated = bizResult.created.length > 0;
-    if (!modelsChanged && !bizCreated) {
+    if (!forceRefresh && !modelsChanged && !bizCreated) {
       return 'none';
     }
     return 'reload';
@@ -108,6 +109,7 @@ function stoSyncChangedConfig(result: StoSyncResult): boolean {
     || result.updated.length > 0
     || result.deleted.length > 0
     || result.defaultSet != null
+    || result.needsForcedGatewayRefresh === true
   );
 }
 
@@ -127,6 +129,7 @@ function schedulePostAuthGatewayRefresh(
   generation: number,
   logPrefix: string,
   mode: PostAuthGatewayRefreshMode,
+  options?: { forceRefresh?: boolean },
 ): void {
   clearRefreshTimers();
 
@@ -135,14 +138,16 @@ function schedulePostAuthGatewayRefresh(
     return;
   }
 
+  const forceRefresh = options?.forceRefresh === true;
+
   const fireRefresh = () => {
     if (generation !== setupGeneration) {
       logger.info(`${logPrefix} Skip delayed Gateway ${mode} (superseded)`);
       return;
     }
-    logger.info(`${logPrefix} Scheduling Gateway ${mode} after batched setup`);
+    logger.info(`${logPrefix} Scheduling Gateway ${mode} after batched setup${forceRefresh ? ' (legacy repair)' : ''}`);
     if (mode === 'reload') {
-      gatewayManager.debouncedReload(1500);
+      gatewayManager.debouncedReload(1500, { force: forceRefresh });
     } else {
       gatewayManager.debouncedRestart(1500);
     }
@@ -172,7 +177,7 @@ function schedulePostAuthGatewayRefresh(
       ? Date.now() - state.connectedAt
       : Number.POSITIVE_INFINITY;
 
-    if (connectedForMs < MIN_CONNECTED_BEFORE_RESTART_MS) {
+    if (!forceRefresh && connectedForMs < MIN_CONNECTED_BEFORE_RESTART_MS) {
       const waitMs = MIN_CONNECTED_BEFORE_RESTART_MS - connectedForMs + 200;
       logger.info(
         `${logPrefix} Delay Gateway ${mode} ${waitMs}ms (connected ${Math.round(connectedForMs)}ms ago)`,
@@ -244,7 +249,13 @@ async function runSetup(
       : 'none';
 
   if (refreshMode !== 'none' && gatewayManager) {
-    schedulePostAuthGatewayRefresh(gatewayManager, generation, logPrefix, refreshMode);
+    schedulePostAuthGatewayRefresh(
+      gatewayManager,
+      generation,
+      logPrefix,
+      refreshMode,
+      { forceRefresh: stoResult.needsForcedGatewayRefresh === true },
+    );
   } else if (source === 'login' && gatewayManager) {
     gatewayManager.cancelPendingGatewayRefresh();
   }

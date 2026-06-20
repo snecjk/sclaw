@@ -146,6 +146,9 @@ export interface ChatState {
 
   // Streaming
   sending: boolean;
+  /** True while model switch API is in flight — blocks chat input to prevent
+   *  sending before backend has applied the new model. */
+  modelSwitching: boolean;
   activeRunId: string | null;
   streamingText: string;
   streamingMessage: unknown | null;

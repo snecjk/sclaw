@@ -17,6 +17,8 @@ interface StoSyncResponse {
   updated?: string[];
   defaultSet?: string | null;
   error?: string;
+  legacyRepaired?: boolean;
+  needsForcedGatewayRefresh?: boolean;
 }
 
 export type SsoEnvironment =

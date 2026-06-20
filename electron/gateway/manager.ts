@@ -656,7 +656,7 @@ export class GatewayManager extends EventEmitter {
    * Ask the Gateway process to reload config in-place when possible.
    * Falls back to restart on unsupported platforms or signaling failures.
    */
-  async reload(): Promise<void> {
+  async reload(options?: { force?: boolean }): Promise<void> {
     await this.refreshReloadPolicy();
 
     if (this.reloadPolicy.mode === 'off' || this.reloadPolicy.mode === 'restart') {
@@ -700,7 +700,8 @@ export class GatewayManager extends EventEmitter {
       : Number.POSITIVE_INFINITY;
 
     // Avoid signaling a process that just came up; it will already read latest config.
-    if (connectedForMs < 8000) {
+    // Legacy STO catalog repair may need an immediate reload even within this window.
+    if (!options?.force && connectedForMs < 8000) {
       logger.info(
         `[gateway-refresh] mode=reload result=skipped_recent_connect connectedForMs=${connectedForMs} pid=${this.process.pid}`,
       );
@@ -735,7 +736,7 @@ export class GatewayManager extends EventEmitter {
    * Debounced reload — coalesces multiple rapid config-change events into one
    * in-process reload when possible.
    */
-  debouncedReload(delayMs?: number): void {
+  debouncedReload(delayMs?: number, options?: { force?: boolean }): void {
     void this.refreshReloadPolicy();
     const effectiveDelay = delayMs ?? this.reloadPolicy.debounceMs;
     if (this.reloadPolicy.mode === 'off' || this.reloadPolicy.mode === 'restart') {
@@ -752,7 +753,7 @@ export class GatewayManager extends EventEmitter {
     logger.debug(`Gateway reload debounced (will fire in ${effectiveDelay}ms)`);
     this.reloadDebounceTimer = setTimeout(() => {
       this.reloadDebounceTimer = null;
-      void this.reload().catch((err) => {
+      void this.reload({ force: options?.force }).catch((err) => {
         logger.warn('Debounced Gateway reload failed:', err);
       });
     }, effectiveDelay);
