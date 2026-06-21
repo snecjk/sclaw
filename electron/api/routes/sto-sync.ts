@@ -26,6 +26,9 @@ export async function handleStoSyncRoutes(
       }
 
       const result = await service.syncModels();
+      if (ctx.gatewayManager && result.needsForcedGatewayRefresh === true) {
+        ctx.gatewayManager.debouncedReload(1500, { force: true });
+      }
       sendJson(res, 200, { success: true, ...result });
     } catch (error) {
       logger.error('[sto-sync] Sync route error:', error);

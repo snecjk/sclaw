@@ -28,7 +28,13 @@ import {
   OPENCLAW_STO_PLACEHOLDER_KEYS_TO_SCRUB,
   shouldDeleteStaleStoPlaceholder,
   STO_CANONICAL_ACCOUNT_ID,
+  isStoCatalogReady,
 } from './sto-placeholder-utils';
+import {
+  detectStoCatalogLegacyState,
+  markStoCatalogMigrationComplete,
+  preMigrateStoCatalogPlaceholders,
+} from './sto-catalog-migration';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -70,6 +76,10 @@ export interface StoSyncResult {
   updated: string[];
   defaultSet: string | null;
   error?: string;
+  /** True when legacy STO catalog residue was repaired during this sync. */
+  legacyRepaired?: boolean;
+  /** When true, caller should force one gateway reload (bypass login 8s skip). */
+  needsForcedGatewayRefresh?: boolean;
 }
 
 export type StoSyncOptions = {
@@ -184,6 +194,15 @@ export class StoModelSyncService {
 
     const env = await getSsoEnvironment();
     const domain = StoModelSyncService.resolveDomain(env);
+
+    const legacyState = await detectStoCatalogLegacyState();
+    if (legacyState.needsMigration) {
+      logger.info(
+        `[sto-sync] Legacy STO catalog detected (${legacyState.reasons.join(', ')}); running pre-migration`,
+      );
+      const preMigrate = await preMigrateStoCatalogPlaceholders(runtimeGateway);
+      result.deleted.push(...preMigrate.deletedAccountIds);
+    }
 
     // Step 2 — Fetch remote models via OpenAI-compatible /v1/models
     let remoteModels: StoRemoteModel[];
@@ -357,8 +376,21 @@ export class StoModelSyncService {
       }
     }
 
+    if (legacyState.needsMigration) {
+      const refreshedAccounts = await listProviderAccounts();
+      const stoAccount = refreshedAccounts.find((a) => a.id === STO_ACCOUNT_ID);
+      if (stoAccount && isStoCatalogReady(stoAccount)) {
+        await markStoCatalogMigrationComplete();
+        result.legacyRepaired = true;
+        result.needsForcedGatewayRefresh = true;
+        logger.info('[sto-sync] Legacy STO catalog migration marked complete');
+      } else {
+        logger.warn('[sto-sync] Legacy STO catalog detected but canonical account not ready; migration deferred');
+      }
+    }
+
     logger.info(
-      `[sto-sync] Sync completed: created=${result.created.length}, deleted=${result.deleted.length}, updated=${result.updated.length}, models=${remoteModelIds.length}, default=${result.defaultSet ?? '(unchanged)'}`,
+      `[sto-sync] Sync completed: created=${result.created.length}, deleted=${result.deleted.length}, updated=${result.updated.length}, models=${remoteModelIds.length}, default=${result.defaultSet ?? '(unchanged)'}, legacyRepaired=${result.legacyRepaired ?? false}`,
     );
 
     return result;

@@ -1625,6 +1625,7 @@ export const useChatStore = create<ChatState>()(
               key: nextSessionKey,
               label: localCurrentSession?.label ?? NEW_SESSION_TEMP_LABEL,
               engineType: localCurrentSession?.engineType,
+              model: localCurrentSession?.model,
             }]
             : dedupedSessions;
 
@@ -1743,7 +1744,10 @@ export const useChatStore = create<ChatState>()(
         error?: string;
       }>('/api/sessions/delete', {
         method: 'POST',
-        body: JSON.stringify({ sessionKey: key }),
+        body: JSON.stringify({
+          sessionKey: key,
+          engineType: resolveEngineTypeForSession(get().sessions, key, get().currentAgentId) ?? 'openclaw',
+        }),
       });
       if (!result.success) {
         console.warn(`[deleteSession] IPC reported failure for ${key}:`, result.error);
@@ -1806,10 +1810,13 @@ export const useChatStore = create<ChatState>()(
       ?? DEFAULT_CANONICAL_PREFIX;
     const newKey = `${prefix}:session-${Date.now()}`;
     const newAgentId = getAgentIdFromSessionKey(newKey);
+    // Carry over model from the current (default) session — e.g. home page selection
+    const currentSessionModel = sessions.find((s) => s.key === currentSessionKey)?.model;
     const newSessionEntry: ChatSession = {
       key: newKey,
       label: NEW_SESSION_TEMP_LABEL,
       engineType: getAgentEngineType(newAgentId),
+      ...(currentSessionModel ? { model: currentSessionModel } : {}),
     };
     set((s) => {
       const nextRuntimeBySessionKey = {

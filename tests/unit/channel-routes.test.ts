@@ -5,6 +5,8 @@ const listConfiguredChannelsMock = vi.fn();
 const listConfiguredChannelAccountsMock = vi.fn();
 const readOpenClawConfigMock = vi.fn();
 const listAgentsSnapshotMock = vi.fn();
+const assignChannelAccountToAgentMock = vi.fn();
+const parseJsonBodyMock = vi.fn();
 const sendJsonMock = vi.fn();
 
 vi.mock('@electron/utils/channel-config', () => ({
@@ -23,7 +25,7 @@ vi.mock('@electron/utils/channel-config', () => ({
 }));
 
 vi.mock('@electron/utils/agent-config', () => ({
-  assignChannelAccountToAgent: vi.fn(),
+  assignChannelAccountToAgent: (...args: unknown[]) => assignChannelAccountToAgentMock(...args),
   clearAllBindingsForChannel: vi.fn(),
   clearChannelBinding: vi.fn(),
   listAgentsSnapshot: (...args: unknown[]) => listAgentsSnapshotMock(...args),
@@ -51,13 +53,15 @@ vi.mock('@electron/utils/whatsapp-login', () => ({
 }));
 
 vi.mock('@electron/api/route-utils', () => ({
-  parseJsonBody: vi.fn().mockResolvedValue({}),
+  parseJsonBody: (...args: unknown[]) => parseJsonBodyMock(...args),
   sendJson: (...args: unknown[]) => sendJsonMock(...args),
 }));
 
 describe('handleChannelRoutes', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    assignChannelAccountToAgentMock.mockResolvedValue(undefined);
+    parseJsonBodyMock.mockResolvedValue({});
     listAgentsSnapshotMock.mockResolvedValue({
       agents: [],
       channelAccountOwners: {},
@@ -233,5 +237,128 @@ describe('handleChannelRoutes', () => {
         ],
       }),
     );
+  });
+
+  it('restarts gateway when binding a plugin-managed WeChat account', async () => {
+    parseJsonBodyMock.mockResolvedValue({
+      channelType: 'wechat',
+      accountId: 'bot-im-bot',
+      agentId: 'main',
+    });
+
+    const debouncedReload = vi.fn();
+    const debouncedRestart = vi.fn();
+
+    const { handleChannelRoutes } = await import('@electron/api/routes/channels');
+    const handled = await handleChannelRoutes(
+      { method: 'PUT' } as IncomingMessage,
+      {} as ServerResponse,
+      new URL('http://127.0.0.1:3210/api/channels/binding'),
+      {
+        gatewayManager: {
+          getStatus: () => ({ state: 'running' }),
+          debouncedReload,
+          debouncedRestart,
+        },
+      } as never,
+    );
+
+    expect(handled).toBe(true);
+    expect(assignChannelAccountToAgentMock).toHaveBeenCalledWith(
+      'main',
+      'openclaw-weixin',
+      'bot-im-bot',
+    );
+    expect(debouncedRestart).toHaveBeenCalledWith(4000);
+    expect(debouncedReload).not.toHaveBeenCalled();
+  });
+
+  it('does not auto-bind WeChat accounts when listing channel accounts', async () => {
+    listConfiguredChannelsMock.mockResolvedValue(['openclaw-weixin']);
+    listConfiguredChannelAccountsMock.mockResolvedValue({
+      'openclaw-weixin': {
+        defaultAccountId: 'bot-im-bot',
+        accountIds: ['bot-im-bot'],
+      },
+    });
+    readOpenClawConfigMock.mockResolvedValue({
+      channels: {
+        'openclaw-weixin': {
+          defaultAccount: 'bot-im-bot',
+          accounts: {
+            'bot-im-bot': { enabled: true },
+          },
+        },
+      },
+    });
+    listAgentsSnapshotMock.mockResolvedValue({
+      agents: [{ id: 'main', name: 'Main' }],
+      channelAccountOwners: {},
+    });
+
+    const rpc = vi.fn().mockResolvedValue({
+      channelAccounts: {
+        'openclaw-weixin': [
+          {
+            accountId: 'bot-im-bot',
+            configured: true,
+            running: false,
+          },
+        ],
+      },
+    });
+
+    const { handleChannelRoutes } = await import('@electron/api/routes/channels');
+    await handleChannelRoutes(
+      { method: 'GET' } as IncomingMessage,
+      {} as ServerResponse,
+      new URL('http://127.0.0.1:3210/api/channels/accounts'),
+      {
+        gatewayManager: {
+          rpc,
+          getStatus: () => ({ state: 'running' }),
+          debouncedReload: vi.fn(),
+          debouncedRestart: vi.fn(),
+        },
+      } as never,
+    );
+
+    expect(assignChannelAccountToAgentMock).not.toHaveBeenCalled();
+    const payload = sendJsonMock.mock.calls.at(-1)?.[2] as {
+      channels?: Array<{ accounts?: Array<{ accountId?: string; agentId?: string }> }>;
+    };
+    expect(payload.channels?.[0]?.accounts?.[0]).toMatchObject({
+      accountId: 'bot-im-bot',
+    });
+    expect(payload.channels?.[0]?.accounts?.[0]?.agentId).toBeUndefined();
+  });
+
+  it('reloads gateway in-place when binding a non-plugin channel account', async () => {
+    parseJsonBodyMock.mockResolvedValue({
+      channelType: 'telegram',
+      accountId: 'default',
+      agentId: 'main',
+    });
+
+    const debouncedReload = vi.fn();
+    const debouncedRestart = vi.fn();
+
+    const { handleChannelRoutes } = await import('@electron/api/routes/channels');
+    const handled = await handleChannelRoutes(
+      { method: 'PUT' } as IncomingMessage,
+      {} as ServerResponse,
+      new URL('http://127.0.0.1:3210/api/channels/binding'),
+      {
+        gatewayManager: {
+          getStatus: () => ({ state: 'running' }),
+          debouncedReload,
+          debouncedRestart,
+        },
+      } as never,
+    );
+
+    expect(handled).toBe(true);
+    expect(debouncedReload).toHaveBeenCalled();
+    expect(debouncedRestart).not.toHaveBeenCalled();
   });
 });

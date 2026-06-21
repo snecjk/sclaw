@@ -79,7 +79,13 @@ describe('buildClaudeRuntimeOptions', () => {
       tool_use_id: 'tool-1',
     }, 'tool-1', { signal: new AbortController().signal });
 
-    expect(firstAllowed).toEqual({});
+    expect(firstAllowed?.hookSpecificOutput).toMatchObject({
+      hookEventName: 'PreToolUse',
+      updatedInput: {
+        command: expect.stringContaining('dws chat message send --user u1'),
+      },
+    });
+    expect(firstAllowed?.hookSpecificOutput?.updatedInput?.command).toContain('--text');
 
     await postTool({
       hook_event_name: 'PostToolUse',

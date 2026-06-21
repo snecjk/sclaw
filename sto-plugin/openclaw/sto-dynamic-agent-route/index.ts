@@ -1,8 +1,7 @@
-import { readFile, unlink } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
-import { buildDingTalkMentionSystemContext } from "./shared/dingtalk-mention-context";
 
 const PROVIDER_ID = "sto-dynamic-agent-route";
 const DEFAULT_MODEL_ID = "sto-route-model";
@@ -50,58 +49,6 @@ function resolveTildePath(filePath: string): string {
 		return resolve(homedir(), filePath.slice(2));
 	}
 	return resolve(filePath);
-}
-
-type DingTalkMentionPendingPayload = {
-	sessionKey: string;
-	mentions: Array<{
-		type: "user" | "group";
-		displayName: string;
-		userId?: string;
-		openConversationId?: string;
-		corpId?: string;
-	}>;
-	userText: string;
-	writtenAt: number;
-	sendFileIntent?: boolean;
-	attachedFiles?: Array<{
-		fileName: string;
-		filePath: string;
-		mimeType: string;
-		fileSize?: number;
-	}>;
-};
-
-function pendingMentionCachePath(sessionKey: string): string {
-	const safeName = Buffer.from(sessionKey, "utf8").toString("base64url");
-	return join(homedir(), ".stoclaw", "cache", "dingtalk-mention-pending", `${safeName}.json`);
-}
-
-const DINGTALK_MENTION_PENDING_TTL_MS = 5 * 60 * 1000;
-
-async function readDingTalkMentionPending(
-	sessionKey: string,
-): Promise<DingTalkMentionPendingPayload | null> {
-	const cachePath = pendingMentionCachePath(sessionKey);
-	try {
-		const raw = await readFile(cachePath, "utf-8");
-		const parsed = JSON.parse(raw) as DingTalkMentionPendingPayload;
-		if (parsed.sessionKey !== sessionKey || !Array.isArray(parsed.mentions) || parsed.mentions.length === 0) {
-			await unlink(cachePath).catch(() => undefined);
-			return null;
-		}
-		if (Date.now() - parsed.writtenAt > DINGTALK_MENTION_PENDING_TTL_MS) {
-			await unlink(cachePath).catch(() => undefined);
-			return null;
-		}
-		return parsed;
-	} catch {
-		return null;
-	}
-}
-
-async function clearDingTalkMentionPending(sessionKey: string): Promise<void> {
-	await unlink(pendingMentionCachePath(sessionKey)).catch(() => undefined);
 }
 
 async function readSsoAuth(ssoAuthPath: string): Promise<SsoAuthInfo> {
@@ -345,7 +292,7 @@ export default definePluginEntry({
 
 			// Inject current SSO user info into the system prompt so the model knows
 			// the default organization/site context and does not ask the user for it.
-			api.on("before_prompt_build", async (event, ctx) => {
+			api.on("before_prompt_build", async (_event, ctx) => {
 				api.logger.debug?.(
 					`[${TAG}] before_prompt_build: fired — agentId=${ctx.agentId ?? "(none)"}, sessionKey=${ctx.sessionKey ?? "(none)"}`,
 				);
@@ -362,20 +309,6 @@ export default definePluginEntry({
 					"- 如果执行结果仅提供 http(s) 可访问地址（如 OSS 链接）且没有本地绝对路径，则使用该 http(s) 链接；不要伪造 file:// 路径。",
 					"- 严禁向用户输出运行环境内部且用户不可访问的伪本地路径（如 /runtime/、/tmp/）作为 file:// 链接。",
 				].join("\n"));
-
-				if (ctx.sessionKey) {
-					const pendingMentions = await readDingTalkMentionPending(ctx.sessionKey);
-					if (pendingMentions) {
-						appendBlocks.push(buildDingTalkMentionSystemContext(pendingMentions.mentions, {
-							sendFileIntent: pendingMentions.sendFileIntent,
-							attachedFiles: pendingMentions.attachedFiles,
-						}));
-						await clearDingTalkMentionPending(ctx.sessionKey);
-						api.logger.debug?.(
-							`[${TAG}] before_prompt_build: injected DingTalk mention context (${pendingMentions.mentions.length} recipients)`,
-						);
-					}
-				}
 
 				try {
 					const ssoAuth = await readSsoAuth(ssoAuthPath);
@@ -399,7 +332,6 @@ export default definePluginEntry({
 					api.logger.warn?.(`[${TAG}] before_prompt_build: failed to read SSO auth (${String(err)}), skipping SSO context injection`);
 				}
 
-				if (appendBlocks.length === 0) return undefined;
 				return { appendSystemContext: appendBlocks.join("\n\n") };
 			});
 

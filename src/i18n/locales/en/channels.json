@@ -23,6 +23,7 @@
         "whatsappConnected": "WhatsApp connected successfully",
         "whatsappFailed": "WhatsApp connection failed: {{error}}",
         "qrConnected": "{{name}} connected successfully",
+        "wechatAutoBoundMain": "Automatically bound to Main Agent. You can change this on the Channels page.",
         "qrFailed": "{{name}} connection failed: {{error}}",
         "channelSaved": "Channel {{name}} saved",
         "channelConnecting": "Connecting to {{name}}...",

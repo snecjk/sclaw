@@ -5,7 +5,8 @@ import { deleteAgentChannelAccounts, listConfiguredChannels, readOpenClawConfig,
 import { withConfigLock } from './config-mutex';
 import { expandPath, getClawXConfigDir, getOpenClawConfigDir } from './paths';
 import * as logger from './logger';
-import { toUiChannelType } from './channel-alias';
+import { OPENCLAW_WECHAT_CHANNEL_TYPE, toUiChannelType } from './channel-alias';
+import { applyWeChatChannelAccountEnabled } from './channel-config';
 
 const MAIN_AGENT_ID = 'main';
 const MAIN_AGENT_NAME = 'Main Agent';
@@ -1026,6 +1027,38 @@ export async function assignChannelToAgent(agentId: string, channelType: string)
     await writeOpenClawConfig(config);
     logger.info('Assigned channel to agent', { agentId, channelType, accountId });
     return await buildSnapshotFromConfig(config);
+  });
+}
+
+export async function saveWeChatChannelWithBinding(
+  accountId: string,
+  agentId = MAIN_AGENT_ID,
+): Promise<void> {
+  return withConfigLock(async () => {
+    const config = await readOpenClawConfig() as AgentConfigDocument;
+    const trimmedAccountId = accountId.trim();
+    if (!trimmedAccountId) {
+      throw new Error('accountId is required');
+    }
+
+    const { entries } = normalizeAgentsConfig(config);
+    if (!entries.some((entry) => entry.id === agentId)) {
+      throw new Error(`Agent "${agentId}" not found`);
+    }
+
+    await applyWeChatChannelAccountEnabled(config, trimmedAccountId);
+    config.bindings = upsertBindingsForChannel(
+      config.bindings,
+      OPENCLAW_WECHAT_CHANNEL_TYPE,
+      agentId,
+      trimmedAccountId,
+    );
+
+    await writeOpenClawConfig(config);
+    logger.info('Saved WeChat channel with default agent binding', {
+      accountId: trimmedAccountId,
+      agentId,
+    });
   });
 }
 

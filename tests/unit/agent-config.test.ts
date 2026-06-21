@@ -363,4 +363,47 @@ describe('agent config lifecycle', () => {
     expect(snapshot.channelAccountOwners['dingtalk:default']).toBeUndefined();
     expect(snapshot.channelAccountOwners['telegram:default']).toBe('main');
   });
+
+  it('atomically saves WeChat channel config and default main binding', async () => {
+    await writeOpenClawJson({
+      agents: {
+        list: [
+          { id: 'main', name: 'Main', default: true },
+        ],
+      },
+    });
+
+    const { saveWeChatChannelWithBinding, listAgentsSnapshot } = await import('@electron/utils/agent-config');
+
+    await saveWeChatChannelWithBinding('bot-im-bot', 'main');
+
+    const config = await readOpenClawJson();
+    const wechat = config.channels as Record<string, {
+      defaultAccount?: string;
+      enabled?: boolean;
+      accounts?: Record<string, { enabled?: boolean }>;
+    }>;
+    expect(wechat['openclaw-weixin']).toMatchObject({
+      defaultAccount: 'bot-im-bot',
+      enabled: true,
+      accounts: {
+        'bot-im-bot': { enabled: true },
+      },
+    });
+    expect((config.plugins as { entries?: Record<string, { enabled?: boolean }> }).entries?.['openclaw-weixin']).toEqual({
+      enabled: true,
+    });
+    expect(config.bindings).toEqual([
+      {
+        agentId: 'main',
+        match: {
+          channel: 'openclaw-weixin',
+          accountId: 'bot-im-bot',
+        },
+      },
+    ]);
+
+    const snapshot = await listAgentsSnapshot();
+    expect(snapshot.channelAccountOwners['openclaw-weixin:bot-im-bot']).toBe('main');
+  });
 });

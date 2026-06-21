@@ -1,4 +1,6 @@
 import { hostApiFetch } from '@/lib/host-api';
+import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
+import { useAgentsStore } from '@/stores/agents';
 import {
   getCanonicalPrefixFromSessions,
   getMessageText,
@@ -14,7 +16,6 @@ import {
   parseScheduledTaskSessionKey,
 } from './cron-session-utils';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
-import { useAgentsStore } from '@/stores/agents';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
@@ -194,6 +195,7 @@ export function createSessionActions(
             key: nextSessionKey,
             label: localCurrentSession?.label ?? NEW_SESSION_TEMP_LABEL,
             engineType: localCurrentSession?.engineType,
+            model: localCurrentSession?.model,
           }]
           : dedupedSessions;
 
@@ -451,11 +453,13 @@ export function createSessionActions(
       // The main process renames <suffix>.jsonl → <suffix>.deleted.jsonl so that
       // sessions.list skips it automatically.
       try {
+        const session = get().sessions.find((item) => item.key === key);
+        const agent = useAgentsStore.getState().agents.find((item) => item.id === get().currentAgentId);
         const result = await hostApiFetch<{ success: boolean; error?: string }>('/api/sessions/delete', {
           method: 'POST',
           body: JSON.stringify({
             sessionKey: key,
-            engineType: getSessionEngineType(get().sessions.find((session) => session.key === key)),
+            engineType: resolveChatSessionEngineType(session, agent?.engineType, key),
           }),
         });
         const typedResult = result as {
