@@ -12,7 +12,7 @@ import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
-import { buildCronSessionHistoryPath, isCronSessionKey, parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './chat/cron-session-utils';
+import { buildCronSessionHistoryPath, getCronRunSessionAggregateKey, isCronSessionKey, parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './chat/cron-session-utils';
 import { sanitizeSessionDisplayField } from './chat/helpers';
 import {
   DEFAULT_CANONICAL_PREFIX,
@@ -1457,6 +1457,7 @@ export const useChatStore = create<ChatState>()(
   error: null,
 
   sending: false,
+  modelSwitching: false,
   activeRunId: null,
   streamingText: '',
   streamingMessage: null,
@@ -1576,9 +1577,14 @@ export const useChatStore = create<ChatState>()(
           }
 
           // Filter out base sessions that have dated replacements
+          // Also filter out run sessions when the job has dated aggregate sessions
           let filteredSessions = sessions.filter((s) => {
             if (cronDated.has(s.key)) return false;
             if (scheduledTaskDated.has(s.key)) return false;
+            const cronParts = parseCronSessionKey(s.key);
+            if (cronParts?.runSessionId && cronDated.has(`agent:main:cron:${cronParts.jobId}`)) {
+              return false;
+            }
             return true;
           });
 
@@ -2578,7 +2584,17 @@ export const useChatStore = create<ChatState>()(
     const eventSessionKey = event.sessionKey != null ? String(event.sessionKey) : null;
     const { activeRunId, currentSessionKey } = get();
 
-    if (eventSessionKey != null && eventSessionKey !== currentSessionKey) {
+    // Map cron run session events to their daily aggregate session key so that
+    // the loading indicator appears on the aggregate session in the sidebar.
+    let resolvedSessionKey = eventSessionKey;
+    if (eventSessionKey) {
+      const aggregateKey = getCronRunSessionAggregateKey(eventSessionKey);
+      if (aggregateKey) {
+        resolvedSessionKey = aggregateKey;
+      }
+    }
+
+    if (resolvedSessionKey != null && resolvedSessionKey !== currentSessionKey) {
       let resolvedState = eventState;
       if (!resolvedState && event.message && typeof event.message === 'object') {
         const msg = event.message as Record<string, unknown>;
@@ -2589,7 +2605,7 @@ export const useChatStore = create<ChatState>()(
           resolvedState = 'delta';
         }
       }
-      handleBackgroundSessionEvent(set, eventSessionKey, event, resolvedState, runId);
+      handleBackgroundSessionEvent(set, resolvedSessionKey, event, resolvedState, runId);
       return;
     }
 

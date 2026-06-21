@@ -110,6 +110,8 @@ export function createSessionActions(
 
         // If a local cron job has virtual dated sessions, drop its base session
         // from Gateway to avoid duplicate entries in the sidebar.
+        // Also drop run sessions when the job already has dated sessions — the run
+        // session's runtime state will be mapped to the aggregate session key.
         const cronJobIdsWithDates = new Set<string>();
         for (const s of rawSessions) {
           const key = String(s.key || '');
@@ -123,6 +125,10 @@ export function createSessionActions(
             const key = String(s.key || '');
             const parsed = parseCronSessionKey(key);
             if (parsed && !parsed.date && !parsed.runSessionId && cronJobIdsWithDates.has(parsed.jobId)) {
+              return false;
+            }
+            // Filter out run sessions when the job has dated aggregate sessions
+            if (parsed?.runSessionId && cronJobIdsWithDates.has(parsed.jobId)) {
               return false;
             }
             return true;

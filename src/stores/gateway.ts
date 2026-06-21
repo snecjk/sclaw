@@ -280,19 +280,27 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
     import('./chat')
       .then(({ useChatStore }) => {
         const state = useChatStore.getState();
-        const resolvedSessionKey = String(sessionKey);
-        const shouldRefreshSessions =
-          resolvedSessionKey !== state.currentSessionKey
-          || !state.sessions.some((session) => session.key === resolvedSessionKey);
-        if (shouldRefreshSessions) {
-          maybeLoadSessions(state, true);
-        }
+        let resolvedSessionKey = String(sessionKey);
+        // Map cron run session to its daily aggregate key so the sidebar shows
+        // loading on the aggregate session instead of the temporary run session.
+        import('./chat/cron-session-utils').then(({ getCronRunSessionAggregateKey }) => {
+          const aggregateKey = getCronRunSessionAggregateKey(resolvedSessionKey);
+          if (aggregateKey) {
+            resolvedSessionKey = aggregateKey;
+          }
+          const shouldRefreshSessions =
+            resolvedSessionKey !== state.currentSessionKey
+            || !state.sessions.some((session) => session.key === resolvedSessionKey);
+          if (shouldRefreshSessions) {
+            maybeLoadSessions(state, true);
+          }
 
-        state.handleChatEvent({
-          state: 'started',
-          runId,
-          sessionKey: resolvedSessionKey,
-        });
+          state.handleChatEvent({
+            state: 'started',
+            runId,
+            sessionKey: resolvedSessionKey,
+          });
+        }).catch(() => {});
       })
       .catch(() => {});
   }
@@ -301,41 +309,48 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
     import('./chat')
       .then(({ useChatStore }) => {
         const state = useChatStore.getState();
-        const resolvedSessionKey = sessionKey != null ? String(sessionKey) : null;
-        const shouldRefreshSessions = resolvedSessionKey != null && (
-          resolvedSessionKey !== state.currentSessionKey
-          || !state.sessions.some((session) => session.key === resolvedSessionKey)
-        );
-        if (shouldRefreshSessions) {
-          maybeLoadSessions(state);
-        }
+        let resolvedSessionKey = sessionKey != null ? String(sessionKey) : null;
+        import('./chat/cron-session-utils').then(({ getCronRunSessionAggregateKey }) => {
+          const aggregateKey = resolvedSessionKey ? getCronRunSessionAggregateKey(resolvedSessionKey) : null;
+          if (aggregateKey) {
+            resolvedSessionKey = aggregateKey;
+          }
+          const shouldRefreshSessions = resolvedSessionKey != null && (
+            resolvedSessionKey !== state.currentSessionKey
+            || !state.sessions.some((session) => session.key === resolvedSessionKey)
+          );
+          if (shouldRefreshSessions) {
+            maybeLoadSessions(state);
+          }
 
-        const matchesCurrentSession = resolvedSessionKey == null || resolvedSessionKey === state.currentSessionKey;
-        const matchesActiveRun = runId != null && state.activeRunId != null && String(runId) === state.activeRunId;
-        const backgroundRuntime = resolvedSessionKey ? state.runtimeBySessionKey[resolvedSessionKey] : null;
-        const hasBackgroundActiveRuntime = Boolean(backgroundRuntime?.sending);
+          const matchesCurrentSession = resolvedSessionKey == null || resolvedSessionKey === state.currentSessionKey;
+          const matchesActiveRun = runId != null && state.activeRunId != null && String(runId) === state.activeRunId;
+          const backgroundRuntime = resolvedSessionKey ? state.runtimeBySessionKey[resolvedSessionKey] : null;
+          const hasBackgroundActiveRuntime = Boolean(backgroundRuntime?.sending);
 
-        if (matchesCurrentSession || matchesActiveRun) {
-          maybeLoadHistory(state);
-        }
-        if ((matchesCurrentSession || matchesActiveRun) && state.sending) {
-          useChatStore.setState({
-            pendingFinal: true,
-          });
-          scheduleCompletedRunFinalization(runId, resolvedSessionKey);
-        } else if (resolvedSessionKey && hasBackgroundActiveRuntime) {
-          useChatStore.setState((prev) => ({
-            runtimeBySessionKey: {
-              ...prev.runtimeBySessionKey,
-              [resolvedSessionKey]: {
-                ...prev.runtimeBySessionKey[resolvedSessionKey],
-                pendingFinal: true,
-                updatedAt: Date.now(),
+          if (matchesCurrentSession || matchesActiveRun) {
+            maybeLoadHistory(state);
+          }
+          if ((matchesCurrentSession || matchesActiveRun) && state.sending) {
+            useChatStore.setState({
+              pendingFinal: true,
+            });
+            scheduleCompletedRunFinalization(runId, resolvedSessionKey);
+          } else if (resolvedSessionKey && hasBackgroundActiveRuntime) {
+            const key = resolvedSessionKey;
+            useChatStore.setState((prev) => ({
+              runtimeBySessionKey: {
+                ...prev.runtimeBySessionKey,
+                [key]: {
+                  ...prev.runtimeBySessionKey[key],
+                  pendingFinal: true,
+                  updatedAt: Date.now(),
+                },
               },
-            },
-          }));
-          scheduleCompletedRunFinalization(runId, resolvedSessionKey);
-        }
+            }));
+            scheduleCompletedRunFinalization(runId, resolvedSessionKey);
+          }
+        }).catch(() => {});
       })
       .catch(() => {});
   }

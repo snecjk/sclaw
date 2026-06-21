@@ -340,6 +340,7 @@ function SidebarScheduledTaskGroup({
   const location = useLocation();
   const { t } = useTranslation(['common', 'tasks']);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
+  const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
 
   if (sessions.length === 0) return null;
 
@@ -413,7 +414,12 @@ function SidebarScheduledTaskGroup({
                       : 'text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
                   )}
                 >
-                  <span className="block min-w-0 truncate">{label}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="block min-w-0 truncate">{label}</span>
+                    {runtimeBySessionKey[s.key]?.sending ? (
+                      <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary animate-pulse" />
+                    ) : null}
+                  </span>
                 </button>
                 <button
                   type="button"
