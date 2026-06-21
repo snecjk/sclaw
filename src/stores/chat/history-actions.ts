@@ -23,6 +23,7 @@ import {
   buildScheduledTaskSessionHistoryPath,
   isClaudeScheduledTaskSessionKey,
   isCronSessionKey,
+  isCronDatedSessionKey,
   isScheduledTaskSessionKey,
 } from './cron-session-utils';
 import type { RawMessage } from './types';
@@ -89,7 +90,7 @@ function insertOptimisticUserMessage(messages: RawMessage[], optimistic: RawMess
 }
 
 async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
-  if (!isCronSessionKey(sessionKey)) return [];
+  if (!isCronSessionKey(sessionKey) && !isCronDatedSessionKey(sessionKey)) return [];
   try {
     const response = await hostApiFetch<{ messages?: RawMessage[] }>(
       buildCronSessionHistoryPath(sessionKey, limit),
@@ -300,7 +301,7 @@ export function createHistoryActions(
         }
 
         let rawMessages = allMessages;
-        if (rawMessages.length === 0 && isCronSessionKey(currentSessionKey)) {
+        if (rawMessages.length === 0 && (isCronSessionKey(currentSessionKey) || isCronDatedSessionKey(currentSessionKey))) {
           rawMessages = await loadCronFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
         }
         if (rawMessages.length === 0 && isScheduledTaskSessionKey(currentSessionKey)) {

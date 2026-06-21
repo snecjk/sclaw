@@ -42,7 +42,18 @@ export function parseCronSessionKey(sessionKey: string): CronSessionKeyParts | n
 }
 
 export function isCronSessionKey(sessionKey: string): boolean {
-  return parseCronSessionKey(sessionKey) != null;
+  const parsed = parseCronSessionKey(sessionKey);
+  return parsed != null && parsed.date == null && parsed.runSessionId == null;
+}
+
+export function isCronDatedSessionKey(sessionKey: string): boolean {
+  const parsed = parseCronSessionKey(sessionKey);
+  return parsed?.date != null;
+}
+
+export function isCronRunSessionKey(sessionKey: string): boolean {
+  const parsed = parseCronSessionKey(sessionKey);
+  return parsed?.runSessionId != null;
 }
 
 export function buildCronSessionHistoryPath(sessionKey: string, limit = CHAT_HISTORY_LIMIT): string {

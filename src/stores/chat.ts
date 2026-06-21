@@ -12,7 +12,7 @@ import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
-import { buildCronSessionHistoryPath, getCronRunSessionAggregateKey, isCronSessionKey, parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './chat/cron-session-utils';
+import { buildCronSessionHistoryPath, getCronRunSessionAggregateKey, isCronSessionKey, isCronDatedSessionKey, parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './chat/cron-session-utils';
 import { sanitizeSessionDisplayField } from './chat/helpers';
 import {
   DEFAULT_CANONICAL_PREFIX,
@@ -793,7 +793,7 @@ async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promi
 }
 
 async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
-  if (!isCronSessionKey(sessionKey)) return [];
+  if (!isCronSessionKey(sessionKey) && !isCronDatedSessionKey(sessionKey)) return [];
   try {
     const response = await hostApiFetch<{ messages?: RawMessage[] }>(
       buildCronSessionHistoryPath(sessionKey, limit),
@@ -2210,7 +2210,7 @@ export const useChatStore = create<ChatState>()(
         }
 
         let rawMessages = allMessages;
-        if (rawMessages.length === 0 && isCronSessionKey(targetSessionKey)) {
+        if (rawMessages.length === 0 && (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey))) {
           rawMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
         }
 
