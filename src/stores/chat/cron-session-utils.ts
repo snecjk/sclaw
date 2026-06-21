@@ -70,7 +70,7 @@ export function parseScheduledTaskSessionKey(sessionKey: string): ScheduledTaskS
 }
 
 export function isScheduledTaskSessionKey(sessionKey: string): boolean {
-  return parseScheduledTaskSessionKey(sessionKey) != null;
+  return parseScheduledTaskSessionKey(sessionKey) != null || parseScheduledTaskAgentSessionKey(sessionKey) != null;
 }
 
 export function buildScheduledTaskSessionHistoryPath(sessionKey: string, limit = CHAT_HISTORY_LIMIT): string {

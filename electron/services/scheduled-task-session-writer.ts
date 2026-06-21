@@ -355,33 +355,63 @@ function normalizeTimestamp(value: unknown): number | undefined {
   return undefined;
 }
 
+
 /**
  * Read session history for a given scheduled task session key.
+ * Supports both:
+ *   - scheduled-task:{taskId}  (summary session)
+ *   - agent:{agentId}:scheduled-task:{taskId}:{date}  (dated agent session)
  */
 export async function readScheduledTaskSessionHistory(
   sessionKey: string,
   limit = 100,
 ): Promise<ScheduledTaskSessionMessage[]> {
-  if (!sessionKey.startsWith('scheduled-task:')) {
-    return [];
+  let sessionFile: string | undefined;
+  let taskId: number | undefined;
+
+  // Case 1: scheduled-task:{taskId} — read from scheduled-tasks local store
+  if (sessionKey.startsWith('scheduled-task:')) {
+    const taskIdStr = sessionKey.slice('scheduled-task:'.length);
+    taskId = Number(taskIdStr);
+    if (Number.isNaN(taskId)) {
+      return [];
+    }
+
+    const store = await readSessionStore(taskId);
+    const entry = findSessionEntry(store, sessionKey);
+    if (!entry) {
+      return [];
+    }
+    sessionFile = entry.sessionFile;
+  }
+  // Case 2: agent:{agentId}:scheduled-task:{taskId}:{date} — read from agent sessions store
+  else if (sessionKey.startsWith('agent:')) {
+    const parts = sessionKey.split(':');
+    // agent:{agentId}:scheduled-task:{taskId}:{date}
+    if (parts.length === 5 && parts[2] === 'scheduled-task') {
+      const agentId = parts[1] || 'main';
+      taskId = Number(parts[3]);
+      if (Number.isNaN(taskId)) {
+        return [];
+      }
+
+      const store = await readAgentSessionStore(agentId);
+      const entry = findAgentSessionEntry(store, sessionKey);
+      if (!entry) {
+        return [];
+      }
+      sessionFile = entry.sessionFile;
+    }
   }
 
-  const taskIdStr = sessionKey.slice('scheduled-task:'.length);
-  const taskId = Number(taskIdStr);
-  if (Number.isNaN(taskId)) {
-    return [];
-  }
-
-  const store = await readSessionStore(taskId);
-  const entry = findSessionEntry(store, sessionKey);
-  if (!entry) {
+  if (!sessionFile || taskId === undefined) {
     return [];
   }
 
   // Read the jsonl file
   let raw: string;
   try {
-    raw = await readFile(entry.sessionFile, 'utf8');
+    raw = await readFile(sessionFile, 'utf8');
   } catch {
     return [];
   }
@@ -420,6 +450,44 @@ export async function readScheduledTaskSessionHistory(
   messages.sort((a, b) => a.timestamp - b.timestamp);
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, messages.length) : messages.length;
   return messages.slice(-effectiveLimit);
+}
+
+/**
+ * Find an agent session entry in the agent session store.
+ */
+function findAgentSessionEntry(store: AgentSessionStore, sessionKey: string): AgentSessionStoreEntry | undefined {
+  // Direct key lookup
+  const direct = store[sessionKey];
+  if (direct && typeof direct === 'object' && direct !== null) {
+    const entry = direct as Record<string, unknown>;
+    if (typeof entry.sessionFile === 'string' && typeof entry.sessionId === 'string') {
+      return {
+        sessionId: entry.sessionId,
+        sessionFile: entry.sessionFile,
+        label: typeof entry.label === 'string' ? entry.label : undefined,
+      };
+    }
+  }
+
+  // Array lookup
+  if (Array.isArray(store.sessions)) {
+    const arrayEntry = store.sessions.find(
+      (s) => s.key === sessionKey || s.sessionKey === sessionKey,
+    );
+    if (
+      arrayEntry &&
+      typeof arrayEntry.sessionFile === 'string' &&
+      typeof arrayEntry.sessionId === 'string'
+    ) {
+      return {
+        sessionId: arrayEntry.sessionId,
+        sessionFile: arrayEntry.sessionFile,
+        label: typeof arrayEntry.label === 'string' ? arrayEntry.label : undefined,
+      };
+    }
+  }
+
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------

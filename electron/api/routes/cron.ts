@@ -102,6 +102,70 @@ function normalizeTimestampMs(value: unknown): number | undefined {
   return undefined;
 }
 
+/**
+ * Read full conversation messages from a cron run session jsonl file.
+ * The sessionKey format is: agent:{agentId}:cron:{jobId}:run:{runSessionId}
+ */
+async function readRunSessionMessages(sessionKey: string): Promise<CronSessionFallbackMessage[]> {
+  const parsed = parseCronSessionKey(sessionKey);
+  if (!parsed || !parsed.runSessionId) return [];
+
+  const sessionFile = join(getOpenClawConfigDir(), 'agents', parsed.agentId, 'sessions', `${parsed.runSessionId}.jsonl`);
+
+  let raw: string;
+  try {
+    raw = await readFile(sessionFile, 'utf8');
+  } catch {
+    return [];
+  }
+
+  const messages: CronSessionFallbackMessage[] = [];
+  const lines = raw.split(/\r?\n/);
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) continue;
+    try {
+      const record = JSON.parse(trimmed) as Record<string, unknown>;
+      if (record.type !== 'message') continue;
+
+      const msg = record.message as Record<string, unknown> | undefined;
+      if (!msg) continue;
+
+      const role = msg.role as string | undefined;
+      const content = msg.content as string | unknown[] | undefined;
+      if (!role || !content) continue;
+
+      // Handle content format: string or array of text blocks
+      let textContent = '';
+      if (typeof content === 'string') {
+        textContent = content;
+      } else if (Array.isArray(content)) {
+        textContent = content
+          .filter((c: unknown) => c && typeof c === 'object' && (c as Record<string, unknown>).type === 'text')
+          .map((c: unknown) => (c as Record<string, unknown>).text as string)
+          .filter(Boolean)
+          .join('');
+      }
+
+      if (!textContent) continue;
+
+      const timestamp = normalizeTimestampMs(record.timestamp) ?? Date.now();
+
+      messages.push({
+        id: `cron-run-msg-${parsed.runSessionId}-${i}`,
+        role: role === 'user' ? 'user' : role === 'system' ? 'system' : 'assistant',
+        content: textContent,
+        timestamp,
+      });
+    } catch {
+      // Ignore malformed lines
+    }
+  }
+
+  return messages;
+}
+
 function formatDuration(durationMs: number | undefined): string | null {
   if (!durationMs || !Number.isFinite(durationMs)) return null;
   if (durationMs < 1000) return `${Math.round(durationMs)}ms`;
@@ -375,13 +439,13 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
   return sessions;
 }
 
-export function buildCronSessionFallbackMessages(params: {
+export async function buildCronSessionFallbackMessages(params: {
   sessionKey: string;
   job?: Pick<GatewayCronJob, 'name' | 'payload' | 'state'>;
   runs: CronRunLogEntry[];
   sessionEntry?: { label?: string; updatedAt?: number };
   limit?: number;
-}): CronSessionFallbackMessage[] {
+}): Promise<CronSessionFallbackMessage[]> {
   const parsed = parseCronSessionKey(params.sessionKey);
   if (!parsed) return [];
 
@@ -424,10 +488,18 @@ export function buildCronSessionFallbackMessages(params: {
     });
   }
 
-  matchingRuns.forEach((entry, index) => {
-    const message = buildCronRunMessage(entry, index);
+  // For each run, load full transcript from the run session jsonl file
+  for (const entry of matchingRuns) {
+    // First add the summary message from the run log
+    const message = buildCronRunMessage(entry, matchingRuns.indexOf(entry));
     if (message) messages.push(message);
-  });
+
+    // Then load full conversation from the run session file
+    if (entry.sessionKey) {
+      const runMessages = await readRunSessionMessages(entry.sessionKey);
+      messages.push(...runMessages);
+    }
+  }
 
   if (matchingRuns.length === 0) {
     const runningAt = normalizeTimestampMs(params.job?.state?.runningAtMs);
@@ -563,7 +635,7 @@ export async function handleCronRoutes(
 
       const jobs = (jobsResult as { jobs?: GatewayCronJob[] }).jobs ?? [];
       const job = jobs.find((item) => item.id === parsedSession.jobId);
-      const messages = buildCronSessionFallbackMessages({
+      const messages = await buildCronSessionFallbackMessages({
         sessionKey,
         job,
         runs,
