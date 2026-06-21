@@ -343,6 +343,7 @@ function SidebarScheduledTaskGroup({
   const { t } = useTranslation(['common', 'tasks']);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
+  const isSending = useChatStore((s) => s.sending);
 
   if (sessions.length === 0) return null;
 
@@ -418,9 +419,13 @@ function SidebarScheduledTaskGroup({
                 >
                   <span className="flex items-center gap-1.5">
                     <span className="block min-w-0 truncate">{label}</span>
-                    {runtimeBySessionKey[s.key]?.sending ? (
-                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
-                    ) : null}
+                    {(() => {
+                      const isSessionSending = runtimeBySessionKey[s.key]?.sending
+                        || (s.key === currentSessionKey && isSending);
+                      return isSessionSending ? (
+                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+                      ) : null;
+                    })()}
                   </span>
                 </button>
                 <button
