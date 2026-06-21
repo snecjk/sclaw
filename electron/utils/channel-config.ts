@@ -635,6 +635,47 @@ export async function saveChannelConfig(
     });
 }
 
+/**
+ * Enable a WeChat plugin account in-memory. Caller must write the config once
+ * after applying any additional mutations (e.g. agent bindings).
+ */
+export async function applyWeChatChannelAccountEnabled(
+    config: OpenClawConfig,
+    accountId: string,
+): Promise<void> {
+    const resolvedAccountId = accountId.trim();
+    if (!resolvedAccountId) {
+        throw new Error('accountId is required');
+    }
+
+    await ensurePluginAllowlist(config, WECHAT_PLUGIN_ID);
+
+    if (!config.channels) {
+        config.channels = {};
+    }
+    if (!config.channels[WECHAT_PLUGIN_ID]) {
+        config.channels[WECHAT_PLUGIN_ID] = {};
+    }
+
+    const channelSection = config.channels[WECHAT_PLUGIN_ID];
+    migrateLegacyChannelConfigToAccounts(channelSection, DEFAULT_ACCOUNT_ID);
+
+    if (!channelSection.accounts || typeof channelSection.accounts !== 'object') {
+        channelSection.accounts = {};
+    }
+    const accounts = channelSection.accounts as Record<string, ChannelConfigData>;
+    channelSection.defaultAccount = resolvedAccountId;
+    accounts[resolvedAccountId] = {
+        ...accounts[resolvedAccountId],
+        enabled: true,
+    };
+
+    const accountData = accounts[resolvedAccountId];
+    for (const [key, value] of Object.entries(accountData)) {
+        channelSection[key] = value;
+    }
+}
+
 export async function getChannelConfig(channelType: string, accountId?: string): Promise<ChannelConfigData | undefined> {
     const resolvedChannelType = resolveStoredChannelType(channelType);
     const config = await readOpenClawConfig();

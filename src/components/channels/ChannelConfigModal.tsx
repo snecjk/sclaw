@@ -262,6 +262,9 @@ export function ChannelConfigModal({
       void data?.accountId;
       qrConnectedRef.current = true;
       toast.success(translateRef.current('toast.qrConnected', { name: CHANNEL_NAMES[channelType] }));
+      if (channelType === 'wechat') {
+        toast.success(translateRef.current('toast.wechatAutoBoundMain'));
+      }
       try {
         if (channelType === 'whatsapp') {
           const saveResult = await hostApiFetch<{ success?: boolean; error?: string }>('/api/channels/config', {

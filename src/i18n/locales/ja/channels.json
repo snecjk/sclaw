@@ -23,6 +23,7 @@
         "whatsappConnected": "WhatsApp が正常に接続されました",
         "whatsappFailed": "WhatsApp 接続に失敗しました: {{error}}",
         "qrConnected": "{{name}} が正常に接続されました",
+        "wechatAutoBoundMain": "Main Agent に自動紐付けしました。チャンネルページで変更できます",
         "qrFailed": "{{name}} の接続に失敗しました: {{error}}",
         "channelSaved": "チャンネル {{name}} が保存されました",
         "channelConnecting": "{{name}} に接続中...",
