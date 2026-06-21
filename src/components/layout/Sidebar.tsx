@@ -56,6 +56,7 @@ import {
   parseClaudeScheduledTaskRunSessionKey,
   parseCronSessionKey,
   parseScheduledTaskAgentSessionKey,
+  isAnyCronSessionKey,
 } from '@/stores/chat/cron-session-utils';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
@@ -733,7 +734,7 @@ export function Sidebar() {
   // Legacy cron + scheduled-task agent sessions — shown under "任务列表" grouped by task name
   const taskListScheduledSessions = useMemo(
     () => visibleSessions.filter((s) => (
-      parseCronSessionKey(s.key)
+      isAnyCronSessionKey(s.key)
       || parseScheduledTaskAgentSessionKey(s.key)
       || parseClaudeScheduledTaskRunSessionKey(s.key)
     )),
@@ -743,7 +744,7 @@ export function Sidebar() {
   // Normal chat sessions — shown under time buckets (today / yesterday / ...)
   const normalSessions = useMemo(
     () => visibleSessions.filter((s) => (
-      !parseCronSessionKey(s.key)
+      !isAnyCronSessionKey(s.key)
       && !parseScheduledTaskAgentSessionKey(s.key)
       && !parseClaudeScheduledTaskRunSessionKey(s.key)
     )),

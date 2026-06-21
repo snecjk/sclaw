@@ -56,6 +56,14 @@ export function isCronRunSessionKey(sessionKey: string): boolean {
   return parsed?.runSessionId != null;
 }
 
+/**
+ * Check if a session key is any cron-related key (base, dated, or run).
+ * Used for sidebar filtering where all cron keys belong in the task list section.
+ */
+export function isAnyCronSessionKey(sessionKey: string): boolean {
+  return parseCronSessionKey(sessionKey) != null;
+}
+
 export function buildCronSessionHistoryPath(sessionKey: string, limit = CHAT_HISTORY_LIMIT): string {
   const params = new URLSearchParams({ sessionKey });
   if (Number.isFinite(limit) && limit > 0) {
