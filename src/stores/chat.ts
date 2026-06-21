@@ -1600,11 +1600,20 @@ export const useChatStore = create<ChatState>()(
           }
 
           // Deduplicate: if both short and canonical existed, keep canonical only
+          // Also deduplicate cron dated sessions by jobId+date to prevent duplicates
           const seen = new Set<string>();
+          const seenCronDated = new Set<string>();
           const dedupedSessions = filteredSessions.filter((s) => {
             if (!s.key.startsWith('agent:') && canonicalBySuffix.has(s.key)) return false;
             if (seen.has(s.key)) return false;
             seen.add(s.key);
+            // Extra dedup for cron dated sessions: same job+date should only appear once
+            const cronParts = parseCronSessionKey(s.key);
+            if (cronParts?.date) {
+              const dedupKey = `${cronParts.jobId}:${cronParts.date}`;
+              if (seenCronDated.has(dedupKey)) return false;
+              seenCronDated.add(dedupKey);
+            }
             return true;
           });
 
