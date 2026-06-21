@@ -23,6 +23,7 @@ import {
   Radio,
   ChevronDown,
   Pencil,
+  Loader2,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -417,7 +418,7 @@ function SidebarScheduledTaskGroup({
                   <span className="flex items-center gap-1.5">
                     <span className="block min-w-0 truncate">{label}</span>
                     {runtimeBySessionKey[s.key]?.sending ? (
-                      <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary animate-pulse" />
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
                     ) : null}
                   </span>
                 </button>
