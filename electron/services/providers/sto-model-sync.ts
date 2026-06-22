@@ -9,8 +9,6 @@
 
 import type { GatewayManager } from '../../gateway/manager';
 import type { ProviderAccount } from '../../shared/providers/types';
-import type { SsoEnvironment } from '../../utils/auth-store';
-import { getStoToken, getSsoEnvironment } from '../../utils/auth-store';
 import { getProviderService } from './provider-service';
 import { listProviderAccounts, getDefaultProviderAccountId } from './provider-store';
 import { providerAccountToConfig } from './provider-store';
@@ -22,51 +20,16 @@ import {
   syncProviderApiKeyToRuntime,
 } from './provider-runtime-sync';
 import { logger } from '../../utils/logger';
-import { buildStoMemoryCenterAuthHeaders } from '../../utils/sto-memory-api-auth';
+import type { SsoUserInfo } from '../../utils/auth-store';
 import { removeProviderFromOpenClaw } from '../../utils/openclaw-auth';
 import {
   OPENCLAW_STO_PLACEHOLDER_KEYS_TO_SCRUB,
   shouldDeleteStaleStoPlaceholder,
   STO_CANONICAL_ACCOUNT_ID,
 } from './sto-placeholder-utils';
-import { isSiteUser } from '../../../shared/site-user-utils';
 import crypto from 'crypto';
 
-/** 非网点用户的固定租户编码 */
-const DEFAULT_TENANT_CODE = 'enterprise-Intelligence';
 
-// Gateway 消息发送域名（无 api 前缀）
-const NEW_SUPPLIER_DOMAINS: Record<string, string> = {
-  prod: 'https://devops-llmgateway.sto.cn',
-  test: 'https://devops-llmgateway-test.sto.cn',
-};
-
-// SK 查询/创建接口域名（带 api 前缀）
-const SK_API_DOMAINS: Record<string, string> = {
-  prod: 'https://devops-llmgatewayapi.sto.cn',
-  test: 'https://devops-llmgatewayapi-test.sto.cn',
-};
-
-function isTestEnvironment(env?: string | null): boolean {
-  const normalized = env?.trim().toLowerCase() || '';
-  return ['test', 'pre-release', 'daily', 'daily-external'].some(
-    (e) => normalized.includes(e)
-  );
-}
-
-async function resolveSupplierDomain(): Promise<string> {
-  const env = await getSsoEnvironment();
-  return isTestEnvironment(env)
-    ? NEW_SUPPLIER_DOMAINS.test
-    : NEW_SUPPLIER_DOMAINS.prod;
-}
-
-async function resolveSkApiDomain(): Promise<string> {
-  const env = await getSsoEnvironment();
-  return isTestEnvironment(env)
-    ? SK_API_DOMAINS.test
-    : SK_API_DOMAINS.prod;
-}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -83,9 +46,6 @@ const STO_DOMAINS: Record<string, string> = {
   'local': 'http://127.0.0.1:7001/agent',
 };
 const STO_DOMAIN_DEFAULT = 'https://baseinfo-aimemory.sto.cn/agent';
-
-/** Standard OpenAI-compatible model list path. */
-const STO_MODEL_LIST_PATH = '/v1/models';
 
 const SYNC_INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
 
@@ -143,69 +103,6 @@ export class StoModelSyncService {
     );
   }
 
-  // -- Remote fetch --------------------------------------------------------
-
-  /**
-   * Fetch model list from the new supplier SK detail API.
-   * The model list is returned in data[0].models field.
-   */
-  async fetchRemoteModels(
-    userCode: string,
-    tenantCode?: string,
-  ): Promise<StoRemoteModel[]> {
-    const domain = await resolveSkApiDomain();
-    const url = `${domain}/openapi/key/detail`;
-    const secretHeader = crypto.createHash('md5').update(userCode).digest('hex');
-
-    const requestBody: Record<string, string> = { userCode };
-    if (tenantCode) {
-      requestBody.tenantCode = tenantCode;
-    }
-
-    logger.info(`[sto-sync] >>> fetchRemoteModels url=${url} tenantCode=${tenantCode ?? '(none)'}`);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          secret: secretHeader,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
-    const bodyText = await response.text();
-    logger.info(`[sto-sync] <<< fetchRemoteModels status=${response.status} body=${bodyText.slice(0, 500)}`);
-
-    if (!response.ok) {
-      throw new Error(
-        `STO model list request failed: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    const json = JSON.parse(bodyText) as {
-      code: string;
-      msg: string;
-      data?: Array<{
-        models: string[];
-        encryptedKey: string;
-      }>;
-    };
-
-    if (json.code !== '0') {
-      throw new Error(`Biz error: ${json.code} ${json.msg}`);
-    }
-
-    const models = json.data?.[0]?.models ?? [];
-    return models.map((id) => ({ id, name: id }));
-  }
-
   // -- Core sync -----------------------------------------------------------
 
   /**
@@ -243,7 +140,7 @@ export class StoModelSyncService {
       return result;
     }
 
-    // Step 2 — Get user code for secret header + determine tenantCode
+    // Step 2 — Get user code for secret header
     const { getAuthState } = await import('../../utils/auth-store');
     const authState = await getAuthState();
     const userCode = authState.user?.code || '';
@@ -253,17 +150,21 @@ export class StoModelSyncService {
     }
     const secretHeader = crypto.createHash('md5').update(userCode).digest('hex');
 
-    // 非网点用户携带固定租户编码
-    const categoryCode = authState.user?.categoryCode;
-    const tenantCode = isSiteUser(categoryCode) ? undefined : DEFAULT_TENANT_CODE;
-
-    // Step 3 — Fetch remote models from SK detail API
+    // Step 3 — Fetch remote models and supplier domain via strategy (零 if/else，自动适配网点/非网点)
+    const { resolveStrategy } = await import('../sto-sk-strategy');
+    const strategy = await resolveStrategy(authState.user);
     let remoteModels: StoRemoteModel[];
+    let supplierDomain: string;
     try {
-      remoteModels = await this.fetchRemoteModels(userCode, tenantCode);
+      if (!strategy || !authState.user) {
+        throw new Error('No strategy or user available');
+      }
+      const models = await strategy.getUserModels(authState.user);
+      remoteModels = (models ?? []).map((id) => ({ id, name: id }));
+      supplierDomain = await strategy.getSupplierDomain();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      logger.warn(`[sto-sync] Failed to fetch remote models: ${message}`);
+      logger.warn(`[sto-sync] Failed to fetch remote models or domain via strategy: ${message}`);
       result.error = `fetch-failed: ${message}`;
       return result;
     }
@@ -320,8 +221,7 @@ export class StoModelSyncService {
 
     // Step 4 — Create or update the single STO account
     const existingAccount = allAccounts.find((a) => a.id === STO_ACCOUNT_ID);
-    const domain = await resolveSupplierDomain();
-    const expectedBaseUrl = `${domain}/v1`;
+    const expectedBaseUrl = `${supplierDomain}/v1`;
     const now = new Date().toISOString();
 
     if (!existingAccount) {
@@ -469,12 +369,12 @@ export class StoModelSyncService {
 
   // -- Logout cleanup ------------------------------------------------------
 
-  async cleanupOnLogout(): Promise<void> {
+  async cleanupOnLogout(userOverride?: SsoUserInfo | null): Promise<void> {
     this.stopPeriodicSync();
 
     // Clear user SK
     const { clearUserSk } = await import('../user-sk-service');
-    await clearUserSk();
+    await clearUserSk(userOverride);
 
     const accounts = await listProviderAccounts();
     const stoAccounts = accounts.filter((a) =>

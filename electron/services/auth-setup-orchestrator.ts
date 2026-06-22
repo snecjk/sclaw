@@ -211,10 +211,15 @@ async function runSetup(
     logger.warn(`${logPrefix} STO plugins config failed:`, err);
   }
 
-  // ===== 新增：登录后静默获取用户 SK =====
+  // ===== 登录后静默获取用户 SK（强制走主租户全链路，不读旧 tenant 缓存） =====
   try {
-    const { getUserSk } = await import('./user-sk-service');
-    await getUserSk();
+    const { getUserSk, clearUserSk } = await import('./user-sk-service');
+    if (source === 'login' && userToSync) {
+      await clearUserSk(userToSync);
+      await getUserSk(true);
+    } else {
+      await getUserSk();
+    }
   } catch {
     // 静默失败，sto-model-sync 会处理无 SK 的情况
   }
