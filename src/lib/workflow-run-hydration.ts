@@ -47,7 +47,7 @@ export async function hydrateWorkflowRun(
 
   hydrateInFlight.add(runId);
   try {
-    console.log('[workflow-trace] hydrateWorkflowRun start runId=%s sessionKey=%s', runId, ctx.sessionKey);
+    
     const state = await fetchWorkflowStatus(runId);
     if (!state) {
       console.warn('[workflow-trace] hydrateWorkflowRun failed runId=%s (GET run returned null)', runId);
@@ -74,12 +74,7 @@ export async function hydrateWorkflowRun(
         return;
       }
 
-      console.log(
-        '[workflow-trace] hydrateWorkflowRun startTracking runId=%s workflowId=%s uiStatus=%s',
-        runId,
-        workflowId,
-        state.status,
-      );
+      
       await invokeIpc('workflow:startTracking', {
         runId,
         workflowId,

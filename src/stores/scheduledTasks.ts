@@ -95,7 +95,7 @@ export const useScheduledTasksStore = create<ScheduledTasksState>((set) => ({
       `/api/scheduled-tasks/${taskId}/trigger`,
       { method: 'POST' },
     );
-    console.log('Scheduled task trigger result:', result);
+    
     return result;
   },
 }));

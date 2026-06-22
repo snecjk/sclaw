@@ -295,7 +295,7 @@ export function extractParameterForm(
       ) {
         return null;
       }
-      console.log('[extractParameterForm] found native parameter_form block, formId:', formId);
+      
       return {
         formId,
         formConfig: (block as any).formConfig as import('@/types/user-form').UserFormConfig,

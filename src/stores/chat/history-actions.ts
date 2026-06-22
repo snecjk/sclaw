@@ -134,7 +134,7 @@ export function createHistoryActions(
 ): Pick<SessionHistoryActions, 'loadHistory'> {
   return {
     loadHistory: async (quiet = false) => {
-      console.log('[loadHistory] called, quiet=%s', quiet);
+      
       const { currentSessionKey, sessions } = get();
       const currentSession = sessions.find((session) => session.key === currentSessionKey);
       if (!quiet) set({ loading: true, error: null });

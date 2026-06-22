@@ -46,12 +46,7 @@ function messageDedupeKey(msg: BuiltinToolResultMessage): string | null {
 }
 
 function handleWorkflowSchemaReady(data: WorkflowSchemaReadyData): void {
-  const injected = applyWorkflowSchemaReady(data);
-  console.log(
-    '[builtin-tool] workflow_schema_ready templateId=%s formInjected=%s',
-    data.templateId,
-    injected,
-  );
+  applyWorkflowSchemaReady(data);
 }
 
 function handleWorkflowCreated(data: WorkflowCreatedData): void {
@@ -65,7 +60,7 @@ function handleWorkflowCreated(data: WorkflowCreatedData): void {
     collectedInputs: data.values ?? {},
     createdAt: Date.now(),
   });
-  console.log('[builtin-tool] workflow_created workflowId=%s', data.workflowId);
+  
 }
 
 async function handleWorkflowExecutionStarted(
@@ -76,11 +71,7 @@ async function handleWorkflowExecutionStarted(
     toast.error('工作流执行结果缺少 runId 或 workflowId');
     return;
   }
-  console.log(
-    '[builtin-tool] workflow_execution_started workflowId=%s runId=%s',
-    data.workflowId,
-    data.runId,
-  );
+  
   await applyWorkflowRunStarted({
     sessionKey: chatState.currentSessionKey,
     agentId: chatState.currentAgentId,

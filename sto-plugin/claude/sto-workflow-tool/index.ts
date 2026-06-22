@@ -116,18 +116,11 @@ export async function runWorkflowAgent(
   })) {
     switch (message.type) {
       case "assistant": {
-        const content = message.message.content;
-        const toolCalls = content.filter(
-          (c: { type: string }) => c.type === "tool_use",
-        );
-        if (toolCalls.length > 0) {
-          console.log("[workflow-agent] calling tools:", toolCalls);
-        }
         break;
       }
       case "result":
         if (message.subtype === "success") {
-          console.log(`[workflow-agent] done — cost: $${message.total_cost_usd}`);
+          
           return { sessionId: message.session_id, result: message.result };
         }
         break;

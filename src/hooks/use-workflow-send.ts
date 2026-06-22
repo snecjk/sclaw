@@ -44,7 +44,7 @@ export async function sendWithWorkflow(
   _context: WorkflowSendContext,
   sendMessage: (text: string, runId?: string | null, workflowId?: string | null, workflowContext?: unknown) => Promise<void>,
 ): Promise<boolean> {
-  console.log('[workflow-trace] sendWithWorkflow start templateId=%s text=%s', templateId, text);
+  
   if (!canStartWorkflow()) {
     toast.error('当前会话已有过多执行中的工作流，请等待完成后再试');
     return false;
@@ -52,16 +52,10 @@ export async function sendWithWorkflow(
 
   try {
     // 1. Fetch startup schema (use cache if available)
-    console.log('[workflow-trace] sendWithWorkflow fetching schema templateId=%s', templateId);
+    
     let cached = schemaCache.get(templateId);
     if (cached) {
-      console.log(
-        '[workflow-trace] sendWithWorkflow schema cache hit templateId=%s fields=%d steps=%d response=%s',
-        templateId,
-        cached.schema.fields.length,
-        cached.schema.steps.length,
-        JSON.stringify({ templateId, schemaHash: cached.schemaHash, schema: cached.schema }),
-      );
+      
     } else {
       const startup = await getStartupSchema(templateId);
       cached = { schema: startup.schema, schemaHash: startup.schemaHash };
@@ -69,7 +63,7 @@ export async function sendWithWorkflow(
     }
 
     const { schema, schemaHash } = cached;
-    console.log('[workflow-trace] sendWithWorkflow schema loaded fields=%d steps=%d', schema.fields.length, schema.steps.length);
+    
 
     // 2. Get template name from store
     const templateName = useWorkflowsStore.getState().templates.find((t) => t.id === templateId)?.label ?? templateId;
@@ -104,7 +98,7 @@ export async function sendWithWorkflow(
       frontendFormInserted: false,
       modelGuidanceSent: true,
     });
-    console.log('[workflow-trace] sendWithWorkflow sent message to Gateway, form will appear after model responds');
+    
 
     return true;
   } catch (err) {
@@ -149,11 +143,7 @@ export async function createAndStartWorkflowDirect(
       startup: buildStartupPreset(inputs, schemaHash),
       idempotencyKey: `create-wf-${templateId}-${Date.now()}`,
     });
-    console.log(
-      '[workflow-trace] createAndStartWorkflowDirect created workflowId=%s templateId=%s',
-      created.workflowId,
-      templateId,
-    );
+    
 
     const templateName = useWorkflowsStore.getState().templates.find((t) => t.id === templateId)?.label ?? templateId;
 
@@ -273,13 +263,7 @@ export async function startExistingWorkflow(
   }
 
   const idempotencyKey = `start-wf-${workflowId}-${Date.now()}`;
-  console.log(
-    '[workflow-trace] startExistingWorkflow workflowId=%s templateName=%s inputKeys=%o text=%s',
-    workflowId,
-    _templateName ?? '',
-    Object.keys(inputs),
-    originalText,
-  );
+  
 
   try {
     const run = await startWorkflow(workflowId, {
@@ -442,11 +426,7 @@ export async function tryResolvePendingWorkflow(
   }
 
   if (pending.workflowId && (isConfirmIntent || isShortReply)) {
-    console.log(
-      '[workflow-trace] tryResolvePendingWorkflow → startExistingWorkflow workflowId=%s text=%s',
-      pending.workflowId,
-      text,
-    );
+    
     const ok = await startExistingWorkflow(
       pending.workflowId,
       inputs,
@@ -498,11 +478,7 @@ export async function tryResolvePendingWorkflow(
       }
     }
 
-    console.log(
-      '[workflow-trace] tryResolvePendingWorkflow → createAndStartWorkflowDirect templateId=%s text=%s',
-      pending.templateId,
-      text,
-    );
+    
     const ok = await createAndStartWorkflowDirect(
       pending.templateId,
       mergedInputs,
@@ -636,11 +612,7 @@ export async function tryStartRememberedWorkflowSend(
     return false;
   }
 
-  console.log(
-    '[workflow-trace] tryStartRememberedWorkflowSend workflowId=%s text=%s',
-    workflowId,
-    trimmed,
-  );
+  
 
   chatState.clearPendingWorkflow();
 

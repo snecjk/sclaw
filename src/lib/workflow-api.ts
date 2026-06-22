@@ -118,40 +118,21 @@ export async function searchWorkflowTemplates(
 // ── 2. Get startup schema ───────────────────────────────────────
 
 export async function getStartupSchema(templateId: string): Promise<StartupSchemaResponse> {
-  console.log(
-    '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema',
-    templateId,
-  );
+  
   const data = await unwrap(
     hostApiFetch<ApiResponse<StartupSchemaResponse>>(`/agent/v1/workflow-templates/${templateId}/startup-schema`, {
       headers: authHeaders(),
     }),
   );
-  console.log(
-    '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema ok schemaHash=%s fields=%d steps=%d enabled=%s',
-    templateId,
-    data.schemaHash,
-    data.schema?.fields?.length ?? 0,
-    data.schema?.steps?.length ?? 0,
-    String(data.schema?.enabled ?? false),
-  );
-  console.log(
-    '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema response=%s',
-    templateId,
-    JSON.stringify(data),
-  );
+  
+  
   return data;
 }
 
 // ── 3. Create workflow ──────────────────────────────────────────
 
 export async function createWorkflow(params: CreateWorkflowRequest): Promise<CreateWorkflowResponse> {
-  console.log(
-    '[workflow-trace] POST /agent/v1/workflows templateId=%s idempotencyKey=%s startupKeys=%o',
-    params.templateId,
-    params.idempotencyKey,
-    Object.keys(params.startup ?? {}),
-  );
+  
   const init: RequestInit = {
     method: 'POST',
     headers: authHeaders(),
@@ -160,39 +141,22 @@ export async function createWorkflow(params: CreateWorkflowRequest): Promise<Cre
   const data = await unwrap(
     hostApiFetch<ApiResponse<CreateWorkflowResponse>>('/agent/v1/workflows', init),
   );
-  console.log(
-    '[workflow-trace] POST /agent/v1/workflows ok workflowId=%s templateId=%s',
-    data.workflowId,
-    params.templateId,
-  );
+  
   return data;
 }
 
 // ── 4. Get workflow detail ──────────────────────────────────────
 
 export async function getWorkflowDetail(workflowId: string): Promise<WorkflowDetailResponse> {
-  console.log('[workflow-trace] GET /agent/v1/workflows/%s', workflowId);
+  
   try {
     const data = await unwrap(
       hostApiFetch<ApiResponse<WorkflowDetailResponse>>(`/agent/v1/workflows/${workflowId}`, {
         headers: authHeaders(),
       }),
     );
-    console.log(
-      '[workflow-trace] GET /agent/v1/workflows/%s ok name=%s nodes=%d edges=%d steps=%d fields=%d preset=%s',
-      workflowId,
-      data.workflowName,
-      data.nodes?.length ?? 0,
-      data.edges?.length ?? 0,
-      data.startup?.schema?.steps?.length ?? 0,
-      data.startup?.schema?.fields?.length ?? 0,
-      data.startup?.defaultPreset ? 'yes' : 'no',
-    );
-    console.log(
-      '[workflow-trace] GET /agent/v1/workflows/%s response=%s',
-      workflowId,
-      JSON.stringify(data),
-    );
+    
+    
     return data;
   } catch (err) {
     console.error(
@@ -210,12 +174,7 @@ export async function startWorkflow(
   workflowId: string,
   params: StartWorkflowRequest,
 ): Promise<StartWorkflowResponse> {
-  console.log(
-    '[workflow-trace] POST /agent/v1/workflows/%s/start idempotencyKey=%s inputKeys=%o',
-    workflowId,
-    params.idempotencyKey,
-    Object.keys(params.inputs ?? {}),
-  );
+  
   const init: RequestInit = {
     method: 'POST',
     headers: authHeaders(),
@@ -227,12 +186,7 @@ export async function startWorkflow(
   if (!data.runId) {
     throw new Error('Start workflow response missing runId');
   }
-  console.log(
-    '[workflow-trace] POST /agent/v1/workflows/%s/start ok runId=%s status=%s',
-    workflowId,
-    data.runId,
-    data.status,
-  );
+  
   return data;
 }
 
@@ -244,7 +198,7 @@ export async function getWorkflowRun(runId: string): Promise<WorkflowRunResponse
       headers: authHeaders(),
     }),
   );
-  console.log(`[workflow-trace] GET /agent/v1/runs/${runId} response body:`, JSON.stringify(data, null, 2));
+  
   return data;
 }
 
@@ -263,19 +217,13 @@ function isElectronRenderer(): boolean {
 function parseRunUpdateEvent(
   runId: string,
   currentData: string,
-  eventCount: number,
+  _eventCount: number,
   onEvent: (data: WorkflowRunResponse) => void,
   onError?: (error: Error) => void,
 ): void {
   try {
     const payload = JSON.parse(currentData) as WorkflowRunResponse;
-    console.log(
-      '[workflow-trace] SSE run.update #%d runId=%s status=%s nodeRuns=%d',
-      eventCount,
-      runId,
-      payload.status,
-      payload.nodeRuns?.length ?? 0,
-    );
+    
     onEvent(payload);
   } catch (e) {
     const parseError = new Error(`SSE parse error: ${String(e)}`);
@@ -290,7 +238,7 @@ function subscribeWorkflowRunViaIpc(
   onError?: (error: Error) => void,
 ): () => void {
   let eventCount = 0;
-  console.log('[workflow-trace] IPC workflow:stream:subscribe runId=%s (backend via resolveStoBaseUrl)', runId);
+  
 
   void invokeIpc('workflow:stream:subscribe', runId).catch((err) => {
     const error = err instanceof Error ? err : new Error(String(err));
@@ -302,7 +250,7 @@ function subscribeWorkflowRunViaIpc(
     const data = payload as { runId: string; event: string; data: string };
     if (data.runId !== runId) return;
     if (data.event !== 'run.update') {
-      console.log('[workflow-trace] SSE event=%s runId=%s (ignored)', data.event, runId);
+      
       return;
     }
     eventCount += 1;
@@ -322,7 +270,7 @@ function subscribeWorkflowRunViaIpc(
   const unsubError = window.electron!.ipcRenderer.on('workflow:stream:error', errorHandler);
 
   return () => {
-    console.log('[workflow-trace] IPC workflow:stream:unsubscribe runId=%s events=%d', runId, eventCount);
+    
     unsubEvent?.();
     unsubError?.();
     void invokeIpc('workflow:stream:unsubscribe', runId).catch(() => {});
@@ -349,7 +297,7 @@ export function subscribeWorkflowRun(
 
   const connect = async () => {
     const streamPath = `/agent/v1/runs/${runId}/stream`;
-    console.log('[workflow-trace] GET %s connecting (SSE browser fallback)...', streamPath);
+    
     try {
       const response = await hostApiFetchStream(streamPath, {
         headers: authHeaders(),
@@ -360,12 +308,7 @@ export function subscribeWorkflowRun(
         throw new Error(`HTTP ${response.status}`);
       }
 
-      console.log(
-        '[workflow-trace] GET %s connected status=%s contentType=%s',
-        streamPath,
-        response.status,
-        response.headers.get('content-type') ?? '',
-      );
+      
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -392,7 +335,7 @@ export function subscribeWorkflowRun(
               eventCount += 1;
               parseRunUpdateEvent(runId, currentData, eventCount, onEvent, onError);
             } else {
-              console.log('[workflow-trace] SSE event=%s runId=%s (ignored)', currentEvent, runId);
+              
             }
             currentEvent = '';
             currentData = '';
@@ -400,17 +343,10 @@ export function subscribeWorkflowRun(
         }
       }
 
-      console.log(
-        '[workflow-trace] GET %s stream ended runId=%s events=%d closed=%s aborted=%s',
-        streamPath,
-        runId,
-        eventCount,
-        closed,
-        abort.signal.aborted,
-      );
+      
     } catch (err) {
       if (closed || abort.signal.aborted) {
-        console.log('[workflow-trace] GET /agent/v1/runs/%s/stream closed runId=%s events=%d', runId, runId, eventCount);
+        
         return;
       }
       const error = err instanceof Error ? err : new Error(String(err));
@@ -422,7 +358,7 @@ export function subscribeWorkflowRun(
   void connect();
 
   return () => {
-    console.log('[workflow-trace] GET /agent/v1/runs/%s/stream unsubscribe runId=%s events=%d', runId, runId, eventCount);
+    
     closed = true;
     abort.abort();
   };

@@ -2335,12 +2335,12 @@ export const useChatStore = create<ChatState>()(
       }
     }
 
-    console.log('[workflow-trace] sendMessage workflowContext=%s text=%s', workflowContext ? `templateId=${workflowContext.templateId} fields=${workflowContext.fields.length}` : 'null', trimmed.slice(0, 50));
+    
     const messageWithContext = appendWorkflowContext(textForGateway, workflowContext);
     const displayText = stripWorkflowSessionHintForDisplay(
       stripWorkflowContextForDisplay(messageWithContext),
     );
-    console.log('[workflow-trace] sendMessage injected=%s finalLength=%d', workflowContext ? 'yes' : 'no', messageWithContext.length);
+    
 
     const quotaCheck = await checkDailyTokenQuota();
     if (quotaCheck) {
@@ -2824,10 +2824,7 @@ export const useChatStore = create<ChatState>()(
             hasOutput
             && !hasPendingToolUse(finalMsg)
             && !isClaudeRunFragment;
-          const pendingForDebug = get().pendingWorkflow;
-          console.log('[handleChatEvent:final] hasOutput=%s, terminal=%s, engine=%s, pendingWorkflow=%s, msgContent=%s',
-            hasOutput, isTerminalOutput, currentEngineType, pendingForDebug ? 'yes' : 'no', typeof finalMsg.content);
-          const msgId = finalMsg.id || (toolOnly
+                    const msgId = finalMsg.id || (toolOnly
             ? `run-${runId}-tool-${Date.now()}`
             : isTerminalOutput
               ? `run-${runId || 'unknown'}`

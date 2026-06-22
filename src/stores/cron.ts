@@ -168,10 +168,9 @@ export const useCronStore = create<CronState>((set) => ({
 
   triggerScheduledTask: async (taskId) => {
     try {
-      const result = await hostApiFetch<{ runId: number; outcome: string }>(`/api/scheduled-tasks/${taskId}/trigger`, {
+      await hostApiFetch<{ runId: number; outcome: string }>(`/api/scheduled-tasks/${taskId}/trigger`, {
         method: 'POST',
       });
-      console.log('Scheduled task trigger result:', result);
     } catch (error) {
       console.error('Failed to trigger scheduled task:', error);
       throw error;
@@ -301,7 +300,7 @@ export const useCronStore = create<CronState>((set) => ({
         method: 'POST',
         body: JSON.stringify({ id }),
       });
-      console.log('Cron trigger result:', result);
+      
       // Refresh jobs after trigger to update lastRun/nextRun state
       try {
         const [openclawJobs, claudeTasks] = await Promise.all([
