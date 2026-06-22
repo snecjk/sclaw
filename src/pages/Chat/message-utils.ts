@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { hostApiFetch } from '@/lib/host-api';
 import { useChatStore } from '@/stores/chat';
 import { sessionHasWorkflowExecution } from '@/stores/workflow-memory';
-import { buildWorkflowFormConfig } from '@/lib/workflow-form-utils';
+import { buildWorkflowFormConfig, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import {
   PARAM_FORM_MARKER_REGEX,
   parseParameterFormMarker,
@@ -325,11 +325,15 @@ export function extractParameterForm(
         }
 
         return {
-          formId: resolveParameterFormId(`workflow-form-${templateId}`),
+          formId: resolveParameterFormId(buildWorkflowFormId(templateId)),
           formConfig: buildWorkflowFormConfig(
             pendingWorkflow.schema,
             '',
             pendingWorkflow.collectedInputs,
+            {
+              templateId,
+              schemaHash,
+            },
           ),
           formContext: {
             source: 'workflow',

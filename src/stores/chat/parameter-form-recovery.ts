@@ -5,7 +5,7 @@
  */
 import { toast } from 'sonner';
 import { registerParameterFormHandler, hasParameterFormHandler } from '@/components/parameter-form/form-handlers';
-import { buildWorkflowFormConfig, buildStartupPreset, buildWorkflowParameterIntroText } from '@/lib/workflow-form-utils';
+import { buildWorkflowFormConfig, buildStartupPreset, buildWorkflowParameterIntroText, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import type { WorkflowSchemaReadyData } from '@/lib/builtin-tool-envelope';
 import { parseStoToolEnvelope } from '@/lib/builtin-tool-envelope';
 import { isWorkflowCreationIntent } from '@/hooks/use-workflow-intent';
@@ -518,8 +518,11 @@ export function appendWorkflowParameterFormToMessage(
       )
     : message.content;
 
-  const formId = `workflow-form-${pending.templateId}-${Date.now()}`;
-  const formConfig = buildWorkflowFormConfig(pending.schema, '', pending.collectedInputs ?? {});
+  const formId = buildWorkflowFormId(pending.templateId);
+  const formConfig = buildWorkflowFormConfig(pending.schema, '', pending.collectedInputs ?? {}, {
+    templateId: pending.templateId,
+    schemaHash: pending.schemaHash,
+  });
   registerWorkflowSubmitHandler(formId, {
     templateId: pending.templateId,
     templateName: pending.templateName,
@@ -619,8 +622,11 @@ export function injectWorkflowParameterForm(params: {
     return false;
   }
 
-  const formId = `workflow-form-${params.templateId}-${Date.now()}`;
-  const formConfig = buildWorkflowFormConfig(params.schema, '', {});
+  const formId = buildWorkflowFormId(params.templateId);
+  const formConfig = buildWorkflowFormConfig(params.schema, '', {}, {
+    templateId: params.templateId,
+    schemaHash: params.schemaHash,
+  });
   registerWorkflowSubmitHandler(formId, {
     templateId: params.templateId,
     templateName: params.templateName,
@@ -706,6 +712,10 @@ async function recoverFormForAssistantMarker(
   },
 ): Promise<RawMessage[]> {
   const { sessionKey, get, getMessageText, collectedInputs = {}, templateName } = options;
+  const hasFormBlock = Array.isArray(marker.message.content)
+    && (marker.message.content as ContentBlock[]).some((b) => b.type === 'parameter_form');
+  if (hasFormBlock) return messages;
+
   const { getStartupSchema } = await import('@/lib/workflow-api');
   const { getLatestWorkflow, getPendingWorkflowDraft } = await import('@/stores/workflow-memory');
   const startup = await getStartupSchema(marker.templateId);
@@ -718,8 +728,11 @@ async function recoverFormForAssistantMarker(
     ?? marker.templateId;
   const inputs = collectedInputs ?? draft?.collectedInputs ?? latest?.collectedInputs ?? {};
 
-  const formId = `workflow-form-${marker.templateId}-${Date.now()}`;
-  const formConfig = buildWorkflowFormConfig(startup.schema, '', inputs);
+  const formId = buildWorkflowFormId(marker.templateId);
+  const formConfig = buildWorkflowFormConfig(startup.schema, '', inputs, {
+    templateId: marker.templateId,
+    schemaHash: startup.schemaHash,
+  });
 
   registerWorkflowSubmitHandler(formId, {
     templateId: marker.templateId,
@@ -903,11 +916,15 @@ export function recoverParameterFormsOnHistoryLoad(
       { targetAssistantIndex: lastAssistantWithMarker.index },
     )
   ) {
-    const formId = `workflow-form-${pendingWorkflow.templateId}-${Date.now()}`;
+    const formId = buildWorkflowFormId(pendingWorkflow.templateId);
     const formConfig = buildWorkflowFormConfig(
       pendingWorkflow.schema,
       '',
       pendingWorkflow.collectedInputs,
+      {
+        templateId: pendingWorkflow.templateId,
+        schemaHash: pendingWorkflow.schemaHash,
+      },
     );
     registerWorkflowSubmitHandler(formId, {
       templateId: pendingWorkflow.templateId,

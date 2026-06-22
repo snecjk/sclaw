@@ -464,6 +464,7 @@ export const ChatMessage = memo(function ChatMessage({
         {/* Parameter form card */}
         {parameterForm && (
           <ParameterFormCard
+            key={`${parameterForm.formContext.sourceId}:${parameterForm.formContext.schemaHash ?? parameterForm.formId}`}
             config={parameterForm.formConfig}
             context={parameterForm.formContext}
             onSubmit={async (values) => {

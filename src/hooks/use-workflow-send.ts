@@ -22,7 +22,7 @@ import { invokeIpc } from '@/lib/api-client';
 import { canStartWorkflow, useWorkflowsStore } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
 import { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } from '@/lib/workflow-local-turn';
-import { buildWorkflowContextSummary } from '@/lib/workflow-form-utils';
+import { buildWorkflowContextSummary, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
 import type { WorkflowSchema, WorkflowSchemaField } from '@/types/workflow';
 
@@ -30,9 +30,6 @@ export interface WorkflowSendContext {
   sessionKey: string;
   agentId: string;
 }
-
-/** Cached startup schema per template */
-const schemaCache = new Map<string, { schema: WorkflowSchema; schemaHash: string }>();
 
 /**
  * Phase 1: Send the user's message with workflow schema context so the AI
@@ -51,20 +48,8 @@ export async function sendWithWorkflow(
   }
 
   try {
-    // 1. Fetch startup schema (use cache if available)
-    
-    let cached = schemaCache.get(templateId);
-    if (cached) {
-      
-    } else {
-      const startup = await getStartupSchema(templateId);
-      cached = { schema: startup.schema, schemaHash: startup.schemaHash };
-      schemaCache.set(templateId, cached);
-    }
-
-    const { schema, schemaHash } = cached;
-    
-
+    const startup = await getStartupSchema(templateId);
+    const { schema, schemaHash } = startup;
     // 2. Get template name from store
     const templateName = useWorkflowsStore.getState().templates.find((t) => t.id === templateId)?.label ?? templateId;
 
@@ -126,15 +111,8 @@ export async function createAndStartWorkflowDirect(
   }
 
   try {
-    // 1. Fetch startup schema (use cache if available)
-    let cached = schemaCache.get(templateId);
-    if (!cached) {
-      const startup = await getStartupSchema(templateId);
-      cached = { schema: startup.schema, schemaHash: startup.schemaHash };
-      schemaCache.set(templateId, cached);
-    }
-
-    const { schemaHash } = cached;
+    const startup = await getStartupSchema(templateId);
+    const { schemaHash } = startup;
 
     const { buildStartupPreset } = await import('@/lib/workflow-form-utils');
 
@@ -497,8 +475,11 @@ export async function tryResolvePendingWorkflow(
     const extractedAny = Object.keys(inputs).some((k) => inputs[k] !== pending?.collectedInputs?.[k]);
     if (extractedAny) {
       const { buildWorkflowFormConfig } = await import('@/lib/workflow-form-utils');
-      const formConfig = buildWorkflowFormConfig(pending.schema, text, inputs);
-      const formId = `workflow-form-${pending.templateId}-${Date.now()}`;
+      const formConfig = buildWorkflowFormConfig(pending.schema, text, inputs, {
+        templateId: pending.templateId,
+        schemaHash: pending.schemaHash,
+      });
+      const formId = buildWorkflowFormId(pending.templateId);
       const now = Date.now() / 1000;
       const { registerParameterFormHandler } = await import('@/components/parameter-form/form-handlers');
       useChatStore.setState((s) => ({

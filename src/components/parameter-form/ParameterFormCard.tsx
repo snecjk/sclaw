@@ -5,7 +5,7 @@
  * Used for workflow startup, tool confirmation, and other scenarios requiring
  * user parameter input.
  */
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { ChevronLeft, ChevronRight, Check, ChevronUp, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -204,17 +204,25 @@ function validateField(field: FormField, value: unknown): string | null {
   return null;
 }
 
-export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCardProps) {
-  console.log('config, context =>>>>>>>>>>>>', JSON.stringify(config), JSON.stringify(context));
+function parameterFormCardPropsAreEqual(
+  prev: ParameterFormCardProps,
+  next: ParameterFormCardProps,
+): boolean {
+  if (prev.config === next.config && prev.context === next.context) return true;
+  return (
+    prev.config.id === next.config.id
+    && prev.context.source === next.context.source
+    && prev.context.sourceId === next.context.sourceId
+    && prev.context.schemaHash === next.context.schemaHash
+  );
+}
 
+function ParameterFormCardInner({ config, context, onSubmit }: ParameterFormCardProps) {
   // If config is empty (from text marker), try to load from workflow memory
   const [schema, setSchema] = useState<import('@/types/workflow').WorkflowSchema | null>(null);
   const [loadedConfig, setLoadedConfig] = useState<UserFormConfig | null>(null);
   const [loadingSchema, setLoadingSchema] = useState(false);
 
-  useEffect(() => {
-    console.log('schema =>>>>>>>>>>>>', loadedConfig);
-  }, [loadedConfig]);
   useEffect(() => {
     const needsSchema =
       context.source === 'workflow'
@@ -240,14 +248,16 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
   }, [config, context.source, context.sourceId]);
 
   useEffect(() => {
-    if (schema && !loadedConfig) {
-      import('@/lib/workflow-form-utils').then(({ buildWorkflowFormConfig }) => {
-        const builtConfig = buildWorkflowFormConfig(schema, '');
-        setLoadedConfig(builtConfig);
-        setLoadingSchema(false);
+    if (!schema || loadedConfig) return;
+    import('@/lib/workflow-form-utils').then(({ buildWorkflowFormConfig }) => {
+      const builtConfig = buildWorkflowFormConfig(schema, '', undefined, {
+        templateId: context.sourceId,
+        schemaHash: context.schemaHash,
       });
-    }
-  }, [schema, loadedConfig]);
+      setLoadedConfig(builtConfig);
+      setLoadingSchema(false);
+    });
+  }, [schema, loadedConfig, context.sourceId, context.schemaHash]);
 
   // Config with title/confirmLabel but zero fields (e.g. 合同审核) is still valid.
   const hasValidConfig =
@@ -263,10 +273,12 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
+  const activeConfigId = effectiveConfig?.id;
   useEffect(() => {
-    if (!loadedConfig?.fields?.length) return;
-    setValues(buildInitialValues(loadedConfig));
-  }, [loadedConfig]);
+    if (!activeConfigId || !effectiveConfig) return;
+    setValues(buildInitialValues(effectiveConfig));
+    setCurrentStep(0);
+  }, [activeConfigId]); // eslint-disable-line react-hooks/exhaustive-deps -- reset only when config identity changes
 
   // Compute steps even if effectiveConfig is null (will be empty array)
   const steps = useMemo(() => effectiveConfig ? buildWizardSteps(effectiveConfig) : [], [effectiveConfig]);
@@ -488,3 +500,5 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
     </div>
   );
 }
+
+export const ParameterFormCard = memo(ParameterFormCardInner, parameterFormCardPropsAreEqual);
