@@ -4,7 +4,7 @@ import { hostApiFetch } from '@/lib/host-api';
 import { useAuthStore } from '@/stores/auth';
 import { useProviderStore } from '@/stores/providers';
 
-const MAX_AUTO_SYNC_ATTEMPTS = 2;
+const MAX_AUTO_SYNC_ATTEMPTS = 3;
 
 /**
  * When logged in but STO customModels are missing from the provider snapshot,

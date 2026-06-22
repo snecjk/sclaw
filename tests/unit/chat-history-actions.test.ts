@@ -267,4 +267,65 @@ describe('chat history actions', () => {
       '我是 STO Claw。',
     ]);
   });
+
+  it('does not duplicate optimistic user message when server timestamp is skewed', async () => {
+    const { createHistoryActions } = await import('@/stores/chat/history-actions');
+    const h = makeHarness({
+      currentSessionKey: 'agent:main:main',
+      sending: true,
+      lastUserMessageAt: 1710000000000,
+      messages: [
+        {
+          id: 'local-user-1',
+          role: 'user',
+          content: '你现在是那个模型？',
+          timestamp: 1710000000,
+        },
+      ] as never,
+    });
+    const actions = createHistoryActions(h.set as never, h.get as never);
+
+    hostApiFetchMock.mockResolvedValueOnce({
+      success: true,
+      result: {
+        messages: [
+          {
+            id: 'history-user-1',
+            role: 'user',
+            content: '你现在是那个模型？',
+            timestamp: 1700000000,
+          },
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '我是 Claude。',
+            timestamp: 1710000003,
+          },
+        ],
+      },
+    });
+
+    await actions.loadHistory(true);
+
+    expect(h.read().messages.map((message) => message.content)).toEqual([
+      '你现在是那个模型？',
+      '我是 Claude。',
+    ]);
+  });
+
+  it('removes trailing duplicate optimistic user after assistant reply', async () => {
+    const { dedupeRedundantUserMessages } = await import('@/stores/chat/user-message-merge');
+    const messages = [
+      { id: 'user-1', role: 'user', content: '你现在是那个模型？', timestamp: 1710000000 },
+      { id: 'assistant-1', role: 'assistant', content: '我是 Claude。', timestamp: 1710000003 },
+      { id: 'user-dup', role: 'user', content: '你现在是那个模型？', timestamp: 1710000000 },
+    ] as never;
+
+    const deduped = dedupeRedundantUserMessages(messages, 1710000000000);
+
+    expect(deduped.map((message) => message.content)).toEqual([
+      '你现在是那个模型？',
+      '我是 Claude。',
+    ]);
+  });
 });

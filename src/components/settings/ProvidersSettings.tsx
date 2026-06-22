@@ -188,43 +188,56 @@ export function ProvidersSettings() {
   const hasStoModelCatalog = hasReadyStoModelCatalog(accounts);
   const navigate = useNavigate();
 
-  const handleRetryStoSync = async () => {
+  const handleRetryStoSync = async (): Promise<boolean> => {
     try {
       const result = await hostApiFetch<{
         success: boolean;
         error?: string;
+        updated?: string[];
+        created?: string[];
       }>('/api/sto-model-sync', { method: 'POST' });
       await refreshProviderSnapshot();
+      const catalogReady = hasReadyStoModelCatalog(useProviderStore.getState().accounts);
+
       if (result?.error) {
         if (result.error === 'empty-model-list') {
           toast.error('获取 STO 模型失败', {
             description: '远程模型列表为空，请检查网络连接或稍后手动重试',
           });
-          return;
+          return false;
         }
 
         if (result.error.startsWith('fetch-failed')) {
           toast.error('模型列表同步失败', {
             description: '无法获取远程模型列表，请检查网络连接后刷新重试',
           });
-          return;
+          return false;
         }
 
         if (result.error === 'no-token') {
           toast.error('登录已过期，请重新登录');
           useAuthStore.setState({ isAuthenticated: false, user: null });
           navigate('/login');
-          return;
+          return false;
         }
 
         toast.error('同步失败', { description: result.error });
-        return;
+        return false;
+      }
+
+      if (!catalogReady) {
+        toast.error('获取 STO 模型失败', {
+          description: '同步已完成但本地模型目录仍未就绪，请退出重新登录或联系支持',
+        });
+        return false;
       }
 
       toast.success('STO 模型同步成功');
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error('同步失败', { description: message });
+      return false;
     }
   };
 
@@ -262,7 +275,7 @@ export function ProvidersSettings() {
     if (!isAuthenticated || hasStoModelCatalog || loading || stoSyncing) {
       return;
     }
-    if (stoAutoSyncAttempts.current >= 2) {
+    if (stoAutoSyncAttempts.current >= 3) {
       return;
     }
     stoAutoSyncAttempts.current += 1;

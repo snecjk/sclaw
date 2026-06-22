@@ -19,6 +19,7 @@ import {
 } from './helpers';
 import type { AttachedFileMeta, RawMessage } from './types';
 import type { ChatGet, ChatSet } from './store-api';
+import { dedupeRedundantUserMessages } from './user-message-merge';
 
 export function handleRuntimeEventState(
   set: ChatSet,
@@ -163,24 +164,30 @@ export function handleRuntimeEventState(
                   activeRunId: hasOutput ? null : s.activeRunId,
                   pendingFinal: hasOutput ? false : true,
                   streamingTools,
+                  lastUserMessageAt: hasOutput ? null : s.lastUserMessageAt,
                   ...clearPendingImages,
                 };
               }
+              const nextMessages = dedupeRedundantUserMessages(
+                [...s.messages, msgWithImages],
+                s.lastUserMessageAt,
+              );
               return toolOnly ? {
-                messages: [...s.messages, msgWithImages],
+                messages: nextMessages,
                 streamingText: '',
                 streamingMessage: null,
                 pendingFinal: true,
                 streamingTools,
                 ...clearPendingImages,
               } : {
-                messages: [...s.messages, msgWithImages],
+                messages: nextMessages,
                 streamingText: '',
                 streamingMessage: null,
                 sending: hasOutput ? false : s.sending,
                 activeRunId: hasOutput ? null : s.activeRunId,
                 pendingFinal: hasOutput ? false : true,
                 streamingTools,
+                lastUserMessageAt: hasOutput ? null : s.lastUserMessageAt,
                 ...clearPendingImages,
               };
             });
