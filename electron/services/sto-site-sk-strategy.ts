@@ -10,6 +10,7 @@
 import type { StoSkStrategy } from './sto-sk-strategy';
 import type { SsoUserInfo } from '../utils/auth-store';
 import type { TokenQuotaTierQueryResult } from '../../shared/sto-token-quota-tier';
+import type { ExpandQuotaResult } from '../../shared/token-quota-expansion-record';
 import { getSsoEnvironment } from '../utils/auth-store';
 import { storeApiKey, getApiKey, deleteApiKey } from '../utils/secure-storage';
 import { logger } from '../utils/logger';
@@ -226,7 +227,7 @@ export class SiteSkStrategy implements StoSkStrategy {
     user: SsoUserInfo,
     tokenId: string,
     amount: number,
-  ): Promise<{ success: boolean; message?: string }> {
+  ): Promise<ExpandQuotaResult> {
     logger.info(`[site-sk] expandQuota called, tokenId=${tokenId}, amount=${amount} (增加量)`);
 
     if (!user.code) {
@@ -255,6 +256,7 @@ export class SiteSkStrategy implements StoSkStrategy {
     logger.info(`[site-sk] expandQuota headers: secret=${secret}`);
     logger.info(`[site-sk] expandQuota body: ${JSON.stringify(body)}`);
 
+    const startedAt = Date.now();
     try {
       const response = await this.fetchWithTimeout(url, {
         method: 'POST',
@@ -266,18 +268,42 @@ export class SiteSkStrategy implements StoSkStrategy {
       });
 
       const json = (await response.json()) as SiteApiResponse<unknown>;
+      const duration_ms = Date.now() - startedAt;
       logger.info(`[site-sk] expandQuota response: success=${json.success}, message=${json.message}`);
+
+      const gatewayPayload = {
+        request: { path: '/openapi/resourcePack/personalBuy', body },
+        response: json,
+        duration_ms,
+      };
 
       if (!json.success) {
         logger.warn(`[site-sk] expandQuota biz failed: ${json.message}`);
-        return { success: false, message: json.message };
+        return {
+          success: false,
+          message: json.message,
+          gatewayStatus: String(json.success),
+          gatewayPayload,
+        };
       }
 
       logger.info(`[site-sk] expandQuota success, added ${amount}`);
-      return { success: true };
+      return {
+        success: true,
+        gatewayStatus: 'true',
+        gatewayPayload,
+      };
     } catch (err) {
       logger.warn('[site-sk] expandQuota error:', err);
-      return { success: false, message: String(err) };
+      return {
+        success: false,
+        message: String(err),
+        gatewayPayload: {
+          request: { path: '/openapi/resourcePack/personalBuy', body },
+          response: { error: String(err) },
+          duration_ms: Date.now() - startedAt,
+        },
+      };
     }
   }
 

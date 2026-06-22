@@ -9,6 +9,7 @@
 import type { StoSkStrategy } from './sto-sk-strategy';
 import type { SsoUserInfo } from '../utils/auth-store';
 import type { TokenQuotaTierQueryResult } from '../../shared/sto-token-quota-tier';
+import type { ExpandQuotaResult } from '../../shared/token-quota-expansion-record';
 import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
 import { storeApiKey, getApiKey, deleteApiKey } from '../utils/secure-storage';
 import { logger } from '../utils/logger';
@@ -143,7 +144,7 @@ export class HqSkStrategy implements StoSkStrategy {
     user: SsoUserInfo,
     tokenId: string,
     amount: number,
-  ): Promise<{ success: boolean; message?: string }> {
+  ): Promise<ExpandQuotaResult> {
     logger.info(`[hq-sk] expandQuota called, tokenId=${tokenId}, amount=${amount}`);
 
     if (!user.code) {
@@ -166,6 +167,7 @@ export class HqSkStrategy implements StoSkStrategy {
     logger.info(`[hq-sk] expandQuota headers: secret=${secret}`);
     logger.info(`[hq-sk] expandQuota body: ${JSON.stringify(body)}`);
 
+    const startedAt = Date.now();
     try {
       const response = await this.fetchWithTimeout(url, {
         method: 'POST',
@@ -181,21 +183,45 @@ export class HqSkStrategy implements StoSkStrategy {
         msg: string;
         detailMsg?: string | null;
       };
+      const duration_ms = Date.now() - startedAt;
       logger.info(
         `[hq-sk] expandQuota response: code=${json.code}, msg=${json.msg}, detailMsg=${json.detailMsg ?? ''}`,
       );
 
+      const gatewayPayload = {
+        request: { path: '/openapi/key/quota/applyExpansion', body },
+        response: json,
+        duration_ms,
+      };
+
       if (json.code !== '0') {
         const message = json.detailMsg || json.msg || `Code ${json.code}`;
         logger.warn(`[hq-sk] expandQuota biz failed: ${json.code} ${message}`);
-        return { success: false, message };
+        return {
+          success: false,
+          message,
+          gatewayStatus: json.code,
+          gatewayPayload,
+        };
       }
 
       logger.info(`[hq-sk] expandQuota success, quotaAmount=${amount}`);
-      return { success: true };
+      return {
+        success: true,
+        gatewayStatus: json.code,
+        gatewayPayload,
+      };
     } catch (err) {
       logger.warn('[hq-sk] expandQuota error:', err);
-      return { success: false, message: String(err) };
+      return {
+        success: false,
+        message: String(err),
+        gatewayPayload: {
+          request: { path: '/openapi/key/quota/applyExpansion', body },
+          response: { error: String(err) },
+          duration_ms: Date.now() - startedAt,
+        },
+      };
     }
   }
 

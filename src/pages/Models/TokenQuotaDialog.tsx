@@ -130,7 +130,13 @@ export function TokenQuotaDialog({
     try {
       await hostApiFetch('/api/token-quota/expansion', {
         method: 'POST',
-        body: JSON.stringify({ tokenId, quotaAmount: tier.quotaAmount }),
+        body: JSON.stringify({
+          tokenId,
+          quotaAmount: tier.quotaAmount,
+          clientEventId: `models_token_quota_apply_${Date.now()}`,
+          tier,
+          tierContext: fetchState.status === 'done' ? fetchState.data : undefined,
+        }),
       });
       trackUiEvent('models.token_quota_apply_success', { amount: tier.quotaAmount });
       toast.success(t('tokenQuotaDialog.applySuccess', '申请成功'));

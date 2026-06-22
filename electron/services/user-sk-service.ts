@@ -9,6 +9,7 @@
 import { getAuthState, type SsoUserInfo } from '../utils/auth-store';
 import { resolveStrategy } from './sto-sk-strategy';
 import type { TokenQuotaTierQueryResult } from '../../shared/sto-token-quota-tier';
+import type { ExpandQuotaResult } from '../../shared/token-quota-expansion-record';
 import { logger } from '../utils/logger';
 
 /**
@@ -56,7 +57,7 @@ export async function getUserSkDetail(): Promise<{ tokenId: string; spend: numbe
 export async function expandUserSkQuota(
   tokenId: string,
   quotaAmount: number,
-): Promise<{ success: boolean; message?: string }> {
+): Promise<ExpandQuotaResult> {
   logger.info(`[user-sk] expandUserSkQuota called, tokenId=${tokenId}, quotaAmount=${quotaAmount}`);
 
   const { user } = await getAuthState();

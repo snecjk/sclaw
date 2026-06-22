@@ -6,6 +6,7 @@
 
 import type { SsoUserInfo } from '../utils/auth-store';
 import type { TokenQuotaTierQueryResult } from '../../shared/sto-token-quota-tier';
+import type { ExpandQuotaResult } from '../../shared/token-quota-expansion-record';
 import { isSiteUser, getSiteDepartmentTypes, setSiteDepartmentTypes } from '../../shared/site-user-utils';
 import { getHqSkStrategy } from './sto-hq-sk-strategy';
 import { getSiteSkStrategy } from './sto-site-sk-strategy';
@@ -38,7 +39,7 @@ export interface StoSkStrategy {
     user: SsoUserInfo,
     tokenId: string,
     amount: number,
-  ): Promise<{ success: boolean; message?: string }>;
+  ): Promise<ExpandQuotaResult>;
 
   /** 查询额度档位列表（非网点实现；网点暂未对接） */
   queryTokenQuotaTier(
@@ -130,4 +131,11 @@ export async function resolveStrategy(user: SsoUserInfo | null): Promise<StoSkSt
     logger.info('[strategy] resolveStrategy: Using HqSkStrategy');
     return getHqSkStrategy();
   }
+}
+
+/** 解析用户类型（网点 / 非网点） */
+export async function resolveUserType(user: SsoUserInfo | null): Promise<'hq' | 'site' | null> {
+  const strategy = await resolveStrategy(user);
+  if (!strategy) return null;
+  return strategy === getSiteSkStrategy() ? 'site' : 'hq';
 }
