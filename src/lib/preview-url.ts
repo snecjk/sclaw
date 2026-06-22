@@ -6,6 +6,21 @@ export function isHttpUrl(path: string): boolean {
 }
 
 /**
+ * Windows drive paths only: use forward slashes so markdown link parsers do not treat
+ * `\.` as an escaped dot (e.g. `admin\.stoclaw` → `admin.stoclaw`). Unix paths unchanged.
+ */
+export function toMarkdownPreviewPath(filePath: string): string {
+  const path = filePath.trim();
+  if (!path || isHttpUrl(path) || path.startsWith('preview://') || path.startsWith('artifact://')) {
+    return path;
+  }
+  if (isWindowsDrivePath(path)) {
+    return path.replace(/\\/g, '/');
+  }
+  return path;
+}
+
+/**
  * Normalize a local file path before Host API read/serve.
  * ReactMarkdown may percent-encode backslashes in preview:// hrefs (C:\ → C:%5C…),
  * which makes Node isAbsolute() false and causes workspace join bugs on Windows.
@@ -19,7 +34,7 @@ export function normalizeLocalFilePath(filePath: string): string {
     path = once.includes('%') ? safeDecodeURIComponent(once) : once;
   }
 
-  return path;
+  return toMarkdownPreviewPath(path);
 }
 
 /** True for Windows drive paths (C:\ or C:/). */

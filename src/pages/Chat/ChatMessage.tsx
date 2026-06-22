@@ -31,6 +31,7 @@ import {
   openExternalUrl,
   previewHttpUrlLabel,
   resolvePreviewLinkTarget,
+  toMarkdownPreviewPath,
 } from '@/lib/preview-url';
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 import { isFilePreviewDebugEnabled, logFilePreview } from '@/lib/file-preview-debug';
@@ -961,10 +962,11 @@ function preprocessTextForPreviewLinks(text: string): string {
       return `[${label}](${path})`;
     }
     if (path.startsWith('preview://')) {
-      const target = path.slice('preview://'.length);
+      const target = toMarkdownPreviewPath(path.slice('preview://'.length));
       return `[${target}](preview://${target})`;
     }
-    return `[${path}](preview://${path})`;
+    const safe = toMarkdownPreviewPath(path);
+    return `[${safe}](preview://${safe})`;
   });
 
   // Protect existing markdown links [text](url) — keep http(s) URLs intact (preview://https:// breaks ReactMarkdown).
@@ -991,7 +993,8 @@ function preprocessTextForPreviewLinks(text: string): string {
     (_match, captured) => {
       // Strip leading / for Windows paths (/C:/ → C:/), keep for Unix (/Users/ → /Users/)
       const filePath = captured.match(/^\/[A-Za-z]:/) ? captured.slice(1) : captured;
-      fileUrlPlaceholders.push(`[${filePath}](preview://${filePath})`);
+      const safe = toMarkdownPreviewPath(filePath);
+      fileUrlPlaceholders.push(`[${safe}](preview://${safe})`);
       return `__FILE_URL_${fileUrlPlaceholders.length - 1}__`;
     },
   );
@@ -1012,7 +1015,10 @@ function preprocessTextForPreviewLinks(text: string): string {
   // (e.g. "/report.html" inside "https://example.com/report.html").
   text = text.replace(
     new RegExp(`(?<![\\w./:])(\\./(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\n\\r]+[\\\\/])*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`, 'g'),
-    '[$1](preview://$1)',
+    (match) => {
+      const safe = toMarkdownPreviewPath(match);
+      return `[${safe}](preview://${safe})`;
+    },
   );
 
   // Wrap bare filenames (e.g. "查看产物: anomaly_config_params.html") into markdown links.

@@ -29,6 +29,7 @@ import {
   isPreviewableArtifactUrl,
   isPreviewableRemoteUrl,
   resolveArtifactUrlFromWorkflowStates,
+  toMarkdownPreviewPath,
 } from '@/lib/preview-url';
 import type { WorkflowExecutionState } from '@/types/workflow';
 
@@ -726,11 +727,12 @@ export function extractPreviewPathFromLine(line: string): string | null {
 /** Markdown link for a local/remote previewable path. */
 export function previewMarkdownLinkForPath(filePath: string): string {
   const path = filePath.trim();
-  const fileName = path.split('/').pop() || path;
+  const safe = toMarkdownPreviewPath(path);
+  const fileName = safe.split('/').pop() || safe;
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return `[${fileName}](${path})`;
   }
-  return `[${fileName}](preview://${path})`;
+  return `[${fileName}](preview://${safe})`;
 }
 
 /**
