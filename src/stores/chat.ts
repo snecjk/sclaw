@@ -2601,11 +2601,22 @@ export const useChatStore = create<ChatState>()(
 
     // Map cron run session events to their daily aggregate session key so that
     // the loading indicator appears on the aggregate session in the sidebar.
+    // Also map base cron keys to dated keys when the current session is dated.
     let resolvedSessionKey = eventSessionKey;
     if (eventSessionKey) {
       const aggregateKey = getCronRunSessionAggregateKey(eventSessionKey);
       if (aggregateKey) {
         resolvedSessionKey = aggregateKey;
+      } else {
+        // If eventSessionKey is a base cron key (no date, no run), and current
+        // session is a dated key for the same job, map to the dated key.
+        const parsed = parseCronSessionKey(eventSessionKey);
+        if (parsed && !parsed.date && !parsed.runSessionId && currentSessionKey) {
+          const currentParsed = parseCronSessionKey(currentSessionKey);
+          if (currentParsed && currentParsed.date && currentParsed.jobId === parsed.jobId) {
+            resolvedSessionKey = currentSessionKey;
+          }
+        }
       }
     }
 
@@ -2622,6 +2633,22 @@ export const useChatStore = create<ChatState>()(
       }
       handleBackgroundSessionEvent(set, resolvedSessionKey, event, resolvedState, runId);
       return;
+    }
+
+    // For active session events, also update runtimeBySessionKey so that
+    // the sidebar shows loading for the current session.
+    if (resolvedSessionKey != null && resolvedSessionKey === currentSessionKey) {
+      let resolvedState = eventState;
+      if (!resolvedState && event.message && typeof event.message === 'object') {
+        const msg = event.message as Record<string, unknown>;
+        const stopReason = msg.stopReason ?? msg.stop_reason;
+        if (stopReason) {
+          resolvedState = 'final';
+        } else if (msg.role || msg.content) {
+          resolvedState = 'delta';
+        }
+      }
+      handleBackgroundSessionEvent(set, resolvedSessionKey, event, resolvedState, runId);
     }
 
     // Only process events for the active run (or if no active run set)
