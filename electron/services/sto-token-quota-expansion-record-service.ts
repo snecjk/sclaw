@@ -25,7 +25,7 @@ export async function reportTokenQuotaExpansionRecord(
   }
 
   const baseUrl = await resolveStoBaseUrl();
-  const url = `http://127.0.0.1:7001${EXPANSION_RECORD_PATH}`;
+  const url = `${baseUrl}${EXPANSION_RECORD_PATH}`;
   logger.info(`[ExpansionRecord] reporting to ${url} apply_code=${payload.apply_code} status=${payload.status}`);
 
   try {
