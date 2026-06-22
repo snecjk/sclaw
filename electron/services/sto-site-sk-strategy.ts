@@ -68,6 +68,7 @@ interface SiteKeyDetailData {
 }
 
 interface SiteKeyBundle {
+  encryptedKey: string;
   sk: string;
   tokenId: string;
   tenantCode: string;
@@ -162,8 +163,8 @@ export class SiteSkStrategy implements StoSkStrategy {
     }
 
     const skCacheKey = this.skCacheKey(primaryTenantCode, user.code);
-    await storeApiKey(skCacheKey, bundle.sk);
-    logger.info(`[site-sk] SK stored in cache key=${skCacheKey} (len=${bundle.sk.length})`);
+    await storeApiKey(skCacheKey, bundle.encryptedKey);
+    logger.info(`[site-sk] encryptedKey stored in cache key=${skCacheKey} (len=${bundle.encryptedKey.length})`);
     return bundle.sk;
   }
 
@@ -467,6 +468,7 @@ export class SiteSkStrategy implements StoSkStrategy {
     }
 
     const bundle: SiteKeyBundle = {
+      encryptedKey: detail.encryptedKey,
       sk,
       tokenId: detail.tokenId,
       tenantCode: effectiveTenantCode,
@@ -923,8 +925,11 @@ export class SiteSkStrategy implements StoSkStrategy {
     }
     const cached = await getApiKey(this.skCacheKey(tenantCode, user.code));
     if (cached) {
-      logger.info(`[site-sk] SK found in cache for primary tenant=${tenantCode} (len=${cached.length})`);
-      return cached;
+      const sk = await this.decryptCachedSk(cached);
+      if (sk) {
+        logger.info(`[site-sk] SK decrypted from cache for primary tenant=${tenantCode} (len=${sk.length})`);
+        return sk;
+      }
     }
     return null;
   }
@@ -950,7 +955,7 @@ export class SiteSkStrategy implements StoSkStrategy {
 
     if (isDevWhitelistUser) {
       logger.info(`[site-sk] resolveTenantCode: dev whitelist hit, tenantCode=userCode=${userCode}`);
-      return companyCode;
+      return userCode;
     }
 
     if (!companyCode) {
@@ -971,6 +976,16 @@ export class SiteSkStrategy implements StoSkStrategy {
     const keyBuffer = Buffer.from(key, 'utf-8');
     const decipher = crypto.createDecipheriv('aes-128-ecb', keyBuffer, null);
     return decipher.update(encrypted, 'base64', 'utf-8') + decipher.final('utf-8');
+  }
+
+  /** 读本地缓存：优先按 encryptedKey 解密；兼容旧版明文缓存 */
+  private async decryptCachedSk(cached: string): Promise<string | null> {
+    try {
+      return await this.decryptSk(cached);
+    } catch {
+      logger.info('[site-sk] Legacy plaintext SK cache hit, will re-encrypt on next fetch');
+      return cached;
+    }
   }
 
   private async resolveApiDomain(): Promise<string> {

@@ -44,8 +44,11 @@ export class HqSkStrategy implements StoSkStrategy {
     if (!forceRefresh) {
       const cached = await getApiKey(HqSkStrategy.CACHE_KEY);
       if (cached) {
-        logger.info(`[hq-sk] SK found in cache (len=${cached.length})`);
-        return cached;
+        const sk = await this.decryptCachedSk(cached);
+        if (sk) {
+          logger.info(`[hq-sk] SK decrypted from cache (len=${sk.length})`);
+          return sk;
+        }
       }
     }
 
@@ -58,18 +61,19 @@ export class HqSkStrategy implements StoSkStrategy {
     const tenantCode = HqSkStrategy.DEFAULT_TENANT_CODE;
     logger.info(`[hq-sk] Fetching SK, tenantCode=${tenantCode}`);
 
-    let sk = await this.fetchSkFromApi('query', token, user.code, tenantCode);
-    if (!sk) {
+    let encryptedKey = await this.fetchSkFromApi('query', token, user.code, tenantCode);
+    if (!encryptedKey) {
       logger.info('[hq-sk] SK not found, creating...');
-      sk = await this.fetchSkFromApi('create', token, user.code, tenantCode);
+      encryptedKey = await this.fetchSkFromApi('create', token, user.code, tenantCode);
     }
 
-    if (sk) {
-      await storeApiKey(HqSkStrategy.CACHE_KEY, sk);
-      logger.info(`[hq-sk] SK stored in cache (len=${sk.length})`);
+    if (encryptedKey) {
+      await storeApiKey(HqSkStrategy.CACHE_KEY, encryptedKey);
+      logger.info(`[hq-sk] encryptedKey stored in cache (len=${encryptedKey.length})`);
+      return this.decryptSk(encryptedKey);
     }
 
-    return sk;
+    return null;
   }
 
   async getUserSkDetail(
@@ -383,16 +387,8 @@ export class HqSkStrategy implements StoSkStrategy {
         return null;
       }
 
-      logger.info(`[hq-sk] fetchSkFromApi(${type}) encryptedKey found, decrypting...`);
-
-      try {
-        const sk = await this.decryptSk(encryptedKey);
-        logger.info(`[hq-sk] fetchSkFromApi(${type}) SK decrypted successfully (len=${sk.length})`);
-        return sk;
-      } catch (err) {
-        logger.warn(`[hq-sk] fetchSkFromApi(${type}) AES decrypt failed:`, err);
-        return null;
-      }
+      logger.info(`[hq-sk] fetchSkFromApi(${type}) encryptedKey found (len=${encryptedKey.length})`);
+      return encryptedKey;
     } catch (err) {
       logger.warn(`[hq-sk] fetchSkFromApi(${type}) error:`, err);
       return null;
@@ -406,6 +402,16 @@ export class HqSkStrategy implements StoSkStrategy {
     let decrypted = decipher.update(encryptedBase64, 'base64', 'utf-8');
     decrypted += decipher.final('utf-8');
     return decrypted;
+  }
+
+  /** 读本地缓存：优先按 encryptedKey 解密；兼容旧版明文缓存 */
+  private async decryptCachedSk(cached: string): Promise<string | null> {
+    try {
+      return await this.decryptSk(cached);
+    } catch {
+      logger.info('[hq-sk] Legacy plaintext SK cache hit, will re-encrypt on next fetch');
+      return cached;
+    }
   }
 
   private resolveOperatorDisplayName(user: SsoUserInfo): string {
