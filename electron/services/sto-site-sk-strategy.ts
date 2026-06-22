@@ -950,7 +950,7 @@ export class SiteSkStrategy implements StoSkStrategy {
 
     if (isDevWhitelistUser) {
       logger.info(`[site-sk] resolveTenantCode: dev whitelist hit, tenantCode=userCode=${userCode}`);
-      return '3220000731';
+      return companyCode;
     }
 
     if (!companyCode) {
