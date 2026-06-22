@@ -79,7 +79,13 @@
     },
     "streaming": {
         "connectingModel": "连接模型中...",
+        "understandingQuestion": "正在理解你的问题…",
+        "awaitingReply": "Claw将在你回复后继续工作…",
         "thinkingProcessTitle": "思考过程",
+        "deepThinkingLabel": "深度思考",
+        "collapsedSummary": "思考 {{thoughtCount}} 次，使用 {{toolCount}} 个工具",
+        "invokeToolLabel": "调用工具 – {{toolName}}",
+        "paramsConfirmedLabel": "参数已确认",
         "toolCallLabel": "工具调用 {{index}}",
         "processMessageLabel": "过程消息 {{count}}",
         "generatingWithTool": "生成回复中 {{tool}}...",
@@ -93,6 +99,10 @@
         "completedLabel": "以上信息由 AI 提供",
         "completedBadge": "已完成",
         "jumpToLatest": "回到最新"
+    },
+    "parameterForm": {
+        "defaultSelectedPrefix": "默认已选类型：",
+        "submitFailed": "表单提交失败，请刷新页面后重试"
     },
     "sessionList": {
         "mainSessionTitle": "主会话"
@@ -139,6 +149,17 @@
         "durationHalfHour": "半小时",
         "durationHours": "{{count}} 小时",
         "durationHoursHalf": "{{count}} 个半小时",
-        "durationHoursMinutes": "{{hours}} 小时 {{minutes}} 分钟"
+        "durationHoursMinutes": "{{hours}} 小时 {{minutes}} 分钟",
+        "viewArtifact": "查看产物",
+        "openArtifactLink": "打开链接",
+        "viewWorkflowAction": "查看工作流"
+    },
+    "artifact": {
+        "typeDocument": "文档",
+        "typeSpreadsheet": "表格",
+        "typeImage": "图片",
+        "typeArchive": "压缩包",
+        "typeMedia": "媒体",
+        "typeFile": "文件"
     }
 }

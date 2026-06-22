@@ -1,15 +1,15 @@
 import { memo, useMemo } from 'react';
-import { Sparkles } from 'lucide-react';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
+import { useChatStore } from '@/stores/chat';
 import { ChatMessage } from './ChatMessage';
 import { mergeThinkingTimelines, pickAssistantReplyMessage } from './chat-display';
 import {
   extractDingTalkSentPreviews,
   stripEchoedDingTalkSentBodiesFromAssistantReply,
 } from '../../../shared/dingtalk-sent-display';
-import { extractAtMentionDisplayNames, extractRawMessageText, extractText } from './message-utils';
+import { extractAtMentionDisplayNames, extractRawMessageText, extractText, extractWorkflowCard, extractParameterForm } from './message-utils';
 import { DingTalkSentPreview } from './DingTalkSentPreview';
-import { ThinkingProcessPanel } from './ThinkingProcessPanel';
+import { ThinkingProcessPanel, type ConnectingLabelKey } from './ThinkingProcessPanel';
 
 type StreamingTool = {
   id?: string;
@@ -70,6 +70,16 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   const isConnecting = activeStream?.isConnecting ?? false;
   const isProcessing = activeStream?.isProcessing ?? false;
   const streamingTools = activeStream?.streamingTools ?? [];
+  const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
+
+  const connectingLabelKey = useMemo((): ConnectingLabelKey => {
+    if (pendingWorkflow !== null) return 'connectingModel';
+    const hasWorkflowInTurn = turnMessages.some((msg) => {
+      if (msg.role !== 'assistant') return false;
+      return extractWorkflowCard(msg) !== null || extractParameterForm(msg, pendingWorkflow) !== null;
+    });
+    return hasWorkflowInTurn ? 'connectingModel' : 'understandingQuestion';
+  }, [turnMessages, pendingWorkflow]);
 
   const showThinkingPanel =
     showThinking &&
@@ -136,43 +146,37 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
   if (!showThinkingPanel && !replyDisplayHasText && !hasDingTalkSentPreview) return null;
 
-  const avatar = (
-    <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,#FFF5E6,#FFE8CC)] text-primary shadow-[0_8px_20px_rgba(255,111,0,0.12)]">
-      <Sparkles className="h-4 w-4" />
-    </div>
-  );
+  const thinkingPanelEl = showThinkingPanel ? (
+    <ThinkingProcessPanel
+      timeline={mergedTimeline}
+      isStreaming={isStreaming}
+      isConnecting={isConnecting}
+      isProcessing={isProcessing}
+      streamingTools={streamingTools}
+      connectingLabelKey={connectingLabelKey}
+    />
+  ) : null;
 
   if (replyDisplayHasText && replyDisplayMessage) {
     return (
-      <div className="group flex flex-row gap-3" data-chat-message-role="assistant">
-        {avatar}
-        <div className="flex w-full min-w-0 max-w-[80%] flex-col items-start space-y-2">
-          {showThinkingPanel ? (
-            <ThinkingProcessPanel
-              timeline={mergedTimeline}
-              isStreaming={isStreaming}
-              isConnecting={isConnecting}
-              isProcessing={isProcessing}
-              streamingTools={streamingTools}
-            />
-          ) : null}
-          {hasDingTalkSentPreview ? (
-            <DingTalkSentPreview previews={dingTalkSentPreviews} />
-          ) : null}
-          <ChatMessage
-            message={replyDisplayMessage}
-            showThinking={false}
-            isSearchMatch={!!replyDisplayMessage.id && !!matchedMessageIds?.has(replyDisplayMessage.id)}
-            isSearchActive={!!replyDisplayMessage.id && replyDisplayMessage.id === activeMessageId}
-            isStreaming={isStreaming && replyDisplayHasText}
-            streamingTools={[]}
-            onPreviewFile={onPreviewFile}
-            onViewWorkflow={onViewWorkflow}
-            onEditMessage={onEditMessage}
-            hideAvatar
-            hideThinkingPanel
-          />
-        </div>
+      <div className="group flex w-full flex-col gap-2" data-chat-message-role="assistant">
+        {thinkingPanelEl}
+        {hasDingTalkSentPreview ? (
+          <DingTalkSentPreview previews={dingTalkSentPreviews} />
+        ) : null}
+        <ChatMessage
+          message={replyDisplayMessage}
+          showThinking={false}
+          isSearchMatch={!!replyDisplayMessage.id && !!matchedMessageIds?.has(replyDisplayMessage.id)}
+          isSearchActive={!!replyDisplayMessage.id && replyDisplayMessage.id === activeMessageId}
+          isStreaming={isStreaming && replyDisplayHasText}
+          streamingTools={[]}
+          onPreviewFile={onPreviewFile}
+          onViewWorkflow={onViewWorkflow}
+          onEditMessage={onEditMessage}
+          hideAvatar
+          hideThinkingPanel
+        />
       </div>
     );
   }
@@ -181,36 +185,16 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
   if (hasDingTalkSentPreview) {
     return (
-      <div className="group flex flex-row gap-3" data-chat-message-role="assistant">
-        {avatar}
-        <div className="flex w-full min-w-0 max-w-[80%] flex-col items-start space-y-2">
-          {showThinkingPanel ? (
-            <ThinkingProcessPanel
-              timeline={mergedTimeline}
-              isStreaming={isStreaming}
-              isConnecting={isConnecting}
-              isProcessing={isProcessing}
-              streamingTools={streamingTools}
-            />
-          ) : null}
-          <DingTalkSentPreview previews={dingTalkSentPreviews} />
-        </div>
+      <div className="group flex w-full flex-col gap-2" data-chat-message-role="assistant">
+        {thinkingPanelEl}
+        <DingTalkSentPreview previews={dingTalkSentPreviews} />
       </div>
     );
   }
 
   return (
-    <div className="group flex flex-row gap-3" data-chat-message-role="assistant">
-      {avatar}
-      <div className="flex w-full min-w-0 max-w-[80%] flex-col">
-        <ThinkingProcessPanel
-          timeline={mergedTimeline}
-          isStreaming={isStreaming}
-          isConnecting={isConnecting}
-          isProcessing={isProcessing}
-          streamingTools={streamingTools}
-        />
-      </div>
+    <div className="group w-full" data-chat-message-role="assistant">
+      {thinkingPanelEl}
     </div>
   );
 });

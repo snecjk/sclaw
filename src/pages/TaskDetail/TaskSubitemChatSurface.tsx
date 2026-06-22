@@ -23,6 +23,7 @@ import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
 import { usePreviewableFiles } from '@/pages/Chat/message-utils';
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
+import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 // import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
 import { extractText } from '@/pages/Chat/message-utils';
@@ -526,6 +527,12 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
           onMoveUp={queueMoveUp}
           onMoveDown={queueMoveDown}
         /> */}
+
+        <div className="relative z-10 shrink-0 px-6">
+          <div className="mx-auto max-w-5xl">
+            <ParameterFormDock layout="page" />
+          </div>
+        </div>
 
         <ChatInput {...chatInputProps} engineType={currentEngineType} />
       </div>

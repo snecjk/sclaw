@@ -11,6 +11,7 @@ import { useChatStore } from '@/stores/chat';
 import { cn } from '@/lib/utils';
 import { stoHeroInputShellClass } from '@/lib/surfaces';
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
+import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
 import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
@@ -99,6 +100,7 @@ export function HomeComposer({
 
   return (
     <div className={cn(stoHeroInputShellClass, className)}>
+      <ParameterFormDock layout="home" />
       <section className="flex flex-col" aria-label={t('assistant.placeholder')}>
         <ChatInput
           {...inputProps}

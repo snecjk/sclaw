@@ -6,10 +6,11 @@
  * user parameter input.
  */
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Check, ChevronUp, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, ChevronUp, Loader2, CornerDownLeft } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { FormFieldRenderer } from './FormFieldRenderer';
+import { FormFieldRenderer, type FormFieldVariant } from './FormFieldRenderer';
 import { normalizeWorkflowFieldValue } from '@/lib/workflow-form-utils';
 import type { UserFormConfig, FormResult, FormField } from '@/types/user-form';
 
@@ -23,6 +24,8 @@ export interface ParameterFormCardProps {
   config: UserFormConfig;
   context: ParameterFormContext;
   onSubmit: (values: FormResult, context: ParameterFormContext) => void | Promise<void>;
+  /** default：消息流内联；chat-dock：输入框上方浮层（MasterGo 8:03938） */
+  variant?: FormFieldVariant;
 }
 
 interface WizardStep {
@@ -196,7 +199,32 @@ function validateField(field: FormField, value: unknown): string | null {
   return null;
 }
 
-export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCardProps) {
+function collectSelectedOptionLabels(step: WizardStep | undefined, values: FormResult): string[] {
+  if (!step?.fields?.length) return [];
+  const labels: string[] = [];
+  for (const field of step.fields) {
+    if (field.hidden || field.type === 'hidden') continue;
+    const options = 'options' in field ? field.options ?? [] : [];
+    if (options.length === 0) continue;
+    const raw = values[field.name];
+    if (field.type === 'multiselect' || (field.type === 'checkbox' && options.length > 0)) {
+      const selected = Array.isArray(raw) ? (raw as unknown[]) : [];
+      for (const opt of options) {
+        if (selected.some((v) => String(v) === String(opt.value))) {
+          labels.push(opt.label);
+        }
+      }
+      continue;
+    }
+    if (field.type === 'select' || field.type === 'radio') {
+      const match = options.find((opt) => String(opt.value) === String(raw));
+      if (match) labels.push(match.label);
+    }
+  }
+  return labels;
+}
+
+export function ParameterFormCard({ config, context, onSubmit, variant = 'default' }: ParameterFormCardProps) {
   // If config is empty (from text marker), try to load from workflow memory
   const [schema, setSchema] = useState<import('@/types/workflow').WorkflowSchema | null>(null);
   const [loadedConfig, setLoadedConfig] = useState<UserFormConfig | null>(null);
@@ -346,6 +374,15 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
     return null;
   }, [step]);
 
+  const { t } = useTranslation('chat');
+  const isDock = variant === 'chat-dock';
+  const selectedSummaryLabels = useMemo(
+    () => collectSelectedOptionLabels(step, values),
+    [step, values],
+  );
+  const workflowTitle = effectiveConfig?.title ?? step?.title ?? '参数确认';
+  const stepShortTitle = step?.title ?? '选择类型';
+
   // Loading state while fetching schema from memory
   if (!hasValidConfig && loadingSchema) {
     return (
@@ -361,6 +398,123 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
   // Guard: if effectiveConfig is null (still loading or failed), render nothing
   if (!effectiveConfig) {
     return null;
+  }
+
+  if (isDock) {
+    return (
+      <div className="flex max-h-[320px] flex-col overflow-hidden rounded-[18px] border border-border bg-card shadow-soft">
+        <div className="shrink-0 rounded-t-[18px] bg-[#FAFBFC] px-3.5 pb-2 pt-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-1.5 text-xs leading-[14px]">
+              <span className="truncate font-medium text-[#6B7280]">{workflowTitle}</span>
+              <span className="text-[#C4C4C4]" aria-hidden>
+                ·
+              </span>
+              <span className="truncate text-muted-foreground">{stepShortTitle}</span>
+            </div>
+            <div className="flex shrink-0 items-center gap-2.5">
+              <div className="flex items-center gap-px">
+                <button
+                  type="button"
+                  onClick={handlePrev}
+                  disabled={isFirst}
+                  aria-label={config.prevLabel ?? '上一步'}
+                  className="flex h-[18px] w-[18px] items-center justify-center rounded-sm transition-colors hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  <ChevronLeft className="h-2.5 w-2.5 text-[#8A919A]" />
+                </button>
+                <span className="min-w-[2rem] px-1 text-center text-xs tabular-nums text-[#8C8C8C]">
+                  {currentStep + 1} / {steps.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleNext}
+                  disabled={isLast}
+                  aria-label={config.nextLabel ?? '下一步'}
+                  className="flex h-[18px] w-[18px] items-center justify-center rounded-sm transition-colors hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-30"
+                >
+                  <ChevronRight className="h-2.5 w-2.5 text-foreground" />
+                </button>
+              </div>
+              <span className="h-3.5 w-px bg-[#DFE3E8]" aria-hidden />
+              <button
+                type="button"
+                onClick={() => setCollapsed((c) => !c)}
+                className="text-xs text-[#8C8C8C] transition-colors hover:text-foreground"
+              >
+                {collapsed ? '展开' : '收起'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {!collapsed ? (
+          <>
+            <div className="min-h-0 flex-1 overflow-y-auto bg-card px-[15px] pb-3 pt-3">
+              <p className="mb-3 text-sm leading-[18px] text-foreground">
+                {currentStep + 1}. {step?.title ?? '参数确认'}
+                {step?.description ? ` · ${step.description}` : ''}
+              </p>
+              <div className="space-y-3">
+                {step?.fields.map((field) => (
+                  <FormFieldRenderer
+                    key={field.name}
+                    field={field}
+                    value={values[field.name]}
+                    onChange={(v) => updateValue(field.name, v)}
+                    error={errors[field.name]}
+                    variant="chat-dock"
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center justify-between gap-3 rounded-b-[18px] bg-card px-3.5 pb-2.5 pt-1.5">
+              <p className="min-w-0 truncate text-xs leading-[14px]">
+                {selectedSummaryLabels.length > 0 ? (
+                  <>
+                    <span className="text-[#C9CDD4]">
+                      {t('parameterForm.defaultSelectedPrefix', { defaultValue: '默认已选类型：' })}
+                    </span>
+                    <span className="text-muted-foreground">{selectedSummaryLabels.join('、')}</span>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">{stepFooterHint}</span>
+                )}
+              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                {isLast ? (
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    className="inline-flex h-6 items-center gap-1 rounded-[7px] bg-[#1A1A1A] px-3 text-xs font-medium text-white transition-colors hover:bg-foreground/90 disabled:opacity-50"
+                  >
+                    {submitting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    ) : (
+                      <>
+                        <span>{config.confirmLabel ?? '继续'}</span>
+                        <CornerDownLeft className="h-3.5 w-3.5" aria-hidden />
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    className="inline-flex h-6 items-center gap-1 rounded-[7px] bg-[#1A1A1A] px-3 text-xs font-medium text-white transition-colors hover:bg-foreground/90"
+                  >
+                    <span>{config.nextLabel ?? '继续'}</span>
+                    <CornerDownLeft className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
+        ) : null}
+      </div>
+    );
   }
 
   return (
@@ -425,6 +579,7 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
                 value={values[field.name]}
                 onChange={(v) => updateValue(field.name, v)}
                 error={errors[field.name]}
+                variant={variant}
               />
             ))}
           </div>

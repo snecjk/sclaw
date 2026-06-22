@@ -14,7 +14,7 @@ export function HomeSiteSurface({ seedText }: { seedText?: string }) {
   const { handleHubSend } = useHomeChatEntrySend();
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="mx-auto flex h-full min-h-0 w-full flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6">
         {showConversation ? (
           <HomeMainConversation className="min-h-0 flex-1" />
