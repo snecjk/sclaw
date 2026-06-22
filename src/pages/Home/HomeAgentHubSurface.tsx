@@ -9,7 +9,6 @@ import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
 import { ChatInput } from '@/pages/Chat/ChatInput';
-import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 import { HomeHero } from './HomeHero';
 import { HomeMainConversation } from './HomeMainConversation';
@@ -77,13 +76,8 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
         {showConversation ? (
           <HomeMainConversation className="min-h-0 flex-1" />
         ) : (
-          <>
-            <div className="mx-auto mb-3 mt-2 flex w-full max-w-[960px] items-center justify-between">
-              <ChatEngineSelector />
-              <ChatModelSelector />
-            </div>
-            <div className="mx-auto flex min-h-0 w-full max-w-[960px] flex-1 flex-col justify-center gap-10 overflow-y-auto overscroll-y-contain pb-6">
-              <HomeHero />
+          <div className="mx-auto flex min-h-0 w-full max-w-[960px] flex-1 flex-col justify-center gap-10 overflow-y-auto overscroll-y-contain pb-6">
+            <HomeHero />
 
               <div className="grid w-full gap-4 sm:grid-cols-3">
                 {(
@@ -149,8 +143,7 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
                   </div>
                 ))}
               </div>
-            </div>
-          </>
+          </div>
         )}
       </div>
 

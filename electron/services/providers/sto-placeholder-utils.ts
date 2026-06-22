@@ -21,6 +21,23 @@ export function isStoInternalOpenClawKey(key: string): boolean {
   return false;
 }
 
+/** Legacy agents.defaults.model.primary refs (custom-sto/*, sto-model-*/*). */
+export function isLegacyStoOpenClawModelRef(modelRef: string): boolean {
+  const trimmed = modelRef.trim();
+  if (!trimmed) return false;
+  const prefix = trimmed.includes('/') ? trimmed.split('/')[0]! : trimmed;
+  return isStoInternalOpenClawKey(prefix);
+}
+
+export function extractOpenClawProviderModelIds(
+  entry: Record<string, unknown> | undefined,
+): string[] {
+  if (!entry || !Array.isArray(entry.models)) return [];
+  return (entry.models as Array<Record<string, unknown>>)
+    .map((m) => (typeof m.id === 'string' ? m.id : ''))
+    .filter(Boolean);
+}
+
 export function isStoManagedAccount(account: Pick<ProviderAccount, 'id' | 'vendorId'>): boolean {
   return (
     account.vendorId === 'sto'
