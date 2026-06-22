@@ -45,6 +45,10 @@ import type { ChatSet } from './chat/store-api';
 import { dispatchBuiltinToolResult } from '@/lib/builtin-tool-dispatch';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
+import {
+  dedupeRedundantUserMessages,
+  mergeOptimisticUserIntoHistory,
+} from './chat/user-message-merge';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 
@@ -1953,20 +1957,11 @@ export const useChatStore = create<ChatState>()(
       // until the run completes, causing it to flash out of the UI.
       let finalMessages = enrichedMessages;
       const userMsgAt = get().lastUserMessageAt;
-      if (get().sending && userMsgAt) {
-        const userMsMs = toMs(userMsgAt);
-        const hasRecentUser = enrichedMessages.some(
-          (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000,
-        );
-        if (!hasRecentUser) {
-          const currentMsgs = get().messages;
-          const optimistic = [...currentMsgs].reverse().find(
-            (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000,
-          );
-          if (optimistic) {
-            finalMessages = [...enrichedMessages, optimistic];
-          }
-        }
+      if (userMsgAt) {
+        finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
+          userMessageAt: userMsgAt,
+          sending: get().sending,
+        });
       }
 
       if (get().currentSessionKey !== targetSessionKey) return;
@@ -1981,6 +1976,7 @@ export const useChatStore = create<ChatState>()(
       finalMessages = mergeLocalWorkflowTurnsFromCurrent(finalMessages, get().messages);
       finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
       finalMessages = ensureWorkflowCardsInMessages(finalMessages, targetSessionKey, getMessageText);
+      finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null);
       const restoredCardStates = buildWorkflowCardStatesForSession(targetSessionKey);
       const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
         sessionKey: targetSessionKey,
@@ -2381,7 +2377,7 @@ export const useChatStore = create<ChatState>()(
       })),
     };
     set((s) => ({
-      messages: [...s.messages, userMsg],
+      messages: dedupeRedundantUserMessages([...s.messages, userMsg], nowMs),
       sending: true,
       error: null,
       streamingText: '',
