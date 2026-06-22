@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { HostApiContext } from '../context';
 import { sendJson } from '../route-utils';
 import { getStoTokenQuotaService } from '../../services/sto-token-quota-service';
-import { getUserSkDetail, expandUserSkQuota } from '../../services/user-sk-service';
+import { getUserSkDetail, expandUserSkQuota, getUserTokenQuotaTiers } from '../../services/user-sk-service';
 import { parseJsonBody } from '../route-utils';
 import { logger } from '../../utils/logger';
 
@@ -62,6 +62,27 @@ export async function handleTokenQuotaRoutes(
       sendJson(res, 200, detail);
     } catch (error) {
       logger.error('[token-quota] Token balance route error:', error);
+      sendJson(res, 500, { error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/token-quota/tiers' && req.method === 'GET') {
+    try {
+      const queryTokenId = url.searchParams.get('tokenId')?.trim() ?? '';
+      let tokenId = queryTokenId;
+      if (!tokenId) {
+        const detail = await getUserSkDetail();
+        tokenId = detail?.tokenId ?? '';
+      }
+      if (!tokenId) {
+        sendJson(res, 200, null);
+        return true;
+      }
+      const result = await getUserTokenQuotaTiers(tokenId);
+      sendJson(res, 200, result);
+    } catch (error) {
+      logger.error('[token-quota] Tiers route error:', error);
       sendJson(res, 500, { error: String(error) });
     }
     return true;

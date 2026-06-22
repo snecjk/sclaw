@@ -9,6 +9,7 @@
 
 import type { StoSkStrategy } from './sto-sk-strategy';
 import type { SsoUserInfo } from '../utils/auth-store';
+import type { TokenQuotaTierQueryResult } from '../../shared/sto-token-quota-tier';
 import { getSsoEnvironment } from '../utils/auth-store';
 import { storeApiKey, getApiKey, deleteApiKey } from '../utils/secure-storage';
 import { logger } from '../utils/logger';
@@ -283,6 +284,14 @@ export class SiteSkStrategy implements StoSkStrategy {
   async clearCache(user: SsoUserInfo): Promise<void> {
     await this.clearSkAndTokenIdCache(user);
     logger.info(`[site-sk] SK and tokenId cache cleared for user=${user.code}`);
+  }
+
+  async queryTokenQuotaTier(
+    _user: SsoUserInfo,
+    _tokenId: string,
+  ): Promise<TokenQuotaTierQueryResult | null> {
+    logger.info('[site-sk] queryTokenQuotaTier: site users not supported yet');
+    return null;
   }
 
   // ─── 核心：租户初始化 + 一次性获取全量信息 ───

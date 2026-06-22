@@ -8,6 +8,7 @@
 
 import type { StoSkStrategy } from './sto-sk-strategy';
 import type { SsoUserInfo } from '../utils/auth-store';
+import type { TokenQuotaTierQueryResult } from '../../shared/sto-token-quota-tier';
 import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
 import { storeApiKey, getApiKey, deleteApiKey } from '../utils/secure-storage';
 import { logger } from '../utils/logger';
@@ -145,13 +146,25 @@ export class HqSkStrategy implements StoSkStrategy {
   ): Promise<{ success: boolean; message?: string }> {
     logger.info(`[hq-sk] expandQuota called, tokenId=${tokenId}, amount=${amount}`);
 
+    if (!user.code) {
+      logger.warn('[hq-sk] expandQuota failed: userCode is empty');
+      return { success: false, message: 'userCode is empty' };
+    }
+
     const domain = await this.resolveApiDomain();
-    const url = `${domain}/openapi/key/quota/expansion`;
+    const url = `${domain}/openapi/key/quota/applyExpansion`;
     const secret = this.md5(tokenId);
+    const operatorName = this.resolveOperatorDisplayName(user);
+    const body = {
+      tokenId,
+      quotaAmount: amount,
+      operatorCode: user.code,
+      operatorName,
+    };
 
     logger.info(`[hq-sk] expandQuota request: url=${url}`);
     logger.info(`[hq-sk] expandQuota headers: secret=${secret}`);
-    logger.info(`[hq-sk] expandQuota body: ${JSON.stringify({ tokenId, quotaAmount: amount })}`);
+    logger.info(`[hq-sk] expandQuota body: ${JSON.stringify(body)}`);
 
     try {
       const response = await this.fetchWithTimeout(url, {
@@ -160,15 +173,22 @@ export class HqSkStrategy implements StoSkStrategy {
           secret,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ tokenId, quotaAmount: amount }),
+        body: JSON.stringify(body),
       });
 
-      const json = (await response.json()) as { code: string; msg: string; detailMsg?: string };
-      logger.info(`[hq-sk] expandQuota response: code=${json.code}, msg=${json.msg}`);
+      const json = (await response.json()) as {
+        code: string;
+        msg: string;
+        detailMsg?: string | null;
+      };
+      logger.info(
+        `[hq-sk] expandQuota response: code=${json.code}, msg=${json.msg}, detailMsg=${json.detailMsg ?? ''}`,
+      );
 
       if (json.code !== '0') {
-        logger.warn(`[hq-sk] expandQuota biz failed: ${json.code} ${json.msg}`);
-        return { success: false, message: json.msg || json.detailMsg || `Code ${json.code}` };
+        const message = json.detailMsg || json.msg || `Code ${json.code}`;
+        logger.warn(`[hq-sk] expandQuota biz failed: ${json.code} ${message}`);
+        return { success: false, message };
       }
 
       logger.info(`[hq-sk] expandQuota success, quotaAmount=${amount}`);
@@ -176,6 +196,51 @@ export class HqSkStrategy implements StoSkStrategy {
     } catch (err) {
       logger.warn('[hq-sk] expandQuota error:', err);
       return { success: false, message: String(err) };
+    }
+  }
+
+  async queryTokenQuotaTier(
+    _user: SsoUserInfo,
+    tokenId: string,
+  ): Promise<TokenQuotaTierQueryResult | null> {
+    logger.info(`[hq-sk] queryTokenQuotaTier called, tokenId=${tokenId}`);
+
+    if (!tokenId) {
+      logger.warn('[hq-sk] queryTokenQuotaTier failed: tokenId is empty');
+      return null;
+    }
+
+    const domain = await this.resolveApiDomain();
+    const url = `${domain}/openapi/key/queryTokenQuotaTier?tokenId=${encodeURIComponent(tokenId)}`;
+    const secret = this.md5(tokenId);
+
+    logger.info(`[hq-sk] queryTokenQuotaTier request: url=${url}`);
+    logger.info(`[hq-sk] queryTokenQuotaTier headers: secret=${secret}`);
+
+    try {
+      const response = await this.fetchWithTimeout(url, {
+        method: 'GET',
+        headers: { secret, 'Content-Type': 'application/json' },
+      });
+
+      const json = (await response.json()) as {
+        code: string;
+        msg: string;
+        detailMsg?: string | null;
+        data?: TokenQuotaTierQueryResult;
+      };
+
+      logger.info(`[hq-sk] queryTokenQuotaTier response: code=${json.code}, msg=${json.msg}`);
+
+      if (json.code !== '0' || !json.data) {
+        logger.warn(`[hq-sk] queryTokenQuotaTier failed: ${json.msg || json.detailMsg || json.code}`);
+        return null;
+      }
+
+      return json.data;
+    } catch (err) {
+      logger.warn('[hq-sk] queryTokenQuotaTier error:', err);
+      return null;
     }
   }
 
@@ -315,6 +380,14 @@ export class HqSkStrategy implements StoSkStrategy {
     let decrypted = decipher.update(encryptedBase64, 'base64', 'utf-8');
     decrypted += decipher.final('utf-8');
     return decrypted;
+  }
+
+  private resolveOperatorDisplayName(user: SsoUserInfo): string {
+    const realName = user.realName?.trim();
+    if (realName) return realName;
+    const userName = user.userName?.trim();
+    if (userName) return userName;
+    return user.code?.trim() ?? '';
   }
 
   private md5(input: string): string {

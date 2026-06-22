@@ -113,6 +113,21 @@ export function Models() {
     };
   }, []);
 
+  const refreshTokenBalance = async () => {
+    setTokenBalance((prev) => ({ ...prev, status: 'loading' }));
+    try {
+      const res = await hostApiFetch<{ tokenId: string; spend: number; maxBudget: number }>('/api/token-balance');
+      setTokenBalance({
+        status: 'done',
+        tokenId: res.tokenId ?? '',
+        spend: res.spend ?? 0,
+        maxBudget: res.maxBudget ?? 0,
+      });
+    } catch {
+      setTokenBalance((prev) => ({ ...prev, status: 'error' }));
+    }
+  };
+
   useEffect(() => {
     if (usageFetchTimerRef.current) {
       clearTimeout(usageFetchTimerRef.current);
@@ -555,6 +570,7 @@ export function Models() {
         tokenId={tokenBalance.tokenId}
         spend={tokenBalance.spend}
         maxBudget={tokenBalance.maxBudget}
+        onQuotaChanged={() => void refreshTokenBalance()}
       />
     </div>
   );

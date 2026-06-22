@@ -8,6 +8,7 @@
 
 import { getAuthState, type SsoUserInfo } from '../utils/auth-store';
 import { resolveStrategy } from './sto-sk-strategy';
+import type { TokenQuotaTierQueryResult } from '../../shared/sto-token-quota-tier';
 import { logger } from '../utils/logger';
 
 /**
@@ -68,6 +69,30 @@ export async function expandUserSkQuota(
 
   logger.info(`[user-sk] Delegating expansion to strategy, userCode=${user.code}`);
   return strategy.expandQuota(user, tokenId, quotaAmount);
+}
+
+/**
+ * 查询 Token 额度档位列表（扩容申请弹框数据）
+ */
+export async function getUserTokenQuotaTiers(
+  tokenId: string,
+): Promise<TokenQuotaTierQueryResult | null> {
+  logger.info(`[user-sk] getUserTokenQuotaTiers called, tokenId=${tokenId}`);
+
+  const { user } = await getAuthState();
+  const strategy = await resolveStrategy(user);
+
+  if (!strategy || !user) {
+    logger.warn(`[user-sk] No strategy or user for quota tiers: strategy=${!!strategy}, user=${!!user}`);
+    return null;
+  }
+
+  if (!tokenId) {
+    logger.warn('[user-sk] getUserTokenQuotaTiers failed: tokenId is empty');
+    return null;
+  }
+
+  return strategy.queryTokenQuotaTier(user, tokenId);
 }
 
 /**

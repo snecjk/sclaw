@@ -5,6 +5,7 @@
  */
 
 import type { SsoUserInfo } from '../utils/auth-store';
+import type { TokenQuotaTierQueryResult } from '../../shared/sto-token-quota-tier';
 import { isSiteUser, getSiteDepartmentTypes, setSiteDepartmentTypes } from '../../shared/site-user-utils';
 import { getHqSkStrategy } from './sto-hq-sk-strategy';
 import { getSiteSkStrategy } from './sto-site-sk-strategy';
@@ -38,6 +39,12 @@ export interface StoSkStrategy {
     tokenId: string,
     amount: number,
   ): Promise<{ success: boolean; message?: string }>;
+
+  /** 查询额度档位列表（非网点实现；网点暂未对接） */
+  queryTokenQuotaTier(
+    user: SsoUserInfo,
+    tokenId: string,
+  ): Promise<TokenQuotaTierQueryResult | null>;
 
   /** 清理缓存（登出/切换登录时调用） */
   clearCache(user: SsoUserInfo): Promise<void>;
