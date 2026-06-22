@@ -21,7 +21,7 @@ export function isStoInternalOpenClawKey(key: string): boolean {
   return false;
 }
 
-/** Legacy agents.defaults.model.primary refs (custom-sto/*, sto-model-*/*). */
+/** Legacy agents.defaults.model.primary refs (e.g. custom-sto/model-id, sto-model-xxx/model-id). */
 export function isLegacyStoOpenClawModelRef(modelRef: string): boolean {
   const trimmed = modelRef.trim();
   if (!trimmed) return false;
