@@ -69,6 +69,8 @@
         "dingtalkSentPreviewToGroup": "已发送至群聊",
         "dingtalkSentPreviewMessageTitle": "消息标题：{{title}}",
         "pickWorkflow": "选择工作流",
+        "dingTalkMention": "钉钉通讯录",
+        "micComingSoon": "即将上线",
         "workflowPlaceholder": "搜索工作流模板...",
         "workflowLoading": "加载中...",
         "workflowNoResults": "未找到匹配模板",

@@ -6,8 +6,26 @@
  * Files are staged to disk via IPC — only lightweight path references
  * are sent with the message (no base64 over WebSocket).
  */
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { SendHorizontal, Square, X, Paperclip, FileText, Film, Music, FileArchive, File, Loader2, AtSign, AlertCircle } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import {
+  SendHorizontal,
+  Square,
+  X,
+  Paperclip,
+  FileText,
+  Film,
+  Music,
+  FileArchive,
+  File,
+  Loader2,
+  AtSign,
+  AlertCircle,
+  CirclePlus,
+  Bot,
+  Workflow,
+  Mic,
+  ArrowUp,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
@@ -90,6 +108,10 @@ interface ChatInputProps {
   placeholder?: string;
   /** Merged onto the outer wrapper (after defaults); use to tune padding, e.g. task subitem bottom inset. */
   className?: string;
+  /** 首页 HomeComposer：内联引擎/模型 + 新工具栏布局（默认关闭，其它页面不传） */
+  composerLayout?: 'default' | 'home';
+  /** 首页工具栏右侧：内联 ChatEngineSelector / ChatModelSelector */
+  toolbarInlineSelectors?: ReactNode;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -168,6 +190,8 @@ export function ChatInput({
   onEditDraftApplied,
   placeholder,
   className,
+  composerLayout = 'default',
+  toolbarInlineSelectors,
 }: ChatInputProps) {
   const { t } = useTranslation('chat');
   const [composerSnapshot, setComposerSnapshot] = useState<MentionComposerSnapshot>({
@@ -664,6 +688,16 @@ export function ChatInput({
   );
 
   const isEmbedded = variant === 'embedded';
+  const isHomeComposer = composerLayout === 'home';
+
+  const handleOpenDingTalkMention = () => {
+    mentionEditorRef.current?.openMentionPicker();
+  };
+
+  const homeToolbarIconBtn = cn(
+    'h-[30px] w-[30px] rounded-[20px] p-0 text-muted-foreground/75',
+    'hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
+  );
 
   return (
     <div
@@ -680,19 +714,29 @@ export function ChatInput({
         {/* 单壳：附件缩略图与输入区同在一个圆角边框内（与 memory-center-web 助手输入一致） */}
         <div
           className={cn(
-            // sto-design: Grey-4 默认描边；Brand-3 悬停边、Brand-5/6 聚焦与拖拽（与 hub 顶栏 hover:border-[#FFC17A] 一致）
-            'relative overflow-visible rounded-2xl border bg-white transition-[box-shadow,border-color,ring-width,ring-color] duration-200 dark:bg-[#131a24]',
-            'border-[#E5E6EB] shadow-[0_4px_14px_rgba(29,33,41,0.05)] ring-1 ring-transparent dark:border-border dark:shadow-[0_4px_14px_rgba(0,0,0,0.22)]',
-            dragOver
-              ? 'border-[#FFC17A] ring-2 ring-[#FFC17A]/35 dark:border-[#FFC17A] dark:ring-[#FFC17A]/30'
-              : [
-                  'hover:border-[#FFC17A] hover:shadow-[0_4px_20px_rgba(255,183,140,0.14)]',
-                  'dark:hover:border-[#FFC17A]/90 dark:hover:shadow-[0_4px_20px_rgba(255,183,140,0.1)]',
-                  'focus-within:border-[#FF8D2A] focus-within:ring-2 focus-within:ring-[#FF6F00]/22',
-                  'focus-within:shadow-[0_0_0_1px_rgba(255,141,42,0.4),0_4px_20px_rgba(255,111,0,0.1)]',
-                  'dark:focus-within:border-[#FF8D2A] dark:focus-within:ring-[#FF6F00]/28',
-                  'dark:focus-within:shadow-[0_0_0_1px_rgba(255,141,42,0.28),0_4px_24px_rgba(255,111,0,0.14)]',
-                ],
+            isHomeComposer
+              ? cn(
+                  'relative flex h-[120px] min-h-[120px] flex-col overflow-visible rounded-[22px] border border-border bg-card',
+                  'shadow-[0_6px_30px_rgba(43,17,0,0.03)] transition-[box-shadow,border-color,ring-width,ring-color] duration-200',
+                  dragOver
+                    ? 'border-primary ring-2 ring-primary/25'
+                    : 'focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20',
+                )
+              : cn(
+                  // sto-design: Grey-4 默认描边；Brand-3 悬停边、Brand-5/6 聚焦与拖拽（与 hub 顶栏 hover:border-[#FFC17A] 一致）
+                  'relative overflow-visible rounded-2xl border bg-white transition-[box-shadow,border-color,ring-width,ring-color] duration-200 dark:bg-[#131a24]',
+                  'border-[#E5E6EB] shadow-[0_4px_14px_rgba(29,33,41,0.05)] ring-1 ring-transparent dark:border-border dark:shadow-[0_4px_14px_rgba(0,0,0,0.22)]',
+                  dragOver
+                    ? 'border-[#FFC17A] ring-2 ring-[#FFC17A]/35 dark:border-[#FFC17A] dark:ring-[#FFC17A]/30'
+                    : [
+                        'hover:border-[#FFC17A] hover:shadow-[0_4px_20px_rgba(255,183,140,0.14)]',
+                        'dark:hover:border-[#FFC17A]/90 dark:hover:shadow-[0_4px_20px_rgba(255,183,140,0.1)]',
+                        'focus-within:border-[#FF8D2A] focus-within:ring-2 focus-within:ring-[#FF6F00]/22',
+                        'focus-within:shadow-[0_0_0_1px_rgba(255,141,42,0.4),0_4px_20px_rgba(255,111,0,0.1)]',
+                        'dark:focus-within:border-[#FF8D2A] dark:focus-within:ring-[#FF6F00]/28',
+                        'dark:focus-within:shadow-[0_0_0_1px_rgba(255,141,42,0.28),0_4px_24px_rgba(255,111,0,0.14)]',
+                      ],
+                ),
           )}
         >
           {attachments.length > 0 && (
@@ -728,7 +772,12 @@ export function ChatInput({
 
 
 
-          <div className={cn('px-4', attachments.length > 0 ? 'pt-1.5' : 'pt-2.5')}>
+          <div className={cn(
+            'px-4',
+            isHomeComposer
+              ? cn('flex min-h-0 flex-1 flex-col', attachments.length > 0 ? 'pt-1' : 'pt-3')
+              : cn(attachments.length > 0 ? 'pt-1.5' : 'pt-2.5'),
+          )}>
             <div ref={mentionPopoverRef} className="flex-1 relative">
               <DingTalkMentionPopover
                 open={dingTalkMentionOpen}
@@ -769,6 +818,155 @@ export function ChatInput({
             </div>
           </div>
 
+          {isHomeComposer ? (
+            <div className="relative flex shrink-0 items-center justify-between gap-2 px-4 pb-3 pt-1">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  type="button"
+                  className={homeToolbarIconBtn}
+                  onClick={pickFiles}
+                  disabled={disabled}
+                  title={t('composer.attachFiles')}
+                >
+                  <CirclePlus className="h-4 w-4" aria-hidden />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  type="button"
+                  className={homeToolbarIconBtn}
+                  onClick={handleOpenDingTalkMention}
+                  disabled={disabled}
+                  title={t('composer.dingTalkMention')}
+                >
+                  <AtSign className="h-4 w-4" aria-hidden />
+                </Button>
+
+                {showAgentPicker ? (
+                  <div ref={pickerRef} className="relative shrink-0">
+                    <Button
+                      variant="ghost"
+                      type="button"
+                      className={cn(
+                        homeToolbarIconBtn,
+                        (pickerOpen || selectedTarget) && 'bg-primary/10 text-primary hover:bg-primary/12',
+                      )}
+                      onClick={() => setPickerOpen((open) => !open)}
+                      disabled={disabled}
+                      title={t('composer.pickAgent')}
+                    >
+                      {/* 临时图标，等用户提供 SVG 替换 */}
+                      <Bot className="h-4 w-4" aria-hidden />
+                    </Button>
+                    {pickerOpen ? (
+                      <div className="absolute left-0 bottom-full z-50 mb-2 w-72 overflow-hidden rounded-2xl border border-glass-border glass p-1.5">
+                        <div className="px-3 py-2 text-[11px] font-medium text-muted-foreground/80">
+                          {t('composer.agentPickerTitle', { currentAgent: currentAgentName })}
+                        </div>
+                        <div className="max-h-64 overflow-y-auto">
+                          {mentionableAgents.map((agent) => (
+                            <AgentPickerItem
+                              key={agent.id}
+                              agent={agent}
+                              selected={agent.id === targetAgentId}
+                              onSelect={() => {
+                                setTargetAgentId(agent.id);
+                                setPickerOpen(false);
+                                mentionEditorRef.current?.focus();
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div ref={workflowPickerRef} className="relative shrink-0">
+                  <Button
+                    ref={workflowButtonRef}
+                    variant="ghost"
+                    type="button"
+                    className={cn(
+                      homeToolbarIconBtn,
+                      workflowPickerOpen && 'bg-primary/10 text-primary hover:bg-primary/12',
+                    )}
+                    onClick={() => setWorkflowPickerOpen((open) => !open)}
+                    disabled={disabled}
+                    title={t('composer.pickWorkflow')}
+                  >
+                    {/* 临时图标，等用户提供 SVG 替换 */}
+                    <Workflow className="h-4 w-4" aria-hidden />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {toolbarInlineSelectors}
+                <Button
+                  variant="ghost"
+                  type="button"
+                  className="h-[22px] w-[22px] rounded-full p-0 text-muted-foreground/60"
+                  disabled
+                  aria-disabled="true"
+                  title={t('composer.micComingSoon')}
+                >
+                  <Mic className="h-[22px] w-[22px]" aria-hidden />
+                </Button>
+                {sending && canSend ? (
+                  <Button
+                    onClick={handleSend}
+                    size="icon"
+                    className="h-[30px] w-[30px] shrink-0 rounded-[16px] border border-primary/80 bg-primary text-primary-foreground shadow-[0_6px_16px_rgba(255,111,0,0.22)] hover:bg-primary/90"
+                    variant="ghost"
+                    title={t('composer.send')}
+                  >
+                    <ArrowUp className="h-4 w-4" strokeWidth={2.1} aria-hidden />
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={sending ? handleStop : handleSend}
+                    disabled={sending ? !canStop : !canSend}
+                    size="icon"
+                    className={cn(
+                      'h-[30px] w-[30px] shrink-0 rounded-[16px] border transition-all',
+                      sending
+                        ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-white/90'
+                        : canSend
+                          ? 'border-primary/80 bg-primary text-primary-foreground shadow-[0_6px_16px_rgba(255,111,0,0.22)] hover:bg-primary/90'
+                          : 'border-black/8 bg-black/5 text-muted-foreground/55 dark:border-white/10 dark:bg-white/[0.06]',
+                    )}
+                    variant="ghost"
+                    title={sending ? t('composer.stop') : t('composer.send')}
+                  >
+                    {sending ? (
+                      <Square className="h-3.5 w-3.5" fill="currentColor" aria-hidden />
+                    ) : (
+                      <ArrowUp className="h-4 w-4" strokeWidth={2.1} aria-hidden />
+                    )}
+                  </Button>
+                )}
+              </div>
+
+              <WorkflowPicker
+                ref={workflowPickerRef}
+                open={workflowPickerOpen}
+                onClose={() => setWorkflowPickerOpen(false)}
+                onSelect={async (id) => {
+                  setWorkflowPickerOpen(false);
+                  const { useChatStore } = await import('@/stores/chat');
+                  useChatStore.getState().clearPendingWorkflow();
+                  const template = templates.find((w) => w.id === id);
+                  if (template) {
+                    mentionEditorRef.current?.insertWorkflow(id, template.label);
+                  }
+                  mentionEditorRef.current?.focus();
+                }}
+                className="absolute left-4 right-4 bottom-full z-50 mb-2"
+              />
+            </div>
+          ) : (
           <div className="flex items-center justify-between gap-3 px-4 pb-1.5 pt-0.5">
             <div className="flex items-center gap-1">
               <Button
@@ -896,6 +1094,7 @@ export function ChatInput({
               </Button>
             )}
           </div>
+          )}
         </div>
         {!isEmbedded ? (
           <div className="mt-2.5 flex items-center justify-between gap-2 px-4 text-[11px] text-muted-foreground/60">

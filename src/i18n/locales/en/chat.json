@@ -69,6 +69,8 @@
         "dingtalkSentPreviewToGroup": "Sent to group",
         "dingtalkSentPreviewMessageTitle": "Title: {{title}}",
         "pickWorkflow": "Choose workflow",
+        "dingTalkMention": "DingTalk contacts",
+        "micComingSoon": "Coming soon",
         "workflowPlaceholder": "Search workflow templates...",
         "workflowLoading": "Loading...",
         "workflowNoResults": "No matching templates",
