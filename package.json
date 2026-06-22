@@ -17,7 +17,8 @@
         },
         "supportedArchitectures": {
             "os": [
-                "current"
+                "current",
+                "win32"
             ],
             "cpu": [
                 "x64",
