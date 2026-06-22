@@ -27,7 +27,7 @@ import {
 } from './chat/types';
 import type { WorkflowExecutionState } from '@/types/workflow';
 import { mergeLocalWorkflowTurnsFromCurrent, mergeWorkflowTurnsFromMemory } from '@/lib/workflow-local-turn';
-import { ensureWorkflowCardsInMessages } from '@/lib/workflow-card-injection';
+import { ensureWorkflowCardsInMessages, mergeWorkflowCardBlocksFromCurrent } from '@/lib/workflow-card-injection';
 import { buildWorkflowCardStatesForSession } from '@/stores/workflow-memory';
 import { hydrateSessionWorkflowCards } from '@/lib/workflow-run-hydration';
 import { upgradeWorkflowParamUserMessages } from '@/lib/workflow-param-messages';
@@ -42,7 +42,10 @@ import {
   recoverParameterFormsOnHistoryLoad,
 } from './chat/parameter-form-recovery';
 import type { ChatSet } from './chat/store-api';
-import { dispatchBuiltinToolResult } from '@/lib/builtin-tool-dispatch';
+import {
+  absorbWorkflowExecutionStartedFromToolResults,
+  dispatchBuiltinToolResult,
+} from '@/lib/builtin-tool-dispatch';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 
@@ -1979,6 +1982,7 @@ export const useChatStore = create<ChatState>()(
         getMessageText,
       );
       finalMessages = mergeLocalWorkflowTurnsFromCurrent(finalMessages, get().messages);
+      finalMessages = mergeWorkflowCardBlocksFromCurrent(finalMessages, get().messages);
       finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
       finalMessages = ensureWorkflowCardsInMessages(finalMessages, targetSessionKey, getMessageText);
       const restoredCardStates = buildWorkflowCardStatesForSession(targetSessionKey);
@@ -2230,6 +2234,11 @@ export const useChatStore = create<ChatState>()(
         }
 
         if (get().currentSessionKey !== targetSessionKey) return;
+        await absorbWorkflowExecutionStartedFromToolResults(rawMessages, {
+          sessionKey: targetSessionKey,
+          agentId: get().currentAgentId,
+        });
+        if (get().currentSessionKey !== targetSessionKey) return;
         applyLoadedMessages(rawMessages, thinkingLevel, {
           isRunning: typeof data.isRunning === 'boolean' ? data.isRunning : undefined,
           runtimeResult: data.runtimeResult,
@@ -2240,6 +2249,11 @@ export const useChatStore = create<ChatState>()(
         const fallbackMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
         if (get().currentSessionKey !== targetSessionKey) return;
         if (fallbackMessages.length > 0) {
+          await absorbWorkflowExecutionStartedFromToolResults(fallbackMessages, {
+            sessionKey: targetSessionKey,
+            agentId: get().currentAgentId,
+          });
+          if (get().currentSessionKey !== targetSessionKey) return;
           applyLoadedMessages(fallbackMessages, null);
         } else if (get().currentSessionKey === targetSessionKey) {
           set({ messages: [], loading: false });
@@ -2939,6 +2953,17 @@ export const useChatStore = create<ChatState>()(
               ...clearPendingImages,
             };
           });
+          if (isTerminalOutput && !toolOnly) {
+            const sessionKey = get().currentSessionKey;
+            const synced = ensureWorkflowCardsInMessages(
+              get().messages,
+              sessionKey,
+              getMessageText,
+            );
+            if (synced !== get().messages) {
+              set({ messages: synced });
+            }
+          }
           // After the final response, quietly reload history to surface all intermediate
           // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
           if (isTerminalOutput && !toolOnly) {

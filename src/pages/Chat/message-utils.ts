@@ -353,13 +353,25 @@ export function extractWorkflowCard(message: RawMessage | unknown): { runId: str
 
   if (!Array.isArray(content)) return null;
 
+  let latest: { runId: string; templateName: string } | null = null;
   for (const block of content as import('@/stores/chat').ContentBlock[]) {
     if (block.type === 'workflow_card' && block.runId) {
-      return {
+      latest = {
         runId: block.runId,
         templateName: block.templateName ?? '工作流',
       };
     }
+  }
+  return latest;
+}
+
+/** Latest workflow_card across assistant snapshots in a turn (newest message / block wins). */
+export function findLatestWorkflowCardInMessages(
+  messages: RawMessage[],
+): { runId: string; templateName: string } | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const card = extractWorkflowCard(messages[i]);
+    if (card) return card;
   }
   return null;
 }

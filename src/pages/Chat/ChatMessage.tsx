@@ -23,6 +23,8 @@ import {
   isWorkflowFormInjectionAllowed,
 } from '@/stores/chat/parameter-form-recovery';
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
+import { RUN_ID_IN_TEXT } from '@/lib/workflow-card-injection';
+import { getExecutionByRunId } from '@/stores/workflow-memory';
 import {
   artifactToPreviewFile,
   inferMimeTypeFromUrl,
@@ -59,6 +61,7 @@ interface ChatMessageProps {
   }>;
   onPreviewFile?: (file: AttachedFileMeta) => void;
   onViewWorkflow?: (workflowId: string) => void;
+  onCreateScheduledTask?: (workflowId: string) => void;
   onEditMessage?: (text: string) => void;
   /** Used when rendered inside AssistantTurnMessage */
   hideAvatar?: boolean;
@@ -83,6 +86,7 @@ export const ChatMessage = memo(function ChatMessage({
   streamingTools = [],
   onPreviewFile,
   onViewWorkflow,
+  onCreateScheduledTask,
   onEditMessage,
   hideAvatar = false,
   hideThinkingPanel = false,
@@ -109,7 +113,20 @@ export const ChatMessage = memo(function ChatMessage({
   const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
   const sessionKey = useChatStore((s) => s.currentSessionKey);
   const sessionMessages = useChatStore((s) => s.messages);
-  const workflowCard = !isUser ? extractWorkflowCard(message) : null;
+  const workflowCardStates = useChatStore((s) => s.workflowCardStates);
+  const workflowCard = useMemo(() => {
+    if (isUser) return null;
+    const fromBlock = extractWorkflowCard(message);
+    if (fromBlock) return fromBlock;
+    const runIds = [...text.matchAll(RUN_ID_IN_TEXT)].map((m) => m[1]).filter(Boolean);
+    for (let i = runIds.length - 1; i >= 0; i -= 1) {
+      const runId = runIds[i]!;
+      if (!workflowCardStates[runId]) continue;
+      const exec = getExecutionByRunId(runId, sessionKey);
+      return { runId, templateName: exec?.templateName ?? '工作流' };
+    }
+    return null;
+  }, [isUser, message, text, workflowCardStates, sessionKey]);
   const parameterForm = useMemo(() => {
     if (isUser) return null;
     const hasNativeFormBlock = Array.isArray(message.content)
@@ -147,7 +164,7 @@ export const ChatMessage = memo(function ChatMessage({
   // Extract previewable refs from message text, then verify non-http paths:
   // local files must exist on disk; cloud-runtime paths resolve to artifact OSS
   // URLs or are dropped (no broken file cards).
-  const workflowCardStatesForRefs = useChatStore((s) => s.workflowCardStates);
+  const workflowCardStatesForRefs = workflowCardStates;
   const candidateRefs = useMemo(
     () =>
       extractPreviewableRefs(text)
@@ -222,7 +239,7 @@ export const ChatMessage = memo(function ChatMessage({
   if (isToolResult) return null;
 
   const hasStreamingToolStatus = isStreaming && streamingTools.length > 0;
-  if (!hasText && !showThinkingPanel && images.length === 0 && visibleTools.length === 0 && !hasRenderableFiles && extractedRefs.length === 0 && !hasStreamingToolStatus && !parameterForm) return null;
+  if (!hasText && !showThinkingPanel && images.length === 0 && visibleTools.length === 0 && !hasRenderableFiles && extractedRefs.length === 0 && !hasStreamingToolStatus && !parameterForm && !workflowCard) return null;
   const showRenderDebugPanel = !isUser && isFilePreviewDebugEnabled();
   const debugMarkdownSource = useMemo(
     () => (onPreviewFile ? preprocessTextForPreviewLinks(text) : text),
@@ -440,6 +457,7 @@ export const ChatMessage = memo(function ChatMessage({
             templateName={workflowCard.templateName}
             onPreviewArtifact={onPreviewFile}
             onViewWorkflow={onViewWorkflow}
+            onCreateScheduledTask={onCreateScheduledTask}
           />
         )}
 

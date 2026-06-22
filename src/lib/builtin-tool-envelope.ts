@@ -70,12 +70,25 @@ export function extractToolResultText(content: unknown): string | null {
   return null;
 }
 
+function isStoToolEnvelope(value: unknown): value is StoToolEnvelope {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as StoToolEnvelope;
+  return typeof candidate.type === 'string' && typeof candidate.success === 'boolean';
+}
+
 export function parseStoToolEnvelope<T = unknown>(content: unknown): StoToolEnvelope<T> | null {
+  if (isStoToolEnvelope(content)) return content as StoToolEnvelope<T>;
+
+  if (content && typeof content === 'object' && !Array.isArray(content)) {
+    const details = (content as { details?: unknown }).details;
+    if (isStoToolEnvelope(details)) return details as StoToolEnvelope<T>;
+  }
+
   const text = extractToolResultText(content);
   if (!text) return null;
   try {
     const parsed = JSON.parse(text) as StoToolEnvelope<T>;
-    if (typeof parsed?.type !== 'string' || typeof parsed?.success !== 'boolean') return null;
+    if (!isStoToolEnvelope(parsed)) return null;
     return parsed;
   } catch {
     return null;

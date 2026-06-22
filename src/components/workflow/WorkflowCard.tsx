@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Circle, Loader2, Workflow, XCircle, Clock, FileText, GitBranch } from 'lucide-react';
+import { CheckCircle2, Circle, Clock, FileText, GitBranch, Loader2, Workflow, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
@@ -23,6 +23,7 @@ interface WorkflowCardProps {
   templateName: string;
   onPreviewArtifact?: (file: AttachedFileMeta) => void;
   onViewWorkflow?: (workflowId: string) => void;
+  onCreateScheduledTask?: (workflowId: string) => void;
 }
 
 interface StatusTheme {
@@ -145,6 +146,7 @@ export function WorkflowCard({
   templateName,
   onPreviewArtifact,
   onViewWorkflow,
+  onCreateScheduledTask,
 }: WorkflowCardProps) {
   const { t } = useTranslation('chat');
   const sessionKey = useChatStore((s) => s.currentSessionKey);
@@ -196,6 +198,9 @@ export function WorkflowCard({
     && onPreviewArtifact
     && isPreviewableArtifactUrl(primaryArtifact.url, primaryArtifact.type),
   );
+  const showWorkflowActions = isTerminal
+    && !!display.workflowId
+    && (onViewWorkflow || onCreateScheduledTask);
 
   return (
     <div
@@ -259,7 +264,7 @@ export function WorkflowCard({
           <p className="mt-2.5 pl-12 text-xs leading-5 text-[#FA3C3C]">{display.error}</p>
         )}
 
-        {(primaryArtifact || (isTerminal && display.workflowId && onViewWorkflow)) && (
+        {(primaryArtifact || showWorkflowActions) && (
           <div className="mt-3 space-y-2 pl-12">
             {primaryArtifact && (
               <div className="flex items-center gap-3 rounded-xl border border-[#E5E6EB] bg-white px-3.5 py-2.5">
@@ -292,15 +297,29 @@ export function WorkflowCard({
               </div>
             )}
 
-            {isTerminal && display.workflowId && onViewWorkflow && (
-              <button
-                type="button"
-                onClick={() => onViewWorkflow(display.workflowId)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E6EB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#1D2129] transition-colors hover:border-[#FFD7A3] hover:bg-[#FFFBF5]"
-              >
-                <GitBranch className="h-3.5 w-3.5 text-[#FF6F00]" />
-                查看工作流
-              </button>
+            {showWorkflowActions && (
+              <div className="flex flex-wrap gap-2">
+                {onViewWorkflow && (
+                  <button
+                    type="button"
+                    onClick={() => onViewWorkflow(display.workflowId)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E6EB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#1D2129] transition-colors hover:border-[#FFD7A3] hover:bg-[#FFFBF5]"
+                  >
+                    <GitBranch className="h-3.5 w-3.5 text-[#FF6F00]" />
+                    查看工作流
+                  </button>
+                )}
+                {onCreateScheduledTask && (
+                  <button
+                    type="button"
+                    onClick={() => onCreateScheduledTask(display.workflowId)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E6EB] bg-white px-3 py-1.5 text-[12px] font-medium text-[#1D2129] transition-colors hover:border-[#FFD7A3] hover:bg-[#FFFBF5]"
+                  >
+                    <Clock className="h-3.5 w-3.5 text-[#FF6F00]" />
+                    创建定时任务
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}

@@ -117,16 +117,42 @@ export async function searchWorkflowTemplates(
 
 // ── 2. Get startup schema ───────────────────────────────────────
 
+const startupSchemaCache = new Map<string, StartupSchemaResponse>();
+const startupSchemaInflight = new Map<string, Promise<StartupSchemaResponse>>();
+
+/** Clear cached startup schemas (tests or forced refresh). */
+export function clearStartupSchemaCache(templateId?: string): void {
+  if (templateId) {
+    startupSchemaCache.delete(templateId);
+    startupSchemaInflight.delete(templateId);
+    return;
+  }
+  startupSchemaCache.clear();
+  startupSchemaInflight.clear();
+}
+
 export async function getStartupSchema(templateId: string): Promise<StartupSchemaResponse> {
-  
-  const data = await unwrap(
+  const cached = startupSchemaCache.get(templateId);
+  if (cached) return cached;
+
+  const inflight = startupSchemaInflight.get(templateId);
+  if (inflight) return inflight;
+
+  const promise = unwrap(
     hostApiFetch<ApiResponse<StartupSchemaResponse>>(`/agent/v1/workflow-templates/${templateId}/startup-schema`, {
       headers: authHeaders(),
     }),
-  );
-  
-  
-  return data;
+  ).then((data) => {
+    startupSchemaCache.set(templateId, data);
+    startupSchemaInflight.delete(templateId);
+    return data;
+  }).catch((err) => {
+    startupSchemaInflight.delete(templateId);
+    throw err;
+  });
+
+  startupSchemaInflight.set(templateId, promise);
+  return promise;
 }
 
 // ── 3. Create workflow ──────────────────────────────────────────

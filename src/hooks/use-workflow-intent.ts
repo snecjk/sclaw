@@ -101,7 +101,7 @@ export function isReExecutionIntent(text: string): boolean {
   const trimmed = text.trim();
   if (SHORT_RERUN_PATTERN.test(trimmed)) return true;
   const reExecPatterns =
-    /(?:执行刚才的|再跑一遍|再执行(?:一下|一次)?|重新执行|用上次参数|继续执行)|(?:运行|执行|启动)这个(?:工作流|workflow)/i;
+    /(?:执行刚才的|再(?:来)?(?:帮我)?(?:执行|跑|运行|启动)(?:一下|下|一次)?|重新执行|用上次参数|继续执行)|(?:运行|执行|启动)这个(?:工作流|workflow)/i;
   return reExecPatterns.test(trimmed);
 }
 

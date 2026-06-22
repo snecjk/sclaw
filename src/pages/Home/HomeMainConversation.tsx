@@ -17,6 +17,8 @@ import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { cn } from '@/lib/utils';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
+import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
+import { CronTaskCreateModal } from '@/pages/Cron/components/CronTaskCreateModal';
 
 /**
  * Main-agent conversation thread on the home route (replaces the old `/chat` welcome + messages UI).
@@ -227,6 +229,14 @@ export function HomeMainConversation({ className }: { className?: string }) {
     workflowError,
   } = useChatPreviewPanel(allMessagesForPreview);
 
+  const {
+    open: workflowCronModalOpen,
+    initialValues: workflowCronInitialValues,
+    openForWorkflow: openWorkflowCronTaskModal,
+    close: closeWorkflowCronTaskModal,
+    handleSave: handleWorkflowCronTaskSave,
+  } = useWorkflowCronTaskModal();
+
   // ── Resizable panel logic ──
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -288,6 +298,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
   );
 
   return (
+    <>
     <div className={cn('-mt-4 relative flex min-h-0 flex-1', className)}>
       {/* Left: Chat area */}
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -338,6 +349,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
                       activeMessageId={activeSearchMatch?.id ?? null}
                       onPreviewFile={openArtifactPreview}
                       onViewWorkflow={openWorkflowPreview}
+                      onCreateScheduledTask={openWorkflowCronTaskModal}
                     />
                   );
                 }
@@ -350,6 +362,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
                     isSearchActive={!!item.message.id && item.message.id === activeSearchMatch?.id}
                     onPreviewFile={openArtifactPreview}
                     onViewWorkflow={openWorkflowPreview}
+                    onCreateScheduledTask={openWorkflowCronTaskModal}
                   />
                 );
               })}
@@ -365,6 +378,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={openArtifactPreview}
                   onViewWorkflow={openWorkflowPreview}
+                  onCreateScheduledTask={openWorkflowCronTaskModal}
                 />
               ) : null}
             </>
@@ -481,5 +495,12 @@ export function HomeMainConversation({ className }: { className?: string }) {
       </button>
     )}
   </div>
+  <CronTaskCreateModal
+    open={workflowCronModalOpen}
+    onClose={closeWorkflowCronTaskModal}
+    onSave={handleWorkflowCronTaskSave}
+    initialValues={workflowCronInitialValues}
+  />
+  </>
   );
 }

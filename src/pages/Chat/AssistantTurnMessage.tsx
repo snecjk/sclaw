@@ -2,12 +2,13 @@ import { memo, useMemo } from 'react';
 import { Sparkles } from 'lucide-react';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { ChatMessage } from './ChatMessage';
+import { appendWorkflowCardBlockToMessage } from '@/lib/workflow-card-injection';
 import { mergeThinkingTimelines, pickAssistantReplyMessage } from './chat-display';
 import {
   extractDingTalkSentPreviews,
   stripEchoedDingTalkSentBodiesFromAssistantReply,
 } from '../../../shared/dingtalk-sent-display';
-import { extractAtMentionDisplayNames, extractRawMessageText, extractText } from './message-utils';
+import { extractAtMentionDisplayNames, extractRawMessageText, extractText, extractWorkflowCard, findLatestWorkflowCardInMessages } from './message-utils';
 import { DingTalkSentPreview } from './DingTalkSentPreview';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
 
@@ -38,6 +39,7 @@ interface AssistantTurnMessageProps {
   activeStream?: ActiveTurnStream | null;
   onPreviewFile?: (file: AttachedFileMeta) => void;
   onViewWorkflow?: (workflowId: string) => void;
+  onCreateScheduledTask?: (workflowId: string) => void;
   onEditMessage?: (text: string) => void;
 }
 
@@ -51,6 +53,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   activeStream = null,
   onPreviewFile,
   onViewWorkflow,
+  onCreateScheduledTask,
   onEditMessage,
 }: AssistantTurnMessageProps) {
   const streamSources = useMemo(() => {
@@ -134,7 +137,25 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     ? extractText(replyDisplayMessage).trim().length > 0
     : false;
 
-  if (!showThinkingPanel && !replyDisplayHasText && !hasDingTalkSentPreview) return null;
+  const chatDisplayMessage = useMemo(() => {
+    if (!replyDisplayMessage) return null;
+    if (extractWorkflowCard(replyDisplayMessage)) return replyDisplayMessage;
+    const card = findLatestWorkflowCardInMessages(turnMessages);
+    if (!card) return replyDisplayMessage;
+    return appendWorkflowCardBlockToMessage(
+      replyDisplayMessage,
+      card.runId,
+      card.templateName,
+    );
+  }, [replyDisplayMessage, turnMessages]);
+
+  const chatDisplayHasWorkflowCard = !!(
+    chatDisplayMessage && extractWorkflowCard(chatDisplayMessage)
+  );
+
+  if (!showThinkingPanel && !replyDisplayHasText && !hasDingTalkSentPreview && !chatDisplayHasWorkflowCard) {
+    return null;
+  }
 
   const avatar = (
     <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,#FFF5E6,#FFE8CC)] text-primary shadow-[0_8px_20px_rgba(255,111,0,0.12)]">
@@ -142,7 +163,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     </div>
   );
 
-  if (replyDisplayHasText && replyDisplayMessage) {
+  if ((replyDisplayHasText || chatDisplayHasWorkflowCard) && chatDisplayMessage) {
     return (
       <div className="group flex flex-row gap-3" data-chat-message-role="assistant">
         {avatar}
@@ -160,14 +181,15 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
             <DingTalkSentPreview previews={dingTalkSentPreviews} />
           ) : null}
           <ChatMessage
-            message={replyDisplayMessage}
+            message={chatDisplayMessage}
             showThinking={false}
-            isSearchMatch={!!replyDisplayMessage.id && !!matchedMessageIds?.has(replyDisplayMessage.id)}
-            isSearchActive={!!replyDisplayMessage.id && replyDisplayMessage.id === activeMessageId}
+            isSearchMatch={!!chatDisplayMessage.id && !!matchedMessageIds?.has(chatDisplayMessage.id)}
+            isSearchActive={!!chatDisplayMessage.id && chatDisplayMessage.id === activeMessageId}
             isStreaming={isStreaming && replyDisplayHasText}
             streamingTools={[]}
             onPreviewFile={onPreviewFile}
             onViewWorkflow={onViewWorkflow}
+            onCreateScheduledTask={onCreateScheduledTask}
             onEditMessage={onEditMessage}
             hideAvatar
             hideThinkingPanel
