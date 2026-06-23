@@ -21,9 +21,9 @@ export const assistantChatCardBgStreaming = cn(
   'dark:bg-[linear-gradient(180deg,hsl(var(--muted)),hsl(var(--card)))]',
 );
 
-/** 任务子项聊天：与设计壳层 MainLayout 中 `<main>` 一致（浅色 `--sto-page-bg`，深色 `background`），避免与主区两侧 / 滚动条带叠色出缝 */
+/** 任务子项聊天：与省区 MainLayout 白卡片 {@link stoMainCardShellClass} 同色，避免输入框下方露出 gutter 灰 */
 export const stoTaskSubitemChatCanvasBg = cn(
-  'bg-[var(--sto-page-bg)]',
+  'bg-[var(--sto-main-card-bg)]',
   'dark:bg-background',
 );
 
@@ -53,10 +53,10 @@ export const glassSegmentTrack = cn(
 );
 
 /** 首页对话/消息阅读区最大宽（780px） */
-export const stoChatShellHomeClass = 'mx-auto w-full min-w-0 max-w-[var(--sto-chat-max-w-home)]';
+export const stoChatShellHomeClass = 'mx-auto w-full min-w-0 max-w-[780px]';
 
 /** 非首页对话/内容区最大宽（862px） */
-export const stoChatShellPageClass = 'mx-auto w-full min-w-0 max-w-[var(--sto-chat-max-w-page)]';
+export const stoChatShellPageClass = 'mx-auto w-full min-w-0 max-w-[862px]';
 
 /**
  * 非首页主内容区：最大 862px（与 {@link stoChatShellPageClass} 同源），窗口变宽时两侧留白。
@@ -145,6 +145,62 @@ export const stoChatShellPageColumnClass = cn(
   'flex min-h-0 flex-1 flex-col',
 );
 
+/** 三栏对话区卡片（MasterGo 矩形 2498：18px 圆角 + #F7F8FA + shadow-glow） */
+export const stoSplitChatCardClass = cn(
+  'min-h-0 min-w-0 overflow-hidden rounded-[18px] bg-[var(--sto-main-card-bg)] shadow-glow',
+);
+
+/** 三栏模式：左栏卡片外层（贴满分割面板；内层对话仍用 page/home 限宽壳） */
+export const stoSplitChatPaneCardWrapClass = cn(
+  stoSplitChatCardClass,
+  'flex min-h-0 min-w-0 flex-1 flex-col items-center',
+);
+
+export type StoChatColumnVariant = 'page' | 'home';
+
+/**
+ * 对话列壳：toolbar + 消息 + 输入同宽居中。
+ * 双栏 / 三栏均相同限宽（page 862px / home 780px），不随浏览器无限变宽。
+ */
+export function stoChatColumnShellClass(variant: StoChatColumnVariant): string {
+  return variant === 'home' ? stoChatShellHomeColumnClass : stoChatShellPageColumnClass;
+}
+
+/**
+ * 对话列完整 class：Chat / 任务子项 / 首页会话共用。
+ * 三栏时外层卡片 items-center，此处 self-center 防止 flex stretch 撑破 max-w。
+ */
+export function stoChatColumnClass(variant: StoChatColumnVariant, isSplit = false): string {
+  return cn(
+    stoChatColumnShellClass(variant),
+    'px-6',
+    isSplit && 'self-center',
+  );
+}
+
+/** 三栏左栏内容外包：split 时加卡片壳，否则仅占满 pane（均 items-center 居中限宽轨） */
+export function stoSplitChatPaneContentWrapClass(isSplit: boolean): string {
+  return isSplit
+    ? stoSplitChatPaneCardWrapClass
+    : 'flex min-h-0 min-w-0 flex-1 flex-col items-center';
+}
+
+/**
+ * 三栏模式外层 row（Chat / 任务子项 / 首页会话共用）。
+ * 配合 {@link stoMainCardBodySplitClass}（body px-0）：左/右 inset 与 ContentHeader 同一套 CSS 变量。
+ */
+export const stoSplitRowInsetsClass = cn(
+  'box-border gap-2 py-2',
+  'pl-[var(--sto-content-header-pad-start)]',
+  '-mr-[var(--sto-main-scrollbar-gutter)]',
+  'pr-[var(--sto-content-header-pad-end)]',
+);
+
+/** ParameterFormDock layout（与对话列 variant 一致） */
+export function stoParameterFormDockLayout(variant: StoChatColumnVariant): 'home' | 'page' {
+  return variant === 'home' ? 'home' : 'page';
+}
+
 /** Hero / 大输入复合框壳层（固定 780px 居中） */
 export const stoHeroInputShellClass =
   'mx-auto flex w-[var(--sto-hero-input-max-w)] max-w-full min-w-0 flex-col';
@@ -156,16 +212,177 @@ export const stoSplitChatPaneClass = 'relative flex min-h-0 min-w-[var(--sto-spl
 export const stoSplitPreviewPaneClass =
   'flex h-full min-h-0 max-w-[var(--sto-split-max-preview)] shrink-0 flex-col overflow-hidden [contain:inline-size]';
 
-/** 三栏预览区分割：预览区宽度占容器百分比，限制在 30%–70% */
-export function clampPreviewPanelPercent(containerWidth: number, previewPx: number): number {
-  if (containerWidth <= 0) return 70;
-  const pct = (previewPx / containerWidth) * 100;
-  return Math.max(30, Math.min(70, pct));
+/** 三栏预览区产物内容壳（描边在 tab 行下方，不含 tab） */
+export const stoPreviewContentShellClass = cn(
+  'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[18px] border border-border',
+  'bg-[var(--sto-main-card-bg)] shadow-glow',
+);
+
+/** @deprecated 整卡描边已拆至 {@link stoPreviewContentShellClass}，tab 行在外 */
+export const stoSplitPreviewCardClass = stoPreviewContentShellClass;
+
+/** @deprecated tab 已迁至 ContentHeader */
+export const stoPreviewTabRowClass = cn(
+  'flex shrink-0 items-center gap-2 pb-2 pl-4 pr-4 pt-0',
+);
+
+/** 预览产物 tab pill（选中 #E5E6EB / 未选 #F5F6F7） */
+export function stoPreviewArtifactTabClass(isActive: boolean): string {
+  return cn(
+    'inline-flex h-[30px] max-w-[143px] shrink-0 items-center gap-1 rounded-[10px] px-2 text-sm leading-[18px] transition-colors duration-fast',
+    isActive
+      ? 'bg-border text-foreground'
+      : 'bg-[#F5F6F7] text-foreground hover:bg-muted',
+  );
 }
 
-/** 全高页面壳层：TitleBar + main 上下内距 */
+/** 预览操作行（标题 + 元信息 + 图标按钮） */
+export const stoPreviewActionRowClass = cn(
+  'flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3',
+);
+
+/** 预览操作行图标按钮（30×30，圆角 7px） */
+export const stoPreviewActionButtonClass = cn(
+  'inline-flex h-[30px] w-[30px] items-center justify-center rounded-[7px] text-muted-foreground transition-colors duration-fast',
+  'hover:bg-black/[0.04] hover:text-foreground',
+);
+
+/** 三栏拖拽分隔条 */
+export const stoSplitResizerClass = cn(
+  'relative z-20 flex h-full w-1 shrink-0 cursor-col-resize items-center justify-center bg-transparent transition-colors duration-fast',
+  'hover:bg-primary/20',
+);
+
+export const stoSplitResizerActiveClass = 'bg-primary/40';
+
+/** 三栏预览区宽度占比下限 / 默认 / 上限（对话区对应 70%–50%–30%） */
+export const STO_PREVIEW_SPLIT_MIN = 30;
+export const STO_PREVIEW_SPLIT_DEFAULT = 50;
+export const STO_PREVIEW_SPLIT_MAX = 70;
+
+/** 三栏预览区分割：预览区宽度占容器百分比，限制在 30%–70% */
+export function clampPreviewPanelPercent(containerWidth: number, previewPx: number): number {
+  if (containerWidth <= 0) return STO_PREVIEW_SPLIT_DEFAULT;
+  const pct = (previewPx / containerWidth) * 100;
+  return Math.max(STO_PREVIEW_SPLIT_MIN, Math.min(STO_PREVIEW_SPLIT_MAX, pct));
+}
+
+/** 全高页面壳层：TitleBar + main 上下内距（省区壳内 --sto-header-h 为 0） */
 export const stoPageFillBelowTitleClass =
   'h-[calc(100dvh-var(--sto-header-h,40px)-var(--sto-main-pad-y-total,40px))]';
+
+/** 省区 AppShell：chrome 下方侧栏 + 卡片行 */
+export const stoAppShellBodyClass =
+  'sto-app-shell-body flex min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-hidden';
+
+/** 省区主内容白卡片外层（展开：上/左/下 8px；收起：由 body 四边 8px，此处无 padding） */
+export function stoMainCardWrapClass(isSidebarCollapsed: boolean): string {
+  return cn(
+    'sto-main-card-wrap flex min-h-0 min-w-0 flex-1 flex-col box-border',
+    isSidebarCollapsed ? 'p-0' : 'pt-2 pl-2 pb-2',
+  );
+}
+
+/** 省区壳层 body：收起态四边 8px gutter */
+export function stoAppShellBodyProvincialClass(isSidebarCollapsed: boolean): string {
+  return cn(
+    stoAppShellBodyClass,
+    'no-drag box-border',
+    isSidebarCollapsed && 'p-2',
+  );
+}
+
+/** 省区主内容白卡片：18px 圆角、无描边、MasterGo drop shadow */
+export const stoMainCardShellClass = cn(
+  'min-h-0 min-w-0 flex-1 overflow-hidden border-0',
+  'bg-[var(--sto-main-card-bg)] shadow-[var(--sto-main-card-shadow)]',
+  'rounded-[var(--sto-main-card-radius)]',
+  '[overflow-anchor:none]',
+);
+
+/** 省区主卡片内容槽（标题栏下方滚动区；顶内距由 ContentHeader 承担） */
+export const stoMainCardBodyClass = cn(
+  'min-h-0 min-w-0 flex-1 overflow-auto overscroll-y-contain',
+  'px-[var(--sto-content-pad-x)] pb-5 pt-0 [scrollbar-gutter:stable]',
+);
+
+/** 三栏预览展开时：去掉 body 水平 px，避免与 ContentHeader / split row 双重 inset */
+export const stoMainCardBodySplitClass = 'px-0';
+
+/**
+ * 内容区 52px 全局标题栏（MasterGo 组 7046）。
+ * 单层 52px 白条：drag-region，双击最大化由系统处理。
+ */
+export const contentHeaderBarClass = cn(
+  'drag-region flex shrink-0 items-center justify-between gap-2 overflow-hidden',
+  'box-border h-[var(--sto-content-header-h,52px)] min-h-[var(--sto-content-header-h,52px)] max-h-[var(--sto-content-header-h,52px)]',
+  'rounded-t-[var(--sto-main-card-radius)] bg-[var(--sto-main-card-bg)]',
+  'pl-[var(--sto-content-header-pad-start)] pr-[var(--sto-content-header-pad-end)]',
+);
+
+/** @deprecated 合并为 {@link contentHeaderBarClass} */
+export const contentHeaderShellClass = contentHeaderBarClass;
+
+/** @deprecated 合并为 {@link contentHeaderBarClass} */
+export const contentHeaderInnerClass = contentHeaderBarClass;
+
+/** 标题栏左侧：会话标题 + 侧栏展开钮（与三栏容器左缘对齐，不被 previewTabs 挤没） */
+export const contentHeaderTitleGroupClass = cn(
+  'flex min-w-[120px] max-w-[min(34vw,280px)] shrink-0 items-center gap-2 overflow-hidden',
+);
+
+/** 三栏 header 左区（对话列宽）：侧栏钮 + 会话 tab，可横滑 */
+export const contentHeaderSplitChatZoneClass = cn(
+  'no-drag flex min-w-0 items-center gap-2 overflow-x-auto overflow-y-hidden',
+);
+
+/** 三栏 header 右区（预览列宽）：产物 tab + 操作 icon，与下方预览描边框对齐 */
+export const contentHeaderSplitPreviewZoneClass = cn(
+  'no-drag flex min-w-0 items-center gap-1 overflow-hidden',
+);
+
+/** 三栏 ContentHeader：grid 列宽与 split row（1fr + resizer + preview%）一致 */
+export const contentHeaderSplitBarClass = cn(
+  contentHeaderBarClass,
+  'grid items-center gap-x-2',
+  '[grid-template-columns:minmax(0,1fr)_4px_var(--sto-split-preview-col,50%)]',
+);
+
+/** 标题栏会话标题（纯文本 fallback） */
+export const contentHeaderTitleClass =
+  'min-w-0 truncate text-sm font-medium leading-5 text-foreground';
+
+/** 标题栏会话 chip（MasterGo 组 7046：#F5F6F7 pill + truncate + 关闭） */
+export const contentHeaderSessionChipClass = cn(
+  'inline-flex h-[30px] min-w-0 max-w-full items-center gap-1 rounded-[10px] bg-[#F5F6F7] pl-2.5 pr-1',
+);
+
+/** 标题栏会话 chip 文案 */
+export const contentHeaderSessionChipLabelClass =
+  'min-w-0 flex-1 truncate text-sm font-medium leading-[18px] text-foreground';
+
+/** 标题栏会话 chip 关闭钮 */
+export const contentHeaderSessionChipCloseClass = cn(
+  'no-drag flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground',
+  'transition-colors duration-fast hover:bg-black/[0.04] hover:text-foreground',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+);
+
+/** 标题栏右侧 icon 按钮（16×16 icon，Grey-9 默认） */
+export const contentHeaderActionBtnClass = cn(
+  'no-drag flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
+  'text-[#4E5969] transition-colors duration-fast',
+  'hover:bg-black/[0.04] hover:text-foreground',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+);
+
+/** 标题栏 icon 激活态（深度思考开、搜索开等） */
+export const contentHeaderActionBtnActiveClass = 'bg-primary/10 text-primary';
+
+/** ContentHeader 预览列内产物 tab 行（占预览区剩余宽，左对齐） */
+export const contentHeaderPreviewTabsWrapClass = cn(
+  'flex min-w-0 flex-1 items-center gap-2 overflow-x-auto',
+);
 
 /**
  * 工作流 Hero 输入复合框（MasterGo 2:7326）：白底 + Grey-4 描边 + 22px 圆角 + 轻阴影。
@@ -466,6 +683,44 @@ export const workflowDetailModalSecondaryActionClass = cn(
 export const workflowDetailModalMoreActionClass = cn(
   'order-1 h-8 w-8 rounded-xl border-border px-0',
   'transition-colors duration-fast hover:bg-black/[0.02]',
+);
+
+/**
+ * MasterGo 148:046134 — 工作流分组参数摘要外框（对话流内助手 A）
+ * 圆角 12 / Grey-4 描边 / 内距 14×12；组间距 8、组内标题-内容间距 2。
+ */
+export const workflowParamsSummaryCardClass =
+  'w-full rounded-xl border border-border px-[14px] py-3';
+
+export const workflowParamsSummaryGroupsClass = 'flex w-full flex-col gap-2';
+
+export const workflowParamsSummaryGroupClass = 'flex flex-col gap-0.5';
+
+export const workflowParamsSummaryGroupTitleClass =
+  'text-[13px] leading-5 font-normal text-foreground';
+
+export const workflowParamsSummaryGroupContentClass =
+  'text-[13px] leading-5 font-normal text-muted-foreground whitespace-pre-wrap break-words';
+
+/**
+ * 工具调用块外层（无描边；标题行在外，入参区单独套 {@link chatToolCallContentShellClass}）
+ */
+export const chatToolCallShellClass = 'flex w-full flex-col gap-1.5';
+
+/** 工具调用标题行（与 ParamsConfirmedHeader / 参数分组标题同级，在描边容器外） */
+export const chatToolCallHeaderBtnClass = cn(
+  'flex items-center gap-1 text-left',
+  'text-[13px] leading-5 font-normal text-muted-foreground transition-colors duration-150 hover:text-foreground',
+  'disabled:cursor-default disabled:hover:text-muted-foreground',
+);
+
+/** 工具入参展开区外框（与 {@link workflowParamsSummaryCardClass} / 数据来源一致） */
+export const chatToolCallContentShellClass = workflowParamsSummaryCardClass;
+
+/** 工具入参正文（与 {@link workflowParamsSummaryGroupContentClass} 一致，保留等宽字体便于读 JSON） */
+export const chatToolCallInputPreClass = cn(
+  workflowParamsSummaryGroupContentClass,
+  'm-0 max-h-[min(42vh,400px)] overflow-y-auto font-mono text-xs leading-5',
 );
 
 /**

@@ -71,6 +71,7 @@ export async function applyWorkflowRunStarted(
   if (presentation === 'local_turn') {
     appendWorkflowStartedLocalTurn({
       userText: resolvedUserText,
+      templateId: wfRecord?.templateId,
       templateName,
       runId,
       workflowId,

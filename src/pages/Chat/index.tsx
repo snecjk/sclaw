@@ -5,6 +5,7 @@
  * are in the toolbar; messages render with markdown + streaming.
  */
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowDown, Bot, Cpu, Loader2, Orbit, Sparkles, Workflow } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useChatStore, type RawMessage } from '@/stores/chat';
@@ -16,9 +17,10 @@ import { ChatMessage } from './ChatMessage';
 import { AssistantTurnMessage } from './AssistantTurnMessage';
 import { useChatDisplay } from './use-chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
-import { ChatToolbar } from './ChatToolbar';
-import { ChatSearchBar } from './ChatSearchBar';
+import { ChatContentHeaderActions } from './ChatSearchBar';
+import { ChatPreviewHeaderTabs } from './ChatPreviewHeaderTabs';
 import { PendingQueuePanel } from './PendingQueuePanel';
+import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
 import { ChatPreviewPanel } from './ChatPreviewPanel';
 import { extractText } from './message-utils';
 import { useMessageQueueStore, createAutoSendWatcher } from '@/stores/message-queue';
@@ -26,15 +28,31 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { cn } from '@/lib/utils';
+import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
+import {
+  clampPreviewPanelPercent,
+  STO_PREVIEW_SPLIT_MAX,
+  STO_PREVIEW_SPLIT_MIN,
+  stoParameterFormDockLayout,
+  stoSplitPreviewPaneClass,
+  stoSplitResizerActiveClass,
+  stoSplitResizerClass,
+  stoSplitRowInsetsClass,
+} from '@/lib/surfaces';
+import { useSettingsStore } from '@/stores/settings';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { useBuiltinToolListener } from '@/hooks/use-builtin-tool-listener';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
 import { CronTaskCreateModal } from '@/pages/Cron/components/CronTaskCreateModal';
+import { useContentHeader } from '@/components/layout/content-header-context';
+import { resolveSessionLabel } from '@/lib/session-label';
+import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
 
 export function Chat() {
   useBuiltinToolListener();
+  const navigate = useNavigate();
   const { t } = useTranslation('chat');
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
@@ -47,6 +65,9 @@ export function Chat() {
   const sending = useChatStore((s) => s.sending);
   const error = useChatStore((s) => s.error);
   const showThinking = useChatStore((s) => s.showThinking);
+  const toggleThinking = useChatStore((s) => s.toggleThinking);
+  const refresh = useChatStore((s) => s.refresh);
+  const sessionLabels = useChatStore((s) => s.sessionLabels);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
@@ -57,6 +78,7 @@ export function Chat() {
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
+  const switchSession = useChatStore((s) => s.switchSession);
 
   // ── Message Queue ──
   const queue = useMessageQueueStore((s) => s.getQueue(currentSessionKey));
@@ -67,7 +89,8 @@ export function Chat() {
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [splitting, setSplitting] = useState(false);
-  const [previewPanelWidth, setPreviewPanelWidth] = useState(480);
+  const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
+  const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
   const [isResizing, setIsResizing] = useState(false);
   const [editDraft, setEditDraft] = useState<{ text: string; version: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -342,9 +365,10 @@ export function Chat() {
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
-    const startWidth = previewPanelRef.current?.offsetWidth ?? previewPanelWidth;
+    const startWidth = previewPanelRef.current?.offsetWidth ?? 0;
+    const containerWidth = previewPanelRef.current?.parentElement?.clientWidth ?? window.innerWidth;
     let rafId: number | null = null;
-    let pendingWidth = startWidth;
+    let pendingWidth = startWidth || containerWidth * (previewPanelPercent / 100);
 
     setIsResizing(true);
     document.body.style.userSelect = 'none';
@@ -363,7 +387,11 @@ export function Chat() {
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = startX - moveEvent.clientX;
-      pendingWidth = Math.max(320, Math.min(900, startWidth + delta));
+      const width = previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth;
+      pendingWidth = Math.max(
+        width * (STO_PREVIEW_SPLIT_MIN / 100),
+        Math.min(width * (STO_PREVIEW_SPLIT_MAX / 100), startWidth + delta),
+      );
       if (rafId === null) {
         rafId = requestAnimationFrame(applyWidth);
       }
@@ -378,7 +406,10 @@ export function Chat() {
         cancelAnimationFrame(rafId);
         rafId = null;
       }
-      setPreviewPanelWidth(pendingWidth);
+      setPreviewSplitPercent(clampPreviewPanelPercent(
+        previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth,
+        pendingWidth,
+      ));
       setIsResizing(false);
     };
 
@@ -393,7 +424,7 @@ export function Chat() {
     return () => {
       cleanup();
     };
-  }, [previewPanelWidth]);
+  }, [previewPanelPercent, setPreviewSplitPercent]);
 
   // Collect previewable files from messages and streaming message
   const allMessagesForPreview = useMemo(() => {
@@ -406,22 +437,21 @@ export function Chat() {
 
   const {
     showPreviewPanel,
-    setShowPreviewPanel,
     activePreviewFilePath,
     setActivePreviewFilePath,
-    previewActiveTab,
-    setPreviewActiveTab,
     previewableFiles,
     canShowPreviewPanel,
     openArtifactPreview,
-    openWorkflowPreview,
+    openPreviewPanel,
     closePreviewPanel,
-    showWorkflowTab,
+    dismissPreviewFile,
+    showEditWorkflow,
     workflowId: sessionWorkflowId,
-    workflowDetail,
-    workflowLoading,
-    workflowError,
-  } = useChatPreviewPanel(allMessagesForPreview);
+  } = useChatPreviewPanel(allMessagesForPreview, currentSessionKey);
+
+  const openWorkflowPreview = useCallback((workflowId: string) => {
+    navigate(`/workflow/${encodeURIComponent(workflowId)}`);
+  }, [navigate]);
 
   const {
     open: workflowCronModalOpen,
@@ -430,6 +460,109 @@ export function Chat() {
     close: closeWorkflowCronTaskModal,
     handleSave: handleWorkflowCronTaskSave,
   } = useWorkflowCronTaskModal();
+
+  const sessionTitle = useMemo(
+    () => resolveSessionLabel({
+      key: currentSessionKey,
+      displayName: currentSession?.displayName,
+      label: currentSession?.label,
+      sessionLabels,
+      t,
+    }),
+    [currentSessionKey, currentSession?.displayName, currentSession?.label, sessionLabels, t],
+  );
+
+  const headerActions = useMemo(
+    () => (
+      <ChatContentHeaderActions
+        canShowPreviewPanel={canShowPreviewPanel}
+        isPreviewPanelOpen={showPreviewPanel}
+        onTogglePreview={() => {
+          if (showPreviewPanel) closePreviewPanel();
+          else openPreviewPanel();
+        }}
+        showThinking={showThinking}
+        onToggleThinking={toggleThinking}
+        loading={loading}
+        onRefresh={refresh}
+        searchProps={{
+          isOpen: isSearchOpen,
+          onToggle: handleSearchToggle,
+          value: searchQuery,
+          onChange: (value) => {
+            setSearchQuery(value);
+            if (!isSearchOpen) {
+              setIsSearchOpen(true);
+            }
+          },
+          onNext: handleSearchNext,
+          onPrevious: handleSearchPrevious,
+          onClear: handleSearchClear,
+          resultCount: searchMatches.length,
+          activeIndex: searchMatches.length > 0 ? activeSearchIndex : 0,
+        }}
+      />
+    ),
+    [
+      canShowPreviewPanel,
+      showPreviewPanel,
+      closePreviewPanel,
+      openPreviewPanel,
+      showThinking,
+      toggleThinking,
+      loading,
+      refresh,
+      isSearchOpen,
+      handleSearchToggle,
+      searchQuery,
+      handleSearchNext,
+      handleSearchPrevious,
+      handleSearchClear,
+      searchMatches.length,
+      activeSearchIndex,
+    ],
+  );
+
+  const previewHeaderTabs = useMemo(
+    () => (
+      showPreviewPanel && (previewableFiles.length > 0 || showEditWorkflow) ? (
+        <ChatPreviewHeaderTabs
+          files={previewableFiles}
+          activeFilePath={activePreviewFilePath}
+          onSelectFile={setActivePreviewFilePath}
+          onDismissFile={dismissPreviewFile}
+          showEditWorkflow={showEditWorkflow}
+          workflowId={sessionWorkflowId}
+          onEditWorkflow={openWorkflowPreview}
+        />
+      ) : null
+    ),
+    [
+      showPreviewPanel,
+      previewableFiles,
+      activePreviewFilePath,
+      setActivePreviewFilePath,
+      dismissPreviewFile,
+      showEditWorkflow,
+      sessionWorkflowId,
+      openWorkflowPreview,
+    ],
+  );
+
+  const handleCloseSession = useCallback(() => {
+    closePreviewPanel();
+    switchSession(DEFAULT_SESSION_KEY);
+  }, [closePreviewPanel, switchSession]);
+
+  useContentHeader({
+    title: sessionTitle,
+    previewTabs: previewHeaderTabs,
+    actions: headerActions,
+    isSplitLayout: canShowPreviewPanel && showPreviewPanel,
+    onCloseSession: handleCloseSession,
+  });
+
+  const isSplitChatLayout = canShowPreviewPanel && showPreviewPanel;
 
   // Auto-send watcher: sends queued messages one-by-one when AI finishes responding
   useEffect(() => {
@@ -440,11 +573,13 @@ export function Chat() {
   return (
     <>
     <div
-      className={cn('relative -m-6 flex min-h-0 min-w-0 overflow-x-hidden transition-colors duration-500')}
-      style={{ height: 'calc(100vh - 2.5rem)' }}
+      className={cn(
+        'relative flex h-full min-h-0 min-w-0 flex-1 flex-row overflow-x-hidden transition-colors duration-500',
+        canShowPreviewPanel && showPreviewPanel && stoSplitRowInsetsClass,
+      )}
     >
       {/* Left: Chat area */}
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      <ChatConversationColumn variant="page" isSplitLayout={isSplitChatLayout}>
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,140,0,0.06),_transparent_30%),radial-gradient(circle_at_80%_20%,_rgba(229,230,235,0.35),_transparent_26%)]" />
         <div className="absolute inset-0 neural-grid opacity-20" />
@@ -452,36 +587,12 @@ export function Chat() {
         <div className="absolute right-8 top-20 h-48 w-48 rounded-full bg-[rgba(255,111,0,0.06)] blur-[110px]" />
       </div>
 
-      {/* Toolbar */}
-      <div className="relative z-10 flex shrink-0 items-center justify-between gap-3 px-6 py-2">
-        <ChatToolbar
-          trailingContent={(
-            <ChatSearchBar
-              isOpen={isSearchOpen}
-              onToggle={handleSearchToggle}
-              value={searchQuery}
-              onChange={(value) => {
-                setSearchQuery(value);
-                if (!isSearchOpen) {
-                  setIsSearchOpen(true);
-                }
-              }}
-              onNext={handleSearchNext}
-              onPrevious={handleSearchPrevious}
-              onClear={handleSearchClear}
-              resultCount={searchMatches.length}
-              activeIndex={searchMatches.length > 0 ? activeSearchIndex : 0}
-            />
-          )}
-        />
-      </div>
-
       {/* Messages Area */}
       <div
         ref={scrollRef}
-        className="relative z-10 flex-1 overflow-y-auto overscroll-y-contain px-6 py-4 [scrollbar-gutter:stable]"
+        className="relative z-10 flex-1 overflow-y-auto overscroll-y-contain py-4 [scrollbar-gutter:stable]"
       >
-        <div ref={contentRef} className="max-w-5xl mx-auto space-y-4">
+        <div ref={contentRef} className="space-y-4">
           {isEmpty ? (
             <WelcomeScreen />
           ) : (
@@ -542,8 +653,8 @@ export function Chat() {
 
       {/* Error bar */}
       {error && (
-        <div className="px-6 py-2 bg-destructive/10 border-t border-destructive/20">
-          <div className="max-w-5xl mx-auto flex items-center justify-between">
+        <div className="bg-destructive/10 border-t border-destructive/20 py-2">
+          <div className="flex items-center justify-between">
             <p className="text-sm text-destructive flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
               {error}
@@ -561,11 +672,11 @@ export function Chat() {
       {/* Jump to latest — 仅在有提示时占位，高度贴齐按钮 */}
       <div
         className={cn(
-          'pointer-events-none shrink-0 overflow-hidden px-6',
+          'pointer-events-none shrink-0 overflow-hidden',
           showJumpToLatest ? 'py-0.5' : 'h-0 py-0',
         )}
       >
-        <div className="max-w-5xl mx-auto flex justify-center">
+        <div className="flex justify-center">
           <motion.button
             type="button"
             onClick={() => scrollToLatest('smooth')}
@@ -593,9 +704,9 @@ export function Chat() {
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="shrink-0 px-6"
+            className="shrink-0"
           >
-            <div className="max-w-5xl mx-auto flex items-center gap-2 rounded-lg border border-border bg-white/50 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm dark:bg-white/[0.06]">
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-white/50 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm dark:bg-white/[0.06]">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
               <span>{t('splitting')}</span>
             </div>
@@ -611,6 +722,11 @@ export function Chat() {
         onMoveDown={queueMoveDown}
       />
 
+      {/* Parameter form dock — 任务二：吸附输入框上方固定浮层 */}
+      <div className="relative z-10 w-full shrink-0">
+        <ParameterFormDock layout={stoParameterFormDockLayout('page')} />
+      </div>
+
       {/* Input Area */}
       <ChatInput
         onSend={handleSend}
@@ -624,6 +740,13 @@ export function Chat() {
         statusTone={composerStatusTone}
         editDraft={editDraft}
         onEditDraftApplied={handleEditDraftApplied}
+        composerLayout="home"
+        toolbarInlineSelectors={(
+          <>
+            <ChatEngineSelector variant="inline" />
+            <ChatModelSelector variant="inline" />
+          </>
+        )}
       />
 
       {/* Transparent loading overlay */}
@@ -634,18 +757,18 @@ export function Chat() {
           </div>
         </div>
       )}
-      </div>
+      </ChatConversationColumn>
       {/* Resizer */}
       {canShowPreviewPanel && showPreviewPanel && (
         <div
           onMouseDown={startResize}
           className={cn(
-            'relative z-20 flex h-full shrink-0 cursor-col-resize items-center justify-center transition-colors',
-            isResizing ? 'bg-primary/50 w-[5px]' : 'bg-border/50 w-[5px] hover:bg-primary/40',
+            stoSplitResizerClass,
+            isResizing && stoSplitResizerActiveClass,
           )}
           style={{ cursor: isResizing ? 'col-resize' : undefined }}
         >
-          <div className={cn('h-8 w-[2px] rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
+          <div className={cn('h-8 w-0.5 rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
         </div>
       )}
 
@@ -660,41 +783,17 @@ export function Chat() {
             exit={{ opacity: 0, x: 40 }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
             // className="shrink-0 overflow-hidden"
-            style={{ width: previewPanelWidth }}
-            className="flex h-full min-h-0 shrink-0 flex-col overflow-hidden [contain:inline-size]"
+            style={{ width: `${previewPanelPercent}%` }}
+            className={stoSplitPreviewPaneClass}
           >
             <ChatPreviewPanel
               files={previewableFiles}
               activeFilePath={activePreviewFilePath}
-              onSelectFile={setActivePreviewFilePath}
-              onClose={closePreviewPanel}
               className="h-full w-full"
-              showWorkflowTab={showWorkflowTab}
-              workflowId={sessionWorkflowId}
-              workflowDetail={workflowDetail}
-              workflowLoading={workflowLoading}
-              workflowError={workflowError}
-              activeTab={previewActiveTab}
-              onActiveTabChange={setPreviewActiveTab}
             />
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Floating toggle button when panel is hidden but files exist */}
-      {canShowPreviewPanel && !showPreviewPanel && (
-        <button
-          onClick={() => setShowPreviewPanel(true)}
-          className="absolute right-4 top-4 z-20 inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-white/60 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white/80 dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
-        >
-          <span>{showWorkflowTab ? '预览' : '预览产物'}</span>
-          {previewableFiles.length > 0 && (
-            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] text-primary">
-              {previewableFiles.length}
-            </span>
-          )}
-        </button>
-      )}
     </div>
     <CronTaskCreateModal
       open={workflowCronModalOpen}

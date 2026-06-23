@@ -22,6 +22,12 @@ import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
 import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay, WORKFLOW_COMPLETE_TAG } from '@/lib/workflow-context';
 import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
 import {
+  isWorkflowGuidanceAssistantText,
+  isWorkflowParameterIntroText,
+  isWorkflowParamsSummaryText,
+  isWorkflowParamsUserText,
+} from '@/lib/workflow-form-utils';
+import {
   artifactToPreviewFile,
   extractPreviewableHttpUrls,
   inferMimeTypeFromUrl,
@@ -254,6 +260,106 @@ function rawMessageText(message: RawMessage): string {
 export function isHiddenWorkflowCompleteUserMessage(message: RawMessage): boolean {
   if (message.role !== 'user') return false;
   return rawMessageText(message).includes(WORKFLOW_COMPLETE_TAG);
+}
+
+function isAssistantMessageRole(role: unknown): boolean {
+  const normalized = typeof role === 'string' ? role.toLowerCase() : '';
+  return normalized === 'assistant' || normalized === '';
+}
+
+export function messageHasWorkflowCard(msg: RawMessage): boolean {
+  return Array.isArray(msg.content)
+    && (msg.content as ContentBlock[]).some((block) => block.type === 'workflow_card');
+}
+
+function messageHasParameterFormBlock(msg: RawMessage): boolean {
+  return Array.isArray(msg.content)
+    && (msg.content as ContentBlock[]).some((block) => block.type === 'parameter_form');
+}
+
+/** 工作流 intro / 分组参数摘要（与后续 workflow_card 执行卡分开展示） */
+export function isWorkflowPreambleAssistantMessage(msg: RawMessage): boolean {
+  if (!isAssistantMessageRole(msg.role)) return false;
+  const text = extractText(msg).trim();
+  if (isWorkflowParamsSummaryText(text)) return true;
+  if (isWorkflowGuidanceAssistantText(text)) return true;
+  if (isWorkflowParameterIntroText(text)) return true;
+  if (messageHasParameterFormBlock(msg)) return true;
+  return false;
+}
+
+/**
+ * 方案 A fallback：旧会话 intro 未 patch 时，从后续用户摘要取分组参数正文。
+ */
+export function findWorkflowParamsSummaryAfterIntro(
+  messages: RawMessage[],
+  introIndex: number,
+): string | null {
+  for (let i = introIndex + 1; i < messages.length; i += 1) {
+    const current = messages[i];
+    if (current.role === 'user' && isWorkflowParamsUserText(rawMessageText(current))) {
+      return rawMessageText(current);
+    }
+    if (isAssistantMessageRole(current.role) && messageHasWorkflowCard(current)) break;
+    if (current.role === 'user') break;
+  }
+  return null;
+}
+
+/** 隐藏已被 intro 承接的用户参数摘要（下一条为 workflow_card 助手 C）。 */
+export function isHiddenWorkflowParamsUserMessage(
+  message: RawMessage,
+  messages: RawMessage[],
+  index: number,
+): boolean {
+  if (message.role !== 'user') return false;
+  if (!isWorkflowParamsUserText(rawMessageText(message))) return false;
+
+  const next = messages[index + 1];
+  if (!next || !messageHasWorkflowCard(next)) return false;
+
+  for (let j = index - 1; j >= 0; j -= 1) {
+    const prior = messages[j];
+    if (prior.role === 'user') break;
+    if (!isAssistantMessageRole(prior.role)) continue;
+    const assistantText = rawMessageText(prior);
+    if (isWorkflowParamsSummaryText(assistantText)) return true;
+    if (isWorkflowParameterIntroText(assistantText)) return true;
+  }
+
+  return false;
+}
+
+/**
+ * 同一段连续助手消息内，仅保留最后一条工作流 preamble（去重流式重复 intro / 参数摘要）。
+ */
+export function isHiddenDuplicateWorkflowPreambleAssistantMessage(
+  message: RawMessage,
+  messages: RawMessage[],
+  index: number,
+): boolean {
+  if (!isWorkflowPreambleAssistantMessage(message)) return false;
+
+  for (let j = index + 1; j < messages.length; j += 1) {
+    const next = messages[j];
+    if (next.role === 'user') break;
+    if (messageHasWorkflowCard(next)) break;
+    if (!isAssistantMessageRole(next.role)) continue;
+    if (isWorkflowPreambleAssistantMessage(next)) return true;
+  }
+
+  const text = rawMessageText(message).trim();
+  if (!isWorkflowParamsSummaryText(text)) return false;
+
+  for (let j = index - 1; j >= 0; j -= 1) {
+    const prior = messages[j];
+    if (prior.role === 'user') break;
+    if (!isAssistantMessageRole(prior.role)) continue;
+    if (messageHasWorkflowCard(prior)) break;
+    if (rawMessageText(prior).trim() === text) return true;
+  }
+
+  return false;
 }
 
 type PendingWorkflowSnapshot = {

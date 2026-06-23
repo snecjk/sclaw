@@ -26,6 +26,19 @@ function extractWorkflowCards(messages: RawMessage[]): string[] {
   return runIds;
 }
 
+/** 仅保留当前会话消息里出现过的 workflow run，避免预览区串会话产物 */
+export function filterSessionWorkflowCardStates(
+  messages: RawMessage[],
+  workflowCardStates: Record<string, WorkflowExecutionState>,
+): Record<string, WorkflowExecutionState> {
+  const filtered: Record<string, WorkflowExecutionState> = {};
+  for (const runId of extractWorkflowCards(messages)) {
+    const state = workflowCardStates[runId];
+    if (state) filtered[runId] = state;
+  }
+  return filtered;
+}
+
 export function resolveSessionWorkflowId(
   sessionKey: string,
   messages: RawMessage[],

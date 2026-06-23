@@ -7,14 +7,17 @@ import { cn } from '@/lib/utils';
 import type { FormFieldOption } from '@/types/user-form';
 
 export type OptionCardMode = 'single' | 'multi' | 'display';
+export type OptionCardVariant = 'default' | 'chat-dock';
 
-interface OptionCardListProps {
+export interface OptionCardListProps {
   options: FormFieldOption[];
   mode: OptionCardMode;
   value: unknown;
   onChange: (value: unknown) => void;
   disabled?: boolean;
   selectionLabel?: string;
+  /** chat-dock：MasterGo 8:08038 / 8:07921 浮层选项卡样式 */
+  variant?: OptionCardVariant;
 }
 
 function isSelected(
@@ -37,7 +40,9 @@ export function OptionCardList({
   onChange,
   disabled,
   selectionLabel = '已选',
+  variant = 'default',
 }: OptionCardListProps) {
+  const isDock = variant === 'chat-dock';
   const isDisplay = mode === 'display' || disabled;
   const multiValues = mode === 'multi' && Array.isArray(value) ? (value as unknown[]) : [];
 
@@ -56,8 +61,8 @@ export function OptionCardList({
     .map((o) => o.label);
 
   return (
-    <div className="space-y-2.5">
-      <div className="space-y-2.5">
+    <div className={cn(isDock ? 'space-y-1' : 'space-y-2.5')}>
+      <div className={cn(isDock ? 'space-y-1' : 'space-y-2.5')}>
         {options.map((option, index) => {
           const selected = !isDisplay && isSelected(mode, option, value);
           const interactive = !isDisplay && !option.disabled;
@@ -76,31 +81,63 @@ export function OptionCardList({
                 }
               }}
               className={cn(
-                'w-full flex items-start gap-3 rounded-xl border px-4 py-3.5 text-left transition-all',
+                'flex w-full items-start text-left transition-colors duration-fast',
+                isDock
+                  ? 'gap-3 rounded-[10px] p-2'
+                  : 'gap-3 rounded-xl border px-4 py-3.5 transition-all',
                 interactive && 'cursor-pointer',
                 !interactive && 'cursor-default',
-                isDisplay
-                  ? 'border-[#E5E6EB] bg-[#F5F6F7]'
-                  : selected
-                    ? 'border-[var(--sto-brand-6)] bg-[#FFF5E6] shadow-[0_1px_2px_rgba(255,111,0,0.08)]'
-                    : 'border-[#E5E6EB] bg-white hover:border-[#FFD7A3]',
+                isDock
+                  ? isDisplay
+                    ? 'bg-muted/60'
+                    : selected
+                      ? 'bg-transparent'
+                      : 'bg-transparent hover:bg-[#FAFAFA]'
+                  : isDisplay
+                    ? 'border-[#E5E6EB] bg-[#F5F6F7]'
+                    : selected
+                      ? 'border-[var(--sto-brand-6)] bg-[#FFF5E6] shadow-[0_1px_2px_rgba(255,111,0,0.08)]'
+                      : 'border-[#E5E6EB] bg-white hover:border-[#FFD7A3]',
                 option.disabled && 'opacity-60',
               )}
             >
-              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--sto-brand-6)] text-[11px] font-bold text-white">
+              <span
+                className={cn(
+                  'flex shrink-0 items-center justify-center font-medium',
+                  isDock
+                    ? cn(
+                        'mt-0.5 h-[18px] w-[18px] rounded-[9px] text-[10px] leading-[10px]',
+                        isDisplay || !selected
+                          ? 'bg-[#E5E6EB] text-[#4E5969]'
+                          : 'bg-primary text-primary-foreground',
+                      )
+                    : 'mt-0.5 h-6 w-6 rounded-full bg-[var(--sto-brand-6)] text-[11px] font-bold text-white',
+                )}
+              >
                 {index + 1}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-[14px] font-semibold leading-snug text-[#1D2129]">
+                  <span
+                    className={cn(
+                      'font-medium leading-[18px] text-foreground',
+                      isDock ? 'text-sm' : 'text-[14px] font-semibold leading-snug text-[#1D2129]',
+                    )}
+                  >
                     {option.label}
                   </span>
-                  {selected && mode === 'multi' && (
+                  {selected && mode === 'multi' && !isDock && (
                     <Check className="h-4 w-4 shrink-0 text-[var(--sto-brand-6)]" strokeWidth={2.5} />
                   )}
                 </div>
                 {option.description && (
-                  <p className="mt-1 text-[12.5px] leading-relaxed text-[#86909C]">
+                  <p
+                    className={cn(
+                      isDock
+                        ? 'mt-0.5 text-xs leading-[14px] text-[#8C8C8C]'
+                        : 'mt-1 text-[12.5px] leading-relaxed text-[#86909C]',
+                    )}
+                  >
                     {option.description}
                   </p>
                 )}
@@ -110,7 +147,7 @@ export function OptionCardList({
         })}
       </div>
 
-      {mode === 'multi' && selectedLabels.length > 0 && (
+      {mode === 'multi' && selectedLabels.length > 0 && !isDock && (
         <p className="text-[12.5px] text-[#86909C]">
           {selectionLabel}：
           <span className="font-medium text-[#4E5969]">{selectedLabels.join('、')}</span>

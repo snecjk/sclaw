@@ -1,0 +1,284 @@
+# 总部首页样式改造 · Cursor 开发文档
+
+> 本文档是给 Cursor 的**唯一施工依据**。Cursor 必须严格按本文档执行，不允许超出范围、不允许臆测设计值、不允许"顺手优化"。
+> 所有规则同时受 `.cursor/rules/01-code-rules.mdc` 与 `.cursor/rules/02-styles.mdc` 约束，本文档与它们冲突时以**更严格者**为准。
+>
+> - 文档版本：v2 · 2026-06-21（已并入用户确认的答复 + 输入框封装为共享组件）
+> - 目标分支：建议新建 `feat/hq-home-restyle`，动手前先 `git commit` 当前状态
+> - 设计稿来源：MasterGo（用户会提供 MasterGo MCP 地址，**精确视觉值一律从 MCP 取**）
+
+---
+
+## 0. 一句话目标
+
+按新 MasterGo 设计稿（图二）刷新**首页右侧内容区**的视觉：把引擎/模型移进输入框、重做三张任务卡、重做输入框工具栏、精简底部文案、隐藏中间状态胶囊；并把**改好的输入框封装成一个共享组件**，在**总部 / 网点 / 省区**三个首页都复用。**不改任何功能 / 接口 / 数据流。**
+
+---
+
+## 1. 绝对铁律（违反任意一条 = 本次施工失败）
+
+1. **改动范围 = 三个首页 + 输入框组件**：
+   - 三个首页 surface：`HomeAgentHubSurface.tsx`（总部）、`HomeSiteSurface.tsx`（网点）、`HomeAssistant.tsx` / 省区分支（省区）。
+   - 输入框：共享组件 `src/pages/Chat/ChatInput.tsx`，以及**新封装的** `HomeComposer`（见 §6、改动六）。
+   - **其它页面/面一律不动**，尤其 `Chat/index.tsx`、`TaskDetail/TaskSubitemChatSurface.tsx`、`ChatToolbar.tsx`。
+2. **只改右侧内容区**：左侧侧边栏（`MainLayout` / Sidebar 相关）**绝对不动**——不改它的结构、样式、宽度、任何 class。
+3. **不改功能 / 接口 / 逻辑**：禁止改动
+   - 接口调用（`hostApiFetch` / `invokeApi` / `invokeIpc` / store action）
+   - props / interface / type（**新增**可选 prop 不算违反，但不得改既有签名语义）
+   - hooks 调用（`useState` / `useEffect` / 自定义 hook）
+   - Zustand store（selector / setter / action）
+   - 事件 handler 函数体（`onClick` / `onSend` / `onQueue` 等）
+4. **样式直接按设计稿改**（颜色 / 字号 / 间距 / 圆角 / 阴影 / 描边 / 图标 / 布局位置）。
+5. **结构改动必须先列出来等用户确认**。本文档 §5 已逐项标注「样式」/「结构（已预批准）」/「🟥 待确认」。§5 标「已预批准」的结构项可直接做；**任何**本文档没写明的新增/删除 DOM、改嵌套、加组件、加新功能，都必须停下来问用户。
+6. **输入框是共享组件，对其它非首页调用方零影响**：`ChatInput.tsx` 还被 `Chat/index.tsx`、`TaskDetail` 复用（见 §6）。所有"输入框内引擎/模型 + 新工具栏布局"的能力**必须通过新增可选 prop 控制，默认关闭**；这两处不传 prop → 渲染结果与改动前**逐像素一致**。
+7. **视觉值以 MasterGo MCP 为准**：所有 px / 色值 / 圆角 / 间距 / 图标名，先从 MCP 拉设计稿节点精确值，再映射到 `02-styles.mdc` 的 token（见 §4）。**禁止凭截图猜色值，禁止发明 token 里没有的值**。
+8. **写法遵守 `02-styles.mdc` 硬规则**：只用 Tailwind utility + `cn()`；禁止 inline `style`、模板字符串拼接 className、裸 hex（无注释引用）、其它样式方案；`dark:` 前缀**保留现有的即可，不新增、不删除**（项目现阶段不实现暗色，但现有 dark: 分支原样保留）。新代码品牌色统一用 `#FF6700` / `text-primary` 派生（不要再引入旧值 `#FF6F00`）。
+9. **要删除的元素一律改为"隐藏 + 完整标注"，不真正删除**（用户明确要求）：
+   - **不删除** JSX 节点、相关常量、变量、hook、i18n key。
+   - 用**命名布尔常量开关**控制，默认 `false`，例如：
+     ```tsx
+     // 2026-06 首页改版：按设计稿隐藏「状态/协作/工具」胶囊，保留代码以便恢复。
+     // 恢复：改为 true。见 docs/总部首页样式改造-开发文档.md §5 改动五。
+     const SHOW_STATUS_CHIPS = false;
+     ...
+     {SHOW_STATUS_CHIPS && ( <div>…原 JSX 原样保留…</div> )}
+     ```
+   - **禁止**用 `hidden` / `display:none` 来"隐藏"；用上面的条件渲染 + 命名 flag。
+   - 每个隐藏块上方注释：为什么隐藏、何时改、怎么恢复、对应本文档哪节。
+
+---
+
+## 2. 背景：三个首页分别是哪个文件
+
+首页按角色权限渲染不同的面，入口在 `src/pages/Home/index.tsx`：
+
+| 角色 | 条件 | 渲染组件 | 顶部引擎/模型 | 底部输入 |
+| --- | --- | --- | --- | --- |
+| **总部 / 其它非网点** | `!isSite && !crmWeekReportSurfaceAllowed` | **`HomeAgentHubSurface`** | 该文件第 ~81–84 行 | 直接 `<ChatInput>`（embedded） |
+| **网点用户** | `isSiteUser(categoryCode)` | **`HomeSiteSurface`** | 该文件第 ~23–26 行 | `<HomeAssistant>`（包了 ChatInput） |
+| **省区白名单** | `crmWeekReportSurfaceAllowed` | `index.tsx` 末尾分支（`HomeHero`+`HomeSummaryCards`） | `index.tsx` 第 ~137–138 行 | `<HomeAssistant>` |
+
+> 当前总部首页 = `HomeAgentHubSurface.tsx`；本次目标 = 新 MasterGo 设计稿。
+> 三个首页**底部输入**目前形态不统一：总部直接用 ChatInput + 自定义三段 footer；网点/省区用 `HomeAssistant`（ChatInput + 右对齐 disclaimer）。本次要把它们**统一成同一个 `HomeComposer` 组件**（改动六）。
+
+---
+
+## 3. 涉及文件清单（精确）
+
+| 文件 | 角色 | 允许的改动 |
+| --- | --- | --- |
+| `src/pages/Chat/ChatInput.tsx` | **共享**输入框 | 工具栏视觉 + 新增「引擎/模型/麦克风」插槽，**全部 gate**（§6） |
+| `src/pages/Chat/ChatEngineModelSelectors.tsx` | 引擎/模型选择器 | **新增**输入框内紧凑 variant（引擎去图标等），不改默认形态/逻辑 |
+| `src/pages/Home/HomeComposer.tsx` | **新建**，封装新输入框 | 新建：组合 ChatInput + 内联引擎/模型 + 新工具栏配置 |
+| `src/pages/Home/HomeAgentHubSurface.tsx` | 总部首页 | 卡片样式、隐藏胶囊、删顶部引擎模型行、底部 footer 精简、改用 `HomeComposer` |
+| `src/pages/Home/HomeSiteSurface.tsx` | 网点首页 | 删顶部引擎模型行、底部改用 `HomeComposer` |
+| `src/pages/Home/HomeAssistant.tsx` | 省区底部助手 | 重构为/替换为 `HomeComposer`（或让其内部用 HomeComposer），保持对外 props 兼容 |
+| `src/pages/Home/index.tsx` | 省区分支 | 删第 ~137–138 行顶部引擎模型行 |
+| `src/i18n/locales/{zh,en,ja}/*.json` | 文案 | 仅工具栏新增控件需要的 label（如有），三语同步 |
+
+> ⚠️ 不在此表的文件**一律不要碰**：`MainLayout`、Sidebar、`HomeSummaryCards`、`HomeHero`、`Chat/index.tsx`、`ChatToolbar.tsx`、`TaskSubitemChatSurface.tsx`。
+
+---
+
+## 4. MasterGo MCP 取值规则（防瞎写核心）
+
+每改一个元素，按顺序不许跳步：
+
+1. **拉设计稿**：MasterGo MCP 读对应节点，取精确值——`fill`、`fontSize`、`fontWeight`、`lineHeight`、`cornerRadius`、`padding`、`gap`、`iconName/iconSize`、`strokeWidth`。
+2. **映射 token**：对照 `02-styles.mdc`——颜色优先语义 token（`bg-primary`/`text-foreground`/`text-muted-foreground`…）；字号 6 档；圆角 13 档；阴影 4 档；间距阶梯；图标 Lucide + §Icon 尺寸/描边。
+3. **完全匹配** → 用 token。
+4. **不匹配**（找不到对应 token）→ **不要造**。列「设计值 vs 最接近 token + 差异」表，停下来问用户：就近用现有 token，还是把新值加进 02-styles 标 🟡 待 review。
+5. **MCP 拿不到某节点值** → 也停下来问，不要用截图估。
+
+---
+
+## 5. 逐项改动规格
+
+> 格式：现状（文件+行号+代码）→ 目标 → 改动类型 → 做法 → token/约束 → 待确认点。
+> 行号为编写时位置，Cursor 以实际代码语义定位为准，不要机械按行号改。
+
+### 改动一：引擎 / 模型 移进输入框（三个首页都移）
+
+- **现状**：三处都在内容区顶部渲染 `<ChatEngineSelector />` + `<ChatModelSelector />`：
+  - 总部 `HomeAgentHubSurface.tsx` ~81–84 行
+  - 网点 `HomeSiteSurface.tsx` ~23–26 行
+  - 省区 `index.tsx` ~137–138 行
+- **目标（图二）**：三处顶部这一行都删除；引擎、模型都落到输入框（`HomeComposer`）的底部工具栏内。**引擎去掉图标**（用户确认）——即引擎为纯文字 + 下拉箭头（如 `OpenClaw ⌄`），不带机器人图标。模型为下拉（`qwen3.6-plus ⌄`）。
+- **改动类型**：🟧 结构（已预批准）。
+- **做法**：
+  1. 删除三处顶部引擎/模型行（含外层 div）。
+  2. 引擎/模型渲染进 `HomeComposer` 的工具栏（见改动六、改动三）。复用 `ChatEngineSelector` / `ChatModelSelector` 的**现有逻辑/接口**（切引擎、切模型的 store/接口一律不动）。
+  3. 在 `ChatEngineModelSelectors.tsx` **新增**一个 `variant="inline"`（或同义）分支：引擎**不渲染 `Bot` 图标**、紧凑尺寸贴合输入框；默认 variant 形态与逻辑保持不变。
+- **token/约束**：下拉用现有 shadcn `DropdownMenu`，状态动画 `data-[state=...]`。文字 `text-[12px]`/`text-sm`，颜色 `text-foreground/90` 等按设计稿。
+- **待确认点**：引擎、模型在工具栏的**确切位置**（图二右侧麦克风左边是模型下拉；引擎位置以 MasterGo 为准）。
+
+### 改动二：三张任务卡重做（文案不变）
+
+- **现状**：`HomeAgentHubSurface.tsx` ~88–127 行。图标方块在左上，右侧竖排「功能角标 → 标题 → 描述」。
+  ```tsx
+  <div className="flex items-start gap-3">
+    <div className="...h-12 w-12...rounded-xl ...INFO_ICON_WRAP"><Icon className="h-6 w-6" .../></div>
+    <div className="min-w-0 flex-1 text-left">
+      <span className={TAG_FUNCTION}>{t('agentHub.functionTag')}</span>
+      <h3 className="mt-2 text-base font-semibold ...">{t(titleKey)}</h3>
+      <p className="mt-1 text-sm leading-relaxed ...">{t(descKey)}</p>
+    </div>
+  </div>
+  ```
+- **目标（图二）**：图标在左（彩色圆角底，三张颜色不同）；**标题与「功能」标签同一行**（标题左、标签为紧跟其后的小 pill）；描述在标题下方整行。图标图形与配色按设计稿换新。
+- **改动类型**：🟧 结构（标签从标题上方移到同行）+ 样式（已预批准）。
+- **重要**：**卡片标题文案不改**（用户确认），保持现有 i18n：`cardTasksTitle=处理任务` / `cardExecTitle=持续执行` / `cardMultiTitle=多智能体并行`，描述同。**不要改 home.json 文案**。只动布局/图标/标签样式。
+- **做法**：
+  1. 右侧容器改为「上行 = 标题 + 标签（flex 同行、`items-center gap-2`）；下行 = 描述」。
+  2. 图标：从 MasterGo 取每张卡的图标图形 + 底色；Lucide 里找对应图标替换 `Cpu/Repeat2/Bot`；底色映射 token，不匹配按 §4 列出待确认（图二三色明显不同：偏绿/偏灰/偏暖）。
+  3. 标签 `功能` 底色/文字色按图二（淡绿或灰底小 pill），映射 token，差异列出。
+  4. 卡片容器圆角/描边/阴影/内距按设计稿对齐 02-styles（圆角大概率 `rounded-2xl`/`rounded-xl`，阴影从 4 档选，以 MCP 值为准）。
+- **token/约束**：标题 `text-base`(16) `font-semibold`；描述 `text-sm`(14) `text-muted-foreground`；标签 `text-xs`(12) `font-medium` `rounded-sm`/`rounded-full`。颜色全走 §4。
+- **待确认点**：三张卡图标底色 / 图标图形 / 标签配色精确值（MCP 取，缺失则问）。
+
+### 改动三：输入框工具栏重做（封进 HomeComposer）
+
+- **现状**：`ChatInput.tsx` ~772–898 行。左侧组：`Paperclip`(上传, ~774) → `AtSign` 按钮（**实为"选择 Agent" `pickAgent`**，仅 `mentionableAgents.length>0` 时显示, ~785–822）→ "选择工作流"**文字**按钮(~824–840)；右侧：圆形发送键(~861–897)。钉钉通讯录是**在编辑器里输入 `@` 字符**触发（`DingTalkMentionEditor`/`DingTalkMentionPopover`），**不是**那个 AtSign 按钮。无麦克风、无引擎、无模型。
+- **目标（图二）**：左侧 = `⊕`(上传，换图标) / `@`(钉钉通讯录) / 工作流(icon) /（选择 Agent，见待确认）；右侧 = 引擎(无图标文字下拉) / 模型下拉 / 🎤麦克风(占位) / 🟠圆形发送。提示文案样式不变。
+- **改动类型**：🟧 结构 + 样式；**共享组件，全部 gate**（§6）。
+- **做法（逐个）**：
+  1. **上传换图标**：`Paperclip` → 图二图标（疑似「圆圈加号」，Lucide `Plus`/`CirclePlus`，以 MasterGo 确认）。**只换图标/样式，`onClick={pickFiles}` 与上传逻辑不动**。
+  2. **`@` 图标 = 唤起钉钉通讯录**（用户确认）：`@` 图标按钮点击 → 触发钉钉通讯录选择，**复用现有钉钉 mention 流程**（等价于在编辑器插入 `@` 触发器、打开 `DingTalkMentionPopover`，调用 `mentionEditorRef` 相关方法 / 现有 `useDingTalkMention` 逻辑），**严禁新写钉钉接口/数据流**。同时**保留**输入框里"直接打 `@` 字符也能唤起钉钉"的现有行为——两条入口并存。
+  3. **选择 Agent 保留 + 临时图标**（用户确认 §7-A）：现有 `AtSign` 按钮承载的「选择 Agent」(`pickAgent`) 功能**保留**，但**换一个临时图标**（随便选一个 Lucide、与 `@`/工作流图标区分，如 `Bot`/`UserPlus`），后续可换 SVG。其逻辑（`showAgentPicker`/`mentionableAgents`/`setTargetAgentId`/下拉）**完全不动**；加注释 `// 临时图标，等用户提供 SVG 替换`。
+  4. **麦克风 = 占位图标**（用户确认）：加一个 Lucide `Mic` 图标按钮，**只占位、不接任何语音逻辑**（`onClick` 空操作或 `disabled` + `title="即将上线"`）。不得引入录音/媒体 API。
+  5. **工作流改为图标按钮**（用户确认）：把"选择工作流"**文字**按钮改为**图标**按钮，先用临时 Lucide 图标（建议 `Workflow`/`Boxes`），**后续用户提供 SVG 再替换**。点击逻辑（`setWorkflowPickerOpen`/`WorkflowPicker`）不动；`title` 仍用 `t('composer.pickWorkflow')`；加注释 `// 临时图标，等用户提供 SVG 替换`。
+  6. **引擎/模型**：见改动一（引擎无图标文字下拉 + 模型下拉），放右侧。
+  7. **发送键**：保持现有逻辑（`handleSend`/`handleStop`/`canSend`），仅按图二对齐橙色实底圆形；若图二是上箭头则把 `SendHorizontal` 换为 `ArrowUp`（仅换图标）。
+  8. **输入框外壳**（圆角/描边/聚焦态/内距）按图二对齐，复用现有 `rounded-2xl` + 描边/聚焦逻辑，仅调数值。
+  9. **提示文案**：`composerPlaceholder` 逻辑与文案**不变**（用户要求"提示样式不变"）。
+- **图标顺序（建议，最终以 MasterGo 为准）**：左 = 上传 / `@`钉钉 / 选择Agent / 工作流；右 = 引擎 / 模型 / 麦克风 / 发送。
+- **token/约束**：图标尺寸/描边按 §Icon；图标按钮沿用现有 `h-8 w-8 rounded-full` ghost 视觉；发送键沿用 primary 圆形。颜色走 §4。
+- **待确认点**：上传图标确切 Lucide 名（MasterGo 确认）。
+
+### 改动四：底部 footer 精简（隐藏，不删）
+
+- **现状**：`HomeAgentHubSurface.tsx` ~172–186 行，三栏 `grid-cols-[1fr_auto_1fr]`：左=网关状态（`gatewayLine`）、中=免责（`footerDisclaimer`）、右=用量（`usageHint`）。
+- **目标（图二）**：只保留居中的「STO Claw 为AI辅助，重要信息请与业务核对后使用」；网关、用量两段去掉。
+- **改动类型**：🟧 结构（已预批准）+ 样式。**按铁律 9：隐藏不删**。
+- **做法**：
+  1. 用命名 flag（如 `const SHOW_GATEWAY_LINE = false;` / `const SHOW_USAGE_HINT = false;`）把网关行、用量行**条件隐藏**，JSX/变量/i18n key 全部保留并加注释。
+  2. 把布局调成**单列居中**只显示 `t('assistant.footerDisclaimer')`（文案已是目标文案）。
+  3. **不要删** `gatewayLine`/`isGatewayRunning`/`gatewayStatus`/`useGatewayStore` 等（隐藏即可，避免越界改逻辑）。
+- **token/约束**：文字 `text-xs`(12) `text-muted-foreground` 居中。
+
+### 改动五：隐藏「状态 / 协作 / 工具」胶囊（隐藏，不删）
+
+- **现状**：`HomeAgentHubSurface.tsx` ~129–151 行，一行三胶囊。
+- **目标（图二）**：不显示。
+- **改动类型**：🟧 结构（已预批准）。**按铁律 9：隐藏不删**。
+- **做法**：加 `const SHOW_STATUS_CHIPS = false;`，把整块 `<div className="flex flex-wrap justify-center gap-3">…</div>` 包进 `{SHOW_STATUS_CHIPS && (…)}`，JSX 原样保留 + 注释。
+  - **注意**：`DOT_SUCCESS` 常量在 footer（~175/180 行）也用到，**不能删**；`DOT_BRAND` 若隐藏后无引用也**保留**（铁律 9）。i18n key 全部保留。
+
+### 改动六：把输入框封装成共享 `HomeComposer` 组件（三首页复用）
+
+- **目标**（用户新增要求）：改好的输入框（新工具栏 + 内联引擎/模型 + 底部精简文案）封装成**一个组件**，总部 / 网点 / 省区三个首页都用它。
+- **改动类型**：🟧 结构（已预批准；属"封装复用"，不改功能）。
+- **前提结论：三处输入框核心功能本就一致**（已核对代码）。三处都用同一发送 hook `useHomeChatEntrySend()` → `handleHubSend`/`handleHubQueue`，同一个 `<ChatInput variant="embedded">`，`engineType` 推导逻辑相同。**唯二差异**：
+  1. 占位文案——网点传 `placeholderKey="site.assistant.placeholder"`，总部/省区用默认；
+  2. 底部 footer——总部原本三段（网关/免责/用量），网点/省区右对齐一行免责（改版后统一居中免责，差异消失）。
+  → 因此封装时**不要为不同首页加功能分支**；只把 `placeholder`、`onSend`、`seedText`、`className`、（可选）footer 对齐 做成 prop 暴露，核心收发逻辑三处共用一套。
+- **做法**：
+  1. 新建 `src/pages/Home/HomeComposer.tsx`，对外 props 至少兼容现有用法：`{ seedText?, onSend?, onQueue?, placeholder?/placeholderKey?, className?, engineType?, showDisclaimer?, footerAlign? }`。内部：
+     - 用 `useChatInputBindings({ variant: 'embedded', ... })` + `<ChatInput>`，并通过**新增的 gate prop**（见 §6）开启"内联引擎/模型 + 新工具栏"。
+     - 渲染内联 `ChatEngineSelector`/`ChatModelSelector`（`variant="inline"`）。
+     - 底部免责文案（`footerDisclaimer`）作为可配置项（总部居中、网点/省区可右对齐——按各自设计；默认居中）。
+  2. 三处接入：
+     - 总部 `HomeAgentHubSurface.tsx`：把原 `<ChatInput>` section + 自定义三段 footer 替换为 `<HomeComposer>`（footer 精简见改动四）。
+     - 网点 `HomeSiteSurface.tsx`：把 `<HomeAssistant>` 替换为 `<HomeComposer>`（透传原 `seedText` / `onSend` / `placeholderKey`）。
+     - 省区 `index.tsx` / `HomeAssistant.tsx`：让省区也走 `HomeComposer`。可选实现：**重构 `HomeAssistant` 内部改用 `HomeComposer`** 并保持其对外 props 不变（这样 index.tsx 省区分支无需改调用），或直接替换为 `HomeComposer`。
+  3. **保持各处现有的 onSend/onQueue/seedText 行为不变**（这些是逻辑，不能动），只是把"输入框 UI"统一。
+- **gate 要求**：`HomeComposer` 是唯一开启新输入框 UI 的入口；`Chat/index.tsx`、`TaskDetail` 仍直接用 `ChatInput` 且不传新 prop → 完全不受影响（§6）。
+- **待确认点**：三个首页底部免责文案的对齐/是否完全一致（默认按图二居中；如各页设计不同，以 MasterGo 为准）。
+
+---
+
+## 6. 共享组件风险与 gate 方案（重点）
+
+`ChatInput.tsx` 复用方：
+- `HomeAgentHubSurface`（✅ 经 HomeComposer 改造）
+- `HomeAssistant`（✅ 经 HomeComposer 改造）
+- `Chat/index.tsx`（❌ 不能受影响）
+- `TaskDetail/TaskSubitemChatSurface.tsx`（❌ 不能受影响）
+
+`ChatEngineSelector`/`ChatModelSelector` 还被 `ChatToolbar.tsx`、（改造前的）`index.tsx`/`HomeSiteSurface` 使用——**改默认形态会波及，禁止**。
+
+**gate 规则（强制）**：
+1. ChatInput 的"内联引擎/模型 + 新工具栏布局 + 麦克风 + 工作流图标化"全部由**新增可选 prop** 控制，默认关闭。只有 `HomeComposer` 传该 prop。
+2. `ChatEngineModelSelectors` 的"输入框内紧凑/去图标"是**新增 variant**，默认导出形态不变。
+3. 改完**必须验证** `Chat/index.tsx` 与 `TaskDetail` 的 ChatInput、`ChatToolbar` 的引擎模型**视觉零变化**（git diff 确认默认分支未改）。
+
+> 若认为 gate 成本过高想直接全局改 —— **停下来问用户**，不要擅自全局改。
+
+---
+
+## 7. 需要用户拍板的清单（开工前集中确认）
+
+**已确认（直接执行）**：引擎去图标｜`@`=钉钉通讯录｜麦克风=占位图标(不接逻辑)｜工作流=临时图标(待用户给 SVG)｜卡片标题文案不改｜要删的改为隐藏+标注｜输入框封装为 HomeComposer 三处复用。
+
+**仍待确认**：
+
+- **§7-A 选择 Agent 的去向（关键）**：当前输入框里的 `@` 图标按钮其实是「选择 Agent」（`pickAgent`，仅有可 @ 的 agent 时显示）。现在 `@` 要改成唤起钉钉通讯录，那「选择 Agent」怎么办？三选一：
+  - (a) 保留「选择 Agent」，给它换一个**独立图标**（如机器人图标，放在 `@` 旁边）；`@` 专做钉钉。
+  - (b) 暂时**隐藏**「选择 Agent」（按铁律 9，flag 隐藏 + 标注），只留 `@` 做钉钉。
+  - (c) 其它位置/形态（用户指定）。
+  > 注：图二右侧麦克风左边是**模型下拉**，不是选择 Agent。
+- **§7-B**：引擎/模型在工具栏的确切位置、上传图标确切 Lucide 名、三张卡图标与配色精确值 —— 均以 MasterGo MCP 为准；MCP 缺失时按 §4 停下来问。
+
+---
+
+## 8. 验收清单（改完必跑，逐条 ✅/❌）
+
+**范围核对**
+- [ ] 只改了 §3 清单内文件；`MainLayout`/Sidebar/其它面 0 改动
+- [ ] `Chat/index.tsx` + `TaskDetail` 的 ChatInput、`ChatToolbar` 引擎模型**视觉零变化**
+- [ ] 三个首页底部输入都已统一为 `HomeComposer`
+- [ ] `git diff` 确认改动只在 className / JSX 视觉 / 新增 gate prop / 新建 HomeComposer
+
+**未越界**
+- [ ] 没改接口 / props 既有签名 / hooks / store / handler 逻辑
+- [ ] 麦克风只占位、无语音逻辑；没引入新依赖/新图标库
+- [ ] 要删的元素都是"flag 隐藏 + 注释"，没有真删 JSX/常量/变量/hook/i18n
+- [ ] §7-A 已拿到答复才动选择 Agent / `@`
+
+**02-styles 自检**（跑 02-styles 末尾「AI 生成样式后必须自检」全清单）
+- [ ] 无 inline `style`；`cn()` 拼接，无模板字符串
+- [ ] 无新增裸 hex（必要的带注释引用 Grey-X/Brand-X）；品牌色用 `#FF6700`/`text-primary`
+- [ ] 字号 6 档 / 圆角 13 档 / 阴影 4 档 / 间距阶梯，无发明值
+- [ ] 图标 Lucide，尺寸/描边合规；装饰 `aria-hidden`、语义 `aria-label`
+- [ ] focus 可见（`focus-visible:ring-*`）；交互用真实 `<button>`
+- [ ] 没新增样式方案；现有 `dark:` 原样保留
+
+**功能回归手测**（`pnpm dev`，1200×800 与 1440×900；三种角色都测）
+- [ ] 总部/网点/省区首页：引擎切换 / 模型切换 / 上传 / @钉钉 / 发送 / 停止 都正常
+- [ ] 三态（Loading/Empty/Error）正常；窗口拉伸布局稳定
+- [ ] 视觉对比图二：颜色/间距/圆角/图标位置吻合
+
+---
+
+## 9. 明确禁止
+
+- ❌ 改左侧侧边栏任何东西
+- ❌ 改 §3 之外的文件；尤其波及 `Chat/index.tsx` / `TaskDetail` / `ChatToolbar`
+- ❌ 不 gate 就改 `ChatInput` / 选择器默认形态
+- ❌ 改接口/props 既有签名/hooks/store/handler 逻辑
+- ❌ 麦克风接真实语音逻辑；引入新依赖/新图标库
+- ❌ 凭截图猜色值；发明 02-styles 没有的 token
+- ❌ 真删除元素（一律 flag 隐藏 + 注释）；删 i18n key / 仍被引用的常量
+- ❌ 改卡片标题文案；"顺手"重构无关代码；把 cn() 改模板字符串
+
+---
+
+## 10. 建议施工顺序
+
+1. `git commit` 存档 → 建分支
+2. 确认 §7-A（选择 Agent 去向）
+3. 改动六先搭骨架：新建 `HomeComposer`（先等价封装现有输入框，三处接入跑通、回归无变化）
+4. 改动五（隐藏胶囊）→ 改动四（精简 footer）：低风险
+5. 改动二（三张卡）：纯 `HomeAgentHubSurface`
+6. 改动一 + 改动三（引擎模型内联 + 工具栏重做）：动共享 ChatInput，最后做，重点验 §6
+7. 跑 §8 验收清单 → `pnpm dev` 三角色对比设计稿 → 截图给用户 review

@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ChevronDown, ChevronRight, Loader2, MessageCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
 import { useSkillsStore } from '@/stores/skills';
-import { maskSensitiveToolInputForDisplay, type ThinkingTimelineItem } from './message-utils';
+import { type ThinkingTimelineItem } from './message-utils';
+
+/** 思考条目正文区最大高度 ≈ 4 行（02-styles 代码块折叠规范，text-sm leading-5） */
+const THINKING_ENTRY_MAX_HEIGHT_CLASS = 'max-h-20';
+
+/** 无外层卡片：思考过程直接铺在对话区底色上（设计稿 flat 布局） */
+const thinkingPanelRootClass = 'w-full text-[13px] leading-[18px]';
 
 type StreamingTool = {
   id?: string;
@@ -15,13 +23,71 @@ type StreamingTool = {
   summary?: string;
 };
 
-export function ConnectingModelIndicator({ className }: { className?: string }) {
+/**
+ * 流式脉冲点（与 ChatMessage.StreamingPulse 参数一致，02-styles §流式脉冲）
+ * 独立副本：避免 ThinkingProcessPanel ↔ ChatMessage 循环依赖。
+ */
+function StreamingPulse() {
+  return (
+    <div className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
+      <motion.span
+        className="absolute h-2.5 w-2.5 rounded-full bg-primary/25"
+        animate={{ scale: [0.8, 1.8], opacity: [0.45, 0] }}
+        transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut' }}
+      />
+      <motion.span
+        className="relative h-1.5 w-1.5 rounded-full bg-primary"
+        animate={{ scale: [0.92, 1.15, 0.92] }}
+        transition={{ duration: 0.8, repeat: Infinity, ease: 'easeInOut' }}
+      />
+    </div>
+  );
+}
+
+export type ConnectingLabelKey = 'connectingModel' | 'understandingQuestion';
+
+export interface ConnectingModelIndicatorProps {
+  className?: string;
+  /** 普通对话默认 understandingQuestion；创建工作流场景传 connectingModel（B1，§2） */
+  labelKey?: ConnectingLabelKey;
+}
+
+/**
+ * 连接/理解等待指示：脉冲点 + 灰字（A1/B1，MasterGo → 02-styles text-muted-foreground text-sm）
+ */
+export function ConnectingModelIndicator({
+  className,
+  labelKey = 'understandingQuestion',
+}: ConnectingModelIndicatorProps) {
   const { t } = useTranslation('chat');
 
   return (
-    <p className={cn('text-sm text-muted-foreground', className)} role="status" aria-live="polite">
-      {t('streaming.connectingModel')}
-    </p>
+    <div
+      className={cn('flex items-center gap-2 text-sm text-muted-foreground', className)}
+      role="status"
+      aria-live="polite"
+    >
+      <StreamingPulse />
+      <span>{t(`streaming.${labelKey}`)}</span>
+    </div>
+  );
+}
+
+/**
+ * B3 等待用户填写/提交参数表单：脉冲点 + awaitingReply 文案（持续到提交，仅视觉）
+ */
+export function AwaitingReplyIndicator({ className }: { className?: string }) {
+  const { t } = useTranslation('chat');
+
+  return (
+    <div
+      className={cn('flex items-center gap-2 text-sm text-muted-foreground', className)}
+      role="status"
+      aria-live="polite"
+    >
+      <StreamingPulse />
+      <span>{t('streaming.awaitingReply')}</span>
+    </div>
   );
 }
 
@@ -31,6 +97,8 @@ interface ThinkingProcessPanelProps {
   isConnecting?: boolean;
   isProcessing?: boolean;
   streamingTools?: StreamingTool[];
+  /** @see ConnectingModelIndicatorProps.labelKey */
+  connectingLabelKey?: ConnectingLabelKey;
   className?: string;
 }
 
@@ -48,14 +116,8 @@ function buildCollapsedSummary(
 ): string | null {
   const toolCount = timeline.filter((item) => item.type === 'tool').length;
   const thoughtCount = timeline.filter((item) => item.type === 'thinking').length;
-  const parts: string[] = [];
-  if (toolCount > 0) {
-    parts.push(t('streaming.toolCallLabel', { index: toolCount }));
-  }
-  if (thoughtCount > 0) {
-    parts.push(t('streaming.processMessageLabel', { count: thoughtCount }));
-  }
-  return parts.length > 0 ? parts.join(' · ') : null;
+  if (toolCount === 0 && thoughtCount === 0) return null;
+  return t('streaming.collapsedSummary', { thoughtCount, toolCount });
 }
 
 function resolveSkillDisplayName(name: string, skills: { id: string; slug?: string; name: string; title?: string }[]): string {
@@ -72,7 +134,6 @@ function resolveSkillNamesInThinking(
 ): string {
   if (!text || skills.length === 0) return text;
 
-  // Build a map of name/slug/id -> title, longest keys first to avoid partial matches
   const replacements = new Map<string, string>();
   for (const s of skills) {
     const title = s.title?.trim();
@@ -85,13 +146,9 @@ function resolveSkillNamesInThinking(
   const sortedKeys = Array.from(replacements.keys()).sort((a, b) => b.length - a.length);
   if (sortedKeys.length === 0) return text;
 
-  // Escape regex special chars and match only when surrounded by word boundaries
-  // (start/end of string, whitespace, or punctuation). Skill names often contain
-  // hyphens, so we treat hyphens as part of the word.
   let result = text;
   for (const key of sortedKeys) {
     const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // Match key when not preceded/followed by [A-Za-z0-9_\-]
     const regex = new RegExp(`(?<![A-Za-z0-9_\\-])${escaped}(?![A-Za-z0-9_\\-])`, 'g');
     result = result.replace(regex, replacements.get(key)!);
   }
@@ -104,6 +161,7 @@ export function ThinkingProcessPanel({
   isConnecting = false,
   isProcessing = false,
   streamingTools = [],
+  connectingLabelKey = 'understandingQuestion',
   className,
 }: ThinkingProcessPanelProps) {
   const { t } = useTranslation('chat');
@@ -172,53 +230,55 @@ export function ThinkingProcessPanel({
   const hasPanelBody =
     mergedTimeline.length > 0 || isConnecting || isProcessing || !!runningTool;
 
+  const headerLabel = collapsedSummary ?? t('streaming.thinkingProcessTitle');
+
   if (!hasPanelBody && !isStreaming) return null;
 
   return (
-    <div className={cn('w-full rounded-lg bg-[var(--canvas-via)] text-sm', className)}>
+    <div className={cn(thinkingPanelRootClass, className)}>
       <button
         type="button"
-        className="flex w-full items-center gap-1.5 px-3 py-2.5 text-muted-foreground transition-colors hover:text-foreground"
+        className={cn(
+          'flex w-full items-center gap-1.5 py-1 text-muted-foreground transition-colors duration-150 hover:text-foreground',
+        )}
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
       >
-        {!expanded && collapsedSummary ? (
-          <>
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-            <span className="truncate font-normal">{collapsedSummary}</span>
-          </>
+        <span className="truncate font-normal">{headerLabel}</span>
+        {expanded ? (
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
         ) : (
-          <>
-            <span className="font-normal">{t('streaming.thinkingProcessTitle')}</span>
-            {expanded ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-            )}
-          </>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
         )}
       </button>
 
       {expanded && (
-        <div className="space-y-3 px-3 pb-3">
+        <div className="space-y-3 pb-1 pt-1">
           {mergedTimeline.map((item, i) => {
             if (item.type === 'thinking') {
               const thinkingContent = resolveSkillNamesInThinking(item.content, skills);
               return (
-                <div
-                  key={`thinking-${i}`}
-                  className="prose prose-sm max-w-none text-sm leading-relaxed text-foreground dark:prose-invert"
-                >
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinkingContent}</ReactMarkdown>
+                <div key={`thinking-${i}`} className="border-l-2 border-border pl-3">
+                  <div className="mb-1.5 flex items-center gap-1.5 text-muted-foreground">
+                    <MessageCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    <span className="font-medium">{t('streaming.deepThinkingLabel')}</span>
+                  </div>
+                  <div
+                    className={cn(
+                      THINKING_ENTRY_MAX_HEIGHT_CLASS,
+                      'overflow-y-auto prose prose-sm max-w-none text-sm leading-5 text-foreground dark:prose-invert',
+                    )}
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinkingContent}</ReactMarkdown>
+                  </div>
                 </div>
               );
             }
 
             const key = toolRowKey(item);
             return (
-              <ToolCallRow
+              <ChatToolCallCard
                 key={key}
-                index={item.index}
                 name={resolveSkillDisplayName(item.name, skills)}
                 input={item.input}
                 status={streamingStatusByKey.get(key)}
@@ -226,17 +286,17 @@ export function ThinkingProcessPanel({
             );
           })}
 
-          {isConnecting ? <ConnectingModelIndicator /> : null}
+          {isConnecting ? <ConnectingModelIndicator labelKey={connectingLabelKey} /> : null}
 
           {isProcessing && !isConnecting ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin opacity-70" aria-hidden />
               <span>{t('streaming.processingTitle')}</span>
             </div>
           ) : null}
 
           {runningTool && !isConnecting ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin opacity-70" aria-hidden />
               <span>
                 {t('streaming.generatingWithTool', {
@@ -247,53 +307,6 @@ export function ThinkingProcessPanel({
           ) : null}
         </div>
       )}
-    </div>
-  );
-}
-
-function ToolCallRow({
-  index,
-  name,
-  input,
-  status,
-}: {
-  index: number;
-  name: string;
-  input: unknown;
-  status?: StreamingTool['status'];
-}) {
-  const { t } = useTranslation('chat');
-  const [open, setOpen] = useState(false);
-  const isRunning = status === 'running';
-  const hasInput = input != null;
-
-  return (
-    <div className="space-y-1">
-      <button
-        type="button"
-        className="flex w-full items-center gap-1.5 text-left text-muted-foreground transition-colors hover:text-foreground"
-        onClick={() => hasInput && setOpen((v) => !v)}
-        aria-expanded={open}
-        disabled={!hasInput}
-      >
-        {hasInput ? (
-          open ? (
-            <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-          )
-        ) : (
-          <span className="inline-block h-3.5 w-3.5 shrink-0" aria-hidden />
-        )}
-        {isRunning && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin opacity-70" aria-hidden />}
-        <span>{t('streaming.toolCallLabel', { index })}</span>
-        {name ? <span className="truncate text-xs opacity-60">{name}</span> : null}
-      </button>
-      {open && hasInput ? (
-        <pre className="overflow-x-auto rounded-md bg-background/60 px-2 py-2 text-xs text-muted-foreground">
-          {maskSensitiveToolInputForDisplay(input)}
-        </pre>
-      ) : null}
     </div>
   );
 }

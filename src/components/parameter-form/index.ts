@@ -7,7 +7,9 @@
  */
 export { FormFieldRenderer } from './FormFieldRenderer';
 export { ParameterFormCard } from './ParameterFormCard';
+export { ParameterFormDock } from './ParameterFormDock';
 export type { ParameterFormContext, ParameterFormCardProps } from './ParameterFormCard';
+export { PARAMETER_FORM_USE_FLOAT_DOCK } from './constants';
 export {
   registerParameterFormHandler,
   unregisterParameterFormHandler,

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { glassNestedCard, glassSectionSurface, glassSegmentTrack } from '@/lib/surfaces';
+import { glassNestedCard, glassSectionSurface, glassSegmentTrack, stoMainInnerShell } from '@/lib/surfaces';
 import { useGatewayStore } from '@/stores/gateway';
 import { useSettingsStore } from '@/stores/settings';
 import { hostApiFetch } from '@/lib/host-api';
@@ -208,7 +208,7 @@ export function Models() {
     );
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
+    <div className={cn(stoMainInnerShell, 'flex flex-col gap-8 pb-10')}>
       <header className="shrink-0 border-b border-border pb-6">
         <div className="flex items-start gap-3">
           <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(255,111,0,0.10)]">

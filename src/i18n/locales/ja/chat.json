@@ -32,7 +32,9 @@
         "searchPrev": "前の結果",
         "searchNext": "次の結果",
         "searchClear": "検索をクリア",
-        "searchClose": "検索を閉じる"
+        "searchClose": "検索を閉じる",
+        "openPreview": "プレビューを開く",
+        "closeSession": "現在のセッションを閉じる"
     },
     "composer": {
         "attachFiles": "ファイルを添付",
@@ -69,6 +71,8 @@
         "dingtalkSentPreviewToGroup": "グループ送信先",
         "dingtalkSentPreviewMessageTitle": "タイトル：{{title}}",
         "pickWorkflow": "ワークフローを選択",
+        "dingTalkMention": "钉钉連絡先",
+        "micComingSoon": "近日公開",
         "workflowPlaceholder": "ワークフローテンプレートを検索...",
         "workflowLoading": "読み込み中...",
         "workflowNoResults": "該当するテンプレートが見つかりません",
@@ -77,7 +81,13 @@
     },
     "streaming": {
         "connectingModel": "モデルに接続中...",
+        "understandingQuestion": "ご質問を理解しています…",
+        "awaitingReply": "返信後、Clawが作業を続けます…",
         "thinkingProcessTitle": "思考過程",
+        "deepThinkingLabel": "深い思考",
+        "collapsedSummary": "{{thoughtCount}} 回思考、{{toolCount}} 個のツールを使用",
+        "invokeToolLabel": "ツール呼び出し – {{toolName}}",
+        "paramsConfirmedLabel": "パラメータを確認しました",
         "toolCallLabel": "ツール呼び出し {{index}}",
         "processMessageLabel": "過程メッセージ {{count}}",
         "generatingWithTool": "{{tool}} で応答を生成中...",
@@ -91,6 +101,10 @@
         "completedLabel": "AIが生成した情報",
         "completedBadge": "完了",
         "jumpToLatest": "最新へ戻る"
+    },
+    "parameterForm": {
+        "defaultSelectedPrefix": "デフォルト選択：",
+        "submitFailed": "フォームの送信に失敗しました。ページを更新して再試行してください。"
     },
     "sessionList": {
         "mainSessionTitle": "メインチャット"
@@ -135,6 +149,31 @@
         "durationHoursMinutes": "{{hours}} 時間 {{minutes}} 分",
         "defaultName": "ワークフロー",
         "backgroundRunningWithId": "ワークフロー ID: {{workflowId}}",
-        "withId": "ワークフロー ID: {{workflowId}}"
+        "withId": "ワークフロー ID: {{workflowId}}",
+        "viewArtifact": "成果物を見る",
+        "openArtifactLink": "リンクを開く",
+        "viewWorkflowAction": "ワークフローを見る",
+        "createScheduledTaskAction": "定期タスクを作成"
+    },
+    "artifact": {
+        "typeDocument": "ドキュメント",
+        "typeSpreadsheet": "表",
+        "typeImage": "画像",
+        "typeArchive": "アーカイブ",
+        "typeMedia": "メディア",
+        "typeFile": "ファイル"
+    },
+    "preview": {
+        "collapsePanel": "プレビューを閉じる",
+        "overflowMenu": "すべての成果物",
+        "fullscreen": "全画面",
+        "refresh": "更新",
+        "download": "ダウンロード",
+        "openExternal": "共有",
+        "editWorkflow": "ワークフローを編集",
+        "workflowTab": "ワークフロー",
+        "emptyHint": "チャット内のファイルリンクをクリックしてプレビュー",
+        "emptyHintSub": "または上から成果物を選択",
+        "dismissTab": "この成果物を閉じる"
     }
 }

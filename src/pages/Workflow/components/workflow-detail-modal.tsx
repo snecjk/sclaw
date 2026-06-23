@@ -14,7 +14,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -28,7 +28,6 @@ import {
   workflowDetailModalFooterClass,
   workflowDetailModalInfoLabelClass,
   workflowDetailModalInfoRowClass,
-  workflowDetailModalMenuClass,
   workflowDetailModalMoreActionClass,
   workflowDetailModalOverlayClass,
   workflowDetailModalPrimaryActionClass,
@@ -41,6 +40,8 @@ import {
   workflowDetailModalStepsHeadingClass,
   workflowDetailModalStepsSectionClass,
   workflowDetailModalTitleBlockClass,
+  workflowListCardMenuClass,
+  workflowListCardMenuItemClass,
 } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
 import { WorkflowCardCover } from '@/pages/Workflow/components/workflow-card-cover';
@@ -75,6 +76,9 @@ function isMineCard(card: WorkflowCardItem | OfficialWorkflowCard): card is Work
   return 'enabled' in card;
 }
 
+const DETAIL_MORE_MENU_WIDTH = 208;
+const DETAIL_MORE_MENU_GAP = 8;
+
 /** 工作流详情弹窗：头图 + 标题/状态 + 信息行 + 步骤时间轴 + Footer 操作按钮（按 mode 切换） */
 export function WorkflowDetailModal({
   open,
@@ -93,16 +97,20 @@ export function WorkflowDetailModal({
 }: WorkflowDetailModalProps) {
   const { t } = useTranslation('workflow');
   const [moreOpen, setMoreOpen] = useState(false);
-  const moreRef = useRef<HTMLDivElement>(null);
+  const [moreMenuPos, setMoreMenuPos] = useState({ x: 0, y: 0 });
 
-  useEffect(() => {
-    if (!moreOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
-    };
-    document.addEventListener('click', onDoc);
-    return () => document.removeEventListener('click', onDoc);
-  }, [moreOpen]);
+  const openMoreMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMoreMenuPos({
+      x: Math.min(
+        Math.max(DETAIL_MORE_MENU_GAP, rect.left),
+        window.innerWidth - DETAIL_MORE_MENU_WIDTH - DETAIL_MORE_MENU_GAP,
+      ),
+      y: rect.top - DETAIL_MORE_MENU_GAP,
+    });
+    setMoreOpen((v) => !v);
+  };
 
   if (!card) return null;
 
@@ -145,6 +153,12 @@ export function WorkflowDetailModal({
             workflowDetailModalContentClass,
           )}
           aria-describedby={undefined}
+          onInteractOutside={(e) => {
+            if (moreOpen) e.preventDefault();
+          }}
+          onPointerDownOutside={(e) => {
+            if (moreOpen) e.preventDefault();
+          }}
         >
           <div className={workflowDetailModalCoverWrapClass}>
             <WorkflowCardCover
@@ -271,6 +285,16 @@ export function WorkflowDetailModal({
           <div className={workflowDetailModalFooterClass}>
             {mode === 'preview' ? (
               <>
+                <span className="flex-1" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={workflowDetailModalSecondaryActionClass}
+                  title={t('detail.tryRunHint')}
+                  onClick={onTryRun}
+                >
+                  {t('card.tryRun')}
+                </Button>
                 <Button
                   type="button"
                   className={workflowDetailModalPrimaryActionClass}
@@ -282,15 +306,6 @@ export function WorkflowDetailModal({
                 >
                   <Download className="mr-1.5 hidden h-4 w-4" aria-hidden />
                   {t('card.install')}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={workflowDetailModalSecondaryActionClass}
-                  title={t('detail.tryRunHint')}
-                  onClick={onTryRun}
-                >
-                  {t('card.tryRun')}
                 </Button>
               </>
             ) : mode === 'draft' ? (
@@ -333,83 +348,98 @@ export function WorkflowDetailModal({
                   <LayoutGrid className="mr-1.5 hidden h-4 w-4" aria-hidden />
                   {t('card.edit')}
                 </Button>
-                <div className="relative order-1" ref={moreRef}>
+                <div className="order-1">
                   <Button
                     type="button"
                     variant="outline"
                     className={workflowDetailModalMoreActionClass}
                     aria-label={t('card.more')}
                     aria-expanded={moreOpen}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMoreOpen((v) => !v);
-                    }}
+                    onClick={openMoreMenu}
                   >
                     <MoreHorizontal className="h-4 w-4" aria-hidden />
                   </Button>
-                  {moreOpen ? (
-                    <div className={workflowDetailModalMenuClass} role="menu">
-                      {mine ? (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] hover:bg-muted"
-                          onClick={() => {
-                            setMoreOpen(false);
-                            onToggleSchedule?.();
-                          }}
-                        >
-                          {card.enabled ? (
-                            <Pause className="h-4 w-4 text-muted-foreground" aria-hidden />
-                          ) : (
-                            <Play className="h-4 w-4 text-muted-foreground" aria-hidden />
-                          )}
-                          {card.enabled ? t('card.pauseSchedule') : t('card.resumeSchedule')}
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] hover:bg-muted"
-                        onClick={() => {
-                          setMoreOpen(false);
-                          onRename?.();
-                        }}
-                      >
-                        {t('card.rename')}
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] hover:bg-muted"
-                        onClick={() => {
-                          setMoreOpen(false);
-                          onShare?.();
-                        }}
-                      >
-                        <Share2 className="h-4 w-4 text-muted-foreground" aria-hidden />
-                        {t('card.share')}
-                      </button>
-                      <div className="mx-1 my-1 h-px bg-border" />
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] text-destructive hover:bg-destructive/10"
-                        onClick={() => {
-                          setMoreOpen(false);
-                          onDelete?.();
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden />
-                        {t('card.delete')}
-                      </button>
-                    </div>
-                  ) : null}
                 </div>
               </>
             )}
           </div>
         </Dialog.Content>
+
+        {moreOpen && mode === 'installed' ? (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-[125] cursor-default bg-transparent"
+              aria-label={t('card.more')}
+              onClick={() => setMoreOpen(false)}
+            />
+            <div
+              className={workflowListCardMenuClass}
+              // 锚点坐标来自 getBoundingClientRect，只能用 style 注入（与列表卡片菜单一致）
+              style={{
+                left: moreMenuPos.x,
+                top: moreMenuPos.y,
+                transform: 'translateY(-100%)',
+              }}
+              role="menu"
+            >
+              {mine ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={workflowListCardMenuItemClass}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    onToggleSchedule?.();
+                  }}
+                >
+                  {card.enabled ? (
+                    <Pause className="h-4 w-4 text-muted-foreground" aria-hidden />
+                  ) : (
+                    <Play className="h-4 w-4 text-muted-foreground" aria-hidden />
+                  )}
+                  {card.enabled ? t('card.pauseSchedule') : t('card.resumeSchedule')}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                role="menuitem"
+                className={workflowListCardMenuItemClass}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onRename?.();
+                }}
+              >
+                {t('card.rename')}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={workflowListCardMenuItemClass}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onShare?.();
+                }}
+              >
+                <Share2 className="h-4 w-4 text-muted-foreground" aria-hidden />
+                {t('card.share')}
+              </button>
+              <div className="mx-2 my-1.5 h-px bg-border" />
+              <button
+                type="button"
+                role="menuitem"
+                className={cn(workflowListCardMenuItemClass, 'text-destructive hover:bg-destructive/10')}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onDelete?.();
+                }}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden />
+                {t('card.delete')}
+              </button>
+            </div>
+          </>
+        ) : null}
       </Dialog.Portal>
     </Dialog.Root>
   );

@@ -4,6 +4,14 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { useHomeOfficialWorkflows } from './use-home-official-workflows';
 import { HomeWorkflowGuideCards } from './HomeWorkflowGuideCards';
+import { HomeWorkflowCard } from './HomeWorkflowCard';
+import {
+  homeHubCardDescClass,
+  homeHubCardGridClass,
+  homeHubCardTagClass,
+  homeHubCardTitleClass,
+  homeHubInteractiveCardShellClass,
+} from './home-hub-surface-styles';
 import avatar01 from '@/assets/avatars/avatar-01.png.png';
 import avatar02 from '@/assets/avatars/avatar-02.png.png';
 import avatar03 from '@/assets/avatars/avatar-03.png.png';
@@ -30,7 +38,7 @@ function pickThreeAvatars(seed: string): readonly [string, string, string] {
 
 function CategoryPill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="shrink-0 rounded-md bg-[#FFF5E6] px-2 py-0.5 text-xs font-medium text-[#D95700] dark:bg-amber-950/45 dark:text-amber-200">
+    <span className={cn('shrink-0', homeHubCardTagClass)}>
       {children}
     </span>
   );
@@ -51,10 +59,7 @@ function AvatarStack({ urls }: { urls: readonly [string, string, string] }) {
   );
 }
 
-const cardShell = cn(
-  'relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border bg-white p-5 shadow-[0_2px_12px_rgba(29,33,41,0.06)]',
-  'dark:border-border dark:bg-card',
-);
+const cardShell = homeHubInteractiveCardShellClass;
 
 function HomeTemplateGuideCard({
   id,
@@ -80,23 +85,20 @@ function HomeTemplateGuideCard({
     <button
       type="button"
       onClick={handleClick}
-      className={cn(
-        cardShell,
-        'w-full text-left transition-shadow duration-200 hover:shadow-[0_8px_24px_rgba(29,33,41,0.1)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)]',
-      )}
+      className={cardShell}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-bold leading-snug text-[#1D2129] dark:text-foreground">{label}</h3>
+            <h3 className={homeHubCardTitleClass}>{label}</h3>
             {category ? <CategoryPill>{category}</CategoryPill> : null}
           </div>
         </div>
       </div>
 
       <div className="mt-5 min-h-[4.5rem]">
-        <p className="text-[13px] leading-snug text-[#86909C] dark:text-muted-foreground">{description}</p>
-        <p className="mt-1.5 text-[15px] leading-relaxed text-[#86909C] dark:text-muted-foreground">
+        <p className={homeHubCardDescClass}>{description}</p>
+        <p className={cn('mt-1.5', homeHubCardDescClass)}>
           {t('homeWorkflowCard.bodyDetail')}
         </p>
       </div>
@@ -134,17 +136,28 @@ export function HomeOfficialWorkflowCards({
       <h2 id="home-official-workflow-heading" className="sr-only">
         {t('site.workflowGuide.heading')}
       </h2>
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-3 md:gap-5">
-        {templates.map((item) => (
-          <HomeTemplateGuideCard
-            key={item.id}
-            id={item.id}
-            label={item.label}
-            category={item.category}
-            description={item.description}
-            onSend={onSend}
-          />
-        ))}
+      <div className={homeHubCardGridClass}>
+        {templates.map((item) =>
+          item.hasMyWorkflow ? (
+            <HomeWorkflowCard
+              key={item.id}
+              id={item.id}
+              label={item.label}
+              category={item.category}
+              description={item.description}
+              onSend={onSend}
+            />
+          ) : (
+            <HomeTemplateGuideCard
+              key={item.id}
+              id={item.id}
+              label={item.label}
+              category={item.category}
+              description={item.description}
+              onSend={onSend}
+            />
+          ),
+        )}
       </div>
     </section>
   );
