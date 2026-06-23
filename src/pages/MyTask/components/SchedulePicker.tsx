@@ -652,7 +652,7 @@ function TimePicker({
 
 // ─── SchedulePicker 主组件 ─────────────────────────────────────────────────
 export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const [_, setAnyOpen] = useState(false);
   const handleOpenChange = useCallback((_open: boolean) => {
     setAnyOpen(_open);

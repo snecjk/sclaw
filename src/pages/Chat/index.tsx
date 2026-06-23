@@ -19,6 +19,7 @@ import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatToolbar } from './ChatToolbar';
 import { ChatSearchBar } from './ChatSearchBar';
 import { PendingQueuePanel } from './PendingQueuePanel';
+import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
 import { ChatPreviewPanel } from './ChatPreviewPanel';
 import { extractText } from './message-utils';
 import { useMessageQueueStore, createAutoSendWatcher } from '@/stores/message-queue';
@@ -610,6 +611,13 @@ export function Chat() {
         onMoveUp={queueMoveUp}
         onMoveDown={queueMoveDown}
       />
+
+      {/* Parameter form dock — 任务二：吸附输入框上方固定浮层 */}
+      <div className="relative z-10 shrink-0 px-6">
+        <div className="mx-auto max-w-5xl">
+          <ParameterFormDock layout="page" />
+        </div>
+      </div>
 
       {/* Input Area */}
       <ChatInput

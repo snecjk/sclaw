@@ -24,7 +24,7 @@ export interface WorkflowOption {
 export async function fetchWorkflows(): Promise<WorkflowOption[]> {
   const res = await hostApiFetch<{
     success: boolean;
-    data: Array<{ id: string; name: string; description?: string }>;
+    data: Array<{ id: string; name: string; description?: string; templateId?: string }>;
   }>(
     '/api/my-tasks/agent/v1/my-workflow',
     { method: 'GET' },

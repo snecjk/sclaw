@@ -23,7 +23,7 @@ import {
 } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
 import { WorkflowCardCover } from '@/pages/Workflow/components/workflow-card-cover';
-import { WorkflowScheduleToggle } from '@/pages/Workflow/components/workflow-schedule-toggle';
+// import { WorkflowScheduleToggle } from '@/pages/Workflow/components/workflow-schedule-toggle';
 import type { OfficialWorkflowCard, WorkflowCardItem, WorkflowCoverKey } from '@/pages/Workflow/types';
 
 interface WorkflowCardShellProps {
@@ -64,7 +64,8 @@ function WorkflowCardShell({ id, coverKey, dimmed, onCardClick, children }: Work
       data-workflow-id={id}
       className={cn(workflowListCardShellClass, dimmed && 'opacity-[0.82]')}
       onClick={(e) => {
-        if ((e.target as HTMLElement).closest('button, [role="switch"]')) return;
+        // if ((e.target as HTMLElement).closest('button, [role="switch"]')) return;
+        if ((e.target as HTMLElement).closest('button')) return;
         onCardClick();
       }}
     >
@@ -81,7 +82,8 @@ export interface WorkflowMineListCardProps {
   isRenaming: boolean;
   renameRef?: RefObject<HTMLInputElement | null>;
   onRenameCommit: (name: string) => void;
-  onToggleEnabled: (enabled: boolean) => void;
+  // TODO: 等待后端 API 对接
+  // onToggleEnabled: (enabled: boolean) => void;
   onCardClick: () => void;
   onRun: () => void;
   onEdit: () => void;
@@ -94,7 +96,7 @@ export function WorkflowMineListCard({
   isRenaming,
   renameRef,
   onRenameCommit,
-  onToggleEnabled,
+  // onToggleEnabled,
   onCardClick,
   onRun,
   onEdit,
@@ -131,15 +133,20 @@ export function WorkflowMineListCard({
                     <span className="rounded-sm bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                       {t('card.customTag')}
                     </span>
-                  ) : null}
+                  ) : (
+                    <span className="rounded-sm bg-muted px-2 py-0.5 text-xs font-medium text-foreground/70">
+                      {t('card.systemTag')}
+                    </span>
+                  )}
                 </span>
               )}
             </div>
-            <WorkflowScheduleToggle
+            {/* TODO: 等待后端 API 对接 */}
+            {/* <WorkflowScheduleToggle
               checked={card.enabled}
               onCheckedChange={onToggleEnabled}
               aria-label={card.enabled ? t('card.pauseSchedule') : t('card.resumeSchedule')}
-            />
+            /> */}
           </div>
           <div className={cn(workflowListCardScheduleRowClass, 'flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5')}>
             <span className={cn(card.scheduleMuted && 'text-muted-foreground/80')}>{card.schedule}</span>

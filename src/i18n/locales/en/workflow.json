@@ -44,6 +44,7 @@
     "install": "Install",
     "tryRun": "Try run",
     "customTag": "Custom",
+    "systemTag": "System",
     "pausedLabel": "· Paused",
     "statusSuccess": "Success",
     "statusPaused": "Paused",

@@ -42,6 +42,7 @@ import type { OfficialWorkflowCard, WorkflowCardItem, WorkflowMineListKind } fro
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { Button } from '@/components/ui/button';
 import { useWorkflowList } from '@/pages/Workflow/use-workflow-list';
+import { renameWorkflow, deleteWorkflow } from '@/lib/workflow-api';
 
 interface WorkflowDashboardProps {
   onManualCreate: () => void;
@@ -63,9 +64,11 @@ export function WorkflowDashboard({
   const {
     cards,
     setCards,
-    isLoading,
+    mineLoading,
+    officialLoading,
     error,
-    refetch,
+    refetchMine,
+    refetchOfficial,
     setSearchKeyword,
     mineCounts,
     officialCards,
@@ -83,6 +86,8 @@ export function WorkflowDashboard({
   const [detailMode, setDetailMode] = useState<WorkflowDetailMode>('installed');
   const [detailMineCard, setDetailMineCard] = useState<WorkflowCardItem | null>(null);
   const [detailOfficialCard, setDetailOfficialCard] = useState<OfficialWorkflowCard | null>(null);
+  const [renameLoading, setRenameLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<WorkflowCardItem | null>(null);
 
   /** 快捷提示词 i18n label 映射 */
@@ -168,12 +173,20 @@ export function WorkflowDashboard({
     toast.success(t('toast.shared'));
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) return;
-    setCards(cards.filter((c) => c.id !== deleteTarget.id));
-    toast.success(t('toast.deleted', { name: deleteTarget.name }));
-    setDeleteTarget(null);
-    closeDetail();
+    setDeleteLoading(true);
+    try {
+      await deleteWorkflow(deleteTarget.id);
+      toast.success(t('toast.deleted', { name: deleteTarget.name }));
+      setDeleteTarget(null);
+      closeDetail();
+      await refetchMine();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '删除失败');
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const handleGenerate = () => {
@@ -260,6 +273,8 @@ export function WorkflowDashboard({
                 setTab(key);
                 if (key === 'mine') {
                   setSearchKeyword(search);
+                } else {
+                  void refetchOfficial();
                 }
               }}
               className={workflowListTabClass(tab === key)}
@@ -311,14 +326,14 @@ export function WorkflowDashboard({
           </nav>
         </div>
 
-        {isLoading ? (
+        {mineLoading ? (
           <div className="flex justify-center py-16" aria-busy="true">
             <LoadingSpinner size="lg" />
           </div>
         ) : error ? (
           <div className="flex flex-col items-center gap-4 py-16 text-center">
             <p className="text-sm text-muted-foreground">{error}</p>
-            <Button type="button" variant="outline" onClick={() => { void refetch(); }}>
+            <Button type="button" variant="outline" onClick={() => { void refetchMine(); }}>
               {t('list.retry')}
             </Button>
           </div>
@@ -343,15 +358,24 @@ export function WorkflowDashboard({
                 card={card}
                 isRenaming={renamingId === card.id}
                 renameRef={renameRef}
-                onRenameCommit={(name) => {
-                  updateCard(index, { name });
-                  setRenamingId(null);
-                  toast.success(t('toast.renamed'));
+                onRenameCommit={async (name) => {
+                  setRenameLoading(true);
+                  try {
+                    await renameWorkflow(card.id, name);
+                    setRenamingId(null);
+                    toast.success(t('toast.renamed'));
+                    await refetchMine();
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : '重命名失败');
+                  } finally {
+                    setRenameLoading(false);
+                  }
                 }}
-                onToggleEnabled={(on) => {
-                  updateCard(index, { enabled: on, showPausedLabel: !on });
-                  toast.success(on ? t('toast.resumed') : t('toast.paused'));
-                }}
+                // TODO: 等待后端 API 对接 — onToggleEnabled 暂不启用
+                // onToggleEnabled={(on) => {
+                //   updateCard(index, { enabled: on, showPausedLabel: !on });
+                //   toast.success(on ? t('toast.resumed') : t('toast.paused'));
+                // }}
                 onCardClick={() => openDetailForMine(card)}
                 onRun={() => {
                   const q = encodeURIComponent(`帮我执行 id 为：${card.id} 的工作流 【${card.name}】`);
@@ -367,6 +391,12 @@ export function WorkflowDashboard({
       </section>
 
       <section role="tabpanel" aria-label={t('tabs.official')} hidden={tab !== 'official'}>
+        {officialLoading ? (
+          <div className="flex justify-center py-16" aria-busy="true">
+            <LoadingSpinner size="lg" />
+          </div>
+        ) : (
+        <>
         <div className={workflowListSubnavSlotClass}>
           <nav className={workflowListSubnavNavClass} aria-label={t('officialFilter.aria')}>
             {officialCategories.map((cat) => {
@@ -405,6 +435,8 @@ export function WorkflowDashboard({
             />
           ))}
         </WorkflowListCardGrid>
+        </>
+        )}
       </section>
       </div>
 
@@ -416,7 +448,7 @@ export function WorkflowDashboard({
             style={{ left: menuPos.x, top: menuPos.y }}
             role="menu"
           >
-            <button
+            {/* <button
               type="button"
               role="menuitem"
               className={workflowListCardMenuItemClass}
@@ -429,20 +461,23 @@ export function WorkflowDashboard({
               }}
             >
               {cards[menuIndex]?.enabled ? t('card.pauseSchedule') : t('card.resumeSchedule')}
-            </button>
+            </button> */}
             <button
               type="button"
               role="menuitem"
               className={workflowListCardMenuItemClass}
+              disabled={renameLoading}
               onClick={() => {
-                setRenamingId(cards[menuIndex]?.id ?? null);
+                const c = cards[menuIndex];
+                if (!c) return;
+                setRenamingId(c.id);
                 closeMenu();
                 requestAnimationFrame(() => renameRef.current?.focus());
               }}
             >
               {t('card.rename')}
             </button>
-            <button
+            {/* <button
               type="button"
               role="menuitem"
               className={workflowListCardMenuItemClass}
@@ -453,12 +488,13 @@ export function WorkflowDashboard({
               }}
             >
               {t('card.share')}
-            </button>
+            </button> */}
             <div className="mx-2 my-1.5 h-px bg-border" />
             <button
               type="button"
               role="menuitem"
               className={cn(workflowListCardMenuItemClass, 'text-destructive hover:bg-destructive/10')}
+              disabled={deleteLoading}
               onClick={() => {
                 const c = cards[menuIndex];
                 if (!c) return;

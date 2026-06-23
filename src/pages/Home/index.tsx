@@ -5,10 +5,10 @@ import { HomeAgentHubSurface } from './HomeAgentHubSurface';
 import { HomeSiteSurface } from './HomeSiteSurface';
 import { HomeHero } from './HomeHero';
 import { HomeSummaryCards } from './HomeSummaryCards';
-import { HomeAssistant } from './HomeAssistant';
+import { HomeComposer } from './HomeComposer';
 import { HomeMainConversation } from './HomeMainConversation';
+import { homeHubFooterShellClass, homeHubMainScrollClass } from './home-hub-surface-styles';
 import { useHomeConversationActive } from './use-home-conversation-active';
-import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
@@ -94,6 +94,7 @@ export function Home() {
     handleHubSend(seedText, undefined, undefined, undefined, seedWorkflowId);
   }, [seedText, seedWorkflowId, gatewayStatus.state, handleHubSend, setSearchParams]);
 
+	// 网点用户看到 首页 UI 
   if (isSite) {
     return (
       <>
@@ -127,24 +128,18 @@ export function Home() {
   return (
     <>
       <div className="mx-auto flex h-full min-h-0 w-full flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6">
           {showConversation ? (
             <HomeMainConversation className="min-h-0 flex-1" />
           ) : (
-            <>
-              <div className="mb-3 mt-2 flex w-full items-center justify-between px-4 sm:px-6">
-                <ChatEngineSelector />
-                <ChatModelSelector />
-              </div>
-              <div className="flex min-h-0 flex-1 flex-col justify-center gap-8 overflow-y-auto py-6 md:gap-10">
-                <HomeHero />
-                <HomeSummaryCards />
-              </div>
-            </>
+            <div className={homeHubMainScrollClass}>
+              <HomeHero />
+              <HomeSummaryCards />
+            </div>
           )}
         </div>
-        <div className="sticky z-10 shrink-0 bg-[var(--sto-page-bg)] pt-6 dark:bg-background">
-          <HomeAssistant seedText={seedText} onSend={handleHubSend} />
+        <div className={homeHubFooterShellClass}>
+          <HomeComposer seedText={seedText} onSend={handleHubSend} />
         </div>
       </div>
       <TaskCreateModal

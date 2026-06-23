@@ -29,6 +29,8 @@ export interface WorkflowCardItem {
   lastRun: string;
   coverKey: WorkflowCoverKey;
   isCustom?: boolean;
+  /** 来自 API 的模板 ID，用于与官方推荐列表比对以区分「系统 / 自建」 */
+  templateId?: string | null;
   /** 排期行显示「已暂停」警告 */
   showPausedLabel?: boolean;
   /** 排期文案弱化（已暂停态） */

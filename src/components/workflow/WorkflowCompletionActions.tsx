@@ -1,8 +1,9 @@
-import { FileText } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { artifactToPreviewFile, isPreviewableArtifactUrl, isUserFacingArtifactUrl } from '@/lib/preview-url';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import type { AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
+import { ArtifactProductCard, buildArtifactMetaLine } from '@/components/chat/artifact-product-card';
 
 interface WorkflowCompletionActionsProps {
   runId: string;
@@ -14,6 +15,7 @@ export function WorkflowCompletionActions({
   runId,
   onPreviewArtifact,
 }: WorkflowCompletionActionsProps) {
+  const { t } = useTranslation('chat');
   const state = useChatStore((s) => s.workflowCardStates[runId]);
   if (!state || !isTerminalWorkflowRunStatus(state.status)) return null;
 
@@ -22,28 +24,19 @@ export function WorkflowCompletionActions({
   const canPreview = primaryArtifact && onPreviewArtifact
     && isPreviewableArtifactUrl(primaryArtifact.url, primaryArtifact.type);
 
-  if (!canPreview) return null;
+  if (!canPreview || !primaryArtifact) return null;
 
   return (
-    <div className="mt-3 space-y-2">
-      {primaryArtifact && (
-        <div className="flex items-center gap-3 rounded-xl border border-[#E5E6EB] bg-white px-3.5 py-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#FFF5E6]">
-            <FileText className="h-4 w-4 text-[#FF6F00]" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-semibold text-[#1D2129]">{primaryArtifact.name}</p>
-            <p className="truncate text-[11px] text-[#86909C]">{primaryArtifact.type || 'output'}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => onPreviewArtifact!(artifactToPreviewFile(primaryArtifact))}
-            className="shrink-0 rounded-full border border-[#FF6F00]/30 px-3 py-1 text-[12px] font-medium text-[#FF6F00] transition-colors hover:bg-[#FFF5E6]"
-          >
-            查看预览
-          </button>
-        </div>
-      )}
+    <div className="mt-3 w-full">
+      <ArtifactProductCard
+        title={primaryArtifact.name}
+        metaLine={buildArtifactMetaLine({
+          fileName: primaryArtifact.name,
+          mimeType: primaryArtifact.type || 'application/octet-stream',
+          t,
+        })}
+        onAction={() => onPreviewArtifact!(artifactToPreviewFile(primaryArtifact))}
+      />
     </div>
   );
 }

@@ -439,6 +439,141 @@
   background: hsl(var(--muted));
 }
 
+/**
+ * 助手回复正文 Markdown（MasterGo 8:15178 / 8:13075）
+ * 仅挂在 ChatMessage 助手 prose 容器，避免影响思考过程区等其它 .prose 用法。
+ */
+.prose-chat-reply {
+  font-size: 0.875rem;
+  line-height: 1.714285714;
+  color: hsl(var(--foreground));
+}
+
+.prose-chat-reply :where(h1) {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.875;
+  margin-top: 1rem;
+  margin-bottom: 0.75rem;
+  color: hsl(var(--foreground));
+}
+
+.prose-chat-reply :where(h2) {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.625;
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+  color: hsl(var(--foreground));
+}
+
+.prose-chat-reply :where(h3) {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+  color: hsl(var(--foreground));
+}
+
+.prose-chat-reply :where(h4, h5, h6) {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.375rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+  color: hsl(var(--foreground));
+}
+
+.prose-chat-reply :where(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
+
+.prose-chat-reply p {
+  margin-bottom: 0.75rem;
+}
+
+.prose-chat-reply p:last-child {
+  margin-bottom: 0;
+}
+
+.prose-chat-reply strong {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.prose-chat-reply ul,
+.prose-chat-reply ol {
+  margin-top: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding-left: 1.25rem;
+}
+
+.prose-chat-reply li {
+  margin-bottom: 0.375rem;
+  line-height: 1.714285714;
+}
+
+.prose-chat-reply li::marker {
+  color: hsl(var(--foreground));
+}
+
+.prose-chat-reply blockquote {
+  border-left: 3px solid hsl(var(--border));
+  padding-left: 1em;
+  margin: 0.75rem 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  line-height: 1.714285714;
+}
+
+.prose-chat-reply .prose-table-wrap {
+  margin: 0.75rem 0;
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  border: 1px solid #f2f3f5;
+}
+
+.prose-chat-reply .prose-table-wrap table {
+  width: 100%;
+  min-width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.375rem;
+}
+
+.prose-chat-reply .prose-table-wrap th {
+  background-color: #f5f6f7;
+  border: 0;
+  border-bottom: 1px solid #f2f3f5;
+  padding: 9px 12px;
+  font-weight: 500;
+  text-align: left;
+  color: hsl(var(--foreground));
+}
+
+.prose-chat-reply .prose-table-wrap td {
+  border: 0;
+  border-bottom: 1px solid #f2f3f5;
+  padding: 11px 12px;
+  text-align: left;
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
+.prose-chat-reply .prose-table-wrap tbody tr:nth-child(even) td {
+  background-color: #fafbfc;
+}
+
+.prose-chat-reply .prose-table-wrap tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.prose-chat-reply .prose-table-wrap tbody tr:last-child th {
+  border-bottom: 0;
+}
+
 /* Typing indicator animation */
 @keyframes bounce {
 

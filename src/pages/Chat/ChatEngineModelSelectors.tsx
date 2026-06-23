@@ -38,9 +38,23 @@ const pillBtn = cn(
   'disabled:pointer-events-none disabled:opacity-60',
 );
 
+/** 首页 HomeComposer 内联引擎/模型：灰底 pill，无左侧标签与图标 */
+const inlinePillTrigger = cn(
+  'flex h-[30px] min-w-0 items-center gap-1 rounded-[20px] bg-[#F5F6F7] px-3 outline-none',
+  'text-sm font-normal text-foreground transition-colors hover:bg-black/[0.04]',
+  'focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
+  'disabled:pointer-events-none disabled:opacity-60 dark:bg-muted dark:hover:bg-white/[0.06]',
+);
+
 /* ── Engine Selector ─────────────────────────────────────────── */
 
-export function ChatEngineSelector({ className }: { className?: string }) {
+export function ChatEngineSelector({
+  className,
+  variant = 'toolbar',
+}: {
+  className?: string;
+  variant?: 'toolbar' | 'inline';
+}) {
   const sending = useChatStore((s) => s.sending);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
@@ -90,6 +104,52 @@ export function ChatEngineSelector({ className }: { className?: string }) {
 
   const engineSelectDisabled = sending || !currentAgentId;
 
+  const engineMenu = (
+    <DropdownMenuContent
+      align="end"
+      side="bottom"
+      className="min-w-[12rem] max-w-[min(100vw-2rem,300px)]"
+    >
+      {(['openclaw', 'claude'] as const).map((engineType) => {
+        const label = engineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
+        const isSelected = agentDefaultEngineType === engineType;
+        return (
+          <DropdownMenuItem
+            key={engineType}
+            className={cn('flex items-center gap-2', isSelected && 'bg-primary/8 font-medium')}
+            onSelect={() => void handleEngineSwitch(engineType)}
+          >
+            <span className="min-w-0 flex-1 truncate text-[13px]">{label}</span>
+            {isSelected ? <Check className="h-4 w-4 shrink-0 text-primary" /> : null}
+          </DropdownMenuItem>
+        );
+      })}
+    </DropdownMenuContent>
+  );
+
+  if (variant === 'inline') {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild disabled={engineSelectDisabled || engineSaving}>
+          <button
+            type="button"
+            title="切换新会话执行引擎"
+            className={cn(
+              inlinePillTrigger,
+              'max-w-[120px]',
+              engineSaving && 'pointer-events-none opacity-60',
+              className,
+            )}
+          >
+            <span className="min-w-0 flex-1 truncate">{agentDefaultEngineLabel}</span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
+          </button>
+        </DropdownMenuTrigger>
+        {engineMenu}
+      </DropdownMenu>
+    );
+  }
+
   return (
     <div className={cn('flex min-w-0 items-center gap-1.5', className)}>
       <span className="shrink-0 whitespace-nowrap px-1 text-[11px] font-medium text-muted-foreground/90 sm:text-[12px]">
@@ -111,26 +171,7 @@ export function ChatEngineSelector({ className }: { className?: string }) {
             </button>
           </DropdownMenuTrigger>
         </div>
-        <DropdownMenuContent
-          align="end"
-          side="bottom"
-          className="min-w-[12rem] max-w-[min(100vw-2rem,300px)]"
-        >
-          {(['openclaw', 'claude'] as const).map((engineType) => {
-            const label = engineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
-            const isSelected = agentDefaultEngineType === engineType;
-            return (
-              <DropdownMenuItem
-                key={engineType}
-                className={cn('flex items-center gap-2', isSelected && 'bg-primary/8 font-medium')}
-                onSelect={() => void handleEngineSwitch(engineType)}
-              >
-                <span className="min-w-0 flex-1 truncate text-[13px]">{label}</span>
-                {isSelected ? <Check className="h-4 w-4 shrink-0 text-primary" /> : null}
-              </DropdownMenuItem>
-            );
-          })}
-        </DropdownMenuContent>
+        {engineMenu}
       </DropdownMenu>
       {showSessionEngineHint ? (
         <Tooltip delayDuration={150}>
@@ -157,7 +198,13 @@ export function ChatEngineSelector({ className }: { className?: string }) {
 
 /* ── Model Selector ──────────────────────────────────────────── */
 
-export function ChatModelSelector({ className }: { className?: string }) {
+export function ChatModelSelector({
+  className,
+  variant = 'toolbar',
+}: {
+  className?: string;
+  variant?: 'toolbar' | 'inline';
+}) {
   const sending = useChatStore((s) => s.sending);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
@@ -306,6 +353,61 @@ export function ChatModelSelector({ className }: { className?: string }) {
 
   const modelSelectDisabled = (currentEngineType === 'openclaw' && !isGatewayRunning) || sending || modelOptions.length === 0;
 
+  const modelMenu = (
+    <DropdownMenuContent
+      align="end"
+      side="bottom"
+      className="min-w-[14rem] max-w-[min(100vw-2rem,360px)]"
+    >
+      {modelOptions.length === 0 ? (
+        <DropdownMenuItem disabled>
+          <span className="text-muted-foreground">{t('toolbar.noModels')}</span>
+        </DropdownMenuItem>
+      ) : (
+        modelOptions.map((option) => (
+          <DropdownMenuItem
+            key={option.key}
+            className={cn('flex items-center gap-2', option.modelId === selectedModelId && 'bg-primary/8 font-medium')}
+            onSelect={() => void handleModelSwitch(option.modelId)}
+          >
+            <span className="min-w-0 flex-1 truncate text-[13px]">{option.displayName}</span>
+            <span className={cn(
+              'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
+              option.isBuiltin
+                ? 'bg-link-muted text-link dark:bg-[hsl(231_35%_18%)] dark:text-[hsl(var(--link))]'
+                : 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
+            )}>
+              {option.isBuiltin ? t('toolbar.modelTagBuiltin') : t('toolbar.modelTagCustom')}
+            </span>
+          </DropdownMenuItem>
+        ))
+      )}
+    </DropdownMenuContent>
+  );
+
+  if (variant === 'inline') {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild disabled={modelSelectDisabled}>
+          <button
+            type="button"
+            title={t('toolbar.switchModelTitle')}
+            className={cn(
+              inlinePillTrigger,
+              'max-w-[136px]',
+              modelSaving && 'pointer-events-none opacity-60',
+              className,
+            )}
+          >
+            <span className="min-w-0 flex-1 truncate">{modelDisplayText}</span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
+          </button>
+        </DropdownMenuTrigger>
+        {modelMenu}
+      </DropdownMenu>
+    );
+  }
+
   return (
     <div className={cn('flex min-w-0 items-center gap-1.5', className)}>
       <span className="shrink-0 whitespace-nowrap px-1 text-[11px] font-medium text-muted-foreground/90 sm:text-[12px]">
@@ -337,35 +439,7 @@ export function ChatModelSelector({ className }: { className?: string }) {
             </button>
           </DropdownMenuTrigger>
         </div>
-        <DropdownMenuContent
-          align="end"
-          side="bottom"
-          className="min-w-[14rem] max-w-[min(100vw-2rem,360px)]"
-        >
-          {modelOptions.length === 0 ? (
-            <DropdownMenuItem disabled>
-              <span className="text-muted-foreground">{t('toolbar.noModels')}</span>
-            </DropdownMenuItem>
-          ) : (
-            modelOptions.map((option) => (
-              <DropdownMenuItem
-                key={option.key}
-                className={cn('flex items-center gap-2', option.modelId === selectedModelId && 'bg-primary/8 font-medium')}
-                onSelect={() => void handleModelSwitch(option.modelId)}
-              >
-                <span className="min-w-0 flex-1 truncate text-[13px]">{option.displayName}</span>
-                <span className={cn(
-                  'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
-                  option.isBuiltin
-                    ? 'bg-link-muted text-link dark:bg-[hsl(231_35%_18%)] dark:text-[hsl(var(--link))]'
-                    : 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
-                )}>
-                  {option.isBuiltin ? t('toolbar.modelTagBuiltin') : t('toolbar.modelTagCustom')}
-                </span>
-              </DropdownMenuItem>
-            ))
-          )}
-        </DropdownMenuContent>
+        {modelMenu}
       </DropdownMenu>
     </div>
   );

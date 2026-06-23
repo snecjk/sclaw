@@ -447,3 +447,30 @@ export function isCaretInsideMentionSpan(_root: HTMLElement): boolean {
   const element = node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement;
   return !!element?.closest(MENTION_SPAN_SELECTOR);
 }
+
+/**
+ * 在光标处插入 `@` 并返回 mention 触发器（首页输入框 @ 按钮复用打字 @ 流程）。
+ */
+export function insertAtTriggerCharacter(root: HTMLElement): ActiveMentionTrigger | null {
+  root.focus();
+  const selection = window.getSelection();
+  if (!selection) return null;
+
+  let range: Range;
+  if (selection.rangeCount > 0 && root.contains(selection.getRangeAt(0).startContainer)) {
+    range = selection.getRangeAt(0);
+  } else {
+    range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+  }
+
+  const atNode = document.createTextNode('@');
+  range.insertNode(atNode);
+  range.setStartAfter(atNode);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+
+  return detectActiveMentionTrigger(root);
+}

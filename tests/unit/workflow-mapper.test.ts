@@ -22,6 +22,7 @@ const t = ((key: string, opts?: Record<string, unknown>) => {
 
 function summary(partial: Partial<WorkflowSummary> & Pick<WorkflowSummary, 'id' | 'name'>): WorkflowSummary {
   return {
+    templateId: null,
     version: 1,
     lifecycleStatus: 'active',
     versionStatus: 'published',

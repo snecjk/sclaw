@@ -1,5 +1,5 @@
-/** 工作流卡片头图资源定义与本地创建辅助函数 */
-import type { WorkflowCardItem, WorkflowCoverKey } from '@/pages/Workflow/types';
+/** 工作流卡片头图资源定义 */
+import type { WorkflowCoverKey } from '@/pages/Workflow/types';
 import workflowCardCover1 from '@/assets/workflow-card-cover-1.png';
 import workflowCardCover2 from '@/assets/workflow-card-cover-2.png';
 import workflowCardCover3 from '@/assets/workflow-card-cover-3.png';
@@ -29,31 +29,3 @@ export const WORKFLOW_CARD_COVER_BY_KEY: Record<WorkflowCoverKey, WorkflowCardCo
     WorkflowCardCoverAsset
   >;
 
-/** 随机选一个头图 key，用于本地创建卡片时分配封面 */
-export function pickRandomWorkflowCoverKey(): WorkflowCoverKey {
-  const index = Math.floor(Math.random() * WORKFLOW_CARD_COVERS.length);
-  return WORKFLOW_CARD_COVERS[index].key;
-}
-
-/** @mock: 待接入 POST /agent/v1/workflows 创建成功后的列表项拼装 */
-export function createWorkflowCardItem(
-  name: string,
-  listKind: 'published' | 'draft',
-): WorkflowCardItem {
-  return {
-    id: `wf_${crypto.randomUUID()}`,
-    name,
-    listKind,
-    category: '经营管理',
-    schedule: listKind === 'draft' ? '还未设置排期' : '待配置自动运行',
-    scheduleIcon: 'clock',
-    enabled: listKind === 'published',
-    isCustom: true,
-    description: '在编辑器中创建的工作流。',
-    flow: ['待配置节点'],
-    lastRun: listKind === 'draft' ? '还没运行过' : '还没运行过',
-    coverKey: pickRandomWorkflowCoverKey(),
-    neverRun: true,
-    ...(listKind === 'draft' ? { scheduleMuted: true, showPausedLabel: false } : {}),
-  };
-}
