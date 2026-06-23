@@ -77,7 +77,24 @@ uv run python scripts/generate.py \
 |------|------|------|
 | `--config` | 是 | 模板配置文件路径（JSON） |
 | `--data-dir` | 是 | 数据目录，内含 `<data_key>.json` 文件 |
-| `--output` | 否 | 输出 HTML 路径，默认自动生成 |
+| `--output` | 否 | 输出 HTML 路径；省略时写入 workspace 的 `.claw-output/` 并自动带时间戳文件名 |
+
+### 默认输出目录
+
+与 StoClaw **long-output-saver** 约定一致：
+
+| 场景 | 实际写入路径 |
+|------|-------------|
+| 未传 `--output` | `~/.stoclaw/openclaw/workspace/.claw-output/report_<时间戳>.html` |
+| `--output weekly.html`（相对路径） | `~/.stoclaw/openclaw/workspace/.claw-output/weekly.html` |
+| `--output /abs/path/report.html`（绝对路径） | 按给定绝对路径写入 |
+
+环境变量（Gateway 注入时优先）：
+
+- `STOCLAW_WORKSPACE` → 输出到 `{STOCLAW_WORKSPACE}/.claw-output/`
+- `STOCLAW_OUTPUT_DIR` → 直接作为输出目录
+
+**回复用户时**：必须照抄脚本 stdout 中的**绝对路径**，用 Markdown 链接 `[文件名](file:///绝对路径)`；禁止 `./.claw-output/...`、`~/.openclaw/...` 或环境变量占位符。
 
 ---
 
@@ -236,5 +253,5 @@ uv run python scripts/generate.py \
 1. **本 skill 不查询数据**，只负责渲染。数据必须由调用方提供。
 2. 模板配置错误时，脚本会输出具体错误信息到 stderr。
 3. 如果数据文件中缺少模板要求的字段，对应位置显示 "-" 或 "暂无数据"。
-4. **生成的 HTML 文件不自开浏览器，只输出文件路径。** sto-claw 内置预览会自动处理，Agent 禁止调用任何工具（browser/exec/openExternal 等）主动打开。
+4. **生成的 HTML 文件不自开浏览器，只输出文件路径。** 回复中必须使用脚本打印的绝对路径（`~/.stoclaw/openclaw/workspace/.claw-output/...`），sto-claw 内置预览会自动处理；Agent 禁止调用任何工具（browser/exec/openExternal 等）主动打开。
 5. **禁止覆盖已有文件**：无论通过 `--output` 指定还是使用默认路径，脚本都会确保写入的是新文件。若需迭代调整，请在 `--output` 中使用 `_v{N}` 批次命名，或让脚本自动递增版本号。
