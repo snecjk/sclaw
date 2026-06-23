@@ -241,7 +241,7 @@ export function WorkflowOfficialListCard({
         >
           依此模板创建
         </button>
-        <button
+        {/* <button
           type="button"
           className={workflowListCardSecondaryActionClass}
           onClick={(e) => {
@@ -250,7 +250,7 @@ export function WorkflowOfficialListCard({
           }}
         >
           {t('card.preview')}
-        </button>
+        </button> */}
         <button
           type="button"
           className={workflowListCardPrimaryActionClass}
