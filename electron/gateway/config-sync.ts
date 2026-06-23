@@ -142,6 +142,19 @@ async function ensureConfiguredPluginsUpgraded(configuredChannels: string[]): Pr
 export async function syncGatewayConfigBeforeLaunch(
   appSettings: Awaited<ReturnType<typeof getAllSettings>>,
 ): Promise<void> {
+  // Group 0: legacy openclaw.json / STO catalog reset before Gateway reads config
+  try {
+    const { runOpenClawRuntimeResetIfNeeded } = await import('../services/openclaw-runtime-reset');
+    const resetResult = await runOpenClawRuntimeResetIfNeeded();
+    if (!resetResult.skipped) {
+      logger.info(
+        `[openclaw-reset] completed: preMigrate=${resetResult.preMigrateRan} nuclear=${resetResult.nuclearReset}`,
+      );
+    }
+  } catch (err) {
+    logger.warn('Failed to run openclaw runtime reset before launch:', err);
+  }
+
   // Group 1: independent config syncs that can run in parallel
   await Promise.all([
     syncProxyConfigToOpenClaw(appSettings, { preserveExistingWhenDisabled: true }),

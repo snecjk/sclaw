@@ -22,7 +22,7 @@ import {
 } from './sto-placeholder-utils';
 
 /** Bump when STO catalog storage / openclaw layout changes require repair. */
-export const STO_CATALOG_MIGRATION_VERSION = 2;
+export const STO_CATALOG_MIGRATION_VERSION = 3;
 
 const STO_LEGACY_OPENCLAW_KEY_PREFIX = 'sto-model-';
 

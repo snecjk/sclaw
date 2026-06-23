@@ -18,6 +18,7 @@ import {
   isConcreteModelId,
   normalizeModelIdForChat,
   resolveChatToolbarModelId,
+  upsertSessionModel,
   type ChatModelOption,
 } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
@@ -453,11 +454,12 @@ export function ChatModelSelector({
         }
       }
       useChatStore.setState((state) => ({
-        sessions: state.sessions.map((session) => (
-          session.key === currentSessionKey
-            ? { ...session, model: persistedModel || modelId }
-            : session
-        )),
+        sessions: upsertSessionModel(
+          state.sessions,
+          currentSessionKey,
+          persistedModel || modelId,
+          { engineType: currentEngineType, label: '新对话' },
+        ),
       }));
       // void loadSessions(); // 这行代码会出现个BUG：新对话中切换模型，会跳转到下方最近一次的对话框中
     } catch (err) {

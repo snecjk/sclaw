@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
 import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-to-chat';
+import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
@@ -1840,8 +1841,16 @@ export const useChatStore = create<ChatState>()(
       ?? DEFAULT_CANONICAL_PREFIX;
     const newKey = `${prefix}:session-${Date.now()}`;
     const newAgentId = getAgentIdFromSessionKey(newKey);
-    // Carry over model from the current (default) session — e.g. home page selection
-    const currentSessionModel = sessions.find((s) => s.key === currentSessionKey)?.model;
+    // Carry over model from home/default session or Claude agent toolbar selection
+    let currentSessionModel = sessions.find((s) => s.key === currentSessionKey)?.model;
+    if (!currentSessionModel?.trim()) {
+      const carryAgent = useAgentsStore.getState().agents.find(
+        (agent) => agent.id === (getAgentIdFromSessionKey(currentSessionKey) ?? get().currentAgentId),
+      );
+      if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
+        currentSessionModel = normalizeModelIdForChat(carryAgent.modelDisplay);
+      }
+    }
     const newSessionEntry: ChatSession = {
       key: newKey,
       label: NEW_SESSION_TEMP_LABEL,
