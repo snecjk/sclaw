@@ -6,6 +6,8 @@ const sendJsonMock = vi.fn();
 const getUserSkDetailMock = vi.fn();
 const expandUserSkQuotaMock = vi.fn();
 const reportExpansionMock = vi.fn();
+const applyHqExpansionMock = vi.fn();
+const resolveUserTypeMock = vi.fn();
 
 vi.mock('@electron/services/sto-token-quota-service', () => ({
   getStoTokenQuotaService: () => ({
@@ -22,6 +24,17 @@ vi.mock('@electron/services/user-sk-service', () => ({
 vi.mock('@electron/services/sto-token-quota-expansion-record-service', () => ({
   generateApplyCode: () => 'exp_test_apply_code',
   reportTokenQuotaExpansionRecord: (...args: unknown[]) => reportExpansionMock(...args),
+}));
+
+vi.mock('@electron/services/sto-token-quota-expansion-apply-service', () => ({
+  applyHqTokenQuotaExpansion: (...args: unknown[]) => applyHqExpansionMock(...args),
+  StoTokenQuotaExpansionApplyError: class StoTokenQuotaExpansionApplyError extends Error {
+    statusCode: number;
+    constructor(message: string, statusCode: number) {
+      super(message);
+      this.statusCode = statusCode;
+    }
+  },
 }));
 
 vi.mock('@electron/utils/auth-store', () => ({
@@ -49,7 +62,7 @@ vi.mock('@electron/utils/auth-store', () => ({
 }));
 
 vi.mock('@electron/services/sto-sk-strategy', () => ({
-  resolveUserType: async () => 'hq',
+  resolveUserType: (...args: unknown[]) => resolveUserTypeMock(...args),
 }));
 
 vi.mock('@electron/api/route-utils', () => ({
@@ -57,9 +70,28 @@ vi.mock('@electron/api/route-utils', () => ({
   parseJsonBody: async (req: IncomingMessage) => (req as IncomingMessage & { __body?: unknown }).__body,
 }));
 
+const sampleTier = {
+  level: 2,
+  tierName: '标准套餐',
+  quotaAmount: 500,
+  needApproval: false,
+  approverDesc: null,
+  isDefault: false,
+  applied: false,
+  children: null,
+};
+
+const sampleTierContext = {
+  tierList: [sampleTier],
+  currentTier: '基础档',
+  currentQuota: 300,
+  totalExpandedQuota: 50,
+};
+
 describe('handleTokenQuotaRoutes', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    resolveUserTypeMock.mockResolvedValue('hq');
   });
 
   it('returns the service result for GET /api/token-quota/check', async () => {
@@ -142,7 +174,56 @@ describe('handleTokenQuotaRoutes', () => {
     );
   });
 
-  it('handles POST /api/token-quota/expansion and reports expansion record', async () => {
+  it('proxies hq POST /api/token-quota/expansion to memory-center', async () => {
+    applyHqExpansionMock.mockResolvedValueOnce(undefined);
+    const { handleTokenQuotaRoutes } = await import('@electron/api/routes/token-quota');
+    const req = {
+      method: 'POST',
+      __body: {
+        tokenId: 'tk_1',
+        quotaAmount: 500,
+        tier: sampleTier,
+        tierContext: sampleTierContext,
+      },
+    } as IncomingMessage & { __body?: unknown };
+
+    const handled = await handleTokenQuotaRoutes(
+      req,
+      {} as ServerResponse,
+      new URL('http://127.0.0.1:3210/api/token-quota/expansion'),
+      {} as never,
+    );
+
+    expect(handled).toBe(true);
+    expect(applyHqExpansionMock).toHaveBeenCalledTimes(1);
+    expect(expandUserSkQuotaMock).not.toHaveBeenCalled();
+    expect(sendJsonMock).toHaveBeenCalledWith(expect.anything(), 200, { success: true });
+  });
+
+  it('returns 400 when hq payload misses tierContext', async () => {
+    const { handleTokenQuotaRoutes } = await import('@electron/api/routes/token-quota');
+    const req = {
+      method: 'POST',
+      __body: { tokenId: 'tk_1', quotaAmount: 500, tier: sampleTier },
+    } as IncomingMessage & { __body?: unknown };
+
+    await handleTokenQuotaRoutes(
+      req,
+      {} as ServerResponse,
+      new URL('http://127.0.0.1:3210/api/token-quota/expansion'),
+      {} as never,
+    );
+
+    expect(sendJsonMock).toHaveBeenCalledWith(
+      expect.anything(),
+      400,
+      { error: 'tierContext is required' },
+    );
+    expect(applyHqExpansionMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps site expansion flow unchanged', async () => {
+    resolveUserTypeMock.mockResolvedValueOnce('site');
     getUserSkDetailMock.mockResolvedValueOnce({
       tokenId: 'tk_1',
       spend: 10,
@@ -160,14 +241,14 @@ describe('handleTokenQuotaRoutes', () => {
       __body?: unknown;
     };
 
-    const handled = await handleTokenQuotaRoutes(
+    await handleTokenQuotaRoutes(
       req,
       {} as ServerResponse,
       new URL('http://127.0.0.1:3210/api/token-quota/expansion'),
       {} as never,
     );
 
-    expect(handled).toBe(true);
+    expect(applyHqExpansionMock).not.toHaveBeenCalled();
     expect(expandUserSkQuotaMock).toHaveBeenCalledWith('tk_1', 200);
     expect(sendJsonMock).toHaveBeenCalledWith(expect.anything(), 200, { success: true });
     await new Promise((resolve) => setTimeout(resolve, 0));

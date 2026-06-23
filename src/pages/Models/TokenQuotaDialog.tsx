@@ -124,7 +124,7 @@ export function TokenQuotaDialog({
   const expansionCount = tierList.length > 0 ? countAppliedExpansions(tierList) : 0;
 
   const handleApply = async (tier: TokenQuotaTierItem) => {
-    if (!tokenId || applying !== null || tier.quotaAmount == null) return;
+    if (!tokenId || applying !== null || tier.quotaAmount == null || fetchState.status !== 'done') return;
     setApplying(tier.quotaAmount);
     trackUiEvent('models.token_quota_apply', { amount: tier.quotaAmount });
     try {
@@ -135,7 +135,7 @@ export function TokenQuotaDialog({
           quotaAmount: tier.quotaAmount,
           clientEventId: `models_token_quota_apply_${Date.now()}`,
           tier,
-          tierContext: fetchState.status === 'done' ? fetchState.data : undefined,
+          tierContext: fetchState.data,
         }),
       });
       trackUiEvent('models.token_quota_apply_success', { amount: tier.quotaAmount });

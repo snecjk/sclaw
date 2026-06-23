@@ -14,6 +14,8 @@ import {
 } from '../../services/token-quota-snapshot-builder';
 import { getUserSkDetail, expandUserSkQuota, getUserTokenQuotaTiers } from '../../services/user-sk-service';
 import { resolveUserType } from '../../services/sto-sk-strategy';
+import { applyHqTokenQuotaExpansion, StoTokenQuotaExpansionApplyError } from '../../services/sto-token-quota-expansion-apply-service';
+import { validateHqExpansionBody } from '../../services/token-quota-expansion-validation';
 import { getAuthState } from '../../utils/auth-store';
 import { parseJsonBody } from '../route-utils';
 import { logger } from '../../utils/logger';
@@ -201,6 +203,29 @@ export async function handleTokenQuotaRoutes(
   if (url.pathname === '/api/token-quota/expansion' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<ExpansionRequestBody>(req);
+      const { user } = await getAuthState();
+      const userType = await resolveUserType(user);
+
+      if (userType === 'hq') {
+        const validationError = validateHqExpansionBody(body);
+        if (validationError) {
+          sendJson(res, 400, { error: validationError });
+          return true;
+        }
+        try {
+          await applyHqTokenQuotaExpansion(body);
+          sendJson(res, 200, { success: true });
+        } catch (error) {
+          if (error instanceof StoTokenQuotaExpansionApplyError) {
+            sendJson(res, error.statusCode, { error: error.message });
+            return true;
+          }
+          throw error;
+        }
+        return true;
+      }
+
+      // 网点：保持现有 Main 编排
       const tokenId = body.tokenId?.trim() || '';
       const quotaAmount = Number(body.quotaAmount) || 0;
       if (!tokenId || quotaAmount <= 0) {
