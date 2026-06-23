@@ -324,19 +324,8 @@ export class StoSkillService {
   }
 
   private async extractZip(zipPath: string, targetDir: string): Promise<void> {
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
-    const execAsync = promisify(exec);
-
-    const isWin = process.platform === 'win32';
-    if (isWin) {
-      await execAsync(
-        `powershell -NoProfile -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${targetDir}' -Force"`,
-        { windowsHide: true },
-      );
-    } else {
-      await execAsync(`unzip -o "${zipPath}" -d "${targetDir}"`);
-    }
+    const { extractZip: unifiedExtractZip } = await import('../utils/zip-extract');
+    await unifiedExtractZip(zipPath, targetDir);
 
     // ZIP packages often contain a single root folder (e.g. "name-1.0.0/SKILL.md").
     // The gateway expects SKILL.md directly inside targetDir.
@@ -361,13 +350,35 @@ export class StoSkillService {
 
     logger.info(`[StoSkillService] found SKILL.md in nested dir: ${skillMdDir}, hoisting to ${targetDir}`);
 
-    // Move all contents from the found directory up to targetDir
+    // Move all contents from the found directory up to targetDir.
+    // If a destination already exists and is a directory (e.g. nested dir with same name as targetDir),
+    // merge by moving its contents instead of skipping.
     const entries = fs.readdirSync(skillMdDir);
     for (const name of entries) {
       const src = path.join(skillMdDir, name);
       const dest = path.join(targetDir, name);
-      // If dest already exists (e.g. the nested parent dir itself), skip
-      if (fs.existsSync(dest)) continue;
+      if (fs.existsSync(dest)) {
+        // Dest exists and is a directory: merge contents
+        if (fs.statSync(src).isDirectory() && fs.statSync(dest).isDirectory()) {
+          const subEntries = fs.readdirSync(src);
+          for (const subName of subEntries) {
+            const subSrc = path.join(src, subName);
+            const subDest = path.join(dest, subName);
+            if (!fs.existsSync(subDest)) {
+              await fs.promises.rename(subSrc, subDest);
+            }
+          }
+          // Remove empty source subdir after merge
+          try {
+            fs.rmdirSync(src);
+          } catch {
+            // ignore if not empty
+          }
+          continue;
+        }
+        // Dest exists and is a file: skip (shouldn't happen in practice)
+        continue;
+      }
       await fs.promises.rename(src, dest);
     }
 
