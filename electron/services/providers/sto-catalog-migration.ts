@@ -7,28 +7,15 @@
 
 import type { GatewayManager } from '../../gateway/manager';
 import type { ProviderAccount } from '../../shared/providers/types';
-import {
-  getOpenClawProvidersConfig,
-  removeProviderFromOpenClaw,
-  saveProviderKeyToOpenClaw,
-  setOpenClawDefaultModelWithOverride,
-  updateAgentModelProvider,
-} from '../../utils/openclaw-auth';
+import { getOpenClawProvidersConfig, removeProviderFromOpenClaw } from '../../utils/openclaw-auth';
 import { logger } from '../../utils/logger';
 import { getProviderService } from './provider-service';
 import { listProviderAccounts, providerAccountToConfig } from './provider-store';
 import { getClawXProviderStore } from './store-instance';
-import {
-  syncDefaultProviderToRuntime,
-  syncDeletedProviderToRuntime,
-  syncSavedProviderToRuntime,
-} from './provider-runtime-sync';
-import { getProviderConfig } from '../../utils/provider-registry';
+import { syncDeletedProviderToRuntime } from './provider-runtime-sync';
 import {
   isStoCatalogReady,
   isStoInternalOpenClawKey,
-  isLegacyStoOpenClawModelRef,
-  extractOpenClawProviderModelIds,
   OPENCLAW_STO_PLACEHOLDER_KEYS_TO_SCRUB,
   shouldDeleteStaleStoPlaceholder,
   STO_CANONICAL_ACCOUNT_ID,
@@ -83,19 +70,15 @@ export async function detectStoCatalogLegacyState(): Promise<StoCatalogLegacySta
     reasons.push('incomplete-sto-account');
   }
 
-  const { providers, defaultModel } = await getOpenClawProvidersConfig();
+  const { providers } = await getOpenClawProvidersConfig();
   for (const key of Object.keys(providers)) {
     if (isLegacyOpenClawProviderKey(key)) {
       reasons.push(`openclaw-key:${key}`);
     }
   }
 
-  if (defaultModel && isLegacyStoOpenClawModelRef(defaultModel)) {
-    reasons.push('legacy-primary-model-ref');
-  }
-
   const stoOpenClaw = providers[STO_CANONICAL_ACCOUNT_ID];
-  const openClawModelIds = extractOpenClawProviderModelIds(stoOpenClaw);
+  const openClawModelIds = extractOpenClawModelIds(stoOpenClaw);
   const catalogModels = canonical?.metadata?.customModels ?? [];
   if (
     catalogModels.length > 0
@@ -109,6 +92,13 @@ export async function detectStoCatalogLegacyState(): Promise<StoCatalogLegacySta
     needsMigration: reasons.length > 0,
     reasons,
   };
+}
+
+function extractOpenClawModelIds(entry: Record<string, unknown> | undefined): string[] {
+  if (!entry || !Array.isArray(entry.models)) return [];
+  return (entry.models as Array<Record<string, unknown>>)
+    .map((m) => (typeof m.id === 'string' ? m.id : ''))
+    .filter(Boolean);
 }
 
 export type StoCatalogPreMigrateResult = {
@@ -170,213 +160,4 @@ export async function preMigrateStoCatalogPlaceholders(
 export function accountNeedsStoCatalogRepair(account: ProviderAccount): boolean {
   return shouldDeleteStaleStoPlaceholder(account)
     || (account.id === STO_CANONICAL_ACCOUNT_ID && !isStoCatalogReady(account));
-}
-
-export type EnsureStoProviderStoreParams = {
-  token: string;
-  remoteModelIds: string[];
-  expectedBaseUrl: string;
-};
-
-/**
- * Ensure the canonical `sto` ProviderAccount exists with metadata.customModels.
- * UI reads this store — openclaw.json alone is not enough.
- */
-export async function ensureStoProviderStoreCatalog(
-  params: EnsureStoProviderStoreParams,
-): Promise<boolean> {
-  const { token, remoteModelIds, expectedBaseUrl } = params;
-  if (remoteModelIds.length === 0) {
-    return false;
-  }
-
-  const providerService = getProviderService();
-  const existing = (await listProviderAccounts()).find((a) => a.id === STO_CANONICAL_ACCOUNT_ID);
-  const now = new Date().toISOString();
-
-  if (!existing) {
-    const account: ProviderAccount = {
-      id: STO_CANONICAL_ACCOUNT_ID,
-      vendorId: 'sto',
-      label: 'STO AI',
-      authMode: 'api_key',
-      baseUrl: expectedBaseUrl,
-      apiProtocol: 'openai-completions',
-      model: remoteModelIds[0],
-      enabled: true,
-      isDefault: false,
-      metadata: {
-        managedBy: 'sto-auto-sync',
-        customModels: remoteModelIds,
-      },
-      createdAt: now,
-      updatedAt: now,
-    };
-    await providerService.createAccount(account, token);
-    logger.info(`[sto-migration] Created sto provider store account with ${remoteModelIds.length} model(s)`);
-    return true;
-  }
-
-  const currentModels = existing.metadata?.customModels ?? [];
-  const needsUpdate =
-    currentModels.length === 0
-    || currentModels.length !== remoteModelIds.length
-    || !remoteModelIds.every((id, i) => currentModels[i] === id)
-    || existing.baseUrl !== expectedBaseUrl
-    || !existing.enabled;
-
-  if (!needsUpdate) {
-    return false;
-  }
-
-  await providerService.updateAccount(
-    STO_CANONICAL_ACCOUNT_ID,
-    {
-      baseUrl: expectedBaseUrl,
-      enabled: true,
-      model: existing.model && remoteModelIds.includes(existing.model)
-        ? existing.model
-        : remoteModelIds[0],
-      metadata: {
-        ...existing.metadata,
-        managedBy: 'sto-auto-sync',
-        customModels: remoteModelIds,
-      },
-      updatedAt: now,
-    },
-    token,
-  );
-  logger.info(`[sto-migration] Updated sto provider store catalog (${remoteModelIds.length} model(s))`);
-  return true;
-}
-
-/**
- * Scrub legacy openclaw provider keys / primary without a remote fetch.
- * Safe to run on every Gateway pre-launch.
- */
-export async function scrubLegacyStoOpenClawConfig(): Promise<boolean> {
-  const { providers, defaultModel } = await getOpenClawProvidersConfig();
-  const legacyProviderKeys = Object.keys(providers).filter(isLegacyOpenClawProviderKey);
-  const legacyPrimary = Boolean(defaultModel && isLegacyStoOpenClawModelRef(defaultModel));
-
-  if (legacyProviderKeys.length === 0 && !legacyPrimary) {
-    return false;
-  }
-
-  logger.info(
-    `[sto-migration] Scrubbing legacy openclaw STO config: keys=${legacyProviderKeys.join(',') || 'none'}, `
-    + `legacyPrimary=${legacyPrimary}${defaultModel ? ` (${defaultModel})` : ''}`,
-  );
-
-  const keysToScrub = new Set<string>([
-    ...OPENCLAW_STO_PLACEHOLDER_KEYS_TO_SCRUB,
-    ...legacyProviderKeys,
-  ]);
-  for (const key of keysToScrub) {
-    try {
-      await removeProviderFromOpenClaw(key);
-    } catch (err) {
-      logger.warn(`[sto-migration] Failed to scrub openclaw key "${key}":`, err);
-    }
-  }
-  return true;
-}
-
-export type RepairOpenClawStoRuntimeParams = {
-  token: string;
-  remoteModelIds: string[];
-  expectedBaseUrl: string;
-  runtimeGateway?: GatewayManager;
-};
-
-/**
- * After a successful remote sync, scrub legacy openclaw keys (custom-sto) and
- * rewrite agents.defaults.model.primary to sto/* when needed.
- */
-export async function repairOpenClawStoRuntimeAfterSync(
-  params: RepairOpenClawStoRuntimeParams,
-): Promise<boolean> {
-  const { token, remoteModelIds, expectedBaseUrl, runtimeGateway } = params;
-  if (remoteModelIds.length === 0) {
-    return false;
-  }
-
-  const { providers, defaultModel } = await getOpenClawProvidersConfig();
-  const legacyProviderKeys = Object.keys(providers).filter(isLegacyOpenClawProviderKey);
-  const legacyPrimary = Boolean(defaultModel && isLegacyStoOpenClawModelRef(defaultModel));
-  const stoOpenClaw = providers[STO_CANONICAL_ACCOUNT_ID];
-  const openClawModelIds = extractOpenClawProviderModelIds(stoOpenClaw);
-  const modelsIncomplete = openClawModelIds.length < remoteModelIds.length;
-  const stoMissing = !stoOpenClaw;
-
-  const needsRepair =
-    legacyProviderKeys.length > 0
-    || legacyPrimary
-    || stoMissing
-    || modelsIncomplete;
-
-  if (!needsRepair) {
-    return false;
-  }
-
-  logger.info(
-    `[sto-migration] Repairing openclaw STO runtime: legacyKeys=${legacyProviderKeys.join(',') || 'none'}, `
-    + `legacyPrimary=${legacyPrimary}${defaultModel ? ` (${defaultModel})` : ''}, `
-    + `openClawModels=${openClawModelIds.length}/${remoteModelIds.length}`,
-  );
-
-  const keysToScrub = new Set<string>([
-    ...OPENCLAW_STO_PLACEHOLDER_KEYS_TO_SCRUB,
-    ...legacyProviderKeys,
-  ]);
-  for (const key of keysToScrub) {
-    try {
-      await removeProviderFromOpenClaw(key);
-    } catch (err) {
-      logger.warn(`[sto-migration] Failed to scrub openclaw key "${key}":`, err);
-    }
-  }
-
-  await ensureStoProviderStoreCatalog({ token, remoteModelIds, expectedBaseUrl });
-
-  const stoAccount = (await listProviderAccounts()).find((a) => a.id === STO_CANONICAL_ACCOUNT_ID);
-  if (stoAccount && isStoCatalogReady(stoAccount)) {
-    await syncSavedProviderToRuntime(
-      providerAccountToConfig(stoAccount),
-      token,
-      runtimeGateway,
-    );
-    await syncDefaultProviderToRuntime(STO_CANONICAL_ACCOUNT_ID, runtimeGateway);
-    return true;
-  }
-
-  const stoMeta = getProviderConfig('sto');
-  const defaultModelId = remoteModelIds[0]!;
-  const modelRef = `sto/${defaultModelId}`;
-  const fallbackModelRefs = remoteModelIds.slice(1).map((id) => `sto/${id}`);
-  const modelEntries = remoteModelIds.map((id) => ({
-    id,
-    name: id,
-    input: ['text', 'image'] as string[],
-  }));
-
-  await setOpenClawDefaultModelWithOverride(
-    STO_CANONICAL_ACCOUNT_ID,
-    modelRef,
-    {
-      baseUrl: expectedBaseUrl,
-      api: stoMeta?.api ?? 'openai-completions',
-      apiKeyEnv: stoMeta?.apiKeyEnv ?? 'STO_API_KEY',
-      defaultModelInput: ['text', 'image'],
-    },
-    fallbackModelRefs,
-  );
-  await updateAgentModelProvider(STO_CANONICAL_ACCOUNT_ID, {
-    baseUrl: expectedBaseUrl,
-    api: stoMeta?.api ?? 'openai-completions',
-    models: modelEntries,
-    apiKey: token,
-  });
-  await saveProviderKeyToOpenClaw(STO_CANONICAL_ACCOUNT_ID, token);
-  return true;
 }

@@ -322,7 +322,7 @@ export default definePluginEntry({
 						if (ssoAuth.departmentCode) lines.push(`- 组织编码（departmentCode）：${ssoAuth.departmentCode}`);
 						if (ssoAuth.departmentName) lines.push(`- 组织名称（departmentName）：${ssoAuth.departmentName}`);
 						lines.push("");
-						lines.push("当用户查询涉及网点、组织的数据时，如果用户未指定具体的网点编码或组织编码，默认使用上述当前登录用户的信息，不需要再向用户询问。");
+						lines.push("⚠️ 重要：当调用任何技能、工具或工作流时，如果参数要求提供网点编码（companyCode）或组织编码（departmentCode），而用户没有明确指定其他网点/组织，必须直接使用上述当前登录用户的网点编码和组织编码，禁止向用户询问。不要在对话中要求用户提供这些信息。");
 						appendBlocks.push(lines.join("\n"));
 						api.logger.debug?.(`[${TAG}] before_prompt_build: injected SSO user context for ${ssoAuth.userName}`);
 					} else {

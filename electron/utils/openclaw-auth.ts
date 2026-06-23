@@ -331,17 +331,6 @@ export async function removeProviderKeyFromOpenClaw(
   
 }
 
-function isLegacyStoOpenClawProviderKey(key: string): boolean {
-  return key === 'custom-sto' || key.startsWith('custom-sto') || key.startsWith('sto-model-');
-}
-
-function isLegacyStoOpenClawModelRef(modelRef: string): boolean {
-  const trimmed = modelRef.trim();
-  if (!trimmed) return false;
-  const prefix = trimmed.includes('/') ? trimmed.split('/')[0]! : trimmed;
-  return isLegacyStoOpenClawProviderKey(prefix);
-}
-
 /**
  * Remove a provider completely from OpenClaw (delete config, disable plugins, delete keys)
  */
@@ -407,34 +396,7 @@ export async function removeProviderFromOpenClaw(provider: string): Promise<void
         
       }
 
-      // When scrubbing legacy STO keys, rewrite agents.defaults.model.primary
-      // (e.g. custom-sto/qwen3.6-plus → sto/qwen3.6-plus) so the key is not re-imported.
-      if (isLegacyStoOpenClawProviderKey(provider)) {
-        const agents = (config.agents || {}) as Record<string, unknown>;
-        const defaults = (agents.defaults || {}) as Record<string, unknown>;
-        const modelConfig = (
-          defaults.model && typeof defaults.model === 'object'
-            ? { ...(defaults.model as Record<string, unknown>) }
-            : {}
-        ) as Record<string, unknown>;
-        const primary = typeof modelConfig.primary === 'string' ? modelConfig.primary : undefined;
-        if (primary && isLegacyStoOpenClawModelRef(primary)) {
-          const modelId = primary.slice(primary.indexOf('/') + 1);
-          if (modelId && providers.sto) {
-            modelConfig.primary = `sto/${modelId}`;
-            defaults.model = modelConfig;
-            agents.defaults = defaults;
-            config.agents = agents;
-            modified = true;
-          }
-        }
-      }
-
       if (modified) {
-        if (models) {
-          models.providers = providers;
-          config.models = models;
-        }
         await writeOpenClawJson(config);
       }
     });
