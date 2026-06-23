@@ -698,9 +698,10 @@ function extToMimeType(ext: string): string {
   return map[ext] || 'application/octet-stream';
 }
 
+import { PREVIEWABLE_FILE_EXT_PATTERN } from '../../../shared/artifact-path';
+
 /** Shared extension list for previewable local file paths (used by extractPreviewableRefs and preprocessTextForPreviewLinks). */
-export const PREVIEWABLE_FILE_EXTS =
-  'properties|swift|scala|bash|fish|html?|java|jsx|tsx|cpp|php|toml|conf|scss|less|zsh|yaml|json|sql|xml|csv|tsv|txt|log|ini|env|md|htm|py|go|rs|cs|rb|mm|bat|cmd|pdf|kt|css|yml|ts|js|sh|c|h|r|m';
+export const PREVIEWABLE_FILE_EXTS = PREVIEWABLE_FILE_EXT_PATTERN;
 
 /** Match a single line that is only a previewable file path (relative, absolute, or Windows). */
 export const PREVIEWABLE_PATH_LINE_REGEX = new RegExp(

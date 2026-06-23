@@ -1,7 +1,7 @@
 import { app } from 'electron';
-import path from 'path';
+import path, { join } from 'path';
+import { getAgentWorkspacePath } from '../utils/agent-config';
 import { existsSync, readFileSync, cpSync, mkdirSync, rmSync } from 'fs';
-import { join } from 'path';
 
 function fsPath(filePath: string): string {
   if (process.platform !== 'win32') return filePath;
@@ -312,6 +312,11 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     ? prependPathEntry(baseEnvRecord, binPath).env
     : baseEnvRecord;
   baseEnvPatched = prependPathEntry(baseEnvPatched, getDwsBinDir()).env;
+
+  const mainWorkspace = await getAgentWorkspacePath('main')
+    ?? join(getOpenClawConfigDir(), 'workspace');
+  const mainOutputDir = join(mainWorkspace, '.claw-output');
+
   const forkEnv: Record<string, string | undefined> = prependNodePathEntry({
     ...baseEnvPatched,
     ...providerEnv,
@@ -323,6 +328,8 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     OPENCLAW_NO_RESPAWN: '1',
     OPENCLAW_STATE_DIR: getOpenClawConfigDir(),
     OPENCLAW_PACKAGE_ROOT: getOpenClawPackageRootEnv(),
+    STOCLAW_WORKSPACE: mainWorkspace,
+    STOCLAW_OUTPUT_DIR: mainOutputDir,
   }, getOpenClawNodeModulesPath());
 
   return {

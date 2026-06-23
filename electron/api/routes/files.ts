@@ -1,11 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { dialog, nativeImage } from 'electron';
 import crypto from 'node:crypto';
-import { extname, isAbsolute, join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { existsSync, readdirSync } from 'node:fs';
+import { extname, join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
 import { copyFile, mkdtemp, readFile, unlink } from 'node:fs/promises';
-import { getOpenClawConfigDir, expandPath } from '../../utils/paths';
+import { getOpenClawConfigDir } from '../../utils/paths';
+import { resolveWorkspaceFilePath } from '../../utils/artifact-path';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -58,55 +58,6 @@ function mimeToExt(mimeType: string): string {
 }
 
 const OUTBOUND_DIR = join(getOpenClawConfigDir(), 'media', 'outbound');
-
-function decodePathSegments(filePath: string): string {
-  let path = filePath.trim();
-  if (!path.includes('%')) return path;
-  try {
-    const once = decodeURIComponent(path);
-    if (once.includes('%')) {
-      try {
-        return decodeURIComponent(once);
-      } catch {
-        return once;
-      }
-    }
-    return once;
-  } catch {
-    return path;
-  }
-}
-
-/**
- * Resolve a preview file path:
- * - `~` expands to home
- * - absolute paths pass through (incl. Windows `C:\` / `C:/`, after URI decode)
- * - relative paths (bare filenames like `USER.md`, or `./report.html`) resolve
- *   against the agent workspaces (`workspace`, then `workspace-<agentId>`),
- *   since AI messages reference workspace files by bare name.
- */
-function resolveWorkspaceFilePath(filePath: string): string {
-  const normalized = decodePathSegments(filePath);
-
-  if (normalized.startsWith('~')) {
-    return expandPath(normalized);
-  }
-  if (isAbsolute(normalized)) {
-    return normalized;
-  }
-
-  const configDir = getOpenClawConfigDir();
-  const candidates = [join(configDir, 'workspace', normalized)];
-  try {
-    for (const entry of readdirSync(configDir)) {
-      if (entry.startsWith('workspace-')) {
-        candidates.push(join(configDir, entry, normalized));
-      }
-    }
-  } catch { /* config dir unreadable — fall through to first candidate */ }
-
-  return candidates.find((p) => existsSync(p)) ?? candidates[0];
-}
 
 /**
  * Read file with EPERM/EACCES fallback: copy to temp directory and read from there.

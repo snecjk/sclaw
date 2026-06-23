@@ -16,7 +16,7 @@ Automated HTML report generation from CLI data sources with template support and
 uv run python scripts/generate_report.py \
   --cli-command "your-cli-command --json" \
   --template assets/network-report-template.html \
-  --output reports/daily-report.html
+  --output .claw-output/daily-report.html
 ```
 
 ### Schedule Daily Reports
@@ -29,7 +29,8 @@ uv run python scripts/generate_report.py \
 ## 输出约束
 
 生成文件后：
-- 在回答中用 Markdown 链接输出**绝对路径**：`[report.html](file:///绝对路径)`（禁止 `./.claw-output/...` 或 `[report.html](report.html)`）
+- 默认写入 `~/.stoclaw/openclaw/workspace/.claw-output/`（相对 `--output` 亦解析到该目录）
+- 在回答中用 Markdown 链接输出脚本 stdout 中的**绝对路径**：`[report.html](file:///绝对路径)`（禁止 `./.claw-output/...` 或 `[report.html](report.html)`）
 - **绝对不要**执行 `open` 命令或自动唤起浏览器
 - **绝对不要**说"已在浏览器中打开"、"已为您打开"等暗示已自动打开的话
 - 对话界面会自动识别文件路径并支持右侧预览
@@ -99,7 +100,7 @@ Main report generation script.
 uv run python scripts/generate_report.py \
   --cli-command "cli-tool data --json" \
   --template assets/template.html \
-  --output reports/output.html \
+  --output .claw-output/output.html \
   [--working-dir /path] \
   [--parse-script scripts/parser.py]
 ```
@@ -174,7 +175,7 @@ See `references/template-guide.md` for advanced templating.
   "cliCommand": "network-cli stats --date today --format json",
   "workingDir": "/opt/network-tool",
   "template": "assets/network-report-template.html",
-  "outputDir": "reports",
+  "outputDir": ".claw-output",
   "outputFilename": "network-{date}.html",
   "parseScript": "scripts/parse_network.py",
   "env": {
@@ -260,7 +261,7 @@ crontab -e
 uv run python scripts/generate_report.py \
   --cli-command "snapshot-cli --now" \
   --template assets/snapshot-template.html \
-  --output reports/snapshot-$(date +%Y%m%d-%H%M).html
+  --output .claw-output/snapshot-$(date +%Y%m%d-%H%M).html
 ```
 
 ## Tips

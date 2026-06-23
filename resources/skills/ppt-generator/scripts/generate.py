@@ -46,6 +46,9 @@ def resolve_output_file(output_arg: str | None) -> Path:
         if candidate.is_absolute():
             target = candidate
         else:
+            parts = candidate.parts
+            if parts and parts[0] == '.claw-output':
+                candidate = Path(*parts[1:]) if len(parts) > 1 else Path(candidate.name)
             target = output_dir / candidate
         return resolve_versioned_path(target)
 
