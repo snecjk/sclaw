@@ -89,6 +89,22 @@ export function isWorkflowCreationIntent(text: string): boolean {
   return hasWorkflow && hasCreateVerb;
 }
 
+/** User named a workflow template directly (e.g.「客户异常监控」without「创建工作流」). */
+export function isTemplateNameWorkflowTurn(userText: string, templateName?: string): boolean {
+  if (!userText?.trim() || !templateName?.trim()) return false;
+  const user = userText.trim();
+  const name = templateName.trim();
+  if (user === name) return true;
+  const core = name.replace(/工作流$/u, '').trim() || name;
+  if (core.length < 2) return false;
+  return user === core || user.includes(core) || core.includes(user);
+}
+
+/** Whether the latest user turn should receive workflow parameter form injection. */
+export function isWorkflowFormUserTurn(userText: string, templateName?: string): boolean {
+  return isWorkflowCreationIntent(userText) || isTemplateNameWorkflowTurn(userText, templateName);
+}
+
 /** Short re-run phrases without explicit「工作流」wording (e.g.「再执行一下」). */
 const SHORT_RERUN_PATTERN = /^再(?:来)?(?:执行|跑|运行|启动)(?:一下|一遍|一次)?[。.!！]?$/i;
 
