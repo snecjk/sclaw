@@ -23,6 +23,7 @@ import { handleStoSyncRoutes } from './routes/sto-sync';
 import { handleTokenQuotaRoutes } from './routes/token-quota';
 import { handleSubscriptionRoutes } from './routes/subscriptions';
 import { handleMyTasksRoutes } from './routes/my-tasks';
+import { handleDictionaryRoutes } from './routes/dictionaries';
 import { handleWorkflowRoutes } from './routes/workflows';
 import { handleWorkflowPlangroundRoutes } from './routes/workflow-playground';
 import { sendJson } from './route-utils';
@@ -51,6 +52,7 @@ const routeHandlers: RouteHandler[] = [
   handleSessionRoutes,
   handleCronRoutes,
   handleScheduledTaskRoutes,
+  handleDictionaryRoutes,
   handleWorkflowRoutes,
   handleClaudeScheduledTaskRoutes,
   handleDingTalkRoutes,

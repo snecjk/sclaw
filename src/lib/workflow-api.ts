@@ -439,7 +439,38 @@ export function beginWorkflowRunSseTrace(runId: string): void {
   );
 }
 
-// ── 8. Rename workflow ──────────────────────────────────────────
+// ── 8. Save / publish workflow definition (designer) ─────────────
+
+export async function saveWorkflowDefinition(
+  workflowId: string,
+  workflow: Record<string, unknown>,
+): Promise<import('@/pages/WorkflowDesigner/types').WorkflowDefinition> {
+  const { definitionFromDetail } = await import('@/lib/workflow-designer-adapter');
+  const data = await unwrap(
+    hostApiFetch<ApiResponse<WorkflowDetailResponse>>(`/agent/v1/workflows/${workflowId}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify(workflow),
+    }),
+  );
+  return definitionFromDetail(data);
+}
+
+export async function publishWorkflowDefinition(
+  workflowId: string,
+): Promise<import('@/pages/WorkflowDesigner/types').WorkflowDefinition> {
+  const { definitionFromDetail } = await import('@/lib/workflow-designer-adapter');
+  const data = await unwrap(
+    hostApiFetch<ApiResponse<WorkflowDetailResponse>>(`/agent/v1/workflows/${workflowId}/publish`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: '{}',
+    }),
+  );
+  return definitionFromDetail(data);
+}
+
+// ── 9. Rename workflow ──────────────────────────────────────────
 
 export async function renameWorkflow(workflowId: string, name: string): Promise<void> {
   console.log(
@@ -462,7 +493,7 @@ export async function renameWorkflow(workflowId: string, name: string): Promise<
   );
 }
 
-// ── 9. Delete workflow ──────────────────────────────────────────
+// ── 10. Delete workflow ──────────────────────────────────────────
 
 export async function deleteWorkflow(workflowId: string): Promise<void> {
   console.log(
