@@ -210,6 +210,12 @@ async function runSetup(
 
   let needsGatewayRefresh = false;
 
+  try {
+    await syncStoPluginsToOpenClaw();
+  } catch (err) {
+    logger.warn(`${logPrefix} STO plugins config failed:`, err);
+  }
+
   const stoSync = getStoModelSyncService();
   if (gatewayManager) {
     stoSync.setGatewayManager(gatewayManager);
@@ -218,13 +224,6 @@ async function runSetup(
   const stoResult = await stoSync.syncModels({ deferGatewayRefresh: true });
   if (stoSyncChangedConfig(stoResult)) {
     needsGatewayRefresh = true;
-  }
-
-  // After model catalog is in openclaw.json — plugins write sto-dynamic-agent-route provider.
-  try {
-    await syncStoPluginsToOpenClaw();
-  } catch (err) {
-    logger.warn(`${logPrefix} STO plugins config failed:`, err);
   }
 
   const bizAgentSync = getStoBizAgentSyncService();
@@ -273,13 +272,6 @@ async function runSetup(
     `${logPrefix} Completed: sto created=${stoResult.created.length} updated=${stoResult.updated.length} `
     + `biz created=${bizResult.created.length} gatewayRefresh=${refreshMode}`,
   );
-
-  try {
-    const { ensureOpenClawRuntimeModelsAfterAuthSetup } = await import('./openclaw-runtime-reset');
-    await ensureOpenClawRuntimeModelsAfterAuthSetup();
-  } catch (err) {
-    logger.warn(`${logPrefix} openclaw model runtime repair failed:`, err);
-  }
 
   return { stoSync: stoResult, bizAgentSync: bizResult };
 }

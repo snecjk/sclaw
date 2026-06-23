@@ -30,7 +30,11 @@ import {
   STO_CANONICAL_ACCOUNT_ID,
   isStoCatalogReady,
 } from './sto-placeholder-utils';
-import { markStoCatalogMigrationComplete, detectStoCatalogLegacyState, preMigrateStoCatalogPlaceholders, isOpenClawStoModelRuntimeReady } from './sto-catalog-migration';
+import {
+  detectStoCatalogLegacyState,
+  markStoCatalogMigrationComplete,
+  preMigrateStoCatalogPlaceholders,
+} from './sto-catalog-migration';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -372,46 +376,16 @@ export class StoModelSyncService {
       }
     }
 
-    // Provider store can be up to date while openclaw.json was scrubbed earlier in this
-    // sync (preMigrate) or left empty after a nuclear reset — always rewrite runtime.
-    if (!(await isOpenClawStoModelRuntimeReady())) {
-      const refreshedAccounts = await listProviderAccounts();
-      const stoAccount = refreshedAccounts.find((a) => a.id === STO_ACCOUNT_ID);
-      if (stoAccount && isStoCatalogReady(stoAccount)) {
-        logger.info('[sto-sync] openclaw.json missing STO runtime; forcing provider rewrite');
-        try {
-          await syncSavedProviderToRuntime(
-            providerAccountToConfig(stoAccount),
-            token,
-            runtimeGateway,
-          );
-          result.updated.push(STO_ACCOUNT_ID);
-        } catch (err) {
-          logger.warn('[sto-sync] Failed to rewrite STO provider to openclaw.json:', err);
-        }
-
-        const currentDefault = await getDefaultProviderAccountId();
-        if (currentDefault === STO_ACCOUNT_ID) {
-          try {
-            await syncDefaultProviderToRuntime(STO_ACCOUNT_ID, runtimeGateway);
-            result.defaultSet = STO_ACCOUNT_ID;
-          } catch (err) {
-            logger.warn('[sto-sync] Failed to rewrite STO default model to openclaw.json:', err);
-          }
-        }
-      }
-    }
-
     if (legacyState.needsMigration) {
       const refreshedAccounts = await listProviderAccounts();
       const stoAccount = refreshedAccounts.find((a) => a.id === STO_ACCOUNT_ID);
-      if (stoAccount && isStoCatalogReady(stoAccount) && await isOpenClawStoModelRuntimeReady()) {
+      if (stoAccount && isStoCatalogReady(stoAccount)) {
         await markStoCatalogMigrationComplete();
         result.legacyRepaired = true;
         result.needsForcedGatewayRefresh = true;
         logger.info('[sto-sync] Legacy STO catalog migration marked complete');
       } else {
-        logger.warn('[sto-sync] Legacy STO catalog detected but openclaw runtime not ready; migration deferred');
+        logger.warn('[sto-sync] Legacy STO catalog detected but canonical account not ready; migration deferred');
       }
     }
 

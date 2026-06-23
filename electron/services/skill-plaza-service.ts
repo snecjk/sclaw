@@ -715,7 +715,7 @@ export class SkillPlazaService {
       const allPlazaSkills: SkillSummary[] = [];
       let page = 1;
       while (true) {
-        const result = await this.getPlazaSkills({ page, pageSize: 50 });
+        const result = await this.getPlazaSkills({ page, pageSize: 100 });
         allPlazaSkills.push(...result.skills);
         if (!result.hasMore || result.skills.length === 0) break;
         page++;
