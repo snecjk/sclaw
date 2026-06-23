@@ -10,11 +10,14 @@
 import { unlink } from 'fs/promises';
 import { join } from 'path';
 import { getOpenClawConfigDir } from '../utils/paths';
-import { getOpenClawProvidersConfig } from '../utils/openclaw-auth';
+import { syncStoPluginsToOpenClaw } from '../utils/openclaw-auth';
 import { logger } from '../utils/logger';
+import { getAuthState, getStoToken } from '../utils/auth-store';
+import { getStoModelSyncService } from './providers/sto-model-sync';
 import {
   detectStoCatalogLegacyState,
   getStoCatalogMigrationVersion,
+  isOpenClawStoModelRuntimeReady,
   preMigrateStoCatalogPlaceholders,
   STO_CATALOG_MIGRATION_VERSION,
   type StoCatalogLegacyState,
@@ -49,7 +52,6 @@ export function shouldNuclearResetOpenClawConfig(
   for (const reason of legacy.reasons) {
     if (reason.startsWith('openclaw-key:')) return true;
     if (reason === 'openclaw-sto-models-incomplete') return true;
-    if (reason.startsWith('stale-account:')) return true;
   }
   return false;
 }
@@ -90,6 +92,7 @@ export async function runOpenClawRuntimeResetIfNeeded(): Promise<OpenClawRuntime
 
   await preMigrateStoCatalogPlaceholders();
   const afterPreMigrate = await detectStoCatalogLegacyState();
+  const { getOpenClawProvidersConfig } = await import('../utils/openclaw-auth');
   const { defaultModel } = await getOpenClawProvidersConfig();
   const nuclearReset = shouldNuclearResetOpenClawConfig(afterPreMigrate, defaultModel);
 
@@ -106,4 +109,34 @@ export async function runOpenClawRuntimeResetIfNeeded(): Promise<OpenClawRuntime
     nuclearReset,
     reasons: legacy.reasons,
   };
+}
+
+/**
+ * After auth setup, ensure openclaw.json has STO providers + default model.
+ * Provider store can be ready while openclaw.json is still minimal after a reset.
+ */
+export async function ensureOpenClawRuntimeModelsAfterAuthSetup(): Promise<void> {
+  const [authState, token] = await Promise.all([getAuthState(), getStoToken()]);
+  if (!authState.isAuthenticated || !token) return;
+
+  if (await isOpenClawStoModelRuntimeReady()) return;
+
+  logger.warn('[openclaw-reset] openclaw.json missing STO model runtime; forcing plugin + catalog repair');
+
+  const stoSync = getStoModelSyncService();
+  const result = await stoSync.syncModels({ deferGatewayRefresh: true });
+  if (result.error) {
+    logger.warn(`[openclaw-reset] Forced STO model sync failed: ${result.error}`);
+    return;
+  }
+
+  try {
+    await syncStoPluginsToOpenClaw();
+  } catch (err) {
+    logger.warn('[openclaw-reset] syncStoPluginsToOpenClaw repair failed:', err);
+  }
+
+  if (!(await isOpenClawStoModelRuntimeReady())) {
+    logger.warn('[openclaw-reset] STO model runtime still incomplete after forced sync');
+  }
 }

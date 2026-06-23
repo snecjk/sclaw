@@ -15,7 +15,6 @@ import { getClawXProviderStore } from './store-instance';
 import { syncDeletedProviderToRuntime } from './provider-runtime-sync';
 import {
   isStoCatalogReady,
-  isStoInternalOpenClawKey,
   OPENCLAW_STO_PLACEHOLDER_KEYS_TO_SCRUB,
   shouldDeleteStaleStoPlaceholder,
   STO_CANONICAL_ACCOUNT_ID,
@@ -41,8 +40,17 @@ export async function markStoCatalogMigrationComplete(): Promise<void> {
   store.set('stoCatalogMigrationVersion', STO_CATALOG_MIGRATION_VERSION);
 }
 
+/** Whether openclaw.json has STO model runtime (providers.sto + default model). */
+export async function isOpenClawStoModelRuntimeReady(): Promise<boolean> {
+  const { providers, defaultModel } = await getOpenClawProvidersConfig();
+  const stoEntry = providers[STO_CANONICAL_ACCOUNT_ID];
+  const stoModels = Array.isArray(stoEntry?.models) ? stoEntry.models : [];
+  return stoModels.length > 0 && Boolean(defaultModel?.trim());
+}
+
+/** Legacy openclaw keys to scrub — excludes sto-dynamic-agent-route (managed by syncStoPlugins). */
 function isLegacyOpenClawProviderKey(key: string): boolean {
-  if (isStoInternalOpenClawKey(key)) return true;
+  if (key === 'custom-sto' || key.startsWith('custom-sto')) return true;
   if (key.startsWith(STO_LEGACY_OPENCLAW_KEY_PREFIX)) return true;
   return false;
 }
