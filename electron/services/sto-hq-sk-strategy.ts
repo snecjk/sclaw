@@ -13,6 +13,10 @@ import type { ExpandQuotaResult } from '../../shared/token-quota-expansion-recor
 import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
 import { storeApiKey, getApiKey, deleteApiKey } from '../utils/secure-storage';
 import { logger } from '../utils/logger';
+import {
+  ensureHqKeyViaMemoryCenter,
+  fetchHqTokenQuotaTiersViaMemoryCenter,
+} from './sto-hq-memory-api-service';
 import crypto from 'crypto';
 
 export class HqSkStrategy implements StoSkStrategy {
@@ -58,22 +62,18 @@ export class HqSkStrategy implements StoSkStrategy {
       return null;
     }
 
-    const tenantCode = HqSkStrategy.DEFAULT_TENANT_CODE;
-    logger.info(`[hq-sk] Fetching SK, tenantCode=${tenantCode}`);
-
-    let encryptedKey = await this.fetchSkFromApi('query', token, user.code, tenantCode);
-    if (!encryptedKey) {
-      logger.info('[hq-sk] SK not found, creating...');
-      encryptedKey = await this.fetchSkFromApi('create', token, user.code, tenantCode);
+    logger.info('[hq-sk] Fetching SK via memory-center ensure');
+    const ensured = await ensureHqKeyViaMemoryCenter();
+    if (!ensured?.encryptedKey) {
+      logger.warn('[hq-sk] ensure key via memory-center failed');
+      return null;
     }
 
-    if (encryptedKey) {
-      await storeApiKey(HqSkStrategy.CACHE_KEY, encryptedKey);
-      logger.info(`[hq-sk] encryptedKey stored in cache (len=${encryptedKey.length})`);
-      return this.decryptSk(encryptedKey);
-    }
-
-    return null;
+    await storeApiKey(HqSkStrategy.CACHE_KEY, ensured.encryptedKey);
+    logger.info(
+      `[hq-sk] encryptedKey stored in cache (len=${ensured.encryptedKey.length}), created=${ensured.created}`,
+    );
+    return this.decryptSk(ensured.encryptedKey);
   }
 
   async getUserSkDetail(
@@ -240,36 +240,10 @@ export class HqSkStrategy implements StoSkStrategy {
       return null;
     }
 
-    const domain = await this.resolveApiDomain();
-    const url = `${domain}/openapi/key/queryTokenQuotaTier?tokenId=${encodeURIComponent(tokenId)}`;
-    const secret = this.md5(tokenId);
-
-    logger.info(`[hq-sk] queryTokenQuotaTier request: url=${url}`);
-    logger.info(`[hq-sk] queryTokenQuotaTier headers: secret=${secret}`);
-
     try {
-      const response = await this.fetchWithTimeout(url, {
-        method: 'GET',
-        headers: { secret, 'Content-Type': 'application/json' },
-      });
-
-      const json = (await response.json()) as {
-        code: string;
-        msg: string;
-        detailMsg?: string | null;
-        data?: TokenQuotaTierQueryResult;
-      };
-
-      logger.info(`[hq-sk] queryTokenQuotaTier response: code=${json.code}, msg=${json.msg}`);
-
-      if (json.code !== '0' || !json.data) {
-        logger.warn(`[hq-sk] queryTokenQuotaTier failed: ${json.msg || json.detailMsg || json.code}`);
-        return null;
-      }
-
-      return json.data;
+      return await fetchHqTokenQuotaTiersViaMemoryCenter(tokenId);
     } catch (err) {
-      logger.warn('[hq-sk] queryTokenQuotaTier error:', err);
+      logger.warn('[hq-sk] queryTokenQuotaTier via memory-center error:', err);
       return null;
     }
   }
