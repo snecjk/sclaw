@@ -1,29 +1,16 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 
 import type { HostApiContext } from '../context';
-import { sendJson } from '../route-utils';
+import { sendJson, parseJsonBody } from '../route-utils';
 import { getStoTokenQuotaService } from '../../services/sto-token-quota-service';
-import {
-  generateApplyCode,
-  reportTokenQuotaExpansionRecord,
-} from '../../services/sto-token-quota-expansion-record-service';
-import {
-  buildBalanceSnapshot,
-  buildPackageSnapshot,
-  buildUserExtra,
-} from '../../services/token-quota-snapshot-builder';
-import { getUserSkDetail, expandUserSkQuota, getUserTokenQuotaTiers } from '../../services/user-sk-service';
+import { getUserSkDetail, getUserTokenQuotaTiers } from '../../services/user-sk-service';
 import { resolveUserType } from '../../services/sto-sk-strategy';
 import { applyHqTokenQuotaExpansion, StoTokenQuotaExpansionApplyError } from '../../services/sto-token-quota-expansion-apply-service';
-import { validateHqExpansionBody } from '../../services/token-quota-expansion-validation';
+import { applySiteTokenQuotaExpansionViaMemoryCenter, StoSiteMemoryApiError } from '../../services/sto-site-memory-api-service';
+import { validateHqExpansionBody, validateSiteExpansionBody } from '../../services/token-quota-expansion-validation';
 import { getAuthState } from '../../utils/auth-store';
-import { parseJsonBody } from '../route-utils';
 import { logger } from '../../utils/logger';
 import type { TokenQuotaTierItem, TokenQuotaTierQueryResult } from '../../../shared/sto-token-quota-tier';
-import type {
-  ExpansionRecordStatus,
-  TokenQuotaExpansionRecordPayload,
-} from '../../../shared/token-quota-expansion-record';
 
 function resolveTokenQuotaStatusCode(error: unknown): number {
   if (typeof error === 'object' && error !== null && 'statusCode' in error) {
@@ -49,92 +36,6 @@ interface ExpansionRequestBody {
   clientEventId?: string;
   tier?: TokenQuotaTierItem;
   tierContext?: TokenQuotaTierQueryResult | null;
-}
-
-function resolveExpansionStatus(
-  result: { success: boolean; message?: string },
-  hadError: boolean,
-): ExpansionRecordStatus {
-  if (hadError && !result.success) return 'error';
-  return result.success ? 'succeeded' : 'failed';
-}
-
-function resolveClientPlatform(): string | undefined {
-  try {
-    return process.platform;
-  } catch {
-    return undefined;
-  }
-}
-
-function resolveClientVersion(): string | undefined {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pkg = require('../../../package.json') as { version?: string };
-    return pkg.version;
-  } catch {
-    return undefined;
-  }
-}
-
-async function reportExpansionAfterApply(
-  body: ExpansionRequestBody,
-  quotaAmount: number,
-  expansionResult: Awaited<ReturnType<typeof expandUserSkQuota>>,
-  applyCode: string,
-  balanceDetail: { tokenId: string; spend: number; maxBudget: number } | null,
-  hadTransportError: boolean,
-): Promise<void> {
-  const { user } = await getAuthState();
-  if (!user) return;
-
-  const userType = await resolveUserType(user);
-  if (!userType) return;
-
-  const tokenId = body.tokenId?.trim() || balanceDetail?.tokenId || '';
-  if (!tokenId) return;
-
-  const detailForSnapshot = balanceDetail ?? {
-    tokenId,
-    spend: 0,
-    maxBudget: 0,
-  };
-
-  const packageSnapshot = buildPackageSnapshot(
-    userType,
-    user,
-    quotaAmount,
-    body.tier,
-    body.tierContext,
-  );
-  const balanceSnapshot = buildBalanceSnapshot(userType, detailForSnapshot);
-  const status = resolveExpansionStatus(expansionResult, hadTransportError);
-
-  const record: TokenQuotaExpansionRecordPayload = {
-    apply_code: applyCode,
-    emp_code: user.empCode?.trim() || undefined,
-    user_code: user.code?.trim() || undefined,
-    user_name: user.realName?.trim() || undefined,
-    user_type: userType,
-    token_id: tokenId,
-    apply_action: 'expand_quota',
-    quota_amount: quotaAmount,
-    quota_unit: 'CNY',
-    status,
-    gateway_status: expansionResult.gatewayStatus,
-    gateway_message: expansionResult.message,
-    client_app: 'sto-claw',
-    client_version: resolveClientVersion(),
-    client_platform: resolveClientPlatform(),
-    client_event_id: body.clientEventId?.trim() || undefined,
-    applied_at: new Date().toISOString(),
-    package_snapshot: packageSnapshot,
-    balance_snapshot: balanceSnapshot,
-    gateway_payload: expansionResult.gatewayPayload,
-    extra: buildUserExtra(user),
-  };
-
-  await reportTokenQuotaExpansionRecord(record);
 }
 
 export async function handleTokenQuotaRoutes(
@@ -225,45 +126,29 @@ export async function handleTokenQuotaRoutes(
         return true;
       }
 
-      // 网点：保持现有 Main 编排
-      const tokenId = body.tokenId?.trim() || '';
+      // 网点：经 memory-center 代理 personalBuy + 审计落库
+      const siteValidationError = validateSiteExpansionBody(body);
+      if (siteValidationError) {
+        sendJson(res, 400, { error: siteValidationError });
+        return true;
+      }
+      const tokenId = body.tokenId!.trim();
       const quotaAmount = Number(body.quotaAmount) || 0;
-      if (!tokenId || quotaAmount <= 0) {
-        sendJson(res, 400, { error: 'tokenId and quotaAmount are required' });
-        return true;
-      }
-
-      const applyCode = generateApplyCode();
-      const balanceDetail = await getUserSkDetail();
-
-      let expansionResult: Awaited<ReturnType<typeof expandUserSkQuota>>;
-      let hadTransportError = false;
       try {
-        expansionResult = await expandUserSkQuota(tokenId, quotaAmount);
-      } catch (err) {
-        hadTransportError = true;
-        expansionResult = {
-          success: false,
-          message: String(err),
-        };
+        await applySiteTokenQuotaExpansionViaMemoryCenter({
+          tokenId,
+          quotaAmount,
+          clientEventId: body.clientEventId,
+        });
+        sendJson(res, 200, { success: true });
+      } catch (error) {
+        if (error instanceof StoSiteMemoryApiError) {
+          sendJson(res, error.statusCode, { error: error.message });
+          return true;
+        }
+        throw error;
       }
-
-      void reportExpansionAfterApply(
-        { ...body, tokenId },
-        quotaAmount,
-        expansionResult,
-        applyCode,
-        balanceDetail,
-        hadTransportError,
-      ).catch((err) => {
-        logger.warn('[token-quota] expansion record report failed:', err);
-      });
-
-      if (!expansionResult.success) {
-        sendJson(res, 400, { error: expansionResult.message || 'Expansion failed' });
-        return true;
-      }
-      sendJson(res, 200, { success: true });
+      return true;
     } catch (error) {
       logger.error('[token-quota] Expansion route error:', error);
       sendJson(res, 500, { error: String(error) });

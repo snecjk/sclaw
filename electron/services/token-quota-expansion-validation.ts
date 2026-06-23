@@ -12,6 +12,22 @@ export interface HqExpansionRequestBody {
   tierContext?: TokenQuotaTierQueryResult | null;
 }
 
+export interface SiteExpansionRequestBody {
+  tokenId?: string;
+  quotaAmount?: number;
+  clientEventId?: string;
+}
+
+export function validateSiteExpansionBody(body: SiteExpansionRequestBody): string | null {
+  const tokenId = body.tokenId?.trim() || '';
+  if (!tokenId) return 'tokenId is required';
+
+  const quotaAmount = Number(body.quotaAmount) || 0;
+  if (quotaAmount <= 0) return 'quotaAmount must be positive';
+
+  return null;
+}
+
 export function validateHqExpansionBody(body: HqExpansionRequestBody): string | null {
   const tokenId = body.tokenId?.trim() || '';
   if (!tokenId) return 'tokenId is required';

@@ -63,17 +63,23 @@ export class HqSkStrategy implements StoSkStrategy {
     }
 
     logger.info('[hq-sk] Fetching SK via memory-center ensure');
-    const ensured = await ensureHqKeyViaMemoryCenter();
-    if (!ensured?.encryptedKey) {
-      logger.warn('[hq-sk] ensure key via memory-center failed');
-      return null;
-    }
+    try {
+      const ensured = await ensureHqKeyViaMemoryCenter();
+      if (!ensured?.encryptedKey) {
+        logger.warn('[hq-sk] ensure key via memory-center failed: empty encryptedKey');
+        return null;
+      }
 
-    await storeApiKey(HqSkStrategy.CACHE_KEY, ensured.encryptedKey);
-    logger.info(
-      `[hq-sk] encryptedKey stored in cache (len=${ensured.encryptedKey.length}), created=${ensured.created}`,
-    );
-    return this.decryptSk(ensured.encryptedKey);
+      await storeApiKey(HqSkStrategy.CACHE_KEY, ensured.encryptedKey);
+      logger.info(
+        `[hq-sk] encryptedKey stored in cache (len=${ensured.encryptedKey.length}), created=${ensured.created}`,
+      );
+      return this.decryptSk(ensured.encryptedKey);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn(`[hq-sk] ensure key via memory-center failed: ${message}`);
+      throw err;
+    }
   }
 
   async getUserSkDetail(
@@ -255,6 +261,14 @@ export class HqSkStrategy implements StoSkStrategy {
 
   // ─── 私有方法 ───
 
+  private formatGatewayError(json: { code: string; msg?: string; detailMsg?: string | null }): string {
+    const detailMsg = json.detailMsg?.trim();
+    if (detailMsg) return detailMsg;
+    const msg = json.msg?.trim();
+    if (msg) return msg;
+    return `code=${json.code}`;
+  }
+
   private async queryKeyDetail(
     token: string,
     userCode: string,
@@ -289,6 +303,7 @@ export class HqSkStrategy implements StoSkStrategy {
       const json = (await response.json()) as {
         code: string;
         msg: string;
+        detailMsg?: string | null;
         data?: Array<{
           tokenId: string;
           encryptedKey: string;
@@ -299,10 +314,12 @@ export class HqSkStrategy implements StoSkStrategy {
         }>;
       };
 
-      logger.info(`[hq-sk] queryKeyDetail response: code=${json.code}, msg=${json.msg}, dataCount=${json.data?.length ?? 0}`);
+      logger.info(
+        `[hq-sk] queryKeyDetail response: code=${json.code}, msg=${json.msg}, detailMsg=${json.detailMsg ?? ''}, dataCount=${json.data?.length ?? 0}`,
+      );
 
       if (json.code !== '0' || !json.data?.[0]) {
-        logger.warn(`[hq-sk] queryKeyDetail failed or no data: code=${json.code}`);
+        logger.warn(`[hq-sk] queryKeyDetail failed: ${this.formatGatewayError(json)}`);
         return null;
       }
 
@@ -344,14 +361,16 @@ export class HqSkStrategy implements StoSkStrategy {
       const json = (await response.json()) as {
         code: string;
         msg: string;
-        detailMsg?: string;
+        detailMsg?: string | null;
         data?: Array<{ encryptedKey: string }>;
       };
 
-      logger.info(`[hq-sk] fetchSkFromApi(${type}) response: code=${json.code}, msg=${json.msg}`);
+      logger.info(
+        `[hq-sk] fetchSkFromApi(${type}) response: code=${json.code}, msg=${json.msg}, detailMsg=${json.detailMsg ?? ''}`,
+      );
 
       if (json.code !== '0') {
-        logger.warn(`[hq-sk] fetchSkFromApi(${type}) biz failed: ${json.code} ${json.msg}`);
+        logger.warn(`[hq-sk] fetchSkFromApi(${type}) biz failed: ${this.formatGatewayError(json)}`);
         return null;
       }
 
