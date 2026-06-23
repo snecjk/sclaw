@@ -93,6 +93,70 @@ function getClaudeOptionalPackageName(platform, arch) {
   return `@anthropic-ai/claude-agent-sdk-${platform}-${arch}`;
 }
 
+function readClaudeSdkVersion(projectNodeModules) {
+  const sdkPkgPath = join(projectNodeModules, '@anthropic-ai', 'claude-agent-sdk', 'package.json');
+  if (!existsSync(sdkPkgPath)) {
+    throw new Error('[after-pack] Cannot resolve claude-agent-sdk version — package.json missing');
+  }
+  const version = JSON.parse(readFileSync(sdkPkgPath, 'utf8')).version;
+  if (!version) {
+    throw new Error('[after-pack] Cannot resolve claude-agent-sdk version — version field missing');
+  }
+  return version;
+}
+
+function installClaudeSdkPackageViaPack(spec, destFolder) {
+  const tmpPackDir = mkdtempSync(join(tmpdir(), 'claude-sdk-pack-'));
+  try {
+    const output = execSync(`npm pack "${spec}" --pack-destination "${tmpPackDir}"`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'inherit'],
+    });
+    const tgzName = output.trim().split(/\r?\n/).filter(Boolean).pop();
+    if (!tgzName) {
+      throw new Error(`[after-pack] npm pack produced no tarball for ${spec}`);
+    }
+    const tgzPath = join(tmpPackDir, basename(tgzName));
+    mkdirSync(destFolder, { recursive: true });
+    execSync(`tar -xzf "${tgzPath}" -C "${destFolder}" --strip-components=1`, { stdio: 'inherit' });
+  } finally {
+    rmSync(tmpPackDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Cross-compile: fetch target claude-agent-sdk via npm pack (same pattern as sharp).
+ * Mac dev machines no longer need ~450MB of win32 SDK packages in node_modules.
+ */
+function ensureTargetClaudeSdkPackage(resourcesDir, platform, arch) {
+  const projectNodeModules = join(__dirname, '..', 'node_modules');
+  const version = readClaudeSdkVersion(projectNodeModules);
+  const packageName = getClaudeOptionalPackageName(platform, arch);
+  const binaryName = getClaudeBinaryFileName(platform);
+  const destDir = join(resourcesDir, 'app.asar.unpacked', 'node_modules', ...packageName.split('/'));
+  const binaryPath = join(destDir, binaryName);
+
+  if (existsSync(binaryPath)) return;
+
+  installClaudeSdkPackageViaPack(`${packageName}@${version}`, destDir);
+}
+
+function cleanupClaudeSdkPackages(resourcesDir, platform, arch) {
+  const anthropicDir = join(resourcesDir, 'app.asar.unpacked', 'node_modules', '@anthropic-ai');
+  if (!existsSync(anthropicDir)) return 0;
+
+  const keepPackage = `claude-agent-sdk-${platform}-${arch}`;
+  let removed = 0;
+  for (const entry of readdirSync(anthropicDir)) {
+    if (!entry.startsWith('claude-agent-sdk-') || entry === keepPackage) continue;
+    try {
+      rmSync(join(anthropicDir, entry), { recursive: true, force: true });
+      removed++;
+    } catch { /* */ }
+  }
+  return removed;
+}
+
 function validateBundledClaudeSdk(resourcesDir, platform, arch) {
   const packageName = getClaudeOptionalPackageName(platform, arch);
   const binaryName = getClaudeBinaryFileName(platform);
@@ -103,7 +167,7 @@ function validateBundledClaudeSdk(resourcesDir, platform, arch) {
     throw new Error(
       `[after-pack] Claude SDK validation failed — missing unpacked binary for ${platform}/${arch}: ${candidate}\n`
       + `Ensure electron-builder asarUnpack includes node_modules/@anthropic-ai/claude-agent-sdk-*/** `
-      + `and the target platform optional dependency is installed before packaging.`,
+      + `and ensureTargetClaudeSdkPackage can fetch the target platform package.`,
     );
   }
 
@@ -1332,5 +1396,7 @@ exports.default = async function afterPack(context) {
     { packageName: 'require-from-string', resolveFromPackageName: 'ajv' },
     'uri-js',
   ]);
+  ensureTargetClaudeSdkPackage(resourcesDir, platform, arch);
+  cleanupClaudeSdkPackages(resourcesDir, platform, arch);
   validateBundledClaudeSdk(resourcesDir, platform, arch);
 };

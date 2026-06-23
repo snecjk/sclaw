@@ -31,6 +31,7 @@ import {
   resolveArtifactUrlFromWorkflowStates,
   toMarkdownPreviewPath,
 } from '@/lib/preview-url';
+import { normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
 import type { WorkflowExecutionState } from '@/types/workflow';
 
 /** OpenClaw injects queued system events as `System: [timestamp] ...` lines before user text. */
@@ -380,6 +381,15 @@ export function findLatestWorkflowCardInMessages(
   return null;
 }
 
+export function extractPlainTextFromContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return (content as ContentBlock[])
+    .filter((b) => b.type === 'text' && typeof b.text === 'string')
+    .map((b) => b.text as string)
+    .join('\n');
+}
+
 export function extractText(message: RawMessage | unknown): string {
   if (!message || typeof message !== 'object') return '';
   const msg = message as Record<string, unknown>;
@@ -688,9 +698,10 @@ function extToMimeType(ext: string): string {
   return map[ext] || 'application/octet-stream';
 }
 
+import { PREVIEWABLE_FILE_EXT_PATTERN } from '../../../shared/artifact-path';
+
 /** Shared extension list for previewable local file paths (used by extractPreviewableRefs and preprocessTextForPreviewLinks). */
-export const PREVIEWABLE_FILE_EXTS =
-  'properties|swift|scala|bash|fish|html?|java|jsx|tsx|cpp|php|toml|conf|scss|less|zsh|yaml|json|sql|xml|csv|tsv|txt|log|ini|env|md|htm|py|go|rs|cs|rb|mm|bat|cmd|pdf|kt|css|yml|ts|js|sh|c|h|r|m';
+export const PREVIEWABLE_FILE_EXTS = PREVIEWABLE_FILE_EXT_PATTERN;
 
 /** Match a single line that is only a previewable file path (relative, absolute, or Windows). */
 export const PREVIEWABLE_PATH_LINE_REGEX = new RegExp(
@@ -707,37 +718,54 @@ export function normalizePreviewPathLine(line: string): string {
     .trim();
 }
 
-export function isPreviewablePathLine(line: string): boolean {
-  let trimmed = normalizePreviewPathLine(line);
-  if (!trimmed) return false;
-  // "链接：/Users/..." or "path: ./foo.md"
-  const colonIdx = Math.max(trimmed.lastIndexOf('：'), trimmed.lastIndexOf(':'));
-  if (colonIdx >= 0) {
-    const afterColon = trimmed.slice(colonIdx + 1).trim();
-    if (afterColon.startsWith('/') || afterColon.startsWith('./') || /^[A-Za-z]:[\\/]/.test(afterColon)) {
-      trimmed = afterColon;
-    }
-  }
-  if (trimmed.startsWith('file://')) {
-    return isPreviewablePathLine(trimmed.slice('file://'.length).replace(/^\/([A-Za-z]:)/, '$1'));
-  }
-  return PREVIEWABLE_PATH_LINE_REGEX.test(trimmed);
+/** Strip markdown/code wrapping around an extracted path segment. */
+function stripPathWrapping(path: string): string {
+  return path.trim().replace(/^[`'"]+|[`'"]+$/g, '').trim();
 }
 
-export function extractPreviewPathFromLine(line: string): string | null {
+/** Label colon for "报告文件：`C:\...`" — avoid treating Windows `C:` as the separator. */
+function findLabelColonIndex(text: string): number {
+  const fullWidth = text.lastIndexOf('：');
+  if (fullWidth >= 0) return fullWidth;
+  for (let i = text.length - 1; i >= 0; i -= 1) {
+    if (text[i] !== ':') continue;
+    const prev = text[i - 1];
+    const next = text[i + 1];
+    if (prev && /[A-Za-z]/.test(prev) && next && /[\\/]/.test(next)) continue;
+    return i;
+  }
+  return -1;
+}
+
+function extractPathCandidateFromLine(line: string): string | null {
   let trimmed = normalizePreviewPathLine(line);
   if (!trimmed) return null;
-  const colonIdx = Math.max(trimmed.lastIndexOf('：'), trimmed.lastIndexOf(':'));
+
+  const colonIdx = findLabelColonIndex(trimmed);
   if (colonIdx >= 0) {
-    const afterColon = trimmed.slice(colonIdx + 1).trim();
-    if (afterColon.startsWith('/') || afterColon.startsWith('./') || /^[A-Za-z]:[\\/]/.test(afterColon)) {
+    const afterColon = stripPathWrapping(trimmed.slice(colonIdx + 1));
+    if (
+      afterColon.startsWith('/')
+      || afterColon.startsWith('./')
+      || /^[A-Za-z]:[\\/]/.test(afterColon)
+    ) {
       trimmed = afterColon;
     }
   }
+
+  trimmed = stripPathWrapping(trimmed);
   if (trimmed.startsWith('file://')) {
     trimmed = trimmed.slice('file://'.length).replace(/^\/([A-Za-z]:)/, '$1');
   }
   return PREVIEWABLE_PATH_LINE_REGEX.test(trimmed) ? trimmed : null;
+}
+
+export function isPreviewablePathLine(line: string): boolean {
+  return extractPathCandidateFromLine(line) !== null;
+}
+
+export function extractPreviewPathFromLine(line: string): string | null {
+  return extractPathCandidateFromLine(line);
 }
 
 /** Markdown link for a local/remote previewable path. */
@@ -828,34 +856,40 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
   const seen = new Set<string>();
 
   for (const path of extractPathsFromPathOnlyCodeBlocks(text)) {
-    const fileName = path.split('/').pop() || '';
+    const fileName = path.split(/[\\/]/).pop() || '';
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     if (fileName && ext) {
       const mimeType = extToMimeType(ext);
-      if (!mimeType.startsWith('image/') && !seen.has(path)) {
-        seen.add(path);
-        results.push({ filePath: path, fileName, mimeType });
+      if (!mimeType.startsWith('image/')) {
+        const key = normalizePreviewFileKey(path, fileName);
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          results.push({ filePath: path, fileName, mimeType });
+        }
       }
     }
   }
 
   for (const line of text.split('\n')) {
     const path = extractPreviewPathFromLine(line);
-    if (!path || seen.has(path)) continue;
-    const fileName = path.split('/').pop() || '';
+    if (!path) continue;
+    const fileName = path.split(/[\\/]/).pop() || '';
+    const key = normalizePreviewFileKey(path, fileName);
+    if (!key || seen.has(key)) continue;
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     if (!ext) continue;
     const mimeType = extToMimeType(ext);
     if (mimeType.startsWith('image/')) continue;
-    seen.add(path);
+    seen.add(key);
     results.push({ filePath: path, fileName, mimeType });
   }
 
   function addIfNotImage(filePath: string, fileName: string, ext: string) {
     const mimeType = extToMimeType(ext);
     if (mimeType.startsWith('image/')) return;
-    if (seen.has(filePath)) return;
-    seen.add(filePath);
+    const key = normalizePreviewFileKey(filePath, fileName);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
     results.push({ filePath, fileName, mimeType });
   }
 
@@ -896,7 +930,7 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
   );
   while ((match = pathRegex.exec(cleanText)) !== null) {
     const path = match[1].replace(/\\/g, '/');
-    const fileName = path.split('/').pop() || '';
+    const fileName = path.split(/[\\/]/).pop() || '';
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     addIfNotImage(path, fileName, ext);
   }
@@ -994,8 +1028,9 @@ export function usePreviewableFiles(
     const result: Array<{ mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }> = [];
 
     function addItem(item: { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }) {
-      if (seen.has(item.filePath)) return;
-      seen.add(item.filePath);
+      const key = normalizePreviewFileKey(item.filePath, item.fileName);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
       result.push(item);
     }
 
@@ -1040,6 +1075,7 @@ export function usePreviewableFiles(
       if (text) {
         const refs = extractPreviewableRefs(text);
         for (const ref of refs) {
+          if (msg._attachedFiles?.some((f) => previewFileRefsMatch(f, ref))) continue;
           addItem({
             mimeType: ref.mimeType,
             filePath: ref.filePath,
@@ -1067,8 +1103,10 @@ export function usePreviewableFiles(
     const result: typeof candidates = [];
     for (const file of candidates) {
       const resolved = resolvePreviewCandidate(file, existence[file.filePath], workflowCardStates);
-      if (!resolved || seen.has(resolved.filePath)) continue;
-      seen.add(resolved.filePath);
+      if (!resolved) continue;
+      const key = normalizePreviewFileKey(resolved.filePath, resolved.fileName);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
       result.push(resolved);
     }
     return result;

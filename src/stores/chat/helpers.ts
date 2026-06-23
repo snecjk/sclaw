@@ -1,4 +1,5 @@
 import { invokeIpc } from '@/lib/api-client';
+import { normalizePreviewFileKey } from '@/lib/preview-file-path';
 import type { AttachedFileMeta, ChatSession, ContentBlock, RawMessage, ToolStatus } from './types';
 
 // Module-level timestamp tracking the last chat event received.
@@ -196,7 +197,13 @@ function extractRawFilePaths(text: string): Array<{ filePath: string; mimeType: 
   const cleanText = stripCodeBlocks(text);
   const refs: Array<{ filePath: string; mimeType: string }> = [];
   const seen = new Set<string>();
-  const exts = 'png|jpe?g|gif|webp|bmp|avif|svg|pdf|docx?|xlsx?|pptx?|txt|csv|md|html?|rtf|epub|zip|tar|gz|rar|7z|mp3|wav|ogg|aac|flac|m4a|mp4|mov|avi|mkv|webm|m4v';
+
+  function rememberPath(p: string): boolean {
+    const key = normalizePreviewFileKey(p);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }
 
   // file:// URLs — strip the scheme and use the underlying local path
   // Regex consumes file:// (2 slashes), capture group gets the 3rd slash + path.
@@ -208,12 +215,12 @@ function extractRawFilePaths(text: string): Array<{ filePath: string; mimeType: 
     const captured = match[1];
     // Strip leading / for Windows paths (/C:/ → C:/), keep for Unix (/Users/ → /Users/)
     const p = captured.match(/^\/[A-Za-z]:/) ? captured.slice(1) : captured;
-    if (p && !seen.has(p)) {
-      seen.add(p);
+    if (p && rememberPath(p)) {
       refs.push({ filePath: p, mimeType: mimeFromExtension(p) });
     }
   }
 
+  const exts = 'png|jpe?g|gif|webp|bmp|avif|svg|pdf|docx?|xlsx?|pptx?|txt|csv|md|html?|rtf|epub|zip|tar|gz|rar|7z|mp3|wav|ogg|aac|flac|m4a|mp4|mov|avi|mkv|webm|m4v';
   // Unix absolute paths (/... or ~/...) — lookbehind rejects mid-token slashes
   // (e.g. "path/to/file.mp4", "https://example.com/file.mp4")
   const unixRegex = new RegExp(`(?<![\\w./:])((?:\\/|~\\/)[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
@@ -224,8 +231,7 @@ function extractRawFilePaths(text: string): Array<{ filePath: string; mimeType: 
   for (const regex of [unixRegex, winBackslashRegex, winForwardRegex]) {
     while ((match = regex.exec(cleanText)) !== null) {
       const p = match[1];
-      if (p && !seen.has(p)) {
-        seen.add(p);
+      if (p && rememberPath(p)) {
         refs.push({ filePath: p, mimeType: mimeFromExtension(p) });
       }
     }
@@ -426,11 +432,15 @@ function enrichWithToolResultFiles(messages: RawMessage[]): RawMessage[] {
 
     if (msg.role === 'assistant' && pending.length > 0) {
       const toAttach = pending.splice(0);
-      // Deduplicate against files already on the assistant message
       const existingPaths = new Set(
-        (msg._attachedFiles || []).map(f => f.filePath).filter(Boolean),
+        (msg._attachedFiles || [])
+          .map((f) => normalizePreviewFileKey(f.filePath, f.fileName))
+          .filter(Boolean),
       );
-      const newFiles = toAttach.filter(f => !f.filePath || !existingPaths.has(f.filePath));
+      const newFiles = toAttach.filter((f) => {
+        const key = normalizePreviewFileKey(f.filePath, f.fileName);
+        return !key || !existingPaths.has(key);
+      });
       if (newFiles.length === 0) return msg;
       return {
         ...msg,

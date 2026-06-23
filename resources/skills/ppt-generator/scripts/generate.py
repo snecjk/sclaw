@@ -9,9 +9,50 @@
 import argparse
 import json
 import math
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
+
+# StoClaw artifact output directory (aligned with long-output-saver / AGENTS.md).
+_DEFAULT_OUTPUT_DIR = (
+    Path.home() / ".stoclaw" / "openclaw" / "workspace" / ".claw-output"
+)
+
+
+def get_output_dir() -> Path:
+    """Resolve the directory for generated HTML reports."""
+    env_output = os.environ.get("STOCLAW_OUTPUT_DIR", "").strip()
+    if env_output:
+        return Path(env_output).expanduser().resolve()
+    env_workspace = os.environ.get("STOCLAW_WORKSPACE", "").strip()
+    if env_workspace:
+        return (Path(env_workspace).expanduser() / ".claw-output").resolve()
+    return _DEFAULT_OUTPUT_DIR.resolve()
+
+
+def resolve_output_file(output_arg: str | None) -> Path:
+    """
+    Resolve the final output file path.
+    - No --output: .claw-output/report_<timestamp>.html
+    - Relative --output: under .claw-output (not skill cwd)
+    - Absolute --output: used as-is (with version bump if exists)
+    """
+    output_dir = get_output_dir()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if output_arg:
+        candidate = Path(output_arg).expanduser()
+        if candidate.is_absolute():
+            target = candidate
+        else:
+            parts = candidate.parts
+            if parts and parts[0] == '.claw-output':
+                candidate = Path(*parts[1:]) if len(parts) > 1 else Path(candidate.name)
+            target = output_dir / candidate
+        return resolve_versioned_path(target)
+
+    return output_dir / f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
 
 # ========== 通用样式 ==========
 
@@ -693,18 +734,13 @@ def main():
 </body>
 </html>'''
     
-    # 写入文件
-    workspace_dir = Path.home() / ".openclaw" / "workspace"
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    
-    if args.output:
-        output_file = resolve_versioned_path(Path(args.output))
-    else:
-        output_file = workspace_dir / f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
-    
+    # 写入文件（默认 ~/.stoclaw/openclaw/workspace/.claw-output/）
+    output_file = resolve_output_file(args.output)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(html)
-    
+
     print(f"报告已生成: {output_file}")
 
 if __name__ == '__main__':

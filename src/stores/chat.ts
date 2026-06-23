@@ -34,6 +34,7 @@ import { upgradeWorkflowParamUserMessages } from '@/lib/workflow-param-messages'
 import {
   absorbWorkflowSchemaFromToolResults,
   appendWorkflowParameterFormToMessage,
+  applyWorkflowSchemaReady,
   ensureWorkflowParameterFormInjected,
   mergeParameterFormBlocksFromCurrent,
   patchLastAssistantWithWorkflowForm,
@@ -41,6 +42,7 @@ import {
   reconcilePendingWorkflowForSession,
   recoverParameterFormsOnHistoryLoad,
 } from './chat/parameter-form-recovery';
+import { parseStoToolEnvelope, type WorkflowSchemaReadyData } from '@/lib/builtin-tool-envelope';
 import type { ChatSet } from './chat/store-api';
 import {
   absorbWorkflowExecutionStartedFromToolResults,
@@ -2736,6 +2738,11 @@ export const useChatStore = create<ChatState>()(
         if (finalMsg) {
           const updates = collectToolUpdates(finalMsg, resolvedState);
           if (isToolResultRole(finalMsg.role)) {
+            const schemaEnvelope = parseStoToolEnvelope(finalMsg.content);
+            if (schemaEnvelope?.type === 'workflow_schema_ready' && schemaEnvelope.success) {
+              applyWorkflowSchemaReady((schemaEnvelope.data ?? {}) as WorkflowSchemaReadyData);
+            }
+
             // Snapshot streaming assistant turn before handling tool result.
             const currentStreamForPath = get().streamingMessage as RawMessage | null;
             const matchedPath = (currentStreamForPath && finalMsg.toolCallId)
@@ -2801,14 +2808,21 @@ export const useChatStore = create<ChatState>()(
                 content: finalMsg.content,
               });
               const sessionKey = get().currentSessionKey;
+              let nextMessages = get().messages;
+              const withForm = patchLastAssistantWithWorkflowForm(nextMessages, getMessageText);
+              if (withForm !== nextMessages) {
+                nextMessages = withForm;
+                set({ messages: withForm });
+              }
               const withCards = ensureWorkflowCardsInMessages(
-                get().messages,
+                nextMessages,
                 sessionKey,
                 getMessageText,
               );
-              if (withCards !== get().messages) {
+              if (withCards !== nextMessages) {
                 set({ messages: withCards });
               }
+              ensureWorkflowParameterFormInjected(getMessageText);
               void get().loadHistory(true);
             })();
             break;

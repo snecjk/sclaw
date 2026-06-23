@@ -17,10 +17,12 @@ import { assistantChatCardBg, assistantChatCardBgStreaming } from '@/lib/surface
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
-import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm, useLocalPathExistence, resolvePreviewCandidate, unwrapPreviewablePathMarkdown } from './message-utils';
+import { extractText, extractPlainTextFromContent, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, useLocalPathExistence, resolvePreviewCandidate, unwrapPreviewablePathMarkdown } from './message-utils';
 import {
   ensureWorkflowParameterFormHandler,
-  isWorkflowFormInjectionAllowed,
+  ensureWorkflowParameterFormInjected,
+  isLastAssistantAfterUserTurn,
+  resolveParameterFormForAssistantMessage,
 } from '@/stores/chat/parameter-form-recovery';
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
 import { RUN_ID_IN_TEXT } from '@/lib/workflow-card-injection';
@@ -35,6 +37,7 @@ import {
   resolvePreviewLinkTarget,
   toMarkdownPreviewPath,
 } from '@/lib/preview-url';
+import { dedupeAttachedFiles, mergePreviewFileLists, normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 import { isFilePreviewDebugEnabled, logFilePreview } from '@/lib/file-preview-debug';
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
@@ -108,7 +111,10 @@ export const ChatMessage = memo(function ChatMessage({
     (thinkingTimeline.length > 0 || (isStreaming && streamingTools.length > 0));
   const visibleTools = showThinking ? [] : tools;
 
-  const attachedFiles = message._attachedFiles || [];
+  const attachedFiles = useMemo(
+    () => dedupeAttachedFiles(message._attachedFiles || []),
+    [message._attachedFiles],
+  );
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
   const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
   const sessionKey = useChatStore((s) => s.currentSessionKey);
@@ -129,26 +135,12 @@ export const ChatMessage = memo(function ChatMessage({
   }, [isUser, message, text, workflowCardStates, sessionKey]);
   const parameterForm = useMemo(() => {
     if (isUser) return null;
-    const hasNativeFormBlock = Array.isArray(message.content)
-      && (message.content as import('@/stores/chat').ContentBlock[]).some(
-        (b) => b.type === 'parameter_form' && b.formId && b.formConfig,
-      );
-    if (hasNativeFormBlock) {
-      return extractParameterForm(message, pendingWorkflow);
-    }
-    if (!pendingWorkflow?.schema) return null;
-    if (
-      !isWorkflowFormInjectionAllowed(
-        pendingWorkflow.templateId,
-        sessionMessages,
-        extractText,
-        sessionKey,
-        { allowLivePending: true },
-      )
-    ) {
-      return null;
-    }
-    return extractParameterForm(message, pendingWorkflow);
+    return resolveParameterFormForAssistantMessage(message, {
+      sessionMessages,
+      sessionKey,
+      pendingWorkflow,
+      getMessageText: extractPlainTextFromContent,
+    });
   }, [isUser, message, pendingWorkflow, sessionMessages, sessionKey]);
 
   useEffect(() => {
@@ -161,6 +153,12 @@ export const ChatMessage = memo(function ChatMessage({
     );
   }, [parameterForm]);
 
+  useEffect(() => {
+    if (isUser || !pendingWorkflow?.schema) return;
+    if (!isLastAssistantAfterUserTurn(message, sessionMessages)) return;
+    ensureWorkflowParameterFormInjected(extractPlainTextFromContent);
+  }, [isUser, pendingWorkflow, message, sessionMessages]);
+
   // Extract previewable refs from message text, then verify non-http paths:
   // local files must exist on disk; cloud-runtime paths resolve to artifact OSS
   // URLs or are dropped (no broken file cards).
@@ -168,7 +166,7 @@ export const ChatMessage = memo(function ChatMessage({
   const candidateRefs = useMemo(
     () =>
       extractPreviewableRefs(text)
-        .filter((ref) => !attachedFiles.some((f) => f.filePath === ref.filePath))
+        .filter((ref) => !attachedFiles.some((f) => previewFileRefsMatch(f, ref)))
         .filter((ref) => isPreviewableFile(ref)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [text, message._attachedFiles],
@@ -197,13 +195,23 @@ export const ChatMessage = memo(function ChatMessage({
         refExistence[ref.filePath],
         workflowCardStatesForRefs,
       );
-      if (!resolved || seen.has(resolved.filePath)) continue;
+      if (!resolved) continue;
+      const key = normalizePreviewFileKey(resolved.filePath, resolved.fileName);
+      if (seen.has(key)) continue;
       if (workflowArtifactUrls.has(resolved.filePath)) continue;
-      seen.add(resolved.filePath);
+      seen.add(key);
       result.push({ filePath: resolved.filePath, fileName: resolved.fileName, mimeType: resolved.mimeType });
     }
     return result;
   }, [candidateRefs, refExistence, workflowCardStatesForRefs, workflowArtifactUrls]);
+
+  const previewFiles = useMemo(
+    () => mergePreviewFileLists(
+      attachedFiles,
+      extractedRefs.map((ref) => ({ ...ref, fileSize: 0, preview: null })),
+    ),
+    [attachedFiles, extractedRefs],
+  );
 
   useEffect(() => {
     if (!isFilePreviewDebugEnabled() || isUser || !hasText) return;
@@ -232,14 +240,14 @@ export const ChatMessage = memo(function ChatMessage({
     attachedFiles,
   ]);
 
-  // All attached files should render as cards (images as thumbnails, everything else as FileCard)
-  const hasRenderableFiles = attachedFiles.length > 0;
+  // Previewable file cards (merged from _attachedFiles + text-extracted refs, deduped once)
+  const hasRenderableFiles = previewFiles.length > 0;
 
   // Never render tool result messages in chat UI
   if (isToolResult) return null;
 
   const hasStreamingToolStatus = isStreaming && streamingTools.length > 0;
-  if (!hasText && !showThinkingPanel && images.length === 0 && visibleTools.length === 0 && !hasRenderableFiles && extractedRefs.length === 0 && !hasStreamingToolStatus && !parameterForm && !workflowCard) return null;
+  if (!hasText && !showThinkingPanel && images.length === 0 && visibleTools.length === 0 && !hasRenderableFiles && !hasStreamingToolStatus && !parameterForm && !workflowCard) return null;
   const showRenderDebugPanel = !isUser && isFilePreviewDebugEnabled();
   const debugMarkdownSource = useMemo(
     () => (onPreviewFile ? preprocessTextForPreviewLinks(text) : text),
@@ -497,15 +505,15 @@ export const ChatMessage = memo(function ChatMessage({
         )}
 
         {/* File attachments — assistant messages (below text) */}
-        {!isUser && (attachedFiles.length > 0 || extractedRefs.length > 0) && (
+        {!isUser && previewFiles.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {attachedFiles.map((file, i) => {
+            {previewFiles.map((file, i) => {
               const isImage = file.mimeType.startsWith('image/');
               if (isImage && images.length > 0) return null;
               if (isImage && file.preview) {
                 return (
                   <ImagePreviewCard
-                    key={`local-${i}`}
+                    key={`preview-${normalizePreviewFileKey(file.filePath, file.fileName) || i}`}
                     src={file.preview}
                     fileName={file.fileName}
                     filePath={file.filePath}
@@ -516,21 +524,19 @@ export const ChatMessage = memo(function ChatMessage({
               }
               if (isImage && !file.preview) {
                 return (
-                  <div key={`local-${i}`} className="flex h-36 w-36 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(245,246,247,0.95))] text-muted-foreground">
+                  <div key={`preview-${i}`} className="flex h-36 w-36 items-center justify-center rounded-2xl border border-border bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(245,246,247,0.95))] text-muted-foreground">
                     <File className="h-8 w-8" />
                   </div>
                 );
               }
-              // All non-image attachments render as FileCard
-              return <FileCard key={`local-${i}`} file={file} onPreviewFile={onPreviewFile} />;
+              return (
+                <FileCard
+                  key={`preview-${normalizePreviewFileKey(file.filePath, file.fileName) || i}`}
+                  file={file}
+                  onPreviewFile={onPreviewFile}
+                />
+              );
             })}
-            {extractedRefs.map((ref, i) => (
-              <FileCard
-                key={`extracted-${i}`}
-                file={{ ...ref, fileSize: 0, preview: null }}
-                onPreviewFile={onPreviewFile}
-              />
-            ))}
           </div>
         )}
 

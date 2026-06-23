@@ -25,7 +25,7 @@ vi.mock('@/stores/chat', async (importOriginal) => {
       getState: () => ({
         pendingWorkflow: {
           templateId: 'tpl-1',
-          templateName: 'Test',
+          templateName: '客户异常监控',
           schemaHash: 'hash-1',
           schema: { fields: [], steps: [] },
           collectedInputs: {},
@@ -56,6 +56,49 @@ describe('workflow form injection guard', () => {
         allowLivePending: true,
       }),
     ).toBe(true);
+  });
+
+  it('allows template name only when pending schema matches', () => {
+    const uiMessages: RawMessage[] = [
+      { role: 'user', content: '客户异常监控' },
+      { role: 'assistant', content: '请在下方表单中确认参数' },
+    ];
+    expect(
+      isWorkflowFormInjectionAllowed('tpl-1', uiMessages, getMessageText, 'agent:main:main', {
+        allowLivePending: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('resolveParameterFormForAssistantMessage builds form from pending on last assistant', async () => {
+    const { resolveParameterFormForAssistantMessage } = await import(
+      '@/stores/chat/parameter-form-recovery'
+    );
+    const assistant: RawMessage = {
+      role: 'assistant',
+      content: '请在下方表单中确认参数',
+      id: 'a1',
+    };
+    const sessionMessages: RawMessage[] = [
+      { role: 'user', content: '客户异常监控', id: 'u1' },
+      assistant,
+    ];
+    const resolved = resolveParameterFormForAssistantMessage(assistant, {
+      sessionMessages,
+      sessionKey: 'agent:main:main',
+      pendingWorkflow: {
+        templateId: 'tpl-1',
+        templateName: '客户异常监控',
+        schemaHash: 'hash-1',
+        schema: { fields: [{ key: 'src', label: '来源', component: 'single_select', options: [] }], steps: [] },
+        collectedInputs: {},
+        modelGuidanceSent: true,
+      },
+      getMessageText,
+    });
+    expect(resolved).not.toBeNull();
+    expect(resolved?.formContext.sourceId).toBe('tpl-1');
+    expect(resolved?.formId).toContain('tpl-1');
   });
 
   it('blocks casual last user even when schema exists in history', () => {

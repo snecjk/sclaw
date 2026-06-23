@@ -1,5 +1,9 @@
 import type { AttachedFileMeta } from '@/stores/chat';
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
+import {
+  extensionFromBasename,
+  normalizeArtifactPathPrefix,
+} from '../../shared/artifact-path';
 
 export function isHttpUrl(path: string): boolean {
   return path.startsWith('http://') || path.startsWith('https://');
@@ -32,6 +36,15 @@ export function normalizeLocalFilePath(filePath: string): string {
   if (path.includes('%')) {
     const once = safeDecodeURIComponent(path);
     path = once.includes('%') ? safeDecodeURIComponent(once) : once;
+  }
+
+  const homeDir = typeof process !== 'undefined'
+    ? (process.env.HOME || process.env.USERPROFILE || '')
+    : '';
+  if (homeDir) {
+    path = normalizeArtifactPathPrefix(path, homeDir);
+  } else {
+    path = toMarkdownPreviewPath(path);
   }
 
   return toMarkdownPreviewPath(path);
@@ -96,12 +109,12 @@ function extFromPathOrUrl(pathOrUrl: string): string {
     if (!urlPathHasFileExtension(pathOrUrl)) return '';
     try {
       const last = new URL(pathOrUrl).pathname.split('/').filter(Boolean).pop() || '';
-      return last.split('.').pop()?.toLowerCase() || '';
+      return extensionFromBasename(last);
     } catch {
       // fall through to basename
     }
   }
-  return previewBasename(pathOrUrl).split('.').pop()?.toLowerCase() || '';
+  return extensionFromBasename(previewBasename(pathOrUrl));
 }
 
 /** http(s) URL whose path has no file extension — treat as a web page (e.g. https://www.baidu.com). */
