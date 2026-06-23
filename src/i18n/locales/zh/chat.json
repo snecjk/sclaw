@@ -137,6 +137,9 @@
         "durationHalfHour": "半小时",
         "durationHours": "{{count}} 小时",
         "durationHoursHalf": "{{count}} 个半小时",
-        "durationHoursMinutes": "{{hours}} 小时 {{minutes}} 分钟"
+        "durationHoursMinutes": "{{hours}} 小时 {{minutes}} 分钟",
+        "defaultName": "工作流",
+        "backgroundRunningWithId": "工作流 ID: {{workflowId}}",
+        "withId": "工作流 ID: {{workflowId}}"
     }
 }

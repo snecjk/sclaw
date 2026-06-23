@@ -132,6 +132,9 @@
         "durationHalfHour": "30 分",
         "durationHours": "{{count}} 時間",
         "durationHoursHalf": "{{count}} 時間半",
-        "durationHoursMinutes": "{{hours}} 時間 {{minutes}} 分"
+        "durationHoursMinutes": "{{hours}} 時間 {{minutes}} 分",
+        "defaultName": "ワークフロー",
+        "backgroundRunningWithId": "ワークフロー ID: {{workflowId}}",
+        "withId": "ワークフロー ID: {{workflowId}}"
     }
 }

@@ -36,6 +36,11 @@ interface StatusTheme {
   spin?: boolean;
 }
 
+function isTemplateIdLabel(name: string | undefined): boolean {
+  const trimmed = name?.trim();
+  return !trimmed || trimmed.startsWith('tpl_');
+}
+
 const STATUS_THEMES: Record<WorkflowRunStatus | 'pending', StatusTheme> = {
   running: {
     labelKey: 'workflow.statusRunning',
@@ -156,10 +161,20 @@ export function WorkflowCard({
   const resolvedName = useMemo(() => {
     const exec = getExecutionByRunId(runId, sessionKey);
     const fromMemory = exec?.templateName?.trim();
-    if (fromMemory && !fromMemory.startsWith('tpl_')) return fromMemory;
-    if (templateName && !templateName.startsWith('tpl_')) return templateName;
-    return fromMemory || templateName;
-  }, [runId, sessionKey, templateName]);
+    if (fromMemory && !isTemplateIdLabel(fromMemory)) return fromMemory;
+    if (templateName && !isTemplateIdLabel(templateName)) return templateName;
+
+    const workflowId = state?.workflowId || exec?.workflowId;
+    const isActive = !state || state.status === 'running' || state.status === 'pending';
+    if (workflowId && isActive) {
+      return t('workflow.backgroundRunningWithId', { workflowId });
+    }
+    if (workflowId) {
+      return t('workflow.withId', { workflowId });
+    }
+
+    return fromMemory || templateName || t('workflow.defaultName');
+  }, [runId, sessionKey, templateName, state?.workflowId, state?.status, t]);
 
   useEffect(() => {
     const needsHydrate = !state

@@ -30,7 +30,12 @@ vi.mock('@/stores/workflow-memory', () => ({
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, opts?: { workflowId?: string }) => {
+      if (key === 'workflow.backgroundRunningWithId' && opts?.workflowId) {
+        return `工作流 ID: ${opts.workflowId}`;
+      }
+      return key;
+    },
   }),
 }));
 
@@ -59,6 +64,25 @@ describe('WorkflowCard scheduled task action', () => {
 
     expect(screen.getByRole('button', { name: '创建定时任务' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '查看工作流' })).toBeTruthy();
+  });
+
+  it('shows workflow id title when template name is a template id', () => {
+    chatState.workflowCardStates.run_123 = {
+      runId: 'run_123',
+      workflowId: 'wf_2496580c',
+      status: 'running',
+      progress: 0,
+      steps: [],
+    };
+
+    render(
+      <WorkflowCard
+        runId="run_123"
+        templateName="tpl_3ec98fd9"
+      />,
+    );
+
+    expect(screen.getByText('工作流后台执行中（工作流 ID: wf_2496580c）')).toBeTruthy();
   });
 
   it('hides create scheduled task action while workflow is running', () => {

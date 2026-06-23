@@ -137,6 +137,9 @@
         "durationHalfHour": "30 min",
         "durationHours": "{{count}} hr",
         "durationHoursHalf": "{{count}}.5 hr",
-        "durationHoursMinutes": "{{hours}} hr {{minutes}} min"
+        "durationHoursMinutes": "{{hours}} hr {{minutes}} min",
+        "defaultName": "Workflow",
+        "backgroundRunningWithId": "Workflow ID: {{workflowId}}",
+        "withId": "Workflow ID: {{workflowId}}"
     }
 }
