@@ -15,7 +15,7 @@ import { PARAMETER_FORM_USE_FLOAT_DOCK } from '@/components/parameter-form/const
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
 
 export interface ParameterFormDockProps {
-  /** 首页 Hero 输入宽度（780）；默认对话页（862） */
+  /** 首页 Hero（780）；默认对话页（862） */
   layout?: 'home' | 'page';
   className?: string;
 }
@@ -37,7 +37,7 @@ export function ParameterFormDock({ layout = 'page', className }: ParameterFormD
           transition={{ duration: 0.2, ease: 'easeOut' }}
           className={cn(
             // mb-[14px] = PARAMETER_FORM_DOCK_INPUT_GAP_PX（选项卡 ↔ 输入框）
-            'mb-[14px] shrink-0 bg-gradient-to-t from-background from-80% to-background/60',
+            'mb-[14px] shrink-0',
             className,
           )}
         >

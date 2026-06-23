@@ -21,9 +21,9 @@ export const assistantChatCardBgStreaming = cn(
   'dark:bg-[linear-gradient(180deg,hsl(var(--muted)),hsl(var(--card)))]',
 );
 
-/** 任务子项聊天：与设计壳层 MainLayout 中 `<main>` 一致（浅色 `--sto-page-bg`，深色 `background`），避免与主区两侧 / 滚动条带叠色出缝 */
+/** 任务子项聊天：与省区 MainLayout 白卡片 {@link stoMainCardShellClass} 同色，避免输入框下方露出 gutter 灰 */
 export const stoTaskSubitemChatCanvasBg = cn(
-  'bg-[var(--sto-page-bg)]',
+  'bg-[var(--sto-main-card-bg)]',
   'dark:bg-background',
 );
 
@@ -53,10 +53,10 @@ export const glassSegmentTrack = cn(
 );
 
 /** 首页对话/消息阅读区最大宽（780px） */
-export const stoChatShellHomeClass = 'mx-auto w-full min-w-0 max-w-[var(--sto-chat-max-w-home)]';
+export const stoChatShellHomeClass = 'mx-auto w-full min-w-0 max-w-[780px]';
 
 /** 非首页对话/内容区最大宽（862px） */
-export const stoChatShellPageClass = 'mx-auto w-full min-w-0 max-w-[var(--sto-chat-max-w-page)]';
+export const stoChatShellPageClass = 'mx-auto w-full min-w-0 max-w-[862px]';
 
 /**
  * 非首页主内容区：最大 862px（与 {@link stoChatShellPageClass} 同源），窗口变宽时两侧留白。
@@ -145,6 +145,54 @@ export const stoChatShellPageColumnClass = cn(
   'flex min-h-0 flex-1 flex-col',
 );
 
+/** 三栏对话区卡片（MasterGo 矩形 2498：18px 圆角 + #F7F8FA + shadow-glow） */
+export const stoSplitChatCardClass = cn(
+  'min-h-0 min-w-0 overflow-hidden rounded-[18px] bg-[var(--sto-main-card-bg)] shadow-glow',
+);
+
+/** 三栏模式：左栏卡片外层（贴满分割面板；内层对话仍用 page/home 限宽壳） */
+export const stoSplitChatPaneCardWrapClass = cn(
+  stoSplitChatCardClass,
+  'flex min-h-0 min-w-0 flex-1 flex-col items-center',
+);
+
+export type StoChatColumnVariant = 'page' | 'home';
+
+/**
+ * 对话列壳：toolbar + 消息 + 输入同宽居中。
+ * 双栏 / 三栏均相同限宽（page 862px / home 780px），不随浏览器无限变宽。
+ */
+export function stoChatColumnShellClass(variant: StoChatColumnVariant): string {
+  return variant === 'home' ? stoChatShellHomeColumnClass : stoChatShellPageColumnClass;
+}
+
+/**
+ * 对话列完整 class：Chat / 任务子项 / 首页会话共用。
+ * 三栏时外层卡片 items-center，此处 self-center 防止 flex stretch 撑破 max-w。
+ */
+export function stoChatColumnClass(variant: StoChatColumnVariant, isSplit = false): string {
+  return cn(
+    stoChatColumnShellClass(variant),
+    'px-6',
+    isSplit && 'self-center',
+  );
+}
+
+/** 三栏左栏内容外包：split 时加卡片壳，否则仅占满 pane（均 items-center 居中限宽轨） */
+export function stoSplitChatPaneContentWrapClass(isSplit: boolean): string {
+  return isSplit
+    ? stoSplitChatPaneCardWrapClass
+    : 'flex min-h-0 min-w-0 flex-1 flex-col items-center';
+}
+
+/** 三栏模式外层 row 间距（Chat / 任务子项 / 首页会话共用） */
+export const stoSplitRowInsetsClass = 'gap-2 p-2';
+
+/** ParameterFormDock layout（与对话列 variant 一致） */
+export function stoParameterFormDockLayout(variant: StoChatColumnVariant): 'home' | 'page' {
+  return variant === 'home' ? 'home' : 'page';
+}
+
 /** Hero / 大输入复合框壳层（固定 780px 居中） */
 export const stoHeroInputShellClass =
   'mx-auto flex w-[var(--sto-hero-input-max-w)] max-w-full min-w-0 flex-col';
@@ -156,11 +204,55 @@ export const stoSplitChatPaneClass = 'relative flex min-h-0 min-w-[var(--sto-spl
 export const stoSplitPreviewPaneClass =
   'flex h-full min-h-0 max-w-[var(--sto-split-max-preview)] shrink-0 flex-col overflow-hidden [contain:inline-size]';
 
+/** 三栏预览区卡片（含 Grey-4 描边） */
+export const stoSplitPreviewCardClass = cn(
+  'min-h-0 min-w-0 overflow-hidden rounded-[18px] border border-border bg-[var(--sto-main-card-bg)] shadow-glow',
+);
+
+/** 预览区 Tab 行容器（组 7047） */
+export const stoPreviewTabRowClass = cn(
+  'flex shrink-0 items-center justify-between gap-2 rounded-t-[18px] bg-[var(--sto-main-card-bg)] pb-3 pl-4 pr-4 pt-2',
+);
+
+/** 预览产物 tab pill（选中 #E5E6EB / 未选 #F5F6F7） */
+export function stoPreviewArtifactTabClass(isActive: boolean): string {
+  return cn(
+    'inline-flex h-[30px] max-w-[143px] shrink-0 items-center gap-1 rounded-[10px] px-2 text-sm leading-[18px] transition-colors duration-fast',
+    isActive
+      ? 'bg-border text-foreground'
+      : 'bg-[#F5F6F7] text-foreground hover:bg-muted',
+  );
+}
+
+/** 预览操作行（标题 + 元信息 + 图标按钮） */
+export const stoPreviewActionRowClass = cn(
+  'flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3',
+);
+
+/** 预览操作行图标按钮（30×30，圆角 7px） */
+export const stoPreviewActionButtonClass = cn(
+  'inline-flex h-[30px] w-[30px] items-center justify-center rounded-[7px] text-muted-foreground transition-colors duration-fast',
+  'hover:bg-black/[0.04] hover:text-foreground',
+);
+
+/** 三栏拖拽分隔条 */
+export const stoSplitResizerClass = cn(
+  'relative z-20 flex h-full w-1 shrink-0 cursor-col-resize items-center justify-center bg-transparent transition-colors duration-fast',
+  'hover:bg-primary/20',
+);
+
+export const stoSplitResizerActiveClass = 'bg-primary/40';
+
+/** 三栏预览区宽度占比下限 / 默认 / 上限（对话区对应 70%–50%–30%） */
+export const STO_PREVIEW_SPLIT_MIN = 30;
+export const STO_PREVIEW_SPLIT_DEFAULT = 50;
+export const STO_PREVIEW_SPLIT_MAX = 70;
+
 /** 三栏预览区分割：预览区宽度占容器百分比，限制在 30%–70% */
 export function clampPreviewPanelPercent(containerWidth: number, previewPx: number): number {
-  if (containerWidth <= 0) return 70;
+  if (containerWidth <= 0) return STO_PREVIEW_SPLIT_DEFAULT;
   const pct = (previewPx / containerWidth) * 100;
-  return Math.max(30, Math.min(70, pct));
+  return Math.max(STO_PREVIEW_SPLIT_MIN, Math.min(STO_PREVIEW_SPLIT_MAX, pct));
 }
 
 /** 全高页面壳层：TitleBar + main 上下内距（省区壳内 --sto-header-h 为 0） */

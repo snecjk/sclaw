@@ -27,12 +27,19 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { cn } from '@/lib/utils';
+import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
 import {
   clampPreviewPanelPercent,
-  stoChatShellPageColumnClass,
-  stoSplitChatPaneClass,
+  STO_PREVIEW_SPLIT_MAX,
+  STO_PREVIEW_SPLIT_MIN,
+  stoParameterFormDockLayout,
+  stoSplitPreviewCardClass,
   stoSplitPreviewPaneClass,
+  stoSplitResizerActiveClass,
+  stoSplitResizerClass,
+  stoSplitRowInsetsClass,
 } from '@/lib/surfaces';
+import { useSettingsStore } from '@/stores/settings';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
@@ -72,7 +79,8 @@ export function Chat() {
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [splitting, setSplitting] = useState(false);
-  const [previewPanelPercent, setPreviewPanelPercent] = useState(70);
+  const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
+  const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
   const [isResizing, setIsResizing] = useState(false);
   const [editDraft, setEditDraft] = useState<{ text: string; version: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -370,7 +378,10 @@ export function Chat() {
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = startX - moveEvent.clientX;
       const width = previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth;
-      pendingWidth = Math.max(width * 0.3, Math.min(width * 0.7, startWidth + delta));
+      pendingWidth = Math.max(
+        width * (STO_PREVIEW_SPLIT_MIN / 100),
+        Math.min(width * (STO_PREVIEW_SPLIT_MAX / 100), startWidth + delta),
+      );
       if (rafId === null) {
         rafId = requestAnimationFrame(applyWidth);
       }
@@ -385,7 +396,7 @@ export function Chat() {
         cancelAnimationFrame(rafId);
         rafId = null;
       }
-      setPreviewPanelPercent(clampPreviewPanelPercent(
+      setPreviewSplitPercent(clampPreviewPanelPercent(
         previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth,
         pendingWidth,
       ));
@@ -403,7 +414,7 @@ export function Chat() {
     return () => {
       cleanup();
     };
-  }, [previewPanelPercent]);
+  }, [previewPanelPercent, setPreviewSplitPercent]);
 
   // Collect previewable files from messages and streaming message
   const allMessagesForPreview = useMemo(() => {
@@ -426,6 +437,7 @@ export function Chat() {
     openArtifactPreview,
     openWorkflowPreview,
     closePreviewPanel,
+    dismissPreviewFile,
     showWorkflowTab,
     workflowId: sessionWorkflowId,
     workflowDetail,
@@ -433,7 +445,7 @@ export function Chat() {
     workflowError,
   } = useChatPreviewPanel(allMessagesForPreview);
 
-
+  const isSplitChatLayout = canShowPreviewPanel && showPreviewPanel;
 
   // Auto-send watcher: sends queued messages one-by-one when AI finishes responding
   useEffect(() => {
@@ -443,12 +455,14 @@ export function Chat() {
 
   return (
     <div
-      className={cn('relative -m-6 flex min-h-0 min-w-0 flex-row overflow-x-hidden transition-colors duration-500')}
+      className={cn(
+        'relative -m-6 flex min-h-0 min-w-0 flex-row overflow-x-hidden transition-colors duration-500',
+        canShowPreviewPanel && showPreviewPanel && stoSplitRowInsetsClass,
+      )}
       style={{ height: 'calc(100vh - var(--sto-header-h))' }}
     >
       {/* Left: Chat area */}
-      <div className={stoSplitChatPaneClass}>
-      <div className={stoChatShellPageColumnClass}>
+      <ChatConversationColumn variant="page" isSplitLayout={isSplitChatLayout}>
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,140,0,0.06),_transparent_30%),radial-gradient(circle_at_80%_20%,_rgba(229,230,235,0.35),_transparent_26%)]" />
         <div className="absolute inset-0 neural-grid opacity-20" />
@@ -613,10 +627,8 @@ export function Chat() {
       />
 
       {/* Parameter form dock — 任务二：吸附输入框上方固定浮层 */}
-      <div className="relative z-10 shrink-0 px-6">
-        <div className="mx-auto max-w-5xl">
-          <ParameterFormDock layout="page" />
-        </div>
+      <div className="relative z-10 w-full shrink-0">
+        <ParameterFormDock layout={stoParameterFormDockLayout('page')} />
       </div>
 
       {/* Input Area */}
@@ -642,19 +654,18 @@ export function Chat() {
           </div>
         </div>
       )}
-      </div>
-      </div>
+      </ChatConversationColumn>
       {/* Resizer */}
       {canShowPreviewPanel && showPreviewPanel && (
         <div
           onMouseDown={startResize}
           className={cn(
-            'relative z-20 flex h-full shrink-0 cursor-col-resize items-center justify-center transition-colors',
-            isResizing ? 'bg-primary/50 w-[5px]' : 'bg-border/50 w-[5px] hover:bg-primary/40',
+            stoSplitResizerClass,
+            isResizing && stoSplitResizerActiveClass,
           )}
           style={{ cursor: isResizing ? 'col-resize' : undefined }}
         >
-          <div className={cn('h-8 w-[2px] rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
+          <div className={cn('h-8 w-0.5 rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
         </div>
       )}
 
@@ -670,13 +681,14 @@ export function Chat() {
             transition={{ duration: 0.25, ease: 'easeInOut' }}
             // className="shrink-0 overflow-hidden"
             style={{ width: `${previewPanelPercent}%` }}
-            className={stoSplitPreviewPaneClass}
+            className={cn(stoSplitPreviewPaneClass, stoSplitPreviewCardClass)}
           >
             <ChatPreviewPanel
               files={previewableFiles}
               activeFilePath={activePreviewFilePath}
               onSelectFile={setActivePreviewFilePath}
               onClose={closePreviewPanel}
+              onDismissFile={dismissPreviewFile}
               className="h-full w-full"
               showWorkflowTab={showWorkflowTab}
               workflowId={sessionWorkflowId}

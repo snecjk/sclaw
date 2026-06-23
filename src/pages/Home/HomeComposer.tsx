@@ -2,14 +2,16 @@
  * HomeComposer - 三首页统一底部输入区
  *
  * 封装 ChatInput（home 布局）+ 内联引擎/模型 + 底部免责文案。
- * 使用位置：总部 HomeAgentHubSurface、网点 HomeSiteSurface、省区 HomeAssistant。
+ * 使用位置：
+ * - 未进入会话（Hero/卡片）：各 Surface 底部 footer 唯一实例
+ * - 已进入会话：仅由 HomeMainConversation 内嵌渲染（footer 不要再挂一份）
  */
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { cn } from '@/lib/utils';
-import { stoHeroInputShellClass } from '@/lib/surfaces';
+import { stoHeroInputShellClass, stoParameterFormDockLayout } from '@/lib/surfaces';
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
 import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
@@ -100,7 +102,7 @@ export function HomeComposer({
 
   return (
     <div className={cn(stoHeroInputShellClass, className)}>
-      <ParameterFormDock layout="home" />
+      <ParameterFormDock layout={stoParameterFormDockLayout('home')} />
       <section className="flex flex-col" aria-label={t('assistant.placeholder')}>
         <ChatInput
           {...inputProps}

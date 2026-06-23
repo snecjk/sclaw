@@ -156,5 +156,18 @@
         "typeArchive": "アーカイブ",
         "typeMedia": "メディア",
         "typeFile": "ファイル"
+    },
+    "preview": {
+        "collapsePanel": "プレビューを閉じる",
+        "overflowMenu": "すべての成果物",
+        "fullscreen": "全画面",
+        "refresh": "更新",
+        "download": "ダウンロード",
+        "openExternal": "共有",
+        "editWorkflow": "ワークフローを編集",
+        "workflowTab": "ワークフロー",
+        "emptyHint": "チャット内のファイルリンクをクリックしてプレビュー",
+        "emptyHintSub": "または上から成果物を選択",
+        "dismissTab": "この成果物を閉じる"
     }
 }

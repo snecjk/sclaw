@@ -161,5 +161,18 @@
         "typeArchive": "压缩包",
         "typeMedia": "媒体",
         "typeFile": "文件"
+    },
+    "preview": {
+        "collapsePanel": "收起预览区",
+        "overflowMenu": "全部产物",
+        "fullscreen": "全屏放映",
+        "refresh": "刷新",
+        "download": "下载",
+        "openExternal": "分享",
+        "editWorkflow": "编辑工作流",
+        "workflowTab": "工作流",
+        "emptyHint": "点击消息中的文件链接进行预览",
+        "emptyHintSub": "或从上方选择产物",
+        "dismissTab": "关闭此产物"
     }
 }

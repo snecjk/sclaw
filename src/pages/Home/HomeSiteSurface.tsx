@@ -17,7 +17,11 @@ export function HomeSiteSurface({ seedText }: { seedText?: string }) {
     <div className="mx-auto flex h-full min-h-0 w-full flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6">
         {showConversation ? (
-          <HomeMainConversation className="min-h-0 flex-1" />
+          <HomeMainConversation
+            className="min-h-0 flex-1"
+            seedText={seedText}
+            onSend={handleHubSend}
+          />
         ) : (
           <div className={homeHubMainScrollClass}>
             <HomeHero variant="site" />
@@ -25,13 +29,15 @@ export function HomeSiteSurface({ seedText }: { seedText?: string }) {
           </div>
         )}
       </div>
-      <div className={homeHubFooterShellClass}>
-        <HomeComposer
-          seedText={seedText}
-          onSend={handleHubSend}
-          placeholderKey="site.assistant.placeholder"
-        />
-      </div>
+      {!showConversation ? (
+        <div className={homeHubFooterShellClass}>
+          <HomeComposer
+            seedText={seedText}
+            onSend={handleHubSend}
+            placeholderKey="site.assistant.placeholder"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

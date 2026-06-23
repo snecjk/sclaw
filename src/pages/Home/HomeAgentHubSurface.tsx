@@ -109,7 +109,11 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6">
         {showConversation ? (
-          <HomeMainConversation className="min-h-0 flex-1" />
+          <HomeMainConversation
+            className="min-h-0 flex-1"
+            seedText={seedText}
+            onSend={handleHubSend}
+          />
         ) : (
           <div className={homeHubMainScrollClass}>
             <HomeHero />
@@ -169,14 +173,15 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
         )}
       </div>
 
-      <div className={homeHubFooterShellClass}>
-        <HomeComposer
-          seedText={seedText}
-          onSend={handleHubSend}
-          onQueue={handleHubQueue}
-          engineType={currentEngineType}
-        />
-        {SHOW_GATEWAY_LINE || SHOW_USAGE_HINT ? (
+      {!showConversation ? (
+        <div className={homeHubFooterShellClass}>
+          <HomeComposer
+            seedText={seedText}
+            onSend={handleHubSend}
+            onQueue={handleHubQueue}
+            engineType={currentEngineType}
+          />
+          {SHOW_GATEWAY_LINE || SHOW_USAGE_HINT ? (
           <div
             className={cn(
               'mx-auto mt-4 grid w-full max-w-[960px] grid-cols-[1fr_auto_1fr] items-center gap-3 border-t pt-4 text-xs',
@@ -224,7 +229,8 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
             )}
           </div>
         ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

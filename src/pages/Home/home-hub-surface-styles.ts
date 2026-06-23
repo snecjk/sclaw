@@ -33,7 +33,7 @@ export const homeHubMainScrollClass =
 
 /** 底部输入 + 免责区外壳 */
 export const homeHubFooterShellClass =
-  'shrink-0 bg-[var(--sto-page-bg)] px-4 pb-4 pt-4 sm:px-6 dark:bg-background';
+  'shrink-0 px-4 pb-4 pt-4 sm:px-6';
 
 /** MasterGo font_2:6551 + Grey-5 底部免责 */
 export const homeHubFooterDisclaimerClass =

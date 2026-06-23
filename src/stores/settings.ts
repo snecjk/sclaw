@@ -37,6 +37,8 @@ interface SettingsState {
   // UI State
   sidebarCollapsed: boolean;
   devModeUnlocked: boolean;
+  /** 三栏预览区宽度占比（30–70），持久化记忆用户拖拽结果 */
+  previewSplitPercent: number;
 
   // Setup
   setupComplete: boolean;
@@ -61,6 +63,7 @@ interface SettingsState {
   setAutoDownloadUpdate: (value: boolean) => void;
   setSidebarCollapsed: (value: boolean) => void;
   setDevModeUnlocked: (value: boolean) => void;
+  setPreviewSplitPercent: (percent: number) => void;
   markSetupComplete: () => void;
   resetSettings: () => void;
 }
@@ -86,6 +89,7 @@ const defaultSettings = {
   autoDownloadUpdate: true,
   sidebarCollapsed: false,
   devModeUnlocked: false,
+  previewSplitPercent: 50,
   setupComplete: false,
 };
 
@@ -181,6 +185,9 @@ export const useSettingsStore = create<SettingsState>()(
         }).catch(() => {});
       },
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+      setPreviewSplitPercent: (previewSplitPercent) => set({
+        previewSplitPercent: Math.max(30, Math.min(70, previewSplitPercent)),
+      }),
       setDevModeUnlocked: (devModeUnlocked) => {
         set({ devModeUnlocked });
         void hostApiFetch('/api/settings/devModeUnlocked', {

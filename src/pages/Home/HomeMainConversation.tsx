@@ -16,18 +16,41 @@ import { ChatSearchBar } from '@/pages/Chat/ChatSearchBar';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/stores/settings';
+import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
 import {
   clampPreviewPanelPercent,
-  stoChatShellHomeColumnClass,
-  stoSplitChatPaneClass,
+  STO_PREVIEW_SPLIT_MAX,
+  STO_PREVIEW_SPLIT_MIN,
+  stoSplitPreviewCardClass,
   stoSplitPreviewPaneClass,
+  stoSplitResizerActiveClass,
+  stoSplitResizerClass,
+  stoSplitRowInsetsClass,
 } from '@/lib/surfaces';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
+import { HomeComposer } from '@/pages/Home/HomeComposer';
+import type { FileAttachment } from '@/pages/Chat/ChatInput';
+import type { DingTalkMention } from '@/types/dingtalk-mention';
 
 /**
  * Main-agent conversation thread on the home route (replaces the old `/chat` welcome + messages UI).
+ * 三栏预览时输入框与消息同属左侧对话列（与 Chat / 任务子项一致）。
  */
-export function HomeMainConversation({ className }: { className?: string }) {
+export interface HomeMainConversationProps {
+  className?: string;
+  /** 一次性填入输入框的种子文案 */
+  seedText?: string;
+  onSend?: (
+    text: string,
+    attachments?: FileAttachment[],
+    targetAgentId?: string | null,
+    dingTalkMentions?: DingTalkMention[],
+    workflowId?: string | null,
+  ) => void;
+}
+
+export function HomeMainConversation({ className, seedText, onSend }: HomeMainConversationProps) {
   const { t } = useTranslation(['chat', 'common']);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const messages = useChatStore((s) => s.messages);
@@ -202,9 +225,10 @@ export function HomeMainConversation({ className }: { className?: string }) {
     [scrollToBottom],
   );
 
-  const [previewPanelPercent, setPreviewPanelPercent] = useState(70);
   const [isResizing, setIsResizing] = useState(false);
   const previewPanelRef = useRef<HTMLDivElement>(null);
+  const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
+  const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
 
   const allMessagesForPreview = useMemo(() => {
     const arr = [...messages] as RawMessage[];
@@ -226,6 +250,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
     openArtifactPreview,
     openWorkflowPreview,
     closePreviewPanel,
+    dismissPreviewFile,
     showWorkflowTab,
     workflowId: sessionWorkflowId,
     workflowDetail,
@@ -233,7 +258,9 @@ export function HomeMainConversation({ className }: { className?: string }) {
     workflowError,
   } = useChatPreviewPanel(allMessagesForPreview);
 
-  // ── Resizable panel logic ──
+  const isSplitChatLayout = canShowPreviewPanel && showPreviewPanel;
+
+  // ── Resizable panel logic（与 Chat / 任务子项一致）──
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
@@ -259,7 +286,10 @@ export function HomeMainConversation({ className }: { className?: string }) {
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const delta = startX - moveEvent.clientX;
       const width = previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth;
-      pendingWidth = Math.max(width * 0.3, Math.min(width * 0.7, startWidth + delta));
+      pendingWidth = Math.max(
+        width * (STO_PREVIEW_SPLIT_MIN / 100),
+        Math.min(width * (STO_PREVIEW_SPLIT_MAX / 100), startWidth + delta),
+      );
       if (rafId === null) {
         rafId = requestAnimationFrame(applyWidth);
       }
@@ -274,7 +304,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
         cancelAnimationFrame(rafId);
         rafId = null;
       }
-      setPreviewPanelPercent(clampPreviewPanelPercent(
+      setPreviewSplitPercent(clampPreviewPanelPercent(
         previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth,
         pendingWidth,
       ));
@@ -291,7 +321,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
     return () => {
       cleanup();
     };
-  }, [previewPanelPercent]);
+  }, [previewPanelPercent, setPreviewSplitPercent]);
 
   const showLoadingPlaceholder = useMemo(
     () => loading && messages.length === 0,
@@ -299,9 +329,12 @@ export function HomeMainConversation({ className }: { className?: string }) {
   );
 
   return (
-    <div className={cn('-mt-4 relative flex min-h-0 flex-1 flex-row overflow-hidden', className)}>
-      <div className={stoSplitChatPaneClass}>
-        <div className={stoChatShellHomeColumnClass}>
+    <div className={cn(
+      '-mt-4 relative flex min-h-0 flex-1 flex-row overflow-hidden',
+      isSplitChatLayout && stoSplitRowInsetsClass,
+      className,
+    )}>
+      <ChatConversationColumn variant="home" isSplitLayout={isSplitChatLayout}>
         {/* Toolbar */}
         <div className="relative z-10 flex shrink-0 items-center justify-between py-2">
           <ChatToolbar
@@ -427,23 +460,29 @@ export function HomeMainConversation({ className }: { className?: string }) {
         </div>
       </div>
 
+      <div className="relative z-10 w-full shrink-0">
+        <HomeComposer
+          seedText={seedText}
+          onSend={onSend}
+        />
+      </div>
+
       {minLoading && !sending ? (
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-white/10 backdrop-blur-[2px] dark:bg-black/10" />
       ) : null}
-        </div>
-      </div>
+      </ChatConversationColumn>
 
     {/* Resizer */}
     {canShowPreviewPanel && showPreviewPanel && (
       <div
         onMouseDown={startResize}
         className={cn(
-          'relative z-20 flex h-full shrink-0 cursor-col-resize items-center justify-center transition-colors',
-          isResizing ? 'bg-primary/50 w-[5px]' : 'bg-border/50 w-[5px] hover:bg-primary/40',
+          stoSplitResizerClass,
+          isResizing && stoSplitResizerActiveClass,
         )}
         style={{ cursor: isResizing ? 'col-resize' : undefined }}
       >
-        <div className={cn('h-8 w-[2px] rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
+        <div className={cn('h-8 w-0.5 rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
       </div>
     )}
 
@@ -458,13 +497,14 @@ export function HomeMainConversation({ className }: { className?: string }) {
           exit={{ opacity: 0, x: 40 }}
           transition={{ duration: 0.25, ease: 'easeInOut' }}
           style={{ width: `${previewPanelPercent}%` }}
-          className={cn(stoSplitPreviewPaneClass, 'border-l border-border/40')}
+          className={cn(stoSplitPreviewPaneClass, stoSplitPreviewCardClass)}
         >
           <ChatPreviewPanel
             files={previewableFiles}
             activeFilePath={activePreviewFilePath}
             onSelectFile={setActivePreviewFilePath}
             onClose={closePreviewPanel}
+            onDismissFile={dismissPreviewFile}
             className="h-full w-full"
             showWorkflowTab={showWorkflowTab}
             workflowId={sessionWorkflowId}
@@ -481,6 +521,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
     {/* Floating toggle button when panel is hidden but files exist */}
     {canShowPreviewPanel && !showPreviewPanel && (
       <button
+        type="button"
         onClick={() => setShowPreviewPanel(true)}
         className="absolute right-4 top-4 z-20 inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-white/60 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white/80 dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
       >

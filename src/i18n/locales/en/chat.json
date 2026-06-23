@@ -161,5 +161,18 @@
         "typeArchive": "Archive",
         "typeMedia": "Media",
         "typeFile": "File"
+    },
+    "preview": {
+        "collapsePanel": "Collapse preview",
+        "overflowMenu": "All artifacts",
+        "fullscreen": "Fullscreen",
+        "refresh": "Refresh",
+        "download": "Download",
+        "openExternal": "Share",
+        "editWorkflow": "Edit workflow",
+        "workflowTab": "Workflow",
+        "emptyHint": "Click a file link in the chat to preview",
+        "emptyHintSub": "Or select an artifact above",
+        "dismissTab": "Close this artifact"
     }
 }

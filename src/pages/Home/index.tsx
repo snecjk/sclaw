@@ -130,7 +130,7 @@ export function Home() {
       <div className="mx-auto flex h-full min-h-0 w-full flex-1 flex-col">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6">
           {showConversation ? (
-            <HomeMainConversation className="min-h-0 flex-1" />
+            <HomeMainConversation className="min-h-0 flex-1" seedText={seedText} onSend={handleHubSend} />
           ) : (
             <div className={homeHubMainScrollClass}>
               <HomeHero />
@@ -138,9 +138,11 @@ export function Home() {
             </div>
           )}
         </div>
-        <div className={homeHubFooterShellClass}>
-          <HomeComposer seedText={seedText} onSend={handleHubSend} />
-        </div>
+        {!showConversation ? (
+          <div className={homeHubFooterShellClass}>
+            <HomeComposer seedText={seedText} onSend={handleHubSend} />
+          </div>
+        ) : null}
       </div>
       <TaskCreateModal
         open={nlModalOpen}
