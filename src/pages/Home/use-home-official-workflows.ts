@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { hostApiFetch } from '@/lib/host-api';
 import { listWorkflowTemplates } from '@/lib/workflow-api';
 import { useMinLoading } from '@/hooks/use-min-loading';
-
-interface MineWorkflowResponse {
-  success?: boolean;
-  data?: Array<{ id: string; name: string; description?: string; templateId?: string }>;
-}
 
 export interface HomeOfficialTemplateItem {
   id: string;
@@ -14,7 +8,6 @@ export interface HomeOfficialTemplateItem {
   category: string;
   description: string;
   nodeCount: number;
-  hasMyWorkflow: boolean;
 }
 
 export interface UseHomeOfficialWorkflowsResult {
@@ -37,21 +30,9 @@ export function useHomeOfficialWorkflows(): UseHomeOfficialWorkflowsResult {
     setError(null);
 
     try {
-      const [officialResult, mineResponse] = await Promise.all([
-        listWorkflowTemplates({ page: 1, pageSize: 100 }),
-        hostApiFetch<MineWorkflowResponse>('/api/my-tasks/agent/v1/my-workflow'),
-      ]);
+      const officialResult = await listWorkflowTemplates({ page: 1, pageSize: 100 });
 
       if (fetchSeqRef.current !== seq) return;
-
-      const mineTemplateIds = new Set<string>();
-      if (mineResponse.success !== false && mineResponse.data) {
-        for (const item of mineResponse.data) {
-          if (item.templateId) {
-            mineTemplateIds.add(String(item.templateId));
-          }
-        }
-      }
 
       const officialItems = (officialResult.items ?? []).map((item) => ({
         id: String(item.id ?? ''),
@@ -59,7 +40,6 @@ export function useHomeOfficialWorkflows(): UseHomeOfficialWorkflowsResult {
         category: item.category != null ? String(item.category) : '',
         description: item.description != null ? String(item.description) : '',
         nodeCount: Number(item.nodeCount) || 0,
-        hasMyWorkflow: mineTemplateIds.has(String(item.id)),
       }));
 
       setTemplates(officialItems);

@@ -3,7 +3,6 @@ import { useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { useHomeOfficialWorkflows } from './use-home-official-workflows';
-import { HomeWorkflowCard } from './HomeWorkflowCard';
 import { HomeWorkflowGuideCards } from './HomeWorkflowGuideCards';
 import avatar01 from '@/assets/avatars/avatar-01.png.png';
 import avatar02 from '@/assets/avatars/avatar-02.png.png';
@@ -136,27 +135,16 @@ export function HomeOfficialWorkflowCards({
         {t('site.workflowGuide.heading')}
       </h2>
       <div className="grid grid-cols-1 gap-5 md:grid-cols-3 md:gap-5">
-        {templates.map((item) =>
-          item.hasMyWorkflow ? (
-            <HomeWorkflowCard
-              key={item.id}
-              id={item.id}
-              label={item.label}
-              category={item.category}
-              description={item.description}
-              onSend={onSend}
-            />
-          ) : (
-            <HomeTemplateGuideCard
-              key={item.id}
-              id={item.id}
-              label={item.label}
-              category={item.category}
-              description={item.description}
-              onSend={onSend}
-            />
-          ),
-        )}
+        {templates.map((item) => (
+          <HomeTemplateGuideCard
+            key={item.id}
+            id={item.id}
+            label={item.label}
+            category={item.category}
+            description={item.description}
+            onSend={onSend}
+          />
+        ))}
       </div>
     </section>
   );

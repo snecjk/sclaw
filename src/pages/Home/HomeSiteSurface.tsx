@@ -2,12 +2,13 @@
  * 网点用户首页：Hero + 工作流引导卡片 + 底部助手输入。
  */
 import { HomeHero } from './HomeHero';
-import { HomeOfficialWorkflowCards } from './HomeOfficialWorkflowCards';
+import { HomeWorkflowGuideCards } from './HomeWorkflowGuideCards';
 import { HomeAssistant } from './HomeAssistant';
 import { HomeMainConversation } from './HomeMainConversation';
 import { useHomeConversationActive } from './use-home-conversation-active';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
+// import { HomeOfficialWorkflowCards } from './HomeOfficialWorkflowCards';
 
 export function HomeSiteSurface({ seedText }: { seedText?: string }) {
   const showConversation = useHomeConversationActive();
@@ -26,7 +27,8 @@ export function HomeSiteSurface({ seedText }: { seedText?: string }) {
             </div>
             <div className="flex min-h-0 flex-1 flex-col justify-center gap-8 overflow-y-auto py-6 md:gap-10">
               <HomeHero variant="site" />
-              <HomeOfficialWorkflowCards onSend={handleHubSend} />
+              <HomeWorkflowGuideCards onSend={handleHubSend} />
+              {/* <HomeOfficialWorkflowCards onSend={handleHubSend} /> */}
             </div>
           </>
         )}
