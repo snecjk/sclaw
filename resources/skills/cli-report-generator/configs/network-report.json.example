@@ -3,7 +3,7 @@
   "cliCommand": "your-cli-tool get-network-stats --date today --format json",
   "workingDir": "/path/to/your/cli/tool",
   "template": "assets/network-report-template.html",
-  "outputDir": "reports",
+  "outputDir": ".claw-output",
   "outputFilename": "network-report-{date}.html",
   "parseScript": "scripts/parse_network_data.py",
   "env": {

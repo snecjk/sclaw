@@ -42,6 +42,25 @@ export function parseCronSessionKey(sessionKey: string): CronSessionKeyParts | n
 }
 
 export function isCronSessionKey(sessionKey: string): boolean {
+  const parsed = parseCronSessionKey(sessionKey);
+  return parsed != null && parsed.date == null && parsed.runSessionId == null;
+}
+
+export function isCronDatedSessionKey(sessionKey: string): boolean {
+  const parsed = parseCronSessionKey(sessionKey);
+  return parsed?.date != null;
+}
+
+export function isCronRunSessionKey(sessionKey: string): boolean {
+  const parsed = parseCronSessionKey(sessionKey);
+  return parsed?.runSessionId != null;
+}
+
+/**
+ * Check if a session key is any cron-related key (base, dated, or run).
+ * Used for sidebar filtering where all cron keys belong in the task list section.
+ */
+export function isAnyCronSessionKey(sessionKey: string): boolean {
   return parseCronSessionKey(sessionKey) != null;
 }
 
@@ -70,7 +89,7 @@ export function parseScheduledTaskSessionKey(sessionKey: string): ScheduledTaskS
 }
 
 export function isScheduledTaskSessionKey(sessionKey: string): boolean {
-  return parseScheduledTaskSessionKey(sessionKey) != null;
+  return parseScheduledTaskSessionKey(sessionKey) != null || parseScheduledTaskAgentSessionKey(sessionKey) != null;
 }
 
 export function buildScheduledTaskSessionHistoryPath(sessionKey: string, limit = CHAT_HISTORY_LIMIT): string {
@@ -155,3 +174,23 @@ export function parseClaudeScheduledTaskRunSessionKey(sessionKey: string): Claud
 export function isClaudeScheduledTaskRunSessionKey(sessionKey: string): boolean {
   return parseClaudeScheduledTaskRunSessionKey(sessionKey) != null;
 }
+
+// ---------------------------------------------------------------------------
+// Cron Run Session → Daily Aggregate Key Mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps a cron run session key to its corresponding daily aggregate session key.
+ * e.g. `agent:main:cron:job-123:run:abc-def` → `agent:main:cron:job-123:2026-06-21`
+ * Returns null if the input is not a cron run session key.
+ */
+export function getCronRunSessionAggregateKey(runSessionKey: string): string | null {
+  const parsed = parseCronSessionKey(runSessionKey);
+  if (!parsed?.runSessionId) return null;
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, '0');
+  const d = String(today.getDate()).padStart(2, '0');
+  return `agent:${parsed.agentId}:cron:${parsed.jobId}:${y}-${m}-${d}`;
+}
+

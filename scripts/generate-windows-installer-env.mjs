@@ -42,4 +42,4 @@ const lines = [
 ];
 
 fs.writeFileSync(outPath, lines.join('\n'), 'utf8');
-console.log(`Wrote ${outPath} (SSO host: ${ssoHost})`);
+

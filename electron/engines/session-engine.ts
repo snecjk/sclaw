@@ -44,6 +44,9 @@ export async function rememberSessionEngineType(
     title: existing?.title,
     model: existing?.model,
     accountId: existing?.accountId,
+    ...(engineChanged && engineType === 'openclaw'
+      ? { archivedClaudeSessionIds: undefined, pendingHistoryBridge: undefined }
+      : {}),
   });
 }
 

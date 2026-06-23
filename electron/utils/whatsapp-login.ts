@@ -1,5 +1,4 @@
 import { dirname, join } from 'path';
-import { homedir } from 'os';
 import { createRequire } from 'module';
 import { EventEmitter } from 'events';
 import { existsSync, mkdirSync, rmSync, readdirSync } from 'fs';
@@ -217,7 +216,7 @@ export class WhatsAppLoginManager extends EventEmitter {
      */
     private async finishLogin(accountId: string): Promise<void> {
         if (!this.active) return;
-        console.log('[WhatsAppLogin] Finishing login, closing socket to hand over to Gateway...');
+        
         this.loginSucceeded = true;
         await this.stop();
         // Allow enough time for WhatsApp server to fully release the session
@@ -267,7 +266,7 @@ export class WhatsAppLoginManager extends EventEmitter {
                 mkdirSync(authDir, { recursive: true });
             }
 
-            console.log(`[WhatsAppLogin] Connecting for ${accountId} at ${authDir} (Attempt ${this.retryCount + 1})`);
+            
 
 
             let pino: (...args: unknown[]) => Record<string, unknown>;
@@ -294,13 +293,13 @@ export class WhatsAppLoginManager extends EventEmitter {
                 }
             }
 
-            console.log('[WhatsAppLogin] Loading auth state...');
+            
             const { state, saveCreds } = await _baileys!.initAuth(authDir);
 
-            console.log('[WhatsAppLogin] Fetching latest version...');
+            
             const { version } = await _baileys!.fetchLatestBaileysVersion();
 
-            console.log(`[WhatsAppLogin] Starting login for ${accountId}, version: ${version}`);
+            
 
             this.socket = _baileys!.makeWASocket({
                 version,
@@ -321,7 +320,7 @@ export class WhatsAppLoginManager extends EventEmitter {
                 if (connectionOpened && !credsReceived) {
                     credsReceived = true;
                     if (credsTimeout) clearTimeout(credsTimeout);
-                    console.log('[WhatsAppLogin] Credentials saved after connection open, finishing login...');
+                    
                     // Small delay to ensure file writes are fully flushed
                     await new Promise(resolve => setTimeout(resolve, 3000));
                     await this.finishLogin(accountId);
@@ -334,7 +333,7 @@ export class WhatsAppLoginManager extends EventEmitter {
 
                     if (qr) {
                         this.qr = qr;
-                        console.log('[WhatsAppLogin] QR received');
+                        
                         const base64 = await renderQrPngBase64(qr);
                         if (this.active) this.emit('qr', { qr: base64, raw: qr });
                     }
@@ -346,19 +345,15 @@ export class WhatsAppLoginManager extends EventEmitter {
                         // Treat 401 as transient if we haven't exhausted retries (max 2 attempts)
                         // This handles the case where WhatsApp's session hasn't fully released
                         const shouldReconnect = !isLoggedOut || this.retryCount < 2;
-                        console.log('[WhatsAppLogin] Connection closed.',
-                            'Reconnect:', shouldReconnect,
-                            'Active:', this.active,
-                            'Error:', error?.message
-                        );
+                        
 
                         if (shouldReconnect && this.active) {
                             if (this.retryCount < this.maxRetries) {
                                 this.retryCount++;
-                                console.log(`[WhatsAppLogin] Reconnecting in 1s... (Attempt ${this.retryCount}/${this.maxRetries})`);
+                                
                                 setTimeout(() => this.connectToWhatsApp(accountId), 1000);
                             } else {
-                                console.log('[WhatsAppLogin] Max retries reached, stopping.');
+                                
                                 this.active = false;
                                 this.emit('error', 'Connection failed after multiple retries');
                             }
@@ -379,7 +374,7 @@ export class WhatsAppLoginManager extends EventEmitter {
                             this.emit('error', 'Logged out');
                         }
                     } else if (connection === 'open') {
-                        console.log('[WhatsAppLogin] Connection opened! Waiting for credentials to be saved...');
+                        
                         this.retryCount = 0;
                         connectionOpened = true;
 
@@ -445,14 +440,14 @@ export class WhatsAppLoginManager extends EventEmitter {
                 const authDir = join(getOpenClawConfigDir(), 'credentials', 'whatsapp', cleanupAccountId);
                 if (existsSync(authDir)) {
                     rmSync(authDir, { recursive: true, force: true });
-                    console.log(`[WhatsAppLogin] Cleaned up auth dir for cancelled login: ${authDir}`);
+                    
                     // Also remove the parent whatsapp dir if it's now empty
                     const parentDir = join(getOpenClawConfigDir(), 'credentials', 'whatsapp');
                     if (existsSync(parentDir)) {
                         const remaining = readdirSync(parentDir);
                         if (remaining.length === 0) {
                             rmSync(parentDir, { recursive: true, force: true });
-                            console.log('[WhatsAppLogin] Removed empty whatsapp credentials directory');
+                            
                         }
                     }
                 }

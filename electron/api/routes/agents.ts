@@ -57,7 +57,7 @@ export async function restartGatewayForAgentDeletion(ctx: HostApiContext): Promi
     const status = ctx.gatewayManager.getStatus();
     const pid = status.pid;
     const port = status.port;
-    console.log('[agents] Triggering Gateway restart (kill+respawn) after agent deletion', { pid, port });
+    
 
     // Force-kill the Gateway process by PID.  The manager's stop() only
     // kills "owned" processes; if the manager connected to an already-
@@ -113,7 +113,7 @@ export async function restartGatewayForAgentDeletion(ctx: HostApiContext): Promi
     }
 
     await ctx.gatewayManager.restart();
-    console.log('[agents] Gateway restart completed after agent deletion');
+    
   } catch (err) {
     console.warn('[agents] Gateway restart after agent deletion failed:', err);
   }

@@ -5,12 +5,12 @@
  * Used for workflow startup, tool confirmation, and other scenarios requiring
  * user parameter input.
  */
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { ChevronLeft, ChevronRight, Check, ChevronUp, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { FormFieldRenderer } from './FormFieldRenderer';
-import { normalizeWorkflowFieldValue } from '@/lib/workflow-form-utils';
+import { isEmptyFormValue, normalizeWorkflowFieldValue } from '@/lib/workflow-form-utils';
 import type { UserFormConfig, FormResult, FormField } from '@/types/user-form';
 
 export interface ParameterFormContext {
@@ -86,7 +86,7 @@ function buildTitledGroupDefaultValue(field: FormField): string {
 }
 
 function buildSelectDefaultValue(field: FormField): unknown {
-  if (field.defaultValue !== undefined) {
+  if (field.defaultValue !== undefined && !isEmptyFormValue(field.defaultValue)) {
     return field.defaultValue;
   }
   if (!isPresetDisplayField(field) || !('options' in field)) {
@@ -108,7 +108,10 @@ function buildInitialValues(config: UserFormConfig): FormResult {
   if (!config.fields) return initial;
   for (const field of config.fields) {
     if (field.type === 'titled_group' || (getTitledGroupItems(field)?.length ?? 0) > 0) {
-      initial[field.name] = buildTitledGroupDefaultValue(field);
+      const titledDefault = buildTitledGroupDefaultValue(field);
+      if (!isEmptyFormValue(titledDefault)) {
+        initial[field.name] = titledDefault;
+      }
       continue;
     }
     if (field.type === 'select' || field.type === 'multiselect' || field.type === 'radio') {
@@ -118,7 +121,7 @@ function buildInitialValues(config: UserFormConfig): FormResult {
         continue;
       }
     }
-    if (field.defaultValue !== undefined) {
+    if (field.defaultValue !== undefined && !isEmptyFormValue(field.defaultValue)) {
       initial[field.name] = field.defaultValue;
     } else if (field.type === 'checkbox' && !('options' in field && (field as { options?: unknown }).options)) {
       initial[field.name] = false;
@@ -162,11 +165,16 @@ function validateField(field: FormField, value: unknown): string | null {
   if (!validation) return null;
 
   if (validation.required) {
-    if (value === undefined || value === null || value === '') {
+    if (isEmptyFormValue(value)) {
+      if (
+        field.type === 'multiselect'
+        || field.type === 'checkbox'
+        || (field.type === 'select' && 'options' in field && (field.options?.length ?? 0) > 1)
+        || field.type === 'radio'
+      ) {
+        return `${field.label}至少选择一个选项`;
+      }
       return `${field.label}是必填项`;
-    }
-    if (Array.isArray(value) && value.length === 0) {
-      return `${field.label}至少选择一个选项`;
     }
   }
 
@@ -196,7 +204,20 @@ function validateField(field: FormField, value: unknown): string | null {
   return null;
 }
 
-export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCardProps) {
+function parameterFormCardPropsAreEqual(
+  prev: ParameterFormCardProps,
+  next: ParameterFormCardProps,
+): boolean {
+  if (prev.config === next.config && prev.context === next.context) return true;
+  return (
+    prev.config.id === next.config.id
+    && prev.context.source === next.context.source
+    && prev.context.sourceId === next.context.sourceId
+    && prev.context.schemaHash === next.context.schemaHash
+  );
+}
+
+function ParameterFormCardInner({ config, context, onSubmit }: ParameterFormCardProps) {
   // If config is empty (from text marker), try to load from workflow memory
   const [schema, setSchema] = useState<import('@/types/workflow').WorkflowSchema | null>(null);
   const [loadedConfig, setLoadedConfig] = useState<UserFormConfig | null>(null);
@@ -227,14 +248,16 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
   }, [config, context.source, context.sourceId]);
 
   useEffect(() => {
-    if (schema && !loadedConfig) {
-      import('@/lib/workflow-form-utils').then(({ buildWorkflowFormConfig }) => {
-        const builtConfig = buildWorkflowFormConfig(schema, '');
-        setLoadedConfig(builtConfig);
-        setLoadingSchema(false);
+    if (!schema || loadedConfig) return;
+    import('@/lib/workflow-form-utils').then(({ buildWorkflowFormConfig }) => {
+      const builtConfig = buildWorkflowFormConfig(schema, '', undefined, {
+        templateId: context.sourceId,
+        schemaHash: context.schemaHash,
       });
-    }
-  }, [schema, loadedConfig]);
+      setLoadedConfig(builtConfig);
+      setLoadingSchema(false);
+    });
+  }, [schema, loadedConfig, context.sourceId, context.schemaHash]);
 
   // Config with title/confirmLabel but zero fields (e.g. 合同审核) is still valid.
   const hasValidConfig =
@@ -250,10 +273,12 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
+  const activeConfigId = effectiveConfig?.id;
   useEffect(() => {
-    if (!loadedConfig?.fields?.length) return;
-    setValues(buildInitialValues(loadedConfig));
-  }, [loadedConfig]);
+    if (!activeConfigId || !effectiveConfig) return;
+    setValues(buildInitialValues(effectiveConfig));
+    setCurrentStep(0);
+  }, [activeConfigId]); // eslint-disable-line react-hooks/exhaustive-deps -- reset only when config identity changes
 
   // Compute steps even if effectiveConfig is null (will be empty array)
   const steps = useMemo(() => effectiveConfig ? buildWizardSteps(effectiveConfig) : [], [effectiveConfig]);
@@ -475,3 +500,5 @@ export function ParameterFormCard({ config, context, onSubmit }: ParameterFormCa
     </div>
   );
 }
+
+export const ParameterFormCard = memo(ParameterFormCardInner, parameterFormCardPropsAreEqual);

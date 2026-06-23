@@ -104,8 +104,8 @@ export async function main() {
 
   await mkdir(OUTPUT_DIR, { recursive: true });
   await writeFile(REPORT_FILE, report);
-  console.log(report);
-  console.log(`\nWrote comparison report to ${REPORT_FILE}`);
+  
+  
 
   if (failures.length > 0) {
     console.error('\nThreshold failures:\n- ' + failures.join('\n- '));

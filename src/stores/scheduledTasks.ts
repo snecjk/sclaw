@@ -103,7 +103,7 @@ export const useScheduledTasksStore = create<ScheduledTasksState>((set) => ({
         ...(Object.keys(body).length > 0 ? { body: JSON.stringify(body) } : {}),
       },
     );
-    console.log('Scheduled task trigger result:', result);
+    
     return result;
   },
 }));

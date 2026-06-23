@@ -164,7 +164,7 @@ export async function main() {
 
   await mkdir(OUTPUT_DIR, { recursive: true });
   await writeFile(OUTPUT_FILE, JSON.stringify(output, null, 2));
-  console.log(`Wrote comms replay metrics to ${OUTPUT_FILE}`);
+  
 }
 
 const isEntrypoint = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);

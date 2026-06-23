@@ -24,6 +24,7 @@ import {
   ChevronDown,
   Pencil,
   Workflow,
+  Loader2,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -56,6 +57,7 @@ import {
   parseClaudeScheduledTaskRunSessionKey,
   parseCronSessionKey,
   parseScheduledTaskAgentSessionKey,
+  isAnyCronSessionKey,
 } from '@/stores/chat/cron-session-utils';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
@@ -342,6 +344,8 @@ function SidebarScheduledTaskGroup({
   const location = useLocation();
   const { t } = useTranslation(['common', 'tasks']);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
+  const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
+  const isSending = useChatStore((s) => s.sending);
 
   if (sessions.length === 0) return null;
 
@@ -392,9 +396,9 @@ function SidebarScheduledTaskGroup({
                 const h = String(d.getHours()).padStart(2, '0');
                 const min = String(d.getMinutes()).padStart(2, '0');
                 const sec = String(d.getSeconds()).padStart(2, '0');
-                label = `${y}年${m}月${day}日${h}时${min}分${sec}秒 的材料`;
+                label = `${y}年${m}月${day}日${h}时${min}分${sec}秒`; // 产品说：定时任务去掉【的材料】这3个字
               } else {
-                label = `${y}年${m}月${day}日 的材料`;
+                label = `${y}年${m}月${day}日`; // 产品说：定时任务去掉【的材料】这3个字
               }
             } else {
               label = s.label || s.displayName || s.key;
@@ -415,7 +419,16 @@ function SidebarScheduledTaskGroup({
                       : 'text-muted-foreground hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]',
                   )}
                 >
-                  <span className="block min-w-0 truncate">{label}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="block min-w-0 truncate">{label}</span>
+                    {(() => {
+                      const isSessionSending = runtimeBySessionKey[s.key]?.sending
+                        || (s.key === currentSessionKey && isSending);
+                      return isSessionSending ? (
+                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+                      ) : null;
+                    })()}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -748,7 +761,7 @@ export function Sidebar() {
   // Legacy cron + scheduled-task agent sessions — shown under "任务列表" grouped by task name
   const taskListScheduledSessions = useMemo(
     () => visibleSessions.filter((s) => (
-      parseCronSessionKey(s.key)
+      isAnyCronSessionKey(s.key)
       || parseScheduledTaskAgentSessionKey(s.key)
       || parseClaudeScheduledTaskRunSessionKey(s.key)
     )),
@@ -758,7 +771,7 @@ export function Sidebar() {
   // Normal chat sessions — shown under time buckets (today / yesterday / ...)
   const normalSessions = useMemo(
     () => visibleSessions.filter((s) => (
-      !parseCronSessionKey(s.key)
+      !isAnyCronSessionKey(s.key)
       && !parseScheduledTaskAgentSessionKey(s.key)
       && !parseClaudeScheduledTaskRunSessionKey(s.key)
     )),

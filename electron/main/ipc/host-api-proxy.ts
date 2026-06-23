@@ -19,6 +19,9 @@ function resolveHostApiTimeoutMs(path: string): number {
   if (path === '/api/auth/login') {
     return TIMEOUTS.AUTH_LOGIN;
   }
+  if (path === '/api/dingtalk/install') {
+    return TIMEOUTS.DWS_INSTALL;
+  }
   if (SKILL_INSTALL_PATHS.has(path)) {
     return TIMEOUTS.SKILL_INSTALL;
   }

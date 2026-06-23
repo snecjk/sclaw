@@ -14,7 +14,6 @@ export function isFilePreviewDebugEnabled(): boolean {
   }
 }
 
-export function logFilePreview(stage: string, payload: Record<string, unknown>): void {
+export function logFilePreview(_stage: string, _payload: Record<string, unknown>): void {
   if (!isFilePreviewDebugEnabled()) return;
-  console.log(`[StoClaw file-preview] ${stage}`, payload);
 }

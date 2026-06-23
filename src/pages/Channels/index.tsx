@@ -377,10 +377,7 @@ export function Channels() {
                               <span className="text-xs text-muted-foreground">{t('account.bindAgentLabel')}</span>
                               <Select
                                 className="h-8 min-h-8 max-w-[200px] py-0 text-xs"
-                                value={
-                                  account.agentId
-                                  || (usesPluginManagedQrAccounts(group.channelType) ? 'main' : '')
-                                }
+                                value={account.agentId || ''}
                                 onChange={(event) => {
                                   void handleBindAgent(group.channelType, account.accountId, event.target.value);
                                 }}

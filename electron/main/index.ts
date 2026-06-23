@@ -784,14 +784,17 @@ if (gotTheLock) {
   });
 
   // Application lifecycle
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     _ts('app.whenReady() resolved');
     void import('../utils/cleanup-old-app-bundles').then(({ scheduleOldAppBackupCleanup }) =>
       scheduleOldAppBackupCleanup(),
     );
-    void import('../services/client-update-platform').then(({ runPendingInstallReport }) =>
-      runPendingInstallReport(app.getVersion(), process.platform),
-    );
+    try {
+      const { runPendingInstallReport } = await import('../services/client-update-platform');
+      await runPendingInstallReport(app.getVersion(), process.platform);
+    } catch (error) {
+      logger.warn('Post-update install report / re-auth hook failed:', error);
+    }
     void initialize().catch((error) => {
       logger.error('Application initialization failed:', error);
     });

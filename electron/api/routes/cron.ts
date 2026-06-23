@@ -8,6 +8,7 @@ import type { DingTalkMention } from '../../../shared/dingtalk-mention';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { getOpenClawConfigDir } from '../../utils/paths';
+import { isSessionDeleted } from '../../utils/scheduled-task-poller-store';
 
 interface GatewayCronJob {
   id: string;
@@ -99,6 +100,70 @@ function normalizeTimestampMs(value: unknown): number | undefined {
     }
   }
   return undefined;
+}
+
+/**
+ * Read full conversation messages from a cron run session jsonl file.
+ * The sessionKey format is: agent:{agentId}:cron:{jobId}:run:{runSessionId}
+ */
+async function readRunSessionMessages(sessionKey: string): Promise<CronSessionFallbackMessage[]> {
+  const parsed = parseCronSessionKey(sessionKey);
+  if (!parsed || !parsed.runSessionId) return [];
+
+  const sessionFile = join(getOpenClawConfigDir(), 'agents', parsed.agentId, 'sessions', `${parsed.runSessionId}.jsonl`);
+
+  let raw: string;
+  try {
+    raw = await readFile(sessionFile, 'utf8');
+  } catch {
+    return [];
+  }
+
+  const messages: CronSessionFallbackMessage[] = [];
+  const lines = raw.split(/\r?\n/);
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) continue;
+    try {
+      const record = JSON.parse(trimmed) as Record<string, unknown>;
+      if (record.type !== 'message') continue;
+
+      const msg = record.message as Record<string, unknown> | undefined;
+      if (!msg) continue;
+
+      const role = msg.role as string | undefined;
+      const content = msg.content as string | unknown[] | undefined;
+      if (!role || !content) continue;
+
+      // Handle content format: string or array of text blocks
+      let textContent = '';
+      if (typeof content === 'string') {
+        textContent = content;
+      } else if (Array.isArray(content)) {
+        textContent = content
+          .filter((c: unknown) => c && typeof c === 'object' && (c as Record<string, unknown>).type === 'text')
+          .map((c: unknown) => (c as Record<string, unknown>).text as string)
+          .filter(Boolean)
+          .join('');
+      }
+
+      if (!textContent) continue;
+
+      const timestamp = normalizeTimestampMs(record.timestamp) ?? Date.now();
+
+      messages.push({
+        id: `cron-run-msg-${parsed.runSessionId}-${i}`,
+        role: role === 'user' ? 'user' : role === 'system' ? 'system' : 'assistant',
+        content: textContent,
+        timestamp,
+      });
+    } catch {
+      // Ignore malformed lines
+    }
+  }
+
+  return messages;
 }
 
 function formatDuration(durationMs: number | undefined): string | null {
@@ -351,16 +416,36 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
   }
 
   sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+
+  // Drop sessions the user explicitly deleted (persisted in deletedSessions store).
+  // This prevents virtual dated cron sessions — regenerated from cron/runs/*.jsonl on
+  // each refresh — from re-appearing in the sidebar after deletion.
+  // Passes the session's updatedAt so that if a newer run exists (e.g. the user
+  // triggered a cron task on a date whose dated session was previously deleted),
+  // the session "revives" and is shown again.
+  if (sessions.length > 0) {
+    const deletionChecks = await Promise.all(
+      sessions.map(async (s) => ({
+        keep: !(await isSessionDeleted(s.key, s.updatedAt)),
+        session: s,
+      })),
+    );
+    const filtered = deletionChecks
+      .filter(({ keep }) => keep)
+      .map(({ session }) => session);
+    return filtered;
+  }
+
   return sessions;
 }
 
-export function buildCronSessionFallbackMessages(params: {
+export async function buildCronSessionFallbackMessages(params: {
   sessionKey: string;
   job?: Pick<GatewayCronJob, 'name' | 'payload' | 'state'>;
   runs: CronRunLogEntry[];
   sessionEntry?: { label?: string; updatedAt?: number };
   limit?: number;
-}): CronSessionFallbackMessage[] {
+}): Promise<CronSessionFallbackMessage[]> {
   const parsed = parseCronSessionKey(params.sessionKey);
   if (!parsed) return [];
 
@@ -403,10 +488,18 @@ export function buildCronSessionFallbackMessages(params: {
     });
   }
 
-  matchingRuns.forEach((entry, index) => {
-    const message = buildCronRunMessage(entry, index);
+  // For each run, load full transcript from the run session jsonl file
+  for (const entry of matchingRuns) {
+    // First add the summary message from the run log
+    const message = buildCronRunMessage(entry, matchingRuns.indexOf(entry));
     if (message) messages.push(message);
-  });
+
+    // Then load full conversation from the run session file
+    if (entry.sessionKey) {
+      const runMessages = await readRunSessionMessages(entry.sessionKey);
+      messages.push(...runMessages);
+    }
+  }
 
   if (matchingRuns.length === 0) {
     const runningAt = normalizeTimestampMs(params.job?.state?.runningAtMs);
@@ -542,7 +635,7 @@ export async function handleCronRoutes(
 
       const jobs = (jobsResult as { jobs?: GatewayCronJob[] }).jobs ?? [];
       const job = jobs.find((item) => item.id === parsedSession.jobId);
-      const messages = buildCronSessionFallbackMessages({
+      const messages = await buildCronSessionFallbackMessages({
         sessionKey,
         job,
         runs,
@@ -556,6 +649,24 @@ export async function handleCronRoutes(
       sendJson(res, 200, { messages });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/cron/local-job-names' && req.method === 'GET') {
+    // Reads cron job names directly from cron/jobs.json (no Gateway dependency).
+    // Used as a fallback when /api/cron/jobs (Gateway-backed) is temporarily
+    // unavailable — e.g. during a cron trigger race window.
+    try {
+      const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
+      const raw = await readFile(jobsFile, 'utf8');
+      const data = JSON.parse(raw) as { jobs?: Array<{ id: string; name?: string }> };
+      const jobs = (data.jobs ?? [])
+        .filter((j) => j.id && j.name)
+        .map((j) => ({ id: j.id, name: j.name! }));
+      sendJson(res, 200, jobs);
+    } catch {
+      sendJson(res, 200, []);
     }
     return true;
   }

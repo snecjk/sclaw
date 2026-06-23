@@ -181,7 +181,12 @@ export function Cron() {
           });
           void useChatStore.getState().loadSessions();
         } else {
-          const sessionKey = `agent:${job.agentId ?? 'main'}:cron:${job.id}`;
+          // Build dated session key instead of base key to avoid adding base session back
+          const today = new Date();
+          const y = today.getFullYear();
+          const m = String(today.getMonth() + 1).padStart(2, '0');
+          const d = String(today.getDate()).padStart(2, '0');
+          const sessionKey = `agent:${job.agentId ?? 'main'}:cron:${job.id}:${y}-${m}-${d}`;
           navigateToMainChatHome(navigate, location.pathname, () => {
             useChatStore.getState().switchSession(sessionKey);
           });

@@ -86,4 +86,84 @@ describe('workflow-card-injection', () => {
 
     localStorage.removeItem(storageKey);
   });
+
+  it('ensureWorkflowCardsInMessages attaches re-run card to current turn, not older workflowId message', () => {
+    const sessionKey = 'agent:main:main';
+    const storageKey = 'stoclaw:workflow-executions';
+    const now = Date.now();
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        [sessionKey]: [
+          {
+            sessionKey,
+            workflowId: 'wf_1',
+            runId: 'run_new',
+            templateId: 'tpl_1',
+            templateName: '客户异常监控',
+            status: 'running',
+            createdAt: now,
+            updatedAt: now,
+            collectedInputs: {},
+          },
+          {
+            sessionKey,
+            workflowId: 'wf_1',
+            runId: 'run_old',
+            templateId: 'tpl_1',
+            templateName: '客户异常监控',
+            status: 'completed',
+            createdAt: now - 60_000,
+            updatedAt: now - 30_000,
+            collectedInputs: {},
+          },
+        ],
+      }),
+    );
+
+    const messages: RawMessage[] = [
+      { role: 'user', content: '首次执行' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: '参数已确认，工作流已在后台启动执行（工作流 ID: wf_1）' },
+          { type: 'workflow_card', runId: 'run_old', templateName: '客户异常监控' },
+        ],
+      },
+      { role: 'user', content: '再帮我执行下 wf_1' },
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: '工作流已重新启动执行（工作流 ID: wf_1）' }],
+      },
+    ];
+
+    const patched = ensureWorkflowCardsInMessages(messages, sessionKey, getMessageText);
+    expect(patched[3].content).toEqual([
+      { type: 'text', text: '工作流已重新启动执行（工作流 ID: wf_1）' },
+      { type: 'workflow_card', runId: 'run_new', templateName: '客户异常监控' },
+    ]);
+    expect(patched[1].content).toEqual(messages[1].content);
+
+    localStorage.removeItem(storageKey);
+  });
+
+  it('patchLastAssistantWithWorkflowCard attaches to tool-only assistant snapshot', () => {
+    const messages: RawMessage[] = [
+      { role: 'user', content: '再执行' },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 'tool-1', name: 'execute_workflow', input: { workflowId: 'wf_1' } }],
+      },
+    ];
+    const patched = patchLastAssistantWithWorkflowCard(
+      messages,
+      'run_tool_only',
+      '客户异常监控',
+      getMessageText,
+    );
+    expect(patched[1].content).toEqual([
+      { type: 'tool_use', id: 'tool-1', name: 'execute_workflow', input: { workflowId: 'wf_1' } },
+      { type: 'workflow_card', runId: 'run_tool_only', templateName: '客户异常监控' },
+    ]);
+  });
 });

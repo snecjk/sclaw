@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildWorkflowStartUnavailablePrompt,
+  isTemplateNameWorkflowTurn,
   isWorkflowCreationIntent,
+  isWorkflowFormUserTurn,
   isWorkflowStartIntent,
   isImperativeWorkflowStartIntent,
   isReExecutionIntent,
@@ -31,6 +33,15 @@ describe('isWorkflowCreationIntent', () => {
   it('does not overlap with start intent without create verb', () => {
     expect(isWorkflowStartIntent('执行工作流')).toBe(true);
     expect(isWorkflowCreationIntent('执行工作流')).toBe(false);
+  });
+});
+
+describe('isTemplateNameWorkflowTurn', () => {
+  it('matches direct template name without 创建工作流', () => {
+    expect(isTemplateNameWorkflowTurn('客户异常监控', '客户异常监控')).toBe(true);
+    expect(isTemplateNameWorkflowTurn('客户异常监控', '客户异常监控工作流')).toBe(true);
+    expect(isWorkflowFormUserTurn('客户异常监控', '客户异常监控')).toBe(true);
+    expect(isTemplateNameWorkflowTurn('随便生成一个和', '客户异常监控')).toBe(false);
   });
 });
 
