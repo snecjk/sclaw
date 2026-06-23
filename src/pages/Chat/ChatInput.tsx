@@ -27,7 +27,6 @@ import { useWorkflowsStore } from '@/stores/workflows';
 import type { ActiveMentionTrigger, MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention, MentionSearchItem } from '@/types/dingtalk-mention';
 import { mentionSearchItemToMention } from '@/types/dingtalk-mention';
-import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -91,8 +90,6 @@ interface ChatInputProps {
   placeholder?: string;
   /** Merged onto the outer wrapper (after defaults); use to tune padding, e.g. task subitem bottom inset. */
   className?: string;
-  /** Show engine/model controls in the composer action row (default true). */
-  showEngineModelControls?: boolean;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -171,7 +168,6 @@ export function ChatInput({
   onEditDraftApplied,
   placeholder,
   className,
-  showEngineModelControls = true,
 }: ChatInputProps) {
   const { t } = useTranslation('chat');
   const [composerSnapshot, setComposerSnapshot] = useState<MentionComposerSnapshot>({
@@ -842,16 +838,7 @@ export function ChatInput({
                   <span className="text-[13px] font-medium">{t('composer.pickWorkflow')}</span>
                 </Button>
               </div>
-
-              {showEngineModelControls ? (
-                <ChatEngineSelector variant="composer" />
-              ) : null}
             </div>
-
-            <div className="flex min-w-0 items-center gap-1.5">
-              {showEngineModelControls ? (
-                <ChatModelSelector variant="composer" />
-              ) : null}
 
             {/* Workflow picker */}
             <WorkflowPicker
@@ -908,7 +895,6 @@ export function ChatInput({
                 )}
               </Button>
             )}
-            </div>
           </div>
         </div>
         {!isEmbedded ? (

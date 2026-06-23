@@ -1,7 +1,7 @@
 /**
  * Chat Toolbar
- * Session search, refresh, and thinking toggle.
- * Engine/model selectors live in ChatInput composer row.
+ * Session selector, model selector, refresh, and thinking toggle.
+ * Rendered in the Header when on the Chat page.
  */
 import { type ReactNode } from 'react';
 import { RefreshCw, Brain } from 'lucide-react';
@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useChatStore } from '@/stores/chat';
 import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
+import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
 
 export function ChatToolbar({ trailingContent }: { trailingContent?: ReactNode }) {
   const loading = useChatStore((s) => s.loading);
@@ -21,10 +22,13 @@ export function ChatToolbar({ trailingContent }: { trailingContent?: ReactNode }
   return (
     <div className="flex w-full items-center justify-between gap-3 pt-2">
       <div className="flex min-w-0 flex-1 items-center gap-2">
+        <ChatEngineSelector />
         {trailingContent}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        <ChatModelSelector />
+
         {/* Refresh */}
         <Tooltip>
           <TooltipTrigger asChild>
