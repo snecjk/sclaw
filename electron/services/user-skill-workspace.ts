@@ -358,19 +358,8 @@ async function downloadSkillZip(slug: string, targetDir: string): Promise<void> 
     await pipeline(body, fileStream);
 
     // Extract ZIP
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
-    const execAsync = promisify(exec);
-
-    const isWin = process.platform === 'win32';
-    if (isWin) {
-      await execAsync(
-        `powershell -NoProfile -Command "Expand-Archive -Path '${tmpZipPath}' -DestinationPath '${targetDir}' -Force"`,
-        { windowsHide: true },
-      );
-    } else {
-      await execAsync(`unzip -o "${tmpZipPath}" -d "${targetDir}"`);
-    }
+    const { extractZip: unifiedExtractZip } = await import('../utils/zip-extract');
+    await unifiedExtractZip(tmpZipPath, targetDir);
 
     // Hoist nested content (same logic as StoSkillService)
     hoistZipContent(targetDir);
@@ -394,7 +383,28 @@ function hoistZipContent(targetDir: string): void {
   for (const name of entries) {
     const src = path.join(found, name);
     const dest = path.join(targetDir, name);
-    if (fs.existsSync(dest)) continue;
+    if (fs.existsSync(dest)) {
+      // Dest exists and is a directory: merge contents
+      if (fs.statSync(src).isDirectory() && fs.statSync(dest).isDirectory()) {
+        const subEntries = fs.readdirSync(src);
+        for (const subName of subEntries) {
+          const subSrc = path.join(src, subName);
+          const subDest = path.join(dest, subName);
+          if (!fs.existsSync(subDest)) {
+            fs.renameSync(subSrc, subDest);
+          }
+        }
+        // Remove empty source subdir after merge
+        try {
+          fs.rmdirSync(src);
+        } catch {
+          // ignore if not empty
+        }
+        continue;
+      }
+      // Dest exists and is a file: skip
+      continue;
+    }
     fs.renameSync(src, dest);
   }
 

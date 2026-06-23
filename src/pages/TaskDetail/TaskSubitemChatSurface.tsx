@@ -527,7 +527,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
           onMoveDown={queueMoveDown}
         /> */}
 
-        <ChatInput {...chatInputProps} engineType={currentEngineType} showEngineModelControls={false} />
+        <ChatInput {...chatInputProps} engineType={currentEngineType} />
       </div>
 
       {/* Resizer */}
