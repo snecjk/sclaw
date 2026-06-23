@@ -177,6 +177,12 @@ export async function handleWorkflowRoutes(
   logger.info(`[WorkflowRoutes] checking ${req.method} ${pathname}`);
 
   // 1. POST /agent/v1/workflow-templates
+  //
+  // 官方推荐模板列表（分页搜索）。
+  // 仅返回 scope=system 的系统模板，后端服务层会过滤掉 personal 模板。
+  // 调用方：Chat Picker 预加载、工作流页面「官方推荐」tab、首页官方推荐、我的任务页模板下拉。
+  //
+  // 关联：个人模板需使用 /agent/v1/workflow-templates/mine（已废弃，前端已不再调用）
   if (pathname === '/agent/v1/workflow-templates' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ query?: string; page?: number; pageSize?: number }>(req);

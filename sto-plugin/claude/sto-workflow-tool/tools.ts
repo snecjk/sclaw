@@ -179,6 +179,8 @@ async function searchTemplates(
   query: string,
   limit?: number,
 ): Promise<TemplateSearchItem[]> {
+  // POST /agent/v1/workflow-templates — 官方推荐模板列表（分页搜索）
+  // 仅返回 scope=system 的系统模板，后端服务层会过滤掉 personal 模板
   const items = await client.fetchJson<TemplateSearchItem[]>(
     "/agent/v1/workflow-templates",
     {
