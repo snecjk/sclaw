@@ -376,7 +376,8 @@ export function WorkflowDashboard({
                 //   updateCard(index, { enabled: on, showPausedLabel: !on });
                 //   toast.success(on ? t('toast.resumed') : t('toast.paused'));
                 // }}
-                onCardClick={() => openDetailForMine(card)}
+                // TODO: 等待后端 API 对接 — onCardClick 暂不启用
+                // onCardClick={() => openDetailForMine(card)}
                 onRun={() => {
                   const q = encodeURIComponent(`帮我执行 id 为：${card.id} 的工作流 【${card.name}】`);
                   navigate(`/?q=${q}`);
@@ -425,8 +426,9 @@ export function WorkflowDashboard({
             <WorkflowOfficialListCard
               key={card.id}
               card={card}
-              onCardClick={() => openDetailForOfficial(card)}
-              onPreview={() => openDetailForOfficial(card)}
+              // TODO: 点击详情弹窗暂不启用
+              // onCardClick={() => openDetailForOfficial(card)}
+              // onPreview={() => openDetailForOfficial(card)}
               onCreateFromTemplate={() => {
                 navigate(`/workflow/new?templateId=${encodeURIComponent(card.id)}`);
               }}
