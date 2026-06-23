@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { hostApiFetch } from '@/lib/host-api';
-import { normalizeAppError } from '@/lib/error-model';
 import { listWorkflowTemplates } from '@/lib/workflow-api';
 import { pickCoverKeyFromWorkflowId } from '@/pages/Workflow/workflow-mapper';
 import { useMinLoading } from '@/hooks/use-min-loading';
@@ -120,11 +119,10 @@ export function useWorkflowList(): UseWorkflowListResult {
         };
       });
       setCards(mappedCards);
-    } catch (err) {
+    } catch {
       if (mineFetchSeq.current !== seq) return;
-      const appError = normalizeAppError(err);
-      setError(appError.message || t('list.loadFailed'));
       setCards([]);
+      setError(null);
     } finally {
       if (mineFetchSeq.current === seq) setMineLoading(false);
     }
