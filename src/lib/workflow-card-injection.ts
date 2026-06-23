@@ -2,9 +2,20 @@
  * Attach workflow_card blocks to assistant messages (model execute_workflow path).
  */
 import type { ContentBlock, RawMessage } from '@/stores/chat/types';
-import { listSessionExecutions } from '@/stores/workflow-memory';
+import { getExecutionByRunId, listSessionExecutions } from '@/stores/workflow-memory';
+import { useChatStore } from '@/stores/chat';
 
-const RUN_ID_IN_TEXT = /\b(run_[\w-]+)\b/i;
+export const RUN_ID_IN_TEXT = /\b(run_[\w-]+)\b/gi;
+
+/** Extract visible assistant text from message content blocks (text parts only). */
+export function getAssistantMessageText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((b) => b && typeof b === 'object' && (b as { type?: string }).type === 'text')
+    .map((b) => String((b as { text?: string }).text ?? ''))
+    .join('\n');
+}
 
 export function messageHasWorkflowCardForRun(message: RawMessage, runId: string): boolean {
   if (!Array.isArray(message.content)) return false;
@@ -81,6 +92,16 @@ export function patchLastAssistantWithWorkflowCard(
     }
   }
 
+  // Tool-only assistant snapshots (execute_workflow) may have no text yet — still attach here.
+  if (targetIdx < 0) {
+    for (let i = messages.length - 1; i > lastUserIdx; i--) {
+      if (messages[i].role === 'assistant') {
+        targetIdx = i;
+        break;
+      }
+    }
+  }
+
   if (targetIdx < 0) return messages;
 
   const next = [...messages];
@@ -88,14 +109,36 @@ export function patchLastAssistantWithWorkflowCard(
   return next;
 }
 
-function assistantTextMatchesExecution(
-  text: string,
-  exec: { runId: string; workflowId: string },
-): boolean {
-  return text.includes(exec.runId) || text.includes(exec.workflowId);
+/** Preserve frontend-only workflow_card blocks when Gateway history overwrites messages. */
+export function mergeWorkflowCardBlocksFromCurrent(
+  loaded: RawMessage[],
+  current: RawMessage[],
+): RawMessage[] {
+  if (current.length === 0) return loaded;
+
+  return loaded.map((loadedMsg) => {
+    if (loadedMsg.role !== 'assistant' || !Array.isArray(loadedMsg.content)) return loadedMsg;
+
+    const match = loadedMsg.id ? current.find((m) => m.id === loadedMsg.id) : undefined;
+    if (!match || !Array.isArray(match.content)) return loadedMsg;
+
+    const cardBlocks = (match.content as ContentBlock[]).filter(
+      (b) => b.type === 'workflow_card' && b.runId,
+    );
+    if (cardBlocks.length === 0) return loadedMsg;
+
+    let merged = loadedMsg;
+    for (const block of cardBlocks) {
+      merged = appendWorkflowCardBlockToMessage(
+        merged,
+        block.runId!,
+        block.templateName ?? '工作流',
+      );
+    }
+    return merged;
+  });
 }
 
-/** Scan assistant text for run IDs and attach cards using session execution metadata. */
 export function ensureWorkflowCardsInMessages(
   messages: RawMessage[],
   sessionKey: string,
@@ -107,6 +150,8 @@ export function ensureWorkflowCardsInMessages(
     (exec) => !next.some((m) => messageHasWorkflowCardForRun(m, exec.runId)),
   );
 
+  const lastUserIdx = findLastUserIndex(next);
+
   for (const exec of executions) {
     if (next.some((m) => messageHasWorkflowCardForRun(m, exec.runId))) continue;
 
@@ -115,8 +160,11 @@ export function ensureWorkflowCardsInMessages(
       const msg = next[i];
       if (msg.role !== 'assistant') continue;
       const text = getMessageText(msg.content);
-      const runMatch = text.match(RUN_ID_IN_TEXT);
-      if (runMatch?.[1] === exec.runId || assistantTextMatchesExecution(text, exec)) {
+      const inCurrentTurn = i > lastUserIdx;
+      const matchesRunId = inCurrentTurn && text.includes(exec.runId);
+      // workflowId appears in many historical turns — only match the current user turn.
+      const matchesWorkflowId = inCurrentTurn && text.includes(exec.workflowId);
+      if (matchesRunId || matchesWorkflowId) {
         const updated = [...next];
         updated[i] = appendWorkflowCardBlockToMessage(msg, exec.runId, exec.templateName);
         next = updated;
@@ -136,6 +184,36 @@ export function ensureWorkflowCardsInMessages(
       getMessageText,
     );
     if (fallback !== next) next = fallback;
+  }
+
+  // Assistant may mention a run ID before execution memory is visible — use live card state.
+  for (let i = next.length - 1; i > lastUserIdx; i -= 1) {
+    const msg = next[i];
+    if (msg.role !== 'assistant') continue;
+    const text = getMessageText(msg.content);
+    const mentionedRunIds = [...text.matchAll(RUN_ID_IN_TEXT)]
+      .map((match) => match[1])
+      .filter(Boolean);
+    if (mentionedRunIds.length === 0) continue;
+
+    let patchedMsg = msg;
+    for (const runId of mentionedRunIds) {
+      if (next.some((m) => messageHasWorkflowCardForRun(m, runId))) continue;
+      const cardState = useChatStore.getState().workflowCardStates[runId];
+      const exec = getExecutionByRunId(runId, sessionKey);
+      if (!cardState && !exec) continue;
+      patchedMsg = appendWorkflowCardBlockToMessage(
+        patchedMsg,
+        runId,
+        exec?.templateName ?? '工作流',
+      );
+    }
+    if (patchedMsg !== msg) {
+      const updated = [...next];
+      updated[i] = patchedMsg;
+      next = updated;
+    }
+    break;
   }
 
   return next;

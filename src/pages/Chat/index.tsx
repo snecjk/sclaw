@@ -30,6 +30,8 @@ import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { useBuiltinToolListener } from '@/hooks/use-builtin-tool-listener';
+import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
+import { CronTaskCreateModal } from '@/pages/Cron/components/CronTaskCreateModal';
 
 export function Chat() {
   useBuiltinToolListener();
@@ -421,7 +423,13 @@ export function Chat() {
     workflowError,
   } = useChatPreviewPanel(allMessagesForPreview);
 
-
+  const {
+    open: workflowCronModalOpen,
+    initialValues: workflowCronInitialValues,
+    openForWorkflow: openWorkflowCronTaskModal,
+    close: closeWorkflowCronTaskModal,
+    handleSave: handleWorkflowCronTaskSave,
+  } = useWorkflowCronTaskModal();
 
   // Auto-send watcher: sends queued messages one-by-one when AI finishes responding
   useEffect(() => {
@@ -430,6 +438,7 @@ export function Chat() {
   }, [scrollToLatest]);
 
   return (
+    <>
     <div
       className={cn('relative -m-6 flex min-h-0 min-w-0 overflow-x-hidden transition-colors duration-500')}
       style={{ height: 'calc(100vh - 2.5rem)' }}
@@ -490,6 +499,7 @@ export function Chat() {
                       activeMessageId={activeSearchMatch?.id ?? null}
                       onPreviewFile={openArtifactPreview}
                       onViewWorkflow={openWorkflowPreview}
+                      onCreateScheduledTask={openWorkflowCronTaskModal}
                       onEditMessage={handleEditMessage}
                     />
                   );
@@ -503,6 +513,7 @@ export function Chat() {
                     isSearchActive={!!item.message.id && item.message.id === activeSearchMatch?.id}
                     onPreviewFile={openArtifactPreview}
                     onViewWorkflow={openWorkflowPreview}
+                    onCreateScheduledTask={openWorkflowCronTaskModal}
                     onEditMessage={handleEditMessage}
                   />
                 );
@@ -520,6 +531,7 @@ export function Chat() {
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={openArtifactPreview}
                   onViewWorkflow={openWorkflowPreview}
+                  onCreateScheduledTask={openWorkflowCronTaskModal}
                   onEditMessage={handleEditMessage}
                 />
               ) : null}
@@ -684,6 +696,13 @@ export function Chat() {
         </button>
       )}
     </div>
+    <CronTaskCreateModal
+      open={workflowCronModalOpen}
+      onClose={closeWorkflowCronTaskModal}
+      onSave={handleWorkflowCronTaskSave}
+      initialValues={workflowCronInitialValues}
+    />
+    </>
   );
 }
 

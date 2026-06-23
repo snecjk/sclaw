@@ -16,8 +16,6 @@ import { syncDeletedProviderToRuntime } from './provider-runtime-sync';
 import {
   isStoCatalogReady,
   isStoInternalOpenClawKey,
-  isLegacyStoOpenClawModelRef,
-  extractOpenClawProviderModelIds,
   OPENCLAW_STO_PLACEHOLDER_KEYS_TO_SCRUB,
   shouldDeleteStaleStoPlaceholder,
   STO_CANONICAL_ACCOUNT_ID,
@@ -72,19 +70,15 @@ export async function detectStoCatalogLegacyState(): Promise<StoCatalogLegacySta
     reasons.push('incomplete-sto-account');
   }
 
-  const { providers, defaultModel } = await getOpenClawProvidersConfig();
+  const { providers } = await getOpenClawProvidersConfig();
   for (const key of Object.keys(providers)) {
     if (isLegacyOpenClawProviderKey(key)) {
       reasons.push(`openclaw-key:${key}`);
     }
   }
 
-  if (defaultModel && isLegacyStoOpenClawModelRef(defaultModel)) {
-    reasons.push('legacy-primary-model-ref');
-  }
-
   const stoOpenClaw = providers[STO_CANONICAL_ACCOUNT_ID];
-  const openClawModelIds = extractOpenClawProviderModelIds(stoOpenClaw);
+  const openClawModelIds = extractOpenClawModelIds(stoOpenClaw);
   const catalogModels = canonical?.metadata?.customModels ?? [];
   if (
     catalogModels.length > 0
@@ -98,6 +92,13 @@ export async function detectStoCatalogLegacyState(): Promise<StoCatalogLegacySta
     needsMigration: reasons.length > 0,
     reasons,
   };
+}
+
+function extractOpenClawModelIds(entry: Record<string, unknown> | undefined): string[] {
+  if (!entry || !Array.isArray(entry.models)) return [];
+  return (entry.models as Array<Record<string, unknown>>)
+    .map((m) => (typeof m.id === 'string' ? m.id : ''))
+    .filter(Boolean);
 }
 
 export type StoCatalogPreMigrateResult = {

@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { hostApiFetch } from '@/lib/host-api';
 import { useChatStore } from '@/stores/chat';
 import { sessionHasWorkflowExecution } from '@/stores/workflow-memory';
-import { buildWorkflowFormConfig } from '@/lib/workflow-form-utils';
+import { buildWorkflowFormConfig, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import {
   PARAM_FORM_MARKER_REGEX,
   parseParameterFormMarker,
@@ -325,11 +325,15 @@ export function extractParameterForm(
         }
 
         return {
-          formId: resolveParameterFormId(`workflow-form-${templateId}`),
+          formId: resolveParameterFormId(buildWorkflowFormId(templateId)),
           formConfig: buildWorkflowFormConfig(
             pendingWorkflow.schema,
             '',
             pendingWorkflow.collectedInputs,
+            {
+              templateId,
+              schemaHash,
+            },
           ),
           formContext: {
             source: 'workflow',
@@ -353,13 +357,25 @@ export function extractWorkflowCard(message: RawMessage | unknown): { runId: str
 
   if (!Array.isArray(content)) return null;
 
+  let latest: { runId: string; templateName: string } | null = null;
   for (const block of content as import('@/stores/chat').ContentBlock[]) {
     if (block.type === 'workflow_card' && block.runId) {
-      return {
+      latest = {
         runId: block.runId,
         templateName: block.templateName ?? '工作流',
       };
     }
+  }
+  return latest;
+}
+
+/** Latest workflow_card across assistant snapshots in a turn (newest message / block wins). */
+export function findLatestWorkflowCardInMessages(
+  messages: RawMessage[],
+): { runId: string; templateName: string } | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const card = extractWorkflowCard(messages[i]);
+    if (card) return card;
   }
   return null;
 }

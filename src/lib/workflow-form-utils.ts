@@ -136,6 +136,35 @@ function mapField(schemaField: WorkflowSchemaField): FormField {
   }
 }
 
+export interface BuildWorkflowFormConfigOptions {
+  templateId?: string;
+  schemaHash?: string;
+}
+
+/** Stable formId for workflow parameter forms (one per template). */
+export function buildWorkflowFormId(templateId: string): string {
+  return `workflow-form-${templateId}`;
+}
+
+const formConfigCache = new Map<string, UserFormConfig>();
+
+function formConfigCacheKey(
+  schema: WorkflowSchema,
+  userInputText: string,
+  defaultValues: Record<string, unknown> | undefined,
+  options?: BuildWorkflowFormConfigOptions,
+): string {
+  const templateKey = options?.templateId ?? schema.nodeId;
+  const hashKey = options?.schemaHash ?? '';
+  const defaultsKey = defaultValues ? JSON.stringify(defaultValues) : '';
+  return `${templateKey}:${hashKey}:${userInputText}:${defaultsKey}`;
+}
+
+/** Clear cached form configs (tests or schema refresh). */
+export function clearWorkflowFormConfigCache(): void {
+  formConfigCache.clear();
+}
+
 /**
  * Build UserFormConfig from startup schema and user input text
  */
@@ -143,7 +172,11 @@ export function buildWorkflowFormConfig(
   schema: WorkflowSchema,
   userInputText: string,
   defaultValues?: Record<string, unknown>,
+  options?: BuildWorkflowFormConfigOptions,
 ): UserFormConfig {
+  const cacheKey = formConfigCacheKey(schema, userInputText, defaultValues, options);
+  const cached = formConfigCache.get(cacheKey);
+  if (cached) return cached;
   // Only include fields from confirm-mode steps
   const confirmStepIds = new Set(
     schema.steps.filter((s) => s.mode === 'confirm').map((s) => s.id),
@@ -208,8 +241,9 @@ export function buildWorkflowFormConfig(
     }
   }
 
-  return {
-    id: `workflow-${schema.nodeId}-${Date.now()}`,
+  const stableId = `workflow-${options?.templateId ?? schema.nodeId}-${options?.schemaHash ?? 'default'}`;
+  const config: UserFormConfig = {
+    id: stableId,
     title: schema.steps.find((s) => confirmStepIds.has(s.id))?.title ?? '工作流参数',
     description: '请填写以下工作流参数',
     fields,
@@ -219,6 +253,8 @@ export function buildWorkflowFormConfig(
     prevLabel: '上一步',
     allowCancel: false,
   };
+  formConfigCache.set(cacheKey, config);
+  return config;
 }
 
 /** Detect objects accidentally created by spreading a string (`{..."abc"}` → {0:"a",1:"b"}). */
@@ -269,6 +305,21 @@ export function normalizeWorkflowFieldValue(value: unknown): unknown {
     }
   }
   return value;
+}
+
+/** Whether a form field value should be treated as empty for required validation. */
+export function isEmptyFormValue(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (typeof value === 'string' && value.trim() === '') return true;
+
+  const normalized = normalizeWorkflowFieldValue(value);
+  if (normalized === undefined || normalized === null) return true;
+  if (typeof normalized === 'string' && normalized.trim() === '') return true;
+  if (Array.isArray(normalized) && normalized.length === 0) return true;
+  if (typeof normalized === 'object' && !Array.isArray(normalized)) {
+    return Object.keys(normalized as Record<string, unknown>).length === 0;
+  }
+  return false;
 }
 
 /** Preview row for workflow detail panel (supports titled_group sub-fields). */

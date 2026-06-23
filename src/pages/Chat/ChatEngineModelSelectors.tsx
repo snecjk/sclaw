@@ -23,7 +23,6 @@ import {
 import { hostApiFetch } from '@/lib/host-api';
 import { cn } from '@/lib/utils';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
-import { useEnsureStoModelCatalog } from '@/hooks/use-ensure-sto-model-catalog';
 import { toast } from 'sonner';
 
 const pillBase = cn(
@@ -324,7 +323,6 @@ export function ChatModelSelector({
   const [modelSaving, setModelSaving] = useState(false);
 
   useEffect(() => { void init(); }, [init]);
-  useEnsureStoModelCatalog();
 
   const prevGatewayState = useRef(gatewayStatus.state);
   useEffect(() => {

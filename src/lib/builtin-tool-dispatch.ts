@@ -15,7 +15,14 @@ import { useChatStore } from '@/stores/chat';
 import {
   applyWorkflowSchemaReady,
 } from '@/stores/chat/parameter-form-recovery';
-import { saveWorkflowRecord } from '@/stores/workflow-memory';
+import {
+  ensureWorkflowCardsInMessages,
+  getAssistantMessageText,
+  messageHasWorkflowCardForRun,
+} from '@/lib/workflow-card-injection';
+import type { RawMessage } from '@/stores/chat/types';
+import { isToolResultRole } from '@/stores/chat/helpers';
+import { getExecutionByRunId, saveWorkflowRecord } from '@/stores/workflow-memory';
 
 export interface BuiltinToolResultMessage {
   id?: string;
@@ -122,7 +129,7 @@ export async function dispatchBuiltinToolResult(
     processedToolResults.add(dedupeKey);
   }
 
-  const envelope = parseStoToolEnvelope(msg.content);
+  const envelope = parseStoToolEnvelope(msg.content) ?? parseStoToolEnvelope(msg);
 
   if (envelope?.type === 'workflow_schema_ready' && envelope.success) {
     handleWorkflowSchemaReady((envelope.data ?? {}) as WorkflowSchemaReadyData);
@@ -153,6 +160,58 @@ export async function dispatchBuiltinToolResult(
   }
 
   return false;
+}
+
+/**
+ * Recover workflow runs from gateway history tool_result rows (filtered from chat UI).
+ * Live streaming may not invoke dispatchBuiltinToolResult before the model's text reply.
+ */
+export async function absorbWorkflowExecutionStartedFromToolResults(
+  rawMessages: RawMessage[],
+  ctx: { sessionKey: string; agentId: string },
+): Promise<void> {
+  for (let i = rawMessages.length - 1; i >= 0; i -= 1) {
+    const msg = rawMessages[i];
+    if (!isToolResultRole(msg.role)) continue;
+
+    const envelope = parseStoToolEnvelope(msg.content)
+      ?? parseStoToolEnvelope(msg);
+    if (envelope?.type !== 'workflow_execution_started' || !envelope.success) continue;
+
+    const data = (envelope.data ?? {}) as WorkflowExecutionStartedData;
+    if (!data.runId || !data.workflowId) continue;
+
+    const chatState = useChatStore.getState();
+    const alreadyTracked = Boolean(
+      getExecutionByRunId(data.runId, ctx.sessionKey)
+      || chatState.workflowCardStates[data.runId],
+    );
+
+    if (!alreadyTracked) {
+      await applyWorkflowRunStarted({
+        sessionKey: ctx.sessionKey,
+        agentId: ctx.agentId,
+        workflowId: data.workflowId,
+        runId: data.runId,
+        templateName: data.templateName ?? '工作流',
+        presentation: 'patch_assistant',
+      });
+      return;
+    }
+
+    const hasCard = chatState.messages.some((m) => messageHasWorkflowCardForRun(m, data.runId));
+    if (!hasCard) {
+      const patched = ensureWorkflowCardsInMessages(
+        chatState.messages,
+        ctx.sessionKey,
+        getAssistantMessageText,
+      );
+      if (patched !== chatState.messages) {
+        useChatStore.setState({ messages: patched });
+      }
+    }
+    return;
+  }
 }
 
 /** Test helper */
