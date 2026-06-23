@@ -32,7 +32,9 @@
         "searchPrev": "前の結果",
         "searchNext": "次の結果",
         "searchClear": "検索をクリア",
-        "searchClose": "検索を閉じる"
+        "searchClose": "検索を閉じる",
+        "openPreview": "プレビューを開く",
+        "closeSession": "現在のセッションを閉じる"
     },
     "composer": {
         "attachFiles": "ファイルを添付",

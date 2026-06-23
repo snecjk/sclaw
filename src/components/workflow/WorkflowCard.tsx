@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Circle, Loader2, XCircle, Clock, GitBranch } from 'lucide-react';
+import { CheckCircle2, Circle, Loader2, XCircle, Clock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
@@ -25,8 +25,9 @@ import type { WorkflowExecutionState, WorkflowRunStatus } from '@/types/workflow
 interface WorkflowCardProps {
   runId: string;
   templateName: string;
+  /** default：对话流独立块（pl-5 + mt-3）；inline：嵌在参数已确认展开区内 */
+  layout?: 'default' | 'inline';
   onPreviewArtifact?: (file: AttachedFileMeta) => void;
-  onViewWorkflow?: (workflowId: string) => void;
 }
 
 interface StatusTheme {
@@ -40,7 +41,7 @@ interface StatusTheme {
 
 /** MasterGo C 组：工作流状态行描边 #E8EAEF（paint_4:1000 / --sto-sidebar-border） */
 const workflowRowShellClass =
-  'rounded-xl border border-[var(--sto-sidebar-border)] bg-card';
+  'rounded-xl border border-[var(--sto-sidebar-border)]';
 
 /**
  * C 组状态主题（MCP layer 8:542）
@@ -150,8 +151,8 @@ function useDurationLabel(
 export function WorkflowCard({
   runId,
   templateName,
+  layout = 'default',
   onPreviewArtifact,
-  onViewWorkflow,
 }: WorkflowCardProps) {
   const { t } = useTranslation('chat');
   const sessionKey = useChatStore((s) => s.currentSessionKey);
@@ -209,13 +210,24 @@ export function WorkflowCard({
   const showStatusRow = !(isCompleted && primaryArtifact);
 
   return (
-    <div className="mt-3 w-full space-y-2 pl-5">
+    <div
+      className={cn(
+        'w-full space-y-2',
+        layout === 'default' && 'mt-3 pl-5',
+      )}
+    >
       {display.result?.summary ? (
         <p className="text-sm leading-6 text-foreground">{display.result.summary}</p>
       ) : null}
 
       {showStatusRow ? (
-        <div className={cn(workflowRowShellClass, 'px-3.5 py-3')}>
+        <div
+          className={cn(
+            workflowRowShellClass,
+            layout === 'inline' ? 'bg-transparent' : 'bg-card',
+            'px-3.5 py-3',
+          )}
+        >
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               <p className="truncate text-[13px] font-medium leading-4 text-[#1A1A1A]">
@@ -277,20 +289,6 @@ export function WorkflowCard({
             }
           }}
         />
-      ) : null}
-
-      {isTerminal && display.workflowId && onViewWorkflow ? (
-        <button
-          type="button"
-          onClick={() => onViewWorkflow(display.workflowId)}
-          className={cn(
-            'inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground',
-            isFailed && 'hover:text-destructive',
-          )}
-        >
-          <GitBranch className="h-3.5 w-3.5" aria-hidden />
-          {t('workflow.viewWorkflowAction')}
-        </button>
       ) : null}
     </div>
   );

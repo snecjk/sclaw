@@ -14,6 +14,7 @@ import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useScheduledTasksStore } from '@/stores/scheduledTasks';
 import { createAutoSendWatcher } from '@/stores/message-queue';
+import { cn } from '@/lib/utils';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { useBuiltinToolListener } from '@/hooks/use-builtin-tool-listener';
 import { TaskCreateModal } from '@/pages/ScheduledTasks/components/TaskCreateModal';
@@ -128,7 +129,12 @@ export function Home() {
   return (
     <>
       <div className="mx-auto flex h-full min-h-0 w-full flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6">
+        <div
+          className={cn(
+            'flex min-h-0 flex-1 flex-col overflow-hidden',
+            !showConversation && 'px-4 sm:px-6',
+          )}
+        >
           {showConversation ? (
             <HomeMainConversation className="min-h-0 flex-1" seedText={seedText} onSend={handleHubSend} />
           ) : (

@@ -16,8 +16,8 @@ import { ChatMessage } from './ChatMessage';
 import { AssistantTurnMessage } from './AssistantTurnMessage';
 import { useChatDisplay } from './use-chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
-import { ChatToolbar } from './ChatToolbar';
-import { ChatSearchBar } from './ChatSearchBar';
+import { ChatContentHeaderActions } from './ChatSearchBar';
+import { ChatPreviewHeaderTabs } from './ChatPreviewHeaderTabs';
 import { PendingQueuePanel } from './PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
 import { ChatPreviewPanel } from './ChatPreviewPanel';
@@ -33,7 +33,6 @@ import {
   STO_PREVIEW_SPLIT_MAX,
   STO_PREVIEW_SPLIT_MIN,
   stoParameterFormDockLayout,
-  stoSplitPreviewCardClass,
   stoSplitPreviewPaneClass,
   stoSplitResizerActiveClass,
   stoSplitResizerClass,
@@ -44,6 +43,9 @@ import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { useBuiltinToolListener } from '@/hooks/use-builtin-tool-listener';
+import { useContentHeader } from '@/components/layout/content-header-context';
+import { resolveSessionLabel } from '@/lib/session-label';
+import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
 
 export function Chat() {
   useBuiltinToolListener();
@@ -59,6 +61,9 @@ export function Chat() {
   const sending = useChatStore((s) => s.sending);
   const error = useChatStore((s) => s.error);
   const showThinking = useChatStore((s) => s.showThinking);
+  const toggleThinking = useChatStore((s) => s.toggleThinking);
+  const refresh = useChatStore((s) => s.refresh);
+  const sessionLabels = useChatStore((s) => s.sessionLabels);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
@@ -69,6 +74,7 @@ export function Chat() {
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
+  const switchSession = useChatStore((s) => s.switchSession);
 
   // ── Message Queue ──
   const queue = useMessageQueueStore((s) => s.getQueue(currentSessionKey));
@@ -427,23 +433,116 @@ export function Chat() {
 
   const {
     showPreviewPanel,
-    setShowPreviewPanel,
     activePreviewFilePath,
     setActivePreviewFilePath,
-    previewActiveTab,
-    setPreviewActiveTab,
     previewableFiles,
     canShowPreviewPanel,
     openArtifactPreview,
-    openWorkflowPreview,
+    openPreviewPanel,
     closePreviewPanel,
     dismissPreviewFile,
-    showWorkflowTab,
+    showEditWorkflow,
     workflowId: sessionWorkflowId,
-    workflowDetail,
-    workflowLoading,
-    workflowError,
-  } = useChatPreviewPanel(allMessagesForPreview);
+  } = useChatPreviewPanel(allMessagesForPreview, currentSessionKey);
+
+  const sessionTitle = useMemo(
+    () => resolveSessionLabel({
+      key: currentSessionKey,
+      displayName: currentSession?.displayName,
+      label: currentSession?.label,
+      sessionLabels,
+      t,
+    }),
+    [currentSessionKey, currentSession?.displayName, currentSession?.label, sessionLabels, t],
+  );
+
+  const headerActions = useMemo(
+    () => (
+      <ChatContentHeaderActions
+        canShowPreviewPanel={canShowPreviewPanel}
+        isPreviewPanelOpen={showPreviewPanel}
+        onTogglePreview={() => {
+          if (showPreviewPanel) closePreviewPanel();
+          else openPreviewPanel();
+        }}
+        showThinking={showThinking}
+        onToggleThinking={toggleThinking}
+        loading={loading}
+        onRefresh={refresh}
+        searchProps={{
+          isOpen: isSearchOpen,
+          onToggle: handleSearchToggle,
+          value: searchQuery,
+          onChange: (value) => {
+            setSearchQuery(value);
+            if (!isSearchOpen) {
+              setIsSearchOpen(true);
+            }
+          },
+          onNext: handleSearchNext,
+          onPrevious: handleSearchPrevious,
+          onClear: handleSearchClear,
+          resultCount: searchMatches.length,
+          activeIndex: searchMatches.length > 0 ? activeSearchIndex : 0,
+        }}
+      />
+    ),
+    [
+      canShowPreviewPanel,
+      showPreviewPanel,
+      closePreviewPanel,
+      openPreviewPanel,
+      showThinking,
+      toggleThinking,
+      loading,
+      refresh,
+      isSearchOpen,
+      handleSearchToggle,
+      searchQuery,
+      handleSearchNext,
+      handleSearchPrevious,
+      handleSearchClear,
+      searchMatches.length,
+      activeSearchIndex,
+    ],
+  );
+
+  const previewHeaderTabs = useMemo(
+    () => (
+      showPreviewPanel && (previewableFiles.length > 0 || showEditWorkflow) ? (
+        <ChatPreviewHeaderTabs
+          files={previewableFiles}
+          activeFilePath={activePreviewFilePath}
+          onSelectFile={setActivePreviewFilePath}
+          onDismissFile={dismissPreviewFile}
+          showEditWorkflow={showEditWorkflow}
+          workflowId={sessionWorkflowId}
+        />
+      ) : null
+    ),
+    [
+      showPreviewPanel,
+      previewableFiles,
+      activePreviewFilePath,
+      setActivePreviewFilePath,
+      dismissPreviewFile,
+      showEditWorkflow,
+      sessionWorkflowId,
+    ],
+  );
+
+  const handleCloseSession = useCallback(() => {
+    closePreviewPanel();
+    switchSession(DEFAULT_SESSION_KEY);
+  }, [closePreviewPanel, switchSession]);
+
+  useContentHeader({
+    title: sessionTitle,
+    previewTabs: previewHeaderTabs,
+    actions: headerActions,
+    isSplitLayout: canShowPreviewPanel && showPreviewPanel,
+    onCloseSession: handleCloseSession,
+  });
 
   const isSplitChatLayout = canShowPreviewPanel && showPreviewPanel;
 
@@ -456,10 +555,9 @@ export function Chat() {
   return (
     <div
       className={cn(
-        'relative -m-6 flex min-h-0 min-w-0 flex-row overflow-x-hidden transition-colors duration-500',
+        'relative flex h-full min-h-0 min-w-0 flex-1 flex-row overflow-x-hidden transition-colors duration-500',
         canShowPreviewPanel && showPreviewPanel && stoSplitRowInsetsClass,
       )}
-      style={{ height: 'calc(100vh - var(--sto-header-h))' }}
     >
       {/* Left: Chat area */}
       <ChatConversationColumn variant="page" isSplitLayout={isSplitChatLayout}>
@@ -468,30 +566,6 @@ export function Chat() {
         <div className="absolute inset-0 neural-grid opacity-20" />
         <div className="absolute left-8 top-10 h-40 w-40 rounded-full bg-cyan-400/10 blur-[90px]" />
         <div className="absolute right-8 top-20 h-48 w-48 rounded-full bg-[rgba(255,111,0,0.06)] blur-[110px]" />
-      </div>
-
-      {/* Toolbar */}
-      <div className="relative z-10 flex shrink-0 items-center justify-between py-2">
-        <ChatToolbar
-          trailingContent={(
-            <ChatSearchBar
-              isOpen={isSearchOpen}
-              onToggle={handleSearchToggle}
-              value={searchQuery}
-              onChange={(value) => {
-                setSearchQuery(value);
-                if (!isSearchOpen) {
-                  setIsSearchOpen(true);
-                }
-              }}
-              onNext={handleSearchNext}
-              onPrevious={handleSearchPrevious}
-              onClear={handleSearchClear}
-              resultCount={searchMatches.length}
-              activeIndex={searchMatches.length > 0 ? activeSearchIndex : 0}
-            />
-          )}
-        />
       </div>
 
       {/* Messages Area */}
@@ -516,7 +590,6 @@ export function Chat() {
                       matchedMessageIds={matchedMessageIds}
                       activeMessageId={activeSearchMatch?.id ?? null}
                       onPreviewFile={openArtifactPreview}
-                      onViewWorkflow={openWorkflowPreview}
                       onEditMessage={handleEditMessage}
                     />
                   );
@@ -529,7 +602,6 @@ export function Chat() {
                     isSearchMatch={!!item.message.id && matchedMessageIds.has(item.message.id)}
                     isSearchActive={!!item.message.id && item.message.id === activeSearchMatch?.id}
                     onPreviewFile={openArtifactPreview}
-                    onViewWorkflow={openWorkflowPreview}
                     onEditMessage={handleEditMessage}
                   />
                 );
@@ -546,7 +618,6 @@ export function Chat() {
                   activeMessageId={activeSearchMatch?.id ?? null}
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={openArtifactPreview}
-                  onViewWorkflow={openWorkflowPreview}
                   onEditMessage={handleEditMessage}
                 />
               ) : null}
@@ -644,6 +715,13 @@ export function Chat() {
         statusTone={composerStatusTone}
         editDraft={editDraft}
         onEditDraftApplied={handleEditDraftApplied}
+        composerLayout="home"
+        toolbarInlineSelectors={(
+          <>
+            <ChatEngineSelector variant="inline" />
+            <ChatModelSelector variant="inline" />
+          </>
+        )}
       />
 
       {/* Transparent loading overlay */}
@@ -681,41 +759,16 @@ export function Chat() {
             transition={{ duration: 0.25, ease: 'easeInOut' }}
             // className="shrink-0 overflow-hidden"
             style={{ width: `${previewPanelPercent}%` }}
-            className={cn(stoSplitPreviewPaneClass, stoSplitPreviewCardClass)}
+            className={stoSplitPreviewPaneClass}
           >
             <ChatPreviewPanel
               files={previewableFiles}
               activeFilePath={activePreviewFilePath}
-              onSelectFile={setActivePreviewFilePath}
-              onClose={closePreviewPanel}
-              onDismissFile={dismissPreviewFile}
               className="h-full w-full"
-              showWorkflowTab={showWorkflowTab}
-              workflowId={sessionWorkflowId}
-              workflowDetail={workflowDetail}
-              workflowLoading={workflowLoading}
-              workflowError={workflowError}
-              activeTab={previewActiveTab}
-              onActiveTabChange={setPreviewActiveTab}
             />
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Floating toggle button when panel is hidden but files exist */}
-      {canShowPreviewPanel && !showPreviewPanel && (
-        <button
-          onClick={() => setShowPreviewPanel(true)}
-          className="absolute right-4 top-4 z-20 inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-white/60 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white/80 dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
-        >
-          <span>{showWorkflowTab ? '预览' : '预览产物'}</span>
-          {previewableFiles.length > 0 && (
-            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] text-primary">
-              {previewableFiles.length}
-            </span>
-          )}
-        </button>
-      )}
     </div>
   );
 }

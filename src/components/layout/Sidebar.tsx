@@ -48,7 +48,7 @@ import { useAuthStore } from '@/stores/auth';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SidebarProvincialChromeRow } from '@/components/layout/sidebar-provincial-chrome-row';
 import { useTranslation } from 'react-i18next';
-import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
+import { resolveSessionLabel } from '@/lib/session-label';
 import logoSvg from '@/assets/logo.svg';
 import packageJson from '../../../package.json';
 import { taskDetailPath, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
@@ -90,6 +90,10 @@ const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
 const SIDEBAR_BUCKET_INITIAL_LIMIT = 60;
 const SIDEBAR_BUCKET_LOAD_MORE_COUNT = 60;
 const SIDEBAR_COLLAPSED_SESSION_LIMIT = 40;
+/** 任务列表分区首次展开时最多展示的顶级任务组数量（子项默认收起，每组 1 行） */
+const SIDEBAR_TASK_LIST_INITIAL_ROW_LIMIT = 8;
+/** 旧版按日期分桶渲染（today/yesterday/…）— 保留逻辑，UI 已合并为「最近」单列表 */
+const USE_LEGACY_SESSION_DATE_BUCKETS = false;
 
 /** MasterGo 2:18620 侧栏正文：PingFang SC 14px / 20px 行高 */
 const SIDEBAR_BODY_TEXT_MEDIUM_CLASS = 'text-sm font-medium leading-5';
@@ -145,6 +149,34 @@ function isTemporaryAgentSessionKey(key: string): boolean {
 const STO_TASK_NAV: { id: StoTaskId; labelKey: 'taskHqReconciliation' | 'taskWeeklyPpt' }[] = [
   { id: 'hq-reconciliation', labelKey: 'taskHqReconciliation' },
 ];
+
+type ScheduledTaskSidebarGroup = {
+  key: string;
+  name: string;
+  sessions: Array<{ key: string; label?: string; displayName?: string; updatedAt?: number }>;
+};
+
+type TaskListRenderItem =
+  | { kind: 'sto'; navItem: (typeof STO_TASK_NAV)[number]; maxVisibleEntries?: number }
+  | { kind: 'scheduled'; group: ScheduledTaskSidebarGroup; maxVisibleSessions?: number };
+
+function buildTaskListRenderPlan(
+  scheduledGroups: ScheduledTaskSidebarGroup[],
+  showAll: boolean,
+): { items: TaskListRenderItem[]; totalRows: number } {
+  const items: TaskListRenderItem[] = [
+    ...STO_TASK_NAV.map((navItem) => ({ kind: 'sto' as const, navItem, maxVisibleEntries: undefined })),
+    ...scheduledGroups.map((group) => ({ kind: 'scheduled' as const, group, maxVisibleSessions: undefined })),
+  ];
+  const totalRows = items.length;
+  if (showAll || totalRows <= SIDEBAR_TASK_LIST_INITIAL_ROW_LIMIT) {
+    return { items, totalRows };
+  }
+  return {
+    items: items.slice(0, SIDEBAR_TASK_LIST_INITIAL_ROW_LIMIT),
+    totalRows,
+  };
+}
 
 function SidebarTaskDateLinks({
   taskId,
@@ -238,6 +270,7 @@ function SidebarTaskGroup({
   taskId,
   label,
   onRequestDeleteSubitem,
+  maxVisibleEntries,
 }: {
   taskId: StoTaskId;
   label: string;
@@ -247,6 +280,8 @@ function SidebarTaskGroup({
     label: string;
     sessionKey: string;
   }) => void;
+  /** 任务列表首次展开行数上限；undefined = 展示全部子项 */
+  maxVisibleEntries?: number;
 }) {
   const { pathname } = useLocation();
   const { t: tTasks } = useTranslation('tasks');
@@ -259,6 +294,7 @@ function SidebarTaskGroup({
     const ids = rawEntryIds ?? [];
     return [...new Set(ids)].sort((a, b) => b.localeCompare(a));
   }, [rawEntryIds]);
+  const visibleEntries = maxVisibleEntries === undefined ? entries : entries.slice(0, maxVisibleEntries);
 
   const activeEntryId = useMemo(() => {
     const m = matchPath({ path: '/tasks/:taskId/:entryId', end: true }, pathname);
@@ -286,7 +322,7 @@ function SidebarTaskGroup({
   }, [taskId]); // Only depend on taskId, not entries
   const underTask = pathname.startsWith(`/tasks/${taskId}`);
 
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const prevUnderTask = useRef<boolean | null>(null);
 
   useEffect(() => {
@@ -347,7 +383,7 @@ function SidebarTaskGroup({
           />
         </span>
       </button>
-      {open ? (
+      {open && visibleEntries.length > 0 ? (
         <div
           id={panelId}
           className="mt-1.5 flex w-full flex-col gap-1 pl-5"
@@ -356,7 +392,7 @@ function SidebarTaskGroup({
         >
           <SidebarTaskDateLinks
             taskId={taskId}
-            entries={entries}
+            entries={visibleEntries}
             onRequestDeleteSubitem={onRequestDeleteSubitem}
           />
         </div>
@@ -370,12 +406,15 @@ function SidebarScheduledTaskGroup({
   name,
   sessions,
   onRequestDelete,
+  maxVisibleSessions,
 }: {
   name: string;
   sessions: Array<{ key: string; label?: string; displayName?: string; updatedAt?: number }>;
   onRequestDelete: (payload: { key: string; label: string }) => void;
+  /** 任务列表首次展开行数上限；undefined = 展示全部子项 */
+  maxVisibleSessions?: number;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const { switchSession, currentSessionKey } = useChatStore();
   const navigate = useNavigate();
   const location = useLocation();
@@ -383,6 +422,8 @@ function SidebarScheduledTaskGroup({
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
 
   if (sessions.length === 0) return null;
+
+  const visibleSessions = maxVisibleSessions === undefined ? sessions : sessions.slice(0, maxVisibleSessions);
 
   // Strip common prefixes from group name for cleaner display
   const displayName = name.replace(/^Cron:\s*/i, '').replace(/^定时任务\s*/i, '');
@@ -415,9 +456,9 @@ function SidebarScheduledTaskGroup({
           strokeWidth={2}
         />
       </button>
-      {open ? (
+      {open && visibleSessions.length > 0 ? (
         <div className="mt-1.5 flex w-full flex-col gap-1 pl-5">
-          {sessions.map((s) => {
+          {visibleSessions.map((s) => {
             const ts = sessionLastActivity[s.key] ?? s.updatedAt ?? 0;
             let label: string;
             if (ts > 0) {
@@ -484,14 +525,17 @@ function SidebarCollapsibleSectionLabel({
   onToggle,
   label,
   toggleAriaLabel,
+  className,
 }: {
   open: boolean;
   onToggle: () => void;
   label: string;
   toggleAriaLabel: string;
+  /** 分区标题与上方区块间距，默认 mt-4（导航→首分区）；次分区可收紧 */
+  className?: string;
 }) {
   return (
-    <div className="mt-4">
+    <div className={cn('mt-4', className)}>
       <button
         type="button"
         aria-expanded={open}
@@ -621,7 +665,9 @@ export function Sidebar() {
   const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
   const workflowEditorActive = useWorkflowUiStore((s) => s.editorActive);
   const sidebarExpandedBeforeWorkflowRef = useRef<boolean | null>(null);
-  const [taskListSectionOpen, setTaskListSectionOpen] = useState(true);
+  const [taskListSectionOpen, setTaskListSectionOpen] = useState(false);
+  const [taskListShowAll, setTaskListShowAll] = useState(false);
+  const [recentOpen, setRecentOpen] = useState(true);
   const [workspaceSectionOpen, setWorkspaceSectionOpen] = useState(true);
   const [bucketOpen, setBucketOpen] = useState<Record<SessionBucketKey, boolean>>({
     today: true,
@@ -633,6 +679,7 @@ export function Sidebar() {
     cronTasks: true,
   });
   const [bucketVisibleCounts, setBucketVisibleCounts] = useState<Partial<Record<SessionBucketKey, number>>>({});
+  const [recentVisibleCount, setRecentVisibleCount] = useState<number | undefined>(undefined);
 
   const { t } = useTranslation(['common', 'chat', 'auth', 'tasks']);
 
@@ -656,6 +703,12 @@ export function Sidebar() {
       setSidebarCollapsed(!restoreExpanded);
     }
   }, [workflowEditorActive, setSidebarCollapsed]);
+
+  useEffect(() => {
+    if (!taskListSectionOpen) {
+      setTaskListShowAll(false);
+    }
+  }, [taskListSectionOpen]);
 
   useEffect(() => {
     if (!isGatewayRunning) return;
@@ -732,20 +785,8 @@ export function Sidebar() {
   }, [isGatewayRunning, loadHistory, loadSessions]);
 
   const getSessionLabel = useCallback(
-    (key: string, displayName?: string, label?: string) => {
-      const preview = sessionLabels[key];
-      if (preview) return preview;
-      if (label?.trim()) return label;
-      const dn = displayName?.trim();
-      if (dn && !looksLikeTechnicalSessionDisplay(dn) && dn !== key) return dn;
-      if (key.endsWith(':main')) {
-        return t('chat:sessionList.mainSessionTitle');
-      }
-      if (isTemporaryAgentSessionKey(key)) {
-        return t('common:sidebar.newChat');
-      }
-      return key;
-    },
+    (key: string, displayName?: string, label?: string) =>
+      resolveSessionLabel({ key, displayName, label, sessionLabels, t }),
     [sessionLabels, t],
   );
 
@@ -818,16 +859,20 @@ export function Sidebar() {
     return isFreshCurrentSession ? nowMs : 0;
   };
 
-  for (const session of [...normalSessions].sort((a, b) =>
-    getEffectiveActivityMs(b) - getEffectiveActivityMs(a),
-  )) {
+  const recentSessionsSorted = useMemo(
+    () => [...normalSessions].sort((a, b) => getEffectiveActivityMs(b) - getEffectiveActivityMs(a)),
+    // getEffectiveActivityMs 依赖 sessionLastActivity / currentSessionKey / sessionLabels / nowMs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [normalSessions, sessionLastActivity, currentSessionKey, sessionLabels, nowMs],
+  );
+
+  // Legacy 日期分桶：折叠轨与潜在回滚仍可能读取 bucket 数据
+  for (const session of recentSessionsSorted) {
     const bucketKey = getSessionBucket(getEffectiveActivityMs(session), nowMs);
     sessionBucketMap[bucketKey].sessions.push(session);
   }
 
-  const sessionsOrderedForCollapse = sessionBuckets
-    .flatMap((b) => b.sessions)
-    .slice(0, SIDEBAR_COLLAPSED_SESSION_LIMIT);
+  const sessionsOrderedForCollapse = recentSessionsSorted.slice(0, SIDEBAR_COLLAPSED_SESSION_LIMIT);
 
   // Group scheduled-task sessions by task name for the task-list section
   const scheduledTaskGroups = useMemo(() => {
@@ -874,6 +919,15 @@ export function Sidebar() {
     return Array.from(groups.values());
   }, [taskListScheduledSessions, sessionLastActivity]);
 
+  const taskListRenderPlan = useMemo(
+    () => buildTaskListRenderPlan(scheduledTaskGroups, taskListShowAll),
+    [scheduledTaskGroups, taskListShowAll],
+  );
+  const showTaskListExpandAll =
+    taskListSectionOpen
+    && !taskListShowAll
+    && taskListRenderPlan.totalRows > SIDEBAR_TASK_LIST_INITIAL_ROW_LIMIT;
+
   const appVersionShort = packageJson.version?.split('-')[0] ?? packageJson.version;
 
   const toggleBucket = (key: SessionBucketKey) => {
@@ -888,6 +942,12 @@ export function Sidebar() {
       ...prev,
       [key]: (prev[key] ?? SIDEBAR_BUCKET_INITIAL_LIMIT) + SIDEBAR_BUCKET_LOAD_MORE_COUNT,
     }));
+  };
+
+  const getRecentVisibleCount = () => recentVisibleCount ?? SIDEBAR_BUCKET_INITIAL_LIMIT;
+
+  const showMoreRecentSessions = () => {
+    setRecentVisibleCount((prev) => (prev ?? SIDEBAR_BUCKET_INITIAL_LIMIT) + SIDEBAR_BUCKET_LOAD_MORE_COUNT);
   };
 
   const primaryNav = useMemo(() => {
@@ -975,7 +1035,7 @@ export function Sidebar() {
 
       <nav
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden pb-2',
+          'flex shrink-0 flex-col gap-1 overflow-x-hidden pb-2',
           sidebarCollapsed ? 'px-0 pt-2' : 'px-2 pt-2',
         )}
       >
@@ -1099,7 +1159,7 @@ export function Sidebar() {
 
       <div
         className={cn(
-          'min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden',
+          'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden',
           sidebarCollapsed ? 'px-0' : 'px-2',
         )}
       >
@@ -1113,22 +1173,34 @@ export function Sidebar() {
         ) : null}
         {!sidebarCollapsed && taskListSectionOpen ? (
           <div className="mt-1 flex flex-col gap-0.5">
-            {STO_TASK_NAV.map((item) => (
-              <SidebarTaskGroup
-                key={item.id}
-                taskId={item.id}
-                label={t(`common:sidebar.${item.labelKey}`)}
-                onRequestDeleteSubitem={setSubitemToDelete}
-              />
-            ))}
-            {scheduledTaskGroups.map((group) => (
-              <SidebarScheduledTaskGroup
-                key={group.key}
-                name={group.name}
-                sessions={group.sessions}
-                onRequestDelete={(payload) => setSessionToDelete(payload)}
-              />
-            ))}
+            {taskListRenderPlan.items.map((item) =>
+              item.kind === 'sto' ? (
+                <SidebarTaskGroup
+                  key={item.navItem.id}
+                  taskId={item.navItem.id}
+                  label={t(`common:sidebar.${item.navItem.labelKey}`)}
+                  onRequestDeleteSubitem={setSubitemToDelete}
+                  maxVisibleEntries={item.maxVisibleEntries}
+                />
+              ) : (
+                <SidebarScheduledTaskGroup
+                  key={item.group.key}
+                  name={item.group.name}
+                  sessions={item.group.sessions}
+                  onRequestDelete={(payload) => setSessionToDelete(payload)}
+                  maxVisibleSessions={item.maxVisibleSessions}
+                />
+              ),
+            )}
+            {showTaskListExpandAll ? (
+              <button
+                type="button"
+                onClick={() => setTaskListShowAll(true)}
+                className="mt-1 w-full rounded-[8px] px-[10px] py-[6px] text-left text-[12px] font-medium text-muted-foreground transition-colors hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]"
+              >
+                {t('common:sidebar.expandAllTaskList')}
+              </button>
+            ) : null}
           </div>
         ) : null}
 
@@ -1158,17 +1230,17 @@ export function Sidebar() {
         </div>
         )}
 
-        {sidebarVis.conversationChrome ? (
-          !sidebarCollapsed ? (
-            <p className={cn('mt-4 px-2', SIDEBAR_SECTION_LABEL_CLASS)}>
-              {t('common:sidebar.sessionList')}
-            </p>
-          ) : (
-            <div className="mx-auto mt-3 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />
-          )
+        {!sidebarCollapsed ? (
+          <SidebarCollapsibleSectionLabel
+            open={recentOpen}
+            onToggle={() => setRecentOpen((o) => !o)}
+            label={t('common:sidebar.recent')}
+            toggleAriaLabel={t('common:sidebar.toggleRecentSection')}
+            className="mt-2"
+          />
         ) : null}
 
-        <div className={cn('space-y-1 pb-2', sidebarCollapsed ? 'pt-1' : 'pt-3')}>
+        <div className={cn('space-y-1 pb-2', sidebarCollapsed ? 'pt-1' : recentOpen ? 'pt-1' : 'pt-0')}>
           {sidebarCollapsed && sessionsOrderedForCollapse.length > 0 ? (
             <div className="flex flex-col gap-1">
               {sessionsOrderedForCollapse.map((s) => {
@@ -1215,133 +1287,236 @@ export function Sidebar() {
               <p className="px-2 pt-2 text-center text-sm leading-5 text-muted-foreground/80">
                 {t('common:sidebar.emptyChatHistory')}
               </p>
-            ) : (
+            ) : recentOpen ? (
               <>
-                {sessionBuckets.map((bucket) =>
-                  bucket.sessions.length > 0 ? (
-                  <div key={bucket.key} className="rounded-lg">
-                  <button
-                    type="button"
-                    onClick={() => toggleBucket(bucket.key)}
-                    className={cn(
-                      'flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-left hover:bg-black/[0.04] dark:hover:bg-white/[0.08]',
-                      SIDEBAR_SECTION_LABEL_CLASS,
-                    )}
-                  >
-                    <span className="truncate">{bucket.label}</span>
-                    <ChevronDown
-                      className={cn('h-4 w-4 shrink-0 transition-transform', bucketOpen[bucket.key] ? 'rotate-180' : '')}
-                      aria-hidden
-                    />
-                  </button>
-                  {bucketOpen[bucket.key] ? (
-                    <>
-                    {bucket.sessions.slice(0, getBucketVisibleCount(bucket.key)).map((s) => {
-                      const isEditing = editingSessionKey === s.key;
-                      const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
-                      return (
-                        <div key={s.key} className="group relative flex items-center">
-                          {isEditing ? (
-                            <input
-                              type="text"
-                              autoFocus
-                              value={editingValue}
-                              onChange={(e) => setEditingValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  renameSession(s.key, editingValue);
-                                  setEditingSessionKey(null);
-                                } else if (e.key === 'Escape') {
-                                  setEditingSessionKey(null);
-                                }
-                              }}
-                              onBlur={() => {
-                                renameSession(s.key, editingValue);
-                                setEditingSessionKey(null);
-                              }}
+                {/* Legacy 按日期分桶 UI — 保留供回滚，默认关闭 */}
+                {USE_LEGACY_SESSION_DATE_BUCKETS
+                  ? sessionBuckets.map((bucket) =>
+                      bucket.sessions.length > 0 ? (
+                        <div key={bucket.key} className="rounded-lg">
+                          <button
+                            type="button"
+                            onClick={() => toggleBucket(bucket.key)}
+                            className={cn(
+                              'flex w-full items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-left hover:bg-black/[0.04] dark:hover:bg-white/[0.08]',
+                              SIDEBAR_SECTION_LABEL_CLASS,
+                            )}
+                          >
+                            <span className="truncate">{bucket.label}</span>
+                            <ChevronDown
                               className={cn(
-                                'w-full rounded-[8px] px-[10px] py-[6px] pr-16 text-left text-sm leading-5 transition-colors outline-none',
-                                'bg-white border border-[var(--sto-brand-6)] text-foreground dark:bg-card',
+                                'h-4 w-4 shrink-0 transition-transform',
+                                bucketOpen[bucket.key] ? 'rotate-180' : '',
                               )}
+                              aria-hidden
                             />
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
-                              }}
-                              title={sessionLabel}
-                              className={cn(
-                                'w-full rounded-[8px] px-[10px] py-[6px] pr-9 text-left transition-colors',
-                                isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY
-                                  ? SIDEBAR_SUBITEM_TEXT_ACTIVE
-                                  : SIDEBAR_SUBITEM_TEXT_IDLE,
-                              )}
-                            >
-                              <span className="block min-w-0 truncate">{sessionLabel}</span>
-                            </button>
-                          )}
-                          {!sidebarCollapsed && !isEditing ? (
+                          </button>
+                          {bucketOpen[bucket.key] ? (
                             <>
-                              <button
-                                type="button"
-                                aria-label={t('common:actions.edit')}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingSessionKey(s.key);
-                                  setEditingValue(sessionLabel);
-                                }}
-                                className={cn(
-                                  'absolute right-6 flex items-center justify-center rounded p-0.5 transition-opacity',
-                                  'opacity-0 group-hover:opacity-100',
-                                  'text-[#86909C] hover:bg-black/[0.04] hover:text-[#4E5969]',
-                                )}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                aria-label={t('common:actions.delete')}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSessionToDelete({
-                                    key: s.key,
-                                    label: sessionLabel,
-                                  });
-                                }}
-                                className={cn(
-                                  'absolute right-1 flex items-center justify-center rounded p-0.5 transition-opacity',
-                                  'opacity-0 group-hover:opacity-100',
-                                  'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
-                                )}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
+                              {bucket.sessions.slice(0, getBucketVisibleCount(bucket.key)).map((s) => {
+                                const isEditing = editingSessionKey === s.key;
+                                const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
+                                return (
+                                  <div key={s.key} className="group relative flex items-center">
+                                    {isEditing ? (
+                                      <input
+                                        type="text"
+                                        autoFocus
+                                        value={editingValue}
+                                        onChange={(e) => setEditingValue(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            renameSession(s.key, editingValue);
+                                            setEditingSessionKey(null);
+                                          } else if (e.key === 'Escape') {
+                                            setEditingSessionKey(null);
+                                          }
+                                        }}
+                                        onBlur={() => {
+                                          renameSession(s.key, editingValue);
+                                          setEditingSessionKey(null);
+                                        }}
+                                        className={cn(
+                                          'w-full rounded-[8px] px-[10px] py-[6px] pr-16 text-left text-sm leading-5 transition-colors outline-none',
+                                          'bg-white border border-[var(--sto-brand-6)] text-foreground dark:bg-card',
+                                        )}
+                                      />
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
+                                        }}
+                                        title={sessionLabel}
+                                        className={cn(
+                                          'w-full rounded-[8px] px-[10px] py-[6px] pr-9 text-left transition-colors',
+                                          isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY
+                                            ? SIDEBAR_SUBITEM_TEXT_ACTIVE
+                                            : SIDEBAR_SUBITEM_TEXT_IDLE,
+                                        )}
+                                      >
+                                        <span className="block min-w-0 truncate">{sessionLabel}</span>
+                                      </button>
+                                    )}
+                                    {!sidebarCollapsed && !isEditing ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          aria-label={t('common:actions.edit')}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingSessionKey(s.key);
+                                            setEditingValue(sessionLabel);
+                                          }}
+                                          className={cn(
+                                            'absolute right-6 flex items-center justify-center rounded p-0.5 transition-opacity',
+                                            'opacity-0 group-hover:opacity-100',
+                                            'text-[#86909C] hover:bg-black/[0.04] hover:text-[#4E5969]',
+                                          )}
+                                        >
+                                          <Pencil className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          aria-label={t('common:actions.delete')}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSessionToDelete({
+                                              key: s.key,
+                                              label: sessionLabel,
+                                            });
+                                          }}
+                                          className={cn(
+                                            'absolute right-1 flex items-center justify-center rounded p-0.5 transition-opacity',
+                                            'opacity-0 group-hover:opacity-100',
+                                            'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
+                                          )}
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                      </>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
+                              {bucket.sessions.length > getBucketVisibleCount(bucket.key) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => showMoreBucketSessions(bucket.key)}
+                                  className="mt-1 w-full rounded-[8px] px-[10px] py-[6px] text-left text-[12px] font-medium text-muted-foreground transition-colors hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]"
+                                >
+                                  {t('common:actions.showMore', {
+                                    defaultValue: '显示更多（{{count}}）',
+                                    count: bucket.sessions.length - getBucketVisibleCount(bucket.key),
+                                  })}
+                                </button>
+                              ) : null}
                             </>
                           ) : null}
                         </div>
-                      );
+                      ) : null,
+                    )
+                  : null}
+                {recentSessionsSorted.slice(0, getRecentVisibleCount()).map((s) => {
+                  const isEditing = editingSessionKey === s.key;
+                  const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
+                  return (
+                    <div key={s.key} className="group relative flex items-center">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          autoFocus
+                          value={editingValue}
+                          onChange={(e) => setEditingValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              renameSession(s.key, editingValue);
+                              setEditingSessionKey(null);
+                            } else if (e.key === 'Escape') {
+                              setEditingSessionKey(null);
+                            }
+                          }}
+                          onBlur={() => {
+                            renameSession(s.key, editingValue);
+                            setEditingSessionKey(null);
+                          }}
+                          className={cn(
+                            'w-full rounded-[8px] px-[10px] py-[6px] pr-16 text-left text-sm leading-5 transition-colors outline-none',
+                            'bg-white border border-[var(--sto-brand-6)] text-foreground dark:bg-card',
+                          )}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
+                          }}
+                          title={sessionLabel}
+                          className={cn(
+                            'w-full rounded-[8px] px-[10px] py-[6px] pr-9 text-left transition-colors',
+                            isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY
+                              ? SIDEBAR_SUBITEM_TEXT_ACTIVE
+                              : SIDEBAR_SUBITEM_TEXT_IDLE,
+                          )}
+                        >
+                          <span className="block min-w-0 truncate">{sessionLabel}</span>
+                        </button>
+                      )}
+                      {!isEditing ? (
+                        <>
+                          <button
+                            type="button"
+                            aria-label={t('common:actions.edit')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingSessionKey(s.key);
+                              setEditingValue(sessionLabel);
+                            }}
+                            className={cn(
+                              'absolute right-6 flex items-center justify-center rounded p-0.5 transition-opacity',
+                              'opacity-0 group-hover:opacity-100',
+                              'text-[#86909C] hover:bg-black/[0.04] hover:text-[#4E5969]',
+                            )}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={t('common:actions.delete')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSessionToDelete({
+                                key: s.key,
+                                label: sessionLabel,
+                              });
+                            }}
+                            className={cn(
+                              'absolute right-1 flex items-center justify-center rounded p-0.5 transition-opacity',
+                              'opacity-0 group-hover:opacity-100',
+                              'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
+                            )}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
+                  );
+                })}
+                {recentSessionsSorted.length > getRecentVisibleCount() ? (
+                  <button
+                    type="button"
+                    onClick={showMoreRecentSessions}
+                    className="mt-1 w-full rounded-[8px] px-[10px] py-[6px] text-left text-[12px] font-medium text-muted-foreground transition-colors hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]"
+                  >
+                    {t('common:actions.showMore', {
+                      defaultValue: '显示更多（{{count}}）',
+                      count: recentSessionsSorted.length - getRecentVisibleCount(),
                     })}
-                    {bucket.sessions.length > getBucketVisibleCount(bucket.key) ? (
-                      <button
-                        type="button"
-                        onClick={() => showMoreBucketSessions(bucket.key)}
-                        className="mt-1 w-full rounded-[8px] px-[10px] py-[6px] text-left text-[12px] font-medium text-muted-foreground transition-colors hover:bg-[rgba(229,230,235,0.7)] hover:text-foreground dark:hover:bg-white/[0.08]"
-                      >
-                        {t('common:actions.showMore', {
-                          defaultValue: '显示更多（{{count}}）',
-                          count: bucket.sessions.length - getBucketVisibleCount(bucket.key),
-                        })}
-                      </button>
-                    ) : null}
-                    </>
-                  ) : null}
-                </div>
-              ) : null
-              )}
+                  </button>
+                ) : null}
               </>
-            )
-          )}
+            ) : null)}
         </div>
       </div>
 

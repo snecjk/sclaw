@@ -9,15 +9,30 @@ import { matchPath, Outlet, useLocation } from 'react-router-dom';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import {
   stoAppShellBodyProvincialClass,
+  stoMainCardBodyClass,
+  stoMainCardBodySplitClass,
   stoMainCardShellClass,
   stoMainCardWrapClass,
 } from '@/lib/surfaces';
 import { AppShellChromeOverlay } from '@/components/layout/app-shell-chrome-overlay';
+import { ContentHeader } from '@/components/layout/ContentHeader';
+import { ContentHeaderProvider, useContentHeaderDisplay } from '@/components/layout/content-header-context';
 import { getSidebarLayoutVariant } from '@/lib/sidebar-layout';
+import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { useSettingsStore } from '@/stores/settings';
 import { Sidebar } from './Sidebar';
 import { TitleBar } from './TitleBar';
+
+function MainCardBody() {
+  const { isSplitLayout } = useContentHeaderDisplay();
+
+  return (
+    <div className={cn(stoMainCardBodyClass, isSplitLayout && stoMainCardBodySplitClass)}>
+      <Outlet />
+    </div>
+  );
+}
 
 export function MainLayout() {
   const { pathname } = useLocation();
@@ -58,14 +73,18 @@ export function MainLayout() {
       <div
         data-app-shell="provincial"
         data-sidebar-collapsed={sidebarCollapsed ? 'true' : 'false'}
+        data-platform={window.electron?.platform ?? 'unknown'}
         className="relative flex h-screen flex-col overflow-hidden bg-[var(--sto-page-bg)]"
       >
         <AppShellChromeOverlay />
         <div className={stoAppShellBodyProvincialClass(sidebarCollapsed)}>
           <Sidebar />
           <div className={stoMainCardWrapClass(sidebarCollapsed)}>
-            <main className={stoMainCardShellClass}>
-              <Outlet />
+            <main className={cn(stoMainCardShellClass, 'flex flex-col')}>
+              <ContentHeaderProvider>
+                <ContentHeader />
+                <MainCardBody />
+              </ContentHeaderProvider>
             </main>
           </div>
         </div>

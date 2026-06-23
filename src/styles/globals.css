@@ -54,6 +54,11 @@
     /* 侧栏主导航选中态：与 docs/sto-design.md Brand-6 一致 */
     --sto-brand-6: #ff6f00;
     --sto-header-h: 52px;
+    --sto-content-header-h: 52px;
+    /* ContentHeader 水平内距：左与 body/三栏容器对齐，右与 icon 列对齐 */
+    --sto-chrome-traffic-light-pad: 0px;
+    --sto-content-header-pad-start: var(--sto-content-pad-x);
+    --sto-content-header-pad-end: 8px;
     /* 省区 AppChrome：折叠钮距窗口顶 12px；行高 = inset + 32px 按钮 */
     --sto-chrome-toggle-inset-top: 12px;
     --sto-chrome-h: calc(var(--sto-chrome-toggle-inset-top) + 32px);
@@ -162,6 +167,7 @@
     --sto-accent-soft: hsl(32 45% 14%);
     --sto-brand-6: #ff6f00;
     --sto-header-h: 52px;
+    --sto-content-header-h: 52px;
     --sto-chrome-toggle-inset-top: 12px;
     --sto-chrome-h: calc(var(--sto-chrome-toggle-inset-top) + 32px);
     --sto-shell-card-gap: 8px;
@@ -211,6 +217,16 @@
   /** 省区 AppShell：无整行顶栏，全高由壳 + 卡片承担 */
   [data-app-shell='provincial'] {
     --sto-header-h: 0px;
+    --sto-content-header-h: 52px;
+  }
+
+  /**
+   * 侧栏收起时主卡片顶到窗口左缘：ContentHeader + 三栏 split row 共用 pad-start，
+   * 与侧栏列 SidebarProvincialChromeRow 的 pl-20 一致，避免红绿灯遮住展开钮与会话标题。
+   */
+  [data-app-shell='provincial'][data-sidebar-collapsed='true'][data-platform='darwin'] {
+    --sto-chrome-traffic-light-pad: 5rem;
+    --sto-content-header-pad-start: max(var(--sto-content-pad-x), var(--sto-chrome-traffic-light-pad));
   }
 
   ::selection {

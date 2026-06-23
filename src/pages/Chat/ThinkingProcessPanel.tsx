@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronDown, ChevronRight, Loader2, MessageCircle, Wrench } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, MessageCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
 import { useSkillsStore } from '@/stores/skills';
-import { maskSensitiveToolInputForDisplay, type ThinkingTimelineItem } from './message-utils';
+import { type ThinkingTimelineItem } from './message-utils';
 
 /** 思考条目正文区最大高度 ≈ 4 行（02-styles 代码块折叠规范，text-sm leading-5） */
 const THINKING_ENTRY_MAX_HEIGHT_CLASS = 'max-h-20';
@@ -229,6 +230,8 @@ export function ThinkingProcessPanel({
   const hasPanelBody =
     mergedTimeline.length > 0 || isConnecting || isProcessing || !!runningTool;
 
+  const headerLabel = collapsedSummary ?? t('streaming.thinkingProcessTitle');
+
   if (!hasPanelBody && !isStreaming) return null;
 
   return (
@@ -237,25 +240,15 @@ export function ThinkingProcessPanel({
         type="button"
         className={cn(
           'flex w-full items-center gap-1.5 py-1 text-muted-foreground transition-colors duration-150 hover:text-foreground',
-          !expanded && collapsedSummary && 'text-muted-foreground',
         )}
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
       >
-        {!expanded && collapsedSummary ? (
-          <>
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-            <span className="truncate font-normal">{collapsedSummary}</span>
-          </>
+        <span className="truncate font-normal">{headerLabel}</span>
+        {expanded ? (
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
         ) : (
-          <>
-            <span className="font-normal">{t('streaming.thinkingProcessTitle')}</span>
-            {expanded ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-            )}
-          </>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
         )}
       </button>
 
@@ -284,7 +277,7 @@ export function ThinkingProcessPanel({
 
             const key = toolRowKey(item);
             return (
-              <ToolCallRow
+              <ChatToolCallCard
                 key={key}
                 name={resolveSkillDisplayName(item.name, skills)}
                 input={item.input}
@@ -314,59 +307,6 @@ export function ThinkingProcessPanel({
           ) : null}
         </div>
       )}
-    </div>
-  );
-}
-
-function ToolCallRow({
-  name,
-  input,
-  status,
-}: {
-  name: string;
-  input: unknown;
-  status?: StreamingTool['status'];
-}) {
-  const { t } = useTranslation('chat');
-  const [open, setOpen] = useState(false);
-  const isRunning = status === 'running';
-  const hasInput = input != null;
-  const displayName = name.trim() || '…';
-
-  return (
-    <div className="space-y-1 border-l-2 border-border pl-3">
-      <button
-        type="button"
-        className="flex w-full items-center gap-1.5 text-left text-muted-foreground transition-colors duration-150 hover:text-foreground"
-        onClick={() => hasInput && setOpen((v) => !v)}
-        aria-expanded={open}
-        disabled={!hasInput}
-      >
-        {hasInput ? (
-          open ? (
-            <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-          )
-        ) : (
-          <span className="inline-block h-3.5 w-3.5 shrink-0" aria-hidden />
-        )}
-        <Wrench className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-        {isRunning ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin opacity-70" aria-hidden /> : null}
-        <span className="min-w-0 truncate font-normal">
-          {t('streaming.invokeToolLabel', { toolName: displayName })}
-        </span>
-      </button>
-      {open && hasInput ? (
-        <pre
-          className={cn(
-            THINKING_ENTRY_MAX_HEIGHT_CLASS,
-            'overflow-y-auto rounded-md border border-border bg-muted/40 px-2 py-2 text-xs leading-5 text-muted-foreground',
-          )}
-        >
-          {maskSensitiveToolInputForDisplay(input)}
-        </pre>
-      ) : null}
     </div>
   );
 }

@@ -32,7 +32,9 @@
         "searchPrev": "Previous result",
         "searchNext": "Next result",
         "searchClear": "Clear search",
-        "searchClose": "Close search"
+        "searchClose": "Close search",
+        "openPreview": "Open preview",
+        "closeSession": "Close current session"
     },
     "composer": {
         "attachFiles": "Attach files",

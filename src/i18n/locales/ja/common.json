@@ -29,8 +29,11 @@
         "collapseHistoryPanel": "履歴パネルを閉じる",
         "subscriptions": "サブスクリプション",
         "taskList": "タスク一覧",
+        "recent": "最近",
         "taskHqReconciliation": "週次会議資料",
         "toggleTaskListSection": "タスク一覧を展開または折りたたむ",
+        "expandAllTaskList": "すべて表示",
+        "toggleRecentSection": "最近の会話を展開または折りたたむ",
         "toggleWorkspaceSection": "ワークスペースを展開または折りたたむ",
         "compactAccountMenu": "アカウントと設定"
     },

@@ -4,7 +4,7 @@
  * with markdown, thinking sections, images, and tool cards.
  */
 import { useState, useCallback, useEffect, useMemo, memo } from 'react';
-import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, CircleCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -12,12 +12,13 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
 import { cn } from '@/lib/utils';
-import { assistantChatCardBg, assistantChatCardBgStreaming } from '@/lib/surfaces';
+import { assistantChatCardBg, assistantChatCardBgStreaming, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
-import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm, useLocalPathExistence, resolvePreviewCandidate, unwrapPreviewablePathMarkdown } from './message-utils';
+import { extractText, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm, useLocalPathExistence, resolvePreviewCandidate, unwrapPreviewablePathMarkdown, findWorkflowParamsSummaryAfterIntro } from './message-utils';
 import {
   ensureWorkflowParameterFormHandler,
   isWorkflowFormInjectionAllowed,
@@ -38,6 +39,16 @@ import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard
 import { PARAMETER_FORM_USE_FLOAT_DOCK } from '@/components/parameter-form/constants';
 import { submitParameterForm } from '@/components/parameter-form/form-handlers';
 import {
+  isPartialWorkflowGuidanceStreamingText,
+  isWorkflowGuidanceAssistantText,
+  parseWorkflowIntroConfirmStepGroups,
+  parseWorkflowParamsSummaryGroups,
+  isWorkflowParameterIntroText,
+  isWorkflowParamsUserText,
+  isWorkflowParamsSummaryText,
+  splitWorkflowIntroPreamble,
+} from '@/lib/workflow-form-utils';
+import {
   ArtifactProductCard,
   buildArtifactMetaLine,
   formatArtifactFileSize,
@@ -48,37 +59,9 @@ import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessP
 
 const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
 
-/** B3：工作流参数引导文案（buildWorkflowParameterIntroText 产出） */
-function isWorkflowParameterIntroText(content: string): boolean {
-  return /即将运行工作流「/.test(content) || /请在下方.*表单/.test(content);
-}
-
-/** B4：用户侧参数确认摘要（workflow-local-turn / buildWorkflowValuesSummary） */
-function isWorkflowParamsUserText(content: string): boolean {
-  const trimmed = content.trim();
-  return (
-    trimmed === '参数已确认'
-    || trimmed.startsWith('已确认以下参数')
-    || /^启动工作流「/.test(trimmed)
-  );
-}
-
 /** B4：助手侧启动 boilerplate，折叠行替代长文案 */
 function isWorkflowStartAssistantBoilerplate(content: string): boolean {
   return /^参数已确认[，,].*工作流已在后台启动/.test(content.trim());
-}
-
-function parseWorkflowParamsDetailLines(content: string): { label: string; value: string }[] {
-  const items: { label: string; value: string }[] = [];
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.replace(/^[\s\-·]+/, '').trim();
-    if (!line) continue;
-    const match = line.match(/^([^：:]+)[：:]\s*(.+)$/);
-    if (match) {
-      items.push({ label: match[1].trim(), value: match[2].trim() });
-    }
-  }
-  return items;
 }
 
 interface ChatMessageProps {
@@ -96,7 +79,6 @@ interface ChatMessageProps {
     summary?: string;
   }>;
   onPreviewFile?: (file: AttachedFileMeta) => void;
-  onViewWorkflow?: (workflowId: string) => void;
   onEditMessage?: (text: string) => void;
   /** Used when rendered inside AssistantTurnMessage */
   hideAvatar?: boolean;
@@ -120,7 +102,6 @@ export const ChatMessage = memo(function ChatMessage({
   isStreaming = false,
   streamingTools = [],
   onPreviewFile,
-  onViewWorkflow,
   onEditMessage,
   hideAvatar = false,
   hideThinkingPanel = false,
@@ -143,10 +124,21 @@ export const ChatMessage = memo(function ChatMessage({
   const visibleTools = showThinking ? [] : tools;
 
   const attachedFiles = message._attachedFiles || [];
+  const sessionMessages = useChatStore((s) => s.messages);
+  const messageIndex = useMemo(
+    () => (message.id ? sessionMessages.findIndex((m) => m.id === message.id) : -1),
+    [message.id, sessionMessages],
+  );
+  const introParamsFallbackText = useMemo(() => {
+    if (isUser || !isWorkflowParameterIntroText(text) || isWorkflowParamsSummaryText(text)) {
+      return null;
+    }
+    if (messageIndex < 0) return null;
+    return findWorkflowParamsSummaryAfterIntro(sessionMessages, messageIndex);
+  }, [isUser, text, messageIndex, sessionMessages]);
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
   const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
   const sessionKey = useChatStore((s) => s.currentSessionKey);
-  const sessionMessages = useChatStore((s) => s.messages);
   const workflowCard = !isUser ? extractWorkflowCard(message) : null;
   const parameterForm = useMemo(() => {
     if (isUser) return null;
@@ -262,8 +254,42 @@ export const ChatMessage = memo(function ChatMessage({
   const hasStreamingToolStatus = isStreaming && streamingTools.length > 0;
   const isWorkflowThinkingContext =
     pendingWorkflow !== null || parameterForm !== null || workflowCard !== null;
-  const isWorkflowOverviewBubble =
-    !isUser && (parameterForm !== null || (hasText && isWorkflowParameterIntroText(text)));
+  const isAssistantParamsSummary = !isUser && isWorkflowParamsSummaryText(text);
+  const isAssistantWorkflowGuidance =
+    !isUser && !isAssistantParamsSummary && isWorkflowGuidanceAssistantText(text);
+  const hasWorkflowSchemaToolStream = streamingTools.some((tool) =>
+    /get_workflow_schema|workflow_schema|search_workflow/i.test(tool.name),
+  );
+  /** 工作流引导流式生成：走描边参数卡，不用 MessageBubble 脉冲/投影壳 */
+  const isWorkflowIntroStreaming =
+    isStreaming
+    && !isUser
+    && (
+      pendingWorkflow !== null
+      || parameterForm !== null
+      || isAssistantWorkflowGuidance
+      || isPartialWorkflowGuidanceStreamingText(text)
+      || hasWorkflowSchemaToolStream
+    );
+  const showAssistantParamsPanel =
+    isAssistantParamsSummary
+    || isAssistantWorkflowGuidance
+    || isWorkflowIntroStreaming
+    || (!isUser && introParamsFallbackText !== null);
+  const assistantParamsPanelText = isAssistantParamsSummary
+    ? text
+    : isAssistantWorkflowGuidance || isWorkflowIntroStreaming
+      ? text
+      : (introParamsFallbackText ?? '');
+  const workflowGuidanceStreamingShell =
+    !isUser
+    && isStreaming
+    && (
+      pendingWorkflow !== null
+      || parameterForm !== null
+      || isAssistantWorkflowGuidance
+      || hasWorkflowSchemaToolStream
+    );
   const showAssistantParamsFold =
     !isUser && workflowCard !== null && /参数已确认/.test(text);
   const assistantBubbleText =
@@ -281,6 +307,7 @@ export const ChatMessage = memo(function ChatMessage({
     && !hasStreamingToolStatus
     && !parameterForm
     && !showAssistantParamsFold
+    && !showAssistantParamsPanel
   ) {
     return null;
   }
@@ -389,7 +416,7 @@ export const ChatMessage = memo(function ChatMessage({
         'rounded-[1.6rem] transition-all duration-200',
         isSearchMatch && 'ring-1 ring-primary/25 ring-offset-2 ring-offset-background',
         isSearchActive && 'ring-2 ring-primary/55 bg-primary/[0.04] shadow-[0_0_0_4px_rgba(255,111,0,0.08)]',
-        thinkingOutsideAvatar ? 'flex w-full flex-col gap-2' : isUser ? 'group flex flex-row-reverse gap-3' : 'group w-full',
+        thinkingOutsideAvatar ? 'flex w-full flex-col gap-2' : isUser && showUserParamsFold ? 'group w-full' : isUser ? 'group flex flex-row-reverse gap-3' : 'group w-full',
       )}
     >
       {thinkingOutsideAvatar ? (
@@ -405,11 +432,12 @@ export const ChatMessage = memo(function ChatMessage({
       <div
         className={cn(
           'flex flex-col w-full min-w-0 space-y-2',
-          isUser && 'max-w-[80%]',
-          isUser ? 'items-end' : 'items-start',
+          isUser && !showUserParamsFold && 'max-w-[80%]',
+          isUser && showUserParamsFold && 'max-w-none items-stretch',
+          isUser && !showUserParamsFold ? 'items-end' : 'items-start',
         )}
       >
-        {isStreaming && !isUser && streamingTools.length > 0 && !showThinking && (
+        {isStreaming && !isUser && streamingTools.length > 0 && !showThinking && !hideThinkingPanel && (
           <ToolStatusBar tools={streamingTools} />
         )}
 
@@ -424,9 +452,9 @@ export const ChatMessage = memo(function ChatMessage({
 
         {/* Tool use cards */}
         {visibleTools.length > 0 && (
-          <div className="space-y-1">
+          <div className="space-y-2">
             {visibleTools.map((tool, i) => (
-              <ToolCard key={tool.id || i} name={tool.name} input={tool.input} />
+              <ChatToolCallCard key={tool.id || i} name={tool.name} input={tool.input} />
             ))}
           </div>
         )}
@@ -484,13 +512,21 @@ export const ChatMessage = memo(function ChatMessage({
           </div>
         )}
 
-        {/* B4：用户参数确认折叠卡 */}
+        {/* B4：分组参数（助手 A / 旧数据 fallback，无标题无白底） */}
+        {showAssistantParamsPanel ? (
+          <ParamsConfirmedParamsOnlyPanel
+            text={assistantParamsPanelText}
+            isStreaming={isWorkflowIntroStreaming}
+          />
+        ) : null}
+
+        {/* B4：用户参数摘要 fallback（无 intro 时可见，无标题） */}
         {showUserParamsFold ? (
-          <ParamsConfirmedFoldCard text={text} />
+          <ParamsConfirmedParamsOnlyPanel text={text} />
         ) : null}
 
         {/* Main text bubble */}
-        {!showUserParamsFold && (isUser ? hasText : showAssistantTextBubble) ? (
+        {!showUserParamsFold && !showAssistantParamsPanel && (isUser ? hasText : showAssistantTextBubble) ? (
           <MessageBubble
             text={isUser ? text : assistantBubbleText}
             isUser={isUser}
@@ -499,22 +535,28 @@ export const ChatMessage = memo(function ChatMessage({
             completedLabel={t('streaming.completedLabel')}
             completedBadge={t('streaming.completedBadge')}
             onPreviewFile={onPreviewFile}
-            assistantVariant={isWorkflowOverviewBubble ? 'workflowOverview' : 'default'}
+            workflowGuidanceShell={workflowGuidanceStreamingShell}
           />
         ) : null}
 
-        {/* B4：助手侧「参数已确认」折叠行（工作流卡前） */}
-        {showAssistantParamsFold ? <ParamsConfirmedFoldRow /> : null}
+        {/* B4：助手侧「参数已确认」折叠块（图一：标题 + 左竖线文案 + 工作流卡） */}
+        {showAssistantParamsFold && workflowCard ? (
+          <ParamsConfirmedFoldRow
+            statusMessage={text.trim()}
+            runId={workflowCard.runId}
+            templateName={workflowCard.templateName}
+            onPreviewArtifact={onPreviewFile}
+          />
+        ) : null}
 
-        {/* Workflow execution card */}
-        {workflowCard && (
+        {/* Workflow execution card（非参数已确认场景单独展示） */}
+        {workflowCard && !showAssistantParamsFold ? (
           <WorkflowCard
             runId={workflowCard.runId}
             templateName={workflowCard.templateName}
             onPreviewArtifact={onPreviewFile}
-            onViewWorkflow={onViewWorkflow}
           />
-        )}
+        ) : null}
 
         {/* B3：表单待提交等待指示（选项卡本体样式属任务二） */}
         {parameterForm ? <AwaitingReplyIndicator className="px-0.5" /> : null}
@@ -797,6 +839,7 @@ function MessageBubble({
   completedBadge,
   onPreviewFile,
   assistantVariant = 'default',
+  workflowGuidanceShell = false,
 }: {
   text: string;
   isUser: boolean;
@@ -807,8 +850,11 @@ function MessageBubble({
   onPreviewFile?: (file: AttachedFileMeta) => void;
   /** B3 工作流就绪概述白卡 */
   assistantVariant?: 'default' | 'workflowOverview';
+  /** 工作流引导流式：与数据来源同款的纯描边壳，无脉冲/投影底栏 */
+  workflowGuidanceShell?: boolean;
 }) {
-  const showStreamingChrome = isStreaming && !isUser;
+  const showStreamingChrome = isStreaming && !isUser && !workflowGuidanceShell;
+  const showWorkflowGuidanceStreaming = isStreaming && !isUser && workflowGuidanceShell;
   const workflowCardStates = useChatStore((s) => s.workflowCardStates);
   const markdownSource = useMemo(
     () => (onPreviewFile ? preprocessTextForPreviewLinks(text) : text),
@@ -840,22 +886,26 @@ function MessageBubble({
         isUser
           ? userMessageBubbleSurfaceClass
           : cn(
-              'rounded-2xl px-4 py-3',
+              showWorkflowGuidanceStreaming
+                ? cn(workflowParamsSummaryCardClass, 'text-[13px] leading-5 text-foreground')
+                : 'rounded-2xl px-4 py-3',
               showStreamingChrome
                 ? cn(
                     'border border-border text-foreground shadow-[0_0_0_1px_rgba(15,23,42,0.04),0_18px_34px_rgba(15,23,42,0.08)]',
                     'dark:border-border dark:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_14px_32px_rgba(0,0,0,0.45)]',
                     assistantChatCardBgStreaming,
                   )
-                : assistantVariant === 'workflowOverview'
-                  ? cn(
-                      'w-full border border-border bg-card px-4 py-3 text-foreground shadow-soft',
-                      'dark:border-border dark:bg-card',
-                    )
-                  : cn(
-                      'w-full text-foreground',
-                      assistantChatCardBg,
-                    ),
+                : showWorkflowGuidanceStreaming
+                  ? null
+                  : assistantVariant === 'workflowOverview'
+                    ? cn(
+                        'w-full border border-border bg-card px-4 py-3 text-foreground shadow-soft',
+                        'dark:border-border dark:bg-card',
+                      )
+                    : cn(
+                        'w-full text-foreground',
+                        assistantChatCardBg,
+                      ),
             ),
       )}
     >
@@ -990,9 +1040,19 @@ function MessageBubble({
           >
             {markdownSource}
           </ReactMarkdown>
-          {isStreaming && (
+          {showWorkflowGuidanceStreaming ? (
+            <div className={cn(workflowParamsSummaryGroupClass, 'mt-2')}>
+              <p className={workflowParamsSummaryGroupTitleClass}>
+                <Loader2
+                  className="h-3.5 w-3.5 shrink-0 animate-spin text-primary"
+                  aria-hidden
+                />
+              </p>
+            </div>
+          ) : null}
+          {isStreaming && !workflowGuidanceShell ? (
             <StreamingCursor />
-          )}
+          ) : null}
         </div>
       )}
 
@@ -1345,99 +1405,197 @@ function ImageLightbox({
   );
 }
 
-// ── Tool Card ───────────────────────────────────────────────────
+// ── 参数已确认折叠面板（图二：按步骤分组、无白底、与对话流同宽）──
 
-/** B4：助手侧「参数已确认」折叠行（与思考折叠摘要同款视觉） */
-function ParamsConfirmedFoldRow() {
-  const { t } = useTranslation('chat');
-  const [expanded, setExpanded] = useState(false);
+interface ParamsConfirmedHeaderProps {
+  /** i18n 标题，默认「参数已确认」 */
+  label: string;
+  expanded: boolean;
+  onToggle: () => void;
+}
+
+function ParamsConfirmedHeader({
+  label,
+  expanded,
+  onToggle,
+}: ParamsConfirmedHeaderProps) {
+  return (
+    <button
+      type="button"
+      className="flex items-center gap-1 text-[13px] leading-5 text-muted-foreground transition-colors duration-150 hover:text-foreground"
+      onClick={onToggle}
+      aria-expanded={expanded}
+    >
+      <CircleCheck className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+      <span className="truncate font-normal">{label}</span>
+      {expanded ? (
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      ) : (
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      )}
+    </button>
+  );
+}
+
+interface ParamsConfirmedGroupedBodyProps {
+  groups: Array<{ title: string; content: string }>;
+  fallbackText: string;
+  /** 流式生成中：首组标题左侧展示 spinner（替代 MessageBubble 脉冲条） */
+  isStreaming?: boolean;
+}
+
+/** 展开区：按表单页分组，分类标题 + 内容（MasterGo 148:046134） */
+function ParamsConfirmedGroupedBody({
+  groups,
+  fallbackText,
+  isStreaming = false,
+}: ParamsConfirmedGroupedBodyProps) {
+  if (groups.length === 0) {
+    return (
+      <p className={workflowParamsSummaryGroupContentClass}>{fallbackText}</p>
+    );
+  }
 
   return (
-    <div className="w-full rounded-lg border border-border bg-[#F4F5F7] text-[13px] leading-[18px] dark:bg-muted">
-      <button
-        type="button"
-        className="flex w-full items-center gap-1.5 px-3 py-2.5 text-muted-foreground transition-colors duration-150 hover:text-foreground"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-      >
-        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
-        {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-        )}
-        <span className="truncate font-normal">{t('streaming.paramsConfirmedLabel')}</span>
-      </button>
+    <div className={workflowParamsSummaryGroupsClass}>
+      {groups.map((group, index) => (
+        <div key={`${group.title}-${index}`} className={workflowParamsSummaryGroupClass}>
+          <p className={workflowParamsSummaryGroupTitleClass}>
+            {isStreaming && index === 0 ? (
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                <Loader2
+                  className="h-3.5 w-3.5 shrink-0 animate-spin text-primary"
+                  aria-hidden
+                />
+                <span className="min-w-0 truncate">{group.title}</span>
+              </span>
+            ) : (
+              group.title
+            )}
+          </p>
+          {group.content ? (
+            <p className={workflowParamsSummaryGroupContentClass}>{group.content}</p>
+          ) : null}
+        </div>
+      ))}
     </div>
   );
 }
 
-/** B4：用户侧参数回填只读卡（折叠展示 buildWorkflowValuesSummary 文本） */
-function ParamsConfirmedFoldCard({ text }: { text: string }) {
+interface ParamsConfirmedFoldRowProps {
+  /** 助手 boilerplate 全文（工作流已在后台启动…） */
+  statusMessage: string;
+  runId: string;
+  templateName: string;
+  onPreviewArtifact?: (file: AttachedFileMeta) => void;
+}
+
+/**
+ * B4：助手侧「参数已确认」折叠块（MasterGo 148:049849）
+ * 扁平标题行 + 左竖线展开区（状态文案 + 工作流执行卡），无外层描边壳。
+ */
+function ParamsConfirmedFoldRow({
+  statusMessage,
+  runId,
+  templateName,
+  onPreviewArtifact,
+}: ParamsConfirmedFoldRowProps) {
   const { t } = useTranslation('chat');
-  const [expanded, setExpanded] = useState(false);
-  const detailLines = useMemo(() => parseWorkflowParamsDetailLines(text), [text]);
+  const [expanded, setExpanded] = useState(true);
+  const showStatusLine =
+    statusMessage.length > 0
+    && (isWorkflowStartAssistantBoilerplate(statusMessage)
+      || !/^参数已确认$/.test(statusMessage.trim()));
 
   return (
-    <div className="w-full max-w-[85%] rounded-lg border border-border bg-[#F4F5F7] text-[13px] leading-[18px] dark:bg-muted">
-      <button
-        type="button"
-        className="flex w-full items-center gap-1.5 px-3 py-2.5 text-muted-foreground transition-colors duration-150 hover:text-foreground"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-      >
-        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
-        {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-        )}
-        <span className="truncate font-normal">{t('streaming.paramsConfirmedLabel')}</span>
-      </button>
+    <div className="flex w-full flex-col gap-1.5 text-[13px] leading-5">
+      <ParamsConfirmedHeader
+        label={t('streaming.paramsConfirmedLabel')}
+        expanded={expanded}
+        onToggle={() => setExpanded((v) => !v)}
+      />
       {expanded ? (
-        <div className="space-y-2 border-t border-[#F0F1F2] px-3 pb-3 pt-2.5 dark:border-border">
-          {detailLines.length > 0 ? (
-            detailLines.map((item) => (
-              <div
-                key={`${item.label}-${item.value}`}
-                className="rounded-lg border border-border bg-card px-3 py-2.5"
-              >
-                <p className="text-sm font-semibold text-foreground">{item.label}</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{item.value}</p>
-              </div>
-            ))
-          ) : (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{text}</p>
-          )}
+        <div className="relative pl-5">
+          <div
+            className="absolute bottom-0 left-[7px] top-0 w-px rounded-[0.5px] bg-border"
+            aria-hidden
+          />
+          <div className="flex flex-col gap-2">
+            {showStatusLine ? (
+              <p className="font-normal text-muted-foreground">{statusMessage}</p>
+            ) : null}
+            <WorkflowCard
+              runId={runId}
+              templateName={templateName}
+              layout="inline"
+              onPreviewArtifact={onPreviewArtifact}
+            />
+          </div>
         </div>
       ) : null}
     </div>
   );
 }
 
-function ToolCard({ name, input }: { name: string; input: unknown }) {
-  const [expanded, setExpanded] = useState(false);
+interface ParamsConfirmedParamsOnlyPanelProps {
+  text: string;
+  /** 工作流 intro 流式中：首组标题左侧 spinner */
+  isStreaming?: boolean;
+}
+
+/** 分组参数摘要（MasterGo 148:046134：圆角描边卡片，无「参数已确认」标题） */
+function ParamsConfirmedParamsOnlyPanel({
+  text,
+  isStreaming = false,
+}: ParamsConfirmedParamsOnlyPanelProps) {
+  const { preamble, groups, isIntroLayout } = useMemo(() => {
+    if (isWorkflowParamsSummaryText(text)) {
+      return {
+        preamble: '',
+        groups: parseWorkflowParamsSummaryGroups(text),
+        isIntroLayout: false,
+      };
+    }
+    if (isWorkflowGuidanceAssistantText(text) || isPartialWorkflowGuidanceStreamingText(text)) {
+      const { preamble: introPreamble, numberedBody } = splitWorkflowIntroPreamble(text);
+      const introGroups = parseWorkflowIntroConfirmStepGroups(
+        numberedBody.length > 0 ? numberedBody : text,
+      );
+      if (introGroups.length > 0 || introPreamble.length > 0) {
+        return {
+          preamble: introPreamble,
+          groups: introGroups,
+          isIntroLayout: true,
+        };
+      }
+    }
+    return {
+      preamble: '',
+      groups: parseWorkflowParamsSummaryGroups(text),
+      isIntroLayout: false,
+    };
+  }, [text]);
 
   return (
-    <div
-      className={cn(
-        'rounded-2xl border border-border text-[14px] shadow-[0_10px_24px_rgba(15,23,42,0.06)]',
-        assistantChatCardBg,
-      )}
-    >
-      <button
-        className="flex w-full items-center gap-2 px-3 py-2 text-muted-foreground transition-colors hover:text-foreground"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-        <Wrench className="h-3 w-3 shrink-0 opacity-60" />
-        <span className="font-mono text-xs">{name}</span>
-        {expanded ? <ChevronDown className="h-3 w-3 ml-auto" /> : <ChevronRight className="h-3 w-3 ml-auto" />}
-      </button>
-      {expanded && input != null && (
-        <pre className="overflow-x-auto px-3 pb-3 text-xs text-muted-foreground">
-          {typeof input === 'string' ? input : JSON.stringify(input, null, 2) as string}
-        </pre>
+    <div className={cn(workflowParamsSummaryCardClass, 'text-[13px] leading-5')}>
+      {isIntroLayout && preamble ? (
+        <p className={cn(workflowParamsSummaryGroupTitleClass, 'mb-2')}>{preamble}</p>
+      ) : null}
+      {isStreaming && groups.length === 0 && isIntroLayout ? (
+        <div className={workflowParamsSummaryGroupClass}>
+          <p className={workflowParamsSummaryGroupTitleClass}>
+            <Loader2
+              className="h-3.5 w-3.5 shrink-0 animate-spin text-primary"
+              aria-hidden
+            />
+          </p>
+        </div>
+      ) : (
+        <ParamsConfirmedGroupedBody
+          groups={groups}
+          fallbackText={isIntroLayout && preamble ? '' : text}
+          isStreaming={isStreaming}
+        />
       )}
     </div>
   );

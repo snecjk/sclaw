@@ -22,6 +22,7 @@ import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
+import { ChatPreviewHeaderTabs } from '@/pages/Chat/ChatPreviewHeaderTabs';
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
@@ -35,7 +36,6 @@ import {
   STO_PREVIEW_SPLIT_MAX,
   STO_PREVIEW_SPLIT_MIN,
   stoParameterFormDockLayout,
-  stoSplitPreviewCardClass,
   stoSplitPreviewPaneClass,
   stoSplitResizerActiveClass,
   stoSplitResizerClass,
@@ -43,6 +43,7 @@ import {
   stoTaskSubitemChatCanvasBg,
 } from '@/lib/surfaces';
 import { useStoTaskSubitemChatSend } from './use-sto-task-subitem-chat-send';
+import { useContentHeader } from '@/components/layout/content-header-context';
 
 /* sessionStorage one-shot + gateway-gated auto-send intentionally use setState in effects */
  
@@ -289,23 +290,47 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
 
   const {
     showPreviewPanel,
-    setShowPreviewPanel,
     activePreviewFilePath,
     setActivePreviewFilePath,
-    previewActiveTab,
-    setPreviewActiveTab,
     previewableFiles,
     canShowPreviewPanel,
     openArtifactPreview,
-    openWorkflowPreview,
+    openPreviewPanel,
     closePreviewPanel,
     dismissPreviewFile,
-    showWorkflowTab,
+    showEditWorkflow,
     workflowId: sessionWorkflowId,
-    workflowDetail,
-    workflowLoading,
-    workflowError,
-  } = useChatPreviewPanel(allMessagesForPreview);
+  } = useChatPreviewPanel(allMessagesForPreview, sessionKey);
+
+  const previewHeaderTabs = useMemo(
+    () => (
+      showPreviewPanel && (previewableFiles.length > 0 || showEditWorkflow) ? (
+        <ChatPreviewHeaderTabs
+          files={previewableFiles}
+          activeFilePath={activePreviewFilePath}
+          onSelectFile={setActivePreviewFilePath}
+          onDismissFile={dismissPreviewFile}
+          showEditWorkflow={showEditWorkflow}
+          workflowId={sessionWorkflowId}
+        />
+      ) : null
+    ),
+    [
+      showPreviewPanel,
+      previewableFiles,
+      activePreviewFilePath,
+      setActivePreviewFilePath,
+      dismissPreviewFile,
+      showEditWorkflow,
+      sessionWorkflowId,
+    ],
+  );
+
+  useContentHeader({
+    title: t('common:sidebar.taskList'),
+    previewTabs: previewHeaderTabs,
+    isSplitLayout: canShowPreviewPanel && showPreviewPanel,
+  });
 
   const isSplitChatLayout = canShowPreviewPanel && showPreviewPanel;
 
@@ -476,7 +501,6 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
                         precedingUserMessage={item.precedingUserMessage}
                         showThinking={showThinking}
                         onPreviewFile={handlePreviewFile}
-                        onViewWorkflow={openWorkflowPreview}
                       />
                     );
                   }
@@ -486,7 +510,6 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
                       message={item.message}
                       showThinking={showThinking}
                       onPreviewFile={handlePreviewFile}
-                      onViewWorkflow={openWorkflowPreview}
                     />
                   );
                 })}
@@ -499,7 +522,6 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
                     showThinking={showThinking}
                     activeStream={activeTurn.activeStream}
                     onPreviewFile={handlePreviewFile}
-                    onViewWorkflow={openWorkflowPreview}
                   />
                 ) : null}
               </>
@@ -582,42 +604,39 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
             exit={{ opacity: 0, x: 40 }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
             style={{ width: `${previewPanelPercent}%` }}
-            className={cn(stoSplitPreviewPaneClass, stoSplitPreviewCardClass)}
+            className={stoSplitPreviewPaneClass}
           >
             <ChatPreviewPanel
               files={previewableFiles}
               activeFilePath={activePreviewFilePath}
-              onSelectFile={setActivePreviewFilePath}
-              onClose={closePreviewPanel}
-              onDismissFile={dismissPreviewFile}
               className="h-full w-full"
-              showWorkflowTab={showWorkflowTab}
-              workflowId={sessionWorkflowId}
-              workflowDetail={workflowDetail}
-              workflowLoading={workflowLoading}
-              workflowError={workflowError}
-              activeTab={previewActiveTab}
-              onActiveTabChange={setPreviewActiveTab}
             />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Floating toggle button when panel is hidden but files exist */}
-      {canShowPreviewPanel && !showPreviewPanel && (
+      {/* 无 ContentHeader 时：浮动按钮切换预览开/关 */}
+      {canShowPreviewPanel ? (
         <button
           type="button"
-          onClick={() => setShowPreviewPanel(true)}
+          onClick={() => {
+            if (showPreviewPanel) closePreviewPanel();
+            else openPreviewPanel();
+          }}
           className="absolute right-4 top-4 z-20 inline-flex h-8 items-center gap-1.5 rounded-full border border-primary/15 bg-white/60 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white/80 dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
         >
-          <span>{showWorkflowTab ? '预览' : '预览产物'}</span>
-          {previewableFiles.length > 0 && (
+          <span>
+            {showPreviewPanel
+              ? t('chat:preview.collapsePanel')
+              : t('chat:toolbar.openPreview')}
+          </span>
+          {!showPreviewPanel && previewableFiles.length > 0 ? (
             <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] text-primary">
               {previewableFiles.length}
             </span>
-          )}
+          ) : null}
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

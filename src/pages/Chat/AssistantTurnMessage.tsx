@@ -7,7 +7,14 @@ import {
   extractDingTalkSentPreviews,
   stripEchoedDingTalkSentBodiesFromAssistantReply,
 } from '../../../shared/dingtalk-sent-display';
-import { extractAtMentionDisplayNames, extractRawMessageText, extractText, extractWorkflowCard, extractParameterForm } from './message-utils';
+import {
+  extractAtMentionDisplayNames,
+  extractRawMessageText,
+  extractText,
+  extractWorkflowCard,
+  extractParameterForm,
+  isWorkflowPreambleAssistantMessage,
+} from './message-utils';
 import { DingTalkSentPreview } from './DingTalkSentPreview';
 import { ThinkingProcessPanel, type ConnectingLabelKey } from './ThinkingProcessPanel';
 
@@ -37,7 +44,6 @@ interface AssistantTurnMessageProps {
   activeMessageId?: string | null;
   activeStream?: ActiveTurnStream | null;
   onPreviewFile?: (file: AttachedFileMeta) => void;
-  onViewWorkflow?: (workflowId: string) => void;
   onEditMessage?: (text: string) => void;
 }
 
@@ -50,7 +56,6 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   activeMessageId = null,
   activeStream = null,
   onPreviewFile,
-  onViewWorkflow,
   onEditMessage,
 }: AssistantTurnMessageProps) {
   const streamSources = useMemo(() => {
@@ -103,6 +108,21 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     return fromHistory;
   }, [turnMessages, activeStream]);
 
+  /** 分组参数 intro 等前置块（与 pickAssistantReplyMessage 选中的执行卡消息分开展示） */
+  const preambleMessages = useMemo(() => {
+    if (!replyMessage) return [];
+    if (isWorkflowPreambleAssistantMessage(replyMessage)) return [];
+
+    const candidates = turnMessages.filter((msg) => {
+      if (msg.id && replyMessage.id && msg.id === replyMessage.id) return false;
+      return isWorkflowPreambleAssistantMessage(msg);
+    });
+    if (candidates.length <= 1) return candidates;
+
+    // 流式阶段可能连续追加多条 intro/摘要，仅保留最后一条 preamble
+    return [candidates[candidates.length - 1]];
+  }, [turnMessages, replyMessage]);
+
   const mentionHints = useMemo(() => {
     if (!precedingUserMessage) return [];
     return extractAtMentionDisplayNames(extractText(precedingUserMessage));
@@ -144,7 +164,11 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     ? extractText(replyDisplayMessage).trim().length > 0
     : false;
 
-  if (!showThinkingPanel && !replyDisplayHasText && !hasDingTalkSentPreview) return null;
+  const hasPreambleMessages = preambleMessages.length > 0;
+
+  if (!showThinkingPanel && !replyDisplayHasText && !hasDingTalkSentPreview && !hasPreambleMessages) {
+    return null;
+  }
 
   const thinkingPanelEl = showThinkingPanel ? (
     <ThinkingProcessPanel
@@ -157,26 +181,40 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     />
   ) : null;
 
-  if (replyDisplayHasText && replyDisplayMessage) {
+  if ((replyDisplayHasText && replyDisplayMessage) || hasPreambleMessages) {
     return (
       <div className="group flex w-full flex-col gap-2" data-chat-message-role="assistant">
         {thinkingPanelEl}
         {hasDingTalkSentPreview ? (
           <DingTalkSentPreview previews={dingTalkSentPreviews} />
         ) : null}
-        <ChatMessage
-          message={replyDisplayMessage}
-          showThinking={false}
-          isSearchMatch={!!replyDisplayMessage.id && !!matchedMessageIds?.has(replyDisplayMessage.id)}
-          isSearchActive={!!replyDisplayMessage.id && replyDisplayMessage.id === activeMessageId}
-          isStreaming={isStreaming && replyDisplayHasText}
-          streamingTools={[]}
-          onPreviewFile={onPreviewFile}
-          onViewWorkflow={onViewWorkflow}
-          onEditMessage={onEditMessage}
-          hideAvatar
-          hideThinkingPanel
-        />
+        {preambleMessages.map((preambleMessage) => (
+          <ChatMessage
+            key={preambleMessage.id ?? `preamble-${extractText(preambleMessage).slice(0, 24)}`}
+            message={preambleMessage}
+            showThinking={false}
+            isSearchMatch={!!preambleMessage.id && !!matchedMessageIds?.has(preambleMessage.id)}
+            isSearchActive={!!preambleMessage.id && preambleMessage.id === activeMessageId}
+            onPreviewFile={onPreviewFile}
+            onEditMessage={onEditMessage}
+            hideAvatar
+            hideThinkingPanel
+          />
+        ))}
+        {replyDisplayHasText && replyDisplayMessage ? (
+          <ChatMessage
+            message={replyDisplayMessage}
+            showThinking={false}
+            isSearchMatch={!!replyDisplayMessage.id && !!matchedMessageIds?.has(replyDisplayMessage.id)}
+            isSearchActive={!!replyDisplayMessage.id && replyDisplayMessage.id === activeMessageId}
+            isStreaming={isStreaming && replyDisplayHasText}
+            streamingTools={isStreaming ? streamingTools : []}
+            onPreviewFile={onPreviewFile}
+            onEditMessage={onEditMessage}
+            hideAvatar
+            hideThinkingPanel
+          />
+        ) : null}
       </div>
     );
   }

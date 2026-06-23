@@ -8,7 +8,6 @@ import { ArtifactProductCard, buildArtifactMetaLine } from '@/components/chat/ar
 interface WorkflowCompletionActionsProps {
   runId: string;
   onPreviewArtifact?: (file: AttachedFileMeta) => void;
-  onViewWorkflow?: (workflowId: string) => void;
 }
 
 export function WorkflowCompletionActions({

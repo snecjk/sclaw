@@ -11,8 +11,8 @@ import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
-import { ChatToolbar } from '@/pages/Chat/ChatToolbar';
-import { ChatSearchBar } from '@/pages/Chat/ChatSearchBar';
+import { ChatContentHeaderActions } from '@/pages/Chat/ChatSearchBar';
+import { ChatPreviewHeaderTabs } from '@/pages/Chat/ChatPreviewHeaderTabs';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { cn } from '@/lib/utils';
@@ -22,7 +22,6 @@ import {
   clampPreviewPanelPercent,
   STO_PREVIEW_SPLIT_MAX,
   STO_PREVIEW_SPLIT_MIN,
-  stoSplitPreviewCardClass,
   stoSplitPreviewPaneClass,
   stoSplitResizerActiveClass,
   stoSplitResizerClass,
@@ -32,6 +31,9 @@ import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import { useContentHeader } from '@/components/layout/content-header-context';
+import { resolveSessionLabel } from '@/lib/session-label';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 
 /**
  * Main-agent conversation thread on the home route (replaces the old `/chat` welcome + messages UI).
@@ -53,15 +55,20 @@ export interface HomeMainConversationProps {
 export function HomeMainConversation({ className, seedText, onSend }: HomeMainConversationProps) {
   const { t } = useTranslation(['chat', 'common']);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const sessions = useChatStore((s) => s.sessions);
+  const sessionLabels = useChatStore((s) => s.sessionLabels);
   const messages = useChatStore((s) => s.messages);
   const loading = useChatStore((s) => s.loading);
   const sending = useChatStore((s) => s.sending);
   const error = useChatStore((s) => s.error);
   const showThinking = useChatStore((s) => s.showThinking);
+  const toggleThinking = useChatStore((s) => s.toggleThinking);
+  const refresh = useChatStore((s) => s.refresh);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const clearError = useChatStore((s) => s.clearError);
+  const switchSession = useChatStore((s) => s.switchSession);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
   useWorkflowCompletion(currentSessionKey);
@@ -240,23 +247,121 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
 
   const {
     showPreviewPanel,
-    setShowPreviewPanel,
     activePreviewFilePath,
     setActivePreviewFilePath,
-    previewActiveTab,
-    setPreviewActiveTab,
     previewableFiles,
     canShowPreviewPanel,
     openArtifactPreview,
-    openWorkflowPreview,
+    openPreviewPanel,
     closePreviewPanel,
     dismissPreviewFile,
-    showWorkflowTab,
+    showEditWorkflow,
     workflowId: sessionWorkflowId,
-    workflowDetail,
-    workflowLoading,
-    workflowError,
-  } = useChatPreviewPanel(allMessagesForPreview);
+  } = useChatPreviewPanel(allMessagesForPreview, currentSessionKey);
+
+  const currentSession = useMemo(
+    () => sessions.find((session) => session.key === currentSessionKey),
+    [sessions, currentSessionKey],
+  );
+
+  const sessionTitle = useMemo(
+    () => resolveSessionLabel({
+      key: currentSessionKey,
+      displayName: currentSession?.displayName,
+      label: currentSession?.label,
+      sessionLabels,
+      t,
+    }),
+    [currentSessionKey, currentSession?.displayName, currentSession?.label, sessionLabels, t],
+  );
+
+  const headerActions = useMemo(
+    () => (
+      <ChatContentHeaderActions
+        canShowPreviewPanel={canShowPreviewPanel}
+        isPreviewPanelOpen={showPreviewPanel}
+        onTogglePreview={() => {
+          if (showPreviewPanel) closePreviewPanel();
+          else openPreviewPanel();
+        }}
+        showThinking={showThinking}
+        onToggleThinking={toggleThinking}
+        loading={loading}
+        onRefresh={refresh}
+        searchProps={{
+          isOpen: isSearchOpen,
+          onToggle: handleSearchToggle,
+          value: searchQuery,
+          onChange: (value) => {
+            setSearchQuery(value);
+            if (!isSearchOpen) {
+              setIsSearchOpen(true);
+            }
+          },
+          onNext: handleSearchNext,
+          onPrevious: handleSearchPrevious,
+          onClear: handleSearchClear,
+          resultCount: searchMatches.length,
+          activeIndex: searchMatches.length > 0 ? activeSearchIndex : 0,
+        }}
+      />
+    ),
+    [
+      canShowPreviewPanel,
+      showPreviewPanel,
+      closePreviewPanel,
+      openPreviewPanel,
+      showThinking,
+      toggleThinking,
+      loading,
+      refresh,
+      isSearchOpen,
+      handleSearchToggle,
+      searchQuery,
+      handleSearchNext,
+      handleSearchPrevious,
+      handleSearchClear,
+      searchMatches.length,
+      activeSearchIndex,
+    ],
+  );
+
+  const previewHeaderTabs = useMemo(
+    () => (
+      showPreviewPanel && (previewableFiles.length > 0 || showEditWorkflow) ? (
+        <ChatPreviewHeaderTabs
+          files={previewableFiles}
+          activeFilePath={activePreviewFilePath}
+          onSelectFile={setActivePreviewFilePath}
+          onDismissFile={dismissPreviewFile}
+          showEditWorkflow={showEditWorkflow}
+          workflowId={sessionWorkflowId}
+        />
+      ) : null
+    ),
+    [
+      showPreviewPanel,
+      previewableFiles,
+      activePreviewFilePath,
+      setActivePreviewFilePath,
+      dismissPreviewFile,
+      showEditWorkflow,
+      sessionWorkflowId,
+    ],
+  );
+
+  const handleCloseSession = useCallback(() => {
+    closePreviewPanel();
+    switchSession(DEFAULT_SESSION_KEY);
+  }, [closePreviewPanel, switchSession]);
+
+  useContentHeader({
+    title: sessionTitle,
+    previewTabs: previewHeaderTabs,
+    actions: headerActions,
+    isSplitLayout: canShowPreviewPanel && showPreviewPanel,
+    onCloseSession: handleCloseSession,
+  });
 
   const isSplitChatLayout = canShowPreviewPanel && showPreviewPanel;
 
@@ -330,34 +435,11 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
 
   return (
     <div className={cn(
-      '-mt-4 relative flex min-h-0 flex-1 flex-row overflow-hidden',
+      'relative flex min-h-0 flex-1 flex-row overflow-hidden',
       isSplitChatLayout && stoSplitRowInsetsClass,
       className,
     )}>
       <ChatConversationColumn variant="home" isSplitLayout={isSplitChatLayout}>
-        {/* Toolbar */}
-        <div className="relative z-10 flex shrink-0 items-center justify-between py-2">
-          <ChatToolbar
-            trailingContent={(
-              <ChatSearchBar
-                isOpen={isSearchOpen}
-                onToggle={handleSearchToggle}
-                value={searchQuery}
-                onChange={(value) => {
-                  setSearchQuery(value);
-                  if (!isSearchOpen) {
-                    setIsSearchOpen(true);
-                  }
-                }}
-                onNext={handleSearchNext}
-                onPrevious={handleSearchPrevious}
-                onClear={handleSearchClear}
-                resultCount={searchMatches.length}
-                activeIndex={searchMatches.length > 0 ? activeSearchIndex : 0}
-              />
-            )}
-          />
-        </div>
       <div
         ref={scrollRef}
         className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-contain py-4 [scrollbar-gutter:stable]"
@@ -381,7 +463,6 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
                       matchedMessageIds={matchedMessageIds}
                       activeMessageId={activeSearchMatch?.id ?? null}
                       onPreviewFile={openArtifactPreview}
-                      onViewWorkflow={openWorkflowPreview}
                     />
                   );
                 }
@@ -393,7 +474,6 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
                     isSearchMatch={!!item.message.id && matchedMessageIds.has(item.message.id)}
                     isSearchActive={!!item.message.id && item.message.id === activeSearchMatch?.id}
                     onPreviewFile={openArtifactPreview}
-                    onViewWorkflow={openWorkflowPreview}
                   />
                 );
               })}
@@ -408,7 +488,6 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
                   activeMessageId={activeSearchMatch?.id ?? null}
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={openArtifactPreview}
-                  onViewWorkflow={openWorkflowPreview}
                 />
               ) : null}
             </>
@@ -497,42 +576,16 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
           exit={{ opacity: 0, x: 40 }}
           transition={{ duration: 0.25, ease: 'easeInOut' }}
           style={{ width: `${previewPanelPercent}%` }}
-          className={cn(stoSplitPreviewPaneClass, stoSplitPreviewCardClass)}
+          className={stoSplitPreviewPaneClass}
         >
           <ChatPreviewPanel
             files={previewableFiles}
             activeFilePath={activePreviewFilePath}
-            onSelectFile={setActivePreviewFilePath}
-            onClose={closePreviewPanel}
-            onDismissFile={dismissPreviewFile}
             className="h-full w-full"
-            showWorkflowTab={showWorkflowTab}
-            workflowId={sessionWorkflowId}
-            workflowDetail={workflowDetail}
-            workflowLoading={workflowLoading}
-            workflowError={workflowError}
-            activeTab={previewActiveTab}
-            onActiveTabChange={setPreviewActiveTab}
           />
         </motion.div>
       )}
     </AnimatePresence>
-
-    {/* Floating toggle button when panel is hidden but files exist */}
-    {canShowPreviewPanel && !showPreviewPanel && (
-      <button
-        type="button"
-        onClick={() => setShowPreviewPanel(true)}
-        className="absolute right-4 top-4 z-20 inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-white/60 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white/80 dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
-      >
-        <span>{showWorkflowTab ? '预览' : '预览产物'}</span>
-        {previewableFiles.length > 0 && (
-          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] text-primary">
-            {previewableFiles.length}
-          </span>
-        )}
-      </button>
-    )}
   </div>
   );
 }

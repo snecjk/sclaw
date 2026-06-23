@@ -185,8 +185,16 @@ export function stoSplitChatPaneContentWrapClass(isSplit: boolean): string {
     : 'flex min-h-0 min-w-0 flex-1 flex-col items-center';
 }
 
-/** 三栏模式外层 row 间距（Chat / 任务子项 / 首页会话共用） */
-export const stoSplitRowInsetsClass = 'gap-2 p-2';
+/**
+ * 三栏模式外层 row（Chat / 任务子项 / 首页会话共用）。
+ * 配合 {@link stoMainCardBodySplitClass}（body px-0）：左/右 inset 与 ContentHeader 同一套 CSS 变量。
+ */
+export const stoSplitRowInsetsClass = cn(
+  'box-border gap-2 py-2',
+  'pl-[var(--sto-content-header-pad-start)]',
+  '-mr-[var(--sto-main-scrollbar-gutter)]',
+  'pr-[var(--sto-content-header-pad-end)]',
+);
 
 /** ParameterFormDock layout（与对话列 variant 一致） */
 export function stoParameterFormDockLayout(variant: StoChatColumnVariant): 'home' | 'page' {
@@ -204,14 +212,18 @@ export const stoSplitChatPaneClass = 'relative flex min-h-0 min-w-[var(--sto-spl
 export const stoSplitPreviewPaneClass =
   'flex h-full min-h-0 max-w-[var(--sto-split-max-preview)] shrink-0 flex-col overflow-hidden [contain:inline-size]';
 
-/** 三栏预览区卡片（含 Grey-4 描边） */
-export const stoSplitPreviewCardClass = cn(
-  'min-h-0 min-w-0 overflow-hidden rounded-[18px] border border-border bg-[var(--sto-main-card-bg)] shadow-glow',
+/** 三栏预览区产物内容壳（描边在 tab 行下方，不含 tab） */
+export const stoPreviewContentShellClass = cn(
+  'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[18px] border border-border',
+  'bg-[var(--sto-main-card-bg)] shadow-glow',
 );
 
-/** 预览区 Tab 行容器（组 7047） */
+/** @deprecated 整卡描边已拆至 {@link stoPreviewContentShellClass}，tab 行在外 */
+export const stoSplitPreviewCardClass = stoPreviewContentShellClass;
+
+/** @deprecated tab 已迁至 ContentHeader */
 export const stoPreviewTabRowClass = cn(
-  'flex shrink-0 items-center justify-between gap-2 rounded-t-[18px] bg-[var(--sto-main-card-bg)] pb-3 pl-4 pr-4 pt-2',
+  'flex shrink-0 items-center gap-2 pb-2 pl-4 pr-4 pt-0',
 );
 
 /** 预览产物 tab pill（选中 #E5E6EB / 未选 #F5F6F7） */
@@ -282,10 +294,94 @@ export function stoAppShellBodyProvincialClass(isSidebarCollapsed: boolean): str
 
 /** 省区主内容白卡片：18px 圆角、无描边、MasterGo drop shadow */
 export const stoMainCardShellClass = cn(
-  'min-h-0 min-w-0 flex-1 overflow-auto overscroll-y-contain border-0',
+  'min-h-0 min-w-0 flex-1 overflow-hidden border-0',
   'bg-[var(--sto-main-card-bg)] shadow-[var(--sto-main-card-shadow)]',
   'rounded-[var(--sto-main-card-radius)]',
-  'px-[var(--sto-content-pad-x)] py-5 [overflow-anchor:none] [scrollbar-gutter:stable]',
+  '[overflow-anchor:none]',
+);
+
+/** 省区主卡片内容槽（标题栏下方滚动区；顶内距由 ContentHeader 承担） */
+export const stoMainCardBodyClass = cn(
+  'min-h-0 min-w-0 flex-1 overflow-auto overscroll-y-contain',
+  'px-[var(--sto-content-pad-x)] pb-5 pt-0 [scrollbar-gutter:stable]',
+);
+
+/** 三栏预览展开时：去掉 body 水平 px，避免与 ContentHeader / split row 双重 inset */
+export const stoMainCardBodySplitClass = 'px-0';
+
+/**
+ * 内容区 52px 全局标题栏（MasterGo 组 7046）。
+ * 单层 52px 白条：drag-region，双击最大化由系统处理。
+ */
+export const contentHeaderBarClass = cn(
+  'drag-region flex shrink-0 items-center justify-between gap-2 overflow-hidden',
+  'box-border h-[var(--sto-content-header-h,52px)] min-h-[var(--sto-content-header-h,52px)] max-h-[var(--sto-content-header-h,52px)]',
+  'rounded-t-[var(--sto-main-card-radius)] bg-[var(--sto-main-card-bg)]',
+  'pl-[var(--sto-content-header-pad-start)] pr-[var(--sto-content-header-pad-end)]',
+);
+
+/** @deprecated 合并为 {@link contentHeaderBarClass} */
+export const contentHeaderShellClass = contentHeaderBarClass;
+
+/** @deprecated 合并为 {@link contentHeaderBarClass} */
+export const contentHeaderInnerClass = contentHeaderBarClass;
+
+/** 标题栏左侧：会话标题 + 侧栏展开钮（与三栏容器左缘对齐，不被 previewTabs 挤没） */
+export const contentHeaderTitleGroupClass = cn(
+  'flex min-w-[120px] max-w-[min(34vw,280px)] shrink-0 items-center gap-2 overflow-hidden',
+);
+
+/** 三栏 header 左区（对话列宽）：侧栏钮 + 会话 tab，可横滑 */
+export const contentHeaderSplitChatZoneClass = cn(
+  'no-drag flex min-w-0 items-center gap-2 overflow-x-auto overflow-y-hidden',
+);
+
+/** 三栏 header 右区（预览列宽）：产物 tab + 操作 icon，与下方预览描边框对齐 */
+export const contentHeaderSplitPreviewZoneClass = cn(
+  'no-drag flex min-w-0 items-center gap-1 overflow-hidden',
+);
+
+/** 三栏 ContentHeader：grid 列宽与 split row（1fr + resizer + preview%）一致 */
+export const contentHeaderSplitBarClass = cn(
+  contentHeaderBarClass,
+  'grid items-center gap-x-2',
+  '[grid-template-columns:minmax(0,1fr)_4px_var(--sto-split-preview-col,50%)]',
+);
+
+/** 标题栏会话标题（纯文本 fallback） */
+export const contentHeaderTitleClass =
+  'min-w-0 truncate text-sm font-medium leading-5 text-foreground';
+
+/** 标题栏会话 chip（MasterGo 组 7046：#F5F6F7 pill + truncate + 关闭） */
+export const contentHeaderSessionChipClass = cn(
+  'inline-flex h-[30px] min-w-0 max-w-full items-center gap-1 rounded-[10px] bg-[#F5F6F7] pl-2.5 pr-1',
+);
+
+/** 标题栏会话 chip 文案 */
+export const contentHeaderSessionChipLabelClass =
+  'min-w-0 flex-1 truncate text-sm font-medium leading-[18px] text-foreground';
+
+/** 标题栏会话 chip 关闭钮 */
+export const contentHeaderSessionChipCloseClass = cn(
+  'no-drag flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground',
+  'transition-colors duration-fast hover:bg-black/[0.04] hover:text-foreground',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+);
+
+/** 标题栏右侧 icon 按钮（16×16 icon，Grey-9 默认） */
+export const contentHeaderActionBtnClass = cn(
+  'no-drag flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
+  'text-[#4E5969] transition-colors duration-fast',
+  'hover:bg-black/[0.04] hover:text-foreground',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+);
+
+/** 标题栏 icon 激活态（深度思考开、搜索开等） */
+export const contentHeaderActionBtnActiveClass = 'bg-primary/10 text-primary';
+
+/** ContentHeader 预览列内产物 tab 行（占预览区剩余宽，左对齐） */
+export const contentHeaderPreviewTabsWrapClass = cn(
+  'flex min-w-0 flex-1 items-center gap-2 overflow-x-auto',
 );
 
 /**
@@ -587,6 +683,44 @@ export const workflowDetailModalSecondaryActionClass = cn(
 export const workflowDetailModalMoreActionClass = cn(
   'order-1 h-8 w-8 rounded-xl border-border px-0',
   'transition-colors duration-fast hover:bg-black/[0.02]',
+);
+
+/**
+ * MasterGo 148:046134 — 工作流分组参数摘要外框（对话流内助手 A）
+ * 圆角 12 / Grey-4 描边 / 内距 14×12；组间距 8、组内标题-内容间距 2。
+ */
+export const workflowParamsSummaryCardClass =
+  'w-full rounded-xl border border-border px-[14px] py-3';
+
+export const workflowParamsSummaryGroupsClass = 'flex w-full flex-col gap-2';
+
+export const workflowParamsSummaryGroupClass = 'flex flex-col gap-0.5';
+
+export const workflowParamsSummaryGroupTitleClass =
+  'text-[13px] leading-5 font-normal text-foreground';
+
+export const workflowParamsSummaryGroupContentClass =
+  'text-[13px] leading-5 font-normal text-muted-foreground whitespace-pre-wrap break-words';
+
+/**
+ * 工具调用块外层（无描边；标题行在外，入参区单独套 {@link chatToolCallContentShellClass}）
+ */
+export const chatToolCallShellClass = 'flex w-full flex-col gap-1.5';
+
+/** 工具调用标题行（与 ParamsConfirmedHeader / 参数分组标题同级，在描边容器外） */
+export const chatToolCallHeaderBtnClass = cn(
+  'flex items-center gap-1 text-left',
+  'text-[13px] leading-5 font-normal text-muted-foreground transition-colors duration-150 hover:text-foreground',
+  'disabled:cursor-default disabled:hover:text-muted-foreground',
+);
+
+/** 工具入参展开区外框（与 {@link workflowParamsSummaryCardClass} / 数据来源一致） */
+export const chatToolCallContentShellClass = workflowParamsSummaryCardClass;
+
+/** 工具入参正文（与 {@link workflowParamsSummaryGroupContentClass} 一致，保留等宽字体便于读 JSON） */
+export const chatToolCallInputPreClass = cn(
+  workflowParamsSummaryGroupContentClass,
+  'm-0 max-h-[min(42vh,400px)] overflow-y-auto font-mono text-xs leading-5',
 );
 
 /**

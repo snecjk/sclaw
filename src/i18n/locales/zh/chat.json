@@ -32,7 +32,10 @@
         "searchPrev": "上一条",
         "searchNext": "下一条",
         "searchClear": "清空搜索",
-        "searchClose": "关闭搜索"
+        "searchClose": "关闭搜索",
+        "openPreview": "打开预览",
+        "closePreview": "关闭预览",
+        "closeSession": "关闭当前会话"
     },
     "composer": {
         "attachFiles": "添加文件",
