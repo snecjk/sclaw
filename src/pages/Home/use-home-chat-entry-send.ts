@@ -9,6 +9,7 @@ import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { hostApiFetch } from '@/lib/host-api';
+import { resolveHomePageCarryoverModel } from '@/lib/chat-model-options';
 
 /**
  * 首页入口（省区工作台 / Agent Hub）与聊天页保持一致：
@@ -46,9 +47,14 @@ export function useHomeChatEntrySend() {
       }
 
       if (currentSessionKey === DEFAULT_SESSION_KEY) {
-        // Capture the home page model selection BEFORE newSession clears it
-        const defaultSession = sessions.find((s) => s.key === DEFAULT_SESSION_KEY);
-        const homePageModel = defaultSession?.model;
+        // Capture home page model BEFORE newSession (Claude may only live on agent until upsert)
+        const homeAgent = (agents ?? []).find((agent) => agent.id === currentAgentId);
+        const homePageModel = resolveHomePageCarryoverModel({
+          sessionKey: DEFAULT_SESSION_KEY,
+          sessions,
+          agentEngineType: homeAgent?.engineType,
+          agentModelDisplay: homeAgent?.modelDisplay,
+        });
         newSession();
         // Persist the home page model to the new session BEFORE sending the message,
         // so the Gateway uses the correct model.

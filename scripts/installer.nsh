@@ -110,8 +110,13 @@ SetCompressor zlib
   ; Clear authentication data from any previous installation.
   ; This ensures users must re-authenticate after reinstalling rather than
   ; silently reusing a stale/expired token from the old install.
-  ; Only auth-related files are removed — settings, providers, channels, etc. are preserved.
+  ; Primary auth is ~/.sai/sso-auth.json; AppData\stoclaw is legacy electron-store cache.
+  Delete "$PROFILE\.sai\sso-auth.json"
   Delete "$APPDATA\stoclaw\sso-auth.json"
+  Delete "$PROFILE\.stoclaw\openclaw\sso-auth.json"
+  ; Stale gateway model config from old installs (regenerated after login)
+  Delete "$PROFILE\.stoclaw\openclaw\openclaw.json"
+  Delete "$PROFILE\.stoclaw\openclaw\agents\main\agent\models.json"
   RMDir /r "$APPDATA\stoclaw\Local Storage"
   RMDir /r "$APPDATA\stoclaw\Session Storage"
 
@@ -121,7 +126,7 @@ SetCompressor zlib
 !macro customUnInstall
   ; Ask user if they want to completely remove all user data
   MessageBox MB_YESNO|MB_ICONQUESTION \
-    "Do you want to completely remove all StoClaw user data?$\r$\n$\r$\nThis will delete:$\r$\n  • .openclaw folder (configuration & skills)$\r$\n  • AppData\Local\stoclaw (local app data)$\r$\n  • AppData\Roaming\stoclaw (roaming app data)$\r$\n$\r$\nSelect 'No' to keep your data for future reinstallation." \
+    "Do you want to completely remove all StoClaw user data?$\r$\n$\r$\nThis will delete:$\r$\n  • .stoclaw\openclaw\openclaw.json (gateway model config)$\r$\n  • .openclaw folder (legacy configuration & skills)$\r$\n  • AppData\Local\stoclaw (local app data)$\r$\n  • AppData\Roaming\stoclaw (roaming app data)$\r$\n$\r$\nSelect 'No' to keep your data for future reinstallation." \
     /SD IDNO IDYES _cu_removeData IDNO _cu_skipRemove
 
   _cu_removeData:
@@ -135,6 +140,12 @@ SetCompressor zlib
 
     ; Wait for processes to fully exit and release file handles
     Sleep 2000
+
+    ; --- Gateway config: remove stale model catalog (regenerated on next login) ---
+    Delete "$PROFILE\.stoclaw\openclaw\openclaw.json"
+    Delete "$PROFILE\.stoclaw\openclaw\agents\main\agent\models.json"
+    Delete "$PROFILE\.sai\sso-auth.json"
+    Delete "$PROFILE\.stoclaw\openclaw\sso-auth.json"
 
     ; --- Always remove current user's data first ---
     RMDir /r "$PROFILE\.openclaw"
@@ -174,6 +185,8 @@ SetCompressor zlib
 
     ; --- Final check: warn user if any directories could not be removed ---
     StrCpy $R3 ""
+    IfFileExists "$PROFILE\.stoclaw\openclaw\openclaw.json" 0 +2
+      StrCpy $R3 "$R3$\r$\n  • $PROFILE\.stoclaw\openclaw\openclaw.json"
     IfFileExists "$PROFILE\.openclaw\*.*" 0 +2
       StrCpy $R3 "$R3$\r$\n  • $PROFILE\.openclaw"
     IfFileExists "$LOCALAPPDATA\stoclaw\*.*" 0 +2
@@ -199,6 +212,10 @@ SetCompressor zlib
     StrCmp $R2 $PROFILE _cu_enumNext
 
     RMDir /r "$R2\.openclaw"
+    Delete "$R2\.stoclaw\openclaw\openclaw.json"
+    Delete "$R2\.stoclaw\openclaw\agents\main\agent\models.json"
+    Delete "$R2\.sai\sso-auth.json"
+    Delete "$R2\.stoclaw\openclaw\sso-auth.json"
     RMDir /r "$R2\AppData\Local\stoclaw"
     RMDir /r "$R2\AppData\Roaming\stoclaw"
 
