@@ -302,16 +302,18 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
     workflowId: sessionWorkflowId,
   } = useChatPreviewPanel(allMessagesForPreview, sessionKey);
 
+  const openWorkflowPreview = useCallback((workflowId: string) => {
+    navigate(`/workflow/${encodeURIComponent(workflowId)}`);
+  }, [navigate]);
+
   const previewHeaderTabs = useMemo(
     () => (
-      showPreviewPanel && (previewableFiles.length > 0 || showEditWorkflow) ? (
+      showPreviewPanel && previewableFiles.length > 0 ? (
         <ChatPreviewHeaderTabs
           files={previewableFiles}
           activeFilePath={activePreviewFilePath}
           onSelectFile={setActivePreviewFilePath}
           onDismissFile={dismissPreviewFile}
-          showEditWorkflow={showEditWorkflow}
-          workflowId={sessionWorkflowId}
         />
       ) : null
     ),
@@ -321,8 +323,6 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
       activePreviewFilePath,
       setActivePreviewFilePath,
       dismissPreviewFile,
-      showEditWorkflow,
-      sessionWorkflowId,
     ],
   );
 
@@ -609,6 +609,9 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
             <ChatPreviewPanel
               files={previewableFiles}
               activeFilePath={activePreviewFilePath}
+              showEditWorkflow={showEditWorkflow}
+              workflowId={sessionWorkflowId}
+              onEditWorkflow={openWorkflowPreview}
               className="h-full w-full"
             />
           </motion.div>

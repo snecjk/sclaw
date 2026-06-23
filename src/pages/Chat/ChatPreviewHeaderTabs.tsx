@@ -1,7 +1,7 @@
 /**
  * ChatPreviewHeaderTabs — 三栏预览产物 tab 行（与 ContentHeader icon 同高对齐）
  *
- * 仅产物文件 tab + 可选「编辑工作流」跳转入口；不在产物区展示工作流详情。
+ * 仅产物文件 tab；「编辑工作流」入口在 ChatPreviewPanel 操作行。
  * 使用位置：ContentHeader.previewTabs（Home / Chat）；TaskSubitem 预览列顶行。
  */
 import {
@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import type { OnEditWorkflowNavigate } from '@/lib/preview-workflow-navigation';
 import {
   contentHeaderPreviewTabsWrapClass,
   stoPreviewActionButtonClass,
@@ -36,10 +35,6 @@ export interface ChatPreviewHeaderTabsProps {
   onSelectFile: (filePath: string) => void;
   /** 关闭单个产物 tab */
   onDismissFile?: (filePath: string) => void;
-  /** 有工作流上下文时展示「编辑工作流」（仅跳转，不切换预览内容） */
-  showEditWorkflow?: boolean;
-  workflowId?: string | null;
-  onEditWorkflow?: OnEditWorkflowNavigate;
   className?: string;
 }
 
@@ -69,19 +64,11 @@ export function ChatPreviewHeaderTabs({
   activeFilePath,
   onSelectFile,
   onDismissFile,
-  showEditWorkflow = false,
-  workflowId = null,
-  onEditWorkflow,
   className,
 }: ChatPreviewHeaderTabsProps) {
   const { t } = useTranslation('chat');
 
-  if (files.length === 0 && !showEditWorkflow) return null;
-
-  const handleEditWorkflow = () => {
-    if (workflowId === null || workflowId === '') return;
-    onEditWorkflow?.(workflowId);
-  };
+  if (files.length === 0) return null;
 
   return (
     <div className={cn(contentHeaderPreviewTabsWrapClass, className)}>
@@ -140,15 +127,6 @@ export function ChatPreviewHeaderTabs({
         );
       })}
 
-      {showEditWorkflow && workflowId ? (
-        <button
-          type="button"
-          className="shrink-0 text-sm leading-[18px] text-foreground transition-colors hover:text-primary"
-          onClick={handleEditWorkflow}
-        >
-          {t('preview.editWorkflow')}
-        </button>
-      ) : null}
     </div>
   );
 }

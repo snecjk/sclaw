@@ -730,3 +730,11 @@ export const workflowBuilderShell = cn(
   '-mx-[var(--sto-content-pad-x)] -mt-5 flex min-h-0 min-w-0 flex-col',
   stoPageFillBelowTitleClass,
 );
+
+/**
+ * MC iframe 工作流编辑：置于 ContentHeader「工作流」标题栏下方。
+ * 仅抵消水平 main 内距，不用 -mt-5，避免编辑区顶栏与全局标题栏叠层。
+ */
+export const workflowMcEditorShell = cn(
+  '-mx-[var(--sto-content-pad-x)] flex min-h-0 min-w-0 flex-1 flex-col',
+);

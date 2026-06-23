@@ -525,15 +525,12 @@ export function Chat() {
 
   const previewHeaderTabs = useMemo(
     () => (
-      showPreviewPanel && (previewableFiles.length > 0 || showEditWorkflow) ? (
+      showPreviewPanel && previewableFiles.length > 0 ? (
         <ChatPreviewHeaderTabs
           files={previewableFiles}
           activeFilePath={activePreviewFilePath}
           onSelectFile={setActivePreviewFilePath}
           onDismissFile={dismissPreviewFile}
-          showEditWorkflow={showEditWorkflow}
-          workflowId={sessionWorkflowId}
-          onEditWorkflow={openWorkflowPreview}
         />
       ) : null
     ),
@@ -543,9 +540,6 @@ export function Chat() {
       activePreviewFilePath,
       setActivePreviewFilePath,
       dismissPreviewFile,
-      showEditWorkflow,
-      sessionWorkflowId,
-      openWorkflowPreview,
     ],
   );
 
@@ -789,6 +783,9 @@ export function Chat() {
             <ChatPreviewPanel
               files={previewableFiles}
               activeFilePath={activePreviewFilePath}
+              showEditWorkflow={showEditWorkflow}
+              workflowId={sessionWorkflowId}
+              onEditWorkflow={openWorkflowPreview}
               className="h-full w-full"
             />
           </motion.div>

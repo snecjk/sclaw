@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import type { OnEditWorkflowNavigate } from '@/lib/preview-workflow-navigation';
 import { isHttpUrl, inferMimeTypeFromUrl } from '@/lib/preview-url';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
@@ -29,12 +30,19 @@ export interface ChatPreviewPanelProps {
   /** 当前可见的产物列表（已过滤 dismissed） */
   files: AttachedFileMeta[];
   activeFilePath: string | null;
+  /** 有工作流上下文时在操作行展示「编辑工作流」（跳转，不切换预览内容） */
+  showEditWorkflow?: boolean;
+  workflowId?: string | null;
+  onEditWorkflow?: OnEditWorkflowNavigate;
   className?: string;
 }
 
 export function ChatPreviewPanel({
   files,
   activeFilePath,
+  showEditWorkflow = false,
+  workflowId = null,
+  onEditWorkflow,
   className,
 }: ChatPreviewPanelProps) {
   const { t } = useTranslation('chat');
@@ -106,6 +114,11 @@ export function ChatPreviewPanel({
     }
   }, [activeFile, handleOpenExternal]);
 
+  const handleEditWorkflow = useCallback(() => {
+    if (workflowId === null || workflowId === '') return;
+    onEditWorkflow?.(workflowId);
+  }, [workflowId, onEditWorkflow]);
+
   if (files.length === 0) return null;
 
   return (
@@ -132,6 +145,15 @@ export function ChatPreviewPanel({
                 <PreviewActionButton onClick={handleOpenExternal} aria-label={t('preview.openExternal')}>
                   <Share2 className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>
+                {showEditWorkflow && workflowId ? (
+                  <button
+                    type="button"
+                    className="shrink-0 text-sm leading-[18px] text-foreground transition-colors hover:text-primary"
+                    onClick={handleEditWorkflow}
+                  >
+                    {t('preview.editWorkflow')}
+                  </button>
+                ) : null}
               </>
             ) : null}
           </div>
