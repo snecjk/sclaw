@@ -21,7 +21,6 @@ import { getOpenClawDir, getOpenClawEntryPath, getOpenClawConfigDir, getOpenClaw
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { cleanupDanglingWeChatPluginState, listConfiguredChannels } from '../utils/channel-config';
 import { syncGatewayTokenToConfig, syncBrowserConfigToOpenClaw, syncSessionIdleMinutesToOpenClaw, sanitizeOpenClawConfig } from '../utils/openclaw-auth';
-import { scrubLegacyStoOpenClawConfig } from '../services/providers/sto-catalog-migration';
 import { buildProxyEnv, resolveProxySettings } from '../utils/proxy';
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { logger } from '../utils/logger';
@@ -148,9 +147,6 @@ export async function syncGatewayConfigBeforeLaunch(
     syncProxyConfigToOpenClaw(appSettings, { preserveExistingWhenDisabled: true }),
     sanitizeOpenClawConfig().catch((err) => {
       logger.warn('Failed to sanitize openclaw.json:', err);
-    }),
-    scrubLegacyStoOpenClawConfig().catch((err) => {
-      logger.warn('Failed to scrub legacy STO openclaw config:', err);
     }),
     cleanupDanglingWeChatPluginState().catch((err) => {
       logger.warn('Failed to clean dangling WeChat plugin state before launch:', err);

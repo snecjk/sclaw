@@ -34,9 +34,6 @@ import {
   detectStoCatalogLegacyState,
   markStoCatalogMigrationComplete,
   preMigrateStoCatalogPlaceholders,
-  repairOpenClawStoRuntimeAfterSync,
-  ensureStoProviderStoreCatalog,
-  scrubLegacyStoOpenClawConfig,
 } from './sto-catalog-migration';
 
 // ---------------------------------------------------------------------------
@@ -205,8 +202,6 @@ export class StoModelSyncService {
       );
       const preMigrate = await preMigrateStoCatalogPlaceholders(runtimeGateway);
       result.deleted.push(...preMigrate.deletedAccountIds);
-    } else {
-      await scrubLegacyStoOpenClawConfig();
     }
 
     // Step 2 — Fetch remote models via OpenAI-compatible /v1/models
@@ -229,7 +224,7 @@ export class StoModelSyncService {
     }
 
     const providerService = getProviderService();
-    let allAccounts = await listProviderAccounts();
+    const allAccounts = await listProviderAccounts();
 
     // Step 3 — Delete stale STO placeholder accounts (legacy sto-model-*, custom-sto, etc.)
     const staleAccounts = allAccounts.filter(shouldDeleteStaleStoPlaceholder);
@@ -270,8 +265,7 @@ export class StoModelSyncService {
       }
     }
 
-    // Step 4 — Create or update the single STO account (re-read after step 3 deletions)
-    allAccounts = await listProviderAccounts();
+    // Step 4 — Create or update the single STO account
     const existingAccount = allAccounts.find((a) => a.id === STO_ACCOUNT_ID);
     const expectedBaseUrl = `${domain}/v1`;
     const now = new Date().toISOString();
@@ -310,9 +304,7 @@ export class StoModelSyncService {
     } else {
       // Check if existing account needs updating
       const currentModels = existingAccount.metadata?.customModels ?? [];
-      const catalogEmpty = currentModels.length === 0;
       const modelsChanged =
-        catalogEmpty ||
         currentModels.length !== remoteModelIds.length ||
         !remoteModelIds.every((id, i) => currentModels[i] === id);
       const baseUrlChanged = existingAccount.baseUrl !== expectedBaseUrl;
@@ -366,29 +358,6 @@ export class StoModelSyncService {
       }
     }
 
-    // Step 4b — Ensure provider store + openclaw.json are aligned (UI reads the store).
-    const storeEnsured = await ensureStoProviderStoreCatalog({
-      token,
-      remoteModelIds,
-      expectedBaseUrl,
-    });
-    if (storeEnsured && !result.updated.includes(STO_ACCOUNT_ID)) {
-      result.updated.push(STO_ACCOUNT_ID);
-    }
-
-    const openClawRepaired = await repairOpenClawStoRuntimeAfterSync({
-      token,
-      remoteModelIds,
-      expectedBaseUrl,
-      runtimeGateway,
-    });
-    if (openClawRepaired) {
-      if (!result.updated.includes(STO_ACCOUNT_ID)) {
-        result.updated.push(STO_ACCOUNT_ID);
-      }
-      result.needsForcedGatewayRefresh = true;
-    }
-
     // Step 5 — Set default provider if needed
     const currentDefault = await getDefaultProviderAccountId();
     const needsNewDefault =
@@ -415,11 +384,6 @@ export class StoModelSyncService {
         result.legacyRepaired = true;
         result.needsForcedGatewayRefresh = true;
         logger.info('[sto-sync] Legacy STO catalog migration marked complete');
-      } else if (openClawRepaired) {
-        await markStoCatalogMigrationComplete();
-        result.legacyRepaired = true;
-        result.needsForcedGatewayRefresh = true;
-        logger.info('[sto-sync] Legacy openclaw STO runtime repaired; migration marked complete');
       } else {
         logger.warn('[sto-sync] Legacy STO catalog detected but canonical account not ready; migration deferred');
       }
