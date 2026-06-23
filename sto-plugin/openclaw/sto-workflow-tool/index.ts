@@ -93,6 +93,7 @@ export default definePluginEntry({
 			resultType: "workflow_templates_found",
 			label: "查询工作流模板",
 			description: `根据用户自然语言描述搜索匹配的工作流模板（POST /agent/v1/workflow-templates）。
+仅返回 scope=system 的官方推荐模板。
 返回 templates[]，每项含 id（即 templateId，如 tpl_xxx）、label、description。
 下一步 get_workflow_schema 必须传入 templates[].id。`,
 			parameters: Type.Object({

@@ -257,7 +257,7 @@ export function clampPreviewPanelPercent(containerWidth: number, previewPx: numb
 
 /** 全高页面壳层：TitleBar + main 上下内距（省区壳内 --sto-header-h 为 0） */
 export const stoPageFillBelowTitleClass =
-  'h-[calc(100dvh-var(--sto-header-h)-var(--sto-main-pad-y-total))]';
+  'h-[calc(100dvh-var(--sto-header-h,40px)-var(--sto-main-pad-y-total,40px))]';
 
 /** 省区 AppShell：chrome 下方侧栏 + 卡片行 */
 export const stoAppShellBodyClass =

@@ -3,8 +3,8 @@ import { useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { useHomeOfficialWorkflows } from './use-home-official-workflows';
-import { HomeWorkflowCard } from './HomeWorkflowCard';
 import { HomeWorkflowGuideCards } from './HomeWorkflowGuideCards';
+import { HomeWorkflowCard } from './HomeWorkflowCard';
 import {
   homeHubCardDescClass,
   homeHubCardGridClass,

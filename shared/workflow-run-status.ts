@@ -1,10 +1,62 @@
-import type {
-  WorkflowExecutionResult,
-  WorkflowExecutionState,
-  WorkflowRunArtifact,
-  WorkflowRunNodeRun,
-  WorkflowRunStatus,
-} from '../src/types/workflow';
+export type WorkflowRunStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'timeout'
+  | 'unknown';
+
+export interface WorkflowRunNodeRun {
+  id: string;
+  nodeId: string;
+  status: string;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+}
+
+export interface WorkflowRunArtifact {
+  id: string;
+  name: string;
+  type: string;
+  url: string;
+  size?: number;
+}
+
+export interface WorkflowExecutionResult {
+  summary?: string;
+  kpis?: Array<{
+    name: string;
+    value: string | number;
+    change?: number;
+    changeType?: 'increase' | 'decrease';
+  }>;
+  artifacts?: Array<{
+    id: string;
+    name: string;
+    type: string;
+    url: string;
+    size?: number;
+  }>;
+}
+
+export interface WorkflowExecutionState {
+  runId: string;
+  workflowId: string;
+  status: WorkflowRunStatus;
+  progress: number;
+  currentStep?: string;
+  startedAt?: string;
+  completedAt?: string;
+  steps: Array<{
+    name: string;
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    duration?: number;
+    error?: string;
+  }>;
+  result?: WorkflowExecutionResult;
+  error?: string;
+}
 import { normalizeWorkflowTimestamp, parseWorkflowTimestampMs } from './workflow-timestamp';
 
 /** Raw GET /runs payload — fields may be omitted while run is starting or on older backends. */

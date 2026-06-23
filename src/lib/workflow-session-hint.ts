@@ -41,7 +41,7 @@ export function buildWorkflowCreationHint(
     '## 工作流创建指引',
     '',
     '用户要创建或查找工作流。必须使用 sto-workflow-tool 内置 OpenClaw Tools：',
-    '1. `search_workflow_templates`（POST /agent/v1/workflow-templates，query 取模板关键词）',
+    '1. `search_workflow_templates`（POST /agent/v1/workflow-templates，仅返回官方推荐模板，query 取模板关键词）',
     '2. `get_workflow_schema`（传 templates[].id；或直接传 query 自动搜索模板）',
     '3. **禁止** `create_workflow`：get_workflow_schema 后客户端会**自动弹出分步参数表单**，用户填写并提交后由客户端创建并启动',
     '4. get_workflow_schema 后：**停止调用工具**；正文最多 3～5 句业务说明（用 schema 的 confirm 步骤标题），引导用户在下方表单逐步确认',

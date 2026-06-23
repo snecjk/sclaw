@@ -47,7 +47,7 @@ import { renameWorkflow, deleteWorkflow } from '@/lib/workflow-api';
 interface WorkflowDashboardProps {
   onManualCreate: () => void;
   onGenerate: (prompt: string) => void;
-  onEditCard: (name: string) => void;
+  onEditCard: (workflowId: string) => void;
 }
 
 type MineFilter = WorkflowMineListKind;
@@ -381,7 +381,7 @@ export function WorkflowDashboard({
                   const q = encodeURIComponent(`帮我执行 id 为：${card.id} 的工作流 【${card.name}】`);
                   navigate(`/?q=${q}`);
                 }}
-                onEdit={() => onEditCard(card.name)}
+                onEdit={() => onEditCard(card.id)}
                 onMore={(e) => openMenu(e, index)}
               />
             );
@@ -427,6 +427,9 @@ export function WorkflowDashboard({
               card={card}
               onCardClick={() => openDetailForOfficial(card)}
               onPreview={() => openDetailForOfficial(card)}
+              onCreateFromTemplate={() => {
+                navigate(`/workflow/new?templateId=${encodeURIComponent(card.id)}`);
+              }}
               onInstall={() => {
                 const q = encodeURIComponent(`/${card.name}`);
                 const wid = encodeURIComponent(card.id);
@@ -520,7 +523,7 @@ export function WorkflowDashboard({
         onEdit={() => {
           if (detailMineCard) {
             closeDetail();
-            onEditCard(detailMineCard.name);
+            onEditCard(detailMineCard.id);
           }
         }}
         onTryRun={() => toast.info(t('detail.tryRunHint'))}
