@@ -582,6 +582,81 @@ function ensureTargetSharpPackages(nodeModulesDir, platform, arch) {
   }
 }
 
+// ── Claude Agent SDK cross-compile ────────────────────────────────────────────
+// When cross-compiling (e.g. building win32 on macOS), the target platform's
+// optional dependency (@anthropic-ai/claude-agent-sdk-win32-x64) is not installed
+// by pnpm/npm because its os/cpu constraints don't match the host. We fetch it
+// via npm pack + tar extract (same pattern as installSharpPackageViaPack) and
+// inject it into both the source node_modules (for future builds) and the
+// resources output directory (for the current build's app.asar.unpacked).
+
+function installClaudeSdkPackageViaPack(spec, destFolder) {
+  const tmpPackDir = mkdtempSync(join(tmpdir(), 'claude-sdk-pack-'));
+  try {
+    const output = execSync(`npm pack "${spec}" --pack-destination "${tmpPackDir}"`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'inherit'],
+    });
+    const tgzName = output.trim().split(/\r?\n/).filter(Boolean).pop();
+    if (!tgzName) {
+      throw new Error(`[after-pack] npm pack produced no tarball for ${spec}`);
+    }
+    const tgzPath = join(tmpPackDir, basename(tgzName));
+    mkdirSync(destFolder, { recursive: true });
+    execSync(`tar -xzf "${tgzPath}" -C "${destFolder}" --strip-components=1`, { stdio: 'inherit' });
+  } finally {
+    rmSync(tmpPackDir, { recursive: true, force: true });
+  }
+}
+
+function ensureTargetClaudeSdkPackage(resourcesDir, platform, arch) {
+  const packageName = getClaudeOptionalPackageName(platform, arch);
+  const binaryName = getClaudeBinaryFileName(platform);
+  const projectNodeModules = join(__dirname, '..', 'node_modules');
+  const sourcePackageDir = join(projectNodeModules, ...packageName.split('/'));
+  const unpackedRoot = join(resourcesDir, 'app.asar.unpacked');
+
+  // Check if the binary already exists in the unpacked output (asar extracted it).
+  const unpackedCandidate = join(unpackedRoot, 'node_modules', ...packageName.split('/'), binaryName);
+  if (existsSync(unpackedCandidate)) {
+    console.log(`[after-pack] ✅ Claude SDK binary already in app.asar.unpacked: ${unpackedCandidate}`);
+    return;
+  }
+
+  console.log(`[after-pack] Claude SDK binary missing for ${platform}/${arch} — cross-compiling from ${process.platform}/${process.arch}`);
+
+  // Determine the version from the main SDK package's optionalDependencies.
+  const sdkPkgPath = join(projectNodeModules, '@anthropic-ai', 'claude-agent-sdk', 'package.json');
+  let version;
+  if (existsSync(sdkPkgPath)) {
+    const sdkPkg = JSON.parse(readFileSync(sdkPkgPath, 'utf8'));
+    version = sdkPkg.optionalDependencies?.[packageName];
+  }
+  if (!version) {
+    throw new Error(`[after-pack] Cannot resolve version for ${packageName} from @anthropic-ai/claude-agent-sdk/package.json`);
+  }
+
+  // Download the package via npm pack + tar extract into source node_modules
+  // (persists for future builds so electron-builder can include it in the asar).
+  if (!existsSync(sourcePackageDir)) {
+    const spec = `${packageName}@${version}`;
+    console.log(`[after-pack] Fetching Claude SDK package: ${spec}`);
+    const scopeDir = join(projectNodeModules, '@anthropic-ai');
+    mkdirSync(scopeDir, { recursive: true });
+    const folder = packageName.split('/').pop(); // e.g. "claude-agent-sdk-win32-x64"
+    installClaudeSdkPackageViaPack(spec, join(scopeDir, folder));
+    console.log(`[after-pack] ✅ Claude SDK package installed to source node_modules: ${sourcePackageDir}`);
+  }
+
+  // For the current build: electron-builder already created the asar without this
+  // package, so we must manually inject it into app.asar.unpacked where
+  // getBundledClaudeExecutablePath() (in claude-adapter.ts) resolves the binary.
+  const unpackedPkgDir = join(unpackedRoot, 'node_modules', '@anthropic-ai', packageName.split('/').pop());
+  mkdirSync(unpackedPkgDir, { recursive: true });
+  cpSync(sourcePackageDir, unpackedPkgDir, { recursive: true, dereference: true });
+  console.log(`[after-pack] ✅ Claude SDK injected into app.asar.unpacked: ${unpackedPkgDir}`);
+}
+
 // ── Platform-specific: koffi ─────────────────────────────────────────────────
 // koffi ships 18 platform pre-builds under koffi/build/koffi/{platform}_{arch}/.
 // We only need the one matching the target.
@@ -1056,6 +1131,7 @@ exports.OPENCLAW_ASAR_UNPACK = OPENCLAW_ASAR_UNPACK;
 exports.packDirectoryToAsar = packDirectoryToAsar;
 exports.validateAsarNativeUnpack = validateAsarNativeUnpack;
 exports.ensureTargetSharpPackages = ensureTargetSharpPackages;
+exports.ensureTargetClaudeSdkPackage = ensureTargetClaudeSdkPackage;
 
 exports.default = async function afterPack(context) {
   const appOutDir = context.appOutDir;
@@ -1335,5 +1411,6 @@ exports.default = async function afterPack(context) {
     { packageName: 'require-from-string', resolveFromPackageName: 'ajv' },
     'uri-js',
   ]);
+  ensureTargetClaudeSdkPackage(resourcesDir, platform, arch);
   validateBundledClaudeSdk(resourcesDir, platform, arch);
 };
