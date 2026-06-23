@@ -1,5 +1,5 @@
 /**
- * 非网点 memory-center 代理：Key 确保 + 套餐档位查询
+ * 非网点 memory-center 代理：Key 确保（含详情/模型列表）+ 套餐档位查询
  */
 
 import { getStoToken, getSsoEnvironment } from '../utils/auth-store';

@@ -1,9 +1,8 @@
 /**
- * 非网点 SK 策略实现
- * 从 user-sk-service.ts 迁移，包装成 HqSkStrategy 类
- * 域名: devops-llmgatewayapi.sto.cn
- * 鉴权: md5(userCode)
- * 响应: { code, msg, data: [...] }
+ * 非网点 SK 策略实现（memory-center 代理）
+ *
+ * Key 确保 / 详情 / 模型列表 / 套餐档位 / 额度扩容 UI：经 memory-center 代理供应商 openapi。
+ * 模型推理域名：客户端本地 SUPPLIER_DOMAINS，不经 memory-center 管理。
  */
 
 import type { StoSkStrategy } from './sto-sk-strategy';
@@ -16,25 +15,27 @@ import { logger } from '../utils/logger';
 import {
   ensureHqKeyViaMemoryCenter,
   fetchHqTokenQuotaTiersViaMemoryCenter,
+  StoHqMemoryApiError,
 } from './sto-hq-memory-api-service';
 import crypto from 'crypto';
 
 export class HqSkStrategy implements StoSkStrategy {
   private static readonly CACHE_KEY = 'sto';
-  private static readonly DEFAULT_TENANT_CODE = 'enterprise-Intelligence';
   private static readonly TIMEOUT_MS = 8000;
 
   /** 非网点 SK 解密密钥（按环境区分） */
   private static readonly AES_KEYS: Record<string, string> = {
-    prod: '2074c2350686f0e4',  // 生产环境密钥
-    test: '2074c2350686f0e4',  // 测试环境密钥（默认与生产相同，可按需修改）
+    prod: '2074c2350686f0e4',
+    test: '2074c2350686f0e4',
   };
 
+  /** 管理 API 域名（仅 expandQuota 遗留直连路径使用，UI 扩容已走 MC） */
   private static readonly API_DOMAINS: Record<string, string> = {
     prod: 'https://devops-llmgatewayapi.sto.cn',
     test: 'https://devops-llmgatewayapi-test.sto.cn',
   };
 
+  /** 模型推理 Gateway baseUrl 域名（客户端本地，不经 memory-center） */
   private static readonly SUPPLIER_DOMAINS: Record<string, string> = {
     prod: 'https://devops-llmgateway.sto.cn',
     test: 'https://devops-llmgateway-test.sto.cn',
@@ -87,49 +88,46 @@ export class HqSkStrategy implements StoSkStrategy {
   ): Promise<{ tokenId: string; spend: number; maxBudget: number } | null> {
     logger.info(`[hq-sk] getUserSkDetail called, userCode=${user.code}`);
 
-    const token = await getStoToken();
-    if (!token) {
-      logger.warn('[hq-sk] No stoToken for detail');
+    try {
+      const ensured = await ensureHqKeyViaMemoryCenter();
+      if (!ensured) {
+        logger.warn('[hq-sk] Failed to get key detail via memory-center');
+        return null;
+      }
+
+      const result = {
+        tokenId: ensured.tokenId,
+        spend: ensured.spend,
+        maxBudget: ensured.maxBudget,
+      };
+      logger.info(
+        `[hq-sk] Key detail via memory-center: tokenId=${result.tokenId}, spend=${result.spend}, maxBudget=${result.maxBudget}`,
+      );
+      return result;
+    } catch (err) {
+      const message = err instanceof StoHqMemoryApiError ? err.message : String(err);
+      logger.warn(`[hq-sk] getUserSkDetail via memory-center failed: ${message}`);
       return null;
     }
-
-    const tenantCode = HqSkStrategy.DEFAULT_TENANT_CODE;
-    const detail = await this.queryKeyDetail(token, user.code, tenantCode);
-
-    if (!detail) {
-      logger.warn('[hq-sk] Key detail not found');
-      return null;
-    }
-
-    const result = {
-      tokenId: detail.tokenId,
-      spend: detail.spend ?? 0,
-      maxBudget: detail.maxBudget ?? 0,
-    };
-
-    logger.info(`[hq-sk] Key detail: tokenId=${result.tokenId}, spend=${result.spend}, maxBudget=${result.maxBudget}`);
-    return result;
   }
 
   async getUserModels(user: SsoUserInfo): Promise<string[] | null> {
     logger.info(`[hq-sk] getUserModels called, userCode=${user.code}`);
 
-    const token = await getStoToken();
-    if (!token) {
-      logger.warn('[hq-sk] No stoToken for models');
+    try {
+      const ensured = await ensureHqKeyViaMemoryCenter();
+      if (!ensured?.models.length) {
+        logger.warn('[hq-sk] No models from memory-center ensure');
+        return null;
+      }
+
+      logger.info(`[hq-sk] Models from memory-center: ${ensured.models.length} items`);
+      return ensured.models;
+    } catch (err) {
+      const message = err instanceof StoHqMemoryApiError ? err.message : String(err);
+      logger.warn(`[hq-sk] getUserModels via memory-center failed: ${message}`);
       return null;
     }
-
-    const tenantCode = HqSkStrategy.DEFAULT_TENANT_CODE;
-    const detail = await this.queryKeyDetail(token, user.code, tenantCode);
-
-    if (!detail?.models) {
-      logger.warn('[hq-sk] No models found');
-      return null;
-    }
-
-    logger.info(`[hq-sk] Models found: ${detail.models.length} items, ids=${JSON.stringify(detail.models)}`);
-    return detail.models;
   }
 
   async getSupplierDomain(): Promise<string> {
@@ -137,7 +135,7 @@ export class HqSkStrategy implements StoSkStrategy {
     const domain = this.isTestEnvironment(env)
       ? HqSkStrategy.SUPPLIER_DOMAINS.test
       : HqSkStrategy.SUPPLIER_DOMAINS.prod;
-    logger.info(`[hq-sk] getSupplierDomain: env=${env}, domain=${domain}`);
+    logger.info(`[hq-sk] getSupplierDomain (local inference): env=${env}, domain=${domain}`);
     return domain;
   }
 
@@ -267,125 +265,6 @@ export class HqSkStrategy implements StoSkStrategy {
     const msg = json.msg?.trim();
     if (msg) return msg;
     return `code=${json.code}`;
-  }
-
-  private async queryKeyDetail(
-    token: string,
-    userCode: string,
-    tenantCode: string,
-  ): Promise<{
-    tokenId: string;
-    encryptedKey: string;
-    models: string[];
-    status: string;
-    spend?: number;
-    maxBudget?: number;
-  } | null> {
-    const domain = await this.resolveApiDomain();
-    const url = `${domain}/openapi/key/detail`;
-    const secret = this.md5(userCode);
-    const body = { userCode, tenantCode };
-
-    logger.info(`[hq-sk] queryKeyDetail request: url=${url}`);
-    logger.info(`[hq-sk] queryKeyDetail headers: secret=${secret}`);
-    logger.info(`[hq-sk] queryKeyDetail body: ${JSON.stringify(body)}`);
-
-    try {
-      const response = await this.fetchWithTimeout(url, {
-        method: 'POST',
-        headers: {
-          secret,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-
-      const json = (await response.json()) as {
-        code: string;
-        msg: string;
-        detailMsg?: string | null;
-        data?: Array<{
-          tokenId: string;
-          encryptedKey: string;
-          models: string[];
-          status: string;
-          spend?: number;
-          maxBudget?: number;
-        }>;
-      };
-
-      logger.info(
-        `[hq-sk] queryKeyDetail response: code=${json.code}, msg=${json.msg}, detailMsg=${json.detailMsg ?? ''}, dataCount=${json.data?.length ?? 0}`,
-      );
-
-      if (json.code !== '0' || !json.data?.[0]) {
-        logger.warn(`[hq-sk] queryKeyDetail failed: ${this.formatGatewayError(json)}`);
-        return null;
-      }
-
-      const item = json.data[0];
-      logger.info(`[hq-sk] queryKeyDetail item: tokenId=${item.tokenId}, status=${item.status}, models=${item.models?.length ?? 0}`);
-      return item;
-    } catch (err) {
-      logger.warn('[hq-sk] queryKeyDetail error:', err);
-      return null;
-    }
-  }
-
-  private async fetchSkFromApi(
-    type: 'query' | 'create',
-    token: string,
-    userCode: string,
-    tenantCode: string,
-  ): Promise<string | null> {
-    const domain = await this.resolveApiDomain();
-    const path = type === 'create' ? '/openapi/key/create' : '/openapi/key/detail';
-    const url = `${domain}${path}`;
-    const secret = this.md5(userCode);
-    const body = { userCode, tenantCode };
-
-    logger.info(`[hq-sk] fetchSkFromApi(${type}) request: url=${url}`);
-    logger.info(`[hq-sk] fetchSkFromApi(${type}) headers: secret=${secret}`);
-    logger.info(`[hq-sk] fetchSkFromApi(${type}) body: ${JSON.stringify(body)}`);
-
-    try {
-      const response = await this.fetchWithTimeout(url, {
-        method: 'POST',
-        headers: {
-          secret,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-
-      const json = (await response.json()) as {
-        code: string;
-        msg: string;
-        detailMsg?: string | null;
-        data?: Array<{ encryptedKey: string }>;
-      };
-
-      logger.info(
-        `[hq-sk] fetchSkFromApi(${type}) response: code=${json.code}, msg=${json.msg}, detailMsg=${json.detailMsg ?? ''}`,
-      );
-
-      if (json.code !== '0') {
-        logger.warn(`[hq-sk] fetchSkFromApi(${type}) biz failed: ${this.formatGatewayError(json)}`);
-        return null;
-      }
-
-      const encryptedKey = json.data?.[0]?.encryptedKey;
-      if (!encryptedKey) {
-        logger.warn(`[hq-sk] fetchSkFromApi(${type}) missing encryptedKey`);
-        return null;
-      }
-
-      logger.info(`[hq-sk] fetchSkFromApi(${type}) encryptedKey found (len=${encryptedKey.length})`);
-      return encryptedKey;
-    } catch (err) {
-      logger.warn(`[hq-sk] fetchSkFromApi(${type}) error:`, err);
-      return null;
-    }
   }
 
   private async decryptSk(encryptedBase64: string): Promise<string> {
