@@ -29,6 +29,14 @@ export function resolveWorkflowStartedAt(
   );
 
   if (candidates.length === 0) return undefined;
+
+  // API startedAt yields a reasonable duration → use it directly so that
+  // completedAt − startedAt is timezone-offset-neutral (same offset cancels).
+  if (completedAt && incoming) {
+    const apiDurationMs = getWorkflowDurationMs(incoming, completedAt) ?? 0;
+    if (apiDurationMs >= 1000) return incoming;
+  }
+
   if (!completedAt) {
     return pickEarlierWorkflowTimestamp(
       pickEarlierWorkflowTimestamp(previous, incoming),
