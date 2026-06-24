@@ -8,7 +8,6 @@
 import type { StoSkStrategy } from './sto-sk-strategy';
 import type { SsoUserInfo } from '../utils/auth-store';
 import type { TokenQuotaTierQueryResult } from '../../shared/sto-token-quota-tier';
-import type { ExpandQuotaResult } from '../../shared/token-quota-expansion-record';
 import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
 import { storeApiKey, getApiKey, deleteApiKey } from '../utils/secure-storage';
 import { logger } from '../utils/logger';
@@ -21,18 +20,11 @@ import crypto from 'crypto';
 
 export class HqSkStrategy implements StoSkStrategy {
   private static readonly CACHE_KEY = 'sto';
-  private static readonly TIMEOUT_MS = 8000;
 
   /** 非网点 SK 解密密钥（按环境区分） */
   private static readonly AES_KEYS: Record<string, string> = {
     prod: '2074c2350686f0e4',
     test: '2074c2350686f0e4',
-  };
-
-  /** 管理 API 域名（仅 expandQuota 遗留直连路径使用，UI 扩容已走 MC） */
-  private static readonly API_DOMAINS: Record<string, string> = {
-    prod: 'https://devops-llmgatewayapi.sto.cn',
-    test: 'https://devops-llmgatewayapi-test.sto.cn',
   };
 
   /** 模型推理 Gateway baseUrl 域名（客户端本地，不经 memory-center） */
@@ -148,91 +140,6 @@ export class HqSkStrategy implements StoSkStrategy {
     return key;
   }
 
-  async expandQuota(
-    user: SsoUserInfo,
-    tokenId: string,
-    amount: number,
-  ): Promise<ExpandQuotaResult> {
-    logger.info(`[hq-sk] expandQuota called, tokenId=${tokenId}, amount=${amount}`);
-
-    if (!user.code) {
-      logger.warn('[hq-sk] expandQuota failed: userCode is empty');
-      return { success: false, message: 'userCode is empty' };
-    }
-
-    const domain = await this.resolveApiDomain();
-    const url = `${domain}/openapi/key/quota/applyExpansion`;
-    const secret = this.md5(tokenId);
-    const operatorName = this.resolveOperatorDisplayName(user);
-    const body = {
-      tokenId,
-      quotaAmount: amount,
-      operatorCode: user.code,
-      operatorName,
-    };
-
-    logger.info(`[hq-sk] expandQuota request: url=${url}`);
-    logger.info(`[hq-sk] expandQuota headers: secret=${secret}`);
-    logger.info(`[hq-sk] expandQuota body: ${JSON.stringify(body)}`);
-
-    const startedAt = Date.now();
-    try {
-      const response = await this.fetchWithTimeout(url, {
-        method: 'POST',
-        headers: {
-          secret,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      });
-
-      const json = (await response.json()) as {
-        code: string;
-        msg: string;
-        detailMsg?: string | null;
-      };
-      const duration_ms = Date.now() - startedAt;
-      logger.info(
-        `[hq-sk] expandQuota response: code=${json.code}, msg=${json.msg}, detailMsg=${json.detailMsg ?? ''}`,
-      );
-
-      const gatewayPayload = {
-        request: { path: '/openapi/key/quota/applyExpansion', body },
-        response: json,
-        duration_ms,
-      };
-
-      if (json.code !== '0') {
-        const message = json.detailMsg || json.msg || `Code ${json.code}`;
-        logger.warn(`[hq-sk] expandQuota biz failed: ${json.code} ${message}`);
-        return {
-          success: false,
-          message,
-          gatewayStatus: json.code,
-          gatewayPayload,
-        };
-      }
-
-      logger.info(`[hq-sk] expandQuota success, quotaAmount=${amount}`);
-      return {
-        success: true,
-        gatewayStatus: json.code,
-        gatewayPayload,
-      };
-    } catch (err) {
-      logger.warn('[hq-sk] expandQuota error:', err);
-      return {
-        success: false,
-        message: String(err),
-        gatewayPayload: {
-          request: { path: '/openapi/key/quota/applyExpansion', body },
-          response: { error: String(err) },
-          duration_ms: Date.now() - startedAt,
-        },
-      };
-    }
-  }
-
   async queryTokenQuotaTier(
     _user: SsoUserInfo,
     tokenId: string,
@@ -259,14 +166,6 @@ export class HqSkStrategy implements StoSkStrategy {
 
   // ─── 私有方法 ───
 
-  private formatGatewayError(json: { code: string; msg?: string; detailMsg?: string | null }): string {
-    const detailMsg = json.detailMsg?.trim();
-    if (detailMsg) return detailMsg;
-    const msg = json.msg?.trim();
-    if (msg) return msg;
-    return `code=${json.code}`;
-  }
-
   private async decryptSk(encryptedBase64: string): Promise<string> {
     const key = await this.getDecryptKey();
     const keyBuffer = Buffer.from(key, 'utf-8');
@@ -286,42 +185,11 @@ export class HqSkStrategy implements StoSkStrategy {
     }
   }
 
-  private resolveOperatorDisplayName(user: SsoUserInfo): string {
-    const realName = user.realName?.trim();
-    if (realName) return realName;
-    const userName = user.userName?.trim();
-    if (userName) return userName;
-    return user.code?.trim() ?? '';
-  }
-
-  private md5(input: string): string {
-    return crypto.createHash('md5').update(input).digest('hex');
-  }
-
   private isTestEnvironment(env?: string | null): boolean {
     const normalized = env?.trim().toLowerCase() || '';
     return ['test', 'pre-release', 'daily', 'daily-external'].some(
       (e) => normalized.includes(e),
     );
-  }
-
-  private async resolveApiDomain(): Promise<string> {
-    const env = await getSsoEnvironment();
-    const domain = this.isTestEnvironment(env)
-      ? HqSkStrategy.API_DOMAINS.test
-      : HqSkStrategy.API_DOMAINS.prod;
-    logger.info(`[hq-sk] resolveApiDomain: env=${env}, domain=${domain}`);
-    return domain;
-  }
-
-  private async fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), HqSkStrategy.TIMEOUT_MS);
-    try {
-      return await fetch(url, { ...init, signal: controller.signal });
-    } finally {
-      clearTimeout(timeoutId);
-    }
   }
 }
 

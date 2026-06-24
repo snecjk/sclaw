@@ -8,14 +8,11 @@
 import type { StoSkStrategy } from './sto-sk-strategy';
 import type { SsoUserInfo } from '../utils/auth-store';
 import type { TokenQuotaTierQueryResult } from '../../shared/sto-token-quota-tier';
-import type { ExpandQuotaResult } from '../../shared/token-quota-expansion-record';
 import { getSsoEnvironment } from '../utils/auth-store';
 import { storeApiKey, getApiKey, deleteApiKey } from '../utils/secure-storage';
 import { logger } from '../utils/logger';
 import {
-  applySiteTokenQuotaExpansionViaMemoryCenter,
   ensureSiteKeyViaMemoryCenter,
-  StoSiteMemoryApiError,
 } from './sto-site-memory-api-service';
 import crypto from 'crypto';
 
@@ -113,37 +110,6 @@ export class SiteSkStrategy implements StoSkStrategy {
       : SiteSkStrategy.AES_KEYS.prod;
     logger.info(`[site-sk] getDecryptKey: env=${env}, key=${key.substring(0, 4)}...`);
     return key;
-  }
-
-  async expandQuota(
-    user: SsoUserInfo,
-    tokenId: string,
-    amount: number,
-  ): Promise<ExpandQuotaResult> {
-    logger.info(`[site-sk] expandQuota via memory-center, tokenId=${tokenId}, amount=${amount} (增量)`);
-
-    if (!user.code) {
-      return { success: false, message: 'userCode is empty' };
-    }
-    if (!tokenId?.trim() || amount <= 0) {
-      return { success: false, message: 'tokenId and positive amount are required' };
-    }
-
-    try {
-      await applySiteTokenQuotaExpansionViaMemoryCenter({
-        tokenId: tokenId.trim(),
-        quotaAmount: amount,
-      });
-      return { success: true, gatewayStatus: 'true' };
-    } catch (err) {
-      const message = err instanceof StoSiteMemoryApiError ? err.message : String(err);
-      logger.warn('[site-sk] expandQuota via memory-center failed:', err);
-      return {
-        success: false,
-        message,
-        gatewayStatus: err instanceof StoSiteMemoryApiError ? String(err.statusCode) : undefined,
-      };
-    }
   }
 
   async clearCache(user: SsoUserInfo): Promise<void> {

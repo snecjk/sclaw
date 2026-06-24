@@ -9,7 +9,6 @@
 import { getAuthState, type SsoUserInfo } from '../utils/auth-store';
 import { resolveStrategy } from './sto-sk-strategy';
 import type { TokenQuotaTierQueryResult } from '../../shared/sto-token-quota-tier';
-import type { ExpandQuotaResult } from '../../shared/token-quota-expansion-record';
 import { logger } from '../utils/logger';
 
 /**
@@ -48,28 +47,6 @@ export async function getUserSkDetail(): Promise<{ tokenId: string; spend: numbe
 
   logger.info(`[user-sk] Delegating detail to strategy, userCode=${user.code}`);
   return strategy.getUserSkDetail(user);
-}
-
-/**
- * 扩容用户 Key 额度
- * 根据用户类型自动选择策略
- */
-export async function expandUserSkQuota(
-  tokenId: string,
-  quotaAmount: number,
-): Promise<ExpandQuotaResult> {
-  logger.info(`[user-sk] expandUserSkQuota called, tokenId=${tokenId}, quotaAmount=${quotaAmount}`);
-
-  const { user } = await getAuthState();
-  const strategy = await resolveStrategy(user);
-
-  if (!strategy || !user) {
-    logger.warn(`[user-sk] No strategy or user for expansion: strategy=${!!strategy}, user=${!!user}`);
-    return { success: false, message: 'No user or strategy' };
-  }
-
-  logger.info(`[user-sk] Delegating expansion to strategy, userCode=${user.code}`);
-  return strategy.expandQuota(user, tokenId, quotaAmount);
 }
 
 /**

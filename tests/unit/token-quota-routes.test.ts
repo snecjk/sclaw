@@ -4,9 +4,8 @@ import type { IncomingMessage, ServerResponse } from 'http';
 const checkTokenQuotaMock = vi.fn();
 const sendJsonMock = vi.fn();
 const getUserSkDetailMock = vi.fn();
-const expandUserSkQuotaMock = vi.fn();
-const reportExpansionMock = vi.fn();
 const applyHqExpansionMock = vi.fn();
+const applySiteExpansionMock = vi.fn();
 const resolveUserTypeMock = vi.fn();
 
 vi.mock('@electron/services/sto-token-quota-service', () => ({
@@ -17,13 +16,18 @@ vi.mock('@electron/services/sto-token-quota-service', () => ({
 
 vi.mock('@electron/services/user-sk-service', () => ({
   getUserSkDetail: (...args: unknown[]) => getUserSkDetailMock(...args),
-  expandUserSkQuota: (...args: unknown[]) => expandUserSkQuotaMock(...args),
   getUserTokenQuotaTiers: vi.fn(),
 }));
 
-vi.mock('@electron/services/sto-token-quota-expansion-record-service', () => ({
-  generateApplyCode: () => 'exp_test_apply_code',
-  reportTokenQuotaExpansionRecord: (...args: unknown[]) => reportExpansionMock(...args),
+vi.mock('@electron/services/sto-site-memory-api-service', () => ({
+  applySiteTokenQuotaExpansionViaMemoryCenter: (...args: unknown[]) => applySiteExpansionMock(...args),
+  StoSiteMemoryApiError: class StoSiteMemoryApiError extends Error {
+    statusCode: number;
+    constructor(message: string, statusCode: number) {
+      super(message);
+      this.statusCode = statusCode;
+    }
+  },
 }));
 
 vi.mock('@electron/services/sto-token-quota-expansion-apply-service', () => ({
@@ -196,7 +200,6 @@ describe('handleTokenQuotaRoutes', () => {
 
     expect(handled).toBe(true);
     expect(applyHqExpansionMock).toHaveBeenCalledTimes(1);
-    expect(expandUserSkQuotaMock).not.toHaveBeenCalled();
     expect(sendJsonMock).toHaveBeenCalledWith(expect.anything(), 200, { success: true });
   });
 
@@ -222,19 +225,9 @@ describe('handleTokenQuotaRoutes', () => {
     expect(applyHqExpansionMock).not.toHaveBeenCalled();
   });
 
-  it('keeps site expansion flow unchanged', async () => {
+  it('proxies site POST /api/token-quota/expansion to memory-center', async () => {
     resolveUserTypeMock.mockResolvedValueOnce('site');
-    getUserSkDetailMock.mockResolvedValueOnce({
-      tokenId: 'tk_1',
-      spend: 10,
-      maxBudget: 100,
-    });
-    expandUserSkQuotaMock.mockResolvedValueOnce({
-      success: true,
-      gatewayStatus: '0',
-      gatewayPayload: { request: { path: '/test', body: {} }, response: { code: '0' } },
-    });
-    reportExpansionMock.mockResolvedValueOnce(undefined);
+    applySiteExpansionMock.mockResolvedValueOnce(undefined);
 
     const { handleTokenQuotaRoutes } = await import('@electron/api/routes/token-quota');
     const req = { method: 'POST', __body: { tokenId: 'tk_1', quotaAmount: 200 } } as IncomingMessage & {
@@ -249,9 +242,11 @@ describe('handleTokenQuotaRoutes', () => {
     );
 
     expect(applyHqExpansionMock).not.toHaveBeenCalled();
-    expect(expandUserSkQuotaMock).toHaveBeenCalledWith('tk_1', 200);
+    expect(applySiteExpansionMock).toHaveBeenCalledWith({
+      tokenId: 'tk_1',
+      quotaAmount: 200,
+      clientEventId: undefined,
+    });
     expect(sendJsonMock).toHaveBeenCalledWith(expect.anything(), 200, { success: true });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(reportExpansionMock).toHaveBeenCalled();
   });
 });

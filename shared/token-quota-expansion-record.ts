@@ -14,13 +14,6 @@ export interface GatewayPayloadSnapshot {
   duration_ms?: number;
 }
 
-export interface ExpandQuotaResult {
-  success: boolean;
-  message?: string;
-  gatewayStatus?: string;
-  gatewayPayload?: GatewayPayloadSnapshot;
-}
-
 export interface PackageSnapshotV1 {
   schema: 'sto.claw.package_snapshot/v1';
   user_type: ExpansionUserType;

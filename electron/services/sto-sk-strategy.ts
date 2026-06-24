@@ -6,7 +6,6 @@
 
 import type { SsoUserInfo } from '../utils/auth-store';
 import type { TokenQuotaTierQueryResult } from '../../shared/sto-token-quota-tier';
-import type { ExpandQuotaResult } from '../../shared/token-quota-expansion-record';
 import { isSiteUser, getSiteDepartmentTypes, setSiteDepartmentTypes } from '../../shared/site-user-utils';
 import { getHqSkStrategy } from './sto-hq-sk-strategy';
 import { getSiteSkStrategy } from './sto-site-sk-strategy';
@@ -33,13 +32,6 @@ export interface StoSkStrategy {
 
   /** 获取 SK 解密密钥（根据当前环境返回对应密钥） */
   getDecryptKey(): Promise<string>;
-
-  /** 扩容额度（amount 语义由实现决定：非网点=目标值，网点=增加值） */
-  expandQuota(
-    user: SsoUserInfo,
-    tokenId: string,
-    amount: number,
-  ): Promise<ExpandQuotaResult>;
 
   /** 查询额度档位列表（非网点实现；网点暂未对接） */
   queryTokenQuotaTier(
