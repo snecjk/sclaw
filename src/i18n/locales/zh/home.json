@@ -19,34 +19,22 @@
       "recon": {
         "title": "总部结算对账",
         "pill": "结算对账",
-        "status": "已完成",
-        "stat1Label": "总收支",
-        "stat1Value": "128,560",
-        "stat1Unit": "元",
-        "stat2Label": "收入",
-        "stat2Value": "98,750",
-        "stat2Unit": "元",
-        "stat3Label": "支出",
-        "stat3Value": "29,810",
-        "stat3Unit": "元",
+        "status": "未配置",
+        "bodyCaption": "工作流简介",
+        "bodyDetail": "对接总部结算数据，自动识别费用结算异常波动科目并输出对账结果，生成可对账、可追踪的标准化结算报告。",
         "footerTeam": "王牌结算小组",
-        "footerHint": "存在异常4项目"
+        "footerHint": "配置工作流",
+        "createPrompt": "总部结算对账 创建工作流"
       },
       "cost": {
         "title": "客户成本分析",
-        "pill": "任务监控",
-        "status": "已完成",
-        "stat1Label": "异常客户",
-        "stat1Value": "57",
-        "stat1Unit": "个",
-        "stat2Label": "高风险",
-        "stat2Value": "12",
-        "stat2Unit": "个",
-        "stat3Label": "涉及金额",
-        "stat3Value": "-26,980.70",
-        "stat3Unit": "元",
+        "pill": "成本分析",
+        "status": "未配置",
+        "bodyCaption": "工作流简介",
+        "bodyDetail": "按客户/店铺维度还原出港发件单票成本，识别科目、流向-重量段成本异常客户，自动生成成本分析报表与优化建议。",
         "footerTeam": "客户跟踪小组",
-        "footerHint": "存在异常3项"
+        "footerHint": "配置工作流",
+        "createPrompt": "客户成本分析 创建工作流"
       }
     },
     "assistant": {
