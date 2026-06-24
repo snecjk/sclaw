@@ -25,7 +25,7 @@ import type { WorkflowExecutionState, WorkflowRunStatus } from '@/types/workflow
 interface WorkflowCardProps {
   runId: string;
   templateName: string;
-  /** default：对话流独立块（pl-5 + mt-3）；inline：嵌在参数已确认展开区内 */
+  /** default：对话流独立块（与消息气泡/输入框同宽，仅 mt-3 间距）；inline：嵌在参数已确认展开区内（外层 pl-5 竖线区） */
   layout?: 'default' | 'inline';
   onPreviewArtifact?: (file: AttachedFileMeta) => void;
   onViewWorkflow?: (workflowId: string) => void;
@@ -228,7 +228,7 @@ export function WorkflowCard({
     <div
       className={cn(
         'w-full space-y-2',
-        layout === 'default' && 'mt-3 pl-5',
+        layout === 'default' && 'mt-3',
       )}
     >
       {display.result?.summary ? (

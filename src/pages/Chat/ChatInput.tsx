@@ -23,7 +23,6 @@ import {
   CirclePlus,
   Bot,
   Workflow,
-  Mic,
   ArrowUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -718,7 +717,8 @@ export function ChatInput({
           className={cn(
             isHomeComposer
               ? cn(
-                  'relative flex h-[120px] min-h-[120px] flex-col overflow-visible rounded-[22px] border border-border bg-card',
+                  // min-h 保留设计稿默认高度；随 DingTalkMentionEditor 增高，避免多行内容溢出边框
+                  'relative flex min-h-[120px] flex-col overflow-visible rounded-[22px] border border-border bg-card',
                   'shadow-[0_6px_30px_rgba(43,17,0,0.03)] transition-[box-shadow,border-color,ring-width,ring-color] duration-200',
                   dragOver
                     ? 'border-primary ring-2 ring-primary/25'
@@ -777,10 +777,10 @@ export function ChatInput({
           <div className={cn(
             'px-4',
             isHomeComposer
-              ? cn('flex min-h-0 flex-1 flex-col', attachments.length > 0 ? 'pt-1' : 'pt-3')
+              ? attachments.length > 0 ? 'pt-1' : 'pt-3'
               : cn(attachments.length > 0 ? 'pt-1.5' : 'pt-2.5'),
           )}>
-            <div ref={mentionPopoverRef} className="flex-1 relative">
+            <div ref={mentionPopoverRef} className={cn('relative', !isHomeComposer && 'flex-1')}>
               <DingTalkMentionPopover
                 open={dingTalkMentionOpen}
                 items={dingTalkItems}
@@ -822,7 +822,7 @@ export function ChatInput({
 
           {isHomeComposer ? (
             <div className="relative flex shrink-0 items-center justify-between gap-2 px-4 pb-3 pt-1">
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <Button
                   variant="ghost"
                   type="button"
@@ -904,18 +904,9 @@ export function ChatInput({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 items-center gap-2">
                 {toolbarInlineSelectors}
-                <Button
-                  variant="ghost"
-                  type="button"
-                  className="h-[22px] w-[22px] rounded-full p-0 text-muted-foreground/60"
-                  disabled
-                  aria-disabled="true"
-                  title={t('composer.micComingSoon')}
-                >
-                  <Mic className="h-[22px] w-[22px]" aria-hidden />
-                </Button>
+                {/* 语音输入暂未接入，先隐藏 Mic 按钮；恢复时还原 ghost Button + Mic 图标 */}
                 {sending && canSend ? (
                   <Button
                     onClick={handleSend}

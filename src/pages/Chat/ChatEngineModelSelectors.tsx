@@ -44,7 +44,7 @@ const pillStatic = cn(
   'flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg py-0 pl-2.5 pr-2',
 );
 
-/** 首页 HomeComposer 内联引擎/模型：灰底 pill，无左侧标签与图标 */
+/** 首页 HomeComposer 内联引擎/模型：灰底 pill；flex-1 + truncate 与对侧 pill 同步截断文字 */
 const inlinePillTrigger = cn(
   'flex h-[30px] min-w-0 items-center gap-1 rounded-[20px] bg-[#F5F6F7] px-3 outline-none',
   'text-sm font-normal text-foreground transition-colors hover:bg-black/[0.04]',
@@ -206,7 +206,7 @@ export function ChatEngineSelector({
             title="切换新会话执行引擎"
             className={cn(
               inlinePillTrigger,
-              'max-w-[120px]',
+              'min-w-0 max-w-none flex-1',
               (engineSaving || !canSwitchEngine) && 'pointer-events-none opacity-60',
               className,
             )}
@@ -500,7 +500,7 @@ export function ChatModelSelector({
             title={t('toolbar.switchModelTitle')}
             className={cn(
               inlinePillTrigger,
-              'max-w-[136px]',
+              'min-w-0 max-w-none flex-1',
               modelSaving && 'pointer-events-none opacity-60',
               className,
             )}

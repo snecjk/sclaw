@@ -15,6 +15,7 @@ import { useGatewayStore } from '@/stores/gateway';
 import { useScheduledTasksStore } from '@/stores/scheduledTasks';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { cn } from '@/lib/utils';
+import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { useBuiltinToolListener } from '@/hooks/use-builtin-tool-listener';
 import { TaskCreateModal } from '@/pages/ScheduledTasks/components/TaskCreateModal';
@@ -28,6 +29,8 @@ export function Home() {
   const isSite = isSiteUser(user?.categoryCode);
   const crmWeekReportSurfaceAllowed = useAuthStore((s) => s.crmWeekReportSurfaceAllowed);
   const showConversation = useHomeConversationActive();
+  const { isSplitGridPassthrough, splitGridPassthroughClass } =
+    useSplitGridPassthroughClass(showConversation);
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
   const navigate = useNavigate();
   const createTask = useScheduledTasksStore((s) => s.createTask);
@@ -120,7 +123,13 @@ export function Home() {
   if (!crmWeekReportSurfaceAllowed) {
     return (
       <>
-        <div className="mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-2 sm:px-2">
+        <div
+          className={cn(
+            isSplitGridPassthrough
+              ? splitGridPassthroughClass
+              : 'mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-2 sm:px-2',
+          )}
+        >
           <HomeAgentHubSurface seedText={seedText} />
         </div>
         <TaskCreateModal
@@ -135,11 +144,19 @@ export function Home() {
 
   return (
     <>
-      <div className="mx-auto flex h-full min-h-0 w-full flex-1 flex-col">
+      <div
+        className={cn(
+          isSplitGridPassthrough
+            ? splitGridPassthroughClass
+            : 'mx-auto flex h-full min-h-0 w-full flex-1 flex-col',
+        )}
+      >
         <div
           className={cn(
-            'flex min-h-0 flex-1 flex-col overflow-hidden',
-            !showConversation && 'px-4 sm:px-6'
+            isSplitGridPassthrough
+              ? splitGridPassthroughClass
+              : 'flex min-h-0 flex-1 flex-col overflow-hidden',
+            !showConversation && !isSplitGridPassthrough && 'px-4 sm:px-6',
           )}
         >
           {showConversation ? (

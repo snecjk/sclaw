@@ -13,6 +13,8 @@ import {
   stoMainCardBodySplitClass,
   stoMainCardShellClass,
   stoMainCardWrapClass,
+  stoSplitShellInsetsClass,
+  stoSplitUnifiedMainClass,
 } from '@/lib/surfaces';
 import { AppShellChromeOverlay } from '@/components/layout/app-shell-chrome-overlay';
 import { ContentHeader } from '@/components/layout/ContentHeader';
@@ -27,10 +29,38 @@ import { TitleBar } from './TitleBar';
 function MainCardBody() {
   const { isSplitLayout } = useContentHeaderDisplay();
 
+  // 三栏与双栏 body 类互斥：cn 合并时 px-[var(--sto-content-pad-x)] 可能压过 px-0，split row 会比 header 窄 ~32–40px
+  if (isSplitLayout) {
+    return (
+      <div className={stoMainCardBodySplitClass}>
+        <Outlet />
+      </div>
+    );
+  }
+
   return (
-    <div className={cn(stoMainCardBodyClass, isSplitLayout && stoMainCardBodySplitClass)}>
+    <div className={stoMainCardBodyClass}>
       <Outlet />
     </div>
+  );
+}
+
+/** 省区主卡片：三栏时 main 承担水平 inset，保证 Header 与 split row 预览列左缘一致 */
+function ProvincialMainCard() {
+  const { isSplitLayout } = useContentHeaderDisplay();
+
+  return (
+    <main
+      className={cn(
+        stoMainCardShellClass,
+        isSplitLayout
+          ? cn(stoSplitShellInsetsClass, stoSplitUnifiedMainClass)
+          : 'flex min-h-0 min-w-0 flex-1 flex-col',
+      )}
+    >
+      <ContentHeader />
+      <MainCardBody />
+    </main>
   );
 }
 
@@ -80,12 +110,9 @@ export function MainLayout() {
         <div className={stoAppShellBodyProvincialClass(sidebarCollapsed)}>
           <Sidebar />
           <div className={stoMainCardWrapClass(sidebarCollapsed)}>
-            <main className={cn(stoMainCardShellClass, 'flex flex-col')}>
-              <ContentHeaderProvider>
-                <ContentHeader />
-                <MainCardBody />
-              </ContentHeaderProvider>
-            </main>
+            <ContentHeaderProvider>
+              <ProvincialMainCard />
+            </ContentHeaderProvider>
           </div>
         </div>
       </div>

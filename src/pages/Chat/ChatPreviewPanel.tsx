@@ -1,8 +1,7 @@
 /**
- * ChatPreviewPanel — 三栏预览区右侧面板（仅产物文件）
+ * ChatPreviewPanel — 三栏预览区右侧面板（圆角内容壳 + 文件预览）
  *
- * Tab 行在 ContentHeader；此处仅产物内容壳（操作行 + 文件预览）。
- * 收起预览由 ContentHeader 的 preview icon 统一控制。
+ * Tab 行（☰ + 产物 pill）在 ContentHeader 与搜索/刷新等 icon 同一行。
  */
 import { useCallback, useMemo, useState } from 'react';
 import {

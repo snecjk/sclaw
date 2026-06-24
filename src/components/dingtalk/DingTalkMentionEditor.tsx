@@ -155,6 +155,10 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
     }), [onTriggerChange, removableMentions, resizeEditor, syncFromDom]);
 
     useEffect(() => {
+      resizeEditor();
+    }, [resizeEditor]);
+
+    useEffect(() => {
       const trimmed = seedText?.trim();
       const root = editorRef.current;
       if (!root) return;
@@ -241,11 +245,13 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
           onCompositionStart?.();
         }}
         onCompositionUpdate={() => {
+          resizeEditor();
           syncFromDom();
         }}
         onCompositionEnd={() => {
           isComposingRef.current = false;
           onCompositionEnd?.();
+          resizeEditor();
           syncFromDom();
         }}
       />
