@@ -14,6 +14,8 @@ import { listProviderAccounts, providerAccountToConfig } from './provider-store'
 import { getClawXProviderStore } from './store-instance';
 import { syncDeletedProviderToRuntime } from './provider-runtime-sync';
 import {
+  extractOpenClawProviderModelIds,
+  isLegacyStoOpenClawModelRef,
   isStoCatalogReady,
   isStoInternalOpenClawKey,
   OPENCLAW_STO_PLACEHOLDER_KEYS_TO_SCRUB,
@@ -70,35 +72,32 @@ export async function detectStoCatalogLegacyState(): Promise<StoCatalogLegacySta
     reasons.push('incomplete-sto-account');
   }
 
-  const { providers } = await getOpenClawProvidersConfig();
+  const { providers, defaultModel } = await getOpenClawProvidersConfig();
   for (const key of Object.keys(providers)) {
     if (isLegacyOpenClawProviderKey(key)) {
       reasons.push(`openclaw-key:${key}`);
     }
   }
 
+  if (defaultModel && isLegacyStoOpenClawModelRef(defaultModel)) {
+    reasons.push('legacy-primary-model-ref');
+  }
+
   const stoOpenClaw = providers[STO_CANONICAL_ACCOUNT_ID];
-  const openClawModelIds = extractOpenClawModelIds(stoOpenClaw);
+  const openClawModelIds = extractOpenClawProviderModelIds(stoOpenClaw);
   const catalogModels = canonical?.metadata?.customModels ?? [];
-  if (
-    catalogModels.length > 0
-    && openClawModelIds.length > 0
-    && openClawModelIds.length < catalogModels.length
-  ) {
-    reasons.push('openclaw-sto-models-incomplete');
+  if (catalogModels.length > 0) {
+    if (!stoOpenClaw || openClawModelIds.length === 0) {
+      reasons.push('openclaw-sto-missing');
+    } else if (openClawModelIds.length < catalogModels.length) {
+      reasons.push('openclaw-sto-models-incomplete');
+    }
   }
 
   return {
     needsMigration: reasons.length > 0,
     reasons,
   };
-}
-
-function extractOpenClawModelIds(entry: Record<string, unknown> | undefined): string[] {
-  if (!entry || !Array.isArray(entry.models)) return [];
-  return (entry.models as Array<Record<string, unknown>>)
-    .map((m) => (typeof m.id === 'string' ? m.id : ''))
-    .filter(Boolean);
 }
 
 export type StoCatalogPreMigrateResult = {

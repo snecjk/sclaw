@@ -23,8 +23,10 @@ import {
 } from './provider-runtime-sync';
 import { logger } from '../../utils/logger';
 import { buildStoMemoryCenterAuthHeaders } from '../../utils/sto-memory-api-auth';
-import { removeProviderFromOpenClaw } from '../../utils/openclaw-auth';
+import { getOpenClawProvidersConfig, removeProviderFromOpenClaw } from '../../utils/openclaw-auth';
 import {
+  extractOpenClawProviderModelIds,
+  isLegacyStoOpenClawModelRef,
   OPENCLAW_STO_PLACEHOLDER_KEYS_TO_SCRUB,
   shouldDeleteStaleStoPlaceholder,
   STO_CANONICAL_ACCOUNT_ID,
@@ -310,9 +312,17 @@ export class StoModelSyncService {
       const baseUrlChanged = existingAccount.baseUrl !== expectedBaseUrl;
       const currentModelRemoved =
         existingAccount.model && !remoteModelIds.includes(existingAccount.model);
+      const vendorIdNeedsNormalize = existingAccount.vendorId !== 'sto';
 
-      if (modelsChanged || baseUrlChanged || currentModelRemoved || !existingAccount.enabled) {
+      if (
+        modelsChanged
+        || baseUrlChanged
+        || currentModelRemoved
+        || !existingAccount.enabled
+        || vendorIdNeedsNormalize
+      ) {
         const patch: Partial<ProviderAccount> = {
+          vendorId: 'sto',
           baseUrl: expectedBaseUrl,
           enabled: true,
           metadata: {
@@ -333,6 +343,7 @@ export class StoModelSyncService {
             ...existingAccount,
             ...patch,
             id: STO_ACCOUNT_ID,
+            vendorId: 'sto' as const,
           };
           await syncSavedProviderToRuntime(
             providerAccountToConfig(updatedAccount),
@@ -358,6 +369,10 @@ export class StoModelSyncService {
       }
     }
 
+    // Step 4b — Provider store may be ready while openclaw.json still has legacy residue
+    // (custom-sto primary, incomplete sto.models[], Windows restart cooldown, etc.).
+    await this.ensureStoCatalogMirroredToOpenClaw(token, runtimeGateway, result);
+
     // Step 5 — Set default provider if needed
     const currentDefault = await getDefaultProviderAccountId();
     const needsNewDefault =
@@ -377,15 +392,23 @@ export class StoModelSyncService {
     }
 
     if (legacyState.needsMigration) {
-      const refreshedAccounts = await listProviderAccounts();
-      const stoAccount = refreshedAccounts.find((a) => a.id === STO_ACCOUNT_ID);
-      if (stoAccount && isStoCatalogReady(stoAccount)) {
+      const postRepairState = await detectStoCatalogLegacyState();
+      if (!postRepairState.needsMigration) {
         await markStoCatalogMigrationComplete();
         result.legacyRepaired = true;
-        result.needsForcedGatewayRefresh = true;
+        if (
+          result.created.length > 0
+          || result.updated.length > 0
+          || result.deleted.length > 0
+          || result.defaultSet != null
+        ) {
+          result.needsForcedGatewayRefresh = true;
+        }
         logger.info('[sto-sync] Legacy STO catalog migration marked complete');
       } else {
-        logger.warn('[sto-sync] Legacy STO catalog detected but canonical account not ready; migration deferred');
+        logger.warn(
+          `[sto-sync] Legacy STO catalog still pending after sync (${postRepairState.reasons.join(', ')})`,
+        );
       }
     }
 
@@ -394,6 +417,65 @@ export class StoModelSyncService {
     );
 
     return result;
+  }
+
+  /**
+   * When the provider store has a ready STO catalog but openclaw.json is stale
+   * (missing sto, incomplete models[], or legacy custom-sto primary), mirror runtime.
+   */
+  private async ensureStoCatalogMirroredToOpenClaw(
+    token: string,
+    runtimeGateway: GatewayManager | undefined,
+    result: StoSyncResult,
+  ): Promise<void> {
+    const refreshedAccounts = await listProviderAccounts();
+    const stoAccount = refreshedAccounts.find((a) => a.id === STO_ACCOUNT_ID);
+    if (!stoAccount || !isStoCatalogReady(stoAccount)) {
+      return;
+    }
+
+    const catalogModels = stoAccount.metadata?.customModels ?? [];
+    const { providers, defaultModel } = await getOpenClawProvidersConfig();
+    const openClawModelIds = extractOpenClawProviderModelIds(providers[STO_ACCOUNT_ID]);
+    const stoMissingFromOpenClaw = !providers[STO_ACCOUNT_ID];
+    const openClawModelsIncomplete =
+      catalogModels.length > 0 && openClawModelIds.length < catalogModels.length;
+    const legacyPrimary = Boolean(defaultModel && isLegacyStoOpenClawModelRef(defaultModel));
+
+    if (!stoMissingFromOpenClaw && !openClawModelsIncomplete && !legacyPrimary) {
+      return;
+    }
+
+    logger.info(
+      `[sto-sync] Repairing openclaw STO runtime: missing=${stoMissingFromOpenClaw}, `
+      + `incompleteModels=${openClawModelsIncomplete} (${openClawModelIds.length}/${catalogModels.length}), `
+      + `legacyPrimary=${legacyPrimary}${defaultModel ? ` (${defaultModel})` : ''}`,
+    );
+
+    try {
+      await syncSavedProviderToRuntime(
+        providerAccountToConfig(stoAccount),
+        token,
+        runtimeGateway,
+      );
+      if (!result.updated.includes(STO_ACCOUNT_ID)) {
+        result.updated.push(STO_ACCOUNT_ID);
+      }
+    } catch (err) {
+      logger.warn('[sto-sync] Failed to mirror STO catalog to openclaw.json:', err);
+      return;
+    }
+
+    if (legacyPrimary || stoMissingFromOpenClaw || openClawModelsIncomplete) {
+      try {
+        await syncDefaultProviderToRuntime(STO_ACCOUNT_ID, runtimeGateway);
+        if (!result.defaultSet) {
+          result.defaultSet = STO_ACCOUNT_ID;
+        }
+      } catch (err) {
+        logger.warn('[sto-sync] Failed to repair STO default model in openclaw.json:', err);
+      }
+    }
   }
 
   // -- Periodic sync -------------------------------------------------------
@@ -446,6 +528,15 @@ export class StoModelSyncService {
           `[sto-sync] Failed to delete account ${account.id} on logout:`,
           err,
         );
+      }
+    }
+
+    for (const legacyKey of OPENCLAW_STO_PLACEHOLDER_KEYS_TO_SCRUB) {
+      try {
+        await removeProviderFromOpenClaw(legacyKey);
+        logger.info(`[sto-sync] Scrubbed legacy openclaw provider "${legacyKey}" on logout`);
+      } catch (err) {
+        logger.warn(`[sto-sync] Failed to scrub legacy openclaw provider "${legacyKey}" on logout:`, err);
       }
     }
 

@@ -34,9 +34,28 @@ import type { ProviderWithKeyInfo } from '../../shared/providers/types';
 import { logger } from '../../utils/logger';
 import { getStoToken } from '../../utils/auth-store';
 import {
+  extractOpenClawProviderModelIds,
   isStaleStoPlaceholderAccount,
+  isStoCatalogReady,
   isStoInternalOpenClawKey,
 } from './sto-placeholder-utils';
+
+function isAccountVisibleAgainstOpenClaw(
+  account: ProviderAccount,
+  activeProviders: Set<string>,
+): boolean {
+  // STO catalog lives in the provider store; do not hide it when openclaw.json lags.
+  if (isStoCatalogReady(account)) {
+    return true;
+  }
+
+  const openClawKey = getOpenClawProviderKeyForType(account.vendorId, account.id);
+  return (
+    activeProviders.has(account.vendorId) ||
+    activeProviders.has(account.id) ||
+    activeProviders.has(openClawKey)
+  );
+}
 
 async function filterAccountsForAuthenticatedStoSync(
   accounts: ProviderAccount[],
@@ -99,16 +118,16 @@ export class ProviderService {
       const configEmpty = activeProviders.size === 0;
 
       if (configEmpty) {
+        const readyStoAccounts = accounts.filter((account) => isStoCatalogReady(account));
+        if (readyStoAccounts.length > 0) {
+          return filterAccountsForAuthenticatedStoSync(readyStoAccounts);
+        }
         logger.info('[provider-sync] OpenClaw config empty — hiding all provider accounts from display');
         return [];
       }
 
       accounts = accounts.filter((account) => {
-        const openClawKey = getOpenClawProviderKeyForType(account.vendorId, account.id);
-        const isActive =
-          activeProviders.has(account.vendorId) ||
-          activeProviders.has(account.id) ||
-          activeProviders.has(openClawKey);
+        const isActive = isAccountVisibleAgainstOpenClaw(account, activeProviders);
 
         if (!isActive) {
           logger.info(`[provider-sync] Hiding stale provider account "${account.id}" (not in OpenClaw config)`);
@@ -218,6 +237,19 @@ export class ProviderService {
         createdAt: now,
         updatedAt: now,
       };
+
+      if (key === 'sto' || vendorId === 'sto') {
+        const customModels = extractOpenClawProviderModelIds(entry);
+        if (customModels.length > 0) {
+          account.metadata = {
+            managedBy: 'openclaw-import',
+            customModels,
+          };
+          if (!account.model) {
+            account.model = customModels[0];
+          }
+        }
+      }
 
       built.push(account);
     }
