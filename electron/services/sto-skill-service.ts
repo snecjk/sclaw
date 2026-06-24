@@ -54,6 +54,26 @@ export interface StoSkillResult {
   stars?: number;
 }
 
+/**
+ * Safe directory removal with retry for Windows EBUSY errors.
+ */
+async function safeRemove(dir: string, maxRetries = 3): Promise<void> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await fs.promises.rm(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code === 'EBUSY' && i < maxRetries - 1) {
+        logger.warn(`[safeRemove] EBUSY on ${dir}, retrying in ${500 * (i + 1)}ms (attempt ${i + 1}/${maxRetries})`);
+        await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -61,6 +81,7 @@ export interface StoSkillResult {
 export class StoSkillService {
   private workDir: string;
   private skillsDir: string;
+  private installLocks: Map<string, Promise<void>> = new Map();
 
   constructor() {
     this.workDir = getOpenClawConfigDir();
@@ -125,6 +146,23 @@ export class StoSkillService {
    *   3. Update lock.json
    */
   async install(params: StoSkillInstallParams): Promise<void> {
+    // Prevent concurrent installs for the same skill slug
+    while (this.installLocks.has(params.slug)) {
+      logger.info(`[StoSkillService] install: waiting for previous install of ${params.slug} to complete`);
+      await this.installLocks.get(params.slug);
+    }
+
+    const installPromise = this.doInstall(params);
+    this.installLocks.set(params.slug, installPromise);
+
+    try {
+      await installPromise;
+    } finally {
+      this.installLocks.delete(params.slug);
+    }
+  }
+
+  private async doInstall(params: StoSkillInstallParams): Promise<void> {
     const baseUrl = await resolveStoBaseUrl();
     const token = await getStoToken();
     if (!token) throw new Error('未登录或 stoToken 已过期，请重新登录');
@@ -179,7 +217,7 @@ export class StoSkillService {
       // Extract ZIP to primary target (mount point)
       const targetDir = path.join(skillsDir, params.slug);
       if (params.force && fs.existsSync(targetDir)) {
-        await fs.promises.rm(targetDir, { recursive: true, force: true });
+        await safeRemove(targetDir);
       }
       if (!fs.existsSync(targetDir)) {
         fs.mkdirSync(targetDir, { recursive: true });
@@ -200,7 +238,7 @@ export class StoSkillService {
       if (userSkillsDir) {
         const userTargetDir = path.join(userSkillsDir, params.slug);
         if (params.force && fs.existsSync(userTargetDir)) {
-          await fs.promises.rm(userTargetDir, { recursive: true, force: true });
+          await safeRemove(userTargetDir);
         }
         await this.copyDir(targetDir, userTargetDir);
         logger.info(`[StoSkillService] install: ${params.slug} copied to user workspace ${userTargetDir}`);
@@ -247,11 +285,11 @@ export class StoSkillService {
     const disabledDir = path.join(this.getDisabledDir(), params.slug);
     if (fs.existsSync(skillDir)) {
       logger.info(`[StoSkillService] uninstall: removing ${skillDir}`);
-      await fs.promises.rm(skillDir, { recursive: true, force: true });
+      await safeRemove(skillDir);
     }
     if (fs.existsSync(disabledDir)) {
       logger.info(`[StoSkillService] uninstall: removing disabled ${disabledDir}`);
-      await fs.promises.rm(disabledDir, { recursive: true, force: true });
+      await safeRemove(disabledDir);
     }
 
     // For global uninstall, also remove from user workspace
@@ -261,10 +299,10 @@ export class StoSkillService {
         const userSkillDir = path.join(getOpenClawUserSkillsDir(userCode), params.slug);
         const userDisabledDir = path.join(getOpenClawUserDisabledDir(userCode), params.slug);
         if (fs.existsSync(userSkillDir)) {
-          await fs.promises.rm(userSkillDir, { recursive: true, force: true });
+          await safeRemove(userSkillDir);
         }
         if (fs.existsSync(userDisabledDir)) {
-          await fs.promises.rm(userDisabledDir, { recursive: true, force: true });
+          await safeRemove(userDisabledDir);
         }
       }
     }
