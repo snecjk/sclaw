@@ -1,14 +1,8 @@
 /**
- * Resolve `zod` through @anthropic-ai/claude-agent-sdk's peer dependency.
- * pnpm does not hoist `zod` to the repo root, so bare `import 'zod'` breaks Vite/Rollup.
+ * Re-export zod for sto-plugin Claude MCP tools.
+ *
+ * Must use a static import so Vite bundles zod into the Electron main chunk.
+ * Packaged app.asar does not ship zod in node_modules; runtime require.resolve
+ * (including via @anthropic-ai/claude-agent-sdk paths) fails after install.
  */
-import { createRequire } from 'node:module';
-import { dirname } from 'node:path';
-
-const require = createRequire(import.meta.url);
-
-// SDK exports only "." — not "./package.json" — so resolve via the main entry.
-const sdkRoot = dirname(require.resolve('@anthropic-ai/claude-agent-sdk'));
-const zodModule = require(require.resolve('zod', { paths: [sdkRoot] })) as typeof import('zod');
-
-export const z = zodModule.z;
+export { z } from 'zod';
