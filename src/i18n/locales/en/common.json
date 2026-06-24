@@ -6,6 +6,7 @@
         "sessionList": "Chat history",
         "toggleSidebarCollapse": "Collapse sidebar",
         "toggleSidebarExpand": "Expand sidebar",
+        "productName": "S Claw",
         "appVersionLabel": "v {{version}}",
         "enterpriseTag": "Enterprise",
         "chat": "Chat",

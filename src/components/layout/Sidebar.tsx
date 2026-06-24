@@ -11,7 +11,6 @@ import {
   Settings as SettingsIcon,
   Trash2,
   LogOut,
-  ChevronLeft,
   ChevronRight,
   Globe,
   Check,
@@ -47,11 +46,9 @@ import { useGatewayStore } from '@/stores/gateway';
 import { useAuthStore } from '@/stores/auth';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { SidebarProvincialChromeRow } from '@/components/layout/sidebar-provincial-chrome-row';
+import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
 import { useTranslation } from 'react-i18next';
 import { resolveSessionLabel } from '@/lib/session-label';
-import logoSvg from '@/assets/logo.svg';
-import packageJson from '../../../package.json';
 import { taskDetailPath, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
@@ -112,13 +109,13 @@ const SIDEBAR_NAV_EXPANDED_IDLE =
 const SIDEBAR_NAV_EXPANDED_ACTIVE =
   'h-9 min-h-9 rounded-[8px] bg-[#E5E6EB] px-[10px] font-medium leading-5 text-[#1D2129] shadow-none [&_svg]:stroke-[#1D2129] hover:bg-[#DCDEE3] dark:bg-white/[0.12] dark:text-foreground dark:[&_svg]:stroke-foreground';
 
+/** 侧栏收起态：展开按钮 */
+const SIDEBAR_COLLAPSED_EXPAND_BTN_CLASS =
+  'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card';
+
 /** 分区标题（任务 / 最近 / 工作台）— 14/20 Medium Grey-8 */
 const SIDEBAR_SECTION_LABEL_CLASS =
   'text-sm font-medium leading-5 text-[#86909C] dark:text-muted-foreground';
-
-/** full layout 顶栏：Logo + 版本 + 描边折叠钮（保留原线上样式） */
-const SIDEBAR_FULL_BRAND_TOGGLE_BTN_CLASS =
-  'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card';
 
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   if (!activityMs || activityMs <= 0) return 'older';
@@ -941,8 +938,6 @@ export function Sidebar() {
     && !taskListShowAll
     && taskListRenderPlan.totalRows > SIDEBAR_TASK_LIST_INITIAL_ROW_LIMIT;
 
-  const appVersionShort = packageJson.version?.split('-')[0] ?? packageJson.version;
-
   const toggleBucket = (key: SessionBucketKey) => {
     setBucketOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -1016,35 +1011,18 @@ export function Sidebar() {
             aria-label={t('common:sidebar.toggleSidebarExpand')}
             title={t('common:sidebar.toggleSidebarExpand')}
             onClick={() => setSidebarCollapsed(false)}
-            className={SIDEBAR_FULL_BRAND_TOGGLE_BTN_CLASS}
+            className={SIDEBAR_COLLAPSED_EXPAND_BTN_CLASS}
           >
             <ChevronRight className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
           </button>
         </div>
-      ) : !isProvincialSidebar ? (
-        <div className="flex shrink-0 items-start justify-between gap-2 border-b border-[var(--sto-sidebar-border)] px-3 pb-3 pt-3">
-          <div className="flex min-w-0 flex-1 items-center gap-2.5 pl-1">
-            <img src={logoSvg} alt="" className="h-10 w-10 shrink-0 rounded-[10px] object-contain" width={40} height={40} />
-            <div className="min-w-0">
-              <div className="text-[17px] font-bold leading-tight tracking-tight text-foreground">STO Claw</div>
-              <div className="text-xs text-muted-foreground">
-                {t('common:sidebar.appVersionLabel', { version: appVersionShort })}
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            aria-expanded={true}
-            aria-label={t('common:sidebar.toggleSidebarCollapse')}
-            title={t('common:sidebar.toggleSidebarCollapse')}
-            onClick={() => setSidebarCollapsed(true)}
-            className={SIDEBAR_FULL_BRAND_TOGGLE_BTN_CLASS}
-          >
-            <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
-          </button>
-        </div>
       ) : (
-        <SidebarProvincialChromeRow />
+        <SidebarBrandHeader
+          layoutVariant={sidebarLayoutVariant}
+          onCollapse={() => setSidebarCollapsed(true)}
+          collapseLabel={t('common:sidebar.toggleSidebarCollapse')}
+          expandLabel={t('common:sidebar.toggleSidebarExpand')}
+        />
       )}
 
       <nav

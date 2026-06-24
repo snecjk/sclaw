@@ -17,14 +17,3 @@ export function ChromeEnvBadge() {
     </span>
   );
 }
-
-/** 省区 chrome 左侧：仅环境角标 */
-export function ChromeProvincialLeading() {
-  if (!envConfig.displaySuffix) return null;
-
-  return (
-    <div className="flex min-w-0 flex-1 items-center">
-      <ChromeEnvBadge />
-    </div>
-  );
-}

@@ -14,6 +14,7 @@ import {
 } from 'react';
 import { matchPath, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { isSidebarPrimaryNavRoute } from '@/lib/sidebar-primary-nav';
 
 export interface ContentHeaderSlot {
   /** 左侧标题（字符串或节点） */
@@ -92,7 +93,7 @@ export function useContentHeader({
 
 /** ContentHeader 组件读取当前应展示的 title / previewTabs / actions（含路由默认标题） */
 export function useContentHeaderDisplay(): {
-  title: ReactNode;
+  title: ReactNode | null;
   previewTabs: ReactNode | null;
   actions: ReactNode | null;
   isSplitLayout: boolean;
@@ -103,8 +104,11 @@ export function useContentHeaderDisplay(): {
   const { t } = useTranslation();
   const defaultTitle = resolveDefaultTitle(pathname, t);
 
+  // primaryNav 路由：侧栏已标识功能，不展示兜底「首页 / 工作流」等；页面注入的会话 chip 仍走 slot.title
+  const title = slot?.title ?? (isSidebarPrimaryNavRoute(pathname) ? null : defaultTitle);
+
   return {
-    title: slot?.title ?? defaultTitle,
+    title,
     previewTabs: slot?.previewTabs ?? null,
     actions: slot?.actions ?? null,
     isSplitLayout: slot?.isSplitLayout ?? false,
