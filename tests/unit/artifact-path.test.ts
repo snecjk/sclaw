@@ -33,6 +33,33 @@ describe('normalizeArtifactPathPrefix', () => {
     ).toBe('/Users/sto/.stoclaw/openclaw/workspace/report.html');
   });
 
+  it('rewrites legacy Windows .openclaw workspace with backslashes', () => {
+    expect(
+      normalizeArtifactPathPrefix(
+        'C:\\Users\\sto\\.openclaw\\workspace\\.claw-output\\report.html',
+        'C:\\Users\\sto',
+      ),
+    ).toBe('C:/Users/sto/.stoclaw/openclaw/workspace/.claw-output/report.html');
+  });
+
+  it('rewrites legacy Windows .openclaw workspace with forward slashes', () => {
+    expect(
+      normalizeArtifactPathPrefix(
+        'C:/Users/sto/.openclaw/workspace/outputs/report.html',
+        'C:/Users/sto',
+      ),
+    ).toBe('C:/Users/sto/.stoclaw/openclaw/workspace/outputs/report.html');
+  });
+
+  it('rewrites file:// Windows legacy workspace path', () => {
+    expect(
+      normalizeArtifactPathPrefix(
+        'file:///C:/Users/sto/.openclaw/workspace/.claw-output/report.html',
+        'C:/Users/sto',
+      ),
+    ).toBe('C:/Users/sto/.stoclaw/openclaw/workspace/.claw-output/report.html');
+  });
+
   it('normalizes Windows file:// URLs', () => {
     expect(stripFileUrlScheme('file:///C:/Users/sto/report.html')).toBe('C:/Users/sto/report.html');
   });

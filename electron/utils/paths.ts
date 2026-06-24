@@ -34,6 +34,11 @@ export function getOpenClawConfigDir(): string {
   return join(homedir(), '.stoclaw', 'openclaw');
 }
 
+/** Legacy standalone OpenClaw workspace (~/.openclaw/workspace), if present on disk. */
+export function getLegacyOpenClawWorkspaceRoot(): string {
+  return join(homedir(), '.openclaw', 'workspace');
+}
+
 /**
  * Get OpenClaw skills directory
  */

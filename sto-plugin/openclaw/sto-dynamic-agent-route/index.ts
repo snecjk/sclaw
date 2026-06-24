@@ -303,6 +303,8 @@ export default definePluginEntry({
 				// 防止模型把云端运行时路径当作可访问链接输出给用户。
 				appendBlocks.push([
 					"产物文件引用规范（重要）：",
+					"- 写入：本地产物必须 save 到当前 workspace 的 `./.claw-output/<文件名>`；⛔ 禁止 `outputs/`、项目源码目录、skill 目录；⛔ 禁止 `~/.openclaw/workspace`（旧路径），统一使用 `~/.stoclaw/openclaw/workspace/.claw-output/`。",
+					"- 路径一致：回复里的 file:/// 绝对路径必须与 write/save 实际路径逐字相同（含文件名）；⛔ 禁止写 A 名、链 B 名。",
 					"- 当回复中引用用户可查看或下载的本地产物文件（HTML 报告、PDF、表格、文档等）时，必须输出绝对路径，并优先使用 file:// URL 的 Markdown 链接格式：[文件名](file:///绝对路径)。",
 					"- 严禁输出相对路径链接（如 [report.md](report.md)、outputs/...、./.claw-output/...、./...）；必须写成绝对路径。",
 					"- Windows 路径必须规范为 file:///C:/...（使用正斜杠），不要输出 file://C:\\... 或反斜杠版本。",
