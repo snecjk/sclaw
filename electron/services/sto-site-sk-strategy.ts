@@ -17,7 +17,6 @@ import {
   ensureSiteKeyViaMemoryCenter,
   StoSiteMemoryApiError,
 } from './sto-site-memory-api-service';
-import { getCurrentEnvConfig } from '../../shared/env-config';
 import crypto from 'crypto';
 
 export class SiteSkStrategy implements StoSkStrategy {
@@ -166,11 +165,7 @@ export class SiteSkStrategy implements StoSkStrategy {
 
   /** 本地缓存 key 命名 hint（与 memory-center tenantCode 规则对齐） */
   private resolveTenantCodeHint(user: SsoUserInfo): string | null {
-    const userCode = user.code?.trim() ?? '';
     const companyCode = user.companyCode?.trim() ?? '';
-    if (getCurrentEnvConfig().isDevelopment) {
-      return userCode || null;
-    }
     return companyCode || null;
   }
 

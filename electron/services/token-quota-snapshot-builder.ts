@@ -68,7 +68,7 @@ export function buildSitePackageSnapshot(
   tier?: TokenQuotaTierItem,
   tierContext?: TokenQuotaTierQueryResult | null,
 ): PackageSnapshotV1 {
-  const tenantCode = user.companyCode?.trim() || user.code?.trim() || '';
+  const tenantCode = user.companyCode?.trim() || '';
   return {
     schema: 'sto.claw.package_snapshot/v1',
     user_type: 'site',
