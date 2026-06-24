@@ -50,6 +50,7 @@ import {
 } from '@/lib/builtin-tool-dispatch';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
+import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import {
   dedupeRedundantUserMessages,
   mergeOptimisticUserIntoHistory,
@@ -1643,7 +1644,10 @@ export const useChatStore = create<ChatState>()(
           if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
             // Preserve only locally-created pending sessions. On initial boot the
             // default ghost key (`agent:main:main`) should yield to real history.
-            const hasLocalPendingSession = localSessions.some((session) => session.key === nextSessionKey);
+            const hasLocalPendingSession =
+              isTemporaryAgentSessionKey(nextSessionKey)
+              || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
+              || localSessions.some((session) => session.key === nextSessionKey);
             if (!hasLocalPendingSession) {
               nextSessionKey = dedupedSessions[0].key;
             }
@@ -2417,9 +2421,7 @@ export const useChatStore = create<ChatState>()(
     // Update session label with first user message text as soon as it's sent
     const { sessionLabels, messages } = get();
     const isFirstMessage = !messages.slice(0, -1).some((m) => m.role === 'user');
-    const existingSession = get().sessions.find((session) => session.key === currentSessionKey);
-    const hasOnlyTemporaryLabel = existingSession?.label === NEW_SESSION_TEMP_LABEL;
-    if (!currentSessionKey.endsWith(':main') && isFirstMessage && (!sessionLabels[currentSessionKey] || hasOnlyTemporaryLabel) && displayText) {
+    if (!currentSessionKey.endsWith(':main') && isFirstMessage && !sessionLabels[currentSessionKey] && displayText) {
       const truncated = displayText.length > 50 ? `${displayText.slice(0, 50)}…` : displayText;
       set((s) => ({ sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated } }));
     }
@@ -3104,6 +3106,9 @@ export const useChatStore = create<ChatState>()(
     if (!trimmed) return;
     set((s) => ({
       sessionLabels: { ...s.sessionLabels, [key]: trimmed },
+      sessions: s.sessions.map((session) => (
+        session.key === key ? { ...session, label: trimmed } : session
+      )),
     }));
   },
 }), {

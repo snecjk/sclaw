@@ -734,6 +734,10 @@ export function Sidebar() {
       // 否则会把默认 main 会话继续绑定到 OpenClaw 启动态。
       if (window.location.pathname === '/') {
         const state = useChatStore.getState();
+        // Preserve locally-created sessions (workflow run, skill use, etc.) awaiting first send.
+        if (isTemporaryAgentSessionKey(state.currentSessionKey)) {
+          return;
+        }
         if (state.currentSessionKey !== DEFAULT_SESSION_KEY || state.messages.length > 0 || state.loading) {
           const nextRuntimeBySessionKey = {
             ...state.runtimeBySessionKey,

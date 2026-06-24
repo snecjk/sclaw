@@ -1,3 +1,4 @@
+import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { hostApiFetch } from '@/lib/host-api';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { useAgentsStore } from '@/stores/agents';
@@ -181,9 +182,12 @@ export function createSessionActions(
           }
         }
         if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
-          // Current session not found in the backend list
-          const isNewEmptySession = get().messages.length === 0;
-          if (!isNewEmptySession) {
+          // Keep locally-created pending sessions even after the first optimistic send.
+          const hasLocalPendingSession =
+            isTemporaryAgentSessionKey(nextSessionKey)
+            || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
+            || localSessions.some((session) => session.key === nextSessionKey);
+          if (!hasLocalPendingSession) {
             nextSessionKey = dedupedSessions[0].key;
           }
         }

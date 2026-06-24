@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { ArrowUp, Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -43,6 +43,7 @@ import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { Button } from '@/components/ui/button';
 import { useWorkflowList } from '@/pages/Workflow/use-workflow-list';
 import { renameWorkflow, deleteWorkflow } from '@/lib/workflow-api';
+import { navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
 
 interface WorkflowDashboardProps {
   onManualCreate: () => void;
@@ -61,6 +62,7 @@ export function WorkflowDashboard({
 }: WorkflowDashboardProps) {
   const { t } = useTranslation('workflow');
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     cards,
     setCards,
@@ -140,6 +142,16 @@ export function WorkflowDashboard({
   };
 
   const closeMenu = () => setMenuIndex(null);
+
+  /** 立即运行：按标题复用已有会话，否则新建并命名，再跳转首页自动发送。 */
+  const runWorkflowInChat = useCallback((card: Pick<WorkflowCardItem, 'id' | 'name'>) => {
+    navigateToNewSessionWithPrompt(
+      navigate,
+      location.pathname,
+      `帮我执行 id 为：${card.id} 的工作流 【${card.name}】`,
+      { sessionTitle: `执行${card.name}工作流` },
+    );
+  }, [navigate, location.pathname]);
 
   const updateCard = (index: number, patch: Partial<WorkflowCardItem>) => {
     setCards(cards.map((c, i) => (i === index ? { ...c, ...patch } : c)));
@@ -378,10 +390,7 @@ export function WorkflowDashboard({
                 // }}
                 // TODO: 等待后端 API 对接 — onCardClick 暂不启用
                 // onCardClick={() => openDetailForMine(card)}
-                onRun={() => {
-                  const q = encodeURIComponent(`帮我执行 id 为：${card.id} 的工作流 【${card.name}】`);
-                  navigate(`/?q=${q}`);
-                }}
+                onRun={() => runWorkflowInChat(card)}
                 onEdit={() => onEditCard(card.id)}
                 onMore={(e) => openMenu(e, index)}
               />
@@ -520,7 +529,9 @@ export function WorkflowDashboard({
         detail={detailData}
         onClose={closeDetail}
         onRun={() => {
-          if (detailMineCard) toast.success(t('toast.runStarted', { name: detailMineCard.name }));
+          if (!detailMineCard) return;
+          closeDetail();
+          runWorkflowInChat(detailMineCard);
         }}
         onEdit={() => {
           if (detailMineCard) {

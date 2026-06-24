@@ -13,11 +13,13 @@ import {
   homeHubTextSecondary,
 } from './home-hub-surface-styles';
 import { formatLocalYmd } from '@/lib/sto-task-entry-label';
+import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
 import {
   STO_TASK_PENDING_COMPOSE_KEY,
   STO_TASK_SUBITEM_NAV_SCROLL_END,
 } from '@/lib/sto-task-compose-storage';
-import { useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
+import { useStoTaskSubitemsStore, stoTaskSubitemKey } from '@/stores/sto-task-subitems';
+import { useChatStore } from '@/stores/chat';
 import avatar01 from '@/assets/avatars/avatar-01.png.png';
 import avatar02 from '@/assets/avatars/avatar-02.png.png';
 import avatar03 from '@/assets/avatars/avatar-03.png.png';
@@ -129,6 +131,21 @@ function SummaryCard(props: SummaryCardProps) {
     const entryIdToday = formatLocalYmd(new Date());
     const hadToday = useStoTaskSubitemsStore.getState().listEntries(stoTaskTarget).includes(entryIdToday);
     ensureSubitem(stoTaskTarget, entryIdToday);
+
+    const subitemKey = stoTaskSubitemKey(stoTaskTarget, entryIdToday);
+    const sessionKey = useStoTaskSubitemsStore.getState().sessionKeyBySubitem[subitemKey];
+    if (!sessionKey) return;
+
+    const cardTitle = t(`summary.${base}.title`);
+    const chat = useChatStore.getState();
+    if (!chat.sessions.some((session) => session.key === sessionKey)) {
+      useChatStore.setState((state) => ({
+        sessions: [...state.sessions, { key: sessionKey, label: cardTitle }],
+      }));
+    }
+    chat.renameSession(sessionKey, cardTitle);
+    chat.switchSession(sessionKey);
+
     const path = taskDetailPath(stoTaskTarget, entryIdToday);
     if (!hadToday) {
       try {
@@ -143,7 +160,7 @@ function SummaryCard(props: SummaryCardProps) {
     } else {
       navigate(path, { state: { [STO_TASK_SUBITEM_NAV_SCROLL_END]: true } });
     }
-  }, [base, ensureSubitem, navigate, stoTaskTarget]);
+  }, [base, ensureSubitem, navigate, stoTaskTarget, t]);
 
   const p = `summary.${base}` as const;
   const bodyCaption = t(`${p}.bodyCaption`, { defaultValue: '' }).trim();
