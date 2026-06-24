@@ -344,15 +344,12 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
 
   const previewHeaderTabs = useMemo(
     () => (
-      showPreviewPanel && (previewableFiles.length > 0 || showEditWorkflow) ? (
+      showPreviewPanel && previewableFiles.length > 0 ? (
         <ChatPreviewHeaderTabs
           files={previewableFiles}
           activeFilePath={activePreviewFilePath}
           onSelectFile={setActivePreviewFilePath}
           onDismissFile={dismissPreviewFile}
-          showEditWorkflow={showEditWorkflow}
-          workflowId={sessionWorkflowId}
-          onEditWorkflow={openWorkflowPreview}
         />
       ) : null
     ),
@@ -362,9 +359,6 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
       activePreviewFilePath,
       setActivePreviewFilePath,
       dismissPreviewFile,
-      showEditWorkflow,
-      sessionWorkflowId,
-      openWorkflowPreview,
     ],
   );
 
@@ -606,6 +600,9 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
           <ChatPreviewPanel
             files={previewableFiles}
             activeFilePath={activePreviewFilePath}
+            showEditWorkflow={showEditWorkflow}
+            workflowId={sessionWorkflowId}
+            onEditWorkflow={openWorkflowPreview}
             className="h-full w-full"
           />
         </motion.div>

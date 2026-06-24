@@ -8,7 +8,7 @@ import {
 } from '@/lib/memory-center-web-url';
 import { getWorkflowStoToken } from '@/lib/workflow-api';
 import { useAuthStore } from '@/stores/auth';
-import { workflowBuilderShell } from '@/lib/surfaces';
+import { workflowMcEditorShell } from '@/lib/surfaces';
 
 interface WorkflowMcIframeEditorProps {
   workflowId: string;
@@ -42,7 +42,7 @@ export function WorkflowMcIframeEditor({ workflowId, onBack }: WorkflowMcIframeE
   };
 
   return (
-    <div className={workflowBuilderShell}>
+    <div className={workflowMcEditorShell}>
       <header className="flex min-h-[48px] shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-2">
         <button
           type="button"
