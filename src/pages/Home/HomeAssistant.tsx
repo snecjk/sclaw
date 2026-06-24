@@ -1,67 +1,39 @@
-import { useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useAgentsStore } from '@/stores/agents';
-import { useChatStore } from '@/stores/chat';
 import { cn } from '@/lib/utils';
-import { ChatInput } from '@/pages/Chat/ChatInput';
-import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
-import { useHomeChatEntrySend } from './use-home-chat-entry-send';
-import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
+import { HomeComposer } from '@/pages/Home/HomeComposer';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
+import type { DingTalkMention } from '@/types/dingtalk-mention';
 
 /**
- * 省区首页底部助手：与聊天页相同的 ChatInput（上传、粘贴图片、拖放、排队、停止），
- * 首次从首页默认态发言会创建会话，后续追问续写当前会话，行为与 HomeAgentHubSurface 一致。
+ * 省区首页底部助手：内部统一走 HomeComposer，保持对外 props 兼容。
  */
 export function HomeAssistant({
   className,
   seedText,
   onSend,
   placeholderKey,
+  footerAlign = 'center',
 }: {
   className?: string;
   seedText?: string;
-  onSend?: (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[], workflowId?: string | null) => void;
+  onSend?: (
+    text: string,
+    attachments?: FileAttachment[],
+    targetAgentId?: string | null,
+    dingTalkMentions?: DingTalkMention[],
+    workflowId?: string | null,
+  ) => void;
   /** i18n key under home namespace for composer placeholder override */
   placeholderKey?: string;
+  /** 免责对齐（默认与总部一致居中） */
+  footerAlign?: 'center' | 'right';
 }) {
-  const { t } = useTranslation('home');
-  const agents = useAgentsStore((s) => s.agents);
-  const currentAgentId = useChatStore((s) => s.currentAgentId);
-  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
-  const sessions = useChatStore((s) => s.sessions);
-  const error = useChatStore((s) => s.error);
-  const { handleHubSend, handleHubQueue } = useHomeChatEntrySend();
-  const currentAgent = useMemo(
-    () => agents.find((agent) => agent.id === currentAgentId),
-    [agents, currentAgentId],
-  );
-  const currentSession = useMemo(
-    () => sessions.find((session) => session.key === currentSessionKey),
-    [sessions, currentSessionKey],
-  );
-  const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
-    ? currentAgent?.engineType
-    : currentSession?.engineType ?? currentAgent?.engineType;
-  const inputProps = useChatInputBindings({
-    onSend: onSend || handleHubSend,
-    onQueue: handleHubQueue,
-    variant: 'embedded',
-    seedText,
-    className,
-    placeholder: placeholderKey ? t(placeholderKey) : undefined,
-    engineType: currentEngineType,
-  });
-
   return (
-    <div className={cn('flex flex-col', inputProps.className)}>
-      <section className="flex flex-col" aria-label={t('assistant.placeholder')}>
-        <ChatInput {...inputProps} engineType={currentEngineType} />
-        {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
-      </section>
-      <p className="mt-3 text-right text-xs leading-relaxed text-[#86909C] dark:text-muted-foreground">
-        {t('assistant.footerDisclaimer')}
-      </p>
-    </div>
+    <HomeComposer
+      className={cn(className)}
+      seedText={seedText}
+      onSend={onSend}
+      placeholderKey={placeholderKey}
+      footerAlign={footerAlign}
+    />
   );
 }

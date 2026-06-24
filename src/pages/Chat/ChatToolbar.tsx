@@ -1,7 +1,7 @@
 /**
- * Chat Toolbar
- * Session selector, model selector, refresh, and thinking toggle.
- * Rendered in the Header when on the Chat page.
+ * ChatToolbar — 对话工具栏（引擎/模型/刷新/思考/搜索）。
+ *
+ * @deprecated 省区 Chat 已迁至 ContentHeader + 输入框内联选择器；HomeMainConversation 仍暂用本组件。
  */
 import { type ReactNode } from 'react';
 import { RefreshCw, Brain } from 'lucide-react';
@@ -29,7 +29,6 @@ export function ChatToolbar({ trailingContent }: { trailingContent?: ReactNode }
       <div className="flex shrink-0 items-center gap-2">
         <ChatModelSelector />
 
-        {/* Refresh */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -45,7 +44,6 @@ export function ChatToolbar({ trailingContent }: { trailingContent?: ReactNode }
           <TooltipContent><p>{t('toolbar.refresh')}</p></TooltipContent>
         </Tooltip>
 
-        {/* Thinking Toggle */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

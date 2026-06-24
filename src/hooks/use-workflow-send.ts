@@ -146,6 +146,7 @@ export async function createAndStartWorkflowDirect(
     const startedAtIso = new Date(trackStartMs).toISOString();
     appendWorkflowStartedLocalTurn({
       userText,
+      templateId,
       templateName,
       runId: run.runId,
       workflowId: created.workflowId,

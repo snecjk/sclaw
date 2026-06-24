@@ -49,6 +49,7 @@ export interface CronJob {
   lastRun?: CronJobLastRun;
   nextRun?: string;
   agentId?: string;
+  workflowCode?: string;
 }
 
 /**
@@ -62,6 +63,7 @@ export interface CronJobCreateInput {
   schedule: string;
   enabled?: boolean;
   dingTalkMentions?: DingTalkMention[];
+  workflowCode?: string;
 }
 
 /**

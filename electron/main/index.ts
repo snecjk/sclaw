@@ -22,6 +22,7 @@ import type { HostEventBus } from '../api/event-bus';
 
 // Lightweight modules needed before window creation
 import { createMenu } from './menu';
+import { getWindowState, trackWindowState } from './window';
 import { logger } from '../utils/logger';
 import { warmupNetworkOptimization } from '../utils/uv-env';
 import { isQuitting, setQuitting } from './app-state';
@@ -228,16 +229,18 @@ function getAppIcon(): Electron.NativeImage | undefined {
 /**
  * Create the main application window
  */
-function createWindow(): BrowserWindow {
+function createWindow(saved?: { width?: number; height?: number; x?: number; y?: number; isMaximized?: boolean }): BrowserWindow {
   const isMac = process.platform === 'darwin';
   const isWindows = process.platform === 'win32';
   const useCustomTitleBar = isWindows;
 
   const win = new BrowserWindow({
-    width: 1280,
-    height: 860,
+    width: saved?.width ?? 1280,
+    height: saved?.height ?? 860,
+    x: saved?.x,
+    y: saved?.y,
     minWidth: 960,
-    minHeight: 600,
+    minHeight: 640,
     icon: getAppIcon(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -247,7 +250,7 @@ function createWindow(): BrowserWindow {
       webviewTag: true, // Enable <webview> for embedding OpenClaw Control UI
     },
     titleBarStyle: isMac ? 'hiddenInset' : useCustomTitleBar ? 'hidden' : 'default',
-    trafficLightPosition: isMac ? { x: 16, y: 16 } : undefined,
+    trafficLightPosition: isMac ? { x: 16, y: 18 } : undefined,
     frame: isMac || !useCustomTitleBar,
     show: false,  // We call show() manually below — before loading content
     backgroundColor: '#0f1525',  // Match splash screen background
@@ -266,6 +269,10 @@ function createWindow(): BrowserWindow {
   const envCfg = getCurrentEnvConfig();
   if (envCfg.displaySuffix) {
     win.setTitle(`STO Claw ${envCfg.displaySuffix}`);
+  }
+
+  if (saved?.isMaximized) {
+    win.maximize();
   }
 
   // Log when the renderer actually finishes first paint (diagnostic).
@@ -314,8 +321,10 @@ function focusMainWindow(): void {
   focusWindow(mainWindow);
 }
 
-function createMainWindow(): BrowserWindow {
-  const win = createWindow();
+async function createMainWindow(): Promise<BrowserWindow> {
+  const saved = await getWindowState();
+  const win = createWindow(saved);
+  trackWindowState(win);
 
   // Handle focus requests from second-instance launches
   win.once('ready-to-show', () => {
@@ -374,7 +383,7 @@ async function initialize(): Promise<void> {
 
   // Create the main window as early as possible.
   // Window shows immediately with dark background (see createWindow).
-  const window = createMainWindow();
+  const window = await createMainWindow();
   _ts('mainWindow created');
 
   // Set application menu (fast, no I/O — can happen after window show)

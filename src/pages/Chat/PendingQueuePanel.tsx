@@ -115,7 +115,7 @@ export function PendingQueuePanel({ queue, onRemove, onMoveUp, onMoveDown }: Pen
   if (queue.length === 0) return null;
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-6 pb-1">
+    <div className="w-full px-6 pb-1">
       <div className="rounded-xl border border-border/40 bg-white/40 p-2 shadow-sm backdrop-blur-sm dark:bg-white/[0.03]">
         <div className="mb-1.5 px-1 text-[11px] font-medium text-muted-foreground/70">
           {t('queue.label', { count: queue.length })}

@@ -6,6 +6,7 @@
  * try sai-cli or other tools to "run" the workflow again.
  */
 import { buildWorkflowValuesSummary, buildWorkflowValuesSummaryFallback } from '@/lib/workflow-form-utils';
+import { replaceWorkflowIntroWithParamsSummary } from '@/lib/workflow-intro-params-patch';
 import { useChatStore } from '@/stores/chat';
 import { getExecutionByRunId, getSessionWorkflows, listSessionExecutions } from '@/stores/workflow-memory';
 import type { ContentBlock, RawMessage } from '@/stores/chat/types';
@@ -48,6 +49,7 @@ export function resolveWorkflowParamsUserText(sessionKey: string, runId: string)
 interface RunTurnRestore {
   runId: string;
   workflowId: string;
+  templateId?: string;
   templateName: string;
   createdAt: number;
   userText: string;
@@ -67,6 +69,7 @@ export function mergeWorkflowTurnsFromMemory(
     runsToRestore.push({
       runId: exec.runId,
       workflowId: exec.workflowId,
+      templateId: exec.templateId,
       templateName: exec.templateName,
       createdAt: exec.createdAt,
       userText: resolveWorkflowParamsUserText(sessionKey, exec.runId),
@@ -80,6 +83,7 @@ export function mergeWorkflowTurnsFromMemory(
     runsToRestore.push({
       runId: wf.lastRunId,
       workflowId: wf.workflowId,
+      templateId: wf.templateId,
       templateName: wf.templateName,
       createdAt: wf.completedAt ?? wf.createdAt,
       userText: resolveWorkflowParamsUserText(sessionKey, wf.lastRunId),
@@ -90,32 +94,43 @@ export function mergeWorkflowTurnsFromMemory(
 
   runsToRestore.sort((a, b) => a.createdAt - b.createdAt);
 
-  const extras: RawMessage[] = [];
+  const merged = [...loaded];
   for (const run of runsToRestore) {
     const ts = run.createdAt / 1000;
-    extras.push(
-      {
+    let introPatched = false;
+    if (run.templateId) {
+      introPatched = replaceWorkflowIntroWithParamsSummary(
+        merged,
+        run.templateId,
+        run.userText,
+      );
+    }
+
+    // 方案 A：优先 patch intro；无 intro 时保留用户摘要供 fallback 渲染
+    if (!introPatched) {
+      merged.push({
         role: 'user',
         content: run.userText,
         timestamp: ts,
         id: crypto.randomUUID(),
-      } as RawMessage,
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text',
-            text: `参数已确认，工作流已在后台启动执行（工作流 ID: ${run.workflowId}），请稍候查看执行进度。`,
-          },
-          { type: 'workflow_card', runId: run.runId, templateName: run.templateName },
-        ],
-        timestamp: ts + 0.001,
-        id: crypto.randomUUID(),
-      } as RawMessage,
-    );
+      } as RawMessage);
+    }
+
+    merged.push({
+      role: 'assistant',
+      content: [
+        {
+          type: 'text',
+          text: `参数已确认，工作流已在后台启动执行（工作流 ID: ${run.workflowId}），请稍候查看执行进度。`,
+        },
+        { type: 'workflow_card', runId: run.runId, templateName: run.templateName },
+      ],
+      timestamp: ts + 0.001,
+      id: crypto.randomUUID(),
+    } as RawMessage);
   }
 
-  return [...loaded, ...extras].sort((a, b) => toMs(a.timestamp) - toMs(b.timestamp));
+  return merged.sort((a, b) => toMs(a.timestamp) - toMs(b.timestamp));
 }
 
 /** Keep local workflow execution turns when Gateway history reload wipes them. */
@@ -147,7 +162,9 @@ export function mergeLocalWorkflowTurnsFromCurrent(
 }
 
 export interface WorkflowStartedLocalTurnParams {
+  /** 分组参数摘要：写入 intro 助手消息，不再单独追加用户消息 */
   userText: string;
+  templateId?: string;
   templateName: string;
   runId: string;
   workflowId?: string;
@@ -157,6 +174,7 @@ export interface WorkflowStartedLocalTurnParams {
 export function appendWorkflowStartedLocalTurn(params: WorkflowStartedLocalTurnParams): void {
   const {
     userText,
+    templateId,
     templateName,
     runId,
     workflowId,
@@ -166,28 +184,26 @@ export function appendWorkflowStartedLocalTurn(params: WorkflowStartedLocalTurnP
   } = params;
 
   const now = Date.now() / 1000;
-  useChatStore.setState((s) => ({
-    messages: [
-      ...s.messages,
-      {
-        role: 'user',
-        content: userText,
-        timestamp: now,
-        id: crypto.randomUUID(),
-      } as RawMessage,
-      {
-        role: 'assistant',
-        content: [
-          { type: 'text', text: assistantText },
-          { type: 'workflow_card', runId, templateName },
-        ],
-        timestamp: now + 0.001,
-        id: crypto.randomUUID(),
-      } as RawMessage,
-    ],
-    lastUserMessageAt: Date.now(),
-    sending: false,
-  }));
+  useChatStore.setState((s) => {
+    const messages = [...s.messages];
+    if (templateId) {
+      replaceWorkflowIntroWithParamsSummary(messages, templateId, userText);
+    }
+    messages.push({
+      role: 'assistant',
+      content: [
+        { type: 'text', text: assistantText },
+        { type: 'workflow_card', runId, templateName },
+      ],
+      timestamp: now + 0.001,
+      id: crypto.randomUUID(),
+    } as RawMessage);
+    return {
+      messages,
+      lastUserMessageAt: Date.now(),
+      sending: false,
+    };
+  });
 }
 
 /** Build parameter summary text when schema is available at submit time. */

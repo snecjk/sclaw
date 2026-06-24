@@ -5,15 +5,16 @@ import { HomeAgentHubSurface } from './HomeAgentHubSurface';
 import { HomeSiteSurface } from './HomeSiteSurface';
 import { HomeHero } from './HomeHero';
 import { HomeSummaryCards } from './HomeSummaryCards';
-import { HomeAssistant } from './HomeAssistant';
+import { HomeComposer } from './HomeComposer';
 import { HomeMainConversation } from './HomeMainConversation';
+import { homeHubFooterShellClass, homeHubMainScrollClass } from './home-hub-surface-styles';
 import { useHomeConversationActive } from './use-home-conversation-active';
-import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useScheduledTasksStore } from '@/stores/scheduledTasks';
 import { createAutoSendWatcher } from '@/stores/message-queue';
+import { cn } from '@/lib/utils';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { useBuiltinToolListener } from '@/hooks/use-builtin-tool-listener';
 import { TaskCreateModal } from '@/pages/ScheduledTasks/components/TaskCreateModal';
@@ -74,11 +75,12 @@ export function Home() {
 
   useEffect(() => () => { cleanupEmptySession(); }, [cleanupEmptySession]);
 
-  // Handle skill-plaza "Use" navigation with ?q= prompt
+  // Handle skill-plaza "Use" navigation with ?q= prompt and ?workflowId= template pick
   const [searchParams, setSearchParams] = useSearchParams();
   // searchParams.get() is already percent-decoded; decodeURIComponent again throws
   // URIError when the prompt contains a literal '%' (e.g. "完成率50%").
   const seedText = searchParams.get('q')?.trim() || undefined;
+  const seedWorkflowId = searchParams.get('workflowId')?.trim() || undefined;
   const { handleHubSend } = useHomeChatEntrySend();
   const gatewayStatus = useGatewayStore((s) => s.status);
   const hasAutoSentRef = useRef(false);
@@ -88,11 +90,12 @@ export function Home() {
     if (gatewayStatus.state !== 'running') return;
 
     hasAutoSentRef.current = true;
-    // Clear q from URL so refresh doesn't re-trigger
+    // Clear q and workflowId from URL so refresh doesn't re-trigger
     setSearchParams({}, { replace: true });
-    handleHubSend(seedText);
-  }, [seedText, gatewayStatus.state, handleHubSend, setSearchParams]);
+    handleHubSend(seedText, undefined, undefined, undefined, seedWorkflowId);
+  }, [seedText, seedWorkflowId, gatewayStatus.state, handleHubSend, setSearchParams]);
 
+	// 网点用户看到 首页 UI 
   if (isSite) {
     return (
       <>
@@ -126,25 +129,26 @@ export function Home() {
   return (
     <>
       <div className="mx-auto flex h-full min-h-0 w-full flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div
+          className={cn(
+            'flex min-h-0 flex-1 flex-col overflow-hidden',
+            !showConversation && 'px-4 sm:px-6',
+          )}
+        >
           {showConversation ? (
-            <HomeMainConversation className="min-h-0 flex-1" />
+            <HomeMainConversation className="min-h-0 flex-1" seedText={seedText} onSend={handleHubSend} />
           ) : (
-            <>
-              <div className="mb-3 mt-2 flex w-full items-center justify-between px-4 sm:px-6">
-                <ChatEngineSelector />
-                <ChatModelSelector />
-              </div>
-              <div className="flex min-h-0 flex-1 flex-col justify-center gap-8 overflow-y-auto py-6 md:gap-10">
-                <HomeHero />
-                <HomeSummaryCards />
-              </div>
-            </>
+            <div className={homeHubMainScrollClass}>
+              <HomeHero />
+              <HomeSummaryCards />
+            </div>
           )}
         </div>
-        <div className="sticky z-10 shrink-0 bg-[var(--sto-page-bg)] pt-6 dark:bg-background">
-          <HomeAssistant seedText={seedText} onSend={handleHubSend} />
-        </div>
+        {!showConversation ? (
+          <div className={homeHubFooterShellClass}>
+            <HomeComposer seedText={seedText} onSend={handleHubSend} />
+          </div>
+        ) : null}
       </div>
       <TaskCreateModal
         open={nlModalOpen}

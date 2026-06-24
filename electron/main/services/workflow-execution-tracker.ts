@@ -9,14 +9,13 @@ import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { logger } from '../../utils/logger';
 import { PORTS } from '../../utils/config';
 import { getStoToken } from '../../utils/auth-store';
-import type { WorkflowExecutionState } from '../../../src/types/workflow';
 import {
+  type WorkflowExecutionState,
   workflowRunResponseToExecutionState,
   type WorkflowRunApiPayload,
 } from '../../../shared/workflow-run-status';
 
 const POLL_INTERVAL_MS = 2_000;
-const MAX_POLL_DURATION_MS = 600_000; // 10 minutes
 const MAX_TRACKED_EXECUTIONS = 50;
 const COMPLETED_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const POLL_TRACE_JSON_MAX = 8_000;
@@ -164,17 +163,6 @@ class WorkflowExecutionTracker {
 
     session.pollTimer = setInterval(() => {
       if (session.stopRequested) return;
-
-      if (Date.now() - session.createdAt > MAX_POLL_DURATION_MS) {
-        this.handleStateChange(session, {
-          ...session.state,
-          status: 'timeout',
-          error: '执行超时（超过10分钟）',
-        });
-        this.stopTracking(session.runId);
-        return;
-      }
-
       void this.poll(session);
     }, POLL_INTERVAL_MS);
   }

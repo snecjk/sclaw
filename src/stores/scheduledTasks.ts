@@ -22,7 +22,7 @@ interface ScheduledTasksState {
   updateTask: (input: ScheduledTaskUpdateInput) => Promise<void>;
   deleteTask: (taskId: number) => Promise<void>;
   toggleTask: (taskId: number, enabled: boolean) => Promise<void>;
-  triggerTask: (taskId: number) => Promise<ScheduledTaskTriggerResponse>;
+  triggerTask: (taskId: number, extraInfo?: Record<string, unknown>) => Promise<ScheduledTaskTriggerResponse>;
 }
 
 export const useScheduledTasksStore = create<ScheduledTasksState>((set) => ({
@@ -61,6 +61,7 @@ export const useScheduledTasksStore = create<ScheduledTasksState>((set) => ({
     if (input.dingdingGroupId !== undefined) body.dingdingGroupId = input.dingdingGroupId;
     if (input.dingdingGroupName !== undefined) body.dingdingGroupName = input.dingdingGroupName;
     if (input.enabled !== undefined) body.enabled = input.enabled;
+    if (input.workflowCode !== undefined) body.workflowCode = input.workflowCode;
 
     const updated = await hostApiFetch<ScheduledTask>(`/api/scheduled-tasks/${input.taskId}`, {
       method: 'PUT',
@@ -90,10 +91,17 @@ export const useScheduledTasksStore = create<ScheduledTasksState>((set) => ({
     }));
   },
 
-  triggerTask: async (taskId) => {
+  triggerTask: async (taskId, extraInfo) => {
+    const body: Record<string, unknown> = {};
+    if (extraInfo !== undefined) {
+      body.extraInfo = extraInfo;
+    }
     const result = await hostApiFetch<ScheduledTaskTriggerResponse>(
       `/api/scheduled-tasks/${taskId}/trigger`,
-      { method: 'POST' },
+      {
+        method: 'POST',
+        ...(Object.keys(body).length > 0 ? { body: JSON.stringify(body) } : {}),
+      },
     );
     
     return result;

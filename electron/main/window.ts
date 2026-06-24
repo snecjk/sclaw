@@ -24,7 +24,7 @@ async function getStore() {
       defaults: {
         windowState: {
           width: 1280,
-          height: 800,
+          height: 860,
           isMaximized: false,
         },
       },

@@ -24,6 +24,7 @@ export interface ScheduledTask {
   ossObjectKey: string | null;
   dialogSessionKey: string | null;
   openclawGatewayUrl: string | null;
+  workflowCode: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -42,6 +43,7 @@ export interface ScheduledTaskCreateInput {
   dialogSessionKey?: string;
   openclawGatewayUrl?: string;
   dingTalkMentions?: DingTalkMention[];
+  workflowCode?: string;
 }
 
 export interface ScheduledTaskUpdateInput {
@@ -55,6 +57,7 @@ export interface ScheduledTaskUpdateInput {
   dingdingGroupId?: string;
   dingdingGroupName?: string;
   dingTalkMentions?: DingTalkMention[];
+  workflowCode?: string;
 }
 
 export interface ScheduledTaskRun {

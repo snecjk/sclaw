@@ -2,7 +2,7 @@ import { app, utilityProcess } from 'electron';
 import path from 'path';
 import { existsSync } from 'fs';
 import WebSocket from 'ws';
-import { getOpenClawEntryPath, getOpenClawProcessCwd, getOpenClawNodeModulesPath, getOpenClawPackageRootEnv } from '../utils/paths';
+import { getOpenClawConfigDir, getOpenClawEntryPath, getOpenClawProcessCwd, getOpenClawNodeModulesPath, getOpenClawPackageRootEnv } from '../utils/paths';
 import { prependPathEntry, prependNodePathEntry } from '../utils/env-path';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { isPythonReady, setupManagedPython } from '../utils/uv-setup';
@@ -333,6 +333,7 @@ export async function runOpenClawDoctorRepair(): Promise<boolean> {
         ...baseEnvPatched,
         ...uvEnv,
         OPENCLAW_NO_RESPAWN: '1',
+        OPENCLAW_STATE_DIR: getOpenClawConfigDir(),
         OPENCLAW_PACKAGE_ROOT: getOpenClawPackageRootEnv(),
       }, getOpenClawNodeModulesPath()) as NodeJS.ProcessEnv,
     });
