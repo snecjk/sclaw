@@ -1,6 +1,6 @@
 {
     "name": "stoclaw",
-    "version": "2026.6.23-GA.1",
+    "version": "2026.6.24-GA.1",
     "pnpm": {
         "onlyBuiltDependencies": [
             "@discordjs/opus",

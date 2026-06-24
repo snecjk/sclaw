@@ -37,6 +37,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
   };
 
   const handleInstall = () => {
+    if (isInstalling) return;
     const { installSkill, fetchPlazaSkills } = useSkillPlazaStore.getState();
     installSkill(liveSkill.slug, {
       version: liveSkill.version,

@@ -47,6 +47,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
 
   const handleInstall = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isInstalling) return;
     const { installSkill, fetchPlazaSkills } = useSkillPlazaStore.getState();
     installSkill(skill.slug, {
       version: skill.version,

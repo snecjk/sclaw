@@ -2,12 +2,13 @@
  * 网点用户首页：Hero + 工作流引导卡片 + 底部助手输入（布局与总部首页对齐）。
  */
 import { HomeHero } from './HomeHero';
-import { HomeOfficialWorkflowCards } from './HomeOfficialWorkflowCards';
+// import { HomeOfficialWorkflowCards } from './HomeOfficialWorkflowCards';
 import { HomeMainConversation } from './HomeMainConversation';
 import { useHomeConversationActive } from './use-home-conversation-active';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { homeHubFooterShellClass, homeHubMainScrollClass } from './home-hub-surface-styles';
+import { HomeWorkflowGuideCards } from './HomeWorkflowGuideCards';
 
 export function HomeSiteSurface({ seedText }: { seedText?: string }) {
   const showConversation = useHomeConversationActive();
@@ -25,7 +26,8 @@ export function HomeSiteSurface({ seedText }: { seedText?: string }) {
         ) : (
           <div className={homeHubMainScrollClass}>
             <HomeHero variant="site" />
-            <HomeOfficialWorkflowCards onSend={handleHubSend} />
+            <HomeWorkflowGuideCards onSend={handleHubSend} />
+            {/* <HomeOfficialWorkflowCards onSend={handleHubSend} /> */}
           </div>
         )}
       </div>

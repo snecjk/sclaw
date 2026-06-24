@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<!-- ════ STO 数字字体 D-DIN（内联自托管，Windows/全平台一致显示，无需外链）════
+     © Datto Inc. · SIL OFL 1.1 · 仅 ASCII 子集（数字/拉丁/标点，约 17KB）
+     用法：把整段 <style> 原样复制进每份报告的 <head>；--num 栈已把 'D-DIN' 置首。
+     字重映射：500→D-DIN Regular(400)，600→D-DIN Bold(700)。中文正文不受影响，仍按 --font 栈降级。 -->
+<style>
+@font-face{
+  font-family:'D-DIN';font-style:normal;font-weight:400;font-display:swap;
+  src:url(data:font/woff2;base64,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) format('woff2');
+}
+@font-face{
+  font-family:'D-DIN';font-style:normal;font-weight:700;font-display:swap;
+  src:url(data:font/woff2;base64,d09GMgABAAAAACGkABEAAAAARxAAACFIAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGhYbjVIcKgZgAEwIbAmabREICtZUyj8BNgIkA4MKC4FIAAQgBYJiByAMgSMbBj8l45glsHEAOLbfWBSlknNj4P+/JzdkiLSDWq3VDplZVEiUibOFDNlq9Nk4YceTKFPEF7kn/DPmqicotu41Yz20oqKoXxSS97HFvxGJyTerz2Ovrf8dEw3FsjCxYC4oR236YqlFLrHW0YqKChr4kXez1ihDRFF8bjJCktmWh/r9Xs/uff+zSmKBWlvhkSShYl+X6fgqS2Qcwvg6gvUhN+vfCIMlaEKEJAsMENE1vTnR7ImHL16UWnn1r6vE2qv+AG0zRJjYKyPBgj4QpA16imIFGLRgQKsoWKx1bm2syq1xGfWL9tv/f53Zhff0JQ+g4jGG66RLTs8KUaWVFzxOtVyRFou2j28Of8kfW60N5FLRPOPeVSFR7PYD58EhLE7g/7v2SUJuOeamrzxQoAXMfFiEvGLySegK2ROnbmZZAbdt9wO80WZSNjZG0edt/Pc/AEpBiJgtM9ie6bvx0TpFB5H7PzXRiBdlP+/zklQ0Yw1c6+6+t5iEwgiweLfeXe5is5BfJd6KWKvy5OyLEhGBliuqiEuVzgyImICOafK+AodlM1hgG8Dw6v/X2Wd775M9uAGF0QlPtmgIui3qdFullN6T7AcafUvy/Njy9wAdjb1geQBzjunvGQggVcQz/uQzDs3fMHfJL5ogdqm3qNKUaetU2MXmEAsCOrt2BYTjk/w2tGxw3XKF2CAJNYR9Sb4sFWAqKySi6oejzx7GVnKBt27PKQYFXTxtM4AiQSBk1J9vJuiF8xYDKCgVJwLBjNMCzCZGILsB4LKKgdihUJzTlBeqqaPNTt2mm2cgqbdJLFsXyieO5aVhnIlChAkXIVK8BCgYWDh4ACIKJrZsXtp1G0SjfgmpP4TVXRH1q86a8DneWQ92WN+x6set36u/Dtqrv43Hqy/4+AVBvSH0KMJMIc6LHMJczBP5hAWiMMYiUUoLZTWqnFEqvLLrH4G5Vn8QnIRwoAgzMR8LRWn9Fi9rEzV0F5q6I+eNPCtYA4j0jeO+nnPX9j/6TiYb+/v46fkFs+sf80nC/sHc8devE657ZM6Djz2+8mPmE/WzX64rvnQvvfRvo3gf675Fd608auGXbfI0cNSWjPe+6vfTOUeW9nUz8byff7xDz+q4cy08Pb/spw5gq1dpt3s129+ck+vv45ybntqtM4rXoLnhd/xu/2v66wJ/d+uGBWXhWu202fZwsvA8tk9lxSR60nqQjVDAxrMAsW11f7sfL8A+tkCEFMELr8JAl4oacVyAgcdhfMRiq7FwWBAWDxjDNjIxw/2g1DETYWZmhc0qs35VLhe0feGtxoy1rvRcYdem6NM6KyknKYPjbcNeNxThM7ESlZSobeTz/Xnid/et0fq3NQz1esO37B1mrfhHPT/DXzuOwbTfoyzsPU968PNRn1Lrfk6jiXu3VzBqmWS114z3zYm4RgZ0rCL1r9gHguXMNi6tZZ/K8q6KoBN6LkQCrc64OnNN93J9JNQNImC39THu6GD3dKhLHer+SIgH8kA90sEe61BPdLCnOtQz3cdz3deLkVAvlYOpdD9f6DBfjvqPatcvofvD67J4l/7gg3zix56Z5UD2pMQJ5GBEOYFBwPQUvcGQTqDm27PvQG6eFwJi6Y4zqgyorTsIJIAcgkeALNGfwiTmpiJJhzhSY51tpv6wYmmM2MSZu3T+q6g+19FP7acUXjJxTcFA2z8wbyUMhFLnkfqL7zyuftfB3CG2kP+XdEuu538CduaXmIF47rsK7NzBObRD8fDDc+/A0WOYID33pB7vDYFRDWVgrCUq4rp0WhD84CoSMKmTihQYgZ+Rpx/tSKfsDrsUxVsy1+Of3oo1aQM+OvSWSg14dHbj0aMiY0zFEUdpu8TAkJVcQcPnKkyQXsUjWCJkZVIvrTNyAAfZoKa3IXVaHBJPPLGmBZmlGWRQO7iPd54Mofa900SpOopKEnGKEI/8+JtekQFdkHscgRoPPTVzFOaMtUpSK3KIFYtR1q4OtVROx/BNj/JkdU+RZQv45hAp+Xs9HXnVd/J05MOhicfqRa2C6sSThFGIxYMpWzVQZ9GC6hcE18ekgFhRJL1OVHzsPLW8Qx1gt7rG4R0X5RaQUAUFC0JnPpeBVp8Jv+veWYuB2WhBx6JUICG1M5F7QDfJhpGWfcSWuIXJgUpTS8hcYqeZp8cm4THvRLRcoEaF2r+1J93irRGr76ysqSPTTuFPyKmKDjYHhXVukzAPZXNKpwSfoLO4ogvQU0tX3HFRJdnoMiB9h9gAgXT1sHPqM//s6AvWv+RfFvzZI79z8vSM3VqYGiDDa864F20gaY5uqFBl6i7XX+isIVkLyPyWWYFZ8nSYXqHpKSdbaU2fOwYGqOlZabWyzj4dMitNzNWOEXtmYFY6JCQuWqL6/n6HmMpEt516eubQZc0cbSOrDoGkXQfzaQnGc+m7HAyC/xWH51qxgYywqNiMCYGIUGgRBm3CoUM06BIBMdGhRwzoE3N8DNF9R4q6c+oFNclrJzE+2ycA/VHi+5LT/jLx8x49wBS9kBG3cIAJPYaUUMgIA0k45ESDgggoiQ5DYsCImDMzYNlVYR4PDCoaScnGnLT7yZm/RgtwHu6JcsUlgH4blpyWOC9xtH0oaTQAK+sxnWvj4m2n4jJnTVdd/0EldbdV1C7czA7wlfvSLqbSHqXdkCT4aV13KKIrAFtXZT7v6Ered8kesIy+DHni+volqriP+vFyxQPwLEnVbFl7iEwl9CXqGRKyp0Rb6VVfbDnCD0ywXWuuPVBdPXjH8SMQEX3yuDsG2j1bwqPJYpwWBiynI+hlHOdQ05wnN4cRgt/Fk0PVkb+kN7M35pKm2b26GFsxiCSx3kHpBXJ2VRninDUIHUAZRkLGOLo4DYU5yxDjmuIdKQpAnqQX543QYI/UmbX0PAMWKUlIVQaDvHXNIzXKIXmSTDkjgx5YFK1rj+vPPdGHQGVMSykvy/Pl/tOABgzvEW2YWtI9q2cCWdo2siOe+RrLYk36KcHbKAfyhGd2bF0qWIZs6fG2xaS5vXv+zSxgf8hwPdFU7LSZyxcQ1Jo0fHef/tAcq8ey1nmhywJx6SvXPzaHeyv8trHe7qslj6LR6msljyMlWepnz2c6Ao+Rs+aiC64HiHzUSdrPR1qXJT795NI2h1rm24jfKLPRc0e3ulv/Q/Q9mcpFY9mbL8u8sT4zZpVXuDmOo0Iz4lbG+I5ZWW2JMmrA206z6/stejmfqw3s5StyJ7pbZpCEx33h93DiMIT12RB1BTV6STaN+ZelU3sED8eY3oJvokEEc4igRQRbBz86RKgNEawT441LwFVsakJrmGBbU3ZgiaRLJD0i6RPloF1cMsQlI1wcs1KY6ODJKRw+nLEEc43K5Q2jeRjNx2gBRgsx2gKjLTHaCnPLOuMYUW1KPAqfxBZFuVM8m1CaizLhYJ+kdkgSjk9FUcZTovCcKHVJ7Auv9hfEScItSXH/9Tc+Eo3PROMr0fi2E3yShG+S4kf9g0liME0MZonB3E5QJAllkisqH9UMXdXya9dKY/ta3/r/fZhePgcBv/zwTP244f8P+hf63RPmb8gqHhC2k6L5DScSBnfTuWsc+1eU45LWFKz8itKCaaSbTidHgWXID1iaZ2YOJge38jA8OC3KjTgq60/3kCjJsioWxR1pYb6LxEelXMuy/cnNwuzvV935/b36U1XVt5NezgvNpI66IbvM8gftWmcqw9LpjbkP3r/RO/lJ0VTNs+FLl+Nsb/Zqu6iWHJQQ4oKDopd+QVHBpmGWYVEeAf2NfQ+KwAkZ2T1JeeGwGmoSDplloRg1dsyIRgrKITqmYu1zljIn+C6T2XhuM4cWIoMEZu1zR/rq8Xu/CCHq+7a9BohoB9cTcMD1oLTVqs2nYh7a51bNYfXiVi9zqaFgExFUitNDHkMQa6QsTIzEqLcBRTXQmkGahewApfsbku+JWEgIhBipokduPIl5UsrZjZoaIfqnnCpQ9FgilGrFwNQsrH/VZyZtjoDB1p6jlUduTMxCwSTlY/bA/6umE11yw2+04y1CpeJyUXJsNaFx1h1R0h72yKV7nxTKC1897sFSlYJ70f3Epm0elVDtMmCRjbpyyNPXala7fOwZT7St7U8JhOLv032G0Ve/5/AcRBaVZnp6DHqDslxPNbWkQUlaPK/6Oq6lGhv6o2YdtTmsomudQc2UyvRDBnG34C01Qldb0d7cM7Aaru468J4TqAfp6z6XYDc0KrNJ+jaSF8VIY8FN6fh2FebJHJhC7r+tZ+A283wlP7yOECaY57fAyUWZmAVssnRhujYeWY3JaIj6PIWag1NNYhWbeXTuOZgZaq3WEOzt06uyyCCUxfEy1f5ifBdqzki2PA1f0bbgS0MjduiRO4c5FHYvX0zIpsfxxkxbjDUmtj2pU1YJhoo63CV8y49W5pzdxO8e5RGVD2/1oHweTS/zShl3YYUFcuyLzsZP7nH1fDCNuVQsDYdONgNXNGxOOCNOgOX0mAOvqZZ8UUpY57CKFhh0eLEg2kouj0IOvoNMoSpaRC77tMmjhmohZGPN+kqMyhMszc8MY5IqqPX1tBrfkRzwoc4/JmJuiYJsnkW1HUO+9HicjmrI7JhgKaupib1hxhW25GLBmMofuXwWrIxAxph5S8FVHjq1ExBn8JRcUCed8dTnISIEBxmwsKlInYObO5eRKH2qKrvzpNlwqxk3/4QMK3wHeimSZI95qezoKj4BWF/pbEXlUSZuJtlAbS9Nxu1Di7XQcNKqoUZ/CmC5kpyo5lWvyFe/Ej4/3XqJbG3tfPYw28VJDS8UlT6bg7DFB3nzbKhJEkOo3npj6RDXCoqOQLQJpsqKJaHYy6itnONtb/SQPamrVHlGoWiUqmZmVekUBNcw79TO2Up+g7eutRxW4HLNMWvpDAoJnMHnXdK0wWFzDFN4jEN/2AUvVBo1E1QsheJLJMCeZdmpsMt+Efz17qRPAaKs6wEJkdJ+iKvtmRV2oWq8yt3thid57Fj7BYwNawu7sTCwUVtpibygc2CC2v30lfagRl2lLfxIrVOmp5HJPjDlf4RNrb96NUqpb2WFrBymUnuXWPM3pNGnoRJK1oh9d4YtklTKi/xyKySFsKoqaL6dWZaSTEtErPkl8RsO688gbDJJJLnZC5eY1gC6rdoDuzVQeQK+Gp8SFS0IX4x/9TjMc+wor72g2hNaDoWE1tMSMTfiz1ckUFXGhrK09GohzgznI7O10sKiWpk4JS0/E2jsqFDnCJWGoeCbvNhQw08gIzJWjQCX/dE99IiPwHOBmdJ3n2CDiK5a7aIrwhIZtYJ27amrTamQhSuh9FOgfj6C0klXbFbRVUF5Zfjm94rkUxWECsIpBUkpVC3YdbCUcEtO0giRV+6vsKwY+eWW5fsHhkyabj9rU44lzKNaqeFJs3r6eiYgd+v/PBqgaV9vx/Y2i83a5rjtsnbY3saaCaK8vXmAsIEgXAb/y09L2o2eVzxtXql7xB1FrfWaEDwv1h8tAQhs1FhXeEmzWieqJdHKmIFUTMmBfSfGWY+XrPezy2X+rTBUOYWcjw8m9rJQRiQlGxOAigSIESjfFt8qs7JOZ68pDiSRJr3k0grYY6udDXUdcY0ZBreBaX14deqjqztXuVdl4Df72auKYC4IHIlLDqPAqSgS4q/d1hnLTISVEzNrdAY1Uttsbmzf5ucyqCbmJJd5yH2rIw8RpI110hB1l9lANswHxgNztV2ECYCb9sRj+ZYx5UdGqiVxr1+XoSaITM6/VYibBPgzqKUa4kwNkVrK8CfgMwtvJ+eTguRdhrThaJQ/EksAsEh/VDSRwpwHBOPn6lbig4F5VAE38iNG2lgvDVF3mIzmdoMyREIu9ZBn7XR0EyYA3Vo3MG7EMUlPevp6Tk4Vc+ZPOGuRoyQQH9duG7aG6EN0tjGkndvM2+QjH08czhl5bq0a+9/VDWN2fCKVERP3lYQl/JCf9nFAj9zU2aqLizipvRooAu705rnb3dW8aZ4a5WazyKzc7Kmxmj3Vqk0GkbxGnUX4GgTnyPt3lZeKarIS60+jG2MQW0Ojt9NFJTynk1/mXrCwe1IJr8MlLEutCcfgiuc2w7PS7cUVvIQgTCHh/5z3P15PSUqe0hvpqY/09Eq/6cN14TiMhJbHqGnVWhkjOHubsopIFr+kPRze0FhYqrOYyowjO/fU0a/5DfX3N/Qv7u/pWOQ0wtwQloQnLMyvUalqCmSFwhwOE9oNtSx0ddJYnsCZi+YPlQwNLuiF+UcFEqkyVyupLJhxGXkoYxPdQvfUWT6OfLQQD2V4mBZmjPs8h7nut7iJWJGLJtBnLo0O1WsV+dKi7EkcbgSoW4Rl6oLJ3QyVZ8SdmJDojmLRCdEojmcfbUKYJQ0YT/g8GVpaUVpeE0FOs7mOjv3yknKHQath8XI4CxrjqC1vIj7+gfiuYWL5JvJeTOzOzJszgY70VPrZc+6o5tz5xIt+C/lZGOifNqX/7bBoaCCMpDoxlJcj8H45srwh1F1Pt1Gn9nnHqjF9f2Ws9TZlLnXzmc1GXDAhd46KVtivA6aSCYf3inHdA98RVhQ0I/j5TwRv7q7XikVyQcjG2CXw9i0GBWl5yhbcFugMg4/OpRWTMmdVYVp/ZcKuRaxX9BgcdrfeR9WezCF0cwlY5ODvQj9FgEZerJtv6KIhM65w3Jwrlriof6GuNIFFst+9W5Sd1SfJEu1275cILO1pxXHent51X9Z/6f0/h1Es3shRT8v88QvGN5/2TO0ebRldNXnUPor6R/M6e+XAi74Xy54L/65fuRm8FrwMbo6OcUe/X7igH9GPWBATYrGOWssuFljeWEovElgvP1rNRWbrx3jCbl0Yqn5sLjRbPtJzcCPasL62iWj/T1Abh6YUUBDA1ZXuyfaItsAmVXVOC+kPYTi5Wl4kEWslih54lYF8Itq7yVtsK1bV5SFs1Ng4uFeyw7E1heoYcb6anZUAVDU2m7nZKQ0yOrvKZqDz+LQuI5XNS+Ux03jqTTCXw55uc7UYGx0a6RgHBNVLZm3hswUHU0l1SRAHpMKhaaAtgRkcVm42WS+lsStpnOdtIw4GmSMvMKRzWbxUNo9GZXD4NB6dQ2kYfgZ2deKMqWDHGIjSKtVYu10OQnNH+9MOlz1VXfzOJ+Ul1cACVz1ARJrKTJ42j6hMFCKWiHMKigHi1tVmCVjcrMfjbXW0ZI680tBsQjcYmqUyBofRelfVabIyiZ/pGPoTakpvRkyGIaWf6nE+2yKJJUhVernAibPXUg+mIZ0o1s42VZu4DdYGP/txbeomYj6ifrT9U1pSIOMm/f1WnrTSOeKcev3B8qvnn6QuTegpLizxc4KRn9DEeiGc6uNgbJHAsURJ/DyuUCPX19UInDgWNpnSx0Q7SQwUKaWPjXTmwcYO5cIBqQqUYWCbQLFHNDgd1nS702EwfmbzltEsXewuiwnV+hpsJl9qnLdGuOZM8HrWzKAnc2oqtf+zNxnbZBVMDsOxpi3dS++ymeb/fPNy44kxlKZoNJsj4CKciiGovTTP2waGz2dSG2PC9TtzYGV+hSKexFqk0dmLxBCrd2wNjRIQFRphLfSt8C0RcwucJQ20T9t94y/G4/X8vKJCyThZmUzbip3bVAZshNksJsCJTiUwWdFpaCdgtpnjYD55u9wln3rNRxsF80l0shZZVatMK5s84qNvrmmp0cdZbFvqt0zf4b/h7+n6pcql0zaP7g5Cjvd5mFJeQhGSjLRE8CD6xj9Tp8raZOgzy/3pAbohnR/dXzeEmoYbxNnIdWQbblFHb54aHb8raipjtKpqlDEzalc8Wp3XS5a+sDKs4U9Q8acjZ1bD1IEE1O1dT8cirJ1SR7FjBzt78sjIH7YsOiFy+RHZgeDQdx/zSGoxA4hcsc05FBTy7l/G75zsm6F6IEQP0FjDco+41dH3fY/LhVcNBoxH0WOk6oewfj2xUSPXCWlR4Namac6D05S6lLqvZarraeBIrYqxKgvZHACvA3W5xLWBb67UAPhfilqJGHG30/5vCznmZxe6vvbqLG5T65QgdWgygyOkpP5AkOHcwQD9BAs9oHiRNXpZIxQy9+vXVxs1hkDNqv5skWCT3KGBQVC5ZmrGg44uXu5YzeEFgAypexnwZSGxUt2icKrbn/aJZpNcJgNncXt88f1Q1mTm1687GxXsbI+zNNkaBOZL1CTUxRWQToXyt+0IIjwgngfdCiADhWyJsUrrJTYB6RR0MjXAWmt1v3C5zPPl0fIwX9jypEhTw7a+h8XBMulRuZL2m1jxw4eC9BD4otmsG44arvznvj+oyrDE4d7eUR5ut74UCcrUBwaDSGILK3tM+cKu0jPN70vVtYTHAD97RNp2bT4dr5SpwHovXb/+slG2E9uqkTaa/H+ew2X1Hr1XBioMAN01x9bX5JpYNz1n5WxSSE2mXrUpsDB1NH0/TB0/wDC79evi9abjbILBHwGULefecLro0WhNjFUf5Hl7XHtVn9plONRk5j+MU4SxkjMH9iKpIyXxIwLBcrmaasBVc5ZOWzYGpawlxmqB4ntc3wCB46oq/R1thaUMi7SQoSkLr8aC4NPgziLOgUvE5wFLNRuGB8vzdHz5QztVsat1I5kgYwR3/h436CpYCrrbedo2R6Gv3f94t0qpKZLM9wMtq901MNkpF0J9NhHtADMaNJy9KgiAoG83tlvw4WWRbncvJSb+FKJ6Bj38PAA0cQkgUJ10/DF9tSmUdd+XjhHp2PnKvQwyQdD1vCeTXg+YHEz2V8veuDeSKWLEfdNlz1RqBEADO3iXnEdU2bJGt3IUFanoerku1LDnNt6mJrqTHuO56/8uYOhPxGTq3wnxrldblOZsfaBXkl8sJha9cv26sVHSX72E2/6HW/qNzrgyWxtjlbtt26BbK2W2bScNOuEUJ7cpGJDUZ5D3EN4nKdHFFZcRToWyYWqRIksoHbtK1RJBF3m3acCXemNT17Mkxm24+NDtgLtxNCP6Xlhwf3lL8TADvNd3VFTqrDbWhxRBk2522FwMXi1ofkm3b6oLnOKkLGWYy3JYk6VXI5MQO98A4l/CAx0Wu7lh+ESt+AcXwZ4DvhFGpGIrAhT2rDcCmNse4tbLRafljvVwTXM9XE3tgqg3G6OAn81/uO4U4pQumWsbAbYwyArpjE6YCQlgdK1xN93ZO9nZaWP1eX9OtH7hzpzs2QTdtM5rawFs7J1kjLBbosxoRACy5LcK+i4mGiau3B+sH1XMEYPxNDL+JNWgU1VrF2VI/VBDWRhDRMccHERwK6waCCiKacrLDi9yW5HfiZQ5C+hXXE3LMGEq7NQzHQ2yo0A5jKofBJEBLtyIXBqX9kKaUqe2s+kpyJgvbdQMW0tq2D/pAqEflBpamO64lhO4BJBpxrjYuLMzV8QJDjzm1IB25LsU+W0otLkR3Elsb1995EuLa74dPLfEBM3JSWzhkNHwW1KEx0GJNbV4gEtZFrmo2ZGNhsiQH1g2uOucTKN0mF6yCxaIQE7ieCNK5ESf0xYjcsggGGeBNai6cAv2kQl5clDNaqwIoBbOtSKAH4aNAVloKgJqWyIR3Dm3kwFoXjO2djMmGD5tmaGP23RoSsdl5adX7woNP3CxsGa2TAxoWkOIxBJwOlBzO55kVL5VLlUoNaCDEAAYApfAljfiuxsq4rxCgv8ECH4NXNQEBHgA1M5FVOalHHRB6irLHyxRhnm8ymFoeZBDIypVUbVd0JCreDuGQesvd6ym0CaOojA3PJ8FsVIBUMitPmJ0syy/FoHZgGWXCkSqC/yq13XTbuavgoeNY2DN7kxArKYYHPf33vFaO87oWyxKGSDajJlXsE+5g/SBOKT6+hYB+4K7JLTudnZLYQRqDBA8Cn/n0/B9wB/4/XYED+5JVxqOdNghSCCIESsMhsjgKqmYlOnL+h6gH7dbiBA1ZZZd0ctZ8GQjde483LQh39YKxNMhArnKMKRawpzSGnBuqKIuLkiEU4G4o0vLgklRLJShgLPmRCvL2fXDHjPwmcY04OyK5fBKRXEMxKN4mCXoonOZ5weWvoOcvlk/SYcud3V7GAuzUHoatNld63VNw/YMJIj1cNrYoDEzUYapT0clIwAIYH03HwX6e+Mbhi7LNiY3+0vH/EdD4qLDnGgKbgylNF/SrW4g/Q7KKACSSpR+5StlPzQ/h/QMWfoPlKY4G4C5j9XfRcuIXAvVPFv1ac8MJpfdf0Doo/7cLOXW8z3waPOYuH+kdORMEC2RWCSWpmC0w/HW8J6Wi6DMvMn2shE5gyCSFSTkVk1nVMMS4FrgOqkA1wS8MVv6Xq/0gyJNOHliR1GoaUU6eBInzdBlhevL0XkfVJKPwmZaswSrXQf2kh9NRR2jvYHwMlcXm2Iis6nMNk49V/mJsBoarIvdzB27BGNEiDD0w1TaY6PWIhttfQM9eKEML6uVOrCsbNjuGHAWHmCcwE9WSEuCMe6ZoGfXupzip4a1cnPh5OKlC2OnFhuADpbHcHF0vpcDOWqS0FNI52JJ30Gak2kuXDZJq58hDFPeQQAndmhmfLrH2BD5Ip2luU/9qKbNnwFUlgZhaveixZQg4AAAQwBgfHjjlcnEBrxe8zrEjCirq4En+BQjZAJHkmZcSr3KizwbZf02CHSDT/CDxNv/4XkITv1mwNtbIJ623p8DiBfZIX85UeXtRuvGBUMBAW29BEDtOwKO0dLG7PM9Ew3ivALIL7TohUyp8Rkmut0B5NC+mGNABh8gluXvOg5JzKnjHXGIDk5BjzaJiUBOHH9sLlQmoCcTOf4Wl7xzikMnSsckTI6T4oeoVkfrN4BkH3auxItFscjmUVEZLI8CCroa2NTwXIedLK9hePQAzKgt4cB6uegkGJNrKDKCtGE/mEMor00WGyXYfAdRKs/RsEkBiq+IiZGUbLQkAmI2z4RJ4nl1Kpqv2PREdTK5aMEaaJ20LkgKvKLhiJnx4iBQET0i6qMovo3lBxMM0dPxE6C7qUCTMeVBofTv3rbYImdlgpacOWVS9AC5Hor08Qa+4I10viA4A3T+cCKgfDgVsT2cWZn5cK5n/8M1bbf/Xgpdn8BnZOJgoVdLxwZhAwQykmR0CAIKNjZGeAhZDFQACFwNGiCwlXUWmhg1omnG1QAChHmmLLkQhFqYZmuLE/AYNaBbbC6inp2V7PT725+MhISjSrkQ1ueuRgYX2NvhIPCWPdn/X5Cdfs8DnHXKPcSr7zDJn/7ueNUDn813QJg3aHK69f5OJ344fugNez7GnmD7kf2D/TY/qR0dHu2O8mYuCAzAyVna36AbN3OdfshvV/83DGpSVu03Onl1b/jjaTmYOGw+lT17ktif2PcOwD7g/xlj1k0Va29r6j7oxlY=) format('woff2');
+}
+</style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>全国各省头部网点降量分析报告 · 06/07 vs 06/08</title>
+<!-- 申通 / STO 默认:正文 PingFang SC(Apple 系统字体,非 Apple 端按 --font 栈降级到思源/雅黑);纯数字内联自托管 D-DIN(下方 @font-face,Windows/全平台一致显示) -->
+<style>
+:root{
+  /* ═══ 申通 / STO 官方色系:冷灰中性 + 申通橙做系统强调 ═══ */
+  --bg:        #f5f7fa;          /* 页底:冷灰(非纯白) */
+  --surface:   #ffffff;          /* 卡片 / 表体 */
+  --surface-2: #eef1f6;          /* 模块行 / 标签底 / hover / foot */
+  --th:        #f5f6f7;          /* 表头底:中性浅灰 */
+  --zebra:     #FAFBFC;          /* 表格斑马纹隔行底色 */
+  --border:    #e5e6eb;          /* 描边:表格分隔 / 输入框边 */
+  --border-2:  #eef0f3;          /* hairline-soft */
+  --text:      #1d2129;          /* 主文本 */
+  --text-2:    #4e5969;          /* 次文本 */
+  --text-3:    #86909c;          /* 辅助文本 */
+  --accent:    #1d2129;          /* 结构色=冷灰近黑(分节条),刻意不是橙 */
+  --brand:     #ff6700;          /* 申通橙:系统强调(关键列 / 选中) */
+  --brand-bg:  #fff3eb;          /* 申通橙淡底 */
+  --pos:  #00b54b; --pos-bg:#e6ffea;
+  --warn: #faad14; --warn-bg:#fffbe6;
+  --neg:  #fa3c3c; --neg-bg:#fff2f0;
+  --info: #005be5;               /* 辅助蓝:图表对比/进度条第二色;链接/下载用 --brand 橙 */
+  --radius: 12px; --r-sm: 6px;
+  --sec-mt:16px; --sec-mb:8px;
+  --sans:'PingFang SC','Source Han Sans SC','Microsoft YaHei',system-ui,sans-serif;
+  --num:'D-DIN','DIN Alternate','Bahnschrift','PingFang SC',ui-monospace,monospace;
+  --ease:cubic-bezier(0.16,1,0.3,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+svg:not([width]){width:1em;height:1em} /* 图标安全网:无宽高的 svg 不会撑满父容器,见 base.md */
+body{
+  background:transparent;
+  background-color:#FAFBFC; color:var(--text);
+  font-family:var(--sans); font-size:12px; line-height:1.5; font-weight:500;
+  font-feature-settings:'tnum' 1; -webkit-font-smoothing:antialiased;
+  padding:12px clamp(10px,1.4vw,20px) 22px;
+}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums}
+
+
+/* ══ 全屏背景:新素材渐变铺满视口(固定,内容滚动其上) ══ */
+.page-bg{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;background:#FAFBFC}
+.page-bg .hero-bg{width:100%;height:1559px;display:block}
+/* 右上角橙色几何装饰:独立图层,不随背景裁切丢失 */
+
+/* ══ 头图标题区:透明,叠在全屏背景之上 ══ */
+.hero{position:relative;margin-bottom:8px;padding:22px 18px 16px}
+.hero .hero-inner{position:relative;z-index:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;gap:5px}
+.hero h1{font-size:clamp(20px,2.4vw,30px);font-weight:600;line-height:1.1;letter-spacing:-.01em;color:var(--text)}
+.hero .sub{font-size:clamp(10px,1.05vw,12px);color:var(--text-2);font-weight:400;letter-spacing:.01em}
+.hero .meta{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 14px;margin-top:2px;
+  font-size:clamp(9px,.95vw,10.5px);color:#4B5563;font-weight:400}
+.hero .k{font-family:var(--num);color:#1D2129;font-weight:500}
+.hero .meta .sep{width:1px;height:10px;background:#4B5563;align-self:center;flex-shrink:0}
+@media(max-width:640px){.hero .meta .sep{display:none}}
+.hero .deck{font-size:10.5px;color:#4B5563;margin-top:2px;letter-spacing:.01em;font-weight:400}
+
+/* ══ 模块标题:申通橙竖色块 + 较大粗体标题 ══ */
+.sec{font-size:15px;font-weight:600;letter-spacing:0;
+  margin:var(--sec-mt) 0 var(--sec-mb);display:flex;align-items:flex-start;gap:8px;
+  color:var(--text);line-height:1.3}
+.sec::before{content:"";width:4px;height:15px;background:var(--brand);border-radius:2px;flex-shrink:0;margin-top:3px}
+.sec .cnt{font-family:var(--num);color:var(--text-3);font-weight:400;font-size:12px;letter-spacing:0}
+/* 模块描述:推到标题最右侧,与标题顶对齐 */
+.sec .deck{margin:1px 0 0 auto;max-width:48%;text-align:right;font-size:10.5px;
+  color:var(--text-3);font-weight:400;line-height:1.5;letter-spacing:.01em}
+
+/* ══ TOP30 卡片:导航 tab + 表格包在同一容器 ══ */
+.tbl-card{background:#FFFFFF;border:none;border-radius:var(--radius);
+  overflow:hidden;margin-top:2px;padding:16px}
+.tbl-hd{padding:0 0 12px}
+
+/* ══ 大区导航:容器 7010 样式(无容器底 · 未选纯文字 · 选中橙实心胶囊 · 计数内联) ══ */
+.rnav{display:flex;flex-wrap:wrap;gap:4px 6px;margin:0}
+.rnav .rt{display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:500;color:var(--text-2);
+  background:transparent;border:none;border-radius:999px;padding:6px 14px;cursor:pointer;
+  transition:color .14s var(--ease),background .14s var(--ease);user-select:none;white-space:nowrap}
+.rnav .rt:hover{background:var(--surface-2);color:var(--text)}
+.rnav .rt.on,.rnav .rt.on:hover{background:var(--brand);color:#fff}
+.rnav .rt .b{font-family:var(--num);font-size:12px;font-weight:600;color:#1D2129;line-height:1}
+.rnav .rt .b.hi{color:#FA3C3C}
+.rnav .rt.on .b{color:#fff;opacity:.85}
+
+/* ══ TOP30 汇总表:单级表头 · 06/08(当期)橙关键列 · 红圈排名 · 降幅条 ══ */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border);border-radius:6px}
+table.main{width:100%;border-collapse:collapse;font-size:12px;font-family:var(--sans)}
+.main thead th{position:sticky;top:0;background:var(--th);font-weight:500;color:var(--text);
+  text-align:left;padding:9px 9px;border-bottom:1px solid var(--border);white-space:nowrap;
+  font-size:14px;font-family:var(--sans);letter-spacing:0}
+.main thead th.r{text-align:right}
+.main thead th.c{text-align:center}
+/* 全表竖向分割线(STO 官方:列间 hairline) */
+.main th,.main td{border-right:1px solid var(--border)}
+.main tr>th:last-child,.main tr>td:last-child{border-right:0}
+.main tbody td{padding:7px 9px;border-bottom:1px solid var(--border-2);white-space:nowrap;line-height:1.4}
+.main tbody tr{transition:background .14s var(--ease)}
+.main tbody tr:nth-child(odd){background:#FFFFFF}        /* ★奇数行(含紧贴表头的第一行)=纯白,锁死 */
+.main tbody tr:nth-child(even){background:var(--zebra)}
+.main tbody tr:hover{background:var(--surface-2)}
+.main .c-num{text-align:right;font-family:var(--num);font-weight:600}
+.main .c-key{text-align:right;font-family:var(--num);font-weight:600;color:var(--brand)}  /* 当期=申通橙关键列 */
+.main .dlt{text-align:right;font-family:var(--num);font-weight:600;color:var(--neg)}
+.main .reg{color:var(--text);font-weight:400}
+.main .nm{font-weight:400;color:var(--text)}
+.main td.c-rk{text-align:center;width:1%;padding-left:12px;padding-right:12px}
+.rk{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;
+  background:var(--neg);color:#fff;font-size:10px;font-weight:600;font-family:var(--num)}
+.rk.lo{background:#fbbcbc}        /* 4 名后降饱和 */
+/* 降幅条:可视化降幅量级(不编造序列,只映射降幅%) */
+.dbar{display:inline-flex;align-items:center;gap:7px;justify-content:flex-end;width:100%}
+.dbar .track{position:relative;width:56px;height:6px;background:var(--border-2);border-radius:3px;overflow:hidden;flex-shrink:0}
+.dbar .fill{position:absolute;left:0;top:0;bottom:0;background:var(--neg);border-radius:3px;width:0;transition:width .7s var(--ease)}
+.dbar .pct{font-family:var(--num);font-weight:600;color:var(--neg);min-width:50px;text-align:right}
+.dbar.up .fill{background:var(--pos)} .dbar.up .pct{color:var(--pos)}
+
+.foot{margin-top:11px;padding:10px 13px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);font-size:10px;color:var(--text-3);line-height:1.6;font-weight:400}
+.ft{text-align:center;margin-top:16px;font-size:10px;color:var(--text-3);font-weight:400}
+.no-match{display:none;padding:22px;text-align:center;color:var(--text-3);font-size:12px}
+
+/* ══ 动效 scaffold ══ */
+@keyframes fu{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+[data-fu]{animation:fu .46s var(--ease) both}
+[data-rv]{opacity:0}
+[data-rv].in{animation:fu .5s var(--ease) both}
+@media(prefers-reduced-motion:reduce){
+  [data-fu],[data-rv].in{animation:none}
+  [data-rv]{opacity:1}
+  .dbar .fill{transition:none}
+}
+</style>
+</head>
+<body>
+<!-- ⚠ 示例数据 · 仅供版式参考,网点名已脱敏,数字为口径示例 -->
+<div class="page-bg" aria-hidden="true"><svg class="hero-bg" preserveAspectRatio="none" style="width:100%;height:1559px;display:block" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" fill="none" version="1.1" width="1440" height="1559" viewBox="0 0 1440 1559"><defs><linearGradient x1="0.5" y1="0" x2="0.5" y2="1" id="master_svg0_19_029168"><stop offset="0%" stop-color="#FFC69E" stop-opacity="1"/><stop offset="20.14291137456894%" stop-color="#FFDCC3" stop-opacity="1"/><stop offset="100%" stop-color="#FAFBFC" stop-opacity="1"/></linearGradient><clipPath id="master_svg1_19_029151"><rect x="0" y="0" width="1440" height="1559" rx="0"/></clipPath><pattern x="-56" y="-227" width="1730" height="935" patternUnits="userSpaceOnUse" id="master_svg2_19_95487"><image x="0" y="-0.03249999999997044" width="1730" height="935.0649999999999" xlink:href="assets/hero-ranking.jpg"/></pattern></defs><g clip-path="url(#master_svg1_19_029151)"><rect x="0" y="0" width="1440" height="1559" rx="0" fill="url(#master_svg0_19_029168)" fill-opacity="1"/><rect x="-56" y="-227" width="1730" height="935" rx="0" fill="url(#master_svg2_19_95487)" fill-opacity="0.11999999731779099" style="mix-blend-mode:color-burn"/></g></svg></div>
+
+<!-- ══ 头图 banner:价格力素材 + 居中标题 ══ -->
+<header class="hero" data-fu style="animation-delay:.02s">
+  <div class="hero-inner">
+    <h1>全国各省头部网点降量分析报告</h1>
+    <div class="meta">
+      <span>监控 <span class="k">21</span> 个大区 · 各省 <span class="k">TOP15</span> 头部网点 · 全国降量 <span class="k">TOP30</span> 汇总</span>
+      <i class="sep"></i>
+      <span>报告日 <span class="k">2026-06-08</span></span>
+      <i class="sep"></i>
+      <span>对比 <span class="k">06/07</span> vs <span class="k">06/08</span> · 口径 <span class="k">T-1 / T-2</span></span>
+      <i class="sep"></i>
+      <span>覆盖 <span class="k">21</span> 大区 · 监控 <span class="k">315</span> 网点</span>
+    </div>
+    <p class="deck">本页面基于 <span class="k">T-2</span> 日的全国各省 <span class="k">TOP15</span> 网点揽收数据为基准,动态监测并展示其在 <span class="k">T-1</span> 日的最新单量波动情况。降量 <span class="k">TOP30</span> 按差值绝对值降序排列。</p>
+  </div>
+</header>
+
+<!-- ══ 全国降量汇总 TOP30 ══ -->
+<div class="tbl-card" data-fu>
+<div class="tbl-hd">
+<nav class="rnav">
+  <span class="rt on" data-region="all">全国 TOP<span class="num">30</span></span>
+  <span class="rt" data-region="广东大区">广东大区 <span class="b">8</span></span>
+  <span class="rt" data-region="湖北省公司">湖北省公司 <span class="b">6</span></span>
+  <span class="rt" data-region="云南省公司">云南省公司 <span class="b">7</span></span>
+  <span class="rt" data-region="贵州省公司">贵州省公司 <span class="b">2</span></span>
+  <span class="rt" data-region="山东省公司">山东省公司 <span class="b">2</span></span>
+  <span class="rt" data-region="河南省公司">河南省公司 <span class="b">2</span></span>
+  <span class="rt" data-region="福建省公司">福建省公司 <span class="b">2</span></span>
+  <span class="rt" data-region="江苏省公司">江苏省公司 <span class="b">1</span></span>
+  <span class="rt" data-region="川藏省公司">川藏省公司 <span class="b">1</span></span>
+  <span class="rt" data-region="湖南省公司">湖南省公司 <span class="b">1</span></span>
+  <span class="rt" data-region="山西省公司">山西省公司 <span class="b">1</span></span>
+  <span class="rt" data-region="西北大区">西北大区 <span class="b">1</span></span>
+  <span class="rt" data-region="广西省公司">广西省公司 <span class="b">1</span></span>
+  <span class="rt" data-region="安徽省公司">安徽省公司 <span class="b">1</span></span>
+  <span class="rt" data-region="重庆省公司">重庆省公司 <span class="b">1</span></span>
+  <span class="rt" data-region="东北大区">东北大区 <span class="b">1</span></span>
+  <span class="rt" data-region="浙江大区">浙江大区 <span class="b">1</span></span>
+  <span class="rt" data-region="内蒙古省公司">内蒙古省公司 <span class="b">1</span></span>
+  <span class="rt" data-region="江西省公司">江西省公司 <span class="b">1</span></span>
+  <span class="rt" data-region="上海省公司">上海省公司 <span class="b">1</span></span>
+  <span class="rt" data-region="京津冀大区">京津冀大区 <span class="b">1</span></span>
+</nav>
+</div>
+<div class="tbl-wrap">
+  <table class="main" id="topTable">
+    <thead>
+      <tr>
+        <th class="c">总排名</th>
+        <th>大区</th>
+        <th>网点名称</th>
+        <th class="r">06/07 揽件量</th>
+        <th class="r">06/08 揽件量</th>
+        <th class="r">差值</th>
+        <th class="r">降幅 · 增幅</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr data-region="云南省公司"><td class="c-rk"><span class="rk">1</span></td><td class="reg">云南省公司</td><td class="nm">示例网点 01</td><td class="c-num">142,580</td><td class="c-key">96,340</td><td class="dlt">−46,240</td><td><span class="dbar"><span class="track"><span class="fill" data-w="92.3"></span></span><b class="pct">−32.4%</b></span></td></tr>
+      <tr data-region="广东大区"><td class="c-rk"><span class="rk">2</span></td><td class="reg">广东大区</td><td class="nm">示例网点 02</td><td class="c-num">168,920</td><td class="c-key">124,560</td><td class="dlt">−44,360</td><td><span class="dbar"><span class="track"><span class="fill" data-w="74.9"></span></span><b class="pct">−26.3%</b></span></td></tr>
+      <tr data-region="贵州省公司"><td class="c-rk"><span class="rk">3</span></td><td class="reg">贵州省公司</td><td class="nm">示例网点 03</td><td class="c-num">118,640</td><td class="c-key">76,980</td><td class="dlt">−41,660</td><td><span class="dbar"><span class="track"><span class="fill" data-w="100"></span></span><b class="pct">−35.1%</b></span></td></tr>
+      <tr data-region="江苏省公司"><td class="c-rk"><span class="rk lo">4</span></td><td class="reg">江苏省公司</td><td class="nm">示例网点 04</td><td class="c-num">156,240</td><td class="c-key">117,820</td><td class="dlt">−38,420</td><td><span class="dbar"><span class="track"><span class="fill" data-w="70.1"></span></span><b class="pct">−24.6%</b></span></td></tr>
+      <tr data-region="湖北省公司"><td class="c-rk"><span class="rk lo">5</span></td><td class="reg">湖北省公司</td><td class="nm">示例网点 05</td><td class="c-num">134,560</td><td class="c-key">98,340</td><td class="dlt">−36,220</td><td><span class="dbar"><span class="track"><span class="fill" data-w="76.6"></span></span><b class="pct">−26.9%</b></span></td></tr>
+      <tr data-region="川藏省公司"><td class="c-rk"><span class="rk lo">6</span></td><td class="reg">川藏省公司</td><td class="nm">示例网点 06</td><td class="c-num">98,720</td><td class="c-key">64,180</td><td class="dlt">−34,540</td><td><span class="dbar"><span class="track"><span class="fill" data-w="99.7"></span></span><b class="pct">−35.0%</b></span></td></tr>
+      <tr data-region="湖南省公司"><td class="c-rk"><span class="rk lo">7</span></td><td class="reg">湖南省公司</td><td class="nm">示例网点 07</td><td class="c-num">127,840</td><td class="c-key">95,260</td><td class="dlt">−32,580</td><td><span class="dbar"><span class="track"><span class="fill" data-w="72.6"></span></span><b class="pct">−25.5%</b></span></td></tr>
+      <tr data-region="广东大区"><td class="c-rk"><span class="rk lo">8</span></td><td class="reg">广东大区</td><td class="nm">示例网点 08</td><td class="c-num">188,460</td><td class="c-key">157,200</td><td class="dlt">−31,260</td><td><span class="dbar"><span class="track"><span class="fill" data-w="47.3"></span></span><b class="pct">−16.6%</b></span></td></tr>
+      <tr data-region="山东省公司"><td class="c-rk"><span class="rk lo">9</span></td><td class="reg">山东省公司</td><td class="nm">示例网点 09</td><td class="c-num">145,920</td><td class="c-key">116,080</td><td class="dlt">−29,840</td><td><span class="dbar"><span class="track"><span class="fill" data-w="58.1"></span></span><b class="pct">−20.4%</b></span></td></tr>
+      <tr data-region="湖北省公司"><td class="c-rk"><span class="rk lo">10</span></td><td class="reg">湖北省公司</td><td class="nm">示例网点 10</td><td class="c-num">86,540</td><td class="c-key">58,420</td><td class="dlt">−28,120</td><td><span class="dbar"><span class="track"><span class="fill" data-w="92.6"></span></span><b class="pct">−32.5%</b></span></td></tr>
+      <tr data-region="山西省公司"><td class="c-rk"><span class="rk lo">11</span></td><td class="reg">山西省公司</td><td class="nm">示例网点 11</td><td class="c-num">92,360</td><td class="c-key">65,180</td><td class="dlt">−27,180</td><td><span class="dbar"><span class="track"><span class="fill" data-w="83.8"></span></span><b class="pct">−29.4%</b></span></td></tr>
+      <tr data-region="河南省公司"><td class="c-rk"><span class="rk lo">12</span></td><td class="reg">河南省公司</td><td class="nm">示例网点 12</td><td class="c-num">124,680</td><td class="c-key">98,920</td><td class="dlt">−25,760</td><td><span class="dbar"><span class="track"><span class="fill" data-w="59.0"></span></span><b class="pct">−20.7%</b></span></td></tr>
+      <tr data-region="福建省公司"><td class="c-rk"><span class="rk lo">13</span></td><td class="reg">福建省公司</td><td class="nm">示例网点 13</td><td class="c-num">167,340</td><td class="c-key">142,180</td><td class="dlt">−25,160</td><td><span class="dbar"><span class="track"><span class="fill" data-w="42.7"></span></span><b class="pct">−15.0%</b></span></td></tr>
+      <tr data-region="西北大区"><td class="c-rk"><span class="rk lo">14</span></td><td class="reg">西北大区</td><td class="nm">示例网点 14</td><td class="c-num">108,920</td><td class="c-key">84,560</td><td class="dlt">−24,360</td><td><span class="dbar"><span class="track"><span class="fill" data-w="63.8"></span></span><b class="pct">−22.4%</b></span></td></tr>
+      <tr data-region="广西省公司"><td class="c-rk"><span class="rk lo">15</span></td><td class="reg">广西省公司</td><td class="nm">示例网点 15</td><td class="c-num">96,480</td><td class="c-key">72,840</td><td class="dlt">−23,640</td><td><span class="dbar"><span class="track"><span class="fill" data-w="69.8"></span></span><b class="pct">−24.5%</b></span></td></tr>
+      <tr data-region="安徽省公司"><td class="c-rk"><span class="rk lo">16</span></td><td class="reg">安徽省公司</td><td class="nm">示例网点 16</td><td class="c-num">88,720</td><td class="c-key">65,980</td><td class="dlt">−22,740</td><td><span class="dbar"><span class="track"><span class="fill" data-w="72.9"></span></span><b class="pct">−25.6%</b></span></td></tr>
+      <tr data-region="重庆省公司"><td class="c-rk"><span class="rk lo">17</span></td><td class="reg">重庆省公司</td><td class="nm">示例网点 17</td><td class="c-num">102,360</td><td class="c-key">80,240</td><td class="dlt">−22,120</td><td><span class="dbar"><span class="track"><span class="fill" data-w="61.5"></span></span><b class="pct">−21.6%</b></span></td></tr>
+      <tr data-region="东北大区"><td class="c-rk"><span class="rk lo">18</span></td><td class="reg">东北大区</td><td class="nm">示例网点 18</td><td class="c-num">94,580</td><td class="c-key">73,120</td><td class="dlt">−21,460</td><td><span class="dbar"><span class="track"><span class="fill" data-w="64.7"></span></span><b class="pct">−22.7%</b></span></td></tr>
+      <tr data-region="浙江大区"><td class="c-rk"><span class="rk lo">19</span></td><td class="reg">浙江大区</td><td class="nm">示例网点 19</td><td class="c-num">214,680</td><td class="c-key">193,580</td><td class="dlt">−21,100</td><td><span class="dbar"><span class="track"><span class="fill" data-w="27.9"></span></span><b class="pct">−9.8%</b></span></td></tr>
+      <tr data-region="内蒙古省公司"><td class="c-rk"><span class="rk lo">20</span></td><td class="reg">内蒙古省公司</td><td class="nm">示例网点 20</td><td class="c-num">78,920</td><td class="c-key">58,460</td><td class="dlt">−20,460</td><td><span class="dbar"><span class="track"><span class="fill" data-w="73.8"></span></span><b class="pct">−25.9%</b></span></td></tr>
+      <tr data-region="江西省公司"><td class="c-rk"><span class="rk lo">21</span></td><td class="reg">江西省公司</td><td class="nm">示例网点 21</td><td class="c-num">89,640</td><td class="c-key">69,820</td><td class="dlt">−19,820</td><td><span class="dbar"><span class="track"><span class="fill" data-w="63.0"></span></span><b class="pct">−22.1%</b></span></td></tr>
+      <tr data-region="上海省公司"><td class="c-rk"><span class="rk lo">22</span></td><td class="reg">上海省公司</td><td class="nm">示例网点 22</td><td class="c-num">132,480</td><td class="c-key">113,260</td><td class="dlt">−19,220</td><td><span class="dbar"><span class="track"><span class="fill" data-w="41.3"></span></span><b class="pct">−14.5%</b></span></td></tr>
+      <tr data-region="京津冀大区"><td class="c-rk"><span class="rk lo">23</span></td><td class="reg">京津冀大区</td><td class="nm">示例网点 23</td><td class="c-num">106,720</td><td class="c-key">88,140</td><td class="dlt">−18,580</td><td><span class="dbar"><span class="track"><span class="fill" data-w="49.6"></span></span><b class="pct">−17.4%</b></span></td></tr>
+      <tr data-region="云南省公司"><td class="c-rk"><span class="rk lo">24</span></td><td class="reg">云南省公司</td><td class="nm">示例网点 24</td><td class="c-num">72,340</td><td class="c-key">54,180</td><td class="dlt">−18,160</td><td><span class="dbar"><span class="track"><span class="fill" data-w="71.5"></span></span><b class="pct">−25.1%</b></span></td></tr>
+      <tr data-region="贵州省公司"><td class="c-rk"><span class="rk lo">25</span></td><td class="reg">贵州省公司</td><td class="nm">示例网点 25</td><td class="c-num">84,560</td><td class="c-key">67,240</td><td class="dlt">−17,320</td><td><span class="dbar"><span class="track"><span class="fill" data-w="58.4"></span></span><b class="pct">−20.5%</b></span></td></tr>
+      <tr data-region="广东大区"><td class="c-rk"><span class="rk lo">26</span></td><td class="reg">广东大区</td><td class="nm">示例网点 26</td><td class="c-num">176,240</td><td class="c-key">159,460</td><td class="dlt">−16,780</td><td><span class="dbar"><span class="track"><span class="fill" data-w="27.1"></span></span><b class="pct">−9.5%</b></span></td></tr>
+      <tr data-region="山东省公司"><td class="c-rk"><span class="rk lo">27</span></td><td class="reg">山东省公司</td><td class="nm">示例网点 27</td><td class="c-num">98,420</td><td class="c-key">82,360</td><td class="dlt">−16,060</td><td><span class="dbar"><span class="track"><span class="fill" data-w="46.4"></span></span><b class="pct">−16.3%</b></span></td></tr>
+      <tr data-region="湖北省公司"><td class="c-rk"><span class="rk lo">28</span></td><td class="reg">湖北省公司</td><td class="nm">示例网点 28</td><td class="c-num">78,640</td><td class="c-key">63,180</td><td class="dlt">−15,460</td><td><span class="dbar"><span class="track"><span class="fill" data-w="56.1"></span></span><b class="pct">−19.7%</b></span></td></tr>
+      <tr data-region="河南省公司"><td class="c-rk"><span class="rk lo">29</span></td><td class="reg">河南省公司</td><td class="nm">示例网点 29</td><td class="c-num">92,180</td><td class="c-key">77,420</td><td class="dlt">−14,760</td><td><span class="dbar"><span class="track"><span class="fill" data-w="45.6"></span></span><b class="pct">−16.0%</b></span></td></tr>
+      <tr data-region="福建省公司"><td class="c-rk"><span class="rk lo">30</span></td><td class="reg">福建省公司</td><td class="nm">示例网点 30</td><td class="c-num">113,460</td><td class="c-key">99,240</td><td class="dlt">−14,220</td><td><span class="dbar"><span class="track"><span class="fill" data-w="35.6"></span></span><b class="pct">−12.5%</b></span></td></tr>
+    </tbody>
+  </table>
+  <div class="no-match" id="noMatch">该大区无网点进入全国降量 TOP30。</div>
+</div>
+</div>
+
+<div class="foot">
+  口径备注:以 T-2 日各省 TOP15 头部网点揽件量为基准,监测其 T-1 日单量波动;降量 TOP30 按差值绝对值降序排列,仅含环比下降网点,逆势增量网点不计入本榜。差值 = 06/08 揽件量 − 06/07 揽件量;降幅 = 差值 ÷ 06/07 揽件量。数据为口径示例,实际以各大区明细为准。
+</div>
+<p class="ft">全国各省头部网点降量分析报告 · 网络运营监控 · 自动生成</p>
+
+<script>
+const reduceM=window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+// 降幅条:进入视口后填充至 data-w%
+function fillBars(){
+  document.querySelectorAll('.dbar .fill').forEach(f=>{ f.style.width=(f.dataset.w||0)+'%'; });
+}
+if(reduceM){ fillBars(); }
+else{ requestAnimationFrame(()=>setTimeout(fillBars,180)); }
+
+// 大区导航:计数 > 5 标红
+document.querySelectorAll('.rnav .rt .b').forEach(b=>{
+  if(parseInt(b.textContent,10) > 5) b.classList.add('hi');
+});
+
+// 大区导航:点击筛选 TOP30 表格行
+const nav=document.querySelector('.rnav');
+const rows=[...document.querySelectorAll('#topTable tbody tr')];
+const noMatch=document.getElementById('noMatch');
+nav.addEventListener('click',e=>{
+  const tab=e.target.closest('.rt'); if(!tab) return;
+  nav.querySelectorAll('.rt').forEach(t=>t.classList.remove('on'));
+  tab.classList.add('on');
+  const reg=tab.dataset.region; let shown=0;
+  rows.forEach(r=>{ const ok=(reg==='all'||r.dataset.region===reg); r.style.display=ok?'':'none'; if(ok)shown++; });
+  noMatch.style.display=shown?'none':'block';
+});
+
+// 入场:区块 stagger + 滚动揭示
+if(!reduceM){
+  let i=0;
+  document.querySelectorAll('.sec,.tbl-card,.foot').forEach(el=>{
+    if(el.getBoundingClientRect().top < window.innerHeight*0.92){
+      el.setAttribute('data-fu',''); el.style.animationDelay=(.04+i*.045)+'s'; i++;
+    } else { el.setAttribute('data-rv',''); }
+  });
+  const io=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}})},{threshold:.12});
+  document.querySelectorAll('[data-rv]').forEach(el=>io.observe(el));
+}
+</script>
+</body>
+</html>

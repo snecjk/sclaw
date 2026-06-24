@@ -31,12 +31,14 @@ export function ContentHeader() {
   const isWin = platform === 'win32';
 
   const titleText = typeof title === 'string' ? title : null;
+  const showTitle = title != null && title !== '';
 
   const titleZone = (
     <div
       className={cn(
         contentHeaderTitleGroupClass,
         isSplitLayout && 'max-w-none min-w-0 shrink',
+        !showTitle && !sidebarCollapsed && 'min-w-0',
       )}
     >
       {sidebarCollapsed ? (
@@ -47,13 +49,15 @@ export function ContentHeader() {
           expandLabel={t('sidebar.toggleSidebarExpand')}
         />
       ) : null}
-      {titleText && onCloseSession ? (
-        <ContentHeaderSessionChip label={titleText} onClose={onCloseSession} />
-      ) : (
-        <div className={contentHeaderTitleClass} title={titleText ?? undefined}>
-          {isValidElement(title) ? title : titleText}
-        </div>
-      )}
+      {showTitle ? (
+        titleText && onCloseSession ? (
+          <ContentHeaderSessionChip label={titleText} onClose={onCloseSession} />
+        ) : (
+          <div className={contentHeaderTitleClass} title={titleText ?? undefined}>
+            {isValidElement(title) ? title : titleText}
+          </div>
+        )
+      ) : null}
     </div>
   );
 

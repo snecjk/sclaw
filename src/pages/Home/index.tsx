@@ -34,7 +34,9 @@ export function Home() {
   const fetchTasks = useScheduledTasksStore((s) => s.fetchTasks);
 
   const [nlModalOpen, setNlModalOpen] = useState(false);
-  const [nlInitialValues, setNlInitialValues] = useState<import('@/hooks/use-scheduled-task-tool-listener').NlExtractedValues>({});
+  const [nlInitialValues, setNlInitialValues] = useState<
+    import('@/hooks/use-scheduled-task-tool-listener').NlExtractedValues
+  >({});
   const closeNlModal = useCallback(() => {
     setNlModalOpen(false);
     setNlInitialValues({});
@@ -65,7 +67,7 @@ export function Home() {
         throw err;
       }
     },
-    [createTask, fetchTasks, navigate, closeNlModal],
+    [createTask, fetchTasks, navigate, closeNlModal]
   );
 
   useEffect(() => {
@@ -73,7 +75,12 @@ export function Home() {
     return unsub;
   }, []);
 
-  useEffect(() => () => { cleanupEmptySession(); }, [cleanupEmptySession]);
+  useEffect(
+    () => () => {
+      cleanupEmptySession();
+    },
+    [cleanupEmptySession]
+  );
 
   // Handle skill-plaza "Use" navigation with ?q= prompt and ?workflowId= template pick
   const [searchParams, setSearchParams] = useSearchParams();
@@ -95,7 +102,7 @@ export function Home() {
     handleHubSend(seedText, undefined, undefined, undefined, seedWorkflowId);
   }, [seedText, seedWorkflowId, gatewayStatus.state, handleHubSend, setSearchParams]);
 
-	// 网点用户看到 首页 UI 
+  // 网点用户看到 首页 UI
   if (isSite) {
     return (
       <>
@@ -132,11 +139,15 @@ export function Home() {
         <div
           className={cn(
             'flex min-h-0 flex-1 flex-col overflow-hidden',
-            !showConversation && 'px-4 sm:px-6',
+            !showConversation && 'px-4 sm:px-6'
           )}
         >
           {showConversation ? (
-            <HomeMainConversation className="min-h-0 flex-1" seedText={seedText} onSend={handleHubSend} />
+            <HomeMainConversation
+              className="min-h-0 flex-1"
+              seedText={seedText}
+              onSend={handleHubSend}
+            />
           ) : (
             <div className={homeHubMainScrollClass}>
               <HomeHero />
