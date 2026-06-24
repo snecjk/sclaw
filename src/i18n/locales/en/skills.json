@@ -197,6 +197,8 @@
         "toast": {
             "installSuccess": "Installed successfully",
             "installError": "Installation failed",
+            "updateSuccess": "Updated successfully",
+            "updateError": "Update failed",
             "uninstallSuccess": "Deleted",
             "uninstallError": "Delete failed"
         },

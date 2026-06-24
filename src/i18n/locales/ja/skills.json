@@ -197,6 +197,8 @@
         "toast": {
             "installSuccess": "インストール成功",
             "installError": "インストールに失敗しました",
+            "updateSuccess": "更新成功",
+            "updateError": "更新に失敗しました",
             "uninstallSuccess": "削除しました",
             "uninstallError": "削除に失敗しました"
         },
