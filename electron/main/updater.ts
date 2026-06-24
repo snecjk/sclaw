@@ -1029,7 +1029,7 @@ export class AppUpdater extends EventEmitter {
    */
   private async cleanupOrphanedBackups(protectedPath: string | null): Promise<void> {
     try {
-      // 推导出当前 app 所在目录和 basename："/Applications" + "STO Claw"
+      // 推导出当前 app 所在目录和 basename："/Applications" + "S Claw"
       const currentAppPath = path.dirname(path.dirname(path.dirname(process.execPath)));
       if (!currentAppPath.endsWith('.app')) {
         logger.warn(`[Updater] cleanupOrphanedBackups: unexpected app path ${currentAppPath}`);

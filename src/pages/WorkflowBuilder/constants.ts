@@ -34,4 +34,4 @@ export const FREQ_OPTIONS = ['每天', '每周', '每月', '不重复'] as const
 /** 发送通知节点：时间选项 */
 export const TIME_OPTIONS = ['09:00', '12:00', '18:00', '21:00'] as const;
 /** 发送通知节点：推送渠道选项 */
-export const NOTIFY_CHANNEL_OPTIONS = ['STO Claw', '钉钉', '邮件', '企业微信'] as const;
+export const NOTIFY_CHANNEL_OPTIONS = ['S Claw', '钉钉', '邮件', '企业微信'] as const;

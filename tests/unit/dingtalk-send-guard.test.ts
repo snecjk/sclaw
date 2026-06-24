@@ -159,7 +159,7 @@ describe('evaluateDingTalkSendGuard', () => {
   it('blocks Bash ANSI-C quoted --text before it reaches Windows exec', () => {
     const params = {
       command:
-        "dws chat message send --user u1 --title \"消息\" --text $'你好\\n\\n---\\n\\n> *本消息由 STO Claw 代为发送，非本人实时回复。*' --format json",
+        "dws chat message send --user u1 --title \"消息\" --text $'你好\\n\\n---\\n\\n> *本消息由 S Claw 代为发送，非本人实时回复。*' --format json",
     };
     const result = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
     expect(result.allowed).toBe(false);
@@ -173,7 +173,7 @@ describe('evaluateDingTalkSendGuard', () => {
   it('blocks shell variable --text because it can collapse to --format', () => {
     const params = {
       command:
-        'powershell -NoProfile -Command "$nl = [Environment]::NewLine; $text = \'你好\' + $nl + $nl + \'---\' + $nl + $nl + \'> *本消息由 STO Claw 代为发送，非本人实时回复。*\'; dws chat message send --user u1 --title \'消息\' --text $text --format json"',
+        'powershell -NoProfile -Command "$nl = [Environment]::NewLine; $text = \'你好\' + $nl + $nl + \'---\' + $nl + $nl + \'> *本消息由 S Claw 代为发送，非本人实时回复。*\'; dws chat message send --user u1 --title \'消息\' --text $text --format json"',
     };
     const result = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
     expect(result.allowed).toBe(false);
@@ -183,7 +183,7 @@ describe('evaluateDingTalkSendGuard', () => {
   it('allows direct quoted text with literal newline escapes for gateway argv normalization', () => {
     const params = {
       command:
-        'dws chat message send --user u1 --title "消息" --text "你好\\n\\n---\\n\\n> *本消息由 STO Claw 代为发送，非本人实时回复。*" --format json',
+        'dws chat message send --user u1 --title "消息" --text "你好\\n\\n---\\n\\n> *本消息由 S Claw 代为发送，非本人实时回复。*" --format json',
     };
     const result = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
     expect(result.allowed).toBe(true);

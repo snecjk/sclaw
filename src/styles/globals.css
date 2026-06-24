@@ -45,7 +45,7 @@
     --link-foreground: 0 0% 100%;
     --link-muted: 228 100% 97%;
 
-    /* STO Claw 壳层（归档设计稿对齐）：侧栏与 gutter 共用 Grey-3 #F1F1F3 */
+    /* S Claw 壳层（归档设计稿对齐）：侧栏与 gutter 共用 Grey-3 #F1F1F3 */
     --sto-page-bg: #f1f1f3;
     --sto-sidebar-bg: var(--sto-page-bg);
     --sto-sidebar-border: #e8eaef;

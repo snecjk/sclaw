@@ -176,7 +176,7 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
   const handleSubmit = async () => {
     const newErrors: typeof errors = {};
     if (!name.trim()) newErrors.name = '请填写任务名称';
-    if (!instructions.trim()) newErrors.instructions = '请描述让 STO Claw 帮你做什么';
+    if (!instructions.trim()) newErrors.instructions = '请描述让 S Claw 帮你做什么';
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
@@ -341,14 +341,14 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
           {/* Instructions */}
           <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">
-              让 STO Claw 帮你做什么…
+              让 S Claw 帮你做什么…
             </label>
             <textarea
               value={instructions}
               onChange={(e) => { setInstructions(e.target.value); if (errors.instructions) setErrors(p => ({ ...p, instructions: undefined })); }}
               rows={7}
               disabled={workflowDisabled}
-              placeholder="让 STO Claw 帮你做什么…"
+              placeholder="让 S Claw 帮你做什么…"
               className={cn(
                 "w-full px-3.5 py-2.5 text-sm rounded-[10px] border bg-background placeholder:text-muted-foreground focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] resize-none transition-colors leading-relaxed",
                 errors.instructions ? "border-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.12)]" : "border-border",

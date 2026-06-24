@@ -41,7 +41,7 @@ export function getMacAppBundleInfo(
   };
 }
 
-/** True for Squirrel backup names like `STO Claw.app.old-1780371448851`. */
+/** True for Squirrel backup names like `S Claw.app.old-1780371448851`. */
 export function isOldAppBackupName(bundleName: string, entryName: string): boolean {
   const pattern = new RegExp(`^${escapeRegExp(bundleName)}\\.old-\\d+$`);
   return pattern.test(entryName);
@@ -131,7 +131,7 @@ export async function cleanupOldMacAppBackups(execPath: string): Promise<string[
     logger.info(`[Updater] Cleaned ${removed.length}/${candidates.length} old app backup(s)`);
   } else if (candidates.length > 0) {
     logger.warn(
-      `[Updater] Could not remove any of ${candidates.length} old app backup(s); check permissions or quit other STO Claw instances`,
+      `[Updater] Could not remove any of ${candidates.length} old app backup(s); check permissions or quit other S Claw instances`,
     );
   }
 

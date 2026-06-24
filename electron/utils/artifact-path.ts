@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from 'node:fs';
-import { basename, extname, isAbsolute, join } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join } from 'node:path';
 import { homedir } from 'node:os';
 import { expandPath, getOpenClawConfigDir } from './paths';
 import {
@@ -11,6 +11,9 @@ const EXT_FUZZY_ALTERNATES: Record<string, string[]> = {
   '.ts': ['.tsv'],
   '.htm': ['.html'],
 };
+
+/** Known agent output subdirs under each workspace root (canonical first). */
+const WORKSPACE_OUTPUT_SUBDIRS = ['.claw-output', 'outputs'] as const;
 
 function decodePathSegments(filePath: string): string {
   let path = filePath.trim();
@@ -58,14 +61,65 @@ function fuzzyExistingPath(filePath: string): string | null {
   return null;
 }
 
+function fuzzyBasenameInDir(dir: string, fileName: string): string | null {
+  const exact = fuzzyExistingPath(join(dir, fileName));
+  if (exact) return exact;
+
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return null;
+  }
+
+  const ext = extname(fileName).toLowerCase();
+  if (!ext) return null;
+
+  const stem = basename(fileName, extname(fileName));
+  const sameExt = entries.filter((entry) => entry.toLowerCase().endsWith(ext));
+
+  for (const entry of sameExt) {
+    const entryStem = basename(entry, extname(entry));
+    if (entryStem === stem) {
+      const found = fuzzyExistingPath(join(dir, entry));
+      if (found) return found;
+    }
+    if (entryStem.startsWith(stem) || stem.startsWith(entryStem)) {
+      const found = fuzzyExistingPath(join(dir, entry));
+      if (found) return found;
+    }
+  }
+
+  const dateMatch = stem.match(/(_\d{8}(?:_v\d+)?)$/);
+  if (dateMatch) {
+    const dateSuffix = dateMatch[1];
+    const stemPrefix = stem.slice(0, -dateSuffix.length);
+    for (const entry of sameExt) {
+      const entryStem = basename(entry, extname(entry));
+      if (!entryStem.endsWith(dateSuffix)) continue;
+      const entryPrefix = entryStem.slice(0, -dateSuffix.length);
+      if (entryPrefix.includes(stemPrefix) || stemPrefix.includes(entryPrefix)) {
+        const found = fuzzyExistingPath(join(dir, entry));
+        if (found) return found;
+      }
+    }
+  }
+
+  return null;
+}
+
 function findInDirs(fileName: string, dirs: string[]): string | null {
   for (const dir of dirs) {
     const direct = join(dir, fileName);
     const found = fuzzyExistingPath(direct);
     if (found) return found;
-    const clawOutput = join(dir, '.claw-output', fileName);
-    const foundClaw = fuzzyExistingPath(clawOutput);
-    if (foundClaw) return foundClaw;
+    for (const subdir of WORKSPACE_OUTPUT_SUBDIRS) {
+      const nested = join(dir, subdir, fileName);
+      const foundNested = fuzzyExistingPath(nested);
+      if (foundNested) return foundNested;
+      const fuzzyNested = fuzzyBasenameInDir(join(dir, subdir), fileName);
+      if (fuzzyNested) return fuzzyNested;
+    }
   }
   return null;
 }
@@ -78,9 +132,11 @@ function relativePathCandidates(normalized: string): string[] {
   for (const root of roots) {
     candidates.push(join(root, normalized));
     candidates.push(join(root, trimmed));
-    if (!trimmed.startsWith('.claw-output')) {
-      candidates.push(join(root, '.claw-output', trimmed));
-      candidates.push(join(root, '.claw-output', basename(trimmed)));
+    for (const subdir of WORKSPACE_OUTPUT_SUBDIRS) {
+      if (!trimmed.startsWith(`${subdir}/`) && trimmed !== subdir) {
+        candidates.push(join(root, subdir, trimmed));
+        candidates.push(join(root, subdir, basename(trimmed)));
+      }
     }
   }
 
@@ -90,8 +146,8 @@ function relativePathCandidates(normalized: string): string[] {
 /**
  * Resolve a preview file path for Host API read/stat/serve.
  * - Expands `~`, `/.stoclaw`, and legacy `.openclaw/workspace`
- * - Relative paths search workspace / workspace-* / `.claw-output`
- * - Fuzzy extension (.ts → .tsv) and basename fallback
+ * - Relative paths search workspace / workspace-* / `.claw-output` / `outputs`
+ * - Fuzzy extension (.ts → .tsv) and basename fallback (incl. near-miss filenames)
  */
 export function resolveWorkspaceFilePath(filePath: string): string {
   const normalized = normalizeInputPath(filePath);
@@ -103,6 +159,8 @@ export function resolveWorkspaceFilePath(filePath: string): string {
   if (isAbsolute(normalized) || isWindowsDrivePath(normalized)) {
     const found = fuzzyExistingPath(normalized);
     if (found) return found;
+    const fuzzySameDir = fuzzyBasenameInDir(dirname(normalized), basename(normalized));
+    if (fuzzySameDir) return fuzzySameDir;
     const byName = findInDirs(basename(normalized), listWorkspaceRoots());
     if (byName) return byName;
     return normalized;

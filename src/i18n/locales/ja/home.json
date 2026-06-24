@@ -1,7 +1,7 @@
 {
   "site": {
     "hero": {
-      "title": "STO Claw — 拠点オペレーションをより効率的に",
+      "title": "S Claw — 拠点オペレーションをより効率的に",
       "subtitle": "AI ワークプラットフォームで拠点のスマート運営を再構築し、効率的で知的な現場運営を支援します。"
     },
     "workflowGuide": {
@@ -67,7 +67,7 @@
     "footerHint": "クリックして起動"
   },
   "hero": {
-    "title": "STO Claw — 経営管理をより効率的に",
+    "title": "S Claw — 経営管理をより効率的に",
     "subtitle": "AI ワークスペースで組織の連携と現場オペレーションを強化します。"
   },
   "summary": {
@@ -134,7 +134,7 @@
     "dataAnalysis": "データ分析",
     "workflow": "ワークフロー",
     "send": "送信",
-    "footerDisclaimer": "STO Claw は AI 補助です。重要な情報は業務で確認のうえご利用ください。",
+    "footerDisclaimer": "S Claw は AI 補助です。重要な情報は業務で確認のうえご利用ください。",
     "gatewayRequired": "送信前にゲートウェイを接続してください。",
     "sendFailed": "送信に失敗しました。チャット画面で確認してください。"
   },

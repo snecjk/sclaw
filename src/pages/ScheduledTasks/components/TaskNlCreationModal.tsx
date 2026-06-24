@@ -92,7 +92,7 @@ export function TaskNlCreationModal({ open, onClose, extractedParams, onSave }: 
   const handleSubmit = async () => {
     const newErrors: typeof errors = {};
     if (!name.trim()) newErrors.name = '请填写任务名称';
-    if (!description.trim()) newErrors.description = '请描述让 STO Claw 帮你做什么';
+    if (!description.trim()) newErrors.description = '请描述让 S Claw 帮你做什么';
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
@@ -188,13 +188,13 @@ export function TaskNlCreationModal({ open, onClose, extractedParams, onSave }: 
           {/* Instructions */}
           <div>
             <label className="block text-[13.5px] font-medium text-foreground mb-1.5">
-              让 STO Claw 帮你做什么…
+              让 S Claw 帮你做什么…
             </label>
             <textarea
               value={description}
               onChange={(e) => { setDescription(e.target.value); if (errors.description) setErrors(p => ({ ...p, description: undefined })); }}
               rows={4}
-              placeholder="让 STO Claw 帮你做什么…"
+              placeholder="让 S Claw 帮你做什么…"
               className={cn(
                 "w-full px-3 py-2.5 text-[13px] rounded-lg border bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-none transition-colors leading-relaxed",
                 errors.description ? "border-destructive focus:border-destructive focus:ring-destructive/20" : "border-border"

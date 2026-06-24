@@ -19,7 +19,7 @@ function TitleBarBrandLogo() {
   return (
     <div className="flex items-center gap-2 px-3">
       <img src={logoSvg} alt="StoClaw" className="h-5 w-auto shrink-0" />
-      <span className="whitespace-nowrap text-sm font-semibold text-foreground/90">STO Claw</span>
+      <span className="whitespace-nowrap text-sm font-semibold text-foreground/90">S Claw</span>
       <ChromeEnvBadge />
     </div>
   );

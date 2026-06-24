@@ -1,6 +1,6 @@
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
+import { z } from '../zod-shim.js';
 import {
   getClaudeScheduledTaskService,
   type ClaudeScheduledTaskCreateInput,

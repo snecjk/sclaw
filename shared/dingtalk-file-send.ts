@@ -63,7 +63,7 @@ export function buildDingTalkFileSendWorkflowContext(
     '',
     '---',
     '',
-    '> *本消息由 STO Claw 代为发送，非本人实时回复。*',
+    '> *本消息由 S Claw 代为发送，非本人实时回复。*',
     '```',
     '',
     '**禁止**将文字和文件拆成两条消息发送；**禁止**先发消息再补文字。',

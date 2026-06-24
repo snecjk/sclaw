@@ -2,20 +2,20 @@
  * DingTalk 代发说明底栏：纯 Markdown 引用，避免 IM 客户端把 HTML 当普通文本展示。
  */
 export const DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER =
-  '> *本消息由 STO Claw 代为发送，非本人实时回复。*';
+  '> *本消息由 S Claw 代为发送，非本人实时回复。*';
 
 /** @deprecated 旧版 HTML 属性，规范化时会被替换 */
 export const DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER_LEGACY =
-  '<font color="#999999">本消息由 STO Claw 代为发送，非本人实时回复。</font>';
+  '<font color="#999999">本消息由 S Claw 代为发送，非本人实时回复。</font>';
 
-export const DINGTALK_AGENT_SEND_DISCLAIMER_MARKER = 'STO Claw 代为发送';
+export const DINGTALK_AGENT_SEND_DISCLAIMER_MARKER = 'S Claw 代为发送';
 
 const DISCLAIMER_FONT_BLOCK =
   /<font\s+color=['"]#999999['"][^>]*>[\s\S]*?<\/font>/gi;
 
 /** 正文与代发说明之间已有 `---` 分隔线。 */
 export function hasDingTalkDisclaimerDivider(text: string): boolean {
-  return /\n---\n[\s\S]*STO Claw 代为发送/i.test(text);
+  return /\n---\n[\s\S]*S Claw 代为发送/i.test(text);
 }
 
 /** 去掉已有代发底栏（含破损 HTML、重复文案），只保留正文。 */
@@ -31,9 +31,9 @@ export function stripDingTalkAgentSendDisclaimerBody(text: string): string {
   return result
     .replace(/\n*<font\s+color=[^\n>]*>[\s\S]*?<\/font>\s*$/gi, '')
     .replace(/\n*<font\s+color=[^\n>]*\s*$/gi, '')
-    .replace(/\n*>\s*\*?[^\n]*STO Claw 代为发送[^\n]*\*?\s*$/gi, '')
-    .replace(/\n*#999999>[^\n]*STO Claw 代为发送[^\n]*\s*$/gi, '')
-    .replace(/\n*[^\n<]*STO Claw 代为发送[^\n<]*\s*$/gi, '')
+    .replace(/\n*>\s*\*?[^\n]*S Claw 代为发送[^\n]*\*?\s*$/gi, '')
+    .replace(/\n*#999999>[^\n]*S Claw 代为发送[^\n]*\s*$/gi, '')
+    .replace(/\n*[^\n<]*S Claw 代为发送[^\n<]*\s*$/gi, '')
     .replace(DISCLAIMER_FONT_BLOCK, '')
     .trim();
 }

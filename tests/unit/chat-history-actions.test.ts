@@ -214,7 +214,7 @@ describe('chat history actions', () => {
           {
             id: 'assistant-1',
             role: 'assistant',
-            content: '我是 STO Claw。',
+            content: '我是 S Claw。',
             timestamp: 1710000003,
           },
         ],
@@ -225,7 +225,7 @@ describe('chat history actions', () => {
 
     expect(h.read().messages.map((message) => message.content)).toEqual([
       '你是谁',
-      '我是 STO Claw。',
+      '我是 S Claw。',
     ]);
   });
 
@@ -253,7 +253,7 @@ describe('chat history actions', () => {
           {
             id: 'assistant-1',
             role: 'assistant',
-            content: '我是 STO Claw。',
+            content: '我是 S Claw。',
             timestamp: 1710000003,
           },
         ],
@@ -264,7 +264,7 @@ describe('chat history actions', () => {
 
     expect(h.read().messages.map((message) => message.content)).toEqual([
       '你是谁',
-      '我是 STO Claw。',
+      '我是 S Claw。',
     ]);
   });
 
