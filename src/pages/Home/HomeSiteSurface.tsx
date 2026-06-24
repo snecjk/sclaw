@@ -9,14 +9,30 @@ import { HomeComposer } from '@/pages/Home/HomeComposer';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { homeHubFooterShellClass, homeHubMainScrollClass } from './home-hub-surface-styles';
 import { HomeWorkflowGuideCards } from './HomeWorkflowGuideCards';
+import { cn } from '@/lib/utils';
+import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
 
 export function HomeSiteSurface({ seedText }: { seedText?: string }) {
   const showConversation = useHomeConversationActive();
+  const { isSplitGridPassthrough, splitGridPassthroughClass } =
+    useSplitGridPassthroughClass(showConversation);
   const { handleHubSend } = useHomeChatEntrySend();
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full flex-1 flex-col">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6">
+    <div
+      className={cn(
+        isSplitGridPassthrough
+          ? splitGridPassthroughClass
+          : 'mx-auto flex h-full min-h-0 w-full flex-1 flex-col',
+      )}
+    >
+      <div
+        className={cn(
+          isSplitGridPassthrough
+            ? splitGridPassthroughClass
+            : 'flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6',
+        )}
+      >
         {showConversation ? (
           <HomeMainConversation
             className="min-h-0 flex-1"

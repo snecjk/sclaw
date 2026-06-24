@@ -17,6 +17,7 @@ import { ChatMessage } from './ChatMessage';
 import { AssistantTurnMessage } from './AssistantTurnMessage';
 import { useChatDisplay } from './use-chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
+import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
 import { ChatContentHeaderActions } from './ChatSearchBar';
 import { ChatPreviewHeaderTabs } from './ChatPreviewHeaderTabs';
 import { PendingQueuePanel } from './PendingQueuePanel';
@@ -30,15 +31,16 @@ import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { cn } from '@/lib/utils';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
 import {
-  clampPreviewPanelPercent,
-  STO_PREVIEW_SPLIT_MAX,
-  STO_PREVIEW_SPLIT_MIN,
   stoParameterFormDockLayout,
-  stoSplitPreviewPaneClass,
+  stoSplitChatScrollClass,
+  stoChatScrollContentClass,
+  stoSplitGridBodyChatClass,
+  stoSplitGridBodyPreviewClass,
+  stoSplitGridBodyResizerClass,
   stoSplitResizerActiveClass,
-  stoSplitResizerClass,
-  stoSplitRowInsetsClass,
+  stoSplitRowContentsClass,
 } from '@/lib/surfaces';
+import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
 import { useSettingsStore } from '@/stores/settings';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
@@ -48,8 +50,6 @@ import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
 import { CronTaskCreateModal } from '@/pages/Cron/components/CronTaskCreateModal';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
-import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
-
 export function Chat() {
   useBuiltinToolListener();
   const navigate = useNavigate();
@@ -78,7 +78,6 @@ export function Chat() {
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
-  const switchSession = useChatStore((s) => s.switchSession);
 
   // ── Message Queue ──
   const queue = useMessageQueueStore((s) => s.getQueue(currentSessionKey));
@@ -91,13 +90,15 @@ export function Chat() {
   const [splitting, setSplitting] = useState(false);
   const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
   const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
-  const [isResizing, setIsResizing] = useState(false);
+  const { splitRowRef, previewPanelRef, startResize, isResizing } = useSplitPanelResize(
+    previewPanelPercent,
+    setPreviewSplitPercent,
+  );
   const [editDraft, setEditDraft] = useState<{ text: string; version: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchableMessages, setSearchableMessages] = useState<Array<{ id: string; text: string }>>([]);
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const previewPanelRef = useRef<HTMLDivElement>(null);
   const deferredSearchQuery = useDeferredValue(searchQuery.trim());
   const minLoading = useMinLoading(loading && messages.length > 0);
   const { contentRef, scrollRef, scrollToBottom, stopScroll } = useStickToBottomInstant(currentSessionKey);
@@ -359,73 +360,6 @@ export function Chat() {
     setEditDraft(null);
   }, []);
 
-  // ── Resizable panel logic ──
-  // Use a full-screen overlay during drag so mouse events are never lost,
-  // even when moving quickly outside the resizer or the page container.
-  const startResize = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = previewPanelRef.current?.offsetWidth ?? 0;
-    const containerWidth = previewPanelRef.current?.parentElement?.clientWidth ?? window.innerWidth;
-    let rafId: number | null = null;
-    let pendingWidth = startWidth || containerWidth * (previewPanelPercent / 100);
-
-    setIsResizing(true);
-    document.body.style.userSelect = 'none';
-
-    // Full-screen overlay captures all mouse events during drag
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:col-resize;';
-    document.body.appendChild(overlay);
-
-    const applyWidth = () => {
-      rafId = null;
-      if (previewPanelRef.current) {
-        previewPanelRef.current.style.width = `${pendingWidth}px`;
-      }
-    };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const delta = startX - moveEvent.clientX;
-      const width = previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth;
-      pendingWidth = Math.max(
-        width * (STO_PREVIEW_SPLIT_MIN / 100),
-        Math.min(width * (STO_PREVIEW_SPLIT_MAX / 100), startWidth + delta),
-      );
-      if (rafId === null) {
-        rafId = requestAnimationFrame(applyWidth);
-      }
-    };
-
-    const cleanup = () => {
-      overlay.removeEventListener('mousemove', handleMouseMove);
-      overlay.removeEventListener('mouseup', handleMouseUp);
-      overlay.remove();
-      document.body.style.userSelect = '';
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      setPreviewSplitPercent(clampPreviewPanelPercent(
-        previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth,
-        pendingWidth,
-      ));
-      setIsResizing(false);
-    };
-
-    const handleMouseUp = () => {
-      cleanup();
-    };
-
-    overlay.addEventListener('mousemove', handleMouseMove);
-    overlay.addEventListener('mouseup', handleMouseUp);
-
-    // Safety: if component unmounts during drag, remove overlay
-    return () => {
-      cleanup();
-    };
-  }, [previewPanelPercent, setPreviewSplitPercent]);
-
   // Collect previewable files from messages and streaming message
   const allMessagesForPreview = useMemo(() => {
     const arr = [...messages] as RawMessage[];
@@ -543,17 +477,11 @@ export function Chat() {
     ],
   );
 
-  const handleCloseSession = useCallback(() => {
-    closePreviewPanel();
-    switchSession(DEFAULT_SESSION_KEY);
-  }, [closePreviewPanel, switchSession]);
-
   useContentHeader({
     title: sessionTitle,
     previewTabs: previewHeaderTabs,
     actions: headerActions,
     isSplitLayout: canShowPreviewPanel && showPreviewPanel,
-    onCloseSession: handleCloseSession,
   });
 
   const isSplitChatLayout = canShowPreviewPanel && showPreviewPanel;
@@ -567,13 +495,18 @@ export function Chat() {
   return (
     <>
     <div
+      ref={splitRowRef}
       className={cn(
-        'relative flex h-full min-h-0 min-w-0 flex-1 flex-row overflow-x-hidden transition-colors duration-500',
-        canShowPreviewPanel && showPreviewPanel && stoSplitRowInsetsClass,
+        'relative h-full min-h-0 min-w-0 flex-1 overflow-x-hidden transition-colors duration-500',
+        isSplitChatLayout ? stoSplitRowContentsClass : 'flex flex-row',
       )}
     >
       {/* Left: Chat area */}
-      <ChatConversationColumn variant="page" isSplitLayout={isSplitChatLayout}>
+      <ChatConversationColumn
+        variant="page"
+        isSplitLayout={isSplitChatLayout}
+        splitGridChatClass={isSplitChatLayout ? stoSplitGridBodyChatClass : undefined}
+      >
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,140,0,0.06),_transparent_30%),radial-gradient(circle_at_80%_20%,_rgba(229,230,235,0.35),_transparent_26%)]" />
         <div className="absolute inset-0 neural-grid opacity-20" />
@@ -584,9 +517,14 @@ export function Chat() {
       {/* Messages Area */}
       <div
         ref={scrollRef}
-        className="relative z-10 flex-1 overflow-y-auto overscroll-y-contain py-4 [scrollbar-gutter:stable]"
+        className={cn(
+          'relative z-10 min-h-0 flex-1 py-4',
+          isSplitChatLayout
+            ? stoSplitChatScrollClass
+            : 'overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
+        )}
       >
-        <div ref={contentRef} className="space-y-4">
+        <div ref={contentRef} className={stoChatScrollContentClass}>
           {isEmpty ? (
             <WelcomeScreen />
           ) : (
@@ -736,10 +674,10 @@ export function Chat() {
         onEditDraftApplied={handleEditDraftApplied}
         composerLayout="home"
         toolbarInlineSelectors={(
-          <>
-            <ChatEngineSelector variant="inline" />
-            <ChatModelSelector variant="inline" />
-          </>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <ChatEngineSelector variant="inline" className="min-w-0 flex-1" />
+            <ChatModelSelector variant="inline" className="min-w-0 flex-1" />
+          </div>
         )}
       />
 
@@ -757,7 +695,7 @@ export function Chat() {
         <div
           onMouseDown={startResize}
           className={cn(
-            stoSplitResizerClass,
+            stoSplitGridBodyResizerClass,
             isResizing && stoSplitResizerActiveClass,
           )}
           style={{ cursor: isResizing ? 'col-resize' : undefined }}
@@ -776,9 +714,7 @@ export function Chat() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 40 }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
-            // className="shrink-0 overflow-hidden"
-            style={{ width: `${previewPanelPercent}%` }}
-            className={stoSplitPreviewPaneClass}
+            className={stoSplitGridBodyPreviewClass}
           >
             <ChatPreviewPanel
               files={previewableFiles}

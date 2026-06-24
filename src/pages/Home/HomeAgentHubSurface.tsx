@@ -9,6 +9,7 @@ import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
+import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
 import { HomeHero } from './HomeHero';
 import { HomeMainConversation } from './HomeMainConversation';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
@@ -84,6 +85,8 @@ const AGENT_HUB_CARDS: ReadonlyArray<{
 export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
   const { t } = useTranslation('home');
   const showConversation = useHomeConversationActive();
+  const { isSplitGridPassthrough, splitGridPassthroughClass } =
+    useSplitGridPassthroughClass(showConversation);
 
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
@@ -106,8 +109,18 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
   const { handleHubSend, handleHubQueue } = useHomeChatEntrySend();
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6">
+    <div
+      className={cn(
+        isSplitGridPassthrough ? splitGridPassthroughClass : 'flex min-h-0 flex-1 flex-col',
+      )}
+    >
+      <div
+        className={cn(
+          isSplitGridPassthrough
+            ? splitGridPassthroughClass
+            : 'flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6',
+        )}
+      >
         {showConversation ? (
           <HomeMainConversation
             className="min-h-0 flex-1"
@@ -184,7 +197,7 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
           {SHOW_GATEWAY_LINE || SHOW_USAGE_HINT ? (
           <div
             className={cn(
-              'mx-auto mt-4 grid w-full max-w-[960px] grid-cols-[1fr_auto_1fr] items-center gap-3 border-t pt-4 text-xs',
+              'mx-auto mt-4 grid w-full max-w-[var(--sto-hero-input-max-w)] grid-cols-[1fr_auto_1fr] items-center gap-3 border-t pt-4 text-xs',
               BORDER_DEFAULT,
               homeHubTextSecondary,
             )}

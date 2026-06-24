@@ -1,5 +1,5 @@
 /**
- * SidebarBrandHeader — 侧栏顶品牌区（S Claw + 版本 + 折叠钮）。
+ * SidebarBrandHeader — 侧栏顶品牌区（SClaw + 版本 + 折叠钮）。
  *
  * 省区 Mac：chrome 行（DEV 在红绿灯后 + 折叠）+ 品牌行；
  * 省区 Win / 完整 layout：单行（Win 在版本号后展示 DEV）。

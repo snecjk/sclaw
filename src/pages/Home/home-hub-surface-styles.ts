@@ -27,9 +27,15 @@ export const homeHubCardDescClass = cn('text-xs leading-[18px]', homeHubTextSeco
 
 export const homeHubCardGridClass = 'grid w-full gap-4 sm:grid-cols-3';
 
-/** Hero + 卡片主滚动区（max-w 960 居中） */
-export const homeHubMainScrollClass =
-  'mx-auto flex min-h-0 w-full max-w-[960px] flex-1 flex-col justify-center gap-10 overflow-y-auto overscroll-y-contain pb-6';
+/** 首页 Hero / 卡片 / 输入区共用最大宽（与 --sto-hero-input-max-w 同源，当前 780px） */
+export const homeHubContentMaxWidthClass =
+  'mx-auto w-full min-w-0 max-w-[var(--sto-hero-input-max-w)]';
+
+/** Hero + 卡片主滚动区（与底部输入框同宽居中） */
+export const homeHubMainScrollClass = cn(
+  homeHubContentMaxWidthClass,
+  'flex min-h-0 flex-1 flex-col justify-center gap-10 overflow-y-auto overscroll-y-contain pb-6',
+);
 
 /** 底部输入 + 免责区外壳 */
 export const homeHubFooterShellClass =

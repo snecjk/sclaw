@@ -5,16 +5,19 @@
  * 三栏：grid 与 split row 同列宽——左=侧栏+会话，中=resizer 占位，右=预览 tab+actions。
  * macOS 侧栏收起时 pad-start 走 CSS 变量（与 split row 共用），避让红绿灯。
  */
-import { isValidElement, type CSSProperties } from 'react';
+import { isValidElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
   contentHeaderBarClass,
-  contentHeaderSplitBarClass,
   contentHeaderSplitChatZoneClass,
   contentHeaderSplitPreviewZoneClass,
   contentHeaderTitleClass,
   contentHeaderTitleGroupClass,
+  stoSplitGridContentsClass,
+  stoSplitGridHeaderChatClass,
+  stoSplitGridHeaderPreviewClass,
+  stoSplitGridHeaderResizerClass,
 } from '@/lib/surfaces';
 import { ContentHeaderSessionChip } from '@/components/layout/content-header-session-chip';
 import { useContentHeaderDisplay } from '@/components/layout/content-header-context';
@@ -26,7 +29,6 @@ export function ContentHeader() {
   const { title, previewTabs, actions, isSplitLayout, onCloseSession } = useContentHeaderDisplay();
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
-  const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
   const platform = window.electron?.platform;
   const isWin = platform === 'win32';
 
@@ -73,25 +75,26 @@ export function ContentHeader() {
   ) : null;
 
   if (isSplitLayout) {
-    const splitStyle = {
-      '--sto-split-preview-col': `${previewPanelPercent}%`,
-    } as CSSProperties;
-
     return (
-      <header
-        className={contentHeaderSplitBarClass}
-        style={splitStyle}
-        aria-label={t('sidebar.chat')}
-      >
-        <div className={contentHeaderSplitChatZoneClass}>{titleZone}</div>
-        <div className="w-1 shrink-0" aria-hidden />
-        <div className={contentHeaderSplitPreviewZoneClass}>
-          {previewTabs ? (
-            <div className="flex min-w-0 flex-1 items-center overflow-hidden">{previewTabs}</div>
-          ) : (
-            <div className="min-w-0 flex-1" aria-hidden />
-          )}
-          {actionsZone}
+      <header className={stoSplitGridContentsClass} aria-label={t('sidebar.chat')}>
+        <div className={stoSplitGridHeaderChatClass}>
+          <div className={contentHeaderSplitChatZoneClass}>{titleZone}</div>
+        </div>
+        <div className={stoSplitGridHeaderResizerClass} aria-hidden />
+        <div className={stoSplitGridHeaderPreviewClass}>
+          <div
+            className={cn(
+              contentHeaderSplitPreviewZoneClass,
+              !previewTabs && actionsZone && 'justify-end',
+            )}
+          >
+            {previewTabs ? (
+              previewTabs
+            ) : (
+              <div className="min-w-0 flex-1" aria-hidden />
+            )}
+            {actionsZone}
+          </div>
         </div>
       </header>
     );

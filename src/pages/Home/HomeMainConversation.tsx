@@ -20,14 +20,15 @@ import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
 import {
-  clampPreviewPanelPercent,
-  STO_PREVIEW_SPLIT_MAX,
-  STO_PREVIEW_SPLIT_MIN,
-  stoSplitPreviewPaneClass,
+  stoSplitChatScrollClass,
+  stoChatScrollContentClass,
+  stoSplitGridBodyChatClass,
+  stoSplitGridBodyPreviewClass,
+  stoSplitGridBodyResizerClass,
   stoSplitResizerActiveClass,
-  stoSplitResizerClass,
-  stoSplitRowInsetsClass,
+  stoSplitRowContentsClass,
 } from '@/lib/surfaces';
+import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
 import { CronTaskCreateModal } from '@/pages/Cron/components/CronTaskCreateModal';
@@ -36,7 +37,6 @@ import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
-import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 
 /**
  * Main-agent conversation thread on the home route (replaces the old `/chat` welcome + messages UI).
@@ -72,7 +72,6 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const clearError = useChatStore((s) => s.clearError);
-  const switchSession = useChatStore((s) => s.switchSession);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
   useWorkflowCompletion(currentSessionKey);
@@ -236,10 +235,12 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
     [scrollToBottom],
   );
 
-  const [isResizing, setIsResizing] = useState(false);
-  const previewPanelRef = useRef<HTMLDivElement>(null);
   const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
   const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
+  const { splitRowRef, previewPanelRef, startResize, isResizing } = useSplitPanelResize(
+    previewPanelPercent,
+    setPreviewSplitPercent,
+  );
 
   const allMessagesForPreview = useMemo(() => {
     const arr = [...messages] as RawMessage[];
@@ -362,83 +363,14 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
     ],
   );
 
-  const handleCloseSession = useCallback(() => {
-    closePreviewPanel();
-    switchSession(DEFAULT_SESSION_KEY);
-  }, [closePreviewPanel, switchSession]);
-
   useContentHeader({
     title: sessionTitle,
     previewTabs: previewHeaderTabs,
     actions: headerActions,
     isSplitLayout: canShowPreviewPanel && showPreviewPanel,
-    onCloseSession: handleCloseSession,
   });
 
   const isSplitChatLayout = canShowPreviewPanel && showPreviewPanel;
-
-  // ── Resizable panel logic（与 Chat / 任务子项一致）──
-  const startResize = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = previewPanelRef.current?.offsetWidth ?? 0;
-    const containerWidth = previewPanelRef.current?.parentElement?.clientWidth ?? window.innerWidth;
-    let rafId: number | null = null;
-    let pendingWidth = startWidth || containerWidth * (previewPanelPercent / 100);
-
-    setIsResizing(true);
-    document.body.style.userSelect = 'none';
-
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:col-resize;';
-    document.body.appendChild(overlay);
-
-    const applyWidth = () => {
-      rafId = null;
-      if (previewPanelRef.current) {
-        previewPanelRef.current.style.width = `${pendingWidth}px`;
-      }
-    };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const delta = startX - moveEvent.clientX;
-      const width = previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth;
-      pendingWidth = Math.max(
-        width * (STO_PREVIEW_SPLIT_MIN / 100),
-        Math.min(width * (STO_PREVIEW_SPLIT_MAX / 100), startWidth + delta),
-      );
-      if (rafId === null) {
-        rafId = requestAnimationFrame(applyWidth);
-      }
-    };
-
-    const cleanup = () => {
-      overlay.removeEventListener('mousemove', handleMouseMove);
-      overlay.removeEventListener('mouseup', handleMouseUp);
-      overlay.remove();
-      document.body.style.userSelect = '';
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      setPreviewSplitPercent(clampPreviewPanelPercent(
-        previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth,
-        pendingWidth,
-      ));
-      setIsResizing(false);
-    };
-
-    const handleMouseUp = () => {
-      cleanup();
-    };
-
-    overlay.addEventListener('mousemove', handleMouseMove);
-    overlay.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      cleanup();
-    };
-  }, [previewPanelPercent, setPreviewSplitPercent]);
 
   const showLoadingPlaceholder = useMemo(
     () => loading && messages.length === 0,
@@ -447,17 +379,29 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
 
   return (
     <>
-    <div className={cn(
-      'relative flex min-h-0 flex-1 flex-row overflow-hidden',
-      isSplitChatLayout && stoSplitRowInsetsClass,
-      className,
-    )}>
-      <ChatConversationColumn variant="home" isSplitLayout={isSplitChatLayout}>
+    <div
+      ref={splitRowRef}
+      className={cn(
+        'relative min-h-0 flex-1 overflow-hidden',
+        isSplitChatLayout ? stoSplitRowContentsClass : 'flex flex-row',
+        className,
+      )}
+    >
+      <ChatConversationColumn
+        variant="home"
+        isSplitLayout={isSplitChatLayout}
+        splitGridChatClass={isSplitChatLayout ? stoSplitGridBodyChatClass : undefined}
+      >
       <div
         ref={scrollRef}
-        className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-contain py-4 [scrollbar-gutter:stable]"
+        className={cn(
+          'relative z-10 min-h-0 flex-1 py-4',
+          isSplitChatLayout
+            ? stoSplitChatScrollClass
+            : 'overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
+        )}
       >
-        <div ref={contentRef} className="space-y-4">
+        <div ref={contentRef} className={stoChatScrollContentClass}>
           {showLoadingPlaceholder ? (
             <div className="flex justify-center py-12 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
@@ -575,7 +519,7 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
       <div
         onMouseDown={startResize}
         className={cn(
-          stoSplitResizerClass,
+          stoSplitGridBodyResizerClass,
           isResizing && stoSplitResizerActiveClass,
         )}
         style={{ cursor: isResizing ? 'col-resize' : undefined }}
@@ -594,8 +538,7 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 40 }}
           transition={{ duration: 0.25, ease: 'easeInOut' }}
-          style={{ width: `${previewPanelPercent}%` }}
-          className={stoSplitPreviewPaneClass}
+          className={stoSplitGridBodyPreviewClass}
         >
           <ChatPreviewPanel
             files={previewableFiles}

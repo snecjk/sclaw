@@ -1,7 +1,7 @@
 {
   "site": {
     "hero": {
-      "title": "STO Claw，让网点运营更高效",
+      "title": "SClaw，让网点运营更高效",
       "subtitle": "搭载 AI 智能工作平台，重塑网点智慧运营新模式，赋能网点高效智能运营"
     },
     "workflowGuide": {
@@ -55,7 +55,7 @@
     "footerHint": "点击启动"
   },
   "hero": {
-    "title": "STO Claw，让经营管理更高效",
+    "title": "SClaw，让经营管理更高效",
     "subtitle": "搭载AI智能工作台，驱动组织高效协同，赋能经营管理新价值"
   },
   "summary": {
@@ -122,7 +122,7 @@
     "dataAnalysis": "数据分析",
     "workflow": "工作流调用",
     "send": "发送",
-    "footerDisclaimer": "STO Claw 为AI辅助，重要信息请与业务核对后使用",
+    "footerDisclaimer": "SClaw 为AI辅助，重要信息请与业务核对后使用",
     "gatewayRequired": "请先连接网关后再发送。",
     "sendFailed": "发送失败，请到对话页查看详情。"
   },

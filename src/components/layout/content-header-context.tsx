@@ -7,7 +7,7 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -85,7 +85,7 @@ export function useContentHeader({
 }: ContentHeaderSlot) {
   const { setSlot } = useContentHeaderRegistry();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setSlot({ title, previewTabs, actions, isSplitLayout, onCloseSession });
     return () => setSlot(null);
   }, [title, previewTabs, actions, isSplitLayout, onCloseSession, setSlot]);

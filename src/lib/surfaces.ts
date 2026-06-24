@@ -52,11 +52,23 @@ export const glassSegmentTrack = cn(
   'dark:bg-[linear-gradient(180deg,hsl(var(--glass-bg)/0.55),hsl(var(--glass-bg)/0.35))] dark:shadow-[inset_0_1px_0_hsl(var(--glass-highlight)/0.12)]',
 );
 
-/** 首页对话/消息阅读区最大宽（780px） */
-export const stoChatShellHomeClass = 'mx-auto w-full min-w-0 max-w-[780px]';
+/** 首页对话/消息/输入内容区最大宽（780px，无列内 px-6 场景直接用） */
+export const stoChatShellHomeClass =
+  'mx-auto w-full min-w-0 max-w-[var(--sto-chat-max-w-home)]';
 
-/** 非首页对话/内容区最大宽（862px） */
-export const stoChatShellPageClass = 'mx-auto w-full min-w-0 max-w-[862px]';
+/** 非首页对话/内容区最大宽（862px，无列内 px-6 场景直接用） */
+export const stoChatShellPageClass =
+  'mx-auto w-full min-w-0 max-w-[var(--sto-chat-max-w-page)]';
+
+/**
+ * 对话列壳 max-w：border-box 下 {@link stoChatColumnClass} 的 px-6 会吃掉内容宽，
+ * 壳层需加上 3rem（24px×2）后，列内消息/输入等内容区才能贴齐设计 token。
+ */
+export const stoChatShellHomeColumnMaxClass =
+  'mx-auto w-full min-w-0 max-w-[calc(var(--sto-chat-max-w-home)+3rem)]';
+
+export const stoChatShellPageColumnMaxClass =
+  'mx-auto w-full min-w-0 max-w-[calc(var(--sto-chat-max-w-page)+3rem)]';
 
 /**
  * 非首页主内容区：最大 862px（与 {@link stoChatShellPageClass} 同源），窗口变宽时两侧留白。
@@ -133,15 +145,15 @@ export function myTaskCardMenuItemClass(isDestructive = false): string {
   );
 }
 
-/** 首页对话整列（toolbar + 消息 + 输入同宽居中，最大 780px） */
+/** 首页对话整列（toolbar + 消息 + 输入同宽居中，列内内容区最大 780px） */
 export const stoChatShellHomeColumnClass = cn(
-  stoChatShellHomeClass,
+  stoChatShellHomeColumnMaxClass,
   'flex min-h-0 flex-1 flex-col',
 );
 
-/** 非首页对话整列（toolbar + 消息 + 输入同宽居中，最大 862px） */
+/** 非首页对话整列（toolbar + 消息 + 输入同宽居中，列内内容区最大 862px） */
 export const stoChatShellPageColumnClass = cn(
-  stoChatShellPageClass,
+  stoChatShellPageColumnMaxClass,
   'flex min-h-0 flex-1 flex-col',
 );
 
@@ -150,7 +162,7 @@ export const stoSplitChatCardClass = cn(
   'min-h-0 min-w-0 overflow-hidden rounded-[18px] bg-[var(--sto-main-card-bg)] shadow-glow',
 );
 
-/** 三栏模式：左栏卡片外层（贴满分割面板；内层对话仍用 page/home 限宽壳） */
+/** 三栏模式：左栏卡片外层（贴满分割面板；内层对话仍用 page/home 限宽壳居中） */
 export const stoSplitChatPaneCardWrapClass = cn(
   stoSplitChatCardClass,
   'flex min-h-0 min-w-0 flex-1 flex-col items-center',
@@ -160,7 +172,7 @@ export type StoChatColumnVariant = 'page' | 'home';
 
 /**
  * 对话列壳：toolbar + 消息 + 输入同宽居中。
- * 双栏 / 三栏均相同限宽（page 862px / home 780px），不随浏览器无限变宽。
+ * 双栏 / 三栏均相同限宽（列内内容 page 862px / home 780px），不随浏览器无限变宽。
  */
 export function stoChatColumnShellClass(variant: StoChatColumnVariant): string {
   return variant === 'home' ? stoChatShellHomeColumnClass : stoChatShellPageColumnClass;
@@ -168,32 +180,107 @@ export function stoChatColumnShellClass(variant: StoChatColumnVariant): string {
 
 /**
  * 对话列完整 class：Chat / 任务子项 / 首页会话共用。
- * 三栏时外层卡片 items-center，此处 self-center 防止 flex stretch 撑破 max-w。
+ * 双栏 / 三栏共用列内 862/780 内容宽轨；三栏 self-center 居中阅读轨（勿加 max-w-full，会盖掉列壳 max-w）。
  */
 export function stoChatColumnClass(variant: StoChatColumnVariant, isSplit = false): string {
   return cn(
     stoChatColumnShellClass(variant),
     'px-6',
-    isSplit && 'self-center',
+    isSplit && 'min-w-0 self-center',
   );
 }
 
-/** 三栏左栏内容外包：split 时加卡片壳，否则仅占满 pane（均 items-center 居中限宽轨） */
+/**
+ * 三栏对话区消息列表滚动区。
+ * min-w-0 + overflow-x-hidden：flex 子项默认 min-width:auto 会被 WorkflowCard 等块撑破列宽，
+ * 导致右侧描边贴边或被卡片壳 overflow-hidden 裁切；垂直滚动仍保留。
+ */
+export const stoSplitChatScrollClass = cn(
+  'min-w-0 w-full overflow-x-hidden overflow-y-auto overscroll-y-contain',
+  '[scrollbar-gutter:stable]',
+);
+
+/** 三栏对话消息列表内层：与滚动区配合 min-w-0，防止块级子项撑宽 */
+export const stoChatScrollContentClass = 'min-w-0 w-full space-y-4';
+
+/** 三栏左栏内容外包：split 时加卡片壳，否则仅占满 pane 并居中限宽轨 */
 export function stoSplitChatPaneContentWrapClass(isSplit: boolean): string {
   return isSplit
     ? stoSplitChatPaneCardWrapClass
     : 'flex min-h-0 min-w-0 flex-1 flex-col items-center';
 }
 
-/**
- * 三栏模式外层 row（Chat / 任务子项 / 首页会话共用）。
- * 配合 {@link stoMainCardBodySplitClass}（body px-0）：左/右 inset 与 ContentHeader 同一套 CSS 变量。
- */
-export const stoSplitRowInsetsClass = cn(
-  'box-border gap-2 py-2',
+/** 三栏壳层水平 inset（挂在 main，Header + split row 共用同一网格可用宽） */
+export const stoSplitShellInsetsClass = cn(
   'pl-[var(--sto-content-header-pad-start)]',
-  '-mr-[var(--sto-main-scrollbar-gutter)]',
   'pr-[var(--sto-content-header-pad-end)]',
+);
+
+/** @deprecated 使用 {@link stoSplitShellInsetsClass} 挂 main；子级 grid 不再重复 pl/pr */
+export const stoSplitHorizontalInsetsClass = stoSplitShellInsetsClass;
+
+/** 三栏 split row 仅保留垂直 py-2（非统一 grid 双栏回退用） */
+export const stoSplitRowInsetsClass = cn('box-border py-2');
+
+/**
+ * 三栏统一 grid（main）：2 行 × 3 列；--sto-split-preview-col 只写在 main。
+ * header / body / split row 用 {@link stoSplitGridContentsClass} 参与同一网格。
+ */
+export const stoSplitUnifiedMainClass = cn(
+  'grid min-h-0 min-w-0 flex-1 overflow-hidden box-border',
+  'grid-rows-[var(--sto-content-header-h,52px)_minmax(0,1fr)]',
+  'grid-cols-[minmax(0,1fr)_4px_var(--sto-split-preview-col,50%)]',
+  'gap-x-2',
+);
+
+/** 三栏：中间层 display:contents，子元素直接参与 main grid */
+export const stoSplitGridContentsClass = 'contents';
+
+/** @deprecated 三栏改用 {@link stoSplitRowContentsClass} + main {@link stoSplitUnifiedMainClass} */
+export const stoSplitRowClass = cn(
+  stoSplitRowInsetsClass,
+  'grid min-h-0 min-w-0 w-full flex-1 overflow-x-hidden',
+  'gap-x-2',
+  '[grid-template-columns:minmax(0,1fr)_4px_var(--sto-split-preview-col,50%)]',
+);
+
+/** 三栏 split row 外壳：display:contents，列定位由子项 grid class 承担 */
+export const stoSplitRowContentsClass = stoSplitGridContentsClass;
+
+/** 三栏 header 行 col1：会话 chip + 顶圆角左（外层 drag-region，内层 no-drag 见 ContentHeader） */
+export const stoSplitGridHeaderChatClass = cn(
+  'drag-region col-start-1 row-start-1 self-stretch min-w-0',
+  'flex items-center',
+  'box-border h-[var(--sto-content-header-h,52px)] min-h-[var(--sto-content-header-h,52px)] max-h-[var(--sto-content-header-h,52px)]',
+  'rounded-tl-[var(--sto-main-card-radius)] bg-[var(--sto-main-card-bg)]',
+);
+
+/** 三栏 header 行 col2：与 body 拖拽条同列对齐 */
+export const stoSplitGridHeaderResizerClass = cn(
+  'drag-region col-start-2 row-start-1 self-stretch',
+  'h-[var(--sto-content-header-h,52px)] min-h-[var(--sto-content-header-h,52px)] max-h-[var(--sto-content-header-h,52px)] w-1 shrink-0',
+  'bg-[var(--sto-main-card-bg)]',
+);
+
+/** 三栏 header 行 col3：☰ + tab + actions + 顶圆角右（外层 drag-region，内层 no-drag） */
+export const stoSplitGridHeaderPreviewClass = cn(
+  'drag-region col-start-3 row-start-1 self-stretch min-w-0',
+  'flex items-center',
+  'box-border h-[var(--sto-content-header-h,52px)] min-h-[var(--sto-content-header-h,52px)] max-h-[var(--sto-content-header-h,52px)]',
+  'rounded-tr-[var(--sto-main-card-radius)] bg-[var(--sto-main-card-bg)]',
+);
+
+/** 三栏 body 行 col1：对话列 */
+export const stoSplitGridBodyChatClass = cn(
+  'col-start-1 row-start-2 self-stretch',
+  'relative flex min-h-0 min-w-0 flex-col overflow-hidden py-2 box-border',
+);
+
+/** 三栏 body 行 col3：预览面板 */
+export const stoSplitGridBodyPreviewClass = cn(
+  'col-start-3 row-start-2 self-stretch',
+  'flex min-h-0 min-w-0 flex-col overflow-hidden py-2 box-border',
+  '[contain:inline-size]',
 );
 
 /** ParameterFormDock layout（与对话列 variant 一致） */
@@ -201,16 +288,18 @@ export function stoParameterFormDockLayout(variant: StoChatColumnVariant): 'home
   return variant === 'home' ? 'home' : 'page';
 }
 
-/** Hero / 大输入复合框壳层（固定 780px 居中） */
+/** Hero / 大输入复合框壳层（最大 780px 居中，与首页 Hero 区同源变量） */
 export const stoHeroInputShellClass =
-  'mx-auto flex w-[var(--sto-hero-input-max-w)] max-w-full min-w-0 flex-col';
+  'mx-auto flex w-full min-w-0 max-w-[var(--sto-hero-input-max-w)] flex-col';
 
-/** 三栏模式：对话区（最小占比 30%） */
-export const stoSplitChatPaneClass = 'relative flex min-h-0 min-w-[var(--sto-split-min-chat)] flex-1 flex-col';
+/** 三栏模式：对话区 grid 第一列（贴满 1fr 轨道） */
+export const stoSplitChatPaneClass = cn(
+  'relative flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden',
+);
 
-/** 三栏模式：预览区（默认/最大 70% 由 width 百分比控制） */
+/** 三栏模式：预览区（列宽由 split row grid 的 --sto-split-preview-col 控制） */
 export const stoSplitPreviewPaneClass =
-  'flex h-full min-h-0 max-w-[var(--sto-split-max-preview)] shrink-0 flex-col overflow-hidden [contain:inline-size]';
+  'flex h-full min-h-0 min-w-0 flex-col overflow-hidden [contain:inline-size]';
 
 /** 三栏预览区产物内容壳（描边在 tab 行下方，不含 tab） */
 export const stoPreviewContentShellClass = cn(
@@ -221,15 +310,10 @@ export const stoPreviewContentShellClass = cn(
 /** @deprecated 整卡描边已拆至 {@link stoPreviewContentShellClass}，tab 行在外 */
 export const stoSplitPreviewCardClass = stoPreviewContentShellClass;
 
-/** @deprecated tab 已迁至 ContentHeader */
-export const stoPreviewTabRowClass = cn(
-  'flex shrink-0 items-center gap-2 pb-2 pl-4 pr-4 pt-0',
-);
-
-/** 预览产物 tab pill（选中 #E5E6EB / 未选 #F5F6F7） */
+/** 预览产物 tab pill（选中 #E5E6EB / 未选 #F5F6F7；高度与 {@link contentHeaderActionBtnClass} 一致） */
 export function stoPreviewArtifactTabClass(isActive: boolean): string {
   return cn(
-    'inline-flex h-[30px] max-w-[143px] shrink-0 items-center gap-1 rounded-[10px] px-2 text-sm leading-[18px] transition-colors duration-fast',
+    'inline-flex h-8 max-w-[143px] shrink-0 items-center gap-1 rounded-[10px] px-2 text-sm leading-none transition-colors duration-fast',
     isActive
       ? 'bg-border text-foreground'
       : 'bg-[#F5F6F7] text-foreground hover:bg-muted',
@@ -254,6 +338,31 @@ export const stoSplitResizerClass = cn(
 );
 
 export const stoSplitResizerActiveClass = 'bg-primary/40';
+
+/** 三栏 body 行 col2：拖拽条（须在 {@link stoSplitResizerClass} 之后定义） */
+export const stoSplitGridBodyResizerClass = cn(
+  'col-start-2 row-start-2 self-stretch',
+  stoSplitResizerClass,
+);
+
+/** ContentHeader 预览列：☰ + tab 与右侧操作 icon 同一 52px 行内对齐 */
+export const contentHeaderPreviewTabsRowClass = cn(
+  'flex h-full min-h-0 min-w-0 flex-1 items-center gap-2 overflow-hidden',
+);
+
+/** @deprecated 别名 {@link contentHeaderPreviewTabsRowClass} */
+export const stoPreviewTabRowClass = contentHeaderPreviewTabsRowClass;
+
+/** ContentHeader 预览列内产物 tab 可滚动区 */
+export const contentHeaderPreviewTabsWrapClass = cn(
+  'flex h-full min-h-0 min-w-0 flex-1 items-center justify-start gap-2 overflow-x-auto overflow-y-hidden',
+);
+
+/** ContentHeader 预览列产物 tab 内按钮（去浏览器默认 padding，避免 pill 偏上） */
+export const contentHeaderPreviewArtifactTabBtnClass = cn(
+  'inline-flex min-w-0 items-center bg-transparent p-0 font-inherit text-inherit leading-none',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+);
 
 /** 三栏预览区宽度占比下限 / 默认 / 上限（对话区对应 70%–50%–30%） */
 export const STO_PREVIEW_SPLIT_MIN = 30;
@@ -306,8 +415,11 @@ export const stoMainCardBodyClass = cn(
   'px-[var(--sto-content-pad-x)] pb-5 pt-0 [scrollbar-gutter:stable]',
 );
 
-/** 三栏预览展开时：去掉 body 水平 px，避免与 ContentHeader / split row 双重 inset */
-export const stoMainCardBodySplitClass = 'px-0';
+/**
+ * 三栏预览展开时 body 槽：display:contents，子项直接参与 main 统一 grid。
+ * 与 {@link stoMainCardBodyClass} 互斥使用。
+ */
+export const stoMainCardBodySplitClass = stoSplitGridContentsClass;
 
 /**
  * 内容区 52px 全局标题栏（MasterGo 组 7046）。
@@ -333,18 +445,31 @@ export const contentHeaderTitleGroupClass = cn(
 
 /** 三栏 header 左区（对话列宽）：侧栏钮 + 会话 tab，可横滑 */
 export const contentHeaderSplitChatZoneClass = cn(
-  'no-drag flex min-w-0 items-center gap-2 overflow-x-auto overflow-y-hidden',
+  'no-drag flex h-full min-w-0 items-center gap-2 overflow-x-auto overflow-y-hidden',
 );
 
-/** 三栏 header 右区（预览列宽）：产物 tab + 操作 icon，与下方预览描边框对齐 */
+/** 三栏 header 右区（预览列宽）：产物 tab + 操作 icon 同一行 */
 export const contentHeaderSplitPreviewZoneClass = cn(
-  'no-drag flex min-w-0 items-center gap-1 overflow-hidden',
+  'no-drag flex h-full min-w-0 w-full items-center gap-1 overflow-hidden',
 );
 
-/** 三栏 ContentHeader：grid 列宽与 split row（1fr + resizer + preview%）一致 */
+/** 三栏 grid 可用宽：main 内容区（统一 grid 唯一量宽基准） */
+export function resolveSplitGridContainerWidth(anchorEl: HTMLElement | null): number {
+  if (anchorEl === null) return 0;
+  const main = anchorEl.closest('main');
+  if (main === null) return anchorEl.clientWidth;
+  const style = getComputedStyle(main);
+  const pl = Number.parseFloat(style.paddingLeft) || 0;
+  const pr = Number.parseFloat(style.paddingRight) || 0;
+  return Math.max(0, main.clientWidth - pl - pr);
+}
+
+/** @deprecated 三栏改用 main {@link stoSplitUnifiedMainClass} + {@link stoSplitGridContentsClass} */
 export const contentHeaderSplitBarClass = cn(
-  contentHeaderBarClass,
-  'grid items-center gap-x-2',
+  'drag-region box-border w-full min-w-0 shrink-0 overflow-hidden',
+  'h-[var(--sto-content-header-h,52px)] min-h-[var(--sto-content-header-h,52px)] max-h-[var(--sto-content-header-h,52px)]',
+  'rounded-t-[var(--sto-main-card-radius)] bg-[var(--sto-main-card-bg)]',
+  'grid items-center justify-normal gap-x-2',
   '[grid-template-columns:minmax(0,1fr)_4px_var(--sto-split-preview-col,50%)]',
 );
 
@@ -378,11 +503,6 @@ export const contentHeaderActionBtnClass = cn(
 
 /** 标题栏 icon 激活态（深度思考开、搜索开等） */
 export const contentHeaderActionBtnActiveClass = 'bg-primary/10 text-primary';
-
-/** ContentHeader 预览列内产物 tab 行（占预览区剩余宽，左对齐） */
-export const contentHeaderPreviewTabsWrapClass = cn(
-  'flex min-w-0 flex-1 items-center gap-2 overflow-x-auto',
-);
 
 /**
  * 工作流 Hero 输入复合框（MasterGo 2:7326）：白底 + Grey-4 描边 + 22px 圆角 + 轻阴影。

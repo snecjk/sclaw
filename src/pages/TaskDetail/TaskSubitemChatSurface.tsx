@@ -32,16 +32,17 @@ import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
 import {
-  clampPreviewPanelPercent,
-  STO_PREVIEW_SPLIT_MAX,
-  STO_PREVIEW_SPLIT_MIN,
   stoParameterFormDockLayout,
-  stoSplitPreviewPaneClass,
+  stoSplitChatScrollClass,
+  stoChatScrollContentClass,
+  stoSplitGridBodyChatClass,
+  stoSplitGridBodyPreviewClass,
+  stoSplitGridBodyResizerClass,
   stoSplitResizerActiveClass,
-  stoSplitResizerClass,
-  stoSplitRowInsetsClass,
+  stoSplitRowContentsClass,
   stoTaskSubitemChatCanvasBg,
 } from '@/lib/surfaces';
+import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
 import { useStoTaskSubitemChatSend } from './use-sto-task-subitem-chat-send';
 import { useContentHeader } from '@/components/layout/content-header-context';
 
@@ -102,10 +103,12 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [composeSeed, setComposeSeed] = useState<string | undefined>();
   const [pendingAutoSendText, setPendingAutoSendText] = useState<string | null>(null);
-  const [isResizing, setIsResizing] = useState(false);
-  const previewPanelRef = useRef<HTMLDivElement>(null);
   const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
   const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
+  const { splitRowRef, previewPanelRef, startResize, isResizing } = useSplitPanelResize(
+    previewPanelPercent,
+    setPreviewSplitPercent,
+  );
   /** True after we consumed sessionStorage one-shot compose for this subitem (skip generic post-load scroll). */
   const hasOneShotComposeRef = useRef(false);
   /** Generic scroll-to-bottom once per subitem mount (sidebar / deep link / home reused path). */
@@ -386,69 +389,6 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
     openArtifactPreview(file);
   }, [openArtifactPreview]);
 
-  // ── Resizable panel logic ──
-  const startResize = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = previewPanelRef.current?.offsetWidth ?? 0;
-    const containerWidth = previewPanelRef.current?.parentElement?.clientWidth ?? window.innerWidth;
-    let rafId: number | null = null;
-    let pendingWidth = startWidth || containerWidth * (previewPanelPercent / 100);
-
-    setIsResizing(true);
-    document.body.style.userSelect = 'none';
-
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:col-resize;';
-    document.body.appendChild(overlay);
-
-    const applyWidth = () => {
-      rafId = null;
-      if (previewPanelRef.current) {
-        previewPanelRef.current.style.width = `${pendingWidth}px`;
-      }
-    };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const delta = startX - moveEvent.clientX;
-      const width = previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth;
-      pendingWidth = Math.max(
-        width * (STO_PREVIEW_SPLIT_MIN / 100),
-        Math.min(width * (STO_PREVIEW_SPLIT_MAX / 100), startWidth + delta),
-      );
-      if (rafId === null) {
-        rafId = requestAnimationFrame(applyWidth);
-      }
-    };
-
-    const cleanup = () => {
-      overlay.removeEventListener('mousemove', handleMouseMove);
-      overlay.removeEventListener('mouseup', handleMouseUp);
-      overlay.remove();
-      document.body.style.userSelect = '';
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      setPreviewSplitPercent(clampPreviewPanelPercent(
-        previewPanelRef.current?.parentElement?.clientWidth ?? containerWidth,
-        pendingWidth,
-      ));
-      setIsResizing(false);
-    };
-
-    const handleMouseUp = () => {
-      cleanup();
-    };
-
-    overlay.addEventListener('mousemove', handleMouseMove);
-    overlay.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      cleanup();
-    };
-  }, [previewPanelPercent, setPreviewSplitPercent]);
-
   if (!sessionKey) {
     return (
       <div
@@ -464,22 +404,30 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
 
   return (
     <div
+      ref={splitRowRef}
       className={cn(
-        'relative flex min-h-0 flex-1 flex-row overflow-hidden rounded-xl',
+        'relative min-h-0 flex-1 overflow-hidden rounded-xl',
         stoTaskSubitemChatCanvasBg,
-        isSplitChatLayout && stoSplitRowInsetsClass,
+        isSplitChatLayout ? stoSplitRowContentsClass : 'flex flex-row',
       )}
     >
       {/* Left: Chat area */}
-      <ChatConversationColumn variant="page" isSplitLayout={isSplitChatLayout}>
+      <ChatConversationColumn
+        variant="page"
+        isSplitLayout={isSplitChatLayout}
+        splitGridChatClass={isSplitChatLayout ? stoSplitGridBodyChatClass : undefined}
+      >
         <div
           ref={scrollRef}
           className={cn(
-            'relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-contain py-4 [scrollbar-gutter:stable]',
+            'relative z-10 min-h-0 flex-1 py-4',
             stoTaskSubitemChatCanvasBg,
+            isSplitChatLayout
+              ? stoSplitChatScrollClass
+              : 'overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
           )}
         >
-          <div ref={contentRef} className="space-y-4">
+          <div ref={contentRef} className={stoChatScrollContentClass}>
             {!sessionSynced || (loading && displayMessages.length === 0) ? (
               <div className="flex justify-center py-12 text-muted-foreground">
                 <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
@@ -585,7 +533,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
         <div
           onMouseDown={startResize}
           className={cn(
-            stoSplitResizerClass,
+            stoSplitGridBodyResizerClass,
             isResizing && stoSplitResizerActiveClass,
           )}
           style={{ cursor: isResizing ? 'col-resize' : undefined }}
@@ -603,8 +551,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 40 }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
-            style={{ width: `${previewPanelPercent}%` }}
-            className={stoSplitPreviewPaneClass}
+            className={stoSplitGridBodyPreviewClass}
           >
             <ChatPreviewPanel
               files={previewableFiles}

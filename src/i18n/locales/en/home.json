@@ -1,7 +1,7 @@
 {
   "site": {
     "hero": {
-      "title": "STO Claw — smarter outlet operations",
+      "title": "SClaw — smarter outlet operations",
       "subtitle": "An AI work platform that reshapes smart outlet operations and empowers efficient, intelligent day-to-day management."
     },
     "workflowGuide": {
@@ -55,7 +55,7 @@
     "footerHint": "Click to start"
   },
   "hero": {
-    "title": "STO Claw — smarter business management",
+    "title": "SClaw — smarter business management",
     "subtitle": "An AI workspace that drives team collaboration and stronger day-to-day operations."
   },
   "summary": {
@@ -122,7 +122,7 @@
     "dataAnalysis": "Data analysis",
     "workflow": "Workflow",
     "send": "Send",
-    "footerDisclaimer": "STO Claw is AI-assisted; verify important information with your team before acting.",
+    "footerDisclaimer": "SClaw is AI-assisted; verify important information with your team before acting.",
     "gatewayRequired": "Connect the gateway before sending.",
     "sendFailed": "Could not send. Open Chat for details."
   },
