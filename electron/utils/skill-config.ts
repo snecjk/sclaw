@@ -6,11 +6,12 @@
  * All file I/O uses async fs/promises to avoid blocking the main thread.
  */
 import { readFile, writeFile, access, cp, mkdir } from 'fs/promises';
-import { existsSync, readFileSync, cpSync, rmSync } from 'fs';
+import { existsSync, readFileSync, cpSync, rmSync, watch } from 'fs';
 import { constants } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { createHash } from 'node:crypto';
+import { app } from 'electron';
 import { getOpenClawDir, getResourcesDir, getOpenClawConfigDir, ensureDir } from './paths';
 import { logger } from './logger';
 import { withConfigLock } from './config-mutex';
@@ -272,6 +273,40 @@ function resolvePreinstalledSkillsSourceRoot(): string | null {
     return root || null;
 }
 
+/**
+ * In dev, local built-in skills are read live from resources/skills/<slug>/ so
+ * edits take effect without re-running the preinstalled-skills bundle script.
+ */
+function resolveLiveLocalSkillSourceDir(slug: string): string | null {
+    if (app.isPackaged) {
+        return null;
+    }
+
+    const candidates = [
+        join(getResourcesDir(), 'skills', slug),
+        join(process.cwd(), 'resources', 'skills', slug),
+        join(__dirname, '../../resources/skills', slug),
+    ];
+
+    for (const dir of candidates) {
+        if (existsSync(join(dir, 'SKILL.md'))) {
+            return dir;
+        }
+    }
+
+    return null;
+}
+
+function resolveSkillSourceDir(spec: PreinstalledSkillSpec, bundledRoot: string): string {
+    if (spec.local) {
+        const liveSource = resolveLiveLocalSkillSourceDir(spec.slug);
+        if (liveSource) {
+            return liveSource;
+        }
+    }
+    return join(bundledRoot, spec.slug);
+}
+
 /** Compute a short SHA-256 hash of a file's contents (sync). */
 function hashFileSync(filePath: string): string {
     try {
@@ -350,7 +385,7 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
     const toEnable: string[] = [];
 
     for (const spec of skills) {
-        const sourceDir = join(sourceRoot, spec.slug);
+        const sourceDir = resolveSkillSourceDir(spec, sourceRoot);
         const sourceManifest = join(sourceDir, 'SKILL.md');
         if (!existsSync(sourceManifest)) {
             logger.warn(`Preinstalled skill source missing SKILL.md, skipping: ${sourceDir}`);
@@ -434,5 +469,48 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
         } catch (error) {
             logger.warn('Failed to auto-enable preinstalled skills:', error);
         }
+    }
+}
+
+let localSkillsWatchStarted = false;
+
+/**
+ * Watch resources/skills in dev and re-sync local built-in skills on save.
+ */
+export function watchLocalSkillsForDev(): void {
+    if (app.isPackaged || localSkillsWatchStarted) {
+        return;
+    }
+
+    const skillsRoot = join(getResourcesDir(), 'skills');
+    if (!existsSync(skillsRoot)) {
+        return;
+    }
+
+    localSkillsWatchStarted = true;
+    let debounceTimer: NodeJS.Timeout | null = null;
+
+    const scheduleSync = (filename: string | null) => {
+        if (filename === PREINSTALLED_MANIFEST_NAME || filename === PREINSTALLED_MARKER_NAME) {
+            return;
+        }
+        if (debounceTimer) {
+            clearTimeout(debounceTimer);
+        }
+        debounceTimer = setTimeout(() => {
+            ensurePreinstalledSkillsInstalled().catch((error) => {
+                logger.warn('Failed to sync local skills after file change:', error);
+            });
+        }, 400);
+    };
+
+    try {
+        watch(skillsRoot, { recursive: true }, (_event, filename) => {
+            scheduleSync(typeof filename === 'string' ? filename : null);
+        });
+        logger.info(`Watching local skills for live sync: ${skillsRoot}`);
+    } catch (error) {
+        localSkillsWatchStarted = false;
+        logger.warn('Failed to watch local skills directory:', error);
     }
 }

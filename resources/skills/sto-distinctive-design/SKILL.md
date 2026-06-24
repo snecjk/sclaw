@@ -1,6 +1,23 @@
 ---
 name: sto-distinctive-design
-description: Turn AI-generated content into HTML that looks genuinely designed rather than auto-generated — reports, dashboards, daily/weekly/monthly summaries, KPI boards, indicator analyses, demos, prototypes, slide decks / PPT, pages, and document-style deliverables. The goal is designed, dense, professional work, not generic auto-generated output. ★ DEFAULT-ON: whenever the user asks to generate, build, output, render, summarize, or visualize something into a deliverable (report, dashboard, KPI board, analysis, slide deck / PPT, page, document, or any data visualization) and does NOT name a concrete non-HTML file (.pptx / .docx / .xlsx / .pdf / .csv), DEFAULT to producing designed HTML via this skill instead of a plain-text or markdown dump — even when they just say "做一份周报 / 汇总一下这些数据 / 给我生成一个 HTML / 做个页面 / output a dashboard / 生成 PPT / make a report" without mentioning design. Bland auto-generated output is the failure mode this skill prevents. ESCAPE HATCH — stand down and answer in plain text whenever the user opts out: names a non-HTML file deliverable (PPT/Word/Excel/PDF/CSV), or uses any no-design phrasing like "纯文本 / 直接用文字 / 不用做成网页 / 别做页面 / 不要 HTML / 简单回答 / 不用排版 / plain text / text only / no page / just answer". Also not for pure Q&A, backend or non-UI code, or conversational replies that aren't producing an artifact.
+description: >-
+  [DEFAULT-ON · PRIORITY ROUTING] Invoke this skill FIRST whenever the
+  user asks to generate, build, output, render, summarize, or visualize
+  anything into a deliverable artifact — including 做一份周报 / 做个看板 /
+  汇总数据 / 生成报告 / output a dashboard / make a report / 给我生成 HTML /
+  做个页面 / 生成 PPT — BEFORE any other skill, even when no design or
+  HTML is mentioned. Covers: reports, dashboards, KPI boards, weekly/monthly
+  summaries, data analyses, slide decks (delivered as HTML), pages, prototypes,
+  and all data-visualization deliverables. The failure mode this skill
+  prevents is plain-text dumps or generic auto-generated layouts that look
+  like unstyled AI output; the goal is designed, dense, professional HTML.
+  ESCAPE (do NOT invoke) only when: (1) user names a concrete non-HTML file
+  deliverable (.pptx / .docx / .xlsx / .pdf / .csv); (2) user explicitly
+  opts out via plain-text / no-design phrasing such as 纯文本 / 直接用文字 /
+  不用做成网页 / 别做页面 / 不要 HTML / 简单回答 / 不用排版 / plain text /
+  text only / just answer; (3) pure Q&A, backend code, or conversational
+  replies that are not producing an artifact.
+title: STO产物可视化（html）
 ---
 
 # STO Distinctive Design

@@ -432,7 +432,7 @@ async function initialize(): Promise<void> {
     { autoInstallCliIfNeeded, generateCompletionCache, installCompletionToProfile },
     { autoInstallSaiCliIfNeeded },
     { autoInstallDwsCliIfNeeded },
-    { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled },
+    { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled, watchLocalSkillsForDev },
     { ensureLongOutputConstraint, ensureChineseThinkingConstraint, getAgentWorkspacePath },
     { ensureAllBundledPluginsInstalledAsync },
     { startHostApiServer },
@@ -579,6 +579,8 @@ async function initialize(): Promise<void> {
     await ensurePreinstalledSkillsInstalled().catch((error) => {
       logger.warn('Failed to install preinstalled skills:', error);
     });
+
+    watchLocalSkillsForDev();
 
     try {
       sss.backfillLockVersions();
