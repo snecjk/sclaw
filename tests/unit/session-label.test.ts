@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findSessionKeyByTitle } from '@/lib/session-label';
+import { findSessionKeyByTitle, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 
 describe('findSessionKeyByTitle', () => {
   const sessions = [
@@ -30,5 +30,13 @@ describe('findSessionKeyByTitle', () => {
   it('returns undefined when nothing matches', () => {
     expect(findSessionKeyByTitle('不存在', sessions, {})).toBeUndefined();
     expect(findSessionKeyByTitle('', sessions, {})).toBeUndefined();
+  });
+});
+
+describe('session label persist helpers', () => {
+  it('shouldAutoDeriveSessionLabel respects in-memory custom titles', () => {
+    const corrupted = (label: string) => label.includes('<!--');
+    expect(shouldAutoDeriveSessionLabel('agent:main:session-1', { 'agent:main:session-1': '执行工作流A' }, corrupted)).toBe(false);
+    expect(shouldAutoDeriveSessionLabel('agent:main:session-1', {}, corrupted)).toBe(true);
   });
 });

@@ -17,6 +17,11 @@ import {
   parseScheduledTaskSessionKey,
 } from './cron-session-utils';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
+import {
+  applyStoredSessionLabels,
+  resolveStoredSessionLabel,
+  shouldAutoDeriveSessionLabel,
+} from '@/lib/session-label';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
@@ -209,8 +214,10 @@ export function createSessionActions(
           }]
           : dedupedSessions;
 
+        const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, get().sessionLabels);
+
         const discoveredActivity = Object.fromEntries(
-          sessionsWithCurrent
+          labeledSessions
             .filter((session) => typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt))
             .map((session) => [session.key, session.updatedAt!]),
         );
@@ -349,7 +356,7 @@ export function createSessionActions(
         }
 
         set((state) => ({
-          sessions: sessionsWithCurrent,
+          sessions: labeledSessions,
           currentSessionKey: nextSessionKey,
           currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
           sessionLastActivity: {
@@ -364,10 +371,14 @@ export function createSessionActions(
 
         // Background: hydrate only the first screen of missing metadata.
         // Avoid N * full-history fan-out when many sessions exist.
-        const sessionsToHydrate = sessionsWithCurrent
+        const sessionsToHydrate = labeledSessions
           .filter((session) => {
             if (session.key.endsWith(':main')) return false;
-            const hasUsableTitle = Boolean(session.label?.trim() || session.displayName?.trim() || get().sessionLabels[session.key]);
+            const hasUsableTitle = Boolean(
+              session.label?.trim()
+              || session.displayName?.trim()
+              || resolveStoredSessionLabel(session.key, get().sessionLabels),
+            );
             const hasActivity = Boolean(session.updatedAt || get().sessionLastActivity[session.key]);
             return !hasUsableTitle || !hasActivity;
           })
@@ -390,8 +401,7 @@ export function createSessionActions(
                 const lastMsg = msgs[msgs.length - 1];
                 set((s) => {
                   const next: Partial<typeof s> = {};
-                  const existingLabel = s.sessionLabels[session.key];
-                  if (firstUser && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+                  if (firstUser && shouldAutoDeriveSessionLabel(session.key, s.sessionLabels, isCorruptedSessionLabel)) {
                     const labelText = deriveSessionLabelFromUserText(getMessageText(firstUser.content));
                     if (labelText) {
                       const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;

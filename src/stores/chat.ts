@@ -50,6 +50,7 @@ import {
 } from '@/lib/builtin-tool-dispatch';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
+import { applyStoredSessionLabels, resolveStoredSessionLabel, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import {
   dedupeRedundantUserMessages,
@@ -1663,14 +1664,16 @@ export const useChatStore = create<ChatState>()(
             }]
             : dedupedSessions;
 
+          const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, get().sessionLabels);
+
           const discoveredActivity = Object.fromEntries(
-            sessionsWithCurrent
+            labeledSessions
               .filter((session) => typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt))
               .map((session) => [session.key, session.updatedAt!]),
           );
 
           set((state) => ({
-            sessions: sessionsWithCurrent,
+            sessions: labeledSessions,
             currentSessionKey: nextSessionKey,
             currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
             sessionLastActivity: {
@@ -1686,10 +1689,14 @@ export const useChatStore = create<ChatState>()(
           // Background: hydrate only the first screen of missing metadata.
           // Avoid the old N * full-history fan-out, which became very expensive
           // when users had hundreds of sessions.
-          const sessionsToHydrate = sessionsWithCurrent
+          const sessionsToHydrate = labeledSessions
             .filter((session) => {
               if (session.key.endsWith(':main')) return false;
-              const hasUsableTitle = Boolean(session.label?.trim() || session.displayName?.trim() || get().sessionLabels[session.key]);
+              const hasUsableTitle = Boolean(
+                session.label?.trim()
+                || session.displayName?.trim()
+                || resolveStoredSessionLabel(session.key, get().sessionLabels),
+              );
               const hasActivity = Boolean(session.updatedAt || get().sessionLastActivity[session.key]);
               return !hasUsableTitle || !hasActivity;
             })
@@ -1712,8 +1719,7 @@ export const useChatStore = create<ChatState>()(
                 const lastMsg = msgs[msgs.length - 1];
                 set((s) => {
                   const next: Partial<typeof s> = {};
-                  const existingLabel = s.sessionLabels[session.key];
-                  if (firstUser && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+                  if (firstUser && shouldAutoDeriveSessionLabel(session.key, s.sessionLabels, isCorruptedSessionLabel)) {
                     const labelText = deriveSessionLabelFromUserText(getMessageText(firstUser.content));
                     if (labelText) {
                       const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
@@ -2097,8 +2103,7 @@ export const useChatStore = create<ChatState>()(
       const isMainSession = targetSessionKey.endsWith(':main');
       if (!isMainSession) {
         const firstUserMsg = finalMessages.find((m) => m.role === 'user');
-        const existingLabel = get().sessionLabels[targetSessionKey];
-        if (firstUserMsg && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+        if (firstUserMsg && shouldAutoDeriveSessionLabel(targetSessionKey, get().sessionLabels, isCorruptedSessionLabel)) {
           const labelText = deriveSessionLabelFromUserText(getMessageText(firstUserMsg.content));
           if (labelText) {
             const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
@@ -2421,7 +2426,9 @@ export const useChatStore = create<ChatState>()(
     // Update session label with first user message text as soon as it's sent
     const { sessionLabels, messages } = get();
     const isFirstMessage = !messages.slice(0, -1).some((m) => m.role === 'user');
-    if (!currentSessionKey.endsWith(':main') && isFirstMessage && !sessionLabels[currentSessionKey] && displayText) {
+    if (!currentSessionKey.endsWith(':main') && isFirstMessage
+      && shouldAutoDeriveSessionLabel(currentSessionKey, sessionLabels, isCorruptedSessionLabel)
+      && displayText) {
       const truncated = displayText.length > 50 ? `${displayText.slice(0, 50)}…` : displayText;
       set((s) => ({ sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated } }));
     }
