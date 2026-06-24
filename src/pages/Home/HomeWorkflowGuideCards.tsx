@@ -254,8 +254,8 @@ export function HomeWorkflowGuideCards({
           hideStatus
           onSend={onSend}
         />
-        <GuideCard avatarSeed="site-hq-reconciliation" base="recon" statusVariant="ok" mode="disabled" hideStatus />
-        <GuideCard avatarSeed="site-cost-analysis" base="cost" statusVariant="ok" mode="disabled" hideStatus />
+        <GuideCard avatarSeed="site-hq-reconciliation" base="recon" statusVariant="pending" mode="configure" hideStatus onSend={onSend} />
+        <GuideCard avatarSeed="site-cost-analysis" base="cost" statusVariant="pending" mode="configure" hideStatus onSend={onSend} />
       </div>
     </section>
   );

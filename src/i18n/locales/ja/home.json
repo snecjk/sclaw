@@ -19,34 +19,22 @@
       "recon": {
         "title": "本社精算照合",
         "pill": "精算",
-        "status": "完了",
-        "stat1Label": "収支",
-        "stat1Value": "128,560",
-        "stat1Unit": "CNY",
-        "stat2Label": "収入",
-        "stat2Value": "98,750",
-        "stat2Unit": "CNY",
-        "stat3Label": "支出",
-        "stat3Value": "29,810",
-        "stat3Unit": "CNY",
+        "status": "未設定",
+        "bodyCaption": "ワークフロー概要",
+        "bodyDetail": "本社精算データと連携し、費用精算の異常変動科目を自動検知して照合結果を出力。追跡可能な標準化精算レポートを生成。",
         "footerTeam": "精算チーム",
-        "footerHint": "例外 4 件"
+        "footerHint": "ワークフローを設定",
+        "createPrompt": "本社精算照合 ワークフローを作成"
       },
       "cost": {
         "title": "顧客コスト分析",
-        "pill": "タスク監視",
-        "status": "完了",
-        "stat1Label": "異常顧客",
-        "stat1Value": "57",
-        "stat1Unit": "件",
-        "stat2Label": "高リスク",
-        "stat2Value": "12",
-        "stat2Unit": "件",
-        "stat3Label": "関与金額",
-        "stat3Value": "-26,980.70",
-        "stat3Unit": "CNY",
+        "pill": "コスト分析",
+        "status": "未設定",
+        "bodyCaption": "ワークフロー概要",
+        "bodyDetail": "顧客/店舗ごとに出港発送の単票コストを还原し、科目・ルート-重量区分のコスト異常顧客を特定。コスト分析レポートと最適化提案を自動生成。",
         "footerTeam": "顧客追跡チーム",
-        "footerHint": "例外 3 件"
+        "footerHint": "ワークフローを設定",
+        "createPrompt": "顧客コスト分析 ワークフローを作成"
       }
     },
     "assistant": {
