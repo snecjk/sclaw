@@ -6,6 +6,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useScheduledTasksStore } from '@/stores/scheduledTasks';
+import { forgetOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
 import { useChatStore } from '@/stores/chat';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { useScheduledTaskUnreadStore } from '@/stores/scheduled-task-unread';
@@ -123,6 +124,7 @@ export default function ScheduledTasks() {
           // Switch to the per-run agent session (dated) instead of the summary session
           const today = new Date().toISOString().slice(0, 10);
           const agentSessionKey = `agent:main:scheduled-task:${job.id}:${today}`;
+          forgetOptimisticDeletedSessionKey(agentSessionKey);
           navigateToMainChatHome(navigate, location.pathname, () => {
             useChatStore.getState().switchSession(agentSessionKey);
           });

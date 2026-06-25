@@ -9,6 +9,8 @@ import { toast } from 'sonner';
 import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-to-chat';
 import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
+import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
+import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
@@ -1700,9 +1702,12 @@ export const useChatStore = create<ChatState>()(
             return true;
           });
 
+          const deletedKeys = await fetchDeletedSessionKeys();
+          const visibleDedupedSessions = omitDeletedSessionKeys(dedupedSessions, deletedKeys);
+
           const { currentSessionKey, sessions: localSessions } = get();
           const localByKey = new Map(localSessions.map((session) => [session.key, session]));
-          const mergedRemoteSessions = dedupedSessions.map((remote) => {
+          const mergedRemoteSessions = visibleDedupedSessions.map((remote) => {
             const local = localByKey.get(remote.key);
             if (!local) return remote;
             return {
@@ -1954,26 +1959,22 @@ export const useChatStore = create<ChatState>()(
   // newSession() design that avoids sessions.reset to preserve history.
 
   deleteSession: async (key: string) => {
-    // Soft-delete the session's JSONL transcript on disk.
-    // The main process renames <suffix>.jsonl → <suffix>.deleted.jsonl so that
-    // sessions.list skips it automatically.
-    try {
-      const result = await hostApiFetch<{
-        success: boolean;
-        error?: string;
-      }>('/api/sessions/delete', {
-        method: 'POST',
-        body: JSON.stringify({
-          sessionKey: key,
-          engineType: resolveEngineTypeForSession(get().sessions, key, get().currentAgentId) ?? 'openclaw',
-        }),
-      });
-      if (!result.success) {
-        console.warn(`[deleteSession] IPC reported failure for ${key}:`, result.error);
-      }
-    } catch (err) {
-      console.warn(`[deleteSession] IPC call failed for ${key}:`, err);
+    const session = get().sessions.find((item) => item.key === key);
+    const deleteResult = await requestSessionDelete(
+      key,
+      resolveSessionDeleteEngineType(
+        key,
+        session,
+        getAgentEngineType(get().currentAgentId ?? getAgentIdFromSessionKey(key)),
+      ),
+    );
+    if (!deleteResult.success) {
+      console.warn(`[deleteSession] IPC reported failure for ${key}:`, deleteResult.error);
+      notifySessionDeleteFailed(deleteResult.error);
+      return false;
     }
+
+    rememberOptimisticDeletedSessionKey(key);
 
     const { currentSessionKey, sessions } = get();
     const remaining = sessions.filter((s) => s.key !== key);
@@ -2009,6 +2010,8 @@ export const useChatStore = create<ChatState>()(
         sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
       }));
     }
+    void get().loadSessions();
+    return true;
   },
 
   // ── New session ──

@@ -4,6 +4,7 @@ import {
   looksLikeTechnicalTaskGroupLabel,
   resolveCronGroupNameFromSession,
   resolveStoScheduledGroupNameFromSession,
+  sortScheduledTaskGroupsByFirstTriggerDesc,
 } from '@/lib/scheduled-task-group-name';
 
 describe('scheduled-task-group-name', () => {
@@ -44,5 +45,111 @@ describe('scheduled-task-group-name', () => {
       },
     );
     expect(name).toBe('日报生成');
+  });
+
+  it('sortScheduledTaskGroupsByFirstTriggerDesc orders by earliest session activity', () => {
+    const sessionLastActivity: Record<string, number> = {};
+    const groups = [
+      {
+        key: 'cron:older',
+        name: '优美的问候语',
+        sessions: [{ key: 'agent:main:cron:older:2026-06-20', updatedAt: Date.parse('2026-06-20') }],
+      },
+      {
+        key: 'cron:newer',
+        name: '测试',
+        sessions: [{ key: 'agent:main:cron:newer:2026-06-25', updatedAt: Date.parse('2026-06-25') }],
+      },
+    ];
+    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, sessionLastActivity);
+    expect(sorted.map((g) => g.name)).toEqual(['测试', '优美的问候语']);
+  });
+
+  it('same calendar day: orders by millisecond trigger time', () => {
+    const day = '2026-06-25';
+    const morning = new Date(2026, 5, 25, 9, 0, 0).getTime();
+    const afternoon = new Date(2026, 5, 25, 15, 0, 0).getTime();
+    const groups = [
+      {
+        key: 'cron:a',
+        name: '优美的问候语',
+        sessions: [{ key: `agent:main:cron:a:${day}`, updatedAt: morning }],
+      },
+      {
+        key: 'cron:b',
+        name: '测试',
+        sessions: [{ key: `agent:main:cron:b:${day}`, updatedAt: afternoon }],
+      },
+    ];
+    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {});
+    expect(sorted.map((g) => g.name)).toEqual(['测试', '优美的问候语']);
+  });
+
+  it('same millisecond: tie-break by stable task id, not display name', () => {
+    const ts = new Date(2026, 5, 25, 9, 0, 0, 500).getTime();
+    const groups = [
+      {
+        key: 'cron:job-b',
+        name: '优美的问候语',
+        sessions: [{ key: 'agent:main:cron:job-b:2026-06-25', updatedAt: ts }],
+      },
+      {
+        key: 'cron:job-a',
+        name: '测试',
+        sessions: [{ key: 'agent:main:cron:job-a:2026-06-25', updatedAt: ts }],
+      },
+    ];
+    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {});
+    expect(sorted.map((g) => g.key)).toEqual(['cron:job-a', 'cron:job-b']);
+  });
+
+  it('active runtime lifts group above start-of-day fallback when triggering today', () => {
+    const afternoon = new Date(2026, 5, 25, 15, 0, 0).getTime();
+    const nowMs = new Date(2026, 5, 25, 16, 30, 0).getTime();
+    const day = '2026-06-25';
+    const runningKey = `agent:main:cron:running:${day}`;
+    const groups = [
+      {
+        key: 'cron:other',
+        name: '优美的问候语',
+        sessions: [{ key: `agent:main:cron:other:${day}`, updatedAt: afternoon }],
+      },
+      {
+        key: 'cron:running',
+        name: '测试',
+        sessions: [{ key: runningKey }],
+      },
+    ];
+    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {}, {
+      runtimeBySessionKey: {
+        [runningKey]: { sending: true, updatedAt: nowMs },
+      },
+      nowMs,
+    });
+    expect(sorted.map((g) => g.name)).toEqual(['测试', '优美的问候语']);
+  });
+
+  it('current scheduled session without recorded activity sorts as active', () => {
+    const afternoon = new Date(2026, 5, 25, 15, 0, 0).getTime();
+    const nowMs = new Date(2026, 5, 25, 16, 30, 0).getTime();
+    const day = '2026-06-25';
+    const runningKey = `agent:main:cron:running:${day}`;
+    const groups = [
+      {
+        key: 'cron:other',
+        name: '优美的问候语',
+        sessions: [{ key: `agent:main:cron:other:${day}`, updatedAt: afternoon }],
+      },
+      {
+        key: 'cron:running',
+        name: '测试',
+        sessions: [{ key: runningKey }],
+      },
+    ];
+    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {}, {
+      currentSessionKey: runningKey,
+      nowMs,
+    });
+    expect(sorted.map((g) => g.name)).toEqual(['测试', '优美的问候语']);
   });
 });

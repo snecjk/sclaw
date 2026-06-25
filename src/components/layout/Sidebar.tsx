@@ -61,7 +61,7 @@ import {
   isAnyCronSessionKey,
 } from '@/stores/chat/cron-session-utils';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
-import { buildScheduledTaskGroupDisplayName } from '@/lib/scheduled-task-group-name';
+import { buildScheduledTaskGroupDisplayName, getSessionActivityMs, sortScheduledTaskGroupsByFirstTriggerDesc } from '@/lib/scheduled-task-group-name';
 import { useScheduledTaskNameMaps } from '@/hooks/use-scheduled-task-name-maps';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
@@ -652,6 +652,8 @@ export function Sidebar() {
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
+  const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
+  const sending = useChatStore((s) => s.sending);
   const switchSession = useChatStore((s) => s.switchSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
   const renameSession = useChatStore((s) => s.renameSession);
@@ -946,9 +948,15 @@ export function Sidebar() {
 
     const resolvedGroups: ScheduledTaskSidebarGroup[] = [];
     for (const group of groups.values()) {
+      const sessionSortOptions = {
+        runtimeBySessionKey,
+        currentSessionKey,
+        currentSessionSending: sending,
+        nowMs,
+      };
       group.sessions.sort((a, b) => {
-        const aAct = sessionLastActivity[a.key] ?? a.updatedAt ?? 0;
-        const bAct = sessionLastActivity[b.key] ?? b.updatedAt ?? 0;
+        const aAct = getSessionActivityMs(a, sessionLastActivity, sessionSortOptions);
+        const bAct = getSessionActivityMs(b, sessionLastActivity, sessionSortOptions);
         return bAct - aAct;
       });
       resolvedGroups.push({
@@ -958,8 +966,13 @@ export function Sidebar() {
       });
     }
 
-    return resolvedGroups;
-  }, [taskListScheduledSessions, sessionLastActivity, scheduledTaskNameMaps]);
+    return sortScheduledTaskGroupsByFirstTriggerDesc(resolvedGroups, sessionLastActivity, {
+      runtimeBySessionKey,
+      currentSessionKey,
+      currentSessionSending: sending,
+      nowMs,
+    });
+  }, [taskListScheduledSessions, sessionLastActivity, scheduledTaskNameMaps, runtimeBySessionKey, currentSessionKey, sending, nowMs]);
 
   const taskListRenderPlan = useMemo(
     () => buildTaskListRenderPlan(scheduledTaskGroups, taskListShowAll),
@@ -1723,7 +1736,8 @@ export function Sidebar() {
         variant="destructive"
         onConfirm={async () => {
           if (!sessionToDelete) return;
-          await deleteSession(sessionToDelete.key);
+          const deleted = await deleteSession(sessionToDelete.key);
+          if (!deleted) return;
           if (currentSessionKey === sessionToDelete.key) navigateToMainChatHome(navigate, location.pathname);
           setSessionToDelete(null);
         }}
@@ -1740,7 +1754,8 @@ export function Sidebar() {
         onConfirm={async () => {
           if (!subitemToDelete) return;
           const { sessionKey, taskId, entryId } = subitemToDelete;
-          await deleteSession(sessionKey);
+          const deleted = await deleteSession(sessionKey);
+          if (!deleted) return;
           removeSubitem(taskId, entryId);
           if (currentSessionKey === sessionKey) navigateToMainChatHome(navigate, location.pathname);
           setSubitemToDelete(null);

@@ -202,7 +202,7 @@ export interface ChatState {
   /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
   switchToAgentMainSession: (agentId: string) => void;
   newSession: () => void;
-  deleteSession: (key: string) => Promise<void>;
+  deleteSession: (key: string) => Promise<boolean>;
   cleanupEmptySession: () => void;
   loadHistory: (quiet?: boolean) => Promise<void>;
   sendMessage: (options: SendMessageOptions) => Promise<void>;

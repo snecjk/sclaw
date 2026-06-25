@@ -1,6 +1,7 @@
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { hostApiFetch } from '@/lib/host-api';
-import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
+import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
+import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
 import { useAgentsStore } from '@/stores/agents';
 import {
   getCanonicalPrefixFromSessions,
@@ -176,6 +177,9 @@ export function createSessionActions(
           return true;
         });
 
+        const deletedKeys = await fetchDeletedSessionKeys();
+        const visibleDedupedSessions = omitDeletedSessionKeys(dedupedSessions, deletedKeys);
+
         const { currentSessionKey, sessions: localSessions, sessionLastActivity, sessionLabels } = get();
         let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
         if (!nextSessionKey.startsWith('agent:')) {
@@ -184,14 +188,14 @@ export function createSessionActions(
             nextSessionKey = canonicalMatch;
           }
         }
-        if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
+        if (!visibleDedupedSessions.find((s) => s.key === nextSessionKey) && visibleDedupedSessions.length > 0) {
           // Keep locally-created pending sessions even after the first optimistic send.
           const hasLocalPendingSession =
             isTemporaryAgentSessionKey(nextSessionKey)
             || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
             || localSessions.some((session) => session.key === nextSessionKey);
           if (!hasLocalPendingSession) {
-            nextSessionKey = dedupedSessions[0].key;
+            nextSessionKey = visibleDedupedSessions[0].key;
           }
         }
 
@@ -199,18 +203,18 @@ export function createSessionActions(
         const hasLocalSessionActivity = Boolean(sessionLastActivity[nextSessionKey] || sessionLabels[nextSessionKey]);
         const shouldAppendCurrentSession = Boolean(
           nextSessionKey
-          && !dedupedSessions.find((s) => s.key === nextSessionKey)
+          && !visibleDedupedSessions.find((s) => s.key === nextSessionKey)
           && (hasLocalPendingSession || hasLocalSessionActivity),
         );
         const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
         const sessionsWithCurrent = shouldAppendCurrentSession
-          ? [...dedupedSessions, {
+          ? [...visibleDedupedSessions, {
             key: nextSessionKey,
             label: localCurrentSession?.label ?? NEW_SESSION_TEMP_LABEL,
             engineType: localCurrentSession?.engineType,
             model: localCurrentSession?.model,
           }]
-          : dedupedSessions;
+          : visibleDedupedSessions;
 
         const scrubbedSessionLabels = scrubCorruptedSessionLabels(get().sessionLabels);
         const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels);
@@ -479,29 +483,19 @@ export function createSessionActions(
     // newSession() design that avoids sessions.reset to preserve history.
 
     deleteSession: async (key: string) => {
-      // Soft-delete the session's JSONL transcript on disk.
-      // The main process renames <suffix>.jsonl → <suffix>.deleted.jsonl so that
-      // sessions.list skips it automatically.
-      try {
-        const session = get().sessions.find((item) => item.key === key);
-        const agent = useAgentsStore.getState().agents.find((item) => item.id === get().currentAgentId);
-        const result = await hostApiFetch<{ success: boolean; error?: string }>('/api/sessions/delete', {
-          method: 'POST',
-          body: JSON.stringify({
-            sessionKey: key,
-            engineType: resolveChatSessionEngineType(session, agent?.engineType, key),
-          }),
-        });
-        const typedResult = result as {
-          success: boolean;
-          error?: string;
-        };
-        if (!typedResult.success) {
-          console.warn(`[deleteSession] API reported failure for ${key}:`, typedResult.error);
-        }
-      } catch (err) {
-        console.warn(`[deleteSession] API call failed for ${key}:`, err);
+      const session = get().sessions.find((item) => item.key === key);
+      const agent = useAgentsStore.getState().agents.find((item) => item.id === get().currentAgentId);
+      const deleteResult = await requestSessionDelete(
+        key,
+        resolveSessionDeleteEngineType(key, session, agent?.engineType),
+      );
+      if (!deleteResult.success) {
+        console.warn(`[deleteSession] API reported failure for ${key}:`, deleteResult.error);
+        notifySessionDeleteFailed(deleteResult.error);
+        return false;
       }
+
+      rememberOptimisticDeletedSessionKey(key);
 
       const { currentSessionKey, sessions } = get();
       const remaining = sessions.filter((s) => s.key !== key);
@@ -535,6 +529,8 @@ export function createSessionActions(
           sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
         }));
       }
+      await get().loadSessions?.();
+      return true;
     },
 
     // ── New session ──

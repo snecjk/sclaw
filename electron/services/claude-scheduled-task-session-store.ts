@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { access, appendFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { getClaudeScheduledTasksDir } from '../utils/paths';
+import { filterDeletedSessions } from '../utils/scheduled-task-poller-store';
+import { reviveClaudeTaskDatedExecutionSession } from '../utils/revive-deleted-execution-session';
 import type {
   ClaudeScheduledTaskDefinition,
   ClaudeScheduledTaskRunRecord,
@@ -242,6 +244,8 @@ export async function appendClaudeScheduledTaskSummaryRun(
   const d = String(runDate.getDate()).padStart(2, '0');
   const dateStr = `${y}-${m}-${d}`;
 
+  await reviveClaudeTaskDatedExecutionSession(definition.id, dateStr);
+
   // Write to both the base summary session AND the dated aggregate session
   const summarySession = await ensureSummarySession(definition);
   const datedSession = await ensureDatedSession(definition, dateStr);
@@ -364,7 +368,7 @@ export async function listClaudeScheduledTaskSummarySessions(): Promise<ClaudeSc
   }
 
   items.sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0));
-  return items;
+  return filterDeletedSessions(items);
 }
 
 export async function readClaudeScheduledTaskSessionHistory(
@@ -440,18 +444,31 @@ export async function readClaudeScheduledTaskSessionHistory(
   return messages.slice(-effectiveLimit);
 }
 
-export async function deleteClaudeScheduledTaskSummarySession(sessionKey: string): Promise<void> {
+function resolveClaudeTaskDeleteTarget(sessionKey: string): { taskId: string; effectiveSessionKey: string } {
   if (!sessionKey.startsWith('claude-task:')) {
     throw new Error(`Unsupported Claude scheduled task session key: ${sessionKey}`);
   }
-
-  const taskId = sessionKey.slice('claude-task:'.length);
+  const rest = sessionKey.slice('claude-task:'.length);
+  const parts = rest.split(':');
+  if (parts.length === 2 && /^\d{4}-\d{2}-\d{2}$/.test(parts[1] ?? '')) {
+    const taskId = parts[0]?.trim();
+    if (!taskId) {
+      throw new Error(`Invalid Claude scheduled task session key: ${sessionKey}`);
+    }
+    return { taskId, effectiveSessionKey: sessionKey };
+  }
+  const taskId = rest.trim();
   if (!taskId) {
     throw new Error(`Invalid Claude scheduled task session key: ${sessionKey}`);
   }
+  return { taskId, effectiveSessionKey: sessionKey };
+}
+
+export async function deleteClaudeScheduledTaskSummarySession(sessionKey: string): Promise<void> {
+  const { taskId, effectiveSessionKey } = resolveClaudeTaskDeleteTarget(sessionKey);
 
   const store = await readSessionStore(taskId);
-  const entry = findSessionEntry(store, sessionKey);
+  const entry = findSessionEntry(store, effectiveSessionKey);
   if (!entry) {
     return;
   }
@@ -464,9 +481,11 @@ export async function deleteClaudeScheduledTaskSummarySession(sessionKey: string
     // Non-fatal: still remove store mapping.
   }
 
-  delete store[sessionKey];
+  delete store[effectiveSessionKey];
   if (Array.isArray(store.sessions)) {
-    store.sessions = store.sessions.filter((item) => item.key !== sessionKey && item.sessionKey !== sessionKey);
+    store.sessions = store.sessions.filter(
+      (item) => item.key !== effectiveSessionKey && item.sessionKey !== effectiveSessionKey,
+    );
   }
   await writeSessionStore(taskId, store);
 }

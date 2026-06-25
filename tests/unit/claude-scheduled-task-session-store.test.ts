@@ -133,4 +133,59 @@ describe('claude scheduled task session store', () => {
     expect(sessions).toHaveLength(1);
     expect(sessions[0]?.key).toBe('claude-task:task-b');
   });
+
+  it('deleteClaudeScheduledTaskSummarySession removes dated aggregate sessions', async () => {
+    const taskId = 'task-dated';
+    const datedKey = 'claude-task:task-dated:2026-06-25';
+    const sessionStore = await import('@electron/services/claude-scheduled-task-session-store');
+
+    await sessionStore.appendClaudeScheduledTaskSummaryRun(
+      {
+        id: taskId,
+        name: 'Dated task',
+        enabled: true,
+        cronExpr: '0 9 * * *',
+        promptTemplate: 'digest',
+        agentId: 'main',
+        workspacePath: '/tmp/workspace',
+        permissionProfile: 'readonly-safe',
+        timeoutSec: 60,
+        retryPolicy: { maxAttempts: 1, backoffSec: 30 },
+        failurePolicy: { pauseAfterConsecutiveFailures: 3 },
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+      },
+      {
+        runId: 'run-1',
+        taskId,
+        status: 'succeeded',
+        triggerSource: 'manual',
+        scheduledFor: '2026-06-25T09:00:00.000Z',
+        startedAt: '2026-06-25T09:00:01.000Z',
+        completedAt: '2026-06-25T09:00:20.000Z',
+        attempt: 1,
+        idempotencyKey: `${taskId}:2026-06-25T09:00:00.000Z:1`,
+        sessionKey: sessionStore.buildClaudeTaskRunSessionKey(taskId, 'run-1'),
+        summary: 'dated digest',
+        runtimeResult: {
+          stopReason: 'end_turn',
+          isError: false,
+          durationMs: 19000,
+        },
+        runtimeSnapshot: {
+          workspacePath: '/tmp/workspace',
+          permissionProfile: 'readonly-safe',
+          pluginPaths: [],
+        },
+      },
+    );
+
+    const beforeDelete = await sessionStore.listClaudeScheduledTaskSummarySessions();
+    expect(beforeDelete.some((item) => item.key === datedKey)).toBe(true);
+
+    await sessionStore.deleteClaudeScheduledTaskSummarySession(datedKey);
+    const sessions = await sessionStore.listClaudeScheduledTaskSummarySessions();
+    expect(sessions.some((item) => item.key === datedKey)).toBe(false);
+    expect(sessions.some((item) => item.key === sessionStore.buildClaudeTaskSummarySessionKey(taskId))).toBe(true);
+  });
 });

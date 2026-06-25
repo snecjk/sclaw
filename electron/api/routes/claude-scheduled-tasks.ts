@@ -6,6 +6,7 @@ import {
   listClaudeScheduledTaskSummarySessions,
   readClaudeScheduledTaskSessionHistory,
 } from '../../services/claude-scheduled-task-session-store';
+import { reviveClaudeTaskDatedExecutionSession } from '../../utils/revive-deleted-execution-session';
 
 export async function handleClaudeScheduledTaskRoutes(
   req: IncomingMessage,
@@ -117,6 +118,12 @@ export async function handleClaudeScheduledTaskRoutes(
 
     try {
       const run = await getClaudeScheduledTaskService().triggerTask(id);
+      const runDateStr = run.scheduledFor ?? run.startedAt ?? run.completedAt ?? new Date().toISOString();
+      const runDate = new Date(runDateStr);
+      const y = runDate.getFullYear();
+      const m = String(runDate.getMonth() + 1).padStart(2, '0');
+      const d = String(runDate.getDate()).padStart(2, '0');
+      await reviveClaudeTaskDatedExecutionSession(id, `${y}-${m}-${d}`);
       sendJson(res, 200, run);
     } catch (error) {
       sendJson(res, 400, { success: false, error: String(error) });

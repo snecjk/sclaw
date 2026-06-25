@@ -4,6 +4,7 @@ import { openClawAdapter } from './openclaw-adapter';
 import { rememberSessionEngineType, resolveSessionEngineType } from './session-engine';
 import { getEngineSessionRegistryEntry } from './session-registry';
 import type { AgentEngineType, EngineAdapter, EngineAdapterContext } from './types';
+import { filterDeletedSessions } from '../utils/scheduled-task-poller-store';
 
 export async function resolveAgentEngineType(agentId: string): Promise<AgentEngineType> {
   const snapshot = await listAgentsSnapshot();
@@ -80,5 +81,5 @@ export async function listEngineSessions(ctx: EngineAdapterContext): Promise<Arr
     }
   }
 
-  return [...sessionsByKey.values()];
+  return await filterDeletedSessions([...sessionsByKey.values()]);
 }

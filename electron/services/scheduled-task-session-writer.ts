@@ -13,6 +13,8 @@ import { readFile, writeFile, appendFile, access, mkdir, readdir } from 'node:fs
 import { join } from 'node:path';
 import { getOpenClawConfigDir } from '../utils/paths';
 import { logger } from '../utils/logger';
+import { filterDeletedSessions } from '../utils/scheduled-task-poller-store';
+import { reviveScheduledTaskAgentDatedExecutionSession } from '../utils/revive-deleted-execution-session';
 
 const CURRENT_SESSION_VERSION = 1;
 
@@ -275,7 +277,9 @@ export async function appendTriggerResultToSession(
   const entryId = formatLocalYmd(new Date());
   const agentId = 'main';
   const agentSessionKey = `agent:${agentId}:scheduled-task:${taskId}:${entryId}`;
-  
+
+  await reviveScheduledTaskAgentDatedExecutionSession(taskId, agentId, entryId);
+
   const executionContent = run.executionResult?.trim() || `任务执行完成 (状态：${run.status})`;
   await appendMessageToAgentSession(
     agentId,
@@ -622,5 +626,5 @@ export async function listAllScheduledTaskSessions(): Promise<ScheduledTaskSessi
 
   // Sort by most recently updated first
   sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
-  return sessions;
+  return filterDeletedSessions(sessions);
 }

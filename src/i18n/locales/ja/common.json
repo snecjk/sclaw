@@ -22,6 +22,8 @@
         "devConsole": "開発者コンソール",
         "models": "モデル",
         "deleteSessionConfirm": "セッション \"{{label}}\" を削除してもよろしいですか？",
+        "deleteSessionFailed": "セッションの削除に失敗しました",
+        "deleteSessionFailedHint": "しばらくしてから再度お試しください。解決しない場合は設定でログを確認してください。",
         "openClawPage": "OpenClaw ページ",
         "expand": "サイドバーを展開",
         "collapse": "サイドバーを折りたたむ",

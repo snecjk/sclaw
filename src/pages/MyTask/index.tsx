@@ -9,6 +9,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCronStore } from '@/stores/cron';
 import type { ManagedLocalTask } from '@/stores/cron';
+import { forgetOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
 import { useChatStore } from '@/stores/chat';
 import { useAgentsStore } from '@/stores/agents';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
@@ -254,6 +255,7 @@ export default function MyTask() {
           const m = String(today.getMonth() + 1).padStart(2, '0');
           const d = String(today.getDate()).padStart(2, '0');
           const sessionKey = `claude-task:${task.id}:${y}-${m}-${d}`;
+          forgetOptimisticDeletedSessionKey(sessionKey);
           navigateToMainChatHome(navigate, location.pathname, () => {
             useChatStore.getState().switchSession(sessionKey);
           });
@@ -265,6 +267,10 @@ export default function MyTask() {
           const m = String(today.getMonth() + 1).padStart(2, '0');
           const d = String(today.getDate()).padStart(2, '0');
           const sessionKey = `agent:${task.agentId ?? 'main'}:cron:${task.id}:${y}-${m}-${d}`;
+          forgetOptimisticDeletedSessionKey(sessionKey);
+          if (task.agentId && task.agentId !== 'main') {
+            forgetOptimisticDeletedSessionKey(`agent:main:cron:${task.id}:${y}-${m}-${d}`);
+          }
           navigateToMainChatHome(navigate, location.pathname, () => {
             useChatStore.getState().switchSession(sessionKey);
           });

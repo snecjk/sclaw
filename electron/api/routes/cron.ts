@@ -8,7 +8,8 @@ import type { DingTalkMention } from '../../../shared/dingtalk-mention';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { getOpenClawConfigDir } from '../../utils/paths';
-import { isSessionDeleted } from '../../utils/scheduled-task-poller-store';
+import { filterDeletedSessions } from '../../utils/scheduled-task-poller-store';
+import { reviveCronDatedExecutionSession } from '../../utils/revive-deleted-execution-session';
 
 interface GatewayCronJob {
   id: string;
@@ -420,26 +421,7 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
 
   sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 
-  // Drop sessions the user explicitly deleted (persisted in deletedSessions store).
-  // This prevents virtual dated cron sessions — regenerated from cron/runs/*.jsonl on
-  // each refresh — from re-appearing in the sidebar after deletion.
-  // Passes the session's updatedAt so that if a newer run exists (e.g. the user
-  // triggered a cron task on a date whose dated session was previously deleted),
-  // the session "revives" and is shown again.
-  if (sessions.length > 0) {
-    const deletionChecks = await Promise.all(
-      sessions.map(async (s) => ({
-        keep: !(await isSessionDeleted(s.key, s.updatedAt)),
-        session: s,
-      })),
-    );
-    const filtered = deletionChecks
-      .filter(({ keep }) => keep)
-      .map(({ session }) => session);
-    return filtered;
-  }
-
-  return sessions;
+  return filterDeletedSessions(sessions);
 }
 
 export async function buildCronSessionFallbackMessages(params: {
@@ -821,7 +803,9 @@ export async function handleCronRoutes(
   if (url.pathname === '/api/cron/trigger' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ id: string }>(req);
-      sendJson(res, 200, await ctx.gatewayManager.rpc('cron.run', { id: body.id, mode: 'force' }));
+      const result = await ctx.gatewayManager.rpc('cron.run', { id: body.id, mode: 'force' });
+      await reviveCronDatedExecutionSession(body.id, 'main');
+      sendJson(res, 200, result);
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }
