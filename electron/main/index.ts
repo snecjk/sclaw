@@ -520,7 +520,14 @@ async function initialize(): Promise<void> {
   );
 
   // Register IPC handlers
-  registerIpcHandlers(gm, chs, window, spriteWindowMod.getSpriteWindow, floatIconMod.getFloatIconWindow);
+  registerIpcHandlers(
+    gm,
+    chs,
+    window,
+    spriteWindowMod.getSpriteWindow,
+    floatIconMod.getFloatIconWindow,
+    () => mainWindow,
+  );
 
   // Register form IPC handlers
   const { registerFormHandlers } = await import('./ipc/form-handlers');

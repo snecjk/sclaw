@@ -13,7 +13,7 @@ import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
 import { buildCronSessionHistoryPath, getCronRunSessionAggregateKey, isCronSessionKey, isCronDatedSessionKey, parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './chat/cron-session-utils';
-import { sanitizeSessionDisplayField } from './chat/helpers';
+import { mergeSessionLastActivity, sanitizeSessionDisplayField } from './chat/helpers';
 import {
   DEFAULT_CANONICAL_PREFIX,
   DEFAULT_SESSION_KEY,
@@ -48,9 +48,9 @@ import {
   absorbWorkflowExecutionStartedFromToolResults,
   dispatchBuiltinToolResult,
 } from '@/lib/builtin-tool-dispatch';
-import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
+import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSessionLabel } from '@/lib/workflow-session-hint';
+import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, hasUsableSessionTitle, scrubCorruptedSessionLabels, resolveStoredSessionLabel, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
-import { applyStoredSessionLabels, resolveStoredSessionLabel, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import {
   dedupeRedundantUserMessages,
@@ -1569,6 +1569,7 @@ export const useChatStore = create<ChatState>()(
               thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
               model: s.model ? String(s.model) : undefined,
               updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
+              spawnedBy: typeof s.spawnedBy === 'string' ? s.spawnedBy : undefined,
               engineType,
             };
           }).filter((s: ChatSession) => s.key);
@@ -1664,7 +1665,8 @@ export const useChatStore = create<ChatState>()(
             }]
             : dedupedSessions;
 
-          const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, get().sessionLabels);
+          const scrubbedSessionLabels = scrubCorruptedSessionLabels(get().sessionLabels);
+          const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels);
 
           const discoveredActivity = Object.fromEntries(
             labeledSessions
@@ -1676,10 +1678,8 @@ export const useChatStore = create<ChatState>()(
             sessions: labeledSessions,
             currentSessionKey: nextSessionKey,
             currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
-            sessionLastActivity: {
-              ...state.sessionLastActivity,
-              ...discoveredActivity,
-            },
+            sessionLastActivity: mergeSessionLastActivity(state.sessionLastActivity, discoveredActivity),
+            sessionLabels: scrubCorruptedSessionLabels(state.sessionLabels),
           }));
 
           if (currentSessionKey !== nextSessionKey) {
@@ -1692,13 +1692,8 @@ export const useChatStore = create<ChatState>()(
           const sessionsToHydrate = labeledSessions
             .filter((session) => {
               if (session.key.endsWith(':main')) return false;
-              const hasUsableTitle = Boolean(
-                session.label?.trim()
-                || session.displayName?.trim()
-                || resolveStoredSessionLabel(session.key, get().sessionLabels),
-              );
               const hasActivity = Boolean(session.updatedAt || get().sessionLastActivity[session.key]);
-              return !hasUsableTitle || !hasActivity;
+              return !hasUsableSessionTitle(session, scrubbedSessionLabels) || !hasActivity;
             })
             .sort((left, right) => {
               const leftAt = left.updatedAt ?? get().sessionLastActivity[left.key] ?? 0;
@@ -1715,19 +1710,31 @@ export const useChatStore = create<ChatState>()(
                   { sessionKey: session.key, limit: SESSION_METADATA_HISTORY_LIMIT },
                 );
                 const msgs = Array.isArray(r.messages) ? r.messages as RawMessage[] : [];
-                const firstUser = msgs.find((m) => m.role === 'user');
                 const lastMsg = msgs[msgs.length - 1];
                 set((s) => {
                   const next: Partial<typeof s> = {};
-                  if (firstUser && shouldAutoDeriveSessionLabel(session.key, s.sessionLabels, isCorruptedSessionLabel)) {
-                    const labelText = deriveSessionLabelFromUserText(getMessageText(firstUser.content));
+                  if (shouldAutoDeriveSessionLabel(session.key, s.sessionLabels, isCorruptedSessionLabel)) {
+                    const labelText = deriveSessionLabelFromHistory(
+                      msgs,
+                      getMessageText,
+                      buildSessionLabelDerivationOptions(session.key, s.sessions, s.sessionLabels),
+                    );
                     if (labelText) {
-                      const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
-                      next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
+                      next.sessionLabels = {
+                        ...s.sessionLabels,
+                        [session.key]: truncateSessionLabel(labelText),
+                      };
                     }
                   }
-                  if (lastMsg?.timestamp && !s.sessionLastActivity[session.key]) {
-                    next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: toMs(lastMsg.timestamp) };
+                  if (lastMsg?.timestamp) {
+                    const lastAt = toMs(lastMsg.timestamp);
+                    if (lastAt > 0) {
+                      const currentAt = s.sessionLastActivity[session.key] ?? 0;
+                      const nextAt = Math.max(currentAt, lastAt);
+                      if (nextAt !== currentAt) {
+                        next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: nextAt };
+                      }
+                    }
                   }
                   return next;
                 });
@@ -2102,13 +2109,22 @@ export const useChatStore = create<ChatState>()(
       // displayName (e.g. the configured agent name "StoClaw") instead.
       const isMainSession = targetSessionKey.endsWith(':main');
       if (!isMainSession) {
-        const firstUserMsg = finalMessages.find((m) => m.role === 'user');
-        if (firstUserMsg && shouldAutoDeriveSessionLabel(targetSessionKey, get().sessionLabels, isCorruptedSessionLabel)) {
-          const labelText = deriveSessionLabelFromUserText(getMessageText(firstUserMsg.content));
+        if (shouldAutoDeriveSessionLabel(targetSessionKey, get().sessionLabels, isCorruptedSessionLabel)) {
+          const labelText = deriveSessionLabelFromHistory(
+            finalMessages,
+            getMessageText,
+            buildSessionLabelDerivationOptions(
+              targetSessionKey,
+              get().sessions,
+              get().sessionLabels,
+            ),
+          );
           if (labelText) {
-            const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
             set((s) => ({
-              sessionLabels: { ...s.sessionLabels, [targetSessionKey]: truncated },
+              sessionLabels: {
+                ...s.sessionLabels,
+                [targetSessionKey]: truncateSessionLabel(labelText),
+              },
             }));
           }
         }
@@ -2429,8 +2445,12 @@ export const useChatStore = create<ChatState>()(
     if (!currentSessionKey.endsWith(':main') && isFirstMessage
       && shouldAutoDeriveSessionLabel(currentSessionKey, sessionLabels, isCorruptedSessionLabel)
       && displayText) {
-      const truncated = displayText.length > 50 ? `${displayText.slice(0, 50)}…` : displayText;
-      set((s) => ({ sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated } }));
+      set((s) => ({
+        sessionLabels: {
+          ...s.sessionLabels,
+          [currentSessionKey]: truncateSessionLabel(displayText),
+        },
+      }));
     }
 
     // Mark this session as most recently active
@@ -3122,5 +3142,6 @@ export const useChatStore = create<ChatState>()(
   name: 'stoclaw-chat-session-labels',
   partialize: (state) => ({
     sessionLabels: state.sessionLabels,
+    sessionLastActivity: state.sessionLastActivity,
   }),
 }));

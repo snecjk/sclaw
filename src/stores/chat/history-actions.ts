@@ -1,6 +1,7 @@
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
-import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
+import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSessionLabel } from '@/lib/workflow-session-hint';
+import { buildSessionLabelDerivationOptions } from '@/lib/session-label';
 import { mergeLocalWorkflowTurnsFromCurrent } from '@/lib/workflow-local-turn';
 import {
   mergeParameterFormBlocksFromCurrent,
@@ -126,14 +127,23 @@ export function createHistoryActions(
         // displayName (e.g. the configured agent name "StoClaw") instead.
         const isMainSession = currentSessionKey.endsWith(':main');
         if (!isMainSession) {
-          const firstUserMsg = finalMessages.find((m) => m.role === 'user');
           const existingLabel = get().sessionLabels[currentSessionKey];
-          if (firstUserMsg && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
-            const labelText = deriveSessionLabelFromUserText(getMessageText(firstUserMsg.content));
+          if (!existingLabel || isCorruptedSessionLabel(existingLabel)) {
+            const labelText = deriveSessionLabelFromHistory(
+              finalMessages,
+              getMessageText,
+              buildSessionLabelDerivationOptions(
+                currentSessionKey,
+                get().sessions,
+                get().sessionLabels,
+              ),
+            );
             if (labelText) {
-              const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
               set((s) => ({
-                sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated },
+                sessionLabels: {
+                  ...s.sessionLabels,
+                  [currentSessionKey]: truncateSessionLabel(labelText),
+                },
               }));
             }
           }

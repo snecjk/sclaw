@@ -184,5 +184,35 @@ describe('chat session actions', () => {
     expect(h.read().sessionLastActivity['agent:main:cron:job-1']).toBe(1773281731621);
     expect(h.read().sessions.find((session) => session.key === 'agent:main:cron:job-1')?.updatedAt).toBe(1773281731621);
   });
+
+  it('preserves newer local sessionLastActivity when backend updatedAt is stale', async () => {
+    const { createSessionActions } = await import('@/stores/chat/session-actions');
+    const h = makeHarness({
+      currentSessionKey: 'agent:main:main',
+      sessions: [],
+      sessionLastActivity: { 'agent:main:session-a': 1_773_281_800_000 },
+    });
+    const actions = createSessionActions(h.set as never, h.get as never);
+
+    invokeIpcMock.mockResolvedValueOnce({
+      success: true,
+      ok: true,
+      status: 200,
+      json: {
+        success: true,
+        sessions: [
+          {
+            key: 'agent:main:session-a',
+            displayName: 'S Claw',
+            updatedAt: 1_773_281_700_000,
+          },
+        ],
+      },
+    });
+
+    await actions.loadSessions();
+
+    expect(h.read().sessionLastActivity['agent:main:session-a']).toBe(1_773_281_800_000);
+  });
 });
 

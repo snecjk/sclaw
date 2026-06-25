@@ -4,6 +4,7 @@
 import type { TFunction } from 'i18next';
 import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
 import type { ChatSession } from '@/stores/chat/types';
+import { isCorruptedSessionLabel, type DeriveSessionLabelOptions } from '@/lib/workflow-session-hint';
 
 /** Zustand persist bucket for `useChatStore` sessionLabels (see chat.ts persist name). */
 export const SESSION_LABELS_STORAGE_KEY = 'stoclaw-chat-session-labels';
@@ -25,21 +26,77 @@ export interface ResolveSessionLabelInput {
   t: TFunction;
 }
 
+export function buildSessionLabelDerivationOptions(
+  sessionKey: string,
+  sessions: ChatSession[],
+  sessionLabels: Record<string, string>,
+): DeriveSessionLabelOptions {
+  const session = sessions.find((entry) => entry.key === sessionKey);
+  return {
+    sessionKey,
+    gatewayLabel: session?.label,
+    spawnedBy: session?.spawnedBy,
+    sessionLabels,
+    sessions,
+  };
+}
+
+/** First non-corrupted human title from stored preview, gateway label, or main displayName. */
+export function resolveVisibleSessionTitle(
+  session: Pick<ChatSession, 'key' | 'label' | 'displayName'>,
+  sessionLabels: Record<string, string>,
+): string | undefined {
+  const stored = resolveStoredSessionLabel(session.key, sessionLabels);
+  if (stored && !isCorruptedSessionLabel(stored)) return stored;
+  const label = session.label?.trim();
+  if (label && !isCorruptedSessionLabel(label)) return label;
+  if (session.key.endsWith(':main')) {
+    const dn = session.displayName?.trim();
+    if (dn && !looksLikeTechnicalSessionDisplay(dn) && dn !== session.key) return dn;
+  }
+  return undefined;
+}
+
+export function hasUsableSessionTitle(
+  session: Pick<ChatSession, 'key' | 'label' | 'displayName'>,
+  sessionLabels: Record<string, string>,
+): boolean {
+  return Boolean(resolveVisibleSessionTitle(session, sessionLabels));
+}
+
+/** Drop persisted titles that were saved from subagent boilerplate or workflow hints. */
+export function scrubCorruptedSessionLabels(
+  sessionLabels: Record<string, string>,
+): Record<string, string> {
+  let changed = false;
+  const next: Record<string, string> = {};
+  for (const [key, value] of Object.entries(sessionLabels)) {
+    if (isCorruptedSessionLabel(value)) {
+      changed = true;
+    } else {
+      next[key] = value;
+    }
+  }
+  return changed ? next : sessionLabels;
+}
+
 /** 与 Sidebar.getSessionLabel 保持同一解析顺序与 fallback 规则 */
 export function resolveSessionLabel(input: ResolveSessionLabelInput): string {
   const { key, displayName, label, sessionLabels, t } = input;
   const preview = resolveStoredSessionLabel(key, sessionLabels);
-  if (preview) return preview;
-  if (label?.trim()) return label;
-  const dn = displayName?.trim();
-  if (dn && !looksLikeTechnicalSessionDisplay(dn) && dn !== key) return dn;
+  if (preview && !isCorruptedSessionLabel(preview)) return preview;
+  const gatewayLabel = label?.trim();
+  if (gatewayLabel && !isCorruptedSessionLabel(gatewayLabel)) return gatewayLabel;
   if (key.endsWith(':main')) {
+    const dn = displayName?.trim();
+    if (dn && !looksLikeTechnicalSessionDisplay(dn) && dn !== key) return dn;
     return t('chat:sessionList.mainSessionTitle');
   }
   if (isTemporaryAgentSessionKey(key)) {
     return t('common:sidebar.newChat');
   }
-  return key;
+  // Non-main sessions without a derived title: avoid agent displayName (e.g. "S Claw").
+  return t('common:sidebar.newChat');
 }
 
 /** Collect human-readable title candidates for a session (lookup order matches resolveSessionLabel). */
@@ -49,11 +106,13 @@ export function sessionTitleCandidates(
 ): string[] {
   const out: string[] = [];
   const preview = sessionLabels[session.key]?.trim();
-  if (preview) out.push(preview);
+  if (preview && !isCorruptedSessionLabel(preview)) out.push(preview);
   const label = session.label?.trim();
-  if (label) out.push(label);
+  if (label && !isCorruptedSessionLabel(label)) out.push(label);
   const dn = session.displayName?.trim();
-  if (dn && !looksLikeTechnicalSessionDisplay(dn) && dn !== session.key) out.push(dn);
+  if (session.key.endsWith(':main') && dn && !looksLikeTechnicalSessionDisplay(dn) && dn !== session.key) {
+    out.push(dn);
+  }
   return out;
 }
 
@@ -123,7 +182,7 @@ export function applyStoredSessionLabels<T extends ChatSession>(
 ): T[] {
   return sessions.map((session) => {
     const stored = resolveStoredSessionLabel(session.key, sessionLabels);
-    if (!stored) return session;
+    if (!stored || isCorruptedSessionLabel(stored)) return session;
     return { ...session, label: stored };
   });
 }

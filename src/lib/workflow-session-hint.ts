@@ -120,9 +120,110 @@ export function stripWorkflowSessionHintForDisplay(message: string): string {
 
 /** User-visible session title from gateway user message (strips injected hints). */
 export function deriveSessionLabelFromUserText(rawText: string): string {
-  return stripWorkflowContextForDisplay(stripWorkflowSessionHintForDisplay(rawText)).trim();
+  const subagentTask = extractSubagentTaskLabel(rawText);
+  if (subagentTask) return subagentTask;
+  const stripped = stripWorkflowContextForDisplay(stripWorkflowSessionHintForDisplay(rawText)).trim();
+  if (isSubagentInjectedUserText(stripped)) return '';
+  return stripped;
+}
+
+const SUBAGENT_CONTEXT_PREFIX = /^\[Subagent Context\]/im;
+
+/** OpenClaw subagent sessions use keys like `agent:main:subagent:<uuid>`. */
+export function isSubagentSessionKey(sessionKey: string): boolean {
+  return /^agent:[^:]+:subagent:/.test(sessionKey);
+}
+
+/** True when the user-role message is OpenClaw's subagent kickoff injection. */
+export function isSubagentInjectedUserText(rawText: string): boolean {
+  return SUBAGENT_CONTEXT_PREFIX.test(rawText.trim());
+}
+
+/** Sidebar/title labels that only contain subagent boilerplate should be re-derived. */
+export function isSubagentContextOnlyLabel(label: string): boolean {
+  const trimmed = label.trim();
+  if (!trimmed) return false;
+  return /^\[Subagent Context\]/i.test(trimmed)
+    || /^You are running as a subagent/i.test(trimmed);
+}
+
+/** Extract delegated task text from OpenClaw's subagent initial user message. */
+export function extractSubagentTaskLabel(rawText: string): string | undefined {
+  const text = rawText.trim();
+  if (!text) return undefined;
+
+  const taskSection = text.match(/\[Subagent Task\]\s*:?\s*\n([\s\S]*?)(?:\n\nBegin\.|\nBegin\.|$)/i);
+  if (taskSection?.[1]?.trim()) {
+    return taskSection[1].trim();
+  }
+
+  if (isSubagentInjectedUserText(text)) {
+    return undefined;
+  }
+
+  return undefined;
+}
+
+export interface DeriveSessionLabelOptions {
+  sessionKey?: string;
+  gatewayLabel?: string;
+  spawnedBy?: string;
+  sessionLabels?: Record<string, string>;
+  sessions?: Array<{ key: string; label?: string }>;
+}
+
+function resolveKnownSessionLabel(
+  sessionKey: string,
+  sessionLabels: Record<string, string>,
+  sessions: Array<{ key: string; label?: string }>,
+): string | undefined {
+  const stored = sessionLabels[sessionKey]?.trim();
+  if (stored && !isCorruptedSessionLabel(stored)) return stored;
+
+  const session = sessions.find((entry) => entry.key === sessionKey);
+  const gatewayLabel = session?.label?.trim();
+  if (gatewayLabel && !isCorruptedSessionLabel(gatewayLabel)) return gatewayLabel;
+
+  return undefined;
+}
+
+/** Derive a human title from history, skipping injected subagent/system user turns. */
+export function deriveSessionLabelFromHistory(
+  messages: Array<{ role: string; content?: unknown }>,
+  getMessageText: (content: unknown) => string,
+  options: DeriveSessionLabelOptions = {},
+): string | undefined {
+  const gatewayLabel = options.gatewayLabel?.trim();
+  if (gatewayLabel && !isCorruptedSessionLabel(gatewayLabel)) {
+    return gatewayLabel;
+  }
+
+  for (const message of messages) {
+    if (message.role !== 'user') continue;
+    const rawText = getMessageText(message.content);
+    const subagentTask = extractSubagentTaskLabel(rawText);
+    if (subagentTask) return subagentTask;
+
+    const derived = deriveSessionLabelFromUserText(rawText);
+    if (derived) return derived;
+  }
+
+  const parentKey = options.spawnedBy?.trim();
+  if (parentKey && options.sessionLabels && options.sessions) {
+    return resolveKnownSessionLabel(parentKey, options.sessionLabels, options.sessions);
+  }
+
+  return undefined;
+}
+
+export function truncateSessionLabel(label: string, maxLength = 50): string {
+  const trimmed = label.trim();
+  if (!trimmed) return '';
+  return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength)}…` : trimmed;
 }
 
 export function isCorruptedSessionLabel(label: string): boolean {
-  return label.includes('<!-- StoClaw-Workflow') || label.includes('## 工作流');
+  return label.includes('<!-- StoClaw-Workflow')
+    || label.includes('## 工作流')
+    || isSubagentContextOnlyLabel(label);
 }
