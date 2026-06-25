@@ -17,7 +17,7 @@ import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock
 import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
-import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
+import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { AgentSummary } from '@/types/agent';
 import { homeHubFooterDisclaimerClass } from './home-hub-surface-styles';
@@ -78,10 +78,10 @@ export function HomeComposer({
     () => sessions.find((session) => session.key === currentSessionKey),
     [sessions, currentSessionKey],
   );
-  const resolvedEngineType = engineTypeProp ?? (
-    currentSessionKey === DEFAULT_SESSION_KEY
-      ? currentAgent?.engineType
-      : currentSession?.engineType ?? currentAgent?.engineType
+  const resolvedEngineType = engineTypeProp ?? resolveChatSessionEngineType(
+    currentSession,
+    currentAgent?.engineType,
+    currentSessionKey,
   );
 
   const inlineToolbarSelectors = (

@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
 import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-to-chat';
+import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
@@ -1558,7 +1559,11 @@ export const useChatStore = create<ChatState>()(
         if (rawSessions.length > 0) {
           const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
             const key = String(s.key || '');
-            const engineType: ChatSession['engineType'] = s.engineType === 'claude' ? 'claude' : 'openclaw';
+            const rawEngineType = s.engineType;
+            const engineType: ChatSession['engineType'] | undefined =
+              rawEngineType === 'claude' ? 'claude'
+                : rawEngineType === 'openclaw' ? 'openclaw'
+                  : undefined;
             return {
               key,
               label: s.label ? String(s.label) : undefined,
@@ -1635,6 +1640,16 @@ export const useChatStore = create<ChatState>()(
           });
 
           const { currentSessionKey, sessions: localSessions } = get();
+          const localByKey = new Map(localSessions.map((session) => [session.key, session]));
+          const mergedRemoteSessions = dedupedSessions.map((remote) => {
+            const local = localByKey.get(remote.key);
+            if (!local) return remote;
+            return {
+              ...remote,
+              engineType: remote.engineType ?? local.engineType,
+              model: remote.model ?? local.model,
+            };
+          });
           let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
           if (!nextSessionKey.startsWith('agent:')) {
             const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
@@ -1642,7 +1657,7 @@ export const useChatStore = create<ChatState>()(
               nextSessionKey = canonicalMatch;
             }
           }
-          if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
+          if (!mergedRemoteSessions.find((s) => s.key === nextSessionKey) && mergedRemoteSessions.length > 0) {
             // Preserve only locally-created pending sessions. On initial boot the
             // default ghost key (`agent:main:main`) should yield to real history.
             const hasLocalPendingSession =
@@ -1650,19 +1665,19 @@ export const useChatStore = create<ChatState>()(
               || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
               || localSessions.some((session) => session.key === nextSessionKey);
             if (!hasLocalPendingSession) {
-              nextSessionKey = dedupedSessions[0].key;
+              nextSessionKey = mergedRemoteSessions[0].key;
             }
           }
 
           const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
-          const sessionsWithCurrent = !dedupedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
-            ? [...dedupedSessions, {
+          const sessionsWithCurrent = !mergedRemoteSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
+            ? [...mergedRemoteSessions, {
               key: nextSessionKey,
               label: localCurrentSession?.label ?? NEW_SESSION_TEMP_LABEL,
               engineType: localCurrentSession?.engineType,
               model: localCurrentSession?.model,
             }]
-            : dedupedSessions;
+            : mergedRemoteSessions;
 
           const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, get().sessionLabels);
 
@@ -1756,6 +1771,10 @@ export const useChatStore = create<ChatState>()(
   switchSession: (key: string) => {
     if (key === get().currentSessionKey) return;
     set((s) => buildSessionSwitchPatch(s, key));
+    const targetSession = get().sessions.find((session) => session.key === key);
+    if (key !== DEFAULT_SESSION_KEY && !targetSession?.engineType) {
+      void get().loadSessions();
+    }
     get().loadHistory();
   },
 
@@ -1850,8 +1869,16 @@ export const useChatStore = create<ChatState>()(
       ?? DEFAULT_CANONICAL_PREFIX;
     const newKey = `${prefix}:session-${Date.now()}`;
     const newAgentId = getAgentIdFromSessionKey(newKey);
-    // Carry over model from the current (default) session — e.g. home page selection
-    const currentSessionModel = sessions.find((s) => s.key === currentSessionKey)?.model;
+    // Carry over model from home/default session or Claude agent toolbar selection
+    let currentSessionModel = sessions.find((s) => s.key === currentSessionKey)?.model;
+    if (!currentSessionModel?.trim()) {
+      const carryAgent = useAgentsStore.getState().agents.find(
+        (agent) => agent.id === (getAgentIdFromSessionKey(currentSessionKey) ?? get().currentAgentId),
+      );
+      if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
+        currentSessionModel = normalizeModelIdForChat(carryAgent.modelDisplay);
+      }
+    }
     const newSessionEntry: ChatSession = {
       key: newKey,
       label: NEW_SESSION_TEMP_LABEL,

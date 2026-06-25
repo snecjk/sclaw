@@ -28,6 +28,7 @@ import { useMessageQueueStore, createAutoSendWatcher } from '@/stores/message-qu
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
+import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { cn } from '@/lib/utils';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
 import {
@@ -109,9 +110,11 @@ export function Chat() {
     () => agents.find((agent) => agent.id === currentAgentId),
     [agents, currentAgentId],
   );
-  const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
-    ? currentAgent?.engineType
-    : currentSession?.engineType ?? currentAgent?.engineType;
+  const currentEngineType = resolveChatSessionEngineType(
+    currentSession,
+    currentAgent?.engineType,
+    currentSessionKey,
+  );
   const composerRequiresGateway = currentEngineType === 'openclaw';
   const composerDisabled = composerRequiresGateway && !isGatewayRunning;
   const composerStatusText = currentEngineType === 'claude'
