@@ -29,9 +29,11 @@ import { useSettingsStore } from './stores/settings';
 import { useAuthStore } from './stores/auth';
 import { useGatewayStore } from './stores/gateway';
 import { useProviderStore } from './stores/providers';
+import { useAgentsStore } from './stores/agents';
 import { useChatStore } from './stores/chat';
 import { useScheduledTaskUnreadStore } from './stores/scheduled-task-unread';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
+import { AccountSwitchFab } from './components/layout/AccountSwitchFab';
 
 /**
  * Error Boundary to catch and display React rendering errors
@@ -113,6 +115,7 @@ function App() {
   const setupComplete = useSettingsStore((state) => state.setupComplete);
   const initGateway = useGatewayStore((state) => state.init);
   const initProviders = useProviderStore((state) => state.init);
+  const fetchAgents = useAgentsStore((state) => state.fetchAgents);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isAuthInitialized = useAuthStore((state) => state.isInitialized);
   const accessDenied = useAuthStore((state) => state.accessDenied);
@@ -139,6 +142,11 @@ function App() {
   useEffect(() => {
     initProviders();
   }, [initProviders]);
+
+  // Initialize agents data on mount
+  useEffect(() => {
+    fetchAgents().catch(() => {});
+  }, [fetchAgents]);
 
   // Auth guard: redirect to login if not authenticated, then to setup if not complete
   // Skip auth guard for sprite and float-icon routes (they manage their own initialization)
@@ -339,6 +347,9 @@ function App() {
         {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
         {location.pathname !== '/float-icon' ? (
           <Toaster position="bottom-center" richColors closeButton style={{ zIndex: 99999 }} />
+        ) : null}
+        {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
+          <AccountSwitchFab />
         ) : null}
       </TooltipProvider>
     </ErrorBoundary>

@@ -80,7 +80,6 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
 
-  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const sessions = useChatStore((s) => s.sessions);
@@ -144,10 +143,6 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   }, [sessionKey, scrollRef, updateJumpToLatestVisibility]);
 
   const lastComposeRouteKeyRef = useRef('');
-
-  useEffect(() => {
-    void fetchAgents();
-  }, [fetchAgents]);
 
   /** Avoid painting another session's messages before the store switches (useEffect runs too late). */
   const sessionSynced = Boolean(sessionKey) && currentSessionKey === sessionKey;

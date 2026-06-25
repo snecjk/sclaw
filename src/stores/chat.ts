@@ -7,12 +7,21 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
 import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-to-chat';
+import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
-import { buildCronSessionHistoryPath, getCronRunSessionAggregateKey, isCronSessionKey, isCronDatedSessionKey, parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './chat/cron-session-utils';
+import {
+  buildCronSessionHistoryPath, getCronRunSessionAggregateKey, getClaudeTaskRunSessionAggregateKey,
+  isCronSessionKey, isCronDatedSessionKey,
+  parseCronSessionKey, parseScheduledTaskSessionKey, parseScheduledTaskAgentSessionKey,
+  // Claude 任务相关
+  isClaudeScheduledTaskSessionKey, isClaudeScheduledTaskRunSessionKey, isClaudeScheduledTaskDatedSessionKey,
+  buildClaudeScheduledTaskSessionHistoryPath,
+  parseClaudeScheduledTaskSessionKey, parseClaudeScheduledTaskRunSessionKey,
+} from './chat/cron-session-utils';
 import { mergeSessionLastActivity, sanitizeSessionDisplayField } from './chat/helpers';
 import {
   DEFAULT_CANONICAL_PREFIX,
@@ -49,7 +58,7 @@ import {
   dispatchBuiltinToolResult,
 } from '@/lib/builtin-tool-dispatch';
 import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSessionLabel } from '@/lib/workflow-session-hint';
-import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, hasUsableSessionTitle, scrubCorruptedSessionLabels, resolveStoredSessionLabel, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
+import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, hasUsableSessionTitle, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import {
@@ -114,6 +123,10 @@ function resolveEngineTypeForSession(
 ): ChatSession['engineType'] | undefined {
   if (sessionKey === DEFAULT_SESSION_KEY) {
     return getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey));
+  }
+  // Claude 任务会话键格式特殊，直接返回 'claude' 避免竞态条件下 sessions 数组尚未包含该条目时回退到 openclaw
+  if (isClaudeScheduledTaskSessionKey(sessionKey) || isClaudeScheduledTaskRunSessionKey(sessionKey) || isClaudeScheduledTaskDatedSessionKey(sessionKey)) {
+    return 'claude';
   }
   return getSessionEngineType(sessions, sessionKey)
     ?? getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey));
@@ -816,6 +829,19 @@ async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY
   }
 }
 
+async function loadClaudeScheduledTaskFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
+  if (!isClaudeScheduledTaskSessionKey(sessionKey) && !isClaudeScheduledTaskRunSessionKey(sessionKey) && !isClaudeScheduledTaskDatedSessionKey(sessionKey)) return [];
+  try {
+    const response = await hostApiFetch<{ messages?: RawMessage[] }>(
+      buildClaudeScheduledTaskSessionHistoryPath(sessionKey, limit),
+    );
+    return Array.isArray(response.messages) ? response.messages : [];
+  } catch (error) {
+    console.warn('Failed to load claude scheduled task fallback history:', error);
+    return [];
+  }
+}
+
 function normalizeAgentId(value: string | undefined | null): string {
   return (value ?? '').trim().toLowerCase() || 'main';
 }
@@ -839,10 +865,11 @@ function ensureSessionEntry(sessions: ChatSession[], sessionKey: string): ChatSe
   if (sessions.some((session) => session.key === sessionKey)) {
     return sessions;
   }
-  return [...sessions, {
-    key: sessionKey,
-    engineType: getAgentEngineType(getAgentIdFromSessionKey(sessionKey)),
-  }];
+  const engineType: ChatSession['engineType'] =
+    isClaudeScheduledTaskSessionKey(sessionKey) || isClaudeScheduledTaskRunSessionKey(sessionKey) || isClaudeScheduledTaskDatedSessionKey(sessionKey)
+      ? 'claude'
+      : getAgentEngineType(getAgentIdFromSessionKey(sessionKey)) ?? 'openclaw';
+  return [...sessions, { key: sessionKey, engineType }];
 }
 
 function clearSessionEntryFromMap<T extends Record<string, unknown>>(entries: T, sessionKey: string): T {
@@ -1542,15 +1569,19 @@ export const useChatStore = create<ChatState>()(
 
         // ── Merge local filesystem sessions (dated cron + scheduled-task runs) ──
         try {
-          const [stRes, cronRes] = await Promise.all([
+          const [stRes, cronRes, claudeTaskRes] = await Promise.all([
             hostApiFetch('/api/scheduled-tasks/sessions').catch(() => null),
             hostApiFetch('/api/cron/sessions').catch(() => null),
+            hostApiFetch('/api/claude-scheduled-tasks/sessions').catch(() => null),
           ]);
           const stData = stRes && typeof stRes === 'object' ? (stRes as Record<string, unknown>) : null;
           const cronData = cronRes && typeof cronRes === 'object' ? (cronRes as Record<string, unknown>) : null;
+          const claudeTaskData = claudeTaskRes && typeof claudeTaskRes === 'object' ? (claudeTaskRes as Record<string, unknown>) : null;
           const stSessions = Array.isArray(stData?.sessions) ? (stData.sessions as Record<string, unknown>[]) : [];
           const cronSessions = Array.isArray(cronData?.sessions) ? (cronData.sessions as Record<string, unknown>[]) : [];
-          rawSessions = [...rawSessions, ...stSessions, ...cronSessions];
+          const claudeTaskSessions = Array.isArray(claudeTaskData?.sessions) ? (claudeTaskData.sessions as Record<string, unknown>[]) : [];
+
+          rawSessions = [...rawSessions, ...stSessions, ...cronSessions, ...claudeTaskSessions];
         } catch {
           // ignore
         }
@@ -1558,7 +1589,11 @@ export const useChatStore = create<ChatState>()(
         if (rawSessions.length > 0) {
           const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
             const key = String(s.key || '');
-            const engineType: ChatSession['engineType'] = s.engineType === 'claude' ? 'claude' : 'openclaw';
+            const rawEngineType = s.engineType;
+            const engineType: ChatSession['engineType'] | undefined =
+              rawEngineType === 'claude' ? 'claude'
+                : rawEngineType === 'openclaw' ? 'openclaw'
+                  : undefined;
             return {
               key,
               label: s.label ? String(s.label) : undefined,
@@ -1577,6 +1612,7 @@ export const useChatStore = create<ChatState>()(
           // ── Identify which jobs already have real dated sessions ──
           const cronDated = new Set<string>();
           const scheduledTaskDated = new Set<string>();
+          const claudeTaskDated = new Set<string>();
           for (const session of sessions) {
             const cronParts = parseCronSessionKey(session.key);
             if (cronParts && cronParts.date) {
@@ -1586,6 +1622,11 @@ export const useChatStore = create<ChatState>()(
             if (stParts && stParts.date) {
               scheduledTaskDated.add(`agent:main:scheduled-task:${stParts.taskId}`);
             }
+            // Claude dated aggregate: claude-task:{taskId}:{YYYY-MM-DD}
+            const claudeParts = parseClaudeScheduledTaskSessionKey(session.key);
+            if (claudeParts && claudeParts.date) {
+              claudeTaskDated.add(`claude-task:${claudeParts.taskId}`);
+            }
           }
 
           // Filter out base sessions that have dated replacements
@@ -1593,8 +1634,15 @@ export const useChatStore = create<ChatState>()(
           let filteredSessions = sessions.filter((s) => {
             if (cronDated.has(s.key)) return false;
             if (scheduledTaskDated.has(s.key)) return false;
+            // Filter out claude-task base sessions when dated replacement exists
+            if (claudeTaskDated.has(s.key)) return false;
             const cronParts = parseCronSessionKey(s.key);
             if (cronParts?.runSessionId && cronDated.has(`agent:main:cron:${cronParts.jobId}`)) {
+              return false;
+            }
+            // Filter out claude-task-run sessions when their task has a dated aggregate
+            const claudeRunParts = parseClaudeScheduledTaskRunSessionKey(s.key);
+            if (claudeRunParts && claudeTaskDated.has(`claude-task:${claudeRunParts.taskId}`)) {
               return false;
             }
             return true;
@@ -1613,8 +1661,10 @@ export const useChatStore = create<ChatState>()(
 
           // Deduplicate: if both short and canonical existed, keep canonical only
           // Also deduplicate cron dated sessions by jobId+date to prevent duplicates
+          // Also deduplicate claude task dated sessions by taskId+date
           const seen = new Set<string>();
           const seenCronDated = new Set<string>();
+          const seenClaudeTaskDated = new Set<string>();
           const dedupedSessions = filteredSessions.filter((s) => {
             if (!s.key.startsWith('agent:') && canonicalBySuffix.has(s.key)) return false;
             if (seen.has(s.key)) {
@@ -1632,10 +1682,30 @@ export const useChatStore = create<ChatState>()(
               }
               seenCronDated.add(dedupKey);
             }
+            // Dedup for claude task dated sessions: same taskId+date should only appear once
+            const claudeParts = parseClaudeScheduledTaskSessionKey(s.key);
+            if (claudeParts?.date) {
+              const dedupKey = `${claudeParts.taskId}:${claudeParts.date}`;
+              if (seenClaudeTaskDated.has(dedupKey)) {
+                console.warn('[loadSessions] Duplicate claude task dated session filtered:', s.key, 'dedupKey:', dedupKey);
+                return false;
+              }
+              seenClaudeTaskDated.add(dedupKey);
+            }
             return true;
           });
 
           const { currentSessionKey, sessions: localSessions } = get();
+          const localByKey = new Map(localSessions.map((session) => [session.key, session]));
+          const mergedRemoteSessions = dedupedSessions.map((remote) => {
+            const local = localByKey.get(remote.key);
+            if (!local) return remote;
+            return {
+              ...remote,
+              engineType: remote.engineType ?? local.engineType,
+              model: remote.model ?? local.model,
+            };
+          });
           let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
           if (!nextSessionKey.startsWith('agent:')) {
             const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
@@ -1643,7 +1713,7 @@ export const useChatStore = create<ChatState>()(
               nextSessionKey = canonicalMatch;
             }
           }
-          if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
+          if (!mergedRemoteSessions.find((s) => s.key === nextSessionKey) && mergedRemoteSessions.length > 0) {
             // Preserve only locally-created pending sessions. On initial boot the
             // default ghost key (`agent:main:main`) should yield to real history.
             const hasLocalPendingSession =
@@ -1651,22 +1721,98 @@ export const useChatStore = create<ChatState>()(
               || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
               || localSessions.some((session) => session.key === nextSessionKey);
             if (!hasLocalPendingSession) {
-              nextSessionKey = dedupedSessions[0].key;
+              nextSessionKey = mergedRemoteSessions[0].key;
             }
           }
 
           const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
-          const sessionsWithCurrent = !dedupedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
-            ? [...dedupedSessions, {
+          const sessionsWithCurrent = !mergedRemoteSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
+            ? [...mergedRemoteSessions, {
               key: nextSessionKey,
               label: localCurrentSession?.label ?? NEW_SESSION_TEMP_LABEL,
               engineType: localCurrentSession?.engineType,
               model: localCurrentSession?.model,
             }]
-            : dedupedSessions;
+            : mergedRemoteSessions;
 
           const scrubbedSessionLabels = scrubCorruptedSessionLabels(get().sessionLabels);
           const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels);
+
+          // ── 定时任务会话名称富化：从任务定义 API 获取 displayName ──
+          // chat.ts 的 loadSessions 直接定义在 store 中，绕过了 session-actions.ts，
+          // 但遗漏了从任务定义 API 拉取名称填充 displayName 的关键步骤。
+          // 当 startTask 异步分离执行时，后端 session 文件尚未写入，本地保留的会话条目缺少 displayName，
+          // 导致侧边栏任务分组标题降级为技术 ID 而非人类可读的任务名。
+
+          // 1) Cron jobs (openclaw)
+          try {
+            const jobsResult = await hostApiFetch<Array<{ id: string; name: string }>>('/api/cron/jobs');
+            const jobNameMap = new Map(jobsResult.map((j) => [j.id, j.name]));
+            const unresolvedCronJobIds = new Set<string>();
+            for (const session of labeledSessions) {
+              const parsed = parseCronSessionKey(session.key);
+              if (parsed) {
+                const name = jobNameMap.get(parsed.jobId);
+                if (name) {
+                  session.displayName = name;
+                } else {
+                  unresolvedCronJobIds.add(parsed.jobId);
+                }
+              }
+            }
+            if (unresolvedCronJobIds.size > 0) {
+              try {
+                const fallbackJobs = await hostApiFetch<Array<{ id: string; name: string }>>('/api/cron/local-job-names');
+                const fallbackMap = new Map(fallbackJobs.map((j) => [j.id, j.name]));
+                for (const session of labeledSessions) {
+                  const parsed = parseCronSessionKey(session.key);
+                  if (parsed && unresolvedCronJobIds.has(parsed.jobId) && !session.displayName) {
+                    const fallbackName = fallbackMap.get(parsed.jobId);
+                    if (fallbackName) session.displayName = fallbackName;
+                  }
+                }
+              } catch {
+                // Fallback is best-effort
+              }
+            }
+          } catch {
+            // Ignore cron name enrichment failure
+          }
+
+          // 2) Scheduled tasks (STO)
+          try {
+            const tasksResult = await hostApiFetch<Array<{ id: number; name: string }>>('/api/scheduled-tasks');
+            const taskNameMap = new Map(tasksResult.map((t) => [t.id, t.name]));
+            for (const session of labeledSessions) {
+              const parsed = parseScheduledTaskSessionKey(session.key);
+              const stAgentParsed = parseScheduledTaskAgentSessionKey(session.key);
+              if (parsed) {
+                const name = taskNameMap.get(parsed.taskId);
+                if (name) session.displayName = name;
+              } else if (stAgentParsed) {
+                const name = taskNameMap.get(stAgentParsed.taskId);
+                if (name) session.displayName = name;
+              }
+            }
+          } catch {
+            // Ignore scheduled-task name enrichment failure
+          }
+
+          // 3) Claude scheduled tasks
+          try {
+            const tasksResult = await hostApiFetch<Array<{ id: string; name: string }>>('/api/claude-scheduled-tasks');
+            const taskNameMap = new Map(tasksResult.map((task) => [task.id, task.name]));
+            for (const session of labeledSessions) {
+              const summaryParsed = parseClaudeScheduledTaskSessionKey(session.key);
+              const runParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
+              const taskId = summaryParsed?.taskId ?? runParsed?.taskId;
+              if (!taskId) continue;
+              const name = taskNameMap.get(taskId);
+              if (name) session.displayName = name;
+            }
+          } catch {
+            // Ignore Claude scheduled-task name enrichment failure
+          }
 
           const discoveredActivity = Object.fromEntries(
             labeledSessions
@@ -1763,6 +1909,10 @@ export const useChatStore = create<ChatState>()(
   switchSession: (key: string) => {
     if (key === get().currentSessionKey) return;
     set((s) => buildSessionSwitchPatch(s, key));
+    const targetSession = get().sessions.find((session) => session.key === key);
+    if (key !== DEFAULT_SESSION_KEY && !targetSession?.engineType) {
+      void get().loadSessions();
+    }
     get().loadHistory();
   },
 
@@ -1857,8 +2007,16 @@ export const useChatStore = create<ChatState>()(
       ?? DEFAULT_CANONICAL_PREFIX;
     const newKey = `${prefix}:session-${Date.now()}`;
     const newAgentId = getAgentIdFromSessionKey(newKey);
-    // Carry over model from the current (default) session — e.g. home page selection
-    const currentSessionModel = sessions.find((s) => s.key === currentSessionKey)?.model;
+    // Carry over model from home/default session or Claude agent toolbar selection
+    let currentSessionModel = sessions.find((s) => s.key === currentSessionKey)?.model;
+    if (!currentSessionModel?.trim()) {
+      const carryAgent = useAgentsStore.getState().agents.find(
+        (agent) => agent.id === (getAgentIdFromSessionKey(currentSessionKey) ?? get().currentAgentId),
+      );
+      if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
+        currentSessionModel = normalizeModelIdForChat(carryAgent.modelDisplay);
+      }
+    }
     const newSessionEntry: ChatSession = {
       key: newKey,
       label: NEW_SESSION_TEMP_LABEL,
@@ -2254,6 +2412,8 @@ export const useChatStore = create<ChatState>()(
         let rawMessages = allMessages;
         if (rawMessages.length === 0 && (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey))) {
           rawMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
+        } else if (rawMessages.length === 0 && (isClaudeScheduledTaskSessionKey(targetSessionKey) || isClaudeScheduledTaskRunSessionKey(targetSessionKey) || isClaudeScheduledTaskDatedSessionKey(targetSessionKey))) {
+          rawMessages = await loadClaudeScheduledTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
         }
 
         if (get().currentSessionKey !== targetSessionKey) return;
@@ -2269,7 +2429,12 @@ export const useChatStore = create<ChatState>()(
       } catch (err) {
         console.warn('Failed to load chat history:', err);
         if (get().currentSessionKey !== targetSessionKey) return;
-        const fallbackMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
+        let fallbackMessages: RawMessage[] = [];
+        if (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey)) {
+          fallbackMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
+        } else if (isClaudeScheduledTaskSessionKey(targetSessionKey) || isClaudeScheduledTaskRunSessionKey(targetSessionKey) || isClaudeScheduledTaskDatedSessionKey(targetSessionKey)) {
+          fallbackMessages = await loadClaudeScheduledTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
+        }
         if (get().currentSessionKey !== targetSessionKey) return;
         if (fallbackMessages.length > 0) {
           await absorbWorkflowExecutionStartedFromToolResults(fallbackMessages, {
@@ -2645,17 +2810,33 @@ export const useChatStore = create<ChatState>()(
     // Also map base cron keys to dated keys when the current session is dated.
     let resolvedSessionKey = eventSessionKey;
     if (eventSessionKey) {
-      const aggregateKey = getCronRunSessionAggregateKey(eventSessionKey);
-      if (aggregateKey) {
-        resolvedSessionKey = aggregateKey;
+      // Map cron run session events to daily aggregate key
+      const cronAggregateKey = getCronRunSessionAggregateKey(eventSessionKey);
+      if (cronAggregateKey) {
+        resolvedSessionKey = cronAggregateKey;
       } else {
-        // If eventSessionKey is a base cron key (no date, no run), and current
-        // session is a dated key for the same job, map to the dated key.
-        const parsed = parseCronSessionKey(eventSessionKey);
-        if (parsed && !parsed.date && !parsed.runSessionId && currentSessionKey) {
-          const currentParsed = parseCronSessionKey(currentSessionKey);
-          if (currentParsed && currentParsed.date && currentParsed.jobId === parsed.jobId) {
-            resolvedSessionKey = currentSessionKey;
+        // Map Claude task run session events to daily aggregate key
+        const claudeAggregateKey = getClaudeTaskRunSessionAggregateKey(eventSessionKey);
+        if (claudeAggregateKey) {
+          resolvedSessionKey = claudeAggregateKey;
+        } else {
+          // If eventSessionKey is a base cron key (no date, no run), and current
+          // session is a dated key for the same job, map to the dated key.
+          const parsed = parseCronSessionKey(eventSessionKey);
+          if (parsed && !parsed.date && !parsed.runSessionId && currentSessionKey) {
+            const currentParsed = parseCronSessionKey(currentSessionKey);
+            if (currentParsed && currentParsed.date && currentParsed.jobId === parsed.jobId) {
+              resolvedSessionKey = currentSessionKey;
+            }
+          }
+          // If eventSessionKey is a base claude-task key (no date), and current
+          // session is a dated key for the same task, map to the dated key.
+          const claudeParsed = parseClaudeScheduledTaskSessionKey(eventSessionKey);
+          if (claudeParsed && !claudeParsed.date && currentSessionKey) {
+            const currentClaudeParsed = parseClaudeScheduledTaskSessionKey(currentSessionKey);
+            if (currentClaudeParsed && currentClaudeParsed.date && currentClaudeParsed.taskId === claudeParsed.taskId) {
+              resolvedSessionKey = currentSessionKey;
+            }
           }
         }
       }

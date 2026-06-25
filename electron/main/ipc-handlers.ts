@@ -2283,9 +2283,17 @@ function registerProviderHandlers(gatewayManager: GatewayManager): void {
  * Shell-related IPC handlers
  */
 function registerShellHandlers(): void {
-  // Open external URL
+  // Open external URL (https / dingtalk deep links only)
   ipcMain.handle('shell:openExternal', async (_, url: string) => {
     try {
+      const parsed = new URL(url);
+      const allowed =
+        parsed.protocol === 'https:'
+        || parsed.protocol === 'http:'
+        || parsed.protocol === 'dingtalk:';
+      if (!allowed) {
+        throw new Error(`Blocked external protocol: ${parsed.protocol}`);
+      }
       await shell.openExternal(url);
     } catch (err) {
       console.error('Failed to open external URL via IPC:', url, err);

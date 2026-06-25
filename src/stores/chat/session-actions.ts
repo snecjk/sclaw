@@ -307,12 +307,15 @@ export function createSessionActions(
           const cronParsed = parseCronSessionKey(session.key);
           const stParsed = parseScheduledTaskAgentSessionKey(session.key);
           const claudeRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
+          const claudeDatedParsed = parseClaudeScheduledTaskSessionKey(session.key);
           let taskId: string | undefined;
           const ts = session.updatedAt;
           if (cronParsed) {
             taskId = `cron:${cronParsed.jobId}`;
           } else if (stParsed) {
             taskId = `st:${stParsed.taskId}`;
+          } else if (claudeDatedParsed?.date) {
+            taskId = `claude-task:${claudeDatedParsed.taskId}`;
           } else if (claudeRunParsed) {
             taskId = `claude-task:${claudeRunParsed.taskId}`;
           }
@@ -327,12 +330,15 @@ export function createSessionActions(
           const cronParsed = parseCronSessionKey(session.key);
           const stParsed = parseScheduledTaskAgentSessionKey(session.key);
           const claudeRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
+          const claudeDatedParsed = parseClaudeScheduledTaskSessionKey(session.key);
           let taskId: string | undefined;
           const ts = session.updatedAt;
           if (cronParsed) {
             taskId = `cron:${cronParsed.jobId}`;
           } else if (stParsed) {
             taskId = `st:${stParsed.taskId}`;
+          } else if (claudeDatedParsed?.date) {
+            taskId = `claude-task:${claudeDatedParsed.taskId}`;
           } else if (claudeRunParsed) {
             taskId = `claude-task:${claudeRunParsed.taskId}`;
           }

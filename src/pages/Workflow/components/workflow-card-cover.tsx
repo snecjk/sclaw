@@ -7,8 +7,11 @@ interface WorkflowCardCoverProps {
   className?: string;
 }
 
+const coverImageClass =
+  'absolute inset-0 block h-full w-full object-cover object-center';
+
 /**
- * 工作流卡片头图：宽度随卡片，高度按切图比例（270:90）自适应。
+ * 工作流卡片头图：宽度随卡片，高度按切图比例（270:90）自适应；暗色主题切换 srcDark。
  */
 export function WorkflowCardCover({ coverKey, className }: WorkflowCardCoverProps) {
   const cover = WORKFLOW_CARD_COVER_BY_KEY[coverKey];
@@ -20,7 +23,14 @@ export function WorkflowCardCover({ coverKey, className }: WorkflowCardCoverProp
         alt=""
         width={cover.width}
         height={cover.height}
-        className="block h-full w-full object-cover object-center"
+        className={cn(coverImageClass, 'dark:hidden')}
+      />
+      <img
+        src={cover.srcDark}
+        alt=""
+        width={cover.width}
+        height={cover.height}
+        className={cn(coverImageClass, 'hidden dark:block')}
       />
     </div>
   );

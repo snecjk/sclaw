@@ -61,7 +61,7 @@
         "dingtalkLoadMore": "加载更多",
         "dingtalkNoResults": "未找到匹配结果",
         "dingtalkNeedsInstall": "使用 @ 提及钉钉联系人需要先安装 CLI",
-        "dingtalkInstall": "安装钉钉 CLI",
+        "dingtalkInstall": "授权钉钉",
         "dingtalkInstalling": "安装中…",
         "dingtalkNeedsAuth": "需要登录钉钉后才能搜索联系人",
         "dingtalkLogin": "登录钉钉",
@@ -175,11 +175,24 @@
         "fullscreen": "全屏放映",
         "refresh": "刷新",
         "download": "下载",
-        "openExternal": "分享",
+        "share": "分享到钉钉",
+        "openExternal": "在浏览器打开",
         "editWorkflow": "编辑工作流",
         "workflowTab": "工作流",
         "emptyHint": "点击消息中的文件链接进行预览",
         "emptyHintSub": "或从上方选择产物",
-        "dismissTab": "关闭此产物"
+        "dismissTab": "关闭此产物",
+        "shareDialog": {
+            "title": "分享到钉钉",
+            "description": "确认分享内容后，将唤起钉钉选人窗口。",
+            "fieldTitle": "标题",
+            "fieldBody": "正文",
+            "fieldLink": "链接",
+            "localUrlHint": "当前链接为本机预览地址，仅在同一网络内可访问的同事可能无法打开。",
+            "cancel": "取消",
+            "confirm": "确认分享",
+            "success": "已唤起钉钉选人窗口",
+            "failed": "分享失败，请稍后重试"
+        }
     }
 }

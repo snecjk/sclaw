@@ -4,6 +4,7 @@ import { Maximize2, Minus, Plus, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { invertedPrimarySurfaceClass } from '@/lib/surfaces';
 import { getCanvasSize } from '@/pages/WorkflowBuilder/workflow-layout';
 import { WorkflowNodeCard } from '@/pages/WorkflowBuilder/components/workflow-node-card';
 import type { NodeRunState, WorkflowLink, WorkflowNodeData } from '@/pages/WorkflowBuilder/types';
@@ -183,7 +184,10 @@ export function WorkflowCanvas({
         <Button
           type="button"
           onClick={onReplay}
-          className="absolute bottom-4 left-4 z-[3] bg-foreground text-primary-foreground shadow-elevated hover:bg-foreground/90"
+          className={cn(
+            'absolute bottom-4 left-4 z-[3] shadow-elevated',
+            invertedPrimarySurfaceClass,
+          )}
         >
           {t('builder.replay')}
         </Button>

@@ -5,6 +5,7 @@
 import { hostApiFetch } from '@/lib/host-api';
 import {
   getWorkspaceDefaultModelId,
+  isConcreteModelId,
   normalizeModelIdForChat,
   shouldSyncSessionToWorkspaceDefault,
 } from '@/lib/chat-model-options';
@@ -68,12 +69,12 @@ export async function applyWorkspaceDefaultToNewSession(
   const trimmedKey = sessionKey.trim();
   if (!trimmedKey) return;
 
-  // If the session already has a model (e.g. carried over from home page selection),
-  // don't overwrite it with the workspace default.
   const existingSession = useChatStore.getState().sessions.find((s) => s.key === trimmedKey);
-  if (existingSession?.model) return;
-
   const agent = useAgentsStore.getState().agents.find((item) => item.id === agentId);
+  // Session override or Claude agent model from home toolbar — skip workspace default.
+  if (existingSession?.model) return;
+  if (agent?.engineType === 'claude' && isConcreteModelId(agent.modelDisplay)) return;
+
   const engineType = resolveChatSessionEngineType(existingSession, agent?.engineType, trimmedKey);
 
   const { accounts, defaultAccountId } = useProviderStore.getState();

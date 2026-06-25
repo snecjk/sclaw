@@ -306,7 +306,7 @@ export function findWorkflowParamsSummaryAfterIntro(
   return null;
 }
 
-/** 隐藏已被 intro 承接的用户参数摘要（下一条为 workflow_card 助手 C）。 */
+/** 隐藏已被 intro 承接的用户参数摘要，或紧挨「参数已确认」执行卡前的冗余用户气泡。 */
 export function isHiddenWorkflowParamsUserMessage(
   message: RawMessage,
   messages: RawMessage[],
@@ -317,6 +317,11 @@ export function isHiddenWorkflowParamsUserMessage(
 
   const next = messages[index + 1];
   if (!next || !messageHasWorkflowCard(next)) return false;
+
+  // 下一条已是「参数已确认」折叠块时，用户侧 fallback（如「启动工作流「xxx」」）无需再展示
+  if (isAssistantMessageRole(next.role) && /参数已确认/.test(rawMessageText(next))) {
+    return true;
+  }
 
   for (let j = index - 1; j >= 0; j -= 1) {
     const prior = messages[j];

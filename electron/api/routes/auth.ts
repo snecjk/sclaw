@@ -5,7 +5,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'http';
 import { app } from 'electron';
-import { getAuthState, setAuthUser, clearAuthUser, getSsoEnvironment, setSsoEnvironment, getStoToken, removeSsoAuthFromOpenClaw } from '../../utils/auth-store';
+import { getAuthState, setAuthUser, clearAuthUser, getSsoEnvironment, setSsoEnvironment, getStoToken, removeSsoAuthFromOpenClaw, getImpersonationOrigin, setImpersonationOrigin, clearImpersonationOrigin } from '../../utils/auth-store';
 import type { SsoEnvironment, SsoUserInfo } from '../../utils/auth-store';
 import { getBaseUrl, signOut } from '../../utils/sso-service';
 import { SsoLoginManager } from '../../utils/sso-login';
@@ -24,6 +24,10 @@ import { loadSiteDepartmentTypes } from '../../services/sto-apollo-config-servic
 import { getClientSiteAccessService } from '../../services/client-site-access-service';
 import type { ClientSiteAccessCheckResult } from '../../../shared/client-site-access';
 import { syncClaudeDefaultContext } from '../../services/claude-context-sync';
+import {
+  fetchAccountSwitchOptions,
+  switchAccountViaMemoryCenter,
+} from '../../services/account-switch-service';
 
 const ssoLoginManager = new SsoLoginManager();
 
@@ -141,6 +145,7 @@ export async function handleAuthRoutes(
         isAuthenticated: state.isAuthenticated,
         user: state.user,
         ssoEnvironment: state.ssoEnvironment,
+        impersonationOrigin: await getImpersonationOrigin(),
       });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -327,6 +332,191 @@ export async function handleAuthRoutes(
     } catch (error) {
       logger.warn('CRM week report policy fetch failed:', error);
       sendJson(res, 200, { allowed: false });
+    }
+    return true;
+  }
+
+  // POST /api/auth/session/commit — 将切换后的用户写入主进程与 sso-auth.json
+  if (url.pathname === '/api/auth/session/commit' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{
+        user?: SsoUserInfo;
+        impersonationOrigin?: SsoUserInfo | null;
+      }>(req);
+      if (!body.user?.stoToken) {
+        sendJson(res, 400, { success: false, error: '缺少 user 或 stoToken' });
+        return true;
+      }
+
+      if (body.impersonationOrigin) {
+        await setImpersonationOrigin(body.impersonationOrigin);
+      } else if (body.impersonationOrigin === null) {
+        await clearImpersonationOrigin();
+      }
+
+      await setAuthUser(body.user);
+
+      const stoSyncService = getStoModelSyncService();
+      if (ctx.gatewayManager) {
+        stoSyncService.setGatewayManager(ctx.gatewayManager);
+      }
+
+      let setupResult: AuthenticatedSetupResult | undefined;
+      try {
+        setupResult = await runAuthenticatedSetup({
+          user: body.user,
+          gatewayManager: ctx.gatewayManager,
+          source: 'login',
+        });
+      } catch (err) {
+        logger.warn('[auth] Post session commit authenticated setup failed:', err);
+      }
+
+      schedulePostLoginBackgroundWork(body.user, ctx);
+
+      sendJson(res, 200, {
+        success: true,
+        user: body.user,
+        impersonationOrigin: await getImpersonationOrigin(),
+        stoSync: setupResult?.stoSync,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error('[auth] session commit failed:', error);
+      sendJson(res, 500, { success: false, error: message });
+    }
+    return true;
+  }
+
+  // GET /api/auth/account-switch/options — 可切换网点列表
+  if (url.pathname === '/api/auth/account-switch/options' && req.method === 'GET') {
+    try {
+      const token = await getStoToken();
+      if (!token) {
+        sendJson(res, 200, { success: true, options: [], originUserCode: null });
+        return true;
+      }
+      const result = await fetchAccountSwitchOptions(token);
+      sendJson(res, 200, { success: true, ...result });
+    } catch (error) {
+      logger.warn('[auth] account switch options failed:', error);
+      sendJson(res, 200, { success: false, options: [], originUserCode: null });
+    }
+    return true;
+  }
+
+  // POST /api/auth/account-switch — 切换为网点账号
+  if (url.pathname === '/api/auth/account-switch' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ targetCode?: string }>(req);
+      const targetCode = body.targetCode?.trim();
+      if (!targetCode) {
+        sendJson(res, 400, { success: false, error: '缺少 targetCode' });
+        return true;
+      }
+
+      const state = await getAuthState();
+      const token = await getStoToken();
+      if (!state.isAuthenticated || !state.user || !token) {
+        sendJson(res, 401, { success: false, error: '未登录' });
+        return true;
+      }
+
+      const existingOrigin = await getImpersonationOrigin();
+
+      if (!existingOrigin) {
+        await setImpersonationOrigin(state.user);
+      }
+
+      const newUser = await switchAccountViaMemoryCenter(token, targetCode);
+
+      const accessCheck = await getClientSiteAccessService().checkAccess(newUser.stoToken ?? '');
+      if (!accessCheck.allowed) {
+        if (!existingOrigin) {
+          await clearImpersonationOrigin();
+        }
+        sendJson(res, 200, {
+          success: false,
+          error: accessCheck.errMessage || CLIENT_SITE_ACCESS_DENIED_MESSAGE,
+          accessCheck: toAccessCheckPayload(accessCheck),
+        });
+        return true;
+      }
+
+      await setAuthUser(newUser);
+
+      const stoSyncService = getStoModelSyncService();
+      if (ctx.gatewayManager) {
+        stoSyncService.setGatewayManager(ctx.gatewayManager);
+      }
+
+      let setupResult: AuthenticatedSetupResult | undefined;
+      try {
+        setupResult = await runAuthenticatedSetup({
+          user: newUser,
+          gatewayManager: ctx.gatewayManager,
+          source: 'login',
+        });
+      } catch (err) {
+        logger.warn('[auth] Post account-switch authenticated setup failed:', err);
+      }
+
+      schedulePostLoginBackgroundWork(newUser, ctx);
+
+      sendJson(res, 200, {
+        success: true,
+        user: newUser,
+        impersonationOrigin: await getImpersonationOrigin(),
+        stoSync: setupResult?.stoSync,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error('[auth] account switch failed:', error);
+      sendJson(res, 500, { success: false, error: message });
+    }
+    return true;
+  }
+
+  // POST /api/auth/account-switch/back — 切回总部原账号（纯本地恢复）
+  if (url.pathname === '/api/auth/account-switch/back' && req.method === 'POST') {
+    try {
+      const origin = await getImpersonationOrigin();
+      if (!origin?.stoToken) {
+        sendJson(res, 400, { success: false, error: '没有可恢复的总部账号' });
+        return true;
+      }
+
+      await setAuthUser(origin);
+      await clearImpersonationOrigin();
+
+      const stoSyncService = getStoModelSyncService();
+      if (ctx.gatewayManager) {
+        stoSyncService.setGatewayManager(ctx.gatewayManager);
+      }
+
+      let setupResult: AuthenticatedSetupResult | undefined;
+      try {
+        setupResult = await runAuthenticatedSetup({
+          user: origin,
+          gatewayManager: ctx.gatewayManager,
+          source: 'login',
+        });
+      } catch (err) {
+        logger.warn('[auth] Post account-switch-back authenticated setup failed:', err);
+      }
+
+      schedulePostLoginBackgroundWork(origin, ctx);
+
+      sendJson(res, 200, {
+        success: true,
+        user: origin,
+        impersonationOrigin: null,
+        stoSync: setupResult?.stoSync,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error('[auth] account switch back failed:', error);
+      sendJson(res, 500, { success: false, error: message });
     }
     return true;
   }
