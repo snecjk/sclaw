@@ -14,6 +14,7 @@ import {
   contentHeaderSplitPreviewZoneClass,
   contentHeaderTitleClass,
   contentHeaderTitleGroupClass,
+  contentHeaderWinControlsReserveClass,
   stoSplitGridContentsClass,
   stoSplitGridHeaderChatClass,
   stoSplitGridHeaderPreviewClass,
@@ -64,14 +65,14 @@ export function ContentHeader() {
   );
 
   const actionsZone = actions ? (
-    <div
-      className={cn(
-        'no-drag flex shrink-0 items-center gap-1',
-        isWin && 'pr-28',
-      )}
-    >
+    <div className="no-drag flex shrink-0 items-center gap-1">
       {actions}
     </div>
+  ) : null;
+
+  /** Win 列表页等无 actions 时，drag-region 会挡住 AppShellChromeOverlay 的窗口三分控件 */
+  const winControlsReserve = isWin ? (
+    <div className={contentHeaderWinControlsReserveClass} aria-hidden />
   ) : null;
 
   if (isSplitLayout) {
@@ -94,6 +95,7 @@ export function ContentHeader() {
               <div className="min-w-0 flex-1" aria-hidden />
             )}
             {actionsZone}
+            {winControlsReserve}
           </div>
         </div>
       </header>
@@ -105,6 +107,7 @@ export function ContentHeader() {
       {titleZone}
       <div className="min-w-0 flex-1" aria-hidden />
       {actionsZone}
+      {winControlsReserve}
     </header>
   );
 }

@@ -18,6 +18,7 @@ import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { TIMEOUTS } from '../utils/config';
 import { normalizeSkillVersion } from '../utils/skill-version';
 import { readSkillMdFrontmatter } from '../utils/skill-frontmatter';
+import { safeRemoveDir } from '../utils/fs-retry';
 
 export const PREINSTALLED_MARKER_NAME = '.stoclaw-preinstalled.json';
 
@@ -52,26 +53,6 @@ export interface StoSkillResult {
   author?: string;
   downloads?: number;
   stars?: number;
-}
-
-/**
- * Safe directory removal with retry for Windows EBUSY errors.
- */
-async function safeRemove(dir: string, maxRetries = 3): Promise<void> {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      await fs.promises.rm(dir, { recursive: true, force: true });
-      return;
-    } catch (error) {
-      const err = error as NodeJS.ErrnoException;
-      if (err.code === 'EBUSY' && i < maxRetries - 1) {
-        logger.warn(`[safeRemove] EBUSY on ${dir}, retrying in ${500 * (i + 1)}ms (attempt ${i + 1}/${maxRetries})`);
-        await new Promise((r) => setTimeout(r, 500 * (i + 1)));
-        continue;
-      }
-      throw error;
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -203,42 +184,40 @@ export class StoSkillService {
       }
     }
 
-    // Save to a temp file
+    // Save to a temp file, extract to staging, then atomically promote to target.
     const tmpZipPath = path.join(this.workDir, `.tmp-sto-skill-${params.slug}-${Date.now()}.zip`);
+    const stagingDir = path.join(this.workDir, `.tmp-sto-skill-staging-${params.slug}-${Date.now()}`);
+    let stagingActive = false;
     try {
       const body = res.body;
       if (!body) throw new Error('下载响应没有 body');
 
       // Node 18+ fetch body is a ReadableStream; pipe to disk
       const fileStream = createWriteStream(tmpZipPath);
-      // @ts-expect-error Node fetch body is compatible with Readable
       await pipeline(body, fileStream);
 
-      // Extract ZIP to primary target (mount point)
-      const targetDir = path.join(skillsDir, params.slug);
-      if (params.force && fs.existsSync(targetDir)) {
-        await safeRemove(targetDir);
-      }
-      if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
-      }
-
-      await this.extractZip(tmpZipPath, targetDir);
+      fs.mkdirSync(stagingDir, { recursive: true });
+      stagingActive = true;
+      await this.extractZip(tmpZipPath, stagingDir);
 
       // Ensure SKILL.md has proper frontmatter so Gateway can load it.
       // Gateway requires at least a `description` in frontmatter, and uses
       // `name` to identify the skill (falls back to directory name otherwise).
       // Gateway requires name to match /^[a-z0-9-]+$/, so we use lowercase slug.
-      this.ensureSkillFrontmatter(targetDir, params.slug, {
+      this.ensureSkillFrontmatter(stagingDir, params.slug, {
         name: params.name,
         description: params.description,
       });
+
+      const targetDir = path.join(skillsDir, params.slug);
+      await this.promoteStagedSkillDir(stagingDir, targetDir, Boolean(params.force));
+      stagingActive = false;
 
       // For global installs, also copy to user workspace
       if (userSkillsDir) {
         const userTargetDir = path.join(userSkillsDir, params.slug);
         if (params.force && fs.existsSync(userTargetDir)) {
-          await safeRemove(userTargetDir);
+          await safeRemoveDir(userTargetDir, { label: userTargetDir });
         }
         await this.copyDir(targetDir, userTargetDir);
         logger.info(`[StoSkillService] install: ${params.slug} copied to user workspace ${userTargetDir}`);
@@ -266,6 +245,9 @@ export class StoSkillService {
 
       logger.info(`[StoSkillService] install: ${params.slug} installed to ${targetDir}`);
     } finally {
+      if (stagingActive && fs.existsSync(stagingDir)) {
+        await safeRemoveDir(stagingDir, { label: stagingDir }).catch(() => {});
+      }
       // Clean up temp file
       if (fs.existsSync(tmpZipPath)) {
         fs.unlinkSync(tmpZipPath);
@@ -285,11 +267,11 @@ export class StoSkillService {
     const disabledDir = path.join(this.getDisabledDir(), params.slug);
     if (fs.existsSync(skillDir)) {
       logger.info(`[StoSkillService] uninstall: removing ${skillDir}`);
-      await safeRemove(skillDir);
+      await safeRemoveDir(skillDir, { label: skillDir });
     }
     if (fs.existsSync(disabledDir)) {
       logger.info(`[StoSkillService] uninstall: removing disabled ${disabledDir}`);
-      await safeRemove(disabledDir);
+      await safeRemoveDir(disabledDir, { label: disabledDir });
     }
 
     // For global uninstall, also remove from user workspace
@@ -299,10 +281,10 @@ export class StoSkillService {
         const userSkillDir = path.join(getOpenClawUserSkillsDir(userCode), params.slug);
         const userDisabledDir = path.join(getOpenClawUserDisabledDir(userCode), params.slug);
         if (fs.existsSync(userSkillDir)) {
-          await safeRemove(userSkillDir);
+          await safeRemoveDir(userSkillDir, { label: userSkillDir });
         }
         if (fs.existsSync(userDisabledDir)) {
-          await safeRemove(userDisabledDir);
+          await safeRemoveDir(userDisabledDir, { label: userDisabledDir });
         }
       }
     }
@@ -346,19 +328,44 @@ export class StoSkillService {
   // -----------------------------------------------------------------------
 
   private async copyDir(src: string, dest: string): Promise<void> {
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true });
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.cpSync(src, dest, { recursive: true, force: true });
+  }
+
+  /**
+   * Promote a fully extracted staging directory into the final skill location.
+   * Uses rename-with-backup on force updates so a failed swap restores the old copy.
+   */
+  private async promoteStagedSkillDir(stagingDir: string, targetDir: string, force: boolean): Promise<void> {
+    fs.mkdirSync(path.dirname(targetDir), { recursive: true });
+
+    if (!force && fs.existsSync(targetDir)) {
+      await this.copyDir(stagingDir, targetDir);
+      await safeRemoveDir(stagingDir, { label: stagingDir });
+      return;
     }
-    const entries = fs.readdirSync(src, { withFileTypes: true });
-    for (const entry of entries) {
-      const srcPath = path.join(src, entry.name);
-      const destPath = path.join(dest, entry.name);
-      if (entry.isDirectory()) {
-        await this.copyDir(srcPath, destPath);
-      } else {
-        fs.copyFileSync(srcPath, destPath);
+
+    if (fs.existsSync(targetDir)) {
+      const backupDir = `${targetDir}.old-${Date.now()}`;
+      await fs.promises.rename(targetDir, backupDir);
+      try {
+        await fs.promises.rename(stagingDir, targetDir);
+        await safeRemoveDir(backupDir, { label: backupDir });
+      } catch (error) {
+        if (!fs.existsSync(targetDir) && fs.existsSync(backupDir)) {
+          await fs.promises.rename(backupDir, targetDir).catch(() => {});
+        } else if (fs.existsSync(backupDir)) {
+          await safeRemoveDir(backupDir, { label: backupDir }).catch(() => {});
+        }
+        if (fs.existsSync(stagingDir)) {
+          await safeRemoveDir(stagingDir, { label: stagingDir }).catch(() => {});
+        }
+        throw error;
       }
+      return;
     }
+
+    await fs.promises.rename(stagingDir, targetDir);
   }
 
   private async extractZip(zipPath: string, targetDir: string): Promise<void> {

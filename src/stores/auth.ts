@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
+import { fetchAccountSwitchOptions as requestAccountSwitchOptions, isAccountSwitchHostApiMissing, isAuthSessionCommitHostApiMissing, postAccountSwitchDirect } from '@/lib/account-switch-fetch';
 import { getCurrentEnvConfig } from '../../shared/env-config';
 import { setSiteDepartmentTypes } from '../../shared/site-user-utils';
 import type { ClientSiteAccessCheckData } from '../../shared/client-site-access';
@@ -50,6 +51,13 @@ export interface SsoUserInfo {
   stoTokenExpiresAt?: string;
 }
 
+export interface AccountSwitchOption {
+  code: string;
+  label: string;
+}
+
+export type AccountSwitchOptionsStatus = 'idle' | 'loading' | 'loaded' | 'error';
+
 // Re-export shared site-user utilities.
 export { isSiteUser, setSiteDepartmentTypes, getSiteDepartmentTypes } from '../../shared/site-user-utils';
 
@@ -78,6 +86,10 @@ interface AuthState {
   /** CRM 周报首页 /tasks 表面：仅在为 true 时展示（策略白名单命中）；未登录或 fail-closed 时为 false。 */
   crmWeekReportSurfaceAllowed: boolean;
   crmWeekReportPolicyStatus: CrmWeekReportPolicyStatus;
+  /** 切换网点前保存的总部原账号（演示用） */
+  impersonationOrigin: SsoUserInfo | null;
+  accountSwitchOptions: AccountSwitchOption[];
+  accountSwitchOptionsStatus: AccountSwitchOptionsStatus;
 
   // Actions
   init: () => Promise<void>;
@@ -86,6 +98,9 @@ interface AuthState {
   setSsoEnvironment: (env: SsoEnvironment) => Promise<void>;
   refreshCrmWeekReportPolicy: () => Promise<void>;
   clearAccessDenied: () => void;
+  loadAccountSwitchOptions: () => Promise<void>;
+  switchToAccount: (targetCode: string) => Promise<void>;
+  switchBackToOrigin: () => Promise<void>;
 }
 
 function showStoSyncErrorToasts(stoSync?: StoSyncResponse | null): void {
@@ -108,6 +123,56 @@ function showStoSyncErrorToasts(stoSync?: StoSyncResponse | null): void {
   if (stoSync.error === 'no-token') {
     useAuthStore.setState({ isAuthenticated: false, user: null });
     return;
+  }
+}
+
+function coerceSsoUserInfo(raw: Record<string, unknown>): SsoUserInfo {
+  return {
+    id: String(raw.id ?? ''),
+    userName: String(raw.userName ?? ''),
+    realName: String(raw.realName ?? ''),
+    code: String(raw.code ?? ''),
+    empCode: String(raw.empCode ?? ''),
+    companyId: String(raw.companyId ?? ''),
+    companyCode: String(raw.companyCode ?? ''),
+    companyName: String(raw.companyName ?? ''),
+    departmentId: String(raw.departmentId ?? ''),
+    departmentCode: String(raw.departmentCode ?? ''),
+    departmentName: String(raw.departmentName ?? ''),
+    categoryCode: String(raw.categoryCode ?? ''),
+    isAdministrator: Boolean(raw.isAdministrator),
+    loginMode: String(raw.loginMode ?? ''),
+    openId: String(raw.openId ?? ''),
+    signature: String(raw.signature ?? ''),
+    authenticatedAt: String(raw.authenticatedAt ?? new Date().toISOString()),
+    stoToken: typeof raw.stoToken === 'string' ? raw.stoToken : undefined,
+    stoTokenExpiresAt: typeof raw.stoTokenExpiresAt === 'string' ? raw.stoTokenExpiresAt : undefined,
+  };
+}
+
+async function commitAuthSessionToHost(payload: {
+  user: SsoUserInfo;
+  impersonationOrigin?: SsoUserInfo | null;
+}): Promise<StoSyncResponse | undefined> {
+  try {
+    const data = await hostApiFetch<{
+      success: boolean;
+      stoSync?: StoSyncResponse;
+      error?: string;
+    }>('/api/auth/session/commit', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    if (!data.success) {
+      throw new Error(data.error || '会话同步失败');
+    }
+    return data.stoSync;
+  } catch (error) {
+    if (!isAuthSessionCommitHostApiMissing(error)) {
+      throw error;
+    }
+    console.warn('[auth] session commit skipped: Host API route missing, sso-auth.json may be stale');
+    return undefined;
   }
 }
 
@@ -186,6 +251,9 @@ export const useAuthStore = create<AuthState>()(
       accessCheck: null,
       crmWeekReportSurfaceAllowed: false,
       crmWeekReportPolicyStatus: 'idle',
+      impersonationOrigin: null,
+      accountSwitchOptions: [],
+      accountSwitchOptionsStatus: 'idle',
 
       clearAccessDenied: () => {
         set({ accessDenied: false, accessCheck: null, error: null });
@@ -223,6 +291,7 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: boolean;
             user: SsoUserInfo | null;
             ssoEnvironment: SsoEnvironment;
+            impersonationOrigin?: SsoUserInfo | null;
             accessDenied?: boolean;
             error?: string;
             accessCheck?: ClientSiteAccessCheckData & {
@@ -261,6 +330,7 @@ export const useAuthStore = create<AuthState>()(
             isInitialized: true,
             accessDenied: false,
             accessCheck: null,
+            impersonationOrigin: data.impersonationOrigin ?? null,
           });
           if (!data.isAuthenticated) {
             set({
@@ -279,6 +349,7 @@ export const useAuthStore = create<AuthState>()(
             void hostApiFetch<{ types: string[] }>('/api/auth/site-department-types')
               .then((res) => setSiteDepartmentTypes(res.types))
               .catch(() => {});
+            void get().loadAccountSwitchOptions();
             // Main process runs batched setup on startup; refresh UI provider list only.
             void refreshProviderSnapshot();
           }
@@ -343,6 +414,9 @@ export const useAuthStore = create<AuthState>()(
               error: null,
               accessDenied: false,
               accessCheck: null,
+              accountSwitchOptions: [],
+              accountSwitchOptionsStatus: 'idle',
+              impersonationOrigin: null,
             });
 
             showStoSyncErrorToasts(data.stoSync);
@@ -353,6 +427,7 @@ export const useAuthStore = create<AuthState>()(
             void hostApiFetch<{ types: string[] }>('/api/auth/site-department-types')
               .then((res) => setSiteDepartmentTypes(res.types))
               .catch(() => {});
+            void get().loadAccountSwitchOptions();
           } else {
             set({
               isLoggingIn: false,
@@ -383,10 +458,169 @@ export const useAuthStore = create<AuthState>()(
           accessCheck: null,
           crmWeekReportSurfaceAllowed: false,
           crmWeekReportPolicyStatus: 'idle',
+          impersonationOrigin: null,
+          accountSwitchOptions: [],
+          accountSwitchOptionsStatus: 'idle',
         });
 
         // Refresh provider list to reflect STO model cleanup
         void refreshProviderSnapshot();
+      },
+
+      loadAccountSwitchOptions: async () => {
+        const { isAuthenticated, user, ssoEnvironment, accountSwitchOptionsStatus } = get();
+        if ((!isAuthenticated && !user) || accountSwitchOptionsStatus === 'loading' || accountSwitchOptionsStatus === 'loaded') {
+          return;
+        }
+        set({ accountSwitchOptionsStatus: 'loading' });
+        try {
+          const result = await requestAccountSwitchOptions(user, ssoEnvironment);
+          set({
+            accountSwitchOptions: result.options,
+            accountSwitchOptionsStatus: 'loaded',
+          });
+        } catch {
+          set({
+            accountSwitchOptions: [],
+            accountSwitchOptionsStatus: 'error',
+          });
+        }
+      },
+
+      switchToAccount: async (targetCode: string) => {
+        const trimmed = targetCode.trim();
+        if (!trimmed) return;
+        try {
+          let data: {
+            success: boolean;
+            user?: SsoUserInfo;
+            impersonationOrigin?: SsoUserInfo | null;
+            error?: string;
+            stoSync?: StoSyncResponse;
+          };
+          let usedDirectFallback = false;
+
+          try {
+            data = await hostApiFetch<typeof data>('/api/auth/account-switch', {
+              method: 'POST',
+              body: JSON.stringify({ targetCode: trimmed }),
+            });
+          } catch (hostError) {
+            if (!isAccountSwitchHostApiMissing(hostError, 'POST', '/api/auth/account-switch')) {
+              throw hostError;
+            }
+            const { user, impersonationOrigin, ssoEnvironment } = get();
+            if (!user?.stoToken) {
+              throw hostError;
+            }
+            const originSnapshot = impersonationOrigin ?? user;
+            if (!impersonationOrigin) {
+              set({ impersonationOrigin: user });
+            }
+            try {
+              const switched = coerceSsoUserInfo(
+                await postAccountSwitchDirect(user, ssoEnvironment, trimmed),
+              );
+              if (!switched.stoToken) {
+                throw new Error('切换响应缺少 stoToken');
+              }
+              usedDirectFallback = true;
+              data = {
+                success: true,
+                user: switched,
+                impersonationOrigin: originSnapshot,
+              };
+            } catch (directError) {
+              if (!impersonationOrigin) {
+                set({ impersonationOrigin: null });
+              }
+              throw directError;
+            }
+          }
+
+          if (!data.success || !data.user) {
+            throw new Error(data.error || '切换网点账号失败');
+          }
+          set({
+            user: data.user,
+            impersonationOrigin: data.impersonationOrigin ?? null,
+          });
+
+          const stoSync = usedDirectFallback
+            ? await commitAuthSessionToHost({
+                user: data.user,
+                impersonationOrigin: data.impersonationOrigin ?? null,
+              })
+            : data.stoSync;
+          showStoSyncErrorToasts(stoSync);
+          void syncStoModelsAndRefreshProviders('login');
+          void get().refreshCrmWeekReportPolicy();
+          void hostApiFetch<{ types: string[] }>('/api/auth/site-department-types')
+            .then((res) => setSiteDepartmentTypes(res.types))
+            .catch(() => {});
+          toast.success('已切换网点账号', {
+            description: data.user.companyName || data.user.realName || trimmed,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          toast.error('切换网点账号失败', { description: message });
+          throw err;
+        }
+      },
+
+      switchBackToOrigin: async () => {
+        try {
+          let data: {
+            success: boolean;
+            user?: SsoUserInfo;
+            error?: string;
+            stoSync?: StoSyncResponse;
+          };
+          let usedDirectFallback = false;
+
+          try {
+            data = await hostApiFetch<typeof data>('/api/auth/account-switch/back', { method: 'POST' });
+          } catch (hostError) {
+            if (!isAccountSwitchHostApiMissing(hostError, 'POST', '/api/auth/account-switch/back')) {
+              throw hostError;
+            }
+            const origin = get().impersonationOrigin;
+            if (!origin?.stoToken) {
+              throw new Error('没有可恢复的总部账号');
+            }
+            usedDirectFallback = true;
+            data = { success: true, user: origin };
+          }
+
+          if (!data.success || !data.user) {
+            throw new Error(data.error || '切回总部账号失败');
+          }
+          set({
+            user: data.user,
+            impersonationOrigin: null,
+            accountSwitchOptions: [],
+            accountSwitchOptionsStatus: 'idle',
+          });
+
+          const stoSync = usedDirectFallback
+            ? await commitAuthSessionToHost({
+                user: data.user,
+                impersonationOrigin: null,
+              })
+            : data.stoSync;
+          showStoSyncErrorToasts(stoSync);
+          void syncStoModelsAndRefreshProviders('login');
+          void get().refreshCrmWeekReportPolicy();
+          void hostApiFetch<{ types: string[] }>('/api/auth/site-department-types')
+            .then((res) => setSiteDepartmentTypes(res.types))
+            .catch(() => {});
+          toast.success('已切回总部账号');
+          void get().loadAccountSwitchOptions();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          toast.error('切回总部账号失败', { description: message });
+          throw err;
+        }
       },
 
       setSsoEnvironment: async (env: SsoEnvironment) => {
@@ -405,6 +639,7 @@ export const useAuthStore = create<AuthState>()(
         isAuthenticated: state.isAuthenticated,
         user: state.user,
         ssoEnvironment: state.ssoEnvironment,
+        impersonationOrigin: state.impersonationOrigin,
       }),
     },
   ),

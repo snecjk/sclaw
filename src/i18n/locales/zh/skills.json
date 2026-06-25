@@ -197,6 +197,8 @@
         "toast": {
             "installSuccess": "安装成功，正在生效",
             "installError": "安装失败",
+            "updateSuccess": "更新成功，正在生效",
+            "updateError": "更新失败",
             "uninstallSuccess": "已删除",
             "uninstallError": "删除失败"
         },
