@@ -5,6 +5,7 @@
  * Do NOT forward these turns to Gateway chat.send — the model may incorrectly
  * try sai-cli or other tools to "run" the workflow again.
  */
+import { dedupeWorkflowCardsForParamsConfirmedTurn } from '@/lib/workflow-card-injection';
 import { buildWorkflowValuesSummary, buildWorkflowValuesSummaryFallback } from '@/lib/workflow-form-utils';
 import { replaceWorkflowIntroWithParamsSummary } from '@/lib/workflow-intro-params-patch';
 import { useChatStore } from '@/stores/chat';
@@ -106,14 +107,20 @@ export function mergeWorkflowTurnsFromMemory(
       );
     }
 
-    // 方案 A：优先 patch intro；无 intro 时保留用户摘要供 fallback 渲染
+    // 方案 A：优先 patch intro；无 intro 时仅保留有信息量的用户摘要（纯 fallback 由「参数已确认」块承接）
     if (!introPatched) {
-      merged.push({
-        role: 'user',
-        content: run.userText,
-        timestamp: ts,
-        id: crypto.randomUUID(),
-      } as RawMessage);
+      const trimmedUserText = run.userText.trim();
+      const isGenericStartFallback =
+        trimmedUserText === '参数已确认'
+        || /^启动工作流「/.test(trimmedUserText);
+      if (!isGenericStartFallback) {
+        merged.push({
+          role: 'user',
+          content: run.userText,
+          timestamp: ts,
+          id: crypto.randomUUID(),
+        } as RawMessage);
+      }
     }
 
     merged.push({
@@ -128,6 +135,11 @@ export function mergeWorkflowTurnsFromMemory(
       timestamp: ts + 0.001,
       id: crypto.randomUUID(),
     } as RawMessage);
+    const deduped = dedupeWorkflowCardsForParamsConfirmedTurn(merged, run.runId);
+    if (deduped !== merged) {
+      merged.length = 0;
+      merged.push(...deduped);
+    }
   }
 
   return merged.sort((a, b) => toMs(a.timestamp) - toMs(b.timestamp));
@@ -198,8 +210,9 @@ export function appendWorkflowStartedLocalTurn(params: WorkflowStartedLocalTurnP
       timestamp: now + 0.001,
       id: crypto.randomUUID(),
     } as RawMessage);
+    const dedupedMessages = dedupeWorkflowCardsForParamsConfirmedTurn(messages, runId);
     return {
-      messages,
+      messages: dedupedMessages,
       lastUserMessageAt: Date.now(),
       sending: false,
     };

@@ -1060,6 +1060,13 @@ export const workflowParamsSummaryGroupContentClass =
   'text-[13px] leading-5 font-normal text-muted-foreground whitespace-pre-wrap break-words';
 
 /**
+ * MasterGo 148:049540 — 工作流完成结果摘要（参数已确认块外独立层级）
+ * 14px / 行高 24 / Regular / Grey-10 #1D2129；左对齐、多行自适应高度。
+ */
+export const workflowResultSummaryClass =
+  'w-full text-left text-sm font-normal leading-6 tracking-normal text-foreground whitespace-pre-wrap break-words';
+
+/**
  * 工具调用块外层（无描边；标题行在外，入参区单独套 {@link chatToolCallContentShellClass}）
  */
 export const chatToolCallShellClass = 'flex w-full flex-col gap-1.5';

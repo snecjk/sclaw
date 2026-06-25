@@ -32,8 +32,9 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, opts?: { workflowId?: string }) => {
       if (key === 'workflow.backgroundRunningWithId' && opts?.workflowId) {
-        return `工作流 ID: ${opts.workflowId}`;
+        return `工作流后台执行中（工作流 ID: ${opts.workflowId}）`;
       }
+      if (key === 'workflow.createScheduledTaskAction') return '创建定时任务';
       return key;
     },
   }),
@@ -57,13 +58,12 @@ describe('WorkflowCard scheduled task action', () => {
       <WorkflowCard
         runId="run_123"
         templateName="测试工作流"
-        onViewWorkflow={vi.fn()}
         onCreateScheduledTask={vi.fn()}
       />,
     );
 
     expect(screen.getByRole('button', { name: '创建定时任务' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '查看工作流' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '查看工作流' })).toBeNull();
   });
 
   it('shows workflow id title when template name is a template id', () => {
@@ -98,7 +98,6 @@ describe('WorkflowCard scheduled task action', () => {
       <WorkflowCard
         runId="run_123"
         templateName="测试工作流"
-        onViewWorkflow={vi.fn()}
         onCreateScheduledTask={vi.fn()}
       />,
     );

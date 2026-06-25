@@ -420,7 +420,6 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
                       matchedMessageIds={matchedMessageIds}
                       activeMessageId={activeSearchMatch?.id ?? null}
                       onPreviewFile={openArtifactPreview}
-                      onViewWorkflow={openWorkflowPreview}
                       onCreateScheduledTask={openWorkflowCronTaskModal}
                     />
                   );
@@ -433,7 +432,6 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
                     isSearchMatch={!!item.message.id && matchedMessageIds.has(item.message.id)}
                     isSearchActive={!!item.message.id && item.message.id === activeSearchMatch?.id}
                     onPreviewFile={openArtifactPreview}
-                    onViewWorkflow={openWorkflowPreview}
                     onCreateScheduledTask={openWorkflowCronTaskModal}
                   />
                 );
@@ -449,7 +447,6 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
                   activeMessageId={activeSearchMatch?.id ?? null}
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={openArtifactPreview}
-                  onViewWorkflow={openWorkflowPreview}
                   onCreateScheduledTask={openWorkflowCronTaskModal}
                 />
               ) : null}
