@@ -496,6 +496,8 @@ interface RuntimeProviderConfigOverride {
   authHeader?: boolean;
   /** Default input capabilities for new model entries (e.g. ['text', 'image']) */
   defaultModelInput?: string[];
+  /** When set, replaces single-model upsert with the full provider catalog. */
+  providerModelIds?: string[];
 }
 
 type ProviderEntryBuildOptions = {
@@ -663,12 +665,15 @@ export async function syncProviderConfigToOpenClaw(
     ensureMoonshotKimiWebSearchCnBaseUrl(config, provider);
 
     if (override.baseUrl && override.api) {
+      const modelIds = override.providerModelIds?.length
+        ? override.providerModelIds
+        : (modelId ? [modelId] : []);
       upsertOpenClawProviderEntry(config, provider, {
         baseUrl: override.baseUrl,
         api: override.api,
         apiKeyEnv: override.apiKeyEnv,
         headers: override.headers,
-        modelIds: modelId ? [modelId] : [],
+        modelIds,
         defaultModelInput: override.defaultModelInput,
       });
     }
@@ -725,13 +730,16 @@ export async function setOpenClawDefaultModelWithOverride(
     syncMainAgentListModelIfBare(config, model);
 
     if (override.baseUrl && override.api) {
+      const modelIds = override.providerModelIds?.length
+        ? override.providerModelIds
+        : [modelId, ...fallbackModelIds];
       upsertOpenClawProviderEntry(config, provider, {
         baseUrl: override.baseUrl,
         api: override.api,
         apiKeyEnv: override.apiKeyEnv,
         headers: override.headers,
         authHeader: override.authHeader,
-        modelIds: [modelId, ...fallbackModelIds],
+        modelIds,
         defaultModelInput: override.defaultModelInput,
       });
     }
