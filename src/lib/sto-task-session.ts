@@ -35,7 +35,8 @@ export function isScheduledTaskSummarySessionKey(sessionKey: string): boolean {
 
 /** Claude scheduled-task summary session (e.g. claude-task:{taskId}) — hidden because task-list section shows run sessions. */
 export function isClaudeScheduledTaskSummarySessionKey(sessionKey: string): boolean {
-  return parseClaudeScheduledTaskSessionKey(sessionKey) !== null;
+  const parsed = parseClaudeScheduledTaskSessionKey(sessionKey);
+  return parsed != null && parsed.date == null;
 }
 
 export function isCronRunSessionKey(sessionKey: string): boolean {
