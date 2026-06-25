@@ -40,19 +40,25 @@ interface TaskCreateModalProps {
   open: boolean;
   onClose: () => void;
   onSave: (input: TaskCreateInputWithRun) => Promise<void>;
-  initialValues?: { name?: string; message?: string; schedule?: string };
+  initialValues?: { name?: string; message?: string; schedule?: string; workflowCode?: string };
 }
 
 interface TaskCreateModalInnerProps {
   job?: ManagedLocalTask | null;
   onClose: () => void;
   onSave: (input: TaskCreateInputWithRun) => Promise<void>;
-  initialValues?: { name?: string; message?: string; schedule?: string };
+  initialValues?: { name?: string; message?: string; schedule?: string; workflowCode?: string };
+}
+
+function buildWorkflowInstructions(workflowCode: string, label?: string): string {
+  return label
+    ? `帮我执行 id 为：${workflowCode} 的工作流 【${label}】`
+    : `帮我执行 id 为：${workflowCode} 的工作流`;
 }
 
 function computeInitialValues(
   job: ManagedLocalTask | null | undefined,
-  initialValues: { name?: string; message?: string; schedule?: string } | undefined
+  initialValues: { name?: string; message?: string; schedule?: string; workflowCode?: string } | undefined
 ) {
 
   if (job) {
@@ -85,7 +91,7 @@ function computeInitialValues(
         : defaultScheduleValue(),
       recipients: [] as DingTalkMention[],
       engineType: 'openclaw' as TaskEngineType,
-      selectedWorkflow: '',
+      selectedWorkflow: initialValues.workflowCode || '',
     };
   }
 
@@ -109,7 +115,7 @@ export function TaskCreateModal({
   if (!open) return null;
   return (
     <TaskCreateModalInner
-      key={job?.id ?? '__create__'}
+      key={job?.id ?? `workflow:${initialValues?.workflowCode ?? '__create__'}`}
       job={job}
       onClose={onClose}
       onSave={onSave}
@@ -123,8 +129,18 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
 
   const init = computeInitialValues(job, initialValues);
 
+  // 预选工作流但未带 instructions 时，按 dropdown 选中分支同源逻辑补模板文本，
+  // 避免 workflowDisabled 锁死空指令框导致校验失败。
+  const correctedInstructions =
+    init.selectedWorkflow && !init.instructions
+      ? buildWorkflowInstructions(
+          init.selectedWorkflow,
+          workflowOptions.find((o) => o.value === init.selectedWorkflow)?.label,
+        )
+      : init.instructions;
+
   const [name, setName] = useState(init.name);
-  const [instructions, setInstructions] = useState(init.instructions);
+  const [instructions, setInstructions] = useState(correctedInstructions);
   const [schedule, setSchedule] = useState<ScheduleValue>(init.schedule);
   const [saving, setSaving] = useState(false);
   const [recipients, setRecipients] = useState<DingTalkMention[]>(init.recipients);
@@ -310,9 +326,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                               setInstructions('');
                             } else {
                               setSelectedWorkflow(opt.value);
-                              setInstructions(
-                                `帮我执行 id 为：${opt.value} 的工作流 【${opt.label}】`
-                              );
+                              setInstructions(buildWorkflowInstructions(opt.value, opt.label));
                             }
                             setWorkflowOpen(false);
                           }}

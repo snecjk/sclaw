@@ -30,7 +30,7 @@ import {
 import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
-import { CronTaskCreateModal } from '@/pages/Cron/components/CronTaskCreateModal';
+import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
@@ -543,7 +543,7 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
       )}
     </AnimatePresence>
   </div>
-  <CronTaskCreateModal
+  <TaskCreateModal
     open={workflowCronModalOpen}
     onClose={closeWorkflowCronTaskModal}
     onSave={handleWorkflowCronTaskSave}

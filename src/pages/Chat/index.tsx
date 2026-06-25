@@ -48,7 +48,7 @@ import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { useBuiltinToolListener } from '@/hooks/use-builtin-tool-listener';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
-import { CronTaskCreateModal } from '@/pages/Cron/components/CronTaskCreateModal';
+import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
 export function Chat() {
@@ -723,7 +723,7 @@ export function Chat() {
         )}
       </AnimatePresence>
     </div>
-    <CronTaskCreateModal
+    <TaskCreateModal
       open={workflowCronModalOpen}
       onClose={closeWorkflowCronTaskModal}
       onSave={handleWorkflowCronTaskSave}
