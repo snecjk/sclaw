@@ -97,7 +97,7 @@ export function Login() {
               <div className="space-y-2 text-center">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.24em] text-foreground/65">
                   <Sparkles className="h-3.5 w-3.5 text-cyan-300" />
-                  StoClaw 智能助手
+                  SClaw 智能助手
                 </div>
                 <h1 className="text-3xl font-semibold tracking-[-0.04em] text-foreground">
                   {t('auth:login.title')}
