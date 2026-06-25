@@ -274,7 +274,10 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       setTimeout(checkStuck, 30_000);
 
       try {
-        const idempotencyKey = crypto.randomUUID();
+        // Reuse the optimistic user message id as the idempotency key so the
+        // Gateway can round-trip it back on the user message record (chat.history),
+        // enabling id-based optimistic↔echo pairing in isSameUserMessage.
+        const idempotencyKey = userMsg.id;
         const hasMedia = attachments && attachments.length > 0;
 
         // Cache image attachments BEFORE the IPC call to avoid race condition:

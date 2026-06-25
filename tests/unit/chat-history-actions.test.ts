@@ -313,19 +313,24 @@ describe('chat history actions', () => {
     ]);
   });
 
-  it('removes trailing duplicate optimistic user after assistant reply', async () => {
+  it('preserves a repeated identical user message separated by an assistant reply', async () => {
+    // Regression for "identical input overwrites previous output": two distinct
+    // sends of the same text must both be kept. The assistant reply between them
+    // proves they are separate turns, not an optimistic/server echo pair (echo
+    // reconciliation is mergeOptimisticUserIntoHistory's job, not this dedupe's).
     const { dedupeRedundantUserMessages } = await import('@/stores/chat/user-message-merge');
     const messages = [
       { id: 'user-1', role: 'user', content: '你现在是那个模型？', timestamp: 1710000000 },
       { id: 'assistant-1', role: 'assistant', content: '我是 Claude。', timestamp: 1710000003 },
-      { id: 'user-dup', role: 'user', content: '你现在是那个模型？', timestamp: 1710000000 },
+      { id: 'user-2', role: 'user', content: '你现在是那个模型？', timestamp: 1710000010 },
     ] as never;
 
-    const deduped = dedupeRedundantUserMessages(messages, 1710000000000);
+    const deduped = dedupeRedundantUserMessages(messages, 1710000010000);
 
     expect(deduped.map((message) => message.content)).toEqual([
       '你现在是那个模型？',
       '我是 Claude。',
+      '你现在是那个模型？',
     ]);
   });
 });
