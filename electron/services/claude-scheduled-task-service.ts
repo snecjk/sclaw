@@ -14,6 +14,7 @@ import {
   upsertClaudeScheduledTaskDefinition,
 } from './claude-scheduled-task-store';
 import { ClaudeTaskScheduler } from './claude-task-scheduler';
+import { type ClaudeTaskEventSink } from './claude-task-worker';
 
 export interface ClaudeScheduledTaskSummary {
   id: string;
@@ -170,6 +171,11 @@ export class ClaudeScheduledTaskService {
 
   stopScheduler(): void {
     this.scheduler.stop();
+  }
+
+  /** Forward the gateway event sink so worker runs can stream to the renderer. */
+  setEventSink(sink: ClaudeTaskEventSink | null): void {
+    this.scheduler.setEventSink(sink);
   }
 
   async listTasks(): Promise<ClaudeScheduledTaskSummary[]> {

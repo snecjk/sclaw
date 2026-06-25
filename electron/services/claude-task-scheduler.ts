@@ -4,7 +4,7 @@ import {
   readClaudeScheduledTaskSchedulerState,
   writeClaudeScheduledTaskSchedulerState,
 } from './claude-scheduled-task-store';
-import { ClaudeTaskWorker } from './claude-task-worker';
+import { ClaudeTaskWorker, type ClaudeTaskEventSink } from './claude-task-worker';
 
 const DEFAULT_TICK_INTERVAL_MS = 30_000;
 const MAX_SCAN_MINUTES = 366 * 24 * 60;
@@ -132,6 +132,11 @@ export class ClaudeTaskScheduler {
       clearTimeout(this.timer);
       this.timer = null;
     }
+  }
+
+  /** Forward the gateway event sink so worker runs can stream to the renderer. */
+  setEventSink(sink: ClaudeTaskEventSink | null): void {
+    this.worker.setEventSink(sink);
   }
 
   async triggerTaskNow(taskId: string): Promise<Awaited<ReturnType<ClaudeTaskWorker['startTask']>>> {

@@ -15,6 +15,7 @@ import {
 } from './claude-scheduled-task-session-store';
 import { buildClaudeTaskRuntimeContext } from './claude-task-runtime-builder';
 import { upsertEngineSessionRegistryEntry } from '../engines/session-registry';
+import { consumeClaudeQuery } from '../engines/claude-adapter';
 
 export interface ClaudeTaskExecutionResult {
   completedAt?: string;
@@ -24,9 +25,23 @@ export interface ClaudeTaskExecutionResult {
   summary?: string;
 }
 
+/**
+ * Minimal event sink used to forward Claude SDK streaming events to the
+ * renderer. Backed at runtime by the GatewayManager EventEmitter, which
+ * bridges `chat:message` / `notification` events to the same IPC broadcast
+ * the OpenClaw Gateway uses — so the renderer's existing state machine handles
+ * them without any renderer-side changes. Mirrors ClaudeEventSink in
+ * electron/engines/claude-adapter.ts; kept local so scheduled-task execution
+ * stays decoupled from the interactive adapter.
+ */
+export type ClaudeTaskEventSink = {
+  emit(event: string, payload: unknown): boolean;
+};
+
 export type ClaudeTaskExecutor = (params: {
   definition: ClaudeScheduledTaskDefinition;
   run: ClaudeScheduledTaskRunRecord;
+  eventSink: ClaudeTaskEventSink | null;
 }) => Promise<ClaudeTaskExecutionResult>;
 
 function nowIso(): string {
@@ -36,7 +51,10 @@ function nowIso(): string {
 async function executeClaudeTask(params: {
   definition: ClaudeScheduledTaskDefinition;
   run: ClaudeScheduledTaskRunRecord;
+  eventSink: ClaudeTaskEventSink | null;
 }): Promise<ClaudeTaskExecutionResult> {
+  const { runId, sessionKey } = params.run;
+  const eventSink = params.eventSink;
   const runtime = await buildClaudeTaskRuntimeContext(params.definition, {
     runId: params.run.runId,
     sessionId: params.run.runId,
@@ -72,6 +90,9 @@ async function executeClaudeTask(params: {
       plugins: runtime.plugins,
       allowDangerouslySkipPermissions: runtime.permissionMode === 'bypassPermissions',
       permissionMode: runtime.permissionMode,
+      // Enable token-level streaming events (SDKPartialAssistantMessage) so the
+      // consumer loop can forward text deltas to the renderer in real time.
+      includePartialMessages: true,
       systemPrompt: runtime.runtimeOptions.systemPromptAppend
         ? {
           type: 'preset' as const,
@@ -86,6 +107,48 @@ async function executeClaudeTask(params: {
   let lastAssistantText = '';
   let runtimeResult: ClaudeScheduledTaskRunRecord['runtimeResult'];
   let actualSessionId = runtime.sessionId;
+
+  // Extract run-record fields from the SDK message stream. consumeClaudeQuery
+  // owns event emission + liveClaudeMessages population; this callback only
+  // captures what the run record needs (summary text, runtime result, actual
+  // session id). It is invoked for user/assistant/result messages (not
+  // stream_event, which consumeClaudeQuery continues past).
+  const onMessage = (message: Record<string, unknown>) => {
+    if (typeof message.session_id === 'string' && message.session_id.trim()) {
+      actualSessionId = message.session_id.trim();
+    }
+    if (message.type === 'assistant' && 'message' in message) {
+      const payload = (message as { message?: { content?: unknown } }).message;
+      const content = payload?.content;
+      if (typeof content === 'string') {
+        lastAssistantText = content;
+      } else if (Array.isArray(content)) {
+        lastAssistantText = content
+          .map((block) => {
+            if (!block || typeof block !== 'object') return '';
+            const record = block as Record<string, unknown>;
+            return typeof record.text === 'string' ? record.text : '';
+          })
+          .filter(Boolean)
+          .join('\n');
+      }
+    }
+    if (message.type === 'result') {
+      const stopReason = message.stop_reason ?? message.stopReason;
+      runtimeResult = {
+        type: typeof message.type === 'string' ? message.type : undefined,
+        subtype: typeof message.subtype === 'string' ? message.subtype : undefined,
+        stopReason: typeof stopReason === 'string' ? stopReason : null,
+        isError: typeof message.subtype === 'string' ? message.subtype.startsWith('error_') : false,
+        durationMs: typeof message.duration_ms === 'number'
+          ? message.duration_ms
+          : typeof message.durationMs === 'number'
+            ? message.durationMs
+            : undefined,
+      };
+    }
+  };
+
   const timeoutMs = Math.max(1, params.definition.timeoutSec) * 1000;
   const timeoutId = setTimeout(() => {
     timedOut = true;
@@ -93,71 +156,40 @@ async function executeClaudeTask(params: {
   }, timeoutMs);
 
   try {
-    for await (const message of query as AsyncIterable<Record<string, unknown>>) {
-      if (typeof message.session_id === 'string' && message.session_id.trim()) {
-        actualSessionId = message.session_id.trim();
-        await upsertEngineSessionRegistryEntry({
-          sessionKey: params.run.sessionKey,
-          sessionId: actualSessionId,
-          cwd: runtime.cwd,
-          agentId: params.definition.agentId,
-          engineType: 'claude',
-          updatedAt: Date.now(),
-          title: params.definition.name,
-          model: runtime.model,
-          accountId: runtime.accountId,
-        });
-      }
-
-      if (message.type === 'assistant' && 'message' in message) {
-        const payload = (message as { message?: { content?: unknown } }).message;
-        const content = payload?.content;
-        if (typeof content === 'string') {
-          lastAssistantText = content;
-        } else if (Array.isArray(content)) {
-          lastAssistantText = content
-            .map((block) => {
-              if (!block || typeof block !== 'object') return '';
-              const record = block as Record<string, unknown>;
-              return typeof record.text === 'string' ? record.text : '';
-            })
-            .filter(Boolean)
-            .join('\n');
-        }
-      }
-
-      if (message.type === 'result') {
-        const stopReason = message.stop_reason ?? message.stopReason;
-        runtimeResult = {
-          type: typeof message.type === 'string' ? message.type : undefined,
-          subtype: typeof message.subtype === 'string' ? message.subtype : undefined,
-          stopReason: typeof stopReason === 'string' ? stopReason : null,
-          isError: typeof message.subtype === 'string' ? message.subtype.startsWith('error_') : false,
-          durationMs: typeof message.duration_ms === 'number'
-            ? message.duration_ms
-            : typeof message.durationMs === 'number'
-              ? message.durationMs
-              : undefined,
-        };
-      }
-    }
+    // Delegate streaming event emission and liveClaudeMessages population to
+    // the same path the interactive claudeAdapter uses (consumeClaudeQuery).
+    // liveClaudeMessages is essential: the renderer's completion-triggered
+    // history reload can race ahead of the SDK flushing the transcript to disk,
+    // and without the in-memory cache buildHistory returns empty and wipes the
+    // just-streamed messages.
+    await consumeClaudeQuery(
+      sessionKey,
+      runtime.sessionId,
+      runtime.cwd,
+      query as AsyncIterable<Record<string, unknown>> & { close(): void },
+      eventSink,
+      runId,
+      onMessage,
+    );
   } finally {
     clearTimeout(timeoutId);
   }
 
-  if (actualSessionId !== runtime.sessionId) {
-    await upsertEngineSessionRegistryEntry({
-      sessionKey: params.run.sessionKey,
-      sessionId: actualSessionId,
-      cwd: runtime.cwd,
-      agentId: params.definition.agentId,
-      engineType: 'claude',
-      updatedAt: Date.now(),
-      title: params.definition.name,
-      model: runtime.model,
-      accountId: runtime.accountId,
-    });
-  }
+  // Restore registry metadata that consumeClaudeQuery overwrites with
+  // key-derived defaults (agentId='main' for the claude-task-run key, title
+  // derived from the prompt) so the session stays attributed to the task's
+  // agent and named after the task.
+  await upsertEngineSessionRegistryEntry({
+    sessionKey: params.run.sessionKey,
+    sessionId: actualSessionId,
+    cwd: runtime.cwd,
+    agentId: params.definition.agentId,
+    engineType: 'claude',
+    updatedAt: Date.now(),
+    title: params.definition.name,
+    model: runtime.model,
+    accountId: runtime.accountId,
+  });
 
   if (timedOut) {
     return {
@@ -178,7 +210,14 @@ async function executeClaudeTask(params: {
 }
 
 export class ClaudeTaskWorker {
+  private eventSink: ClaudeTaskEventSink | null = null;
+
   constructor(private readonly executor: ClaudeTaskExecutor = executeClaudeTask) {}
+
+  /** Inject the gateway event sink so worker runs can stream to the renderer. */
+  setEventSink(sink: ClaudeTaskEventSink | null): void {
+    this.eventSink = sink;
+  }
 
   private async prepareRun(params: {
     attempt?: number;
@@ -238,7 +277,7 @@ export class ClaudeTaskWorker {
     runningRecord: ClaudeScheduledTaskRunRecord,
   ): Promise<ClaudeScheduledTaskRunRecord> {
     try {
-      const execution = await this.executor({ definition, run: runningRecord });
+      const execution = await this.executor({ definition, run: runningRecord, eventSink: this.eventSink });
       const finalRecord: ClaudeScheduledTaskRunRecord = {
         ...runningRecord,
         completedAt: execution.completedAt ?? nowIso(),

@@ -544,6 +544,9 @@ async function initialize(): Promise<void> {
 
   const { getClaudeScheduledTaskService } = await import('../services/claude-scheduled-task-service');
   const claudeScheduledTaskService = getClaudeScheduledTaskService();
+  // Inject the gateway event sink before the scheduler starts ticking so that
+  // Claude scheduled-task runs (including 立即运行) stream to the renderer.
+  claudeScheduledTaskService.setEventSink(gm);
   claudeScheduledTaskService.startScheduler();
   void claudeScheduledTaskService.refreshSchedule().catch((error) => {
     logger.warn('[claude-task] initial schedule refresh failed:', error);
