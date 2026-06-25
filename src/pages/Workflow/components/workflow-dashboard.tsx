@@ -1,13 +1,11 @@
 import { useRef, useState, useCallback } from 'react';
-import { ArrowUp, Plus, Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import {
   stoMainInnerShell,
-  workflowHeroComposer,
   workflowHeroInteractiveShellClass,
   workflowHeroManualCreateClass,
   workflowHeroQuickChipClass,
@@ -44,6 +42,7 @@ import { Button } from '@/components/ui/button';
 import { useWorkflowList } from '@/pages/Workflow/use-workflow-list';
 import { renameWorkflow, deleteWorkflow } from '@/lib/workflow-api';
 import { navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
+import { WorkflowComposer } from '@/pages/Workflow/components/workflow-composer';
 
 interface WorkflowDashboardProps {
   onManualCreate: () => void;
@@ -75,7 +74,8 @@ export function WorkflowDashboard({
     mineCounts,
     officialCards,
   } = useWorkflowList();
-  const [prompt, setPrompt] = useState('');
+  /** chip 点击后 bump key，使 ChatInput 重挂载并应用 seedText */
+  const [composerSeed, setComposerSeed] = useState<{ text: string; key: number } | null>(null);
   const [tab, setTab] = useState<'mine' | 'official'>('mine');
   const [search, setSearch] = useState('');
   const [mineFilter, setMineFilter] = useState<MineFilter>('published');
@@ -201,10 +201,6 @@ export function WorkflowDashboard({
     }
   };
 
-  const handleGenerate = () => {
-    onGenerate(prompt.trim() || chipLabels.abnormalCustomer);
-  };
-
   return (
     <div className={cn(stoMainInnerShell, 'pb-10')}>
       <header className="sr-only">
@@ -218,24 +214,11 @@ export function WorkflowDashboard({
           {t('generate.title')}
         </h2>
         <div className={workflowHeroInteractiveShellClass}>
-          <div className={workflowHeroComposer}>
-            <Textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder={t('generate.placeholder')}
-              className="min-h-0 flex-1 resize-none border-0 bg-transparent px-4 pt-4 pb-0 text-sm leading-[18px] text-foreground shadow-none placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
-            <div className="flex h-[50px] shrink-0 items-center justify-end px-3 pb-3 pl-4 pt-0">
-              <button
-                type="button"
-                onClick={handleGenerate}
-                className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-[transform,background-color] duration-fast hover:bg-primary/90 active:scale-[0.98]"
-                aria-label={t('generate.sendAria')}
-              >
-                <ArrowUp className="h-4 w-4" aria-hidden />
-              </button>
-            </div>
-          </div>
+          <WorkflowComposer
+            key={composerSeed?.key ?? 'workflow-composer'}
+            seedText={composerSeed?.text}
+            onGenerate={onGenerate}
+          />
           <div className={workflowHeroQuickPromptsRowClass}>
             <div
               className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -246,7 +229,9 @@ export function WorkflowDashboard({
                 <button
                   key={key}
                   type="button"
-                  onClick={() => setPrompt(chipLabels[key])}
+                  onClick={() =>
+                    setComposerSeed({ text: chipLabels[key], key: Date.now() })
+                  }
                   className={workflowHeroQuickChipClass}
                 >
                   {chipLabels[key]}

@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
 import { useWorkflowCompletion } from '@/hooks/use-workflow-completion';
-import { useAgentsStore } from '@/stores/agents';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
@@ -31,7 +30,7 @@ import {
 import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
-import { CronTaskCreateModal } from '@/pages/Cron/components/CronTaskCreateModal';
+import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
@@ -72,7 +71,6 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const clearError = useChatStore((s) => s.clearError);
-  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
   useWorkflowCompletion(currentSessionKey);
 
@@ -100,7 +98,7 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     updateJumpToLatestVisibility();
     scrollElement.addEventListener('scroll', updateJumpToLatestVisibility, { passive: true });
     window.addEventListener('resize', updateJumpToLatestVisibility);
@@ -110,10 +108,6 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
       window.removeEventListener('resize', updateJumpToLatestVisibility);
     };
   }, [currentSessionKey, scrollRef, updateJumpToLatestVisibility]);
-
-  useEffect(() => {
-    void fetchAgents();
-  }, [fetchAgents]);
 
   useEffect(() => {
     const unsub = createAutoSendWatcher(() => scrollToBottom('auto'));
@@ -136,14 +130,14 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
   });
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     updateJumpToLatestVisibility();
   }, [messages.length, sending, pendingFinal, streamText, streamingTools.length, updateJumpToLatestVisibility]);
 
   useEffect(() => {
     const contentElement = contentRef.current;
     if (!contentElement) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setSearchableMessages([]);
       return;
     }
@@ -420,7 +414,6 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
                       matchedMessageIds={matchedMessageIds}
                       activeMessageId={activeSearchMatch?.id ?? null}
                       onPreviewFile={openArtifactPreview}
-                      onViewWorkflow={openWorkflowPreview}
                       onCreateScheduledTask={openWorkflowCronTaskModal}
                     />
                   );
@@ -433,7 +426,6 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
                     isSearchMatch={!!item.message.id && matchedMessageIds.has(item.message.id)}
                     isSearchActive={!!item.message.id && item.message.id === activeSearchMatch?.id}
                     onPreviewFile={openArtifactPreview}
-                    onViewWorkflow={openWorkflowPreview}
                     onCreateScheduledTask={openWorkflowCronTaskModal}
                   />
                 );
@@ -449,7 +441,6 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
                   activeMessageId={activeSearchMatch?.id ?? null}
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={openArtifactPreview}
-                  onViewWorkflow={openWorkflowPreview}
                   onCreateScheduledTask={openWorkflowCronTaskModal}
                 />
               ) : null}
@@ -552,7 +543,7 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
       )}
     </AnimatePresence>
   </div>
-  <CronTaskCreateModal
+  <TaskCreateModal
     open={workflowCronModalOpen}
     onClose={closeWorkflowCronTaskModal}
     onSave={handleWorkflowCronTaskSave}

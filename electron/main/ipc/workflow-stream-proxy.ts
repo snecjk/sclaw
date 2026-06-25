@@ -4,7 +4,8 @@
  * Connects to resolveStoBaseUrl() — same backend domain as workflow create/start —
  * and forwards SSE events to Renderer via IPC.
  */
-import { ipcMain, webContents } from 'electron';
+import { ipcMain } from 'electron';
+import { safeBroadcastToAllWebContents } from '../safe-web-contents-send';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { getStoToken } from '../../utils/auth-store';
 import { resolveStoBaseUrl } from '../../utils/sto-domain';
@@ -35,9 +36,7 @@ async function readErrorBody(response: Response): Promise<string> {
 }
 
 function broadcast(channel: string, payload: unknown): void {
-  for (const wc of webContents.getAllWebContents()) {
-    wc.send(channel, payload);
-  }
+  safeBroadcastToAllWebContents(channel, payload);
 }
 
 async function startStream(runId: string): Promise<void> {

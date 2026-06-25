@@ -9,8 +9,7 @@ import {
 } from '@/lib/surfaces';
 
 export interface ScheduleValue {
-  frequency: 'daily' | 'weekly' | 'monthly' | 'once';
-  onceDate?: string;
+  frequency: 'daily' | 'weekly' | 'monthly';
   weekDays: number[];     // 多选星期: 0=周日, 1=周一
   monthDay?: number;      // 1-31
   time: string;           // "HH:mm"
@@ -57,7 +56,6 @@ const FREQUENCY_OPTIONS = [
   { value: 'daily' as const, label: '每天' },
   { value: 'weekly' as const, label: '每周' },
   { value: 'monthly' as const, label: '每月' },
-  { value: 'once' as const, label: '一次性' },
 ];
 
 const WEEKDAY_FULL_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
@@ -74,11 +72,6 @@ const WEEKDAY_DROPDOWN_OPTIONS: { value: number; label: string }[] = [
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
 const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
 const MONTH_DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
-
-const scheduleCalendarNavButtonClass = cn(
-  'flex h-7 w-7 items-center justify-center rounded-md text-base text-muted-foreground transition-colors',
-  'hover:bg-muted hover:text-foreground',
-);
 
 const scheduleCalendarDayHoverClass =
   'text-foreground hover:bg-primary/10 hover:text-primary';
@@ -263,165 +256,6 @@ function WeekdaysPicker({
                 </button>
               );
             })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── 一次性日期选择器（自定义日历） ─────────────────────────────────────────
-function OnceDatePicker({
-  onceDate,
-  onChange,
-  onOpenChange,
-}: {
-  onceDate?: string;
-  onChange: (date: string) => void;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const dir = useDropdownDirection(ref, open);
-  const today = new Date();
-  const [viewYear, setViewYear] = useState(today.getFullYear());
-  const [viewMonth, setViewMonth] = useState(today.getMonth());
-
-  const displayLabel = onceDate
-    ? (() => {
-        const d = new Date(onceDate);
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      })()
-    : '请选择日期';
-
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    onOpenChange(next);
-  };
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-        onOpenChange(false);
-      }
-    }
-    if (open) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [open, onOpenChange]);
-
-  // 构建日历格子
-  const calendarCells = useMemo(() => {
-    const firstDay = new Date(viewYear, viewMonth, 1);
-    // 周一起始: 0=Mon, 6=Sun
-    let startWeekday = firstDay.getDay() - 1;
-    if (startWeekday < 0) startWeekday = 6;
-    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-    const daysInPrevMonth = new Date(viewYear, viewMonth, 0).getDate();
-
-    const cells: { day: number; inMonth: boolean; date: Date }[] = [];
-    // 上月尾部
-    for (let i = startWeekday - 1; i >= 0; i--) {
-      const d = daysInPrevMonth - i;
-      cells.push({ day: d, inMonth: false, date: new Date(viewYear, viewMonth - 1, d) });
-    }
-    // 当月
-    for (let d = 1; d <= daysInMonth; d++) {
-      cells.push({ day: d, inMonth: true, date: new Date(viewYear, viewMonth, d) });
-    }
-    // 下月头部至 42 格 (6行)
-    const remaining = 42 - cells.length;
-    for (let d = 1; d <= remaining; d++) {
-      cells.push({ day: d, inMonth: false, date: new Date(viewYear, viewMonth + 1, d) });
-    }
-    return cells;
-  }, [viewYear, viewMonth]);
-
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-  function selectDate(d: Date) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    onChange(`${y}-${m}-${day}`);
-    setOpen(false);
-    onOpenChange(false);
-  }
-
-  function goToday() {
-    setViewYear(today.getFullYear());
-    setViewMonth(today.getMonth());
-    selectDate(today);
-  }
-
-  const title = `${viewYear}年${viewMonth + 1}月`;
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={toggle}
-        className={cn(schedulePickerTriggerClass, 'tabular-nums', open ? formFieldOpenClass : 'border-border')}
-      >
-        <span className={cn('truncate', !onceDate && 'font-normal text-muted-foreground')}>{displayLabel}</span>
-        <span className="shrink-0 text-muted-foreground"><ChevronDownIcon /></span>
-      </button>
-      {open && (
-        <div className={cn(dir === 'up' ? 'absolute bottom-[calc(100%+6px)] left-0 z-[25]' : 'absolute top-[calc(100%+6px)] left-0 z-[25]', 'w-[min(300px,calc(100vw-48px))]')}>
-          <div className={cn(schedulePickerDropdownPanelClass, 'p-3 pb-2.5')}>
-            {/* Header nav */}
-            <div className="mb-2.5 flex items-center justify-center gap-1">
-              <button type="button" onClick={() => setViewYear(v => v - 1)} className={scheduleCalendarNavButtonClass}>«</button>
-              <button type="button" onClick={() => { if (viewMonth === 0) { setViewMonth(11); setViewYear(v => v - 1); } else setViewMonth(m => m - 1); }} className={scheduleCalendarNavButtonClass}>‹</button>
-              <span className="flex-1 text-center text-[15px] font-semibold text-foreground">{title}</span>
-              <button type="button" onClick={() => { if (viewMonth === 11) { setViewMonth(0); setViewYear(v => v + 1); } else setViewMonth(m => m + 1); }} className={scheduleCalendarNavButtonClass}>›</button>
-              <button type="button" onClick={() => setViewYear(v => v + 1)} className={scheduleCalendarNavButtonClass}>»</button>
-            </div>
-            {/* Weekday header */}
-            <div className="mb-1 grid grid-cols-7 gap-0.5 text-center text-[13px] font-medium text-muted-foreground">
-              {['一', '二', '三', '四', '五', '六', '日'].map(w => <span key={w}>{w}</span>)}
-            </div>
-            {/* Day grid */}
-            <div className="grid grid-cols-7 gap-0.5">
-              {calendarCells.map((cell, i) => {
-                const cellStr = `${cell.date.getFullYear()}-${String(cell.date.getMonth() + 1).padStart(2, '0')}-${String(cell.date.getDate()).padStart(2, '0')}`;
-                const isSelected = cellStr === onceDate;
-                const isToday = cellStr === todayStr;
-                const isPast = cell.date < todayDate && !isToday;
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    disabled={isPast}
-                    onClick={() => selectDate(cell.date)}
-                    className={cn(
-                      'flex h-[34px] items-center justify-center rounded-lg text-sm tabular-nums transition-colors',
-                      !cell.inMonth && 'text-muted-foreground/70',
-                      isPast && 'cursor-not-allowed text-muted-foreground/70 opacity-72',
-                      !isPast && !isSelected && scheduleCalendarDayHoverClass,
-                      isSelected && 'bg-primary font-semibold text-primary-foreground',
-                      isToday && !isSelected && 'text-primary ring-1 ring-inset ring-primary',
-                    )}
-                  >
-                    {cell.day}
-                  </button>
-                );
-              })}
-            </div>
-            {/* Today button */}
-            <div className="mt-2.5 border-t border-border pt-2.5 text-center">
-              <button
-                type="button"
-                onClick={goToday}
-                className={cn('rounded-md px-3 py-1 text-sm font-medium transition-colors', scheduleCalendarDayHoverClass)}
-              >
-                今天
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -655,17 +489,6 @@ export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
           onOpenChange={handleOpenChange}
         />
       </div>
-
-      {/* 一次性日期（仅 frequency=once） */}
-      {value.frequency === 'once' && (
-        <div className="flex-1 min-w-0">
-          <OnceDatePicker
-            onceDate={value.onceDate}
-            onChange={(d) => update({ onceDate: d })}
-            onOpenChange={handleOpenChange}
-          />
-        </div>
-      )}
 
       {/* 星期多选（仅 frequency=weekly） */}
       {value.frequency === 'weekly' && (

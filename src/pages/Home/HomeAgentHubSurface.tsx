@@ -24,6 +24,7 @@ import {
   homeHubCardTitleClass,
   homeHubFooterShellClass,
   homeHubMainScrollClass,
+  homeHubMainScrollHostClass,
   homeHubTextSecondary,
 } from './home-hub-surface-styles';
 
@@ -128,10 +129,11 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
             onSend={handleHubSend}
           />
         ) : (
-          <div className={homeHubMainScrollClass}>
-            <HomeHero />
+          <div className={homeHubMainScrollHostClass}>
+            <div className={homeHubMainScrollClass}>
+              <HomeHero />
 
-            <div className={homeHubCardGridClass}>
+              <div className={homeHubCardGridClass}>
               {AGENT_HUB_CARDS.map(({ icon: Icon, iconWrapClass, titleKey, descKey }) => (
                 <div key={titleKey} className={homeHubCardShellClass}>
                   <div className="flex items-start gap-3">
@@ -182,6 +184,7 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
                 ))}
               </div>
             ) : null}
+            </div>
           </div>
         )}
       </div>

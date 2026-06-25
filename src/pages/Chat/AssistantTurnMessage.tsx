@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
 import { ChatMessage } from './ChatMessage';
-import { appendWorkflowCardBlockToMessage } from '@/lib/workflow-card-injection';
+import { appendWorkflowCardBlockToMessage, sessionHasParamsConfirmedWorkflowForRun } from '@/lib/workflow-card-injection';
 import { mergeThinkingTimelines, pickAssistantReplyMessage } from './chat-display';
 import {
   extractDingTalkSentPreviews,
@@ -46,7 +46,6 @@ interface AssistantTurnMessageProps {
   activeMessageId?: string | null;
   activeStream?: ActiveTurnStream | null;
   onPreviewFile?: (file: AttachedFileMeta) => void;
-  onViewWorkflow?: (workflowId: string) => void;
   onCreateScheduledTask?: (workflowId: string) => void;
   onEditMessage?: (text: string) => void;
 }
@@ -60,7 +59,6 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   activeMessageId = null,
   activeStream = null,
   onPreviewFile,
-  onViewWorkflow,
   onCreateScheduledTask,
   onEditMessage,
 }: AssistantTurnMessageProps) {
@@ -170,17 +168,22 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     ? extractText(replyDisplayMessage).trim().length > 0
     : false;
 
+  const sessionMessages = useChatStore((s) => s.messages);
+
   const chatDisplayMessage = useMemo(() => {
     if (!replyDisplayMessage) return null;
     if (extractWorkflowCard(replyDisplayMessage)) return replyDisplayMessage;
     const card = findLatestWorkflowCardInMessages(turnMessages);
     if (!card) return replyDisplayMessage;
+    if (sessionHasParamsConfirmedWorkflowForRun(sessionMessages, card.runId)) {
+      return replyDisplayMessage;
+    }
     return appendWorkflowCardBlockToMessage(
       replyDisplayMessage,
       card.runId,
       card.templateName,
     );
-  }, [replyDisplayMessage, turnMessages]);
+  }, [replyDisplayMessage, turnMessages, sessionMessages]);
 
   const chatDisplayHasWorkflowCard = !!(
     chatDisplayMessage && extractWorkflowCard(chatDisplayMessage)
@@ -233,7 +236,6 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
             isStreaming={isStreaming && replyDisplayHasText}
             streamingTools={isStreaming ? streamingTools : []}
             onPreviewFile={onPreviewFile}
-            onViewWorkflow={onViewWorkflow}
             onCreateScheduledTask={onCreateScheduledTask}
             onEditMessage={onEditMessage}
             hideAvatar

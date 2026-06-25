@@ -158,7 +158,7 @@
 ### 改动四：底部 footer 精简（隐藏，不删）
 
 - **现状**：`HomeAgentHubSurface.tsx` ~172–186 行，三栏 `grid-cols-[1fr_auto_1fr]`：左=网关状态（`gatewayLine`）、中=免责（`footerDisclaimer`）、右=用量（`usageHint`）。
-- **目标（图二）**：只保留居中的「S Claw 为AI辅助，重要信息请与业务核对后使用」；网关、用量两段去掉。
+- **目标（图二）**：只保留居中的「内容由 AI 生成，请核实重要信息。」；网关、用量两段去掉。
 - **改动类型**：🟧 结构（已预批准）+ 样式。**按铁律 9：隐藏不删**。
 - **做法**：
   1. 用命名 flag（如 `const SHOW_GATEWAY_LINE = false;` / `const SHOW_USAGE_HINT = false;`）把网关行、用量行**条件隐藏**，JSX/变量/i18n key 全部保留并加注释。

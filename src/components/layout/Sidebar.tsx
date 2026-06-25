@@ -54,6 +54,7 @@ import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
 import {
+  parseClaudeScheduledTaskSessionKey,
   parseClaudeScheduledTaskRunSessionKey,
   parseCronSessionKey,
   parseScheduledTaskAgentSessionKey,
@@ -841,12 +842,13 @@ export function Sidebar() {
     [sessions],
   );
 
-  // Legacy cron + scheduled-task agent sessions — shown under "任务列表" grouped by task name
+  // Legacy cron + scheduled-task agent + Claude task (base, dated, run) sessions — shown under "任务列表" grouped by task name
   const taskListScheduledSessions = useMemo(
     () => visibleSessions.filter((s) => (
       isAnyCronSessionKey(s.key)
       || parseScheduledTaskAgentSessionKey(s.key)
       || parseClaudeScheduledTaskRunSessionKey(s.key)
+      || parseClaudeScheduledTaskSessionKey(s.key) != null  // covers base & dated
     )),
     [visibleSessions],
   );
@@ -857,6 +859,7 @@ export function Sidebar() {
       !isAnyCronSessionKey(s.key)
       && !parseScheduledTaskAgentSessionKey(s.key)
       && !parseClaudeScheduledTaskRunSessionKey(s.key)
+      && !parseClaudeScheduledTaskSessionKey(s.key)  // excludes base & dated
     )),
     [visibleSessions],
   );
@@ -874,7 +877,11 @@ export function Sidebar() {
   };
 
   const recentSessionsSorted = useMemo(
-    () => [...normalSessions].sort((a, b) => getEffectiveActivityMs(b) - getEffectiveActivityMs(a)),
+    () => [...normalSessions].sort((a, b) => {
+      const activityDiff = getEffectiveActivityMs(b) - getEffectiveActivityMs(a);
+      if (activityDiff !== 0) return activityDiff;
+      return b.key.localeCompare(a.key);
+    }),
     // getEffectiveActivityMs 依赖 sessionLastActivity / currentSessionKey / sessionLabels / nowMs
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [normalSessions, sessionLastActivity, currentSessionKey, sessionLabels, nowMs],
@@ -896,6 +903,7 @@ export function Sidebar() {
       const stParsed = parseScheduledTaskAgentSessionKey(session.key);
       const cronParsed = parseCronSessionKey(session.key);
       const claudeTaskRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
+      const claudeTaskDatedParsed = parseClaudeScheduledTaskSessionKey(session.key);
 
       if (stParsed) {
         const taskName = session.displayName || session.label?.split(' - ')[0] || `定时任务 ${stParsed.taskId}`;
@@ -909,6 +917,14 @@ export function Sidebar() {
         const groupKey = `cron:${cronParsed.jobId}`;
         if (!groups.has(groupKey)) {
           groups.set(groupKey, { key: groupKey, name: jobName, sessions: [] });
+        }
+        groups.get(groupKey)!.sessions.push(session);
+      } else if (claudeTaskDatedParsed) {
+        // Claude task session: covers base (claude-task:{taskId}), dated (claude-task:{taskId}:{date}), and any future variants
+        const taskName = session.displayName || session.label || `Claude 定时任务 ${claudeTaskDatedParsed.taskId}`;
+        const groupKey = `claude-task:${claudeTaskDatedParsed.taskId}`;
+        if (!groups.has(groupKey)) {
+          groups.set(groupKey, { key: groupKey, name: taskName, sessions: [] });
         }
         groups.get(groupKey)!.sessions.push(session);
       } else if (claudeTaskRunParsed) {

@@ -122,7 +122,7 @@
     "dataAnalysis": "数据分析",
     "workflow": "工作流调用",
     "send": "发送",
-    "footerDisclaimer": "S Claw 为AI辅助，重要信息请与业务核对后使用",
+    "footerDisclaimer": "内容由 AI 生成，请核实重要信息。",
     "gatewayRequired": "请先连接网关后再发送。",
     "sendFailed": "发送失败，请到对话页查看详情。"
   },

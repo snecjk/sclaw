@@ -24,6 +24,11 @@
     --accent-foreground: 26 100% 36%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
+    /* Success #28C840 / Warning #FEBC2E — docs/sto-design.md + 02-styles.mdc */
+    --success: 130 67% 47%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 99% 59%;
+    --warning-foreground: 220 26% 14%;
     /* Grey-4 #E5E6EB */
     --border: 220 13% 91%;
     --input: 220 13% 91%;
@@ -149,6 +154,10 @@
     --accent-foreground: 32 100% 88%;
     --destructive: 0 72% 56%;
     --destructive-foreground: 0 0% 100%;
+    --success: 130 60% 42%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 90% 52%;
+    --warning-foreground: 220 26% 14%;
     --border: 220 14% 22%;
     --input: 220 14% 20%;
     --ring: 26 100% 55%;
@@ -429,6 +438,22 @@
 /* Focus ring */
 .focus-ring {
   @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+}
+
+/**
+ * 首页 Hero + 卡片区：矮屏顶对齐（Logo 不被输入框顶出视口），中间区足够高时再垂直居中。
+ * 阈值 ~480px ≈ 默认窗口扣除顶栏/输入区后，Hero+三卡能完整放下的高度。
+ */
+.home-hub-main-scroll-host {
+  container-type: size;
+  container-name: home-hub-main;
+}
+
+@container home-hub-main (min-height: 480px) {
+  .home-hub-main-scroll {
+    justify-content: center;
+    padding-top: 0;
+  }
 }
 
 /* Prose styling for markdown — match chat user bubble (text-sm / 14px) */

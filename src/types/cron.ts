@@ -76,6 +76,7 @@ export interface CronJobUpdateInput {
   enabled?: boolean;
   agentId?: string;
   dingTalkMentions?: DingTalkMention[];
+  workflowCode?: string;
 }
 
 /**

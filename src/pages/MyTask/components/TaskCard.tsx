@@ -5,7 +5,7 @@
  * 结构：顶栏开关 + 更多菜单 → 标题/描述 → 弹性间距（≥18px）→ 底栏计划时间 + 下次执行
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Clock, Loader2, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { parseScheduleToLabel } from '@/lib/schedule-label';
@@ -48,22 +48,37 @@ interface TaskCardProps {
   onClick?: (task: TaskCardData) => void;
 }
 
-/** 将接口 nextRunAt 格式化为设计稿底栏文案 */
+/** 将接口 nextRunAt 格式化为设计稿底栏文案（含分钟级精度） */
 function formatNextRunLabel(nextRunAt: string | null, enabled: boolean): string | null {
   if (!enabled || nextRunAt === null) return null;
   const diffMs = new Date(nextRunAt).getTime() - Date.now();
   if (Number.isNaN(diffMs)) return null;
   if (diffMs <= 0) return '即将执行';
-  const hours = Math.ceil(diffMs / (1000 * 60 * 60));
-  if (hours < 24) return `下次执行${hours}小时内`;
-  const days = Math.ceil(hours / 24);
-  return `下次执行${days}天内`;
+
+  const totalMinutes = Math.ceil(diffMs / (1000 * 60));
+  if (totalMinutes < 1) return '即将执行';
+  if (totalMinutes < 60) return `下次执行${totalMinutes}分钟后`;
+  const totalHours = Math.ceil(totalMinutes / 60);
+  if (totalHours < 24) return `下次执行${totalHours}小时后`;
+  const days = Math.ceil(totalHours / 24);
+  return `下次执行${days}天后`;
 }
 
 export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: TaskCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // 定时刷新 nextRunLabel：每 30 秒重新计算，确保"X分钟后"随时间递减
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!task.enabled || task.nextRunAt === null) return;
+    const id = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, [task.enabled, task.nextRunAt]);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const nextRunLabel = useCallback(() => formatNextRunLabel(task.nextRunAt, task.enabled), [task.nextRunAt, task.enabled, tick])();
 
   // 点击外部关闭菜单
   useEffect(() => {
@@ -85,9 +100,8 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
   };
 
   const scheduleLabel = task.scheduleText ?? parseScheduleToLabel(task.cronExpr);
-  const nextRunLabel = formatNextRunLabel(task.nextRunAt, task.enabled);
-  /** 从 description 中提取 wf_ 开头的工作流 ID */
-  const workflowId = task.description?.match(/wf_\w+/)?.[0] ?? null;
+  /** 关联工作流 code，用于显示"工作流"badge */
+  const workflowId = task.workflowCode ?? null;
 
   return (
     <article

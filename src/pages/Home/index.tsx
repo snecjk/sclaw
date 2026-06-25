@@ -7,7 +7,7 @@ import { HomeHero } from './HomeHero';
 import { HomeSummaryCards } from './HomeSummaryCards';
 import { HomeComposer } from './HomeComposer';
 import { HomeMainConversation } from './HomeMainConversation';
-import { homeHubFooterShellClass, homeHubMainScrollClass } from './home-hub-surface-styles';
+import { homeHubFooterShellClass, homeHubMainScrollClass, homeHubMainScrollHostClass } from './home-hub-surface-styles';
 import { useHomeConversationActive } from './use-home-conversation-active';
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
@@ -166,9 +166,11 @@ export function Home() {
               onSend={handleHubSend}
             />
           ) : (
-            <div className={homeHubMainScrollClass}>
-              <HomeHero />
-              <HomeSummaryCards />
+            <div className={homeHubMainScrollHostClass}>
+              <div className={homeHubMainScrollClass}>
+                <HomeHero />
+                <HomeSummaryCards />
+              </div>
             </div>
           )}
         </div>

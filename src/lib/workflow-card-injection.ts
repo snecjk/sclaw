@@ -24,6 +24,71 @@ export function messageHasWorkflowCardForRun(message: RawMessage, runId: string)
   );
 }
 
+/** 助手「参数已确认」折叠块：文案含参数已确认且带 workflow_card。 */
+export function isParamsConfirmedWorkflowAssistantMessage(
+  message: RawMessage,
+  getMessageText: (content: unknown) => string = getAssistantMessageText,
+): boolean {
+  if (message.role !== 'assistant') return false;
+  if (!messageHasWorkflowCard(message)) return false;
+  return /参数已确认/.test(getMessageText(message.content));
+}
+
+function messageHasWorkflowCard(message: RawMessage): boolean {
+  if (!Array.isArray(message.content)) return false;
+  return (message.content as ContentBlock[]).some((block) => block.type === 'workflow_card');
+}
+
+/** 会话内是否已有「参数已确认」消息承载该 run（可排除当前消息 id）。 */
+export function sessionHasParamsConfirmedWorkflowForRun(
+  messages: RawMessage[],
+  runId: string,
+  excludeMessageId?: string,
+  getMessageText: (content: unknown) => string = getAssistantMessageText,
+): boolean {
+  return messages.some((message) => {
+    if (excludeMessageId && message.id === excludeMessageId) return false;
+    return isParamsConfirmedWorkflowAssistantMessage(message, getMessageText)
+      && messageHasWorkflowCardForRun(message, runId);
+  });
+}
+
+export function stripWorkflowCardBlocksForRun(message: RawMessage, runId: string): RawMessage {
+  if (!Array.isArray(message.content)) return message;
+  const blocks = message.content as ContentBlock[];
+  const filtered = blocks.filter(
+    (block) => !(block.type === 'workflow_card' && block.runId === runId),
+  );
+  if (filtered.length === blocks.length) return message;
+  return {
+    ...message,
+    content: filtered.length > 0 ? filtered : [{ type: 'text', text: '' }],
+  };
+}
+
+/** 参数已确认消息为唯一载体时，从其它助手消息移除同 runId 的 workflow_card。 */
+export function dedupeWorkflowCardsForParamsConfirmedTurn(
+  messages: RawMessage[],
+  runId: string,
+  getMessageText: (content: unknown) => string = getAssistantMessageText,
+): RawMessage[] {
+  const owner = messages.find(
+    (message) =>
+      isParamsConfirmedWorkflowAssistantMessage(message, getMessageText)
+      && messageHasWorkflowCardForRun(message, runId),
+  );
+  if (!owner) return messages;
+
+  let changed = false;
+  const next = messages.map((message) => {
+    if (message === owner) return message;
+    if (!messageHasWorkflowCardForRun(message, runId)) return message;
+    changed = true;
+    return stripWorkflowCardBlocksForRun(message, runId);
+  });
+  return changed ? next : messages;
+}
+
 export function appendWorkflowCardBlockToMessage(
   message: RawMessage,
   runId: string,

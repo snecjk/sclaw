@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { installDwsCli, loginDingTalk, searchDingTalkMentions } from '@/lib/host-api';
+import { installDwsCli, isDwsInstallFetchFailedMessage, loginDingTalk, searchDingTalkMentions } from '@/lib/host-api';
 import type { ActiveMentionTrigger } from '@/lib/dingtalk-mention-composer';
 import type { MentionSearchItem } from '@/types/dingtalk-mention';
 
@@ -156,7 +156,9 @@ export function useDingTalkMention(trigger: ActiveMentionTrigger | null, enabled
       setSearchNonce((value) => value + 1);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setError(message);
+      if (!isDwsInstallFetchFailedMessage(message)) {
+        setError(message);
+      }
     } finally {
       setInstalling(false);
     }

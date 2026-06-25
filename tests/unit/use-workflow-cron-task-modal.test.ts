@@ -2,8 +2,9 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
 
-const { createJobMock } = vi.hoisted(() => ({
+const { createJobMock, fetchWorkflowsMock } = vi.hoisted(() => ({
   createJobMock: vi.fn(async () => ({})),
+  fetchWorkflowsMock: vi.fn(async () => {}),
 }));
 
 vi.mock('@/stores/cron', () => ({
@@ -16,6 +17,15 @@ vi.mock('@/stores/agents', () => ({
     selector({ agents: [], defaultAgentId: 'main' }),
 }));
 
+vi.mock('@/pages/MyTask/store', () => ({
+  useMyTaskStore: {
+    getState: () => ({
+      workflowOptions: [],
+      fetchWorkflows: fetchWorkflowsMock,
+    }),
+  },
+}));
+
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
@@ -26,16 +36,18 @@ vi.mock('sonner', () => ({
 describe('useWorkflowCronTaskModal', () => {
   beforeEach(() => {
     createJobMock.mockClear();
+    fetchWorkflowsMock.mockClear();
   });
 
-  it('prefills cron modal instructions from workflow id', () => {
+  it('prefills cron modal with workflowCode from workflow id', async () => {
     const { result } = renderHook(() => useWorkflowCronTaskModal());
 
-    act(() => {
-      result.current.openForWorkflow('wf_2c200d96');
+    await act(async () => {
+      await result.current.openForWorkflow('wf_2c200d96');
     });
 
+    expect(fetchWorkflowsMock).toHaveBeenCalledTimes(1);
     expect(result.current.open).toBe(true);
-    expect(result.current.initialValues).toEqual({ message: '执行 wf_2c200d96 工作流' });
+    expect(result.current.initialValues).toEqual({ workflowCode: 'wf_2c200d96' });
   });
 });

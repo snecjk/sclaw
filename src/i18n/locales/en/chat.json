@@ -60,7 +60,7 @@
         "dingtalkLoadMore": "Load more",
         "dingtalkNoResults": "No matches found",
         "dingtalkNeedsInstall": "Install DingTalk CLI to mention contacts",
-        "dingtalkInstall": "Install DingTalk CLI",
+        "dingtalkInstall": "Authorize DingTalk",
         "dingtalkInstalling": "Installing…",
         "dingtalkNeedsAuth": "Sign in to DingTalk to search contacts",
         "dingtalkLogin": "Sign in to DingTalk",
@@ -174,11 +174,24 @@
         "fullscreen": "Fullscreen",
         "refresh": "Refresh",
         "download": "Download",
-        "openExternal": "Share",
+        "share": "Share to DingTalk",
+        "openExternal": "Open in browser",
         "editWorkflow": "Edit workflow",
         "workflowTab": "Workflow",
         "emptyHint": "Click a file link in the chat to preview",
         "emptyHintSub": "Or select an artifact above",
-        "dismissTab": "Close this artifact"
+        "dismissTab": "Close this artifact",
+        "shareDialog": {
+            "title": "Share to DingTalk",
+            "description": "Confirm the content, then DingTalk will open the recipient picker.",
+            "fieldTitle": "Title",
+            "fieldBody": "Body",
+            "fieldLink": "Link",
+            "localUrlHint": "This link is a local preview URL. Colleagues outside your network may not be able to open it.",
+            "cancel": "Cancel",
+            "confirm": "Share",
+            "success": "DingTalk recipient picker opened",
+            "failed": "Share failed. Please try again."
+        }
     }
 }
