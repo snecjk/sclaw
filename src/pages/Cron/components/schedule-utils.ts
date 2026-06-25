@@ -1,6 +1,21 @@
-import type { ScheduleValue } from './SchedulePicker';
+/** 与 SchedulePicker 兼容的计划值类型（不含 once） */
+export interface ScheduleValueCompat {
+  frequency: 'daily' | 'weekly' | 'monthly';
+  weekDays: number[];
+  monthDay?: number;
+  time: string;
+}
 
-export function scheduleValueToCron(value: ScheduleValue): string {
+/** 完整计划值类型（含 once，用于 Cron/ScheduledTasks 页面） */
+export interface ScheduleValueFull {
+  frequency: 'daily' | 'weekly' | 'monthly' | 'once';
+  onceDate?: string;
+  weekDays: number[];
+  monthDay?: number;
+  time: string;
+}
+
+export function scheduleValueToCron(value: ScheduleValueCompat | ScheduleValueFull): string {
   const [hour, minute] = value.time.split(':');
   const m = minute || '00';
   const h = hour || '09';
@@ -13,12 +28,11 @@ export function scheduleValueToCron(value: ScheduleValue): string {
       return `${m} ${h} * * ${days.join(',')}`;
     }
     case 'monthly': return `${m} ${h} ${value.monthDay ?? 1} * *`;
-    case 'once': return `${m} ${h} ${value.onceDate ? new Date(value.onceDate).getDate() : 1} ${value.onceDate ? new Date(value.onceDate).getMonth() + 1 : 1} *`;
     default: return `${m} ${h} * * *`;
   }
 }
 
-export function cronToScheduleValue(cron: string | unknown): ScheduleValue {
+export function cronToScheduleValue(cron: string | unknown): ScheduleValueCompat {
   if (typeof cron !== 'string') {
     if (cron && typeof cron === 'object') {
       const s = cron as { kind?: string; expr?: string };
@@ -53,7 +67,7 @@ export function cronToScheduleValue(cron: string | unknown): ScheduleValue {
   return { frequency: 'daily', time, weekDays: [1, 2, 3, 4, 5] };
 }
 
-export function defaultScheduleValue(): ScheduleValue {
+export function defaultScheduleValue(): ScheduleValueCompat {
   return {
     frequency: 'daily',
     time: '09:00',
