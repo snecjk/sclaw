@@ -135,17 +135,44 @@ export function isScheduledTaskAgentSessionKey(sessionKey: string): boolean {
 
 export interface ClaudeScheduledTaskSessionKeyParts {
   taskId: string;
+  date?: string; // YYYY-MM-DD for dated aggregate sessions
 }
 
 export function parseClaudeScheduledTaskSessionKey(sessionKey: string): ClaudeScheduledTaskSessionKeyParts | null {
   if (!sessionKey.startsWith('claude-task:')) return null;
-  const taskId = sessionKey.slice('claude-task:'.length).trim();
-  if (!taskId) return null;
-  return { taskId };
+  const rest = sessionKey.slice('claude-task:'.length);
+  const parts = rest.split(':');
+  // claude-task:{taskId} (base)
+  if (parts.length === 1) {
+    const taskId = parts[0]?.trim();
+    if (!taskId) return null;
+    return { taskId };
+  }
+  // claude-task:{taskId}:{YYYY-MM-DD} (dated aggregate)
+  if (parts.length === 2) {
+    const taskId = parts[0]?.trim();
+    const date = parts[1]?.trim();
+    if (!taskId) return null;
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return { taskId, date };
+    }
+    // Non-date second segment — treat as base key
+    return { taskId };
+  }
+  return null;
 }
 
 export function isClaudeScheduledTaskSessionKey(sessionKey: string): boolean {
   return parseClaudeScheduledTaskSessionKey(sessionKey) != null;
+}
+
+export function isClaudeScheduledTaskDatedSessionKey(sessionKey: string): boolean {
+  const parsed = parseClaudeScheduledTaskSessionKey(sessionKey);
+  return parsed?.date != null;
+}
+
+export function buildClaudeTaskDatedSessionKey(taskId: string, date: string): string {
+  return `claude-task:${taskId}:${date}`;
 }
 
 export function buildClaudeScheduledTaskSessionHistoryPath(sessionKey: string, limit = CHAT_HISTORY_LIMIT): string {
@@ -192,5 +219,24 @@ export function getCronRunSessionAggregateKey(runSessionKey: string): string | n
   const m = String(today.getMonth() + 1).padStart(2, '0');
   const d = String(today.getDate()).padStart(2, '0');
   return `agent:${parsed.agentId}:cron:${parsed.jobId}:${y}-${m}-${d}`;
+}
+
+// ---------------------------------------------------------------------------
+// Claude Task Run Session → Daily Aggregate Key Mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps a Claude task run session key to its corresponding daily aggregate session key.
+ * e.g. `claude-task-run:abc-123:def-456` → `claude-task:abc-123:2026-06-25`
+ * Returns null if the input is not a Claude task run session key.
+ */
+export function getClaudeTaskRunSessionAggregateKey(runSessionKey: string): string | null {
+  const parsed = parseClaudeScheduledTaskRunSessionKey(runSessionKey);
+  if (!parsed) return null;
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, '0');
+  const d = String(today.getDate()).padStart(2, '0');
+  return `claude-task:${parsed.taskId}:${y}-${m}-${d}`;
 }
 

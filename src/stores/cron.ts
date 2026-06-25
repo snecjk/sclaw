@@ -217,6 +217,7 @@ export const useCronStore = create<CronState>((set) => ({
         if (payload.model !== undefined) body.model = payload.model;
         if (payload.permissionProfile !== undefined) body.permissionProfile = payload.permissionProfile;
         if (payload.timeoutSec !== undefined) body.timeoutSec = payload.timeoutSec;
+        if (payload.workflowCode !== undefined) body.workflowCode = payload.workflowCode;
         const updated = await hostApiFetch<ClaudeScheduledTask>(`/api/claude-scheduled-tasks/${encodeURIComponent(id)}`, {
           method: 'PUT',
           body: JSON.stringify(body),

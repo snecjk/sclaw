@@ -10,6 +10,7 @@ import { glassSectionSurface } from '@/lib/surfaces';
 import {
   fetchDingTalkStatus,
   installDwsCli,
+  isDwsInstallFetchFailedMessage,
   loginDingTalk,
   type DingTalkStatusResponse,
 } from '@/lib/host-api';
@@ -59,8 +60,12 @@ export function DwsCliSettings() {
       await refreshStatus();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setError(message);
-      toast.error(t('dwsCli.installFailed'), { description: message });
+      if (isDwsInstallFetchFailedMessage(message)) {
+        toast.error(t('dwsCli.installFailed'));
+      } else {
+        setError(message);
+        toast.error(t('dwsCli.installFailed'), { description: message });
+      }
     } finally {
       setInstalling(false);
     }

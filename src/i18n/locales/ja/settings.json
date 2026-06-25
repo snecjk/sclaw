@@ -175,7 +175,7 @@
     "auth": "ログイン状態",
     "authenticated": "ログイン済み",
     "notAuthenticated": "未ログイン",
-    "install": "钉钉 CLI をインストール",
+    "install": "钉钉を認可",
     "reinstall": "更新を確認",
     "installing": "インストール中…",
     "login": "钉钉にログイン",

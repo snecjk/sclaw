@@ -36,6 +36,7 @@ export async function handleClaudeScheduledTaskRoutes(
         model?: string;
         permissionProfile?: 'readonly-safe' | 'workspace-write' | 'dangerous-bypass';
         timeoutSec?: number;
+        workflowCode?: string;
         retryPolicy?: {
           maxAttempts?: number;
           backoffSec?: number;

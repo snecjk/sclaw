@@ -103,6 +103,7 @@ export interface ClaudeScheduledTask {
   model?: string;
   permissionProfile: ClaudeTaskPermissionProfile;
   timeoutSec: number;
+  workflowCode?: string;
   nextRunAt?: string;
   lastRun?: ClaudeScheduledTaskLastRun | null;
   createdAt: string;
@@ -119,6 +120,7 @@ export interface ClaudeScheduledTaskCreateInput {
   model?: string;
   permissionProfile?: ClaudeTaskPermissionProfile;
   timeoutSec?: number;
+  workflowCode?: string;
 }
 
 export interface ClaudeScheduledTaskUpdateInput {
@@ -133,6 +135,7 @@ export interface ClaudeScheduledTaskUpdateInput {
   model?: string;
   permissionProfile?: ClaudeTaskPermissionProfile;
   timeoutSec?: number;
+  workflowCode?: string;
 }
 
 export interface ClaudeScheduledTaskRunRecord {

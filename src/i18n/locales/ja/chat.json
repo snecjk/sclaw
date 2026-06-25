@@ -60,7 +60,7 @@
         "dingtalkLoadMore": "さらに表示",
         "dingtalkNoResults": "一致する結果がありません",
         "dingtalkNeedsInstall": "@ 指定には钉钉 CLI のインストールが必要です",
-        "dingtalkInstall": "钉钉 CLI をインストール",
+        "dingtalkInstall": "钉钉を認可",
         "dingtalkInstalling": "インストール中…",
         "dingtalkNeedsAuth": "連絡先を検索するには钉钉へのログインが必要です",
         "dingtalkLogin": "钉钉にログイン",
@@ -169,11 +169,24 @@
         "fullscreen": "全画面",
         "refresh": "更新",
         "download": "ダウンロード",
-        "openExternal": "共有",
+        "share": "DingTalkで共有",
+        "openExternal": "ブラウザで開く",
         "editWorkflow": "ワークフローを編集",
         "workflowTab": "ワークフロー",
         "emptyHint": "チャット内のファイルリンクをクリックしてプレビュー",
         "emptyHintSub": "または上から成果物を選択",
-        "dismissTab": "この成果物を閉じる"
+        "dismissTab": "この成果物を閉じる",
+        "shareDialog": {
+            "title": "DingTalkで共有",
+            "description": "内容を確認後、DingTalkの宛先選択画面を開きます。",
+            "fieldTitle": "タイトル",
+            "fieldBody": "本文",
+            "fieldLink": "リンク",
+            "localUrlHint": "このリンクはローカルプレビュー用です。社外の同僚は開けない場合があります。",
+            "cancel": "キャンセル",
+            "confirm": "共有する",
+            "success": "DingTalkの宛先選択を開きました",
+            "failed": "共有に失敗しました。しばらくしてから再試行してください"
+        }
     }
 }
