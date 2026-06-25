@@ -7,7 +7,7 @@ import { HomeMainConversation } from './HomeMainConversation';
 import { useHomeConversationActive } from './use-home-conversation-active';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
-import { homeHubFooterShellClass, homeHubMainScrollClass } from './home-hub-surface-styles';
+import { homeHubFooterShellClass, homeHubMainScrollClass, homeHubMainScrollHostClass } from './home-hub-surface-styles';
 import { HomeWorkflowGuideCards } from './HomeWorkflowGuideCards';
 import { cn } from '@/lib/utils';
 import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
@@ -40,10 +40,12 @@ export function HomeSiteSurface({ seedText }: { seedText?: string }) {
             onSend={handleHubSend}
           />
         ) : (
-          <div className={homeHubMainScrollClass}>
-            <HomeHero variant="site" />
-            <HomeWorkflowGuideCards onSend={handleHubSend} />
-            {/* <HomeOfficialWorkflowCards onSend={handleHubSend} /> */}
+          <div className={homeHubMainScrollHostClass}>
+            <div className={homeHubMainScrollClass}>
+              <HomeHero variant="site" />
+              <HomeWorkflowGuideCards onSend={handleHubSend} />
+              {/* <HomeOfficialWorkflowCards onSend={handleHubSend} /> */}
+            </div>
           </div>
         )}
       </div>

@@ -431,6 +431,22 @@
   @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
 }
 
+/**
+ * 首页 Hero + 卡片区：矮屏顶对齐（Logo 不被输入框顶出视口），中间区足够高时再垂直居中。
+ * 阈值 ~480px ≈ 默认窗口扣除顶栏/输入区后，Hero+三卡能完整放下的高度。
+ */
+.home-hub-main-scroll-host {
+  container-type: size;
+  container-name: home-hub-main;
+}
+
+@container home-hub-main (min-height: 480px) {
+  .home-hub-main-scroll {
+    justify-content: center;
+    padding-top: 0;
+  }
+}
+
 /* Prose styling for markdown — match chat user bubble (text-sm / 14px) */
 .prose {
   font-size: 0.875rem;

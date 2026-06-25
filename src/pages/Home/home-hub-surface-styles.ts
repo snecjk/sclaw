@@ -34,10 +34,14 @@ export const homeHubCardGridClass = 'grid w-full gap-4 sm:grid-cols-3';
 export const homeHubContentMaxWidthClass =
   'mx-auto w-full min-w-0 max-w-[var(--sto-hero-input-max-w)]';
 
-/** Hero + 卡片主滚动区（与底部输入框同宽居中） */
+/** 首页主列容器：供 container query 判断中间区高度（矮屏顶对齐 / 高屏居中 Hero） */
+export const homeHubMainScrollHostClass =
+  'home-hub-main-scroll-host flex min-h-0 flex-1 flex-col overflow-hidden';
+
+/** Hero + 卡片主滚动区（与底部输入框同宽居中；对齐策略见 globals.css @container home-hub-main） */
 export const homeHubMainScrollClass = cn(
   homeHubContentMaxWidthClass,
-  'flex min-h-0 flex-1 flex-col justify-center gap-10 overflow-y-auto overscroll-y-contain pb-6',
+  'home-hub-main-scroll flex min-h-0 flex-1 flex-col justify-start gap-10 overflow-y-auto overscroll-y-contain pb-6 pt-4 sm:pt-6',
 );
 
 /** 底部输入 + 免责区外壳（底边距与对话列一致，仅依赖 MainLayout body pb-5） */
