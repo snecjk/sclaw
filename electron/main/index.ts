@@ -861,27 +861,16 @@ if (gotTheLock) {
       return;
     }
 
-    const stopPromise = gatewayManager.stop().catch((err) => {
-      logger.warn('gatewayManager.stop() error during quit:', err);
-    });
-    const timeoutPromise = new Promise<'timeout'>((resolve) => {
-      setTimeout(() => resolve('timeout'), 5000);
-    });
-
-    void Promise.race([stopPromise.then(() => 'stopped' as const), timeoutPromise]).then((result) => {
-      if (result === 'timeout') {
-        logger.warn('Gateway shutdown timed out during app quit; proceeding with forced quit');
-        void gatewayManager?.forceTerminateOwnedProcessForQuit().then((terminated) => {
-          if (terminated) {
-            logger.warn('Forced gateway process termination completed after quit timeout');
-          }
-        }).catch((err) => {
-          logger.warn('Forced gateway termination failed after quit timeout:', err);
-        });
-      }
-      markQuitCleanupCompleted(quitLifecycleState);
-      app.quit();
-    });
+    void import('./gateway-quit-cleanup').then(({ shutdownGatewayForQuit }) =>
+      shutdownGatewayForQuit(gatewayManager!)
+        .catch((err) => {
+          logger.warn('Gateway quit cleanup failed:', err);
+        })
+        .finally(() => {
+          markQuitCleanupCompleted(quitLifecycleState);
+          app.quit();
+        }),
+    );
   });
 
   // Best-effort Gateway cleanup on unexpected crashes.
