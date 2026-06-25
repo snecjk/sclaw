@@ -37,9 +37,9 @@ export const homeHubMainScrollClass = cn(
   'flex min-h-0 flex-1 flex-col justify-center gap-10 overflow-y-auto overscroll-y-contain pb-6',
 );
 
-/** 底部输入 + 免责区外壳 */
+/** 底部输入 + 免责区外壳（底边距与对话列一致，仅依赖 MainLayout body pb-5） */
 export const homeHubFooterShellClass =
-  'shrink-0 px-4 pb-4 pt-4 sm:px-6';
+  'shrink-0 px-4 pb-0 pt-4 sm:px-6';
 
 /** MasterGo font_2:6551 + Grey-5 底部免责 */
 export const homeHubFooterDisclaimerClass =
