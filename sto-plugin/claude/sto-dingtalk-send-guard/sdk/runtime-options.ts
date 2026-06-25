@@ -1,6 +1,10 @@
 import type { HookCallbackMatcher, HookEvent } from '@anthropic-ai/claude-agent-sdk';
+import { appendDingTalkAgentSendDisclaimer } from '../../../../shared/dingtalk-disclaimer';
 import { buildDingTalkMentionSystemContext } from '../../../../shared/dingtalk-mention-context';
-import { fixDwsChatMessageSendToolParams } from '../../../../shared/dws-send-text';
+import {
+  buildDwsChatMessageSendAgentCommandExample,
+  fixDwsChatMessageSendToolParams,
+} from '../../../../shared/dws-send-text';
 import {
   evaluateDingTalkSendGuard,
   handleDingTalkSendGuardAfter,
@@ -35,15 +39,23 @@ function readCommand(params: Record<string, unknown> | undefined): string {
   return '';
 }
 
+function buildDingTalkSendFormatExample(): string {
+  return buildDwsChatMessageSendAgentCommandExample({
+    recipientKind: 'user',
+    recipientId: '<userId>',
+    text: appendDingTalkAgentSendDisclaimer('{正文}'),
+  });
+}
+
 function resolveDingTalkSendFormatProblem(command: string): string | null {
   if (!/dws\s+chat\s+message\s+send\b/i.test(command) || !/--text\s+/i.test(command)) {
     return null;
   }
   if (/<\/?font\b/i.test(command)) {
-    return '钉钉发送正文禁止使用 <font> HTML。请改用 Markdown 底栏：--- 后接 `> *本消息由 STO Claw 代为发送，非本人实时回复。*`。';
+    return `钉钉发送正文禁止使用 <font> HTML。请改用 Markdown 底栏，示例：\n${buildDingTalkSendFormatExample()}`;
   }
   if (/--text\s+\$[A-Za-z_][A-Za-z0-9_]*/i.test(command) || /--text\s+(?:--format\b|$)/i.test(command)) {
-    return '钉钉发送正文不能使用 shell 变量或空 `--text`，否则可能把 `--format` 当正文发送。请直接使用 `--text "正文\\n\\n---\\n\\n> *本消息由 STO Claw 代为发送，非本人实时回复。*"`。';
+    return `钉钉发送正文不能使用 shell 变量或空 \`--text\`。请直接使用示例格式：\n${buildDingTalkSendFormatExample()}`;
   }
   return null;
 }

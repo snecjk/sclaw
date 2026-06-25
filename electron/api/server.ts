@@ -22,7 +22,10 @@ import { handleDingTalkRoutes } from './routes/dingtalk';
 import { handleStoSyncRoutes } from './routes/sto-sync';
 import { handleTokenQuotaRoutes } from './routes/token-quota';
 import { handleSubscriptionRoutes } from './routes/subscriptions';
+import { handleMyTasksRoutes } from './routes/my-tasks';
+import { handleDictionaryRoutes } from './routes/dictionaries';
 import { handleWorkflowRoutes } from './routes/workflows';
+import { handleWorkflowPlangroundRoutes } from './routes/workflow-playground';
 import { sendJson } from './route-utils';
 
 type RouteHandler = (
@@ -49,11 +52,15 @@ const routeHandlers: RouteHandler[] = [
   handleSessionRoutes,
   handleCronRoutes,
   handleScheduledTaskRoutes,
+  handleDictionaryRoutes,
+  handleWorkflowRoutes,
   handleClaudeScheduledTaskRoutes,
   handleDingTalkRoutes,
+  handleMyTasksRoutes,
   handleLogRoutes,
   handleUsageRoutes,
   handleWorkflowRoutes,
+	handleWorkflowPlangroundRoutes,
 ];
 
 export function startHostApiServer(ctx: HostApiContext, port = PORTS.CLAWX_HOST_API): Server {

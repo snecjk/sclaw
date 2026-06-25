@@ -2262,7 +2262,7 @@ function registerProviderHandlers(gatewayManager: GatewayManager): void {
         const resolvedBaseUrl = options?.baseUrl || provider?.baseUrl || registryBaseUrl;
         const resolvedProtocol = options?.apiProtocol || provider?.apiProtocol;
 
-        console.log(`[stoclaw-validate] validating provider type: ${providerType}`);
+        
         return await validateApiKeyWithProvider(providerType, apiKey, {
           baseUrl: resolvedBaseUrl,
           apiProtocol: resolvedProtocol,
@@ -2279,9 +2279,17 @@ function registerProviderHandlers(gatewayManager: GatewayManager): void {
  * Shell-related IPC handlers
  */
 function registerShellHandlers(): void {
-  // Open external URL
+  // Open external URL (https / dingtalk deep links only)
   ipcMain.handle('shell:openExternal', async (_, url: string) => {
     try {
+      const parsed = new URL(url);
+      const allowed =
+        parsed.protocol === 'https:'
+        || parsed.protocol === 'http:'
+        || parsed.protocol === 'dingtalk:';
+      if (!allowed) {
+        throw new Error(`Blocked external protocol: ${parsed.protocol}`);
+      }
       await shell.openExternal(url);
     } catch (err) {
       console.error('Failed to open external URL via IPC:', url, err);

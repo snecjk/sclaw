@@ -24,6 +24,7 @@ export interface ScheduledTask {
   ossObjectKey: string | null;
   dialogSessionKey: string | null;
   openclawGatewayUrl: string | null;
+  workflowCode: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -42,6 +43,7 @@ export interface ScheduledTaskCreateInput {
   dialogSessionKey?: string;
   openclawGatewayUrl?: string;
   dingTalkMentions?: DingTalkMention[];
+  workflowCode?: string;
 }
 
 export interface ScheduledTaskUpdateInput {
@@ -55,6 +57,7 @@ export interface ScheduledTaskUpdateInput {
   dingdingGroupId?: string;
   dingdingGroupName?: string;
   dingTalkMentions?: DingTalkMention[];
+  workflowCode?: string;
 }
 
 export interface ScheduledTaskRun {
@@ -100,6 +103,7 @@ export interface ClaudeScheduledTask {
   model?: string;
   permissionProfile: ClaudeTaskPermissionProfile;
   timeoutSec: number;
+  workflowCode?: string;
   nextRunAt?: string;
   lastRun?: ClaudeScheduledTaskLastRun | null;
   createdAt: string;
@@ -116,6 +120,7 @@ export interface ClaudeScheduledTaskCreateInput {
   model?: string;
   permissionProfile?: ClaudeTaskPermissionProfile;
   timeoutSec?: number;
+  workflowCode?: string;
 }
 
 export interface ClaudeScheduledTaskUpdateInput {
@@ -130,6 +135,7 @@ export interface ClaudeScheduledTaskUpdateInput {
   model?: string;
   permissionProfile?: ClaudeTaskPermissionProfile;
   timeoutSec?: number;
+  workflowCode?: string;
 }
 
 export interface ClaudeScheduledTaskRunRecord {

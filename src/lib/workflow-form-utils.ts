@@ -136,6 +136,35 @@ function mapField(schemaField: WorkflowSchemaField): FormField {
   }
 }
 
+export interface BuildWorkflowFormConfigOptions {
+  templateId?: string;
+  schemaHash?: string;
+}
+
+/** Stable formId for workflow parameter forms (one per template). */
+export function buildWorkflowFormId(templateId: string): string {
+  return `workflow-form-${templateId}`;
+}
+
+const formConfigCache = new Map<string, UserFormConfig>();
+
+function formConfigCacheKey(
+  schema: WorkflowSchema,
+  userInputText: string,
+  defaultValues: Record<string, unknown> | undefined,
+  options?: BuildWorkflowFormConfigOptions,
+): string {
+  const templateKey = options?.templateId ?? schema.nodeId;
+  const hashKey = options?.schemaHash ?? '';
+  const defaultsKey = defaultValues ? JSON.stringify(defaultValues) : '';
+  return `${templateKey}:${hashKey}:${userInputText}:${defaultsKey}`;
+}
+
+/** Clear cached form configs (tests or schema refresh). */
+export function clearWorkflowFormConfigCache(): void {
+  formConfigCache.clear();
+}
+
 /**
  * Build UserFormConfig from startup schema and user input text
  */
@@ -143,7 +172,11 @@ export function buildWorkflowFormConfig(
   schema: WorkflowSchema,
   userInputText: string,
   defaultValues?: Record<string, unknown>,
+  options?: BuildWorkflowFormConfigOptions,
 ): UserFormConfig {
+  const cacheKey = formConfigCacheKey(schema, userInputText, defaultValues, options);
+  const cached = formConfigCache.get(cacheKey);
+  if (cached) return cached;
   // Only include fields from confirm-mode steps
   const confirmStepIds = new Set(
     schema.steps.filter((s) => s.mode === 'confirm').map((s) => s.id),
@@ -208,8 +241,9 @@ export function buildWorkflowFormConfig(
     }
   }
 
-  return {
-    id: `workflow-${schema.nodeId}-${Date.now()}`,
+  const stableId = `workflow-${options?.templateId ?? schema.nodeId}-${options?.schemaHash ?? 'default'}`;
+  const config: UserFormConfig = {
+    id: stableId,
     title: schema.steps.find((s) => confirmStepIds.has(s.id))?.title ?? '工作流参数',
     description: '请填写以下工作流参数',
     fields,
@@ -219,6 +253,8 @@ export function buildWorkflowFormConfig(
     prevLabel: '上一步',
     allowCancel: false,
   };
+  formConfigCache.set(cacheKey, config);
+  return config;
 }
 
 /** Detect objects accidentally created by spreading a string (`{..."abc"}` → {0:"a",1:"b"}). */
@@ -271,12 +307,35 @@ export function normalizeWorkflowFieldValue(value: unknown): unknown {
   return value;
 }
 
+/** Whether a form field value should be treated as empty for required validation. */
+export function isEmptyFormValue(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (typeof value === 'string' && value.trim() === '') return true;
+
+  const normalized = normalizeWorkflowFieldValue(value);
+  if (normalized === undefined || normalized === null) return true;
+  if (typeof normalized === 'string' && normalized.trim() === '') return true;
+  if (Array.isArray(normalized) && normalized.length === 0) return true;
+  if (typeof normalized === 'object' && !Array.isArray(normalized)) {
+    return Object.keys(normalized as Record<string, unknown>).length === 0;
+  }
+  return false;
+}
+
 /** Preview row for workflow detail panel (supports titled_group sub-fields). */
 export interface WorkflowFieldPreviewRow {
   key: string;
   label: string;
   display: string;
   description?: string;
+}
+
+/** 参数已确认折叠区：按表单 confirm 步骤分组展示 */
+export interface WorkflowValuesSummaryGroup {
+  /** 步骤 / 分类标题（如「数据来源（系统预置）」） */
+  title: string;
+  /** 紧凑单行文案（多选以顿号、对象子项以分号拼接） */
+  content: string;
 }
 
 function parseWorkflowObjectValue(value: unknown): Record<string, unknown> | null {
@@ -408,44 +467,222 @@ export function formatWorkflowValueForDisplay(
   return text;
 }
 
+/** Build grouped parameter summary for「参数已确认」折叠面板（按 confirm 步骤分页）。 */
+export function buildWorkflowValuesSummaryGroups(
+  schema: WorkflowSchema,
+  values: Record<string, unknown>,
+): WorkflowValuesSummaryGroup[] {
+  const confirmStepIds = new Set(
+    schema.steps.filter((s) => s.mode === 'confirm').map((s) => s.id),
+  );
+  const confirmSteps = schema.steps
+    .filter((s) => confirmStepIds.has(s.id))
+    .sort((a, b) => a.order - b.order);
+
+  const groups: WorkflowValuesSummaryGroup[] = [];
+
+  const pushField = (title: string, field: WorkflowSchemaField) => {
+    const val = values[field.key];
+    if (val === undefined || val === null || val === '') return;
+
+    const objectLines = formatWorkflowObjectLines(val, field);
+    if (objectLines.length > 0) {
+      groups.push({ title, content: objectLines.join('；') });
+      return;
+    }
+
+    const display = formatWorkflowValueForDisplay(val, field);
+    if (display) groups.push({ title, content: display });
+  };
+
+  if (confirmSteps.length > 0) {
+    for (const step of confirmSteps) {
+      const stepFields = schema.fields
+        .filter((f) => f.group === step.id)
+        .sort((a, b) => a.order - b.order)
+        .filter((f) => {
+          const v = values[f.key];
+          return v !== undefined && v !== null && v !== '';
+        });
+
+      if (stepFields.length === 0) continue;
+
+      if (stepFields.length === 1) {
+        pushField(step.title, stepFields[0]);
+        continue;
+      }
+
+      for (const field of stepFields) {
+        const title = field.groupTitle?.trim() || field.label || step.title;
+        pushField(title, field);
+      }
+    }
+  } else {
+    for (const field of [...schema.fields].sort((a, b) => a.order - b.order)) {
+      const title = field.groupTitle?.trim() || field.label;
+      pushField(title, field);
+    }
+  }
+
+  return groups;
+}
+
+export function serializeWorkflowValuesSummaryGroups(
+  groups: WorkflowValuesSummaryGroup[],
+): string {
+  if (groups.length === 0) return '参数已确认';
+  const body = groups
+    .map((g) => `【${g.title}】\n${g.content}`)
+    .join('\n');
+  return `已确认以下参数：\n${body}`;
+}
+
+/** 解析用户消息中的分组参数摘要（新格式【标题】+ 兼容旧列表格式）。 */
+export function parseWorkflowParamsSummaryGroups(content: string): WorkflowValuesSummaryGroup[] {
+  const trimmed = content.trim();
+  const bracketGroups: WorkflowValuesSummaryGroup[] = [];
+  const bracketRegex = /【([^】]+)】\s*\n([\s\S]*?)(?=\n【|$)/g;
+  let bracketMatch: RegExpExecArray | null;
+  while ((bracketMatch = bracketRegex.exec(trimmed)) !== null) {
+    const title = bracketMatch[1].trim();
+    const contentBlock = bracketMatch[2]
+      .split('\n')
+      .map((line) => line.replace(/^[\s·\-]+/, '').trim())
+      .filter(Boolean)
+      .join('；');
+    if (title && contentBlock) {
+      bracketGroups.push({ title, content: contentBlock });
+    }
+  }
+  if (bracketGroups.length > 0) return bracketGroups;
+
+  const legacyGroups: WorkflowValuesSummaryGroup[] = [];
+  let current: WorkflowValuesSummaryGroup | null = null;
+
+  for (const rawLine of trimmed.split(/\r?\n/)) {
+    const line = rawLine.replace(/^[\s\-]+/, '').trim();
+    if (!line || line === '已确认以下参数：' || line === '已确认以下参数') continue;
+
+    const topMatch = line.match(/^([^：:]+)[：:]\s*(.*)$/);
+    if (topMatch && !line.startsWith('·')) {
+      if (current) legacyGroups.push(current);
+      const value = topMatch[2].trim();
+      current = {
+        title: topMatch[1].trim(),
+        content: value,
+      };
+      continue;
+    }
+
+    const subMatch = line.match(/^[·•]\s*(.+)$/);
+    if (subMatch && current) {
+      const piece = subMatch[1].trim();
+      current.content = current.content
+        ? `${current.content}；${piece}`
+        : piece;
+    }
+  }
+  if (current) legacyGroups.push(current);
+
+  return legacyGroups;
+}
+
+/** B3：工作流参数引导文案（客户端 / 模型产出的表单引导） */
+export function isWorkflowParameterIntroText(content: string): boolean {
+  return (
+    /即将运行工作流「/.test(content)
+    || /工作流「[^」]+」已就绪/.test(content)
+    || /请在下方.*表单/.test(content)
+    || /已找到「[^」]+」工作流模板/.test(content)
+    || /需要您确认以下/.test(content)
+  );
+}
+
+/** 流式输出前半段：模型常用「已找到模板 / 需要确认」等表述，尚未凑齐完整 intro */
+export function isPartialWorkflowGuidanceStreamingText(content: string): boolean {
+  const trimmed = content.trim();
+  if (!trimmed) return false;
+  return (
+    /工作流「|即将运行工作流/.test(content)
+    || /已找到「/.test(content)
+    || /工作流模板/.test(content)
+    || /需要您确认/.test(content)
+    || /确认以下/.test(content)
+    || /该工作流将/.test(content)
+  );
+}
+
+/** 助手侧工作流引导正文（含 intro / 模板已找到 / 流式前半段） */
+export function isWorkflowGuidanceAssistantText(content: string): boolean {
+  if (isWorkflowParamsSummaryText(content)) return false;
+  return isWorkflowParameterIntroText(content) || isPartialWorkflowGuidanceStreamingText(content);
+}
+
+/** @deprecated 使用 {@link isPartialWorkflowGuidanceStreamingText} */
+export function isPartialWorkflowIntroStreamingText(content: string): boolean {
+  return isPartialWorkflowGuidanceStreamingText(content);
+}
+
+/** 将 intro 拆成引导段（preamble）与编号环节正文（供分组解析） */
+export function splitWorkflowIntroPreamble(content: string): {
+  preamble: string;
+  numberedBody: string;
+} {
+  const lines = content.split(/\r?\n/);
+  const firstNumberedIndex = lines.findIndex((line) => /^\s*\d+[.、．]\s*/.test(line));
+  if (firstNumberedIndex === -1) {
+    return { preamble: content.trim(), numberedBody: '' };
+  }
+  return {
+    preamble: lines.slice(0, firstNumberedIndex).join('\n').trim(),
+    numberedBody: lines.slice(firstNumberedIndex).join('\n').trim(),
+  };
+}
+
+/** 解析 intro 中的编号环节（`1. 标题 — 说明`）为分组展示。 */
+export function parseWorkflowIntroConfirmStepGroups(
+  content: string,
+): WorkflowValuesSummaryGroup[] {
+  const groups: WorkflowValuesSummaryGroup[] = [];
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const numbered = line.match(/^\d+[.、．]\s*(.+?)(?:\s*[—–-]\s*(.+))?$/);
+    if (!numbered) continue;
+
+    const title = numbered[1].trim();
+    const body = (numbered[2] ?? '').trim();
+    if (!title) continue;
+    groups.push({ title, content: body });
+  }
+
+  return groups;
+}
+
+/** B4：用户侧参数确认摘要（workflow-local-turn / buildWorkflowValuesSummary） */
+export function isWorkflowParamsUserText(content: string): boolean {
+  const trimmed = content.trim();
+  return (
+    trimmed === '参数已确认'
+    || trimmed.startsWith('已确认以下参数')
+    || /^启动工作流「/.test(trimmed)
+  );
+}
+
+/** 助手 A：分组参数摘要（替换 intro 白卡后的正文） */
+export function isWorkflowParamsSummaryText(content: string): boolean {
+  const trimmed = content.trim();
+  return trimmed.startsWith('已确认以下参数');
+}
+
 /** Build user-facing summary after parameter form submission. */
 export function buildWorkflowValuesSummary(
   schema: WorkflowSchema,
   values: Record<string, unknown>,
 ): string {
-  const confirmStepIds = new Set(
-    schema.steps.filter((s) => s.mode === 'confirm').map((s) => s.id),
-  );
-  let fields = schema.fields
-    .filter((f) => confirmStepIds.has(f.group))
-    .sort((a, b) => a.order - b.order);
-
-  // Some templates put fields under nodeId groups — fall back to all fields with values.
-  if (fields.length === 0) {
-    fields = [...schema.fields].sort((a, b) => a.order - b.order);
-  }
-
-  const lines: string[] = [];
-  for (const field of fields) {
-    const val = values[field.key];
-    if (val === undefined || val === null || val === '') continue;
-
-    const objectLines = formatWorkflowObjectLines(val, field);
-    if (objectLines.length > 1) {
-      lines.push(`${field.label}：`);
-      for (const sub of objectLines) {
-        lines.push(`  · ${sub}`);
-      }
-      continue;
-    }
-
-    const display = formatWorkflowValueForDisplay(val, field);
-    if (!display) continue;
-    lines.push(`${field.label}：${display}`);
-  }
-
-  if (lines.length === 0) return '参数已确认';
-  return `已确认以下参数：\n${lines.map((l) => (l.startsWith('  ·') ? l : `- ${l}`)).join('\n')}`;
+  return serializeWorkflowValuesSummaryGroups(buildWorkflowValuesSummaryGroups(schema, values));
 }
 
 /** Fetch schema and build Chinese parameter summary for display / restore. */
@@ -467,15 +704,18 @@ export async function buildWorkflowParamsSummary(
 export function buildWorkflowValuesSummaryFallback(
   values: Record<string, unknown>,
 ): string {
-  const lines = Object.entries(values)
+  const groups: WorkflowValuesSummaryGroup[] = Object.entries(values)
     .filter(([, value]) => value !== undefined && value !== null && value !== '')
     .map(([key, value]) => {
-      if (Array.isArray(value)) return `- ${key}：${value.join('、')}`;
-      if (typeof value === 'object') return `- ${key}：${JSON.stringify(value)}`;
-      return `- ${key}：${String(value)}`;
+      if (Array.isArray(value)) {
+        return { title: key, content: value.join('、') };
+      }
+      if (typeof value === 'object') {
+        return { title: key, content: JSON.stringify(value) };
+      }
+      return { title: key, content: String(value) };
     });
-  if (lines.length === 0) return '参数已确认';
-  return `已确认以下参数：\n${lines.join('\n')}`;
+  return serializeWorkflowValuesSummaryGroups(groups);
 }
 
 /**

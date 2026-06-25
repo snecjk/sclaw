@@ -1,7 +1,7 @@
 {
   "site": {
     "hero": {
-      "title": "STO Claw — smarter outlet operations",
+      "title": "S Claw — smarter outlet operations",
       "subtitle": "An AI work platform that reshapes smart outlet operations and empowers efficient, intelligent day-to-day management."
     },
     "workflowGuide": {
@@ -19,42 +19,43 @@
       "recon": {
         "title": "HQ settlement reconciliation",
         "pill": "Settlement",
-        "status": "Done",
-        "stat1Label": "Net",
-        "stat1Value": "128,560",
-        "stat1Unit": "CNY",
-        "stat2Label": "Income",
-        "stat2Value": "98,750",
-        "stat2Unit": "CNY",
-        "stat3Label": "Expense",
-        "stat3Value": "29,810",
-        "stat3Unit": "CNY",
+        "status": "Not configured",
+        "bodyCaption": "Workflow overview",
+        "bodyDetail": "Connect HQ settlement data, automatically identify abnormal cost fluctuation items, and output reconciliation results — generate trackable, standardized settlement reports.",
         "footerTeam": "Ace settlement squad",
-        "footerHint": "4 exceptions"
+        "footerHint": "Configure workflow",
+        "createPrompt": "HQ settlement reconciliation — create workflow"
       },
       "cost": {
         "title": "Customer cost analysis",
-        "pill": "Task monitoring",
-        "status": "Done",
-        "stat1Label": "Abnormal customers",
-        "stat1Value": "57",
-        "stat1Unit": "items",
-        "stat2Label": "High risk",
-        "stat2Value": "12",
-        "stat2Unit": "items",
-        "stat3Label": "Amount involved",
-        "stat3Value": "-26,980.70",
-        "stat3Unit": "CNY",
+        "pill": "Cost analysis",
+        "status": "Not configured",
+        "bodyCaption": "Workflow overview",
+        "bodyDetail": "Reconstruct per-ticket outbound costs by customer/shop, identify abnormal customers by account category and route-weight segment, and auto-generate cost analysis reports with optimization suggestions.",
         "footerTeam": "Customer tracking squad",
-        "footerHint": "3 exceptions"
+        "footerHint": "Configure workflow",
+        "createPrompt": "Customer cost analysis — create workflow"
       }
     },
     "assistant": {
       "placeholder": "Help me prepare an HQ settlement reconciliation sheet"
     }
   },
+  "homeWorkflowCard": {
+    "createPrompt": "{{label}} — create workflow",
+    "startPrompt": "Start {{label}}",
+    "bodyDetail": "Click to configure and start this workflow",
+    "stat1Label": "Status",
+    "stat1Value": "Pending",
+    "stat2Label": "Nodes",
+    "stat2Value": "-",
+    "stat3Label": "Last run",
+    "stat3Value": "-",
+    "footerTeam": "Workflow team",
+    "footerHint": "Click to start"
+  },
   "hero": {
-    "title": "STO Claw — smarter business management",
+    "title": "S Claw — smarter business management",
     "subtitle": "An AI workspace that drives team collaboration and stronger day-to-day operations."
   },
   "summary": {
@@ -121,7 +122,7 @@
     "dataAnalysis": "Data analysis",
     "workflow": "Workflow",
     "send": "Send",
-    "footerDisclaimer": "STO Claw is AI-assisted; verify important information with your team before acting.",
+    "footerDisclaimer": "S Claw is AI-assisted; verify important information with your team before acting.",
     "gatewayRequired": "Connect the gateway before sending.",
     "sendFailed": "Could not send. Open Chat for details."
   },

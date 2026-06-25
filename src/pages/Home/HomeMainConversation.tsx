@@ -1,39 +1,76 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowDown, Loader2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
 import { useWorkflowCompletion } from '@/hooks/use-workflow-completion';
-import { useAgentsStore } from '@/stores/agents';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
-import { ChatToolbar } from '@/pages/Chat/ChatToolbar';
-import { ChatSearchBar } from '@/pages/Chat/ChatSearchBar';
+import { ChatContentHeaderActions } from '@/pages/Chat/ChatSearchBar';
+import { ChatPreviewHeaderTabs } from '@/pages/Chat/ChatPreviewHeaderTabs';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/stores/settings';
+import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
+import {
+  stoSplitChatScrollClass,
+  stoChatScrollContentClass,
+  stoSplitGridBodyChatClass,
+  stoSplitGridBodyPreviewClass,
+  stoSplitGridBodyResizerClass,
+  stoSplitResizerActiveClass,
+  stoSplitRowContentsClass,
+} from '@/lib/surfaces';
+import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
+import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
+import { CronTaskCreateModal } from '@/pages/Cron/components/CronTaskCreateModal';
+import { HomeComposer } from '@/pages/Home/HomeComposer';
+import type { FileAttachment } from '@/pages/Chat/ChatInput';
+import type { DingTalkMention } from '@/types/dingtalk-mention';
+import { useContentHeader } from '@/components/layout/content-header-context';
+import { resolveSessionLabel } from '@/lib/session-label';
 
 /**
  * Main-agent conversation thread on the home route (replaces the old `/chat` welcome + messages UI).
+ * 三栏预览时输入框与消息同属左侧对话列（与 Chat / 任务子项一致）。
  */
-export function HomeMainConversation({ className }: { className?: string }) {
+export interface HomeMainConversationProps {
+  className?: string;
+  /** 一次性填入输入框的种子文案 */
+  seedText?: string;
+  onSend?: (
+    text: string,
+    attachments?: FileAttachment[],
+    targetAgentId?: string | null,
+    dingTalkMentions?: DingTalkMention[],
+    workflowId?: string | null,
+  ) => void;
+}
+
+export function HomeMainConversation({ className, seedText, onSend }: HomeMainConversationProps) {
+  const navigate = useNavigate();
   const { t } = useTranslation(['chat', 'common']);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const sessions = useChatStore((s) => s.sessions);
+  const sessionLabels = useChatStore((s) => s.sessionLabels);
   const messages = useChatStore((s) => s.messages);
   const loading = useChatStore((s) => s.loading);
   const sending = useChatStore((s) => s.sending);
   const error = useChatStore((s) => s.error);
   const showThinking = useChatStore((s) => s.showThinking);
+  const toggleThinking = useChatStore((s) => s.toggleThinking);
+  const refresh = useChatStore((s) => s.refresh);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const clearError = useChatStore((s) => s.clearError);
-  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
   useWorkflowCompletion(currentSessionKey);
 
@@ -61,7 +98,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     updateJumpToLatestVisibility();
     scrollElement.addEventListener('scroll', updateJumpToLatestVisibility, { passive: true });
     window.addEventListener('resize', updateJumpToLatestVisibility);
@@ -71,10 +108,6 @@ export function HomeMainConversation({ className }: { className?: string }) {
       window.removeEventListener('resize', updateJumpToLatestVisibility);
     };
   }, [currentSessionKey, scrollRef, updateJumpToLatestVisibility]);
-
-  useEffect(() => {
-    void fetchAgents();
-  }, [fetchAgents]);
 
   useEffect(() => {
     const unsub = createAutoSendWatcher(() => scrollToBottom('auto'));
@@ -97,14 +130,14 @@ export function HomeMainConversation({ className }: { className?: string }) {
   });
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     updateJumpToLatestVisibility();
   }, [messages.length, sending, pendingFinal, streamText, streamingTools.length, updateJumpToLatestVisibility]);
 
   useEffect(() => {
     const contentElement = contentRef.current;
     if (!contentElement) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setSearchableMessages([]);
       return;
     }
@@ -196,9 +229,12 @@ export function HomeMainConversation({ className }: { className?: string }) {
     [scrollToBottom],
   );
 
-  const [previewPanelWidth, setPreviewPanelWidth] = useState(480);
-  const [isResizing, setIsResizing] = useState(false);
-  const previewPanelRef = useRef<HTMLDivElement>(null);
+  const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
+  const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
+  const { splitRowRef, previewPanelRef, startResize, isResizing } = useSplitPanelResize(
+    previewPanelPercent,
+    setPreviewSplitPercent,
+  );
 
   const allMessagesForPreview = useMemo(() => {
     const arr = [...messages] as RawMessage[];
@@ -210,77 +246,125 @@ export function HomeMainConversation({ className }: { className?: string }) {
 
   const {
     showPreviewPanel,
-    setShowPreviewPanel,
     activePreviewFilePath,
     setActivePreviewFilePath,
-    previewActiveTab,
-    setPreviewActiveTab,
     previewableFiles,
     canShowPreviewPanel,
     openArtifactPreview,
-    openWorkflowPreview,
+    openPreviewPanel,
     closePreviewPanel,
-    showWorkflowTab,
+    dismissPreviewFile,
+    showEditWorkflow,
     workflowId: sessionWorkflowId,
-    workflowDetail,
-    workflowLoading,
-    workflowError,
-  } = useChatPreviewPanel(allMessagesForPreview);
+  } = useChatPreviewPanel(allMessagesForPreview, currentSessionKey);
 
-  // ── Resizable panel logic ──
-  const startResize = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = previewPanelRef.current?.offsetWidth ?? previewPanelWidth;
-    let rafId: number | null = null;
-    let pendingWidth = startWidth;
+  const openWorkflowPreview = useCallback((workflowId: string) => {
+    navigate(`/workflow/${encodeURIComponent(workflowId)}`);
+  }, [navigate]);
 
-    setIsResizing(true);
-    document.body.style.userSelect = 'none';
+  const {
+    open: workflowCronModalOpen,
+    initialValues: workflowCronInitialValues,
+    openForWorkflow: openWorkflowCronTaskModal,
+    close: closeWorkflowCronTaskModal,
+    handleSave: handleWorkflowCronTaskSave,
+  } = useWorkflowCronTaskModal();
 
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:col-resize;';
-    document.body.appendChild(overlay);
+  const currentSession = useMemo(
+    () => sessions.find((session) => session.key === currentSessionKey),
+    [sessions, currentSessionKey],
+  );
 
-    const applyWidth = () => {
-      rafId = null;
-      if (previewPanelRef.current) {
-        previewPanelRef.current.style.width = `${pendingWidth}px`;
-      }
-    };
+  const sessionTitle = useMemo(
+    () => resolveSessionLabel({
+      key: currentSessionKey,
+      displayName: currentSession?.displayName,
+      label: currentSession?.label,
+      sessionLabels,
+      t,
+    }),
+    [currentSessionKey, currentSession?.displayName, currentSession?.label, sessionLabels, t],
+  );
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const delta = startX - moveEvent.clientX;
-      pendingWidth = Math.max(320, Math.min(900, startWidth + delta));
-      if (rafId === null) {
-        rafId = requestAnimationFrame(applyWidth);
-      }
-    };
+  const headerActions = useMemo(
+    () => (
+      <ChatContentHeaderActions
+        canShowPreviewPanel={canShowPreviewPanel}
+        isPreviewPanelOpen={showPreviewPanel}
+        onTogglePreview={() => {
+          if (showPreviewPanel) closePreviewPanel();
+          else openPreviewPanel();
+        }}
+        showThinking={showThinking}
+        onToggleThinking={toggleThinking}
+        loading={loading}
+        onRefresh={refresh}
+        searchProps={{
+          isOpen: isSearchOpen,
+          onToggle: handleSearchToggle,
+          value: searchQuery,
+          onChange: (value) => {
+            setSearchQuery(value);
+            if (!isSearchOpen) {
+              setIsSearchOpen(true);
+            }
+          },
+          onNext: handleSearchNext,
+          onPrevious: handleSearchPrevious,
+          onClear: handleSearchClear,
+          resultCount: searchMatches.length,
+          activeIndex: searchMatches.length > 0 ? activeSearchIndex : 0,
+        }}
+      />
+    ),
+    [
+      canShowPreviewPanel,
+      showPreviewPanel,
+      closePreviewPanel,
+      openPreviewPanel,
+      showThinking,
+      toggleThinking,
+      loading,
+      refresh,
+      isSearchOpen,
+      handleSearchToggle,
+      searchQuery,
+      handleSearchNext,
+      handleSearchPrevious,
+      handleSearchClear,
+      searchMatches.length,
+      activeSearchIndex,
+    ],
+  );
 
-    const cleanup = () => {
-      overlay.removeEventListener('mousemove', handleMouseMove);
-      overlay.removeEventListener('mouseup', handleMouseUp);
-      overlay.remove();
-      document.body.style.userSelect = '';
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      setPreviewPanelWidth(pendingWidth);
-      setIsResizing(false);
-    };
+  const previewHeaderTabs = useMemo(
+    () => (
+      showPreviewPanel && previewableFiles.length > 0 ? (
+        <ChatPreviewHeaderTabs
+          files={previewableFiles}
+          activeFilePath={activePreviewFilePath}
+          onSelectFile={setActivePreviewFilePath}
+          onDismissFile={dismissPreviewFile}
+        />
+      ) : null
+    ),
+    [
+      showPreviewPanel,
+      previewableFiles,
+      activePreviewFilePath,
+      setActivePreviewFilePath,
+      dismissPreviewFile,
+    ],
+  );
 
-    const handleMouseUp = () => {
-      cleanup();
-    };
+  useContentHeader({
+    title: sessionTitle,
+    previewTabs: previewHeaderTabs,
+    actions: headerActions,
+    isSplitLayout: canShowPreviewPanel && showPreviewPanel,
+  });
 
-    overlay.addEventListener('mousemove', handleMouseMove);
-    overlay.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      cleanup();
-    };
-  }, [previewPanelWidth]);
+  const isSplitChatLayout = canShowPreviewPanel && showPreviewPanel;
 
   const showLoadingPlaceholder = useMemo(
     () => loading && messages.length === 0,
@@ -288,37 +372,30 @@ export function HomeMainConversation({ className }: { className?: string }) {
   );
 
   return (
-    <div className={cn('-mt-4 relative flex min-h-0 flex-1', className)}>
-      {/* Left: Chat area */}
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-        {/* Toolbar */}
-        <div className="relative z-10 flex shrink-0 items-center justify-between px-4 py-2 sm:px-6">
-          <ChatToolbar
-            trailingContent={(
-              <ChatSearchBar
-                isOpen={isSearchOpen}
-                onToggle={handleSearchToggle}
-                value={searchQuery}
-                onChange={(value) => {
-                  setSearchQuery(value);
-                  if (!isSearchOpen) {
-                    setIsSearchOpen(true);
-                  }
-                }}
-                onNext={handleSearchNext}
-                onPrevious={handleSearchPrevious}
-                onClear={handleSearchClear}
-                resultCount={searchMatches.length}
-                activeIndex={searchMatches.length > 0 ? activeSearchIndex : 0}
-              />
-            )}
-          />
-        </div>
+    <>
+    <div
+      ref={splitRowRef}
+      className={cn(
+        'relative min-h-0 flex-1 overflow-hidden',
+        isSplitChatLayout ? stoSplitRowContentsClass : 'flex flex-row',
+        className,
+      )}
+    >
+      <ChatConversationColumn
+        variant="home"
+        isSplitLayout={isSplitChatLayout}
+        splitGridChatClass={isSplitChatLayout ? stoSplitGridBodyChatClass : undefined}
+      >
       <div
         ref={scrollRef}
-        className="relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-4 sm:px-6 [scrollbar-gutter:stable]"
+        className={cn(
+          'relative z-10 min-h-0 flex-1 py-4',
+          isSplitChatLayout
+            ? stoSplitChatScrollClass
+            : 'overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
+        )}
       >
-        <div ref={contentRef} className="mx-auto max-w-5xl space-y-4">
+        <div ref={contentRef} className={stoChatScrollContentClass}>
           {showLoadingPlaceholder ? (
             <div className="flex justify-center py-12 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
@@ -338,6 +415,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
                       activeMessageId={activeSearchMatch?.id ?? null}
                       onPreviewFile={openArtifactPreview}
                       onViewWorkflow={openWorkflowPreview}
+                      onCreateScheduledTask={openWorkflowCronTaskModal}
                     />
                   );
                 }
@@ -350,6 +428,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
                     isSearchActive={!!item.message.id && item.message.id === activeSearchMatch?.id}
                     onPreviewFile={openArtifactPreview}
                     onViewWorkflow={openWorkflowPreview}
+                    onCreateScheduledTask={openWorkflowCronTaskModal}
                   />
                 );
               })}
@@ -365,6 +444,7 @@ export function HomeMainConversation({ className }: { className?: string }) {
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={openArtifactPreview}
                   onViewWorkflow={openWorkflowPreview}
+                  onCreateScheduledTask={openWorkflowCronTaskModal}
                 />
               ) : null}
             </>
@@ -373,8 +453,8 @@ export function HomeMainConversation({ className }: { className?: string }) {
       </div>
 
       {error ? (
-        <div className="shrink-0 border-t border-destructive/20 bg-destructive/10 px-4 py-2 sm:px-6">
-          <div className="mx-auto flex max-w-5xl items-center justify-between">
+        <div className="shrink-0 border-t border-destructive/20 bg-destructive/10 py-2">
+          <div className="flex items-center justify-between">
             <p className="flex items-center gap-2 text-sm text-destructive">
               <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
               {error}
@@ -392,11 +472,11 @@ export function HomeMainConversation({ className }: { className?: string }) {
 
       <div
         className={cn(
-          'pointer-events-none shrink-0 overflow-hidden px-4 sm:px-6',
+          'pointer-events-none shrink-0 overflow-hidden',
           showJumpToLatest ? 'py-0.5' : 'h-0 py-0',
         )}
       >
-        <div className="mx-auto flex max-w-5xl justify-center">
+        <div className="flex justify-center">
           <motion.button
             type="button"
             onClick={() => scrollToLatest('smooth')}
@@ -416,22 +496,29 @@ export function HomeMainConversation({ className }: { className?: string }) {
         </div>
       </div>
 
+      <div className="relative z-10 w-full shrink-0">
+        <HomeComposer
+          seedText={seedText}
+          onSend={onSend}
+        />
+      </div>
+
       {minLoading && !sending ? (
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-white/10 backdrop-blur-[2px] dark:bg-black/10" />
       ) : null}
-      </div>
+      </ChatConversationColumn>
 
     {/* Resizer */}
     {canShowPreviewPanel && showPreviewPanel && (
       <div
         onMouseDown={startResize}
         className={cn(
-          'relative z-20 flex h-full shrink-0 cursor-col-resize items-center justify-center transition-colors',
-          isResizing ? 'bg-primary/50 w-[5px]' : 'bg-border/50 w-[5px] hover:bg-primary/40',
+          stoSplitGridBodyResizerClass,
+          isResizing && stoSplitResizerActiveClass,
         )}
         style={{ cursor: isResizing ? 'col-resize' : undefined }}
       >
-        <div className={cn('h-8 w-[2px] rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
+        <div className={cn('h-8 w-0.5 rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
       </div>
     )}
 
@@ -445,41 +532,26 @@ export function HomeMainConversation({ className }: { className?: string }) {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 40 }}
           transition={{ duration: 0.25, ease: 'easeInOut' }}
-          style={{ width: previewPanelWidth }}
-          className="flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-l border-border/40 [contain:inline-size]"
+          className={stoSplitGridBodyPreviewClass}
         >
           <ChatPreviewPanel
             files={previewableFiles}
             activeFilePath={activePreviewFilePath}
-            onSelectFile={setActivePreviewFilePath}
-            onClose={closePreviewPanel}
-            className="h-full w-full"
-            showWorkflowTab={showWorkflowTab}
+            showEditWorkflow={showEditWorkflow}
             workflowId={sessionWorkflowId}
-            workflowDetail={workflowDetail}
-            workflowLoading={workflowLoading}
-            workflowError={workflowError}
-            activeTab={previewActiveTab}
-            onActiveTabChange={setPreviewActiveTab}
+            onEditWorkflow={openWorkflowPreview}
+            className="h-full w-full"
           />
         </motion.div>
       )}
     </AnimatePresence>
-
-    {/* Floating toggle button when panel is hidden but files exist */}
-    {canShowPreviewPanel && !showPreviewPanel && (
-      <button
-        onClick={() => setShowPreviewPanel(true)}
-        className="absolute right-4 top-4 z-20 inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-white/60 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white/80 dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
-      >
-        <span>{showWorkflowTab ? '预览' : '预览产物'}</span>
-        {previewableFiles.length > 0 && (
-          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] text-primary">
-            {previewableFiles.length}
-          </span>
-        )}
-      </button>
-    )}
   </div>
+  <CronTaskCreateModal
+    open={workflowCronModalOpen}
+    onClose={closeWorkflowCronTaskModal}
+    onSave={handleWorkflowCronTaskSave}
+    initialValues={workflowCronInitialValues}
+  />
+  </>
   );
 }

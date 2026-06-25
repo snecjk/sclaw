@@ -3,6 +3,10 @@ import {
   extractText,
   extractThinkingTimeline,
   isHiddenWorkflowCompleteUserMessage,
+  isHiddenDuplicateWorkflowPreambleAssistantMessage,
+  isHiddenWorkflowParamsUserMessage,
+  isWorkflowPreambleAssistantMessage,
+  messageHasWorkflowCard,
   type ThinkingTimelineItem,
 } from './message-utils';
 
@@ -174,6 +178,10 @@ export function buildChatDisplayItems(messages: RawMessage[]): ChatDisplayItem[]
         i += 1;
         continue;
       }
+      if (isHiddenWorkflowParamsUserMessage(msg, messages, i)) {
+        i += 1;
+        continue;
+      }
       lastUserMessage = msg;
       items.push({ type: 'single', message: msg, key: msg.id || `user-${i}` });
       i += 1;
@@ -181,6 +189,11 @@ export function buildChatDisplayItems(messages: RawMessage[]): ChatDisplayItem[]
     }
 
     if (isAssistantRole(msg.role)) {
+      if (isHiddenDuplicateWorkflowPreambleAssistantMessage(msg, messages, i)) {
+        i += 1;
+        continue;
+      }
+
       const start = i;
       const turnMessages: RawMessage[] = [];
       const turnToolResults: RawMessage[] = [];
@@ -194,6 +207,18 @@ export function buildChatDisplayItems(messages: RawMessage[]): ChatDisplayItem[]
           continue;
         }
         if (!isAssistantRole(current.role)) break;
+        if (isHiddenDuplicateWorkflowPreambleAssistantMessage(current, messages, i)) {
+          i += 1;
+          continue;
+        }
+        // 方案 A：分组参数 intro 与 workflow_card 执行卡不能合并成同一 assistant-turn
+        if (
+          turnMessages.length > 0
+          && messageHasWorkflowCard(current)
+          && turnMessages.some(isWorkflowPreambleAssistantMessage)
+        ) {
+          break;
+        }
         turnMessages.push(current);
         i += 1;
       }

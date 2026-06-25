@@ -1,6 +1,6 @@
 {
     "name": "stoclaw",
-    "version": "2026.6.16-GA.1",
+    "version": "2026.6.24-GA.1",
     "pnpm": {
         "onlyBuiltDependencies": [
             "@discordjs/opus",
@@ -25,9 +25,9 @@
             ]
         }
     },
-    "description": "StoClaw - Graphical AI Assistant based on OpenClaw",
+    "description": "S Claw - Graphical AI Assistant based on OpenClaw",
     "main": "dist-electron/main/index.js",
-    "author": "StoClaw Team",
+    "author": "S Claw Team",
     "license": "MIT",
     "private": true,
     "scripts": {
@@ -56,7 +56,8 @@
         "uv:download:all": "cross-env NODE_OPTIONS=\"--import ./.node-preload.mjs\" zx scripts/download-bundled-uv.mjs --all",
         "dws:manifest": "zx scripts/download-dws-manifest.mjs",
         "node:download:win": "cross-env NODE_OPTIONS=\"--import ./.node-preload.mjs\" zx scripts/download-bundled-node.mjs --platform=win",
-        "prep:win-binaries": "cross-env NODE_OPTIONS=\"--import ./.node-preload.mjs\" pnpm run uv:download:win && pnpm run node:download:win",
+        "prep:win-deps": "pnpm install --config.supportedArchitectures.os[]=current --config.supportedArchitectures.os[]=win32",
+        "prep:win-binaries": "pnpm run prep:win-deps && cross-env NODE_OPTIONS=\"--import ./.node-preload.mjs\" pnpm run uv:download:win && pnpm run node:download:win",
         "icons": "zx scripts/generate-icons.mjs",
         "package": "pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && vite build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
         "package:test": "pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && cross-env VITE_APP_ENV=test vite build --mode test && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
@@ -82,23 +83,25 @@
         "postversion": "git push && git push --tags"
     },
     "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.168",
-    "ajv": "^6.12.6",
-    "clawhub": "^0.5.0",
-    "electron-store": "^11.0.2",
-    "electron-updater": "^6.8.3",
-    "fast-deep-equal": "^3.1.3",
-    "fast-json-stable-stringify": "^2.1.0",
-    "json-schema-traverse": "^0.4.1",
-    "mammoth": "^1.12.0",
-    "ms": "^2.1.3",
-    "node-machine-id": "^1.1.12",
-    "posthog-node": "^5.28.0",
-    "pptx-preview": "^1.0.7",
-    "uri-js": "^4.4.1",
-    "ws": "^8.19.0",
-    "xlsx": "^0.18.5"
-  },
+        "@anthropic-ai/claude-agent-sdk": "^0.3.168",
+        "ajv": "^6.12.6",
+        "clawhub": "^0.5.0",
+        "electron-store": "^11.0.2",
+        "electron-updater": "^6.8.3",
+        "extract-zip": "^2.0.1",
+        "fast-deep-equal": "^3.1.3",
+        "fast-json-stable-stringify": "^2.1.0",
+        "json-schema-traverse": "^0.4.1",
+        "mammoth": "^1.12.0",
+        "ms": "^2.1.3",
+        "node-machine-id": "^1.1.12",
+        "posthog-node": "^5.28.0",
+        "pptx-preview": "^1.0.7",
+        "uri-js": "^4.4.1",
+        "ws": "^8.19.0",
+        "xlsx": "^0.18.5",
+        "zod": "^3.24.2"
+    },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
         "@radix-ui/react-dialog": "^1.1.15",
@@ -114,7 +117,7 @@
         "@radix-ui/react-toast": "^1.2.15",
         "@radix-ui/react-tooltip": "^1.2.8",
         "@sliverp/qqbot": "^1.6.1",
-        "@tencent-weixin/openclaw-weixin": "^2.4.4",
+        "@tencent-weixin/openclaw-weixin": "2.4.4",
         "@testing-library/jest-dom": "^6.9.1",
         "@testing-library/react": "^16.3.2",
         "@types/node": "^25.3.0",

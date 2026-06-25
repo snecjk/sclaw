@@ -13,6 +13,10 @@ export interface EngineSessionRegistryEntry {
   title?: string;
   model?: string;
   accountId?: string;
+  /** Prior Claude SDK session IDs kept for UI history after in-session model switches. */
+  archivedClaudeSessionIds?: string[];
+  /** Inject archived transcript on the next user message after a model switch. */
+  pendingHistoryBridge?: boolean;
 }
 
 interface EngineSessionRegistryDocument {

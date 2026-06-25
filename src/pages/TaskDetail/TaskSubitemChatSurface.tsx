@@ -5,9 +5,10 @@ import { AlertCircle, ArrowDown, Loader2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore, type AttachedFileMeta, type RawMessage } from '@/stores/chat';
-import { useSessionWorkflowPreview } from '@/hooks/use-session-workflow-preview';
+import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
 import { useGatewayStore } from '@/stores/gateway';
 import { createAutoSendWatcher, /* useMessageQueueStore */ } from '@/stores/message-queue';
+import { useSettingsStore } from '@/stores/settings';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import {
   STO_TASK_PENDING_COMPOSE_KEY,
@@ -21,15 +22,29 @@ import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
-import { usePreviewableFiles } from '@/pages/Chat/message-utils';
+import { ChatPreviewHeaderTabs } from '@/pages/Chat/ChatPreviewHeaderTabs';
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
+import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 // import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
 import { extractText } from '@/pages/Chat/message-utils';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
-import { stoTaskSubitemChatCanvasBg } from '@/lib/surfaces';
+import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
+import {
+  stoParameterFormDockLayout,
+  stoSplitChatScrollClass,
+  stoChatScrollContentClass,
+  stoSplitGridBodyChatClass,
+  stoSplitGridBodyPreviewClass,
+  stoSplitGridBodyResizerClass,
+  stoSplitResizerActiveClass,
+  stoSplitRowContentsClass,
+  stoTaskSubitemChatCanvasBg,
+} from '@/lib/surfaces';
+import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
 import { useStoTaskSubitemChatSend } from './use-sto-task-subitem-chat-send';
+import { useContentHeader } from '@/components/layout/content-header-context';
 
 /* sessionStorage one-shot + gateway-gated auto-send intentionally use setState in effects */
  
@@ -65,7 +80,6 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
 
-  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const sessions = useChatStore((s) => s.sessions);
@@ -88,11 +102,12 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [composeSeed, setComposeSeed] = useState<string | undefined>();
   const [pendingAutoSendText, setPendingAutoSendText] = useState<string | null>(null);
-  const [showPreviewPanel, setShowPreviewPanel] = useState(true);
-  const [activePreviewFilePath, setActivePreviewFilePath] = useState<string | null>(null);
-  const [previewPanelWidth, setPreviewPanelWidth] = useState(480);
-  const [isResizing, setIsResizing] = useState(false);
-  const previewPanelRef = useRef<HTMLDivElement>(null);
+  const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
+  const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
+  const { splitRowRef, previewPanelRef, startResize, isResizing } = useSplitPanelResize(
+    previewPanelPercent,
+    setPreviewSplitPercent,
+  );
   /** True after we consumed sessionStorage one-shot compose for this subitem (skip generic post-load scroll). */
   const hasOneShotComposeRef = useRef(false);
   /** Generic scroll-to-bottom once per subitem mount (sidebar / deep link / home reused path). */
@@ -128,10 +143,6 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   }, [sessionKey, scrollRef, updateJumpToLatestVisibility]);
 
   const lastComposeRouteKeyRef = useRef('');
-
-  useEffect(() => {
-    void fetchAgents();
-  }, [fetchAgents]);
 
   /** Avoid painting another session's messages before the store switches (useEffect runs too late). */
   const sessionSynced = Boolean(sessionKey) && currentSessionKey === sessionKey;
@@ -267,42 +278,76 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const isEmpty =
     sessionSynced && !loading && displayMessages.length === 0 && !shouldRenderStreaming && !activeTurn;
 
-  // Collect previewable files from messages and streaming message
   const allMessagesForPreview = useMemo(() => {
-    const arr = [...messages] as Array<{ _attachedFiles?: AttachedFileMeta[] }>;
+    const arr = [...messages] as RawMessage[];
     if (streamMsgObj) {
-      arr.push(streamMsgObj as unknown as { _attachedFiles?: AttachedFileMeta[] });
+      arr.push(streamMsgObj as unknown as RawMessage);
     }
     return arr;
   }, [messages, streamMsgObj]);
-  const previewableFiles = usePreviewableFiles(allMessagesForPreview);
-  const hasPreviewableFiles = previewableFiles.length > 0;
 
   const {
+    showPreviewPanel,
+    activePreviewFilePath,
+    setActivePreviewFilePath,
+    previewableFiles,
+    canShowPreviewPanel,
+    openArtifactPreview,
+    openPreviewPanel,
+    closePreviewPanel,
+    dismissPreviewFile,
+    showEditWorkflow,
     workflowId: sessionWorkflowId,
-    showWorkflowTab,
-    detail: workflowDetail,
-    loading: workflowLoading,
-    error: workflowError,
-  } = useSessionWorkflowPreview(allMessagesForPreview as RawMessage[]);
+  } = useChatPreviewPanel(allMessagesForPreview, sessionKey);
+
+  const openWorkflowPreview = useCallback((workflowId: string) => {
+    navigate(`/workflow/${encodeURIComponent(workflowId)}`);
+  }, [navigate]);
+
+  const previewHeaderTabs = useMemo(
+    () => (
+      showPreviewPanel && previewableFiles.length > 0 ? (
+        <ChatPreviewHeaderTabs
+          files={previewableFiles}
+          activeFilePath={activePreviewFilePath}
+          onSelectFile={setActivePreviewFilePath}
+          onDismissFile={dismissPreviewFile}
+        />
+      ) : null
+    ),
+    [
+      showPreviewPanel,
+      previewableFiles,
+      activePreviewFilePath,
+      setActivePreviewFilePath,
+      dismissPreviewFile,
+    ],
+  );
+
+  useContentHeader({
+    title: t('common:sidebar.taskList'),
+    previewTabs: previewHeaderTabs,
+    isSplitLayout: canShowPreviewPanel && showPreviewPanel,
+  });
+
+  const isSplitChatLayout = canShowPreviewPanel && showPreviewPanel;
 
   // Auto-open newly-generated files in the preview panel
   const prevPreviewableFilesRef = useRef(previewableFiles);
   useEffect(() => {
     const prev = prevPreviewableFilesRef.current;
     const prevPaths = new Set(prev.map((f) => f.filePath));
-    const newFiles = previewableFiles.filter((f) => !prevPaths.has(f.filePath));
+    const newFiles = previewableFiles.filter((f) => f.filePath && !prevPaths.has(f.filePath));
 
     if (newFiles.length > 0) {
       const latestFile = newFiles[newFiles.length - 1];
       if (latestFile.filePath) {
-        setActivePreviewFilePath(latestFile.filePath);
-        setShowPreviewPanel(true);
+        openArtifactPreview(latestFile);
       }
     }
 
     prevPreviewableFilesRef.current = previewableFiles;
-  }, [previewableFiles]);
+  }, [previewableFiles, openArtifactPreview]);
 
   useEffect(() => {
     if (currentSessionKey !== sessionKey) return;
@@ -336,66 +381,8 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   });
 
   const handlePreviewFile = useCallback((file: AttachedFileMeta) => {
-    if (file.filePath) {
-      setActivePreviewFilePath(file.filePath);
-      setShowPreviewPanel(true);
-    }
-  }, []);
-
-  // ── Resizable panel logic ──
-  const startResize = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = previewPanelRef.current?.offsetWidth ?? previewPanelWidth;
-    let rafId: number | null = null;
-    let pendingWidth = startWidth;
-
-    setIsResizing(true);
-    document.body.style.userSelect = 'none';
-
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:col-resize;';
-    document.body.appendChild(overlay);
-
-    const applyWidth = () => {
-      rafId = null;
-      if (previewPanelRef.current) {
-        previewPanelRef.current.style.width = `${pendingWidth}px`;
-      }
-    };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const delta = startX - moveEvent.clientX;
-      pendingWidth = Math.max(320, Math.min(900, startWidth + delta));
-      if (rafId === null) {
-        rafId = requestAnimationFrame(applyWidth);
-      }
-    };
-
-    const cleanup = () => {
-      overlay.removeEventListener('mousemove', handleMouseMove);
-      overlay.removeEventListener('mouseup', handleMouseUp);
-      overlay.remove();
-      document.body.style.userSelect = '';
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      setPreviewPanelWidth(pendingWidth);
-      setIsResizing(false);
-    };
-
-    const handleMouseUp = () => {
-      cleanup();
-    };
-
-    overlay.addEventListener('mousemove', handleMouseMove);
-    overlay.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      cleanup();
-    };
-  }, [previewPanelWidth]);
+    openArtifactPreview(file);
+  }, [openArtifactPreview]);
 
   if (!sessionKey) {
     return (
@@ -412,21 +399,30 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
 
   return (
     <div
+      ref={splitRowRef}
       className={cn(
-        'relative flex min-h-0 flex-1 flex-row overflow-hidden rounded-xl',
+        'relative min-h-0 flex-1 overflow-hidden rounded-xl',
         stoTaskSubitemChatCanvasBg,
+        isSplitChatLayout ? stoSplitRowContentsClass : 'flex flex-row',
       )}
     >
       {/* Left: Chat area */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <ChatConversationColumn
+        variant="page"
+        isSplitLayout={isSplitChatLayout}
+        splitGridChatClass={isSplitChatLayout ? stoSplitGridBodyChatClass : undefined}
+      >
         <div
           ref={scrollRef}
           className={cn(
-            'relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-6 py-4 [scrollbar-gutter:stable]',
+            'relative z-10 min-h-0 flex-1 py-4',
             stoTaskSubitemChatCanvasBg,
+            isSplitChatLayout
+              ? stoSplitChatScrollClass
+              : 'overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
           )}
         >
-          <div ref={contentRef} className="mx-auto max-w-5xl space-y-4">
+          <div ref={contentRef} className={stoChatScrollContentClass}>
             {!sessionSynced || (loading && displayMessages.length === 0) ? (
               <div className="flex justify-center py-12 text-muted-foreground">
                 <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
@@ -477,8 +473,8 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
         </div>
 
         {error ? (
-          <div className="shrink-0 border-t border-destructive/20 bg-destructive/10 px-6 py-2">
-            <div className="mx-auto flex max-w-5xl items-center justify-between">
+          <div className="shrink-0 border-t border-destructive/20 bg-destructive/10 py-2">
+            <div className="flex items-center justify-between">
               <p className="flex items-center gap-2 text-sm text-destructive">
                 <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
                 {error}
@@ -496,11 +492,11 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
 
         <div
           className={cn(
-            'pointer-events-none shrink-0 overflow-hidden px-6',
+            'pointer-events-none shrink-0 overflow-hidden',
             showJumpToLatest ? 'py-0.5' : 'h-0 py-0',
           )}
         >
-          <div className="mx-auto flex max-w-5xl justify-center">
+          <div className="flex justify-center">
             <motion.button
               type="button"
               onClick={() => scrollToLatest('smooth')}
@@ -520,70 +516,72 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
           </div>
         </div>
 
-        {/* <PendingQueuePanel
-          queue={queue}
-          onRemove={queueRemove}
-          onMoveUp={queueMoveUp}
-          onMoveDown={queueMoveDown}
-        /> */}
+        <div className="relative z-10 w-full shrink-0">
+          <ParameterFormDock layout={stoParameterFormDockLayout('page')} />
+        </div>
 
         <ChatInput {...chatInputProps} engineType={currentEngineType} />
-      </div>
+      </ChatConversationColumn>
 
       {/* Resizer */}
-      {hasPreviewableFiles && showPreviewPanel && (
+      {canShowPreviewPanel && showPreviewPanel && (
         <div
           onMouseDown={startResize}
           className={cn(
-            'relative z-20 flex h-full shrink-0 cursor-col-resize items-center justify-center transition-colors',
-            isResizing ? 'bg-primary/50 w-[5px]' : 'bg-border/50 w-[5px] hover:bg-primary/40',
+            stoSplitGridBodyResizerClass,
+            isResizing && stoSplitResizerActiveClass,
           )}
           style={{ cursor: isResizing ? 'col-resize' : undefined }}
         >
-          <div className={cn('h-8 w-[2px] rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
+          <div className={cn('h-8 w-0.5 rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
         </div>
       )}
 
       {/* Right: Preview Panel */}
       <AnimatePresence>
-        {hasPreviewableFiles && showPreviewPanel && (
+        {canShowPreviewPanel && showPreviewPanel && (
           <motion.div
             ref={previewPanelRef}
             initial={{ opacity: 0, x: 40 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 40 }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
-            style={{ width: previewPanelWidth }}
-            className="flex h-full min-h-0 shrink-0 flex-col overflow-hidden"
+            className={stoSplitGridBodyPreviewClass}
           >
             <ChatPreviewPanel
               files={previewableFiles}
               activeFilePath={activePreviewFilePath}
-              onSelectFile={setActivePreviewFilePath}
-              onClose={() => setShowPreviewPanel(false)}
-              className="h-full w-full"
-              showWorkflowTab={showWorkflowTab}
+              showEditWorkflow={showEditWorkflow}
               workflowId={sessionWorkflowId}
-              workflowDetail={workflowDetail}
-              workflowLoading={workflowLoading}
-              workflowError={workflowError}
+              onEditWorkflow={openWorkflowPreview}
+              className="h-full w-full"
             />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Floating toggle button when panel is hidden but files exist */}
-      {hasPreviewableFiles && !showPreviewPanel && (
+      {/* 无 ContentHeader 时：浮动按钮切换预览开/关 */}
+      {canShowPreviewPanel ? (
         <button
-          onClick={() => setShowPreviewPanel(true)}
+          type="button"
+          onClick={() => {
+            if (showPreviewPanel) closePreviewPanel();
+            else openPreviewPanel();
+          }}
           className="absolute right-4 top-4 z-20 inline-flex h-8 items-center gap-1.5 rounded-full border border-primary/15 bg-white/60 px-3 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-white/80 dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
         >
-          <span>预览产物</span>
-          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] text-primary">
-            {previewableFiles.length}
+          <span>
+            {showPreviewPanel
+              ? t('chat:preview.collapsePanel')
+              : t('chat:toolbar.openPreview')}
           </span>
+          {!showPreviewPanel && previewableFiles.length > 0 ? (
+            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] text-primary">
+              {previewableFiles.length}
+            </span>
+          ) : null}
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

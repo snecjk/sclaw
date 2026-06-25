@@ -2,7 +2,7 @@ import { app, utilityProcess } from 'electron';
 import path from 'path';
 import { existsSync } from 'fs';
 import WebSocket from 'ws';
-import { getOpenClawEntryPath, getOpenClawProcessCwd, getOpenClawNodeModulesPath, getOpenClawPackageRootEnv } from '../utils/paths';
+import { getOpenClawConfigDir, getOpenClawEntryPath, getOpenClawProcessCwd, getOpenClawNodeModulesPath, getOpenClawPackageRootEnv } from '../utils/paths';
 import { prependPathEntry, prependNodePathEntry } from '../utils/env-path';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { isPythonReady, setupManagedPython } from '../utils/uv-setup';
@@ -33,31 +33,34 @@ export async function terminateOwnedGatewayProcess(child: Electron.UtilityProces
     });
   };
 
+  const pid = child.pid;
+
   await new Promise<void>((resolve) => {
     let exited = false;
 
-    // Register a single exit listener before any kill attempt to avoid
-    // the race where exit fires between two separate `once('exit')` calls.
     child.once('exit', () => {
       exited = true;
       clearTimeout(timeout);
       resolve();
     });
 
-    const pid = child.pid;
     logger.info(`Sending kill to Gateway process (pid=${pid ?? 'unknown'})`);
 
-    if (process.platform === 'win32' && pid) {
-      void terminateWindowsProcessTree(pid).catch((err) => {
-        logger.warn(`Windows process-tree kill failed for Gateway pid=${pid}:`, err);
-      });
-    } else {
+    void (async () => {
       try {
-        child.kill();
-      } catch {
-        // ignore if already exited
+        if (process.platform === 'win32' && pid) {
+          await terminateWindowsProcessTree(pid);
+        } else {
+          try {
+            child.kill();
+          } catch {
+            // ignore if already exited
+          }
+        }
+      } catch (err) {
+        logger.warn(`Initial Gateway kill failed (pid=${pid ?? 'unknown'}):`, err);
       }
-    }
+    })();
 
     const timeout = setTimeout(() => {
       if (!exited) {
@@ -333,6 +336,7 @@ export async function runOpenClawDoctorRepair(): Promise<boolean> {
         ...baseEnvPatched,
         ...uvEnv,
         OPENCLAW_NO_RESPAWN: '1',
+        OPENCLAW_STATE_DIR: getOpenClawConfigDir(),
         OPENCLAW_PACKAGE_ROOT: getOpenClawPackageRootEnv(),
       }, getOpenClawNodeModulesPath()) as NodeJS.ProcessEnv,
     });

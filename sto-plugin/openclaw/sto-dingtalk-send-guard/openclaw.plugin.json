@@ -1,7 +1,14 @@
 {
   "id": "sto-dingtalk-send-guard",
   "name": "钉钉发送防护",
-  "description": "钉钉 @ 收件人 prompt 注入；限制 dws chat message send 频率，并拦截 shell 循环批量发送。",
+  "description": "钉钉 @ 收件人 prompt 注入、share_to_dingtalk 分享选人、限制 dws chat message send 频率，并拦截 shell 循环批量发送。",
+  "tools": ["share_to_dingtalk"],
+  "toolConfig": {
+    "share_to_dingtalk": {
+      "label": "分享到钉钉（选人）",
+      "help": "唤起 PC 钉钉选人窗口并预填文本/链接/图片 URL"
+    }
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

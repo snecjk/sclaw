@@ -9,6 +9,7 @@ import { X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { FormFieldRenderer } from '@/components/parameter-form/FormFieldRenderer';
+import { isEmptyFormValue } from '@/lib/workflow-form-utils';
 import type {
   UserFormConfig,
   FormField,
@@ -91,11 +92,16 @@ export function UserFormModal({
     if (!validation) return null;
 
     if (validation.required) {
-      if (value === undefined || value === null || value === '') {
+      if (isEmptyFormValue(value)) {
+        if (
+          field.type === 'multiselect'
+          || field.type === 'checkbox'
+          || (field.type === 'select' && 'options' in field && (field.options?.length ?? 0) > 1)
+          || field.type === 'radio'
+        ) {
+          return `${field.label}至少选择一个选项`;
+        }
         return `${field.label}是必填项`;
-      }
-      if (Array.isArray(value) && value.length === 0) {
-        return `${field.label}至少选择一个选项`;
       }
     }
 

@@ -23,6 +23,7 @@
         "whatsappConnected": "WhatsApp 连接成功",
         "whatsappFailed": "WhatsApp 连接失败: {{error}}",
         "qrConnected": "{{name}} 连接成功",
+        "wechatAutoBoundMain": "已自动绑定到 Main Agent，可在频道页修改",
         "qrFailed": "{{name}} 连接失败: {{error}}",
         "channelSaved": "频道 {{name}} 已保存",
         "channelConnecting": "正在连接 {{name}}...",

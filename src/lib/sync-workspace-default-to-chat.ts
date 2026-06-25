@@ -4,14 +4,15 @@
  */
 import { hostApiFetch } from '@/lib/host-api';
 import {
-  getWorkspaceDefaultModelId,
   getWorkspaceDefaultRawModelId,
   normalizeModelIdForChat,
   shouldSyncSessionToWorkspaceDefault,
 } from '@/lib/chat-model-options';
+import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useProviderStore } from '@/stores/providers';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 
 export async function syncWorkspaceDefaultModelToChat(opts: {
   modelId: string;
@@ -28,10 +29,16 @@ export async function syncWorkspaceDefaultModelToChat(opts: {
   const { currentSessionKey, currentAgentId, sessions, loadSessions } = chat;
   if (!currentSessionKey) return;
 
+  // Placeholder new-chat page: user choice lives in pendingNewSessionModel, not main session.
+  if (currentSessionKey === DEFAULT_SESSION_KEY) return;
+
   const session = sessions.find((s) => s.key === currentSessionKey);
   if (!shouldSyncSessionToWorkspaceDefault(session?.model, opts.previousWorkspaceModel)) {
     return;
   }
+
+  const agent = useAgentsStore.getState().agents.find((item) => item.id === currentAgentId);
+  const engineType = resolveChatSessionEngineType(session, agent?.engineType, currentSessionKey);
 
   const target = normalizeModelIdForChat(modelId);
   const current = normalizeModelIdForChat(session?.model);
@@ -48,7 +55,7 @@ export async function syncWorkspaceDefaultModelToChat(opts: {
         model: modelId,
         accountId,
         agentId: currentAgentId || undefined,
-        engineType: session?.engineType,
+        engineType,
       }),
     });
     void loadSessions();
@@ -67,40 +74,40 @@ export async function applyWorkspaceDefaultToNewSession(
   const trimmedKey = sessionKey.trim();
   if (!trimmedKey) return;
 
-  // If the session already has a model (carried from pendingNewSessionModel),
-  // use that instead of the global default — the user explicitly chose it.
   const existingSession = useChatStore.getState().sessions.find((s) => s.key === trimmedKey);
-  if (existingSession?.model) {
-    const { accounts, defaultAccountId } = useProviderStore.getState();
-    const accountId = defaultAccountId?.trim() ?? '';
-    if (!accountId) return;
+  const agent = useAgentsStore.getState().agents.find((item) => item.id === agentId);
+  const engineType = resolveChatSessionEngineType(existingSession, agent?.engineType, trimmedKey);
+  const { accounts, defaultAccountId } = useProviderStore.getState();
+  const accountId = defaultAccountId?.trim() ?? '';
+  if (!accountId) return;
 
+  const userChosenModel = existingSession?.model?.trim();
+  if (userChosenModel) {
     try {
       await hostApiFetch('/api/sessions/model', {
         method: 'POST',
         body: JSON.stringify({
           sessionKey: trimmedKey,
-          model: existingSession.model,
+          model: userChosenModel,
           accountId,
           agentId: agentId.trim() || undefined,
-          engineType: existingSession.engineType,
+          engineType,
         }),
       });
-      void useChatStore.getState().loadSessions();
+      useChatStore.setState((state) => ({
+        sessions: state.sessions.map((session) => (
+          session.key === trimmedKey
+            ? { ...session, model: userChosenModel }
+            : session
+        )),
+      }));
     } catch (err) {
       console.warn('[applyWorkspaceDefaultToNewSession] failed to persist user-chosen model:', err);
     }
-    // Clear the pending state since it has been carried into the session
     useChatStore.getState().setPendingNewSessionModel(null);
     return;
   }
 
-  const { accounts, defaultAccountId } = useProviderStore.getState();
-  const accountId = defaultAccountId?.trim() ?? '';
-  if (!accountId) return;
-
-  // Use raw model ID (preserves supplier sub-prefix like "dashscope/kimi-k2.6")
-  // so the value sent to backend / Gateway matches what is registered in models.json.
   const rawModelId = getWorkspaceDefaultRawModelId(accounts, defaultAccountId);
   if (!rawModelId) return;
 
@@ -112,7 +119,7 @@ export async function applyWorkspaceDefaultToNewSession(
         model: rawModelId,
         accountId,
         agentId: agentId.trim() || undefined,
-        engineType: useChatStore.getState().sessions.find((session) => session.key === trimmedKey)?.engineType,
+        engineType,
       }),
     });
     useChatStore.setState((state) => ({

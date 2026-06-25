@@ -6,7 +6,7 @@ import { app } from 'electron';
 import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SsoEnvironment } from '../utils/auth-store';
-import { getSsoEnvironment, getStoToken } from '../utils/auth-store';
+import { clearAuthUser, getSsoEnvironment, getStoToken } from '../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { cleanupOldMacAppBackups } from '../utils/cleanup-old-app-bundles';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
@@ -186,7 +186,8 @@ export async function writePendingInstallReport(record: PendingInstallRecord): P
 }
 
 /**
- * After upgrade restart: if userData contains pending record and version matches, report install_complete.
+ * After upgrade restart: if userData contains pending record and version matches,
+ * report install_complete, then clear auth so the user must re-login on this launch.
  */
 export async function runPendingInstallReport(currentVersion: string, platform: string): Promise<void> {
   if (!app.isPackaged) return;
@@ -207,17 +208,28 @@ export async function runPendingInstallReport(currentVersion: string, platform: 
   if (!rec?.targetVersion || rec.targetVersion !== currentVersion) {
     return;
   }
-  await unlink(fp).catch(() => {});
+
   const env = await getSsoEnvironment();
-  sendClientUpdateEventsFireAndForget(env, [
-    {
-      event_type: 'install_complete',
-      client_version: currentVersion,
-      target_version: rec.targetVersion,
-      feed_slug: rec.feedSlug ?? null,
-      platform,
-    },
-  ]);
+  const token = await getStoToken();
+  if (token) {
+    await postClientUpdateEvents(token, env, [
+      {
+        event_type: 'install_complete',
+        client_version: currentVersion,
+        target_version: rec.targetVersion,
+        feed_slug: rec.feedSlug ?? null,
+        platform,
+      },
+    ]);
+  }
+
+  await unlink(fp).catch(() => {});
+
+  logger.info(
+    `[client-update] Upgrade to ${currentVersion} detected after restart; clearing auth to require re-login`,
+  );
+  await clearAuthUser();
+
   if (platform === 'darwin') {
     void cleanupOldMacAppBackups(process.execPath);
   }

@@ -9,7 +9,7 @@ import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
 import { ChannelConfigModal } from '@/components/channels/ChannelConfigModal';
 import { cn } from '@/lib/utils';
-import { glassNestedCard, glassNestedInsetRow, glassSectionSurface } from '@/lib/surfaces';
+import { glassNestedCard, glassNestedInsetRow, glassSectionSurface, stoMainInnerShell } from '@/lib/surfaces';
 import { Select } from '@/components/ui/select';
 import {
   CHANNEL_ICONS,
@@ -220,7 +220,7 @@ export function Channels() {
 
   if (loading) {
     return (
-      <div className="mx-auto flex w-full max-w-5xl flex-col pb-10">
+      <div className={cn(stoMainInnerShell, 'flex flex-col pb-10')}>
         <div className="flex min-h-[50vh] items-center justify-center">
           <LoadingSpinner size="lg" />
         </div>
@@ -229,7 +229,7 @@ export function Channels() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 pb-10">
+    <div className={cn(stoMainInnerShell, 'flex flex-col gap-8 pb-10')}>
       <header className="shrink-0 border-b border-border pb-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-3">
@@ -377,10 +377,7 @@ export function Channels() {
                               <span className="text-xs text-muted-foreground">{t('account.bindAgentLabel')}</span>
                               <Select
                                 className="h-8 min-h-8 max-w-[200px] py-0 text-xs"
-                                value={
-                                  account.agentId
-                                  || (usesPluginManagedQrAccounts(group.channelType) ? 'main' : '')
-                                }
+                                value={account.agentId || ''}
                                 onChange={(event) => {
                                   void handleBindAgent(group.channelType, account.accountId, event.target.value);
                                 }}

@@ -18,6 +18,7 @@ import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { TIMEOUTS } from '../utils/config';
 import { normalizeSkillVersion } from '../utils/skill-version';
 import { readSkillMdFrontmatter } from '../utils/skill-frontmatter';
+import { safeRemoveDir } from '../utils/fs-retry';
 
 export const PREINSTALLED_MARKER_NAME = '.stoclaw-preinstalled.json';
 
@@ -61,6 +62,7 @@ export interface StoSkillResult {
 export class StoSkillService {
   private workDir: string;
   private skillsDir: string;
+  private installLocks: Map<string, Promise<void>> = new Map();
 
   constructor() {
     this.workDir = getOpenClawConfigDir();
@@ -125,6 +127,23 @@ export class StoSkillService {
    *   3. Update lock.json
    */
   async install(params: StoSkillInstallParams): Promise<void> {
+    // Prevent concurrent installs for the same skill slug
+    while (this.installLocks.has(params.slug)) {
+      logger.info(`[StoSkillService] install: waiting for previous install of ${params.slug} to complete`);
+      await this.installLocks.get(params.slug);
+    }
+
+    const installPromise = this.doInstall(params);
+    this.installLocks.set(params.slug, installPromise);
+
+    try {
+      await installPromise;
+    } finally {
+      this.installLocks.delete(params.slug);
+    }
+  }
+
+  private async doInstall(params: StoSkillInstallParams): Promise<void> {
     const baseUrl = await resolveStoBaseUrl();
     const token = await getStoToken();
     if (!token) throw new Error('未登录或 stoToken 已过期，请重新登录');
@@ -165,42 +184,40 @@ export class StoSkillService {
       }
     }
 
-    // Save to a temp file
+    // Save to a temp file, extract to staging, then atomically promote to target.
     const tmpZipPath = path.join(this.workDir, `.tmp-sto-skill-${params.slug}-${Date.now()}.zip`);
+    const stagingDir = path.join(this.workDir, `.tmp-sto-skill-staging-${params.slug}-${Date.now()}`);
+    let stagingActive = false;
     try {
       const body = res.body;
       if (!body) throw new Error('下载响应没有 body');
 
       // Node 18+ fetch body is a ReadableStream; pipe to disk
       const fileStream = createWriteStream(tmpZipPath);
-      // @ts-expect-error Node fetch body is compatible with Readable
       await pipeline(body, fileStream);
 
-      // Extract ZIP to primary target (mount point)
-      const targetDir = path.join(skillsDir, params.slug);
-      if (params.force && fs.existsSync(targetDir)) {
-        await fs.promises.rm(targetDir, { recursive: true, force: true });
-      }
-      if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
-      }
-
-      await this.extractZip(tmpZipPath, targetDir);
+      fs.mkdirSync(stagingDir, { recursive: true });
+      stagingActive = true;
+      await this.extractZip(tmpZipPath, stagingDir);
 
       // Ensure SKILL.md has proper frontmatter so Gateway can load it.
       // Gateway requires at least a `description` in frontmatter, and uses
       // `name` to identify the skill (falls back to directory name otherwise).
       // Gateway requires name to match /^[a-z0-9-]+$/, so we use lowercase slug.
-      this.ensureSkillFrontmatter(targetDir, params.slug, {
+      this.ensureSkillFrontmatter(stagingDir, params.slug, {
         name: params.name,
         description: params.description,
       });
+
+      const targetDir = path.join(skillsDir, params.slug);
+      await this.promoteStagedSkillDir(stagingDir, targetDir, Boolean(params.force));
+      stagingActive = false;
 
       // For global installs, also copy to user workspace
       if (userSkillsDir) {
         const userTargetDir = path.join(userSkillsDir, params.slug);
         if (params.force && fs.existsSync(userTargetDir)) {
-          await fs.promises.rm(userTargetDir, { recursive: true, force: true });
+          await safeRemoveDir(userTargetDir, { label: userTargetDir });
         }
         await this.copyDir(targetDir, userTargetDir);
         logger.info(`[StoSkillService] install: ${params.slug} copied to user workspace ${userTargetDir}`);
@@ -228,6 +245,9 @@ export class StoSkillService {
 
       logger.info(`[StoSkillService] install: ${params.slug} installed to ${targetDir}`);
     } finally {
+      if (stagingActive && fs.existsSync(stagingDir)) {
+        await safeRemoveDir(stagingDir, { label: stagingDir }).catch(() => {});
+      }
       // Clean up temp file
       if (fs.existsSync(tmpZipPath)) {
         fs.unlinkSync(tmpZipPath);
@@ -247,11 +267,11 @@ export class StoSkillService {
     const disabledDir = path.join(this.getDisabledDir(), params.slug);
     if (fs.existsSync(skillDir)) {
       logger.info(`[StoSkillService] uninstall: removing ${skillDir}`);
-      await fs.promises.rm(skillDir, { recursive: true, force: true });
+      await safeRemoveDir(skillDir, { label: skillDir });
     }
     if (fs.existsSync(disabledDir)) {
       logger.info(`[StoSkillService] uninstall: removing disabled ${disabledDir}`);
-      await fs.promises.rm(disabledDir, { recursive: true, force: true });
+      await safeRemoveDir(disabledDir, { label: disabledDir });
     }
 
     // For global uninstall, also remove from user workspace
@@ -261,10 +281,10 @@ export class StoSkillService {
         const userSkillDir = path.join(getOpenClawUserSkillsDir(userCode), params.slug);
         const userDisabledDir = path.join(getOpenClawUserDisabledDir(userCode), params.slug);
         if (fs.existsSync(userSkillDir)) {
-          await fs.promises.rm(userSkillDir, { recursive: true, force: true });
+          await safeRemoveDir(userSkillDir, { label: userSkillDir });
         }
         if (fs.existsSync(userDisabledDir)) {
-          await fs.promises.rm(userDisabledDir, { recursive: true, force: true });
+          await safeRemoveDir(userDisabledDir, { label: userDisabledDir });
         }
       }
     }
@@ -308,35 +328,49 @@ export class StoSkillService {
   // -----------------------------------------------------------------------
 
   private async copyDir(src: string, dest: string): Promise<void> {
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true });
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.cpSync(src, dest, { recursive: true, force: true });
+  }
+
+  /**
+   * Promote a fully extracted staging directory into the final skill location.
+   * Uses rename-with-backup on force updates so a failed swap restores the old copy.
+   */
+  private async promoteStagedSkillDir(stagingDir: string, targetDir: string, force: boolean): Promise<void> {
+    fs.mkdirSync(path.dirname(targetDir), { recursive: true });
+
+    if (!force && fs.existsSync(targetDir)) {
+      await this.copyDir(stagingDir, targetDir);
+      await safeRemoveDir(stagingDir, { label: stagingDir });
+      return;
     }
-    const entries = fs.readdirSync(src, { withFileTypes: true });
-    for (const entry of entries) {
-      const srcPath = path.join(src, entry.name);
-      const destPath = path.join(dest, entry.name);
-      if (entry.isDirectory()) {
-        await this.copyDir(srcPath, destPath);
-      } else {
-        fs.copyFileSync(srcPath, destPath);
+
+    if (fs.existsSync(targetDir)) {
+      const backupDir = `${targetDir}.old-${Date.now()}`;
+      await fs.promises.rename(targetDir, backupDir);
+      try {
+        await fs.promises.rename(stagingDir, targetDir);
+        await safeRemoveDir(backupDir, { label: backupDir });
+      } catch (error) {
+        if (!fs.existsSync(targetDir) && fs.existsSync(backupDir)) {
+          await fs.promises.rename(backupDir, targetDir).catch(() => {});
+        } else if (fs.existsSync(backupDir)) {
+          await safeRemoveDir(backupDir, { label: backupDir }).catch(() => {});
+        }
+        if (fs.existsSync(stagingDir)) {
+          await safeRemoveDir(stagingDir, { label: stagingDir }).catch(() => {});
+        }
+        throw error;
       }
+      return;
     }
+
+    await fs.promises.rename(stagingDir, targetDir);
   }
 
   private async extractZip(zipPath: string, targetDir: string): Promise<void> {
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
-    const execAsync = promisify(exec);
-
-    const isWin = process.platform === 'win32';
-    if (isWin) {
-      await execAsync(
-        `powershell -NoProfile -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${targetDir}' -Force"`,
-        { windowsHide: true },
-      );
-    } else {
-      await execAsync(`unzip -o "${zipPath}" -d "${targetDir}"`);
-    }
+    const { extractZip: unifiedExtractZip } = await import('../utils/zip-extract');
+    await unifiedExtractZip(zipPath, targetDir);
 
     // ZIP packages often contain a single root folder (e.g. "name-1.0.0/SKILL.md").
     // The gateway expects SKILL.md directly inside targetDir.
@@ -361,13 +395,35 @@ export class StoSkillService {
 
     logger.info(`[StoSkillService] found SKILL.md in nested dir: ${skillMdDir}, hoisting to ${targetDir}`);
 
-    // Move all contents from the found directory up to targetDir
+    // Move all contents from the found directory up to targetDir.
+    // If a destination already exists and is a directory (e.g. nested dir with same name as targetDir),
+    // merge by moving its contents instead of skipping.
     const entries = fs.readdirSync(skillMdDir);
     for (const name of entries) {
       const src = path.join(skillMdDir, name);
       const dest = path.join(targetDir, name);
-      // If dest already exists (e.g. the nested parent dir itself), skip
-      if (fs.existsSync(dest)) continue;
+      if (fs.existsSync(dest)) {
+        // Dest exists and is a directory: merge contents
+        if (fs.statSync(src).isDirectory() && fs.statSync(dest).isDirectory()) {
+          const subEntries = fs.readdirSync(src);
+          for (const subName of subEntries) {
+            const subSrc = path.join(src, subName);
+            const subDest = path.join(dest, subName);
+            if (!fs.existsSync(subDest)) {
+              await fs.promises.rename(subSrc, subDest);
+            }
+          }
+          // Remove empty source subdir after merge
+          try {
+            fs.rmdirSync(src);
+          } catch {
+            // ignore if not empty
+          }
+          continue;
+        }
+        // Dest exists and is a file: skip (shouldn't happen in practice)
+        continue;
+      }
       await fs.promises.rename(src, dest);
     }
 

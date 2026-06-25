@@ -4,6 +4,7 @@ node_modules/
 .pnp.js
 
 # Build outputs
+electron-builder.package-all.js
 dist/
 dist-electron/
 release/
@@ -71,3 +72,4 @@ nul
 .claude/
 .kilo/
 /.codegraph/
+outputs/

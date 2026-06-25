@@ -4,11 +4,11 @@
  * re-registers them from message content + workflow memory.
  */
 import { toast } from 'sonner';
-import { registerParameterFormHandler, hasParameterFormHandler } from '@/components/parameter-form/form-handlers';
-import { buildWorkflowFormConfig, buildStartupPreset, buildWorkflowParameterIntroText } from '@/lib/workflow-form-utils';
+import { registerParameterFormHandler, hasParameterFormHandler, resolveParameterFormId } from '@/components/parameter-form/form-handlers';
+import { buildWorkflowFormConfig, buildStartupPreset, buildWorkflowParameterIntroText, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import type { WorkflowSchemaReadyData } from '@/lib/builtin-tool-envelope';
 import { parseStoToolEnvelope } from '@/lib/builtin-tool-envelope';
-import { isWorkflowCreationIntent } from '@/hooks/use-workflow-intent';
+import { isWorkflowFormUserTurn } from '@/hooks/use-workflow-intent';
 import { PARAM_FORM_MARKER_REGEX, parseParameterFormMarker } from '@/lib/parameter-form-marker';
 import { messageHasWorkflowContext } from '@/lib/workflow-context';
 import { deriveSessionLabelFromUserText } from '@/lib/workflow-session-hint';
@@ -170,11 +170,9 @@ export function isWorkflowFormInjectionAllowed(
     return false;
   }
 
-  if (!isWorkflowCreationIntent(userVisible)) return false;
-
-  if (rawMessages.length > 0 && sessionHistoryHasSchemaReady(rawMessages, templateId)) {
-    return true;
-  }
+  const pendingForTurn = useChatStore.getState().pendingWorkflow;
+  const templateName =
+    pendingForTurn?.templateId === templateId ? pendingForTurn.templateName : undefined;
 
   if (options?.allowLivePending) {
     const state = useChatStore.getState();
@@ -183,9 +181,21 @@ export function isWorkflowFormInjectionAllowed(
       pending?.templateId === templateId
       && pending.schema
       && (state.sending || pending.modelGuidanceSent)
+      && isWorkflowFormUserTurn(userVisible, pending.templateName)
     ) {
       return true;
     }
+  }
+
+  if (!isWorkflowFormUserTurn(userVisible, templateName)) return false;
+
+  if (rawMessages.length > 0 && sessionHistoryHasSchemaReady(rawMessages, templateId)) {
+    return true;
+  }
+
+  const pendingState = useChatStore.getState().pendingWorkflow;
+  if (pendingState?.templateId === templateId && pendingState.schema) {
+    return true;
   }
 
   return false;
@@ -206,7 +216,12 @@ export function reconcilePendingWorkflowForSession(
       uiMessages,
       getMessageText,
       sessionKey,
-      { rawMessages, allowLivePending: useChatStore.getState().sending },
+      {
+        rawMessages,
+        allowLivePending:
+          useChatStore.getState().sending
+          || !!useChatStore.getState().pendingWorkflow?.modelGuidanceSent,
+      },
     )
   ) {
     return;
@@ -347,6 +362,7 @@ function registerWorkflowSubmitHandler(
       const startedAtIso = new Date(trackStartMs).toISOString();
       appendWorkflowStartedLocalTurn({
         userText,
+        templateId,
         templateName,
         runId: run.runId,
         workflowId: created.workflowId,
@@ -414,6 +430,12 @@ export function applyWorkflowSchemaReady(data: WorkflowSchemaReadyData): boolean
     frontendFormInserted: false,
     modelGuidanceSent: true,
   });
+
+  const state = useChatStore.getState();
+  const patched = patchLastAssistantWithWorkflowForm(state.messages, defaultGetMessageText);
+  if (patched !== state.messages) {
+    useChatStore.setState({ messages: patched });
+  }
   return true;
 }
 
@@ -446,8 +468,6 @@ export function ensureWorkflowParameterFormInjected(
     }
     return true;
   }
-
-  if (state.sending) return false;
 
   const patched = patchLastAssistantWithWorkflowForm(state.messages, getMessageText);
   if (patched !== state.messages) {
@@ -518,8 +538,11 @@ export function appendWorkflowParameterFormToMessage(
       )
     : message.content;
 
-  const formId = `workflow-form-${pending.templateId}-${Date.now()}`;
-  const formConfig = buildWorkflowFormConfig(pending.schema, '', pending.collectedInputs ?? {});
+  const formId = buildWorkflowFormId(pending.templateId);
+  const formConfig = buildWorkflowFormConfig(pending.schema, '', pending.collectedInputs ?? {}, {
+    templateId: pending.templateId,
+    schemaHash: pending.schemaHash,
+  });
   registerWorkflowSubmitHandler(formId, {
     templateId: pending.templateId,
     templateName: pending.templateName,
@@ -555,14 +578,156 @@ export function appendWorkflowParameterFormToMessage(
   return { ...message, content: [newBlock] };
 }
 
+/** True when `message` is the latest assistant reply after the last user turn. */
+export function isLastAssistantAfterUserTurn(
+  message: RawMessage,
+  messages: RawMessage[],
+): boolean {
+  if (message.role !== 'assistant') return false;
+  const msgIdx = message.id
+    ? messages.findIndex((m) => m.id === message.id)
+    : messages.indexOf(message);
+  if (msgIdx < 0) return false;
+
+  let lastUserIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') {
+      lastUserIdx = i;
+      break;
+    }
+  }
+  if (msgIdx <= lastUserIdx) return false;
+
+  for (let i = messages.length - 1; i > lastUserIdx; i--) {
+    if (messages[i].role === 'assistant') {
+      return i === msgIdx;
+    }
+  }
+  return false;
+}
+
+export function buildWorkflowParameterFormFromPending(
+  pending: NonNullable<ReturnType<typeof useChatStore.getState>['pendingWorkflow']>,
+): {
+  formId: string;
+  formConfig: import('@/types/user-form').UserFormConfig;
+  formContext: { source: 'workflow' | 'tool' | 'skill'; sourceId: string; schemaHash?: string };
+} | null {
+  if (!pending.schema || !pending.schemaHash) return null;
+  const sessionKey = useChatStore.getState().currentSessionKey;
+  if (sessionHasWorkflowExecution(sessionKey, pending.templateId)) return null;
+
+  const formId = buildWorkflowFormId(pending.templateId);
+  return {
+    formId: resolveParameterFormId(formId),
+    formConfig: buildWorkflowFormConfig(
+      pending.schema,
+      '',
+      pending.collectedInputs ?? {},
+      { templateId: pending.templateId, schemaHash: pending.schemaHash },
+    ),
+    formContext: {
+      source: 'workflow' as const,
+      sourceId: pending.templateId,
+      schemaHash: pending.schemaHash,
+    },
+  };
+}
+
+/** Resolve inline parameter form from message blocks or live pending workflow state. */
+export function resolveParameterFormForAssistantMessage(
+  message: RawMessage,
+  options: {
+    sessionMessages: RawMessage[];
+    sessionKey: string;
+    pendingWorkflow: ReturnType<typeof useChatStore.getState>['pendingWorkflow'];
+    getMessageText: (content: unknown) => string;
+  },
+): ReturnType<typeof buildWorkflowParameterFormFromPending> {
+  const { sessionMessages, sessionKey, pendingWorkflow, getMessageText } = options;
+
+  const contentBlocks = Array.isArray(message.content)
+    ? (message.content as ContentBlock[])
+    : [];
+  for (const block of contentBlocks) {
+    if (
+      block.type === 'parameter_form'
+      && block.formId
+      && block.formConfig
+      && block.formContext
+    ) {
+      const formContext = block.formContext as {
+        source: 'workflow' | 'tool' | 'skill';
+        sourceId: string;
+        schemaHash?: string;
+      };
+      if (
+        formContext.source === 'workflow'
+        && formContext.sourceId
+        && sessionHasWorkflowExecution(sessionKey, formContext.sourceId)
+      ) {
+        return null;
+      }
+      return {
+        formId: block.formId,
+        formConfig: block.formConfig as import('@/types/user-form').UserFormConfig,
+        formContext: formContext,
+      };
+    }
+  }
+
+  for (const block of contentBlocks) {
+    if (block.type === 'text' && typeof block.text === 'string') {
+      const parsed = parseParameterFormMarker(block.text);
+      if (!parsed) continue;
+      if (sessionHasWorkflowExecution(sessionKey, parsed.templateId)) return null;
+      if (
+        !pendingWorkflow
+        || pendingWorkflow.templateId !== parsed.templateId
+        || !pendingWorkflow.schema
+      ) {
+        continue;
+      }
+      return {
+        formId: resolveParameterFormId(buildWorkflowFormId(parsed.templateId)),
+        formConfig: buildWorkflowFormConfig(
+          pendingWorkflow.schema,
+          '',
+          pendingWorkflow.collectedInputs ?? {},
+          { templateId: parsed.templateId, schemaHash: parsed.schemaHash },
+        ),
+        formContext: {
+          source: 'workflow',
+          sourceId: parsed.templateId,
+          schemaHash: parsed.schemaHash,
+        },
+      };
+    }
+  }
+
+  if (!pendingWorkflow?.schema || !pendingWorkflow.schemaHash) return null;
+  if (!isLastAssistantAfterUserTurn(message, sessionMessages)) return null;
+  if (
+    !isWorkflowFormInjectionAllowed(
+      pendingWorkflow.templateId,
+      sessionMessages,
+      getMessageText,
+      sessionKey,
+      { allowLivePending: true },
+    )
+  ) {
+    return null;
+  }
+
+  return buildWorkflowParameterFormFromPending(pendingWorkflow);
+}
+
 /** Patch the last assistant reply (after last user turn) with workflow parameter form. */
 export function patchLastAssistantWithWorkflowForm(
   messages: RawMessage[],
   getMessageText: (content: unknown) => string,
   options?: { rawMessages?: RawMessage[] },
 ): RawMessage[] {
-  if (useChatStore.getState().sending) return messages;
-
   const pending = useChatStore.getState().pendingWorkflow;
   if (!pending?.templateId || !pending.schema) return messages;
 
@@ -573,7 +738,7 @@ export function patchLastAssistantWithWorkflowForm(
       messages,
       getMessageText,
       sessionKey,
-      { rawMessages: options?.rawMessages },
+      { rawMessages: options?.rawMessages, allowLivePending: true },
     )
   ) {
     return messages;
@@ -594,6 +759,7 @@ export function patchLastAssistantWithWorkflowForm(
     if (!text) continue;
     const updated = appendWorkflowParameterFormToMessage(m, getMessageText, {
       rawMessages: options?.rawMessages,
+      allowLivePending: true,
     });
     if (updated) {
       const next = [...messages];
@@ -619,8 +785,11 @@ export function injectWorkflowParameterForm(params: {
     return false;
   }
 
-  const formId = `workflow-form-${params.templateId}-${Date.now()}`;
-  const formConfig = buildWorkflowFormConfig(params.schema, '', {});
+  const formId = buildWorkflowFormId(params.templateId);
+  const formConfig = buildWorkflowFormConfig(params.schema, '', {}, {
+    templateId: params.templateId,
+    schemaHash: params.schemaHash,
+  });
   registerWorkflowSubmitHandler(formId, {
     templateId: params.templateId,
     templateName: params.templateName,
@@ -706,6 +875,10 @@ async function recoverFormForAssistantMarker(
   },
 ): Promise<RawMessage[]> {
   const { sessionKey, get, getMessageText, collectedInputs = {}, templateName } = options;
+  const hasFormBlock = Array.isArray(marker.message.content)
+    && (marker.message.content as ContentBlock[]).some((b) => b.type === 'parameter_form');
+  if (hasFormBlock) return messages;
+
   const { getStartupSchema } = await import('@/lib/workflow-api');
   const { getLatestWorkflow, getPendingWorkflowDraft } = await import('@/stores/workflow-memory');
   const startup = await getStartupSchema(marker.templateId);
@@ -718,8 +891,11 @@ async function recoverFormForAssistantMarker(
     ?? marker.templateId;
   const inputs = collectedInputs ?? draft?.collectedInputs ?? latest?.collectedInputs ?? {};
 
-  const formId = `workflow-form-${marker.templateId}-${Date.now()}`;
-  const formConfig = buildWorkflowFormConfig(startup.schema, '', inputs);
+  const formId = buildWorkflowFormId(marker.templateId);
+  const formConfig = buildWorkflowFormConfig(startup.schema, '', inputs, {
+    templateId: marker.templateId,
+    schemaHash: startup.schemaHash,
+  });
 
   registerWorkflowSubmitHandler(formId, {
     templateId: marker.templateId,
@@ -903,11 +1079,15 @@ export function recoverParameterFormsOnHistoryLoad(
       { targetAssistantIndex: lastAssistantWithMarker.index },
     )
   ) {
-    const formId = `workflow-form-${pendingWorkflow.templateId}-${Date.now()}`;
+    const formId = buildWorkflowFormId(pendingWorkflow.templateId);
     const formConfig = buildWorkflowFormConfig(
       pendingWorkflow.schema,
       '',
       pendingWorkflow.collectedInputs,
+      {
+        templateId: pendingWorkflow.templateId,
+        schemaHash: pendingWorkflow.schemaHash,
+      },
     );
     registerWorkflowSubmitHandler(formId, {
       templateId: pendingWorkflow.templateId,

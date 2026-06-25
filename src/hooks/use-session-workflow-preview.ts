@@ -1,67 +1,36 @@
-import { useEffect, useMemo, useState } from 'react';
-import { getWorkflowDetail } from '@/lib/workflow-api';
+import { useMemo } from 'react';
 import {
+  filterSessionWorkflowCardStates,
   resolveSessionWorkflowId,
   shouldShowWorkflowPreviewTab,
 } from '@/lib/session-workflow-context';
 import { useChatStore } from '@/stores/chat';
 import type { RawMessage } from '@/stores/chat/types';
-import type { WorkflowDetailResponse } from '@/types/workflow';
 
+/**
+ * 会话工作流上下文（预览区不展示工作流详情，仅决定是否展示「编辑工作流」入口）。
+ */
 export function useSessionWorkflowPreview(
   messages: RawMessage[],
-  forcedWorkflowId?: string | null,
+  sessionKey?: string,
 ) {
-  const sessionKey = useChatStore((s) => s.currentSessionKey);
+  const storeSessionKey = useChatStore((s) => s.currentSessionKey);
+  const resolvedSessionKey = sessionKey ?? storeSessionKey;
   const workflowCardStates = useChatStore((s) => s.workflowCardStates);
-
-  const sessionWorkflowId = useMemo(
-    () => resolveSessionWorkflowId(sessionKey, messages, workflowCardStates),
-    [sessionKey, messages, workflowCardStates],
+  const sessionWorkflowCardStates = useMemo(
+    () => filterSessionWorkflowCardStates(messages, workflowCardStates),
+    [messages, workflowCardStates],
   );
 
-  const workflowId = forcedWorkflowId ?? sessionWorkflowId;
+  const workflowId = useMemo(
+    () => resolveSessionWorkflowId(resolvedSessionKey, messages, sessionWorkflowCardStates),
+    [resolvedSessionKey, messages, sessionWorkflowCardStates],
+  );
 
-  const showWorkflowTab = useMemo(() => {
-    if (forcedWorkflowId) return true;
+  const showEditWorkflow = useMemo(() => {
     if (!workflowId) return false;
-    return shouldShowWorkflowPreviewTab(sessionKey, messages, workflowCardStates);
-  }, [forcedWorkflowId, workflowId, sessionKey, messages, workflowCardStates]);
+    return shouldShowWorkflowPreviewTab(resolvedSessionKey, messages, sessionWorkflowCardStates);
+  }, [workflowId, resolvedSessionKey, messages, sessionWorkflowCardStates]);
 
-  const [detail, setDetail] = useState<WorkflowDetailResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!showWorkflowTab || !workflowId) {
-      setDetail(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    getWorkflowDetail(workflowId)
-      .then((data) => {
-        if (!cancelled) setDetail(data);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setDetail(null);
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [showWorkflowTab, workflowId]);
-
-  return { workflowId, showWorkflowTab, detail, loading, error };
+  return { workflowId, showEditWorkflow };
 }

@@ -13,6 +13,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { toast } from 'sonner';
+import { stoMainInnerShell } from '@/lib/surfaces';
 import { useTranslation } from 'react-i18next';
 import type { ManagedLocalTask } from '@/stores/cron';
 import { CronTaskHero } from './components/CronTaskHero';
@@ -181,7 +182,12 @@ export function Cron() {
           });
           void useChatStore.getState().loadSessions();
         } else {
-          const sessionKey = `agent:${job.agentId ?? 'main'}:cron:${job.id}`;
+          // Build dated session key instead of base key to avoid adding base session back
+          const today = new Date();
+          const y = today.getFullYear();
+          const m = String(today.getMonth() + 1).padStart(2, '0');
+          const d = String(today.getDate()).padStart(2, '0');
+          const sessionKey = `agent:${job.agentId ?? 'main'}:cron:${job.id}:${y}-${m}-${d}`;
           navigateToMainChatHome(navigate, location.pathname, () => {
             useChatStore.getState().switchSession(sessionKey);
           });
@@ -219,7 +225,7 @@ export function Cron() {
     return (
       <div className="h-full flex flex-col">
         <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="max-w-7xl mx-auto">
+          <div className={stoMainInnerShell}>
             <div className="flex items-center justify-center py-20">
               <LoadingSpinner size="lg" />
             </div>
@@ -232,7 +238,7 @@ export function Cron() {
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="max-w-7xl mx-auto">
+        <div className={stoMainInnerShell}>
           <CronTaskHero
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}

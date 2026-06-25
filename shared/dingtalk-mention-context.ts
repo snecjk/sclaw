@@ -12,6 +12,10 @@ import {
   hasResolvedDingTalkMentions,
   type DingTalkMention,
 } from './dingtalk-mention';
+import {
+  buildDwsChatMessageSendAgentCommandExample,
+  DWS_CHAT_MESSAGE_SEND_AGENT_FORMAT_RULE,
+} from './dws-send-text';
 
 export type { DingTalkAttachedFileHint };
 export { shouldIncludeDingTalkFileSendWorkflow };
@@ -39,19 +43,15 @@ export function stripDingTalkAgentSendDisclaimerForDisplay(text: string): string
   return text
     .replace(/\r\n/g, '\n')
     .replace(/\n*---\n*\s*<font color=['"]#999999['"]>[\s\S]*?<\/font>\s*/gi, '')
-    .replace(/\n*---\n*\s*>\s*\*?[^\n]*STO Claw[^*\n]*代为发送[^\n]*\*?\s*/gi, '')
+    .replace(/\n*---\n*\s*>\s*\*?[^\n]*S Claw[^*\n]*代为发送[^\n]*\*?\s*/gi, '')
     .replace(/<font color=['"]#999999['"]>[\s\S]*?<\/font>/gi, '')
-    .replace(/\n*>\s*\*?[^*\n]*STO Claw[^*\n]*代为发送[^*\n]*\*?\s*/gi, '')
+    .replace(/\n*>\s*\*?[^*\n]*S Claw[^*\n]*代为发送[^*\n]*\*?\s*/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
 function buildDingTalkSendTextExample(userBody = '你好'): string {
   return appendDingTalkAgentSendDisclaimer(userBody);
-}
-
-function buildDwsSendCommand(prefix: string, text: string): string {
-  return `${prefix} --title "消息" --text ${JSON.stringify(text)} --format json`;
 }
 
 function buildRecipientPayload(mentions: DingTalkMention[]) {
@@ -78,12 +78,20 @@ function buildSendCommandHints(mentions: DingTalkMention[]): string[] {
   return mentions.flatMap((mention) => {
     if (mention.type === 'user' && mention.userId) {
       return [
-        `- ${mention.displayName}: ${buildDwsSendCommand(`dws chat message send --user ${mention.userId}`, textExample)}`,
+        `- ${mention.displayName}: ${buildDwsChatMessageSendAgentCommandExample({
+          recipientKind: 'user',
+          recipientId: mention.userId,
+          text: textExample,
+        })}`,
       ];
     }
     if (mention.type === 'group' && mention.openConversationId) {
       return [
-        `- ${mention.displayName}: ${buildDwsSendCommand(`dws chat message send --group ${mention.openConversationId}`, textExample)}`,
+        `- ${mention.displayName}: ${buildDwsChatMessageSendAgentCommandExample({
+          recipientKind: 'group',
+          recipientId: mention.openConversationId,
+          text: textExample,
+        })}`,
       ];
     }
     return [];
@@ -153,7 +161,7 @@ export function buildDingTalkMentionSystemContext(
     '5. 发送前可与用户确认正文，或使用 `--dry-run`；但如果用户消息已经是可直接发送的问候/问题/通知，直接发送原文即可。',
     '6. **`--title` 必填**（单聊/群聊均需）；无特定标题时用 `消息`',
     '7. **正文**用钉钉 IM Markdown：`###` 标题、`**加粗**`、`-` 列表等；段落之间要换行空一行；正文内**禁止** HTML（`<font>`、`<br>` 等会乱版）',
-    '8. **不要使用 shell 变量传正文**（例如 `--text $text`），也不要使用 Bash ANSI-C 引号 `$\\\'...\\\'`。请直接写 `dws chat message send ... --text "正文" --format json`；多段正文可在普通双引号里写 `\\n`，StoClaw gateway 会在执行前转成真实换行并以 argv 传给 dws。',
+    `8. ${DWS_CHAT_MESSAGE_SEND_AGENT_FORMAT_RULE}`,
     '9. **正文末尾必须附加代发说明**（`---` 分隔线 + Markdown 引用说明，固定格式）：',
     '   ```',
     '   {用户正文}',
@@ -166,7 +174,7 @@ export function buildDingTalkMentionSystemContext(
     '10. 发送成功后，最终回复可简短确认即可；**完整发送正文**会在 StoClaw 对话卡片中自动展示，无需在回复里重复粘贴全文。',
     '11. **安全**：禁止循环/批量调用 `dws chat message send`（含 shell `for`/`while`）；同一对话内 **文字** 与 **图片/文件** 分别限流：各 **每 20 秒最多成功发送 1 条**（仅 `dws` 返回成功才计入；`--dry-run` 不计入）。',
     '',
-    '预填命令示例（`--text` 已含代发说明，发送时把示例中的「你好」换成实际正文）：',
+    '预填命令示例（格式与 StoClaw 自动修正逻辑一致；`--text` 已含代发说明，发送时把示例中的「你好」换成实际正文）：',
     ...sendCommandHints,
     ...(options?.sendFileIntent
       ? [buildDingTalkFileSendWorkflowContext(mentions, options.attachedFiles)]

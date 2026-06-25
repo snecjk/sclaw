@@ -12,7 +12,7 @@ import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
-import { buildCronSessionHistoryPath, isCronSessionKey, parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './chat/cron-session-utils';
+import { buildCronSessionHistoryPath, getCronRunSessionAggregateKey, isCronSessionKey, isCronDatedSessionKey, parseCronSessionKey, parseScheduledTaskAgentSessionKey } from './chat/cron-session-utils';
 import { sanitizeSessionDisplayField } from './chat/helpers';
 import {
   DEFAULT_CANONICAL_PREFIX,
@@ -27,13 +27,14 @@ import {
 } from './chat/types';
 import type { WorkflowExecutionState } from '@/types/workflow';
 import { mergeLocalWorkflowTurnsFromCurrent, mergeWorkflowTurnsFromMemory } from '@/lib/workflow-local-turn';
-import { ensureWorkflowCardsInMessages } from '@/lib/workflow-card-injection';
+import { ensureWorkflowCardsInMessages, mergeWorkflowCardBlocksFromCurrent } from '@/lib/workflow-card-injection';
 import { buildWorkflowCardStatesForSession } from '@/stores/workflow-memory';
 import { hydrateSessionWorkflowCards } from '@/lib/workflow-run-hydration';
 import { upgradeWorkflowParamUserMessages } from '@/lib/workflow-param-messages';
 import {
   absorbWorkflowSchemaFromToolResults,
   appendWorkflowParameterFormToMessage,
+  applyWorkflowSchemaReady,
   ensureWorkflowParameterFormInjected,
   mergeParameterFormBlocksFromCurrent,
   patchLastAssistantWithWorkflowForm,
@@ -41,10 +42,20 @@ import {
   reconcilePendingWorkflowForSession,
   recoverParameterFormsOnHistoryLoad,
 } from './chat/parameter-form-recovery';
+import { parseStoToolEnvelope, type WorkflowSchemaReadyData } from '@/lib/builtin-tool-envelope';
 import type { ChatSet } from './chat/store-api';
-import { dispatchBuiltinToolResult } from '@/lib/builtin-tool-dispatch';
+import {
+  absorbWorkflowExecutionStartedFromToolResults,
+  dispatchBuiltinToolResult,
+} from '@/lib/builtin-tool-dispatch';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
+import { applyStoredSessionLabels, resolveStoredSessionLabel, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
+import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
+import {
+  dedupeRedundantUserMessages,
+  mergeOptimisticUserIntoHistory,
+} from './chat/user-message-merge';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 
@@ -793,7 +804,7 @@ async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promi
 }
 
 async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
-  if (!isCronSessionKey(sessionKey)) return [];
+  if (!isCronSessionKey(sessionKey) && !isCronDatedSessionKey(sessionKey)) return [];
   try {
     const response = await hostApiFetch<{ messages?: RawMessage[] }>(
       buildCronSessionHistoryPath(sessionKey, limit),
@@ -1457,6 +1468,7 @@ export const useChatStore = create<ChatState>()(
   error: null,
 
   sending: false,
+  modelSwitching: false,
   activeRunId: null,
   streamingText: '',
   streamingMessage: null,
@@ -1581,9 +1593,14 @@ export const useChatStore = create<ChatState>()(
           }
 
           // Filter out base sessions that have dated replacements
+          // Also filter out run sessions when the job has dated aggregate sessions
           let filteredSessions = sessions.filter((s) => {
             if (cronDated.has(s.key)) return false;
             if (scheduledTaskDated.has(s.key)) return false;
+            const cronParts = parseCronSessionKey(s.key);
+            if (cronParts?.runSessionId && cronDated.has(`agent:main:cron:${cronParts.jobId}`)) {
+              return false;
+            }
             return true;
           });
 
@@ -1599,11 +1616,26 @@ export const useChatStore = create<ChatState>()(
           }
 
           // Deduplicate: if both short and canonical existed, keep canonical only
+          // Also deduplicate cron dated sessions by jobId+date to prevent duplicates
           const seen = new Set<string>();
+          const seenCronDated = new Set<string>();
           const dedupedSessions = filteredSessions.filter((s) => {
             if (!s.key.startsWith('agent:') && canonicalBySuffix.has(s.key)) return false;
-            if (seen.has(s.key)) return false;
+            if (seen.has(s.key)) {
+              console.warn('[loadSessions] Duplicate session key filtered:', s.key);
+              return false;
+            }
             seen.add(s.key);
+            // Extra dedup for cron dated sessions: same job+date should only appear once
+            const cronParts = parseCronSessionKey(s.key);
+            if (cronParts?.date) {
+              const dedupKey = `${cronParts.jobId}:${cronParts.date}`;
+              if (seenCronDated.has(dedupKey)) {
+                console.warn('[loadSessions] Duplicate cron dated session filtered:', s.key, 'dedupKey:', dedupKey);
+                return false;
+              }
+              seenCronDated.add(dedupKey);
+            }
             return true;
           });
 
@@ -1618,7 +1650,10 @@ export const useChatStore = create<ChatState>()(
           if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
             // Preserve only locally-created pending sessions. On initial boot the
             // default ghost key (`agent:main:main`) should yield to real history.
-            const hasLocalPendingSession = localSessions.some((session) => session.key === nextSessionKey);
+            const hasLocalPendingSession =
+              isTemporaryAgentSessionKey(nextSessionKey)
+              || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
+              || localSessions.some((session) => session.key === nextSessionKey);
             if (!hasLocalPendingSession) {
               nextSessionKey = dedupedSessions[0].key;
             }
@@ -1630,17 +1665,20 @@ export const useChatStore = create<ChatState>()(
               key: nextSessionKey,
               label: localCurrentSession?.label ?? NEW_SESSION_TEMP_LABEL,
               engineType: localCurrentSession?.engineType,
+              model: localCurrentSession?.model,
             }]
             : dedupedSessions;
 
+          const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, get().sessionLabels);
+
           const discoveredActivity = Object.fromEntries(
-            sessionsWithCurrent
+            labeledSessions
               .filter((session) => typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt))
               .map((session) => [session.key, session.updatedAt!]),
           );
 
           set((state) => ({
-            sessions: sessionsWithCurrent,
+            sessions: labeledSessions,
             currentSessionKey: nextSessionKey,
             currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
             sessionLastActivity: {
@@ -1656,10 +1694,14 @@ export const useChatStore = create<ChatState>()(
           // Background: hydrate only the first screen of missing metadata.
           // Avoid the old N * full-history fan-out, which became very expensive
           // when users had hundreds of sessions.
-          const sessionsToHydrate = sessionsWithCurrent
+          const sessionsToHydrate = labeledSessions
             .filter((session) => {
               if (session.key.endsWith(':main')) return false;
-              const hasUsableTitle = Boolean(session.label?.trim() || session.displayName?.trim() || get().sessionLabels[session.key]);
+              const hasUsableTitle = Boolean(
+                session.label?.trim()
+                || session.displayName?.trim()
+                || resolveStoredSessionLabel(session.key, get().sessionLabels),
+              );
               const hasActivity = Boolean(session.updatedAt || get().sessionLastActivity[session.key]);
               return !hasUsableTitle || !hasActivity;
             })
@@ -1682,8 +1724,7 @@ export const useChatStore = create<ChatState>()(
                 const lastMsg = msgs[msgs.length - 1];
                 set((s) => {
                   const next: Partial<typeof s> = {};
-                  const existingLabel = s.sessionLabels[session.key];
-                  if (firstUser && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+                  if (firstUser && shouldAutoDeriveSessionLabel(session.key, s.sessionLabels, isCorruptedSessionLabel)) {
                     const labelText = deriveSessionLabelFromUserText(getMessageText(firstUser.content));
                     if (labelText) {
                       const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
@@ -1748,7 +1789,10 @@ export const useChatStore = create<ChatState>()(
         error?: string;
       }>('/api/sessions/delete', {
         method: 'POST',
-        body: JSON.stringify({ sessionKey: key }),
+        body: JSON.stringify({
+          sessionKey: key,
+          engineType: resolveEngineTypeForSession(get().sessions, key, get().currentAgentId) ?? 'openclaw',
+        }),
       });
       if (!result.success) {
         console.warn(`[deleteSession] IPC reported failure for ${key}:`, result.error);
@@ -1811,11 +1855,14 @@ export const useChatStore = create<ChatState>()(
       ?? DEFAULT_CANONICAL_PREFIX;
     const newKey = `${prefix}:session-${Date.now()}`;
     const newAgentId = getAgentIdFromSessionKey(newKey);
+    const pendingModel = get().pendingNewSessionModel?.trim();
+    const carriedModel = sessions.find((s) => s.key === currentSessionKey)?.model?.trim();
+    const chosenModel = pendingModel || carriedModel;
     const newSessionEntry: ChatSession = {
       key: newKey,
       label: NEW_SESSION_TEMP_LABEL,
       engineType: getAgentEngineType(newAgentId),
-      model: get().pendingNewSessionModel ?? undefined,
+      ...(chosenModel ? { model: chosenModel } : {}),
     };
     set((s) => {
       const nextRuntimeBySessionKey = {
@@ -1931,20 +1978,11 @@ export const useChatStore = create<ChatState>()(
       // until the run completes, causing it to flash out of the UI.
       let finalMessages = enrichedMessages;
       const userMsgAt = get().lastUserMessageAt;
-      if (get().sending && userMsgAt) {
-        const userMsMs = toMs(userMsgAt);
-        const hasRecentUser = enrichedMessages.some(
-          (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000,
-        );
-        if (!hasRecentUser) {
-          const currentMsgs = get().messages;
-          const optimistic = [...currentMsgs].reverse().find(
-            (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMsMs) < 5000,
-          );
-          if (optimistic) {
-            finalMessages = [...enrichedMessages, optimistic];
-          }
-        }
+      if (userMsgAt) {
+        finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
+          userMessageAt: userMsgAt,
+          sending: get().sending,
+        });
       }
 
       if (get().currentSessionKey !== targetSessionKey) return;
@@ -1957,8 +1995,10 @@ export const useChatStore = create<ChatState>()(
         getMessageText,
       );
       finalMessages = mergeLocalWorkflowTurnsFromCurrent(finalMessages, get().messages);
+      finalMessages = mergeWorkflowCardBlocksFromCurrent(finalMessages, get().messages);
       finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
       finalMessages = ensureWorkflowCardsInMessages(finalMessages, targetSessionKey, getMessageText);
+      finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null);
       const restoredCardStates = buildWorkflowCardStatesForSession(targetSessionKey);
       const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
         sessionKey: targetSessionKey,
@@ -2069,8 +2109,7 @@ export const useChatStore = create<ChatState>()(
       const isMainSession = targetSessionKey.endsWith(':main');
       if (!isMainSession) {
         const firstUserMsg = finalMessages.find((m) => m.role === 'user');
-        const existingLabel = get().sessionLabels[targetSessionKey];
-        if (firstUserMsg && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+        if (firstUserMsg && shouldAutoDeriveSessionLabel(targetSessionKey, get().sessionLabels, isCorruptedSessionLabel)) {
           const labelText = deriveSessionLabelFromUserText(getMessageText(firstUserMsg.content));
           if (labelText) {
             const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
@@ -2203,10 +2242,15 @@ export const useChatStore = create<ChatState>()(
         }
 
         let rawMessages = allMessages;
-        if (rawMessages.length === 0 && isCronSessionKey(targetSessionKey)) {
+        if (rawMessages.length === 0 && (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey))) {
           rawMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
         }
 
+        if (get().currentSessionKey !== targetSessionKey) return;
+        await absorbWorkflowExecutionStartedFromToolResults(rawMessages, {
+          sessionKey: targetSessionKey,
+          agentId: get().currentAgentId,
+        });
         if (get().currentSessionKey !== targetSessionKey) return;
         applyLoadedMessages(rawMessages, thinkingLevel, {
           isRunning: typeof data.isRunning === 'boolean' ? data.isRunning : undefined,
@@ -2218,6 +2262,11 @@ export const useChatStore = create<ChatState>()(
         const fallbackMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
         if (get().currentSessionKey !== targetSessionKey) return;
         if (fallbackMessages.length > 0) {
+          await absorbWorkflowExecutionStartedFromToolResults(fallbackMessages, {
+            sessionKey: targetSessionKey,
+            agentId: get().currentAgentId,
+          });
+          if (get().currentSessionKey !== targetSessionKey) return;
           applyLoadedMessages(fallbackMessages, null);
         } else if (get().currentSessionKey === targetSessionKey) {
           set({ messages: [], loading: false });
@@ -2313,12 +2362,12 @@ export const useChatStore = create<ChatState>()(
       }
     }
 
-    console.log('[workflow-trace] sendMessage workflowContext=%s text=%s', workflowContext ? `templateId=${workflowContext.templateId} fields=${workflowContext.fields.length}` : 'null', trimmed.slice(0, 50));
+    
     const messageWithContext = appendWorkflowContext(textForGateway, workflowContext);
     const displayText = stripWorkflowSessionHintForDisplay(
       stripWorkflowContextForDisplay(messageWithContext),
     );
-    console.log('[workflow-trace] sendMessage injected=%s finalLength=%d', workflowContext ? 'yes' : 'no', messageWithContext.length);
+    
 
     const quotaCheck = await checkDailyTokenQuota();
     if (quotaCheck) {
@@ -2359,7 +2408,7 @@ export const useChatStore = create<ChatState>()(
       })),
     };
     set((s) => ({
-      messages: [...s.messages, userMsg],
+      messages: dedupeRedundantUserMessages([...s.messages, userMsg], nowMs),
       sending: true,
       error: null,
       streamingText: '',
@@ -2383,9 +2432,9 @@ export const useChatStore = create<ChatState>()(
     // Update session label with first user message text as soon as it's sent
     const { sessionLabels, messages } = get();
     const isFirstMessage = !messages.slice(0, -1).some((m) => m.role === 'user');
-    const existingSession = get().sessions.find((session) => session.key === currentSessionKey);
-    const hasOnlyTemporaryLabel = existingSession?.label === NEW_SESSION_TEMP_LABEL;
-    if (!currentSessionKey.endsWith(':main') && isFirstMessage && (!sessionLabels[currentSessionKey] || hasOnlyTemporaryLabel) && displayText) {
+    if (!currentSessionKey.endsWith(':main') && isFirstMessage
+      && shouldAutoDeriveSessionLabel(currentSessionKey, sessionLabels, isCorruptedSessionLabel)
+      && displayText) {
       const truncated = displayText.length > 50 ? `${displayText.slice(0, 50)}…` : displayText;
       set((s) => ({ sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated } }));
     }
@@ -2578,7 +2627,28 @@ export const useChatStore = create<ChatState>()(
     const eventSessionKey = event.sessionKey != null ? String(event.sessionKey) : null;
     const { activeRunId, currentSessionKey } = get();
 
-    if (eventSessionKey != null && eventSessionKey !== currentSessionKey) {
+    // Map cron run session events to their daily aggregate session key so that
+    // the loading indicator appears on the aggregate session in the sidebar.
+    // Also map base cron keys to dated keys when the current session is dated.
+    let resolvedSessionKey = eventSessionKey;
+    if (eventSessionKey) {
+      const aggregateKey = getCronRunSessionAggregateKey(eventSessionKey);
+      if (aggregateKey) {
+        resolvedSessionKey = aggregateKey;
+      } else {
+        // If eventSessionKey is a base cron key (no date, no run), and current
+        // session is a dated key for the same job, map to the dated key.
+        const parsed = parseCronSessionKey(eventSessionKey);
+        if (parsed && !parsed.date && !parsed.runSessionId && currentSessionKey) {
+          const currentParsed = parseCronSessionKey(currentSessionKey);
+          if (currentParsed && currentParsed.date && currentParsed.jobId === parsed.jobId) {
+            resolvedSessionKey = currentSessionKey;
+          }
+        }
+      }
+    }
+
+    if (resolvedSessionKey != null && resolvedSessionKey !== currentSessionKey) {
       let resolvedState = eventState;
       if (!resolvedState && event.message && typeof event.message === 'object') {
         const msg = event.message as Record<string, unknown>;
@@ -2589,8 +2659,24 @@ export const useChatStore = create<ChatState>()(
           resolvedState = 'delta';
         }
       }
-      handleBackgroundSessionEvent(set, eventSessionKey, event, resolvedState, runId);
+      handleBackgroundSessionEvent(set, resolvedSessionKey, event, resolvedState, runId);
       return;
+    }
+
+    // For active session events, also update runtimeBySessionKey so that
+    // the sidebar shows loading for the current session.
+    if (resolvedSessionKey != null && resolvedSessionKey === currentSessionKey) {
+      let resolvedState = eventState;
+      if (!resolvedState && event.message && typeof event.message === 'object') {
+        const msg = event.message as Record<string, unknown>;
+        const stopReason = msg.stopReason ?? msg.stop_reason;
+        if (stopReason) {
+          resolvedState = 'final';
+        } else if (msg.role || msg.content) {
+          resolvedState = 'delta';
+        }
+      }
+      handleBackgroundSessionEvent(set, resolvedSessionKey, event, resolvedState, runId);
     }
 
     // Only process events for the active run (or if no active run set)
@@ -2668,6 +2754,11 @@ export const useChatStore = create<ChatState>()(
         if (finalMsg) {
           const updates = collectToolUpdates(finalMsg, resolvedState);
           if (isToolResultRole(finalMsg.role)) {
+            const schemaEnvelope = parseStoToolEnvelope(finalMsg.content);
+            if (schemaEnvelope?.type === 'workflow_schema_ready' && schemaEnvelope.success) {
+              applyWorkflowSchemaReady((schemaEnvelope.data ?? {}) as WorkflowSchemaReadyData);
+            }
+
             // Snapshot streaming assistant turn before handling tool result.
             const currentStreamForPath = get().streamingMessage as RawMessage | null;
             const matchedPath = (currentStreamForPath && finalMsg.toolCallId)
@@ -2733,14 +2824,21 @@ export const useChatStore = create<ChatState>()(
                 content: finalMsg.content,
               });
               const sessionKey = get().currentSessionKey;
+              let nextMessages = get().messages;
+              const withForm = patchLastAssistantWithWorkflowForm(nextMessages, getMessageText);
+              if (withForm !== nextMessages) {
+                nextMessages = withForm;
+                set({ messages: withForm });
+              }
               const withCards = ensureWorkflowCardsInMessages(
-                get().messages,
+                nextMessages,
                 sessionKey,
                 getMessageText,
               );
-              if (withCards !== get().messages) {
+              if (withCards !== nextMessages) {
                 set({ messages: withCards });
               }
+              ensureWorkflowParameterFormInjected(getMessageText);
               void get().loadHistory(true);
             })();
             break;
@@ -2766,10 +2864,7 @@ export const useChatStore = create<ChatState>()(
             hasOutput
             && !hasPendingToolUse(finalMsg)
             && !isClaudeRunFragment;
-          const pendingForDebug = get().pendingWorkflow;
-          console.log('[handleChatEvent:final] hasOutput=%s, terminal=%s, engine=%s, pendingWorkflow=%s, msgContent=%s',
-            hasOutput, isTerminalOutput, currentEngineType, pendingForDebug ? 'yes' : 'no', typeof finalMsg.content);
-          const msgId = finalMsg.id || (toolOnly
+                    const msgId = finalMsg.id || (toolOnly
             ? `run-${runId}-tool-${Date.now()}`
             : isTerminalOutput
               ? `run-${runId || 'unknown'}`
@@ -2884,6 +2979,17 @@ export const useChatStore = create<ChatState>()(
               ...clearPendingImages,
             };
           });
+          if (isTerminalOutput && !toolOnly) {
+            const sessionKey = get().currentSessionKey;
+            const synced = ensureWorkflowCardsInMessages(
+              get().messages,
+              sessionKey,
+              getMessageText,
+            );
+            if (synced !== get().messages) {
+              set({ messages: synced });
+            }
+          }
           // After the final response, quietly reload history to surface all intermediate
           // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
           if (isTerminalOutput && !toolOnly) {
@@ -3014,6 +3120,9 @@ export const useChatStore = create<ChatState>()(
     if (!trimmed) return;
     set((s) => ({
       sessionLabels: { ...s.sessionLabels, [key]: trimmed },
+      sessions: s.sessions.map((session) => (
+        session.key === key ? { ...session, label: trimmed } : session
+      )),
     }));
   },
 }), {

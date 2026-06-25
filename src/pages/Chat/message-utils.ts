@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { hostApiFetch } from '@/lib/host-api';
 import { useChatStore } from '@/stores/chat';
 import { sessionHasWorkflowExecution } from '@/stores/workflow-memory';
-import { buildWorkflowFormConfig } from '@/lib/workflow-form-utils';
+import { buildWorkflowFormConfig, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import {
   PARAM_FORM_MARKER_REGEX,
   parseParameterFormMarker,
@@ -22,6 +22,12 @@ import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
 import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay, WORKFLOW_COMPLETE_TAG } from '@/lib/workflow-context';
 import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
 import {
+  isWorkflowGuidanceAssistantText,
+  isWorkflowParameterIntroText,
+  isWorkflowParamsSummaryText,
+  isWorkflowParamsUserText,
+} from '@/lib/workflow-form-utils';
+import {
   artifactToPreviewFile,
   extractPreviewableHttpUrls,
   inferMimeTypeFromUrl,
@@ -29,7 +35,9 @@ import {
   isPreviewableArtifactUrl,
   isPreviewableRemoteUrl,
   resolveArtifactUrlFromWorkflowStates,
+  toMarkdownPreviewPath,
 } from '@/lib/preview-url';
+import { normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
 import type { WorkflowExecutionState } from '@/types/workflow';
 
 /** OpenClaw injects queued system events as `System: [timestamp] ...` lines before user text. */
@@ -254,6 +262,106 @@ export function isHiddenWorkflowCompleteUserMessage(message: RawMessage): boolea
   return rawMessageText(message).includes(WORKFLOW_COMPLETE_TAG);
 }
 
+function isAssistantMessageRole(role: unknown): boolean {
+  const normalized = typeof role === 'string' ? role.toLowerCase() : '';
+  return normalized === 'assistant' || normalized === '';
+}
+
+export function messageHasWorkflowCard(msg: RawMessage): boolean {
+  return Array.isArray(msg.content)
+    && (msg.content as ContentBlock[]).some((block) => block.type === 'workflow_card');
+}
+
+function messageHasParameterFormBlock(msg: RawMessage): boolean {
+  return Array.isArray(msg.content)
+    && (msg.content as ContentBlock[]).some((block) => block.type === 'parameter_form');
+}
+
+/** 工作流 intro / 分组参数摘要（与后续 workflow_card 执行卡分开展示） */
+export function isWorkflowPreambleAssistantMessage(msg: RawMessage): boolean {
+  if (!isAssistantMessageRole(msg.role)) return false;
+  const text = extractText(msg).trim();
+  if (isWorkflowParamsSummaryText(text)) return true;
+  if (isWorkflowGuidanceAssistantText(text)) return true;
+  if (isWorkflowParameterIntroText(text)) return true;
+  if (messageHasParameterFormBlock(msg)) return true;
+  return false;
+}
+
+/**
+ * 方案 A fallback：旧会话 intro 未 patch 时，从后续用户摘要取分组参数正文。
+ */
+export function findWorkflowParamsSummaryAfterIntro(
+  messages: RawMessage[],
+  introIndex: number,
+): string | null {
+  for (let i = introIndex + 1; i < messages.length; i += 1) {
+    const current = messages[i];
+    if (current.role === 'user' && isWorkflowParamsUserText(rawMessageText(current))) {
+      return rawMessageText(current);
+    }
+    if (isAssistantMessageRole(current.role) && messageHasWorkflowCard(current)) break;
+    if (current.role === 'user') break;
+  }
+  return null;
+}
+
+/** 隐藏已被 intro 承接的用户参数摘要（下一条为 workflow_card 助手 C）。 */
+export function isHiddenWorkflowParamsUserMessage(
+  message: RawMessage,
+  messages: RawMessage[],
+  index: number,
+): boolean {
+  if (message.role !== 'user') return false;
+  if (!isWorkflowParamsUserText(rawMessageText(message))) return false;
+
+  const next = messages[index + 1];
+  if (!next || !messageHasWorkflowCard(next)) return false;
+
+  for (let j = index - 1; j >= 0; j -= 1) {
+    const prior = messages[j];
+    if (prior.role === 'user') break;
+    if (!isAssistantMessageRole(prior.role)) continue;
+    const assistantText = rawMessageText(prior);
+    if (isWorkflowParamsSummaryText(assistantText)) return true;
+    if (isWorkflowParameterIntroText(assistantText)) return true;
+  }
+
+  return false;
+}
+
+/**
+ * 同一段连续助手消息内，仅保留最后一条工作流 preamble（去重流式重复 intro / 参数摘要）。
+ */
+export function isHiddenDuplicateWorkflowPreambleAssistantMessage(
+  message: RawMessage,
+  messages: RawMessage[],
+  index: number,
+): boolean {
+  if (!isWorkflowPreambleAssistantMessage(message)) return false;
+
+  for (let j = index + 1; j < messages.length; j += 1) {
+    const next = messages[j];
+    if (next.role === 'user') break;
+    if (messageHasWorkflowCard(next)) break;
+    if (!isAssistantMessageRole(next.role)) continue;
+    if (isWorkflowPreambleAssistantMessage(next)) return true;
+  }
+
+  const text = rawMessageText(message).trim();
+  if (!isWorkflowParamsSummaryText(text)) return false;
+
+  for (let j = index - 1; j >= 0; j -= 1) {
+    const prior = messages[j];
+    if (prior.role === 'user') break;
+    if (!isAssistantMessageRole(prior.role)) continue;
+    if (messageHasWorkflowCard(prior)) break;
+    if (rawMessageText(prior).trim() === text) return true;
+  }
+
+  return false;
+}
+
 type PendingWorkflowSnapshot = {
   templateId: string;
   schema?: import('@/types/workflow').WorkflowSchema;
@@ -295,7 +403,7 @@ export function extractParameterForm(
       ) {
         return null;
       }
-      console.log('[extractParameterForm] found native parameter_form block, formId:', formId);
+      
       return {
         formId,
         formConfig: (block as any).formConfig as import('@/types/user-form').UserFormConfig,
@@ -324,11 +432,15 @@ export function extractParameterForm(
         }
 
         return {
-          formId: resolveParameterFormId(`workflow-form-${templateId}`),
+          formId: resolveParameterFormId(buildWorkflowFormId(templateId)),
           formConfig: buildWorkflowFormConfig(
             pendingWorkflow.schema,
             '',
             pendingWorkflow.collectedInputs,
+            {
+              templateId,
+              schemaHash,
+            },
           ),
           formContext: {
             source: 'workflow',
@@ -352,15 +464,36 @@ export function extractWorkflowCard(message: RawMessage | unknown): { runId: str
 
   if (!Array.isArray(content)) return null;
 
+  let latest: { runId: string; templateName: string } | null = null;
   for (const block of content as import('@/stores/chat').ContentBlock[]) {
     if (block.type === 'workflow_card' && block.runId) {
-      return {
+      latest = {
         runId: block.runId,
         templateName: block.templateName ?? '工作流',
       };
     }
   }
+  return latest;
+}
+
+/** Latest workflow_card across assistant snapshots in a turn (newest message / block wins). */
+export function findLatestWorkflowCardInMessages(
+  messages: RawMessage[],
+): { runId: string; templateName: string } | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const card = extractWorkflowCard(messages[i]);
+    if (card) return card;
+  }
   return null;
+}
+
+export function extractPlainTextFromContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return (content as ContentBlock[])
+    .filter((b) => b.type === 'text' && typeof b.text === 'string')
+    .map((b) => b.text as string)
+    .join('\n');
 }
 
 export function extractText(message: RawMessage | unknown): string {
@@ -671,9 +804,10 @@ function extToMimeType(ext: string): string {
   return map[ext] || 'application/octet-stream';
 }
 
+import { PREVIEWABLE_FILE_EXT_PATTERN } from '../../../shared/artifact-path';
+
 /** Shared extension list for previewable local file paths (used by extractPreviewableRefs and preprocessTextForPreviewLinks). */
-export const PREVIEWABLE_FILE_EXTS =
-  'properties|swift|scala|bash|fish|html?|java|jsx|tsx|cpp|php|toml|conf|scss|less|zsh|yaml|json|sql|xml|csv|tsv|txt|log|ini|env|md|htm|py|go|rs|cs|rb|mm|bat|cmd|pdf|kt|css|yml|ts|js|sh|c|h|r|m';
+export const PREVIEWABLE_FILE_EXTS = PREVIEWABLE_FILE_EXT_PATTERN;
 
 /** Match a single line that is only a previewable file path (relative, absolute, or Windows). */
 export const PREVIEWABLE_PATH_LINE_REGEX = new RegExp(
@@ -690,47 +824,65 @@ export function normalizePreviewPathLine(line: string): string {
     .trim();
 }
 
-export function isPreviewablePathLine(line: string): boolean {
-  let trimmed = normalizePreviewPathLine(line);
-  if (!trimmed) return false;
-  // "链接：/Users/..." or "path: ./foo.md"
-  const colonIdx = Math.max(trimmed.lastIndexOf('：'), trimmed.lastIndexOf(':'));
-  if (colonIdx >= 0) {
-    const afterColon = trimmed.slice(colonIdx + 1).trim();
-    if (afterColon.startsWith('/') || afterColon.startsWith('./') || /^[A-Za-z]:[\\/]/.test(afterColon)) {
-      trimmed = afterColon;
-    }
-  }
-  if (trimmed.startsWith('file://')) {
-    return isPreviewablePathLine(trimmed.slice('file://'.length).replace(/^\/([A-Za-z]:)/, '$1'));
-  }
-  return PREVIEWABLE_PATH_LINE_REGEX.test(trimmed);
+/** Strip markdown/code wrapping around an extracted path segment. */
+function stripPathWrapping(path: string): string {
+  return path.trim().replace(/^[`'"]+|[`'"]+$/g, '').trim();
 }
 
-export function extractPreviewPathFromLine(line: string): string | null {
+/** Label colon for "报告文件：`C:\...`" — avoid treating Windows `C:` as the separator. */
+function findLabelColonIndex(text: string): number {
+  const fullWidth = text.lastIndexOf('：');
+  if (fullWidth >= 0) return fullWidth;
+  for (let i = text.length - 1; i >= 0; i -= 1) {
+    if (text[i] !== ':') continue;
+    const prev = text[i - 1];
+    const next = text[i + 1];
+    if (prev && /[A-Za-z]/.test(prev) && next && /[\\/]/.test(next)) continue;
+    return i;
+  }
+  return -1;
+}
+
+function extractPathCandidateFromLine(line: string): string | null {
   let trimmed = normalizePreviewPathLine(line);
   if (!trimmed) return null;
-  const colonIdx = Math.max(trimmed.lastIndexOf('：'), trimmed.lastIndexOf(':'));
+
+  const colonIdx = findLabelColonIndex(trimmed);
   if (colonIdx >= 0) {
-    const afterColon = trimmed.slice(colonIdx + 1).trim();
-    if (afterColon.startsWith('/') || afterColon.startsWith('./') || /^[A-Za-z]:[\\/]/.test(afterColon)) {
+    const afterColon = stripPathWrapping(trimmed.slice(colonIdx + 1));
+    if (
+      afterColon.startsWith('/')
+      || afterColon.startsWith('./')
+      || /^[A-Za-z]:[\\/]/.test(afterColon)
+    ) {
       trimmed = afterColon;
     }
   }
+
+  trimmed = stripPathWrapping(trimmed);
   if (trimmed.startsWith('file://')) {
     trimmed = trimmed.slice('file://'.length).replace(/^\/([A-Za-z]:)/, '$1');
   }
   return PREVIEWABLE_PATH_LINE_REGEX.test(trimmed) ? trimmed : null;
 }
 
+export function isPreviewablePathLine(line: string): boolean {
+  return extractPathCandidateFromLine(line) !== null;
+}
+
+export function extractPreviewPathFromLine(line: string): string | null {
+  return extractPathCandidateFromLine(line);
+}
+
 /** Markdown link for a local/remote previewable path. */
 export function previewMarkdownLinkForPath(filePath: string): string {
   const path = filePath.trim();
-  const fileName = path.split('/').pop() || path;
+  const safe = toMarkdownPreviewPath(path);
+  const fileName = safe.split('/').pop() || safe;
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return `[${fileName}](${path})`;
   }
-  return `[${fileName}](preview://${path})`;
+  return `[${fileName}](preview://${safe})`;
 }
 
 /**
@@ -810,34 +962,40 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
   const seen = new Set<string>();
 
   for (const path of extractPathsFromPathOnlyCodeBlocks(text)) {
-    const fileName = path.split('/').pop() || '';
+    const fileName = path.split(/[\\/]/).pop() || '';
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     if (fileName && ext) {
       const mimeType = extToMimeType(ext);
-      if (!mimeType.startsWith('image/') && !seen.has(path)) {
-        seen.add(path);
-        results.push({ filePath: path, fileName, mimeType });
+      if (!mimeType.startsWith('image/')) {
+        const key = normalizePreviewFileKey(path, fileName);
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          results.push({ filePath: path, fileName, mimeType });
+        }
       }
     }
   }
 
   for (const line of text.split('\n')) {
     const path = extractPreviewPathFromLine(line);
-    if (!path || seen.has(path)) continue;
-    const fileName = path.split('/').pop() || '';
+    if (!path) continue;
+    const fileName = path.split(/[\\/]/).pop() || '';
+    const key = normalizePreviewFileKey(path, fileName);
+    if (!key || seen.has(key)) continue;
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     if (!ext) continue;
     const mimeType = extToMimeType(ext);
     if (mimeType.startsWith('image/')) continue;
-    seen.add(path);
+    seen.add(key);
     results.push({ filePath: path, fileName, mimeType });
   }
 
   function addIfNotImage(filePath: string, fileName: string, ext: string) {
     const mimeType = extToMimeType(ext);
     if (mimeType.startsWith('image/')) return;
-    if (seen.has(filePath)) return;
-    seen.add(filePath);
+    const key = normalizePreviewFileKey(filePath, fileName);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
     results.push({ filePath, fileName, mimeType });
   }
 
@@ -878,7 +1036,7 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
   );
   while ((match = pathRegex.exec(cleanText)) !== null) {
     const path = match[1].replace(/\\/g, '/');
-    const fileName = path.split('/').pop() || '';
+    const fileName = path.split(/[\\/]/).pop() || '';
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     addIfNotImage(path, fileName, ext);
   }
@@ -976,8 +1134,9 @@ export function usePreviewableFiles(
     const result: Array<{ mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }> = [];
 
     function addItem(item: { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }) {
-      if (seen.has(item.filePath)) return;
-      seen.add(item.filePath);
+      const key = normalizePreviewFileKey(item.filePath, item.fileName);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
       result.push(item);
     }
 
@@ -1022,6 +1181,7 @@ export function usePreviewableFiles(
       if (text) {
         const refs = extractPreviewableRefs(text);
         for (const ref of refs) {
+          if (msg._attachedFiles?.some((f) => previewFileRefsMatch(f, ref))) continue;
           addItem({
             mimeType: ref.mimeType,
             filePath: ref.filePath,
@@ -1049,8 +1209,10 @@ export function usePreviewableFiles(
     const result: typeof candidates = [];
     for (const file of candidates) {
       const resolved = resolvePreviewCandidate(file, existence[file.filePath], workflowCardStates);
-      if (!resolved || seen.has(resolved.filePath)) continue;
-      seen.add(resolved.filePath);
+      if (!resolved) continue;
+      const key = normalizePreviewFileKey(resolved.filePath, resolved.fileName);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
       result.push(resolved);
     }
     return result;

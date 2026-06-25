@@ -32,7 +32,9 @@
         "searchPrev": "前の結果",
         "searchNext": "次の結果",
         "searchClear": "検索をクリア",
-        "searchClose": "検索を閉じる"
+        "searchClose": "検索を閉じる",
+        "openPreview": "プレビューを開く",
+        "closeSession": "現在のセッションを閉じる"
     },
     "composer": {
         "attachFiles": "ファイルを添付",
@@ -58,7 +60,7 @@
         "dingtalkLoadMore": "さらに表示",
         "dingtalkNoResults": "一致する結果がありません",
         "dingtalkNeedsInstall": "@ 指定には钉钉 CLI のインストールが必要です",
-        "dingtalkInstall": "钉钉 CLI をインストール",
+        "dingtalkInstall": "钉钉を認可",
         "dingtalkInstalling": "インストール中…",
         "dingtalkNeedsAuth": "連絡先を検索するには钉钉へのログインが必要です",
         "dingtalkLogin": "钉钉にログイン",
@@ -69,6 +71,8 @@
         "dingtalkSentPreviewToGroup": "グループ送信先",
         "dingtalkSentPreviewMessageTitle": "タイトル：{{title}}",
         "pickWorkflow": "ワークフローを選択",
+        "dingTalkMention": "钉钉連絡先",
+        "micComingSoon": "近日公開",
         "workflowPlaceholder": "ワークフローテンプレートを検索...",
         "workflowLoading": "読み込み中...",
         "workflowNoResults": "該当するテンプレートが見つかりません",
@@ -77,7 +81,13 @@
     },
     "streaming": {
         "connectingModel": "モデルに接続中...",
+        "understandingQuestion": "ご質問を理解しています…",
+        "awaitingReply": "返信後、Clawが作業を続けます…",
         "thinkingProcessTitle": "思考過程",
+        "deepThinkingLabel": "深い思考",
+        "collapsedSummary": "{{thoughtCount}} 回思考、{{toolCount}} 個のツールを使用",
+        "invokeToolLabel": "ツール呼び出し – {{toolName}}",
+        "paramsConfirmedLabel": "パラメータを確認しました",
         "toolCallLabel": "ツール呼び出し {{index}}",
         "processMessageLabel": "過程メッセージ {{count}}",
         "generatingWithTool": "{{tool}} で応答を生成中...",
@@ -91,6 +101,10 @@
         "completedLabel": "AIが生成した情報",
         "completedBadge": "完了",
         "jumpToLatest": "最新へ戻る"
+    },
+    "parameterForm": {
+        "defaultSelectedPrefix": "デフォルト選択：",
+        "submitFailed": "フォームの送信に失敗しました。ページを更新して再試行してください。"
     },
     "sessionList": {
         "mainSessionTitle": "メインチャット"
@@ -132,6 +146,47 @@
         "durationHalfHour": "30 分",
         "durationHours": "{{count}} 時間",
         "durationHoursHalf": "{{count}} 時間半",
-        "durationHoursMinutes": "{{hours}} 時間 {{minutes}} 分"
+        "durationHoursMinutes": "{{hours}} 時間 {{minutes}} 分",
+        "defaultName": "ワークフロー",
+        "backgroundRunningWithId": "ワークフロー ID: {{workflowId}}",
+        "withId": "ワークフロー ID: {{workflowId}}",
+        "viewArtifact": "成果物を見る",
+        "openArtifactLink": "リンクを開く",
+        "viewWorkflowAction": "ワークフローを見る",
+        "createScheduledTaskAction": "定期タスクを作成"
+    },
+    "artifact": {
+        "typeDocument": "ドキュメント",
+        "typeSpreadsheet": "表",
+        "typeImage": "画像",
+        "typeArchive": "アーカイブ",
+        "typeMedia": "メディア",
+        "typeFile": "ファイル"
+    },
+    "preview": {
+        "collapsePanel": "プレビューを閉じる",
+        "overflowMenu": "すべての成果物",
+        "fullscreen": "全画面",
+        "refresh": "更新",
+        "download": "ダウンロード",
+        "share": "DingTalkで共有",
+        "openExternal": "ブラウザで開く",
+        "editWorkflow": "ワークフローを編集",
+        "workflowTab": "ワークフロー",
+        "emptyHint": "チャット内のファイルリンクをクリックしてプレビュー",
+        "emptyHintSub": "または上から成果物を選択",
+        "dismissTab": "この成果物を閉じる",
+        "shareDialog": {
+            "title": "DingTalkで共有",
+            "description": "内容を確認後、DingTalkの宛先選択画面を開きます。",
+            "fieldTitle": "タイトル",
+            "fieldBody": "本文",
+            "fieldLink": "リンク",
+            "localUrlHint": "このリンクはローカルプレビュー用です。社外の同僚は開けない場合があります。",
+            "cancel": "キャンセル",
+            "confirm": "共有する",
+            "success": "DingTalkの宛先選択を開きました",
+            "failed": "共有に失敗しました。しばらくしてから再試行してください"
+        }
     }
 }

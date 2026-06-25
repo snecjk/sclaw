@@ -1029,7 +1029,7 @@ export class AppUpdater extends EventEmitter {
    */
   private async cleanupOrphanedBackups(protectedPath: string | null): Promise<void> {
     try {
-      // 推导出当前 app 所在目录和 basename："/Applications" + "STO Claw"
+      // 推导出当前 app 所在目录和 basename："/Applications" + "S Claw"
       const currentAppPath = path.dirname(path.dirname(path.dirname(process.execPath)));
       if (!currentAppPath.endsWith('.app')) {
         logger.warn(`[Updater] cleanupOrphanedBackups: unexpected app path ${currentAppPath}`);
@@ -1153,11 +1153,20 @@ export class AppUpdater extends EventEmitter {
     this.clearRestartCountdownTimer();
     const execPath = this._relaunchExecPath ?? process.execPath;
     logger.info(`[Updater] restartApp: relaunch execPath=${execPath}`);
-    // 留一点时间让 IPC / 日志 flush
-    setTimeout(() => {
-      app.relaunch({ execPath });
-      app.quit();
-    }, 100);
+    const targetVersion = (this.status.info as UpdateInfo | undefined)?.version;
+    // 留一点时间让 IPC / 日志 flush；写入 pending marker 供重启后检测更新完成并强制重登
+    void (async () => {
+      if (targetVersion && app.isPackaged) {
+        await writePendingInstallReport({
+          targetVersion,
+          feedSlug: this.lastFeedSlug,
+        });
+      }
+      setTimeout(() => {
+        app.relaunch({ execPath });
+        app.quit();
+      }, 100);
+    })();
   }
 
   private startAutoInstallCountdown(): void {

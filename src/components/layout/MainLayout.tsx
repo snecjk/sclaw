@@ -1,18 +1,75 @@
 /**
  * Main Layout Component
- * TitleBar at top, then sidebar + content below.
+ *
+ * 省区：无整行顶栏；侧栏列顶内嵌 chrome + 白卡片与侧栏顶齐平。
+ * 完整 layout：52px TitleBar + 侧栏 + main 滚动区。
  */
 import { useEffect, useRef } from 'react';
 import { matchPath, Outlet, useLocation } from 'react-router-dom';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
+import {
+  stoAppShellBodyProvincialClass,
+  stoMainCardBodyClass,
+  stoMainCardBodySplitClass,
+  stoMainCardShellClass,
+  stoMainCardWrapClass,
+  stoSplitShellInsetsClass,
+  stoSplitUnifiedMainClass,
+} from '@/lib/surfaces';
+import { AppShellChromeOverlay } from '@/components/layout/app-shell-chrome-overlay';
+import { ContentHeader } from '@/components/layout/ContentHeader';
+import { ContentHeaderProvider, useContentHeaderDisplay } from '@/components/layout/content-header-context';
+import { getSidebarLayoutVariant } from '@/lib/sidebar-layout';
+import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
+import { useSettingsStore } from '@/stores/settings';
 import { Sidebar } from './Sidebar';
 import { TitleBar } from './TitleBar';
+
+function MainCardBody() {
+  const { isSplitLayout } = useContentHeaderDisplay();
+
+  // 三栏与双栏 body 类互斥：cn 合并时 px-[var(--sto-content-pad-x)] 可能压过 px-0，split row 会比 header 窄 ~32–40px
+  if (isSplitLayout) {
+    return (
+      <div className={stoMainCardBodySplitClass}>
+        <Outlet />
+      </div>
+    );
+  }
+
+  return (
+    <div className={stoMainCardBodyClass}>
+      <Outlet />
+    </div>
+  );
+}
+
+/** 省区主卡片：三栏时 main 承担水平 inset，保证 Header 与 split row 预览列左缘一致 */
+function ProvincialMainCard() {
+  const { isSplitLayout } = useContentHeaderDisplay();
+
+  return (
+    <main
+      className={cn(
+        stoMainCardShellClass,
+        isSplitLayout
+          ? cn(stoSplitShellInsetsClass, stoSplitUnifiedMainClass)
+          : 'flex min-h-0 min-w-0 flex-1 flex-col',
+      )}
+    >
+      <ContentHeader />
+      <MainCardBody />
+    </main>
+  );
+}
 
 export function MainLayout() {
   const { pathname } = useLocation();
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const switchToAgentMainSession = useChatStore((s) => s.switchToAgentMainSession);
+  const isProvincialSidebar = getSidebarLayoutVariant() === 'provincial';
+  const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
 
   const prevPathnameRef = useRef(pathname);
   const prevSessionKeyRef = useRef(currentSessionKey);
@@ -41,15 +98,33 @@ export function MainLayout() {
     prevSessionKeyRef.current = currentSessionKey;
   }, [pathname, currentSessionKey, switchToAgentMainSession]);
 
+  if (isProvincialSidebar) {
+    return (
+      <div
+        data-app-shell="provincial"
+        data-sidebar-collapsed={sidebarCollapsed ? 'true' : 'false'}
+        data-platform={window.electron?.platform ?? 'unknown'}
+        className="relative flex h-screen flex-col overflow-hidden bg-[var(--sto-page-bg)]"
+      >
+        <AppShellChromeOverlay />
+        <div className={stoAppShellBodyProvincialClass(sidebarCollapsed)}>
+          <Sidebar />
+          <div className={stoMainCardWrapClass(sidebarCollapsed)}>
+            <ContentHeaderProvider>
+              <ProvincialMainCard />
+            </ContentHeaderProvider>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--sto-page-bg)] dark:bg-background">
-      {/* Title bar: drag region on macOS, icon + controls on Windows */}
       <TitleBar />
-
-      {/* Below the title bar: sidebar + main（主区画布对齐归档设计稿） */}
       <div className="flex min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-hidden">
         <Sidebar />
-        <main className="min-h-0 min-w-0 flex-1 overflow-auto bg-[var(--sto-page-bg)] px-[var(--sto-content-pad-x)] py-5 dark:bg-background">
+        <main className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-y-contain bg-[var(--sto-page-bg)] px-[var(--sto-content-pad-x)] py-5 [overflow-anchor:none] [scrollbar-gutter:stable] dark:bg-background">
           <Outlet />
         </main>
       </div>

@@ -77,11 +77,11 @@ async function packDirectoryToAsar(sourceDir, asarPath, label) {
   if (existsSync(asarPath)) rmSync(asarPath, { force: true });
   if (existsSync(unpackedPath)) rmSync(unpackedPath, { recursive: true, force: true });
 
-  console.log(`[after-pack] 📦 Packing ${label} (${fileCount} files) -> ${asarPath}`);
+  
   await createPackageWithOptions(sourceDir, asarPath, { unpack: OPENCLAW_ASAR_UNPACK });
   validateAsarNativeUnpack(asarPath, label);
   rmSync(sourceDir, { recursive: true, force: true });
-  console.log(`[after-pack] ✅ ${label} packed into ASAR (${basename(asarPath)}).`);
+  
   return true;
 }
 
@@ -91,6 +91,70 @@ function getClaudeBinaryFileName(platform) {
 
 function getClaudeOptionalPackageName(platform, arch) {
   return `@anthropic-ai/claude-agent-sdk-${platform}-${arch}`;
+}
+
+function readClaudeSdkVersion(projectNodeModules) {
+  const sdkPkgPath = join(projectNodeModules, '@anthropic-ai', 'claude-agent-sdk', 'package.json');
+  if (!existsSync(sdkPkgPath)) {
+    throw new Error('[after-pack] Cannot resolve claude-agent-sdk version — package.json missing');
+  }
+  const version = JSON.parse(readFileSync(sdkPkgPath, 'utf8')).version;
+  if (!version) {
+    throw new Error('[after-pack] Cannot resolve claude-agent-sdk version — version field missing');
+  }
+  return version;
+}
+
+function installClaudeSdkPackageViaPack(spec, destFolder) {
+  const tmpPackDir = mkdtempSync(join(tmpdir(), 'claude-sdk-pack-'));
+  try {
+    const output = execSync(`npm pack "${spec}" --pack-destination "${tmpPackDir}"`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'inherit'],
+    });
+    const tgzName = output.trim().split(/\r?\n/).filter(Boolean).pop();
+    if (!tgzName) {
+      throw new Error(`[after-pack] npm pack produced no tarball for ${spec}`);
+    }
+    const tgzPath = join(tmpPackDir, basename(tgzName));
+    mkdirSync(destFolder, { recursive: true });
+    execSync(`tar -xzf "${tgzPath}" -C "${destFolder}" --strip-components=1`, { stdio: 'inherit' });
+  } finally {
+    rmSync(tmpPackDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Cross-compile: fetch target claude-agent-sdk via npm pack (same pattern as sharp).
+ * Mac dev machines no longer need ~450MB of win32 SDK packages in node_modules.
+ */
+function ensureTargetClaudeSdkPackage(resourcesDir, platform, arch) {
+  const projectNodeModules = join(__dirname, '..', 'node_modules');
+  const version = readClaudeSdkVersion(projectNodeModules);
+  const packageName = getClaudeOptionalPackageName(platform, arch);
+  const binaryName = getClaudeBinaryFileName(platform);
+  const destDir = join(resourcesDir, 'app.asar.unpacked', 'node_modules', ...packageName.split('/'));
+  const binaryPath = join(destDir, binaryName);
+
+  if (existsSync(binaryPath)) return;
+
+  installClaudeSdkPackageViaPack(`${packageName}@${version}`, destDir);
+}
+
+function cleanupClaudeSdkPackages(resourcesDir, platform, arch) {
+  const anthropicDir = join(resourcesDir, 'app.asar.unpacked', 'node_modules', '@anthropic-ai');
+  if (!existsSync(anthropicDir)) return 0;
+
+  const keepPackage = `claude-agent-sdk-${platform}-${arch}`;
+  let removed = 0;
+  for (const entry of readdirSync(anthropicDir)) {
+    if (!entry.startsWith('claude-agent-sdk-') || entry === keepPackage) continue;
+    try {
+      rmSync(join(anthropicDir, entry), { recursive: true, force: true });
+      removed++;
+    } catch { /* */ }
+  }
+  return removed;
 }
 
 function validateBundledClaudeSdk(resourcesDir, platform, arch) {
@@ -103,11 +167,11 @@ function validateBundledClaudeSdk(resourcesDir, platform, arch) {
     throw new Error(
       `[after-pack] Claude SDK validation failed — missing unpacked binary for ${platform}/${arch}: ${candidate}\n`
       + `Ensure electron-builder asarUnpack includes node_modules/@anthropic-ai/claude-agent-sdk-*/** `
-      + `and the target platform optional dependency is installed before packaging.`,
+      + `and ensureTargetClaudeSdkPackage can fetch the target platform package.`,
     );
   }
 
-  console.log(`[after-pack] ✅ Claude SDK binary present: ${candidate}`);
+  
 }
 
 function resolveRuntimePackageSource(projectNodeModules, resolvedSources, entry) {
@@ -145,7 +209,7 @@ function ensureAppRuntimePackages(resourcesDir, packageEntries) {
     mkdirSync(dirname(dest), { recursive: true });
     cpSync(src, dest, { recursive: true, dereference: true });
     resolvedSources.set(packageName, src);
-    console.log(`[after-pack] ✅ Added app runtime package: ${packageName} <- ${src}`);
+    
   }
 }
 
@@ -159,9 +223,9 @@ function validateAsarNativeUnpack(asarPath, label) {
   if (label !== 'OpenClaw runtime') {
     if (existsSync(unpackedRoot)) {
       const unpackedCount = countFilesRecursive(unpackedRoot);
-      console.log(`[after-pack] ✅ ${label}: ${unpackedCount} native file(s) in .unpacked (optional).`);
+      
     } else {
-      console.log(`[after-pack] ℹ️  ${label}: no .unpacked dir (no native binaries to extract).`);
+      
     }
     return;
   }
@@ -204,7 +268,7 @@ function validateAsarNativeUnpack(asarPath, label) {
     }
   }
 
-  console.log(`[after-pack] ✅ ${label}: validated ${unpackedCount} unpacked file(s).`);
+  
 }
 
 function normWin(p) {
@@ -380,10 +444,7 @@ function removeUnindexedBundledExtensions(openclawRoot) {
     removed.push(entry.name);
   }
   if (removed.length > 0) {
-    console.log(
-      `[after-pack] ✅ Removed ${removed.length} unindexed bundled extensions `
-      + `(ASAR-incompatible manifest check): ${removed.join(', ')}`,
-    );
+    
   }
 }
 
@@ -575,11 +636,86 @@ function ensureTargetSharpPackages(nodeModulesDir, platform, arch) {
     }
     return `${name}@${version}`;
   });
-  console.log(`[after-pack] Fetching target sharp packages for ${platform}/${arch}: ${specs.join(', ')}`);
+  
   for (const spec of specs) {
     const folder = spec.slice('@img/'.length).replace(/@[^@]+$/, '');
     installSharpPackageViaPack(spec, join(imgDir, folder));
   }
+}
+
+// ── Claude Agent SDK cross-compile ────────────────────────────────────────────
+// When cross-compiling (e.g. building win32 on macOS), the target platform's
+// optional dependency (@anthropic-ai/claude-agent-sdk-win32-x64) is not installed
+// by pnpm/npm because its os/cpu constraints don't match the host. We fetch it
+// via npm pack + tar extract (same pattern as installSharpPackageViaPack) and
+// inject it into both the source node_modules (for future builds) and the
+// resources output directory (for the current build's app.asar.unpacked).
+
+function installClaudeSdkPackageViaPack(spec, destFolder) {
+  const tmpPackDir = mkdtempSync(join(tmpdir(), 'claude-sdk-pack-'));
+  try {
+    const output = execSync(`npm pack "${spec}" --pack-destination "${tmpPackDir}"`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'inherit'],
+    });
+    const tgzName = output.trim().split(/\r?\n/).filter(Boolean).pop();
+    if (!tgzName) {
+      throw new Error(`[after-pack] npm pack produced no tarball for ${spec}`);
+    }
+    const tgzPath = join(tmpPackDir, basename(tgzName));
+    mkdirSync(destFolder, { recursive: true });
+    execSync(`tar -xzf "${tgzPath}" -C "${destFolder}" --strip-components=1`, { stdio: 'inherit' });
+  } finally {
+    rmSync(tmpPackDir, { recursive: true, force: true });
+  }
+}
+
+function ensureTargetClaudeSdkPackage(resourcesDir, platform, arch) {
+  const packageName = getClaudeOptionalPackageName(platform, arch);
+  const binaryName = getClaudeBinaryFileName(platform);
+  const projectNodeModules = join(__dirname, '..', 'node_modules');
+  const sourcePackageDir = join(projectNodeModules, ...packageName.split('/'));
+  const unpackedRoot = join(resourcesDir, 'app.asar.unpacked');
+
+  // Check if the binary already exists in the unpacked output (asar extracted it).
+  const unpackedCandidate = join(unpackedRoot, 'node_modules', ...packageName.split('/'), binaryName);
+  if (existsSync(unpackedCandidate)) {
+    console.log(`[after-pack] ✅ Claude SDK binary already in app.asar.unpacked: ${unpackedCandidate}`);
+    return;
+  }
+
+  console.log(`[after-pack] Claude SDK binary missing for ${platform}/${arch} — cross-compiling from ${process.platform}/${process.arch}`);
+
+  // Determine the version from the main SDK package's optionalDependencies.
+  const sdkPkgPath = join(projectNodeModules, '@anthropic-ai', 'claude-agent-sdk', 'package.json');
+  let version;
+  if (existsSync(sdkPkgPath)) {
+    const sdkPkg = JSON.parse(readFileSync(sdkPkgPath, 'utf8'));
+    version = sdkPkg.optionalDependencies?.[packageName];
+  }
+  if (!version) {
+    throw new Error(`[after-pack] Cannot resolve version for ${packageName} from @anthropic-ai/claude-agent-sdk/package.json`);
+  }
+
+  // Download the package via npm pack + tar extract into source node_modules
+  // (persists for future builds so electron-builder can include it in the asar).
+  if (!existsSync(sourcePackageDir)) {
+    const spec = `${packageName}@${version}`;
+    console.log(`[after-pack] Fetching Claude SDK package: ${spec}`);
+    const scopeDir = join(projectNodeModules, '@anthropic-ai');
+    mkdirSync(scopeDir, { recursive: true });
+    const folder = packageName.split('/').pop(); // e.g. "claude-agent-sdk-win32-x64"
+    installClaudeSdkPackageViaPack(spec, join(scopeDir, folder));
+    console.log(`[after-pack] ✅ Claude SDK package installed to source node_modules: ${sourcePackageDir}`);
+  }
+
+  // For the current build: electron-builder already created the asar without this
+  // package, so we must manually inject it into app.asar.unpacked where
+  // getBundledClaudeExecutablePath() (in claude-adapter.ts) resolves the binary.
+  const unpackedPkgDir = join(unpackedRoot, 'node_modules', '@anthropic-ai', packageName.split('/').pop());
+  mkdirSync(unpackedPkgDir, { recursive: true });
+  cpSync(sourcePackageDir, unpackedPkgDir, { recursive: true, dereference: true });
+  console.log(`[after-pack] ✅ Claude SDK injected into app.asar.unpacked: ${unpackedPkgDir}`);
 }
 
 // ── Platform-specific: koffi ─────────────────────────────────────────────────
@@ -751,7 +887,7 @@ function patchBrokenModules(nodeModulesDir) {
           'utf8'
         );
         count++;
-        console.log('[after-pack] 🩹 Patched lru-cache/index.js: added named LRUCache export for v11+ compat');
+        
       }
     } catch (err) {
       console.warn('[after-pack] ⚠️  Failed to patch lru-cache:', err.message);
@@ -805,7 +941,7 @@ function patchBrokenModules(nodeModulesDir) {
         };
         writeFileSync(hpaPkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
         count++;
-        console.log(`[after-pack] 🩹 Patched https-proxy-agent exports for CJS compatibility (require=${requireTarget})`);
+        
       }
     } catch (err) {
       console.warn('[after-pack] ⚠️  Failed to patch https-proxy-agent:', err.message);
@@ -813,7 +949,7 @@ function patchBrokenModules(nodeModulesDir) {
   }
 
   if (count > 0) {
-    console.log(`[after-pack] 🩹 Patched ${count} broken module(s) in ${nodeModulesDir}`);
+    
   }
 }
 
@@ -849,7 +985,7 @@ function patchPluginIds(pluginDir, expectedId) {
       if (replaced !== content) {
         content = replaced;
         patched = true;
-        console.log(`[after-pack] 🩹 Patching plugin ID in ${entry}: "${wrongId}" → "${correctId}"`);
+        
       }
     }
 
@@ -968,7 +1104,7 @@ function bundlePlugin(nodeModulesRoot, npmName, destDir) {
       console.warn(`[after-pack]   Skipped dep ${pkgName}: ${e.message}`);
     }
   }
-  console.log(`[after-pack] ✅ Plugin ${npmName}: copied ${count} deps to ${destDir}`);
+  
   return true;
 }
 
@@ -988,7 +1124,7 @@ function bundleLocalPlugin(preBuildDir, rawSourceDir, nodeModulesRoot, destDir) 
 
   // Prefer pre-built output (already has deps bundled by bundle-openclaw-plugins.mjs)
   if (existsSync(join(preBuildDir, 'openclaw.plugin.json'))) {
-    console.log(`[after-pack]   Using pre-built output: ${preBuildDir}`);
+    
     if (existsSync(normWin(destDir))) rmSync(normWin(destDir), { recursive: true, force: true });
     mkdirSync(normWin(destDir), { recursive: true });
     cpSync(normWin(preBuildDir), normWin(destDir), { recursive: true, dereference: true });
@@ -1001,7 +1137,7 @@ function bundleLocalPlugin(preBuildDir, rawSourceDir, nodeModulesRoot, destDir) 
     return false;
   }
 
-  console.log(`[after-pack]   Copying from raw source: ${rawSourceDir}`);
+  
   if (existsSync(normWin(destDir))) rmSync(normWin(destDir), { recursive: true, force: true });
   mkdirSync(normWin(destDir), { recursive: true });
   cpSync(normWin(rawSourceDir), normWin(destDir), { recursive: true, dereference: true, filter: copyFilter });
@@ -1056,13 +1192,14 @@ exports.OPENCLAW_ASAR_UNPACK = OPENCLAW_ASAR_UNPACK;
 exports.packDirectoryToAsar = packDirectoryToAsar;
 exports.validateAsarNativeUnpack = validateAsarNativeUnpack;
 exports.ensureTargetSharpPackages = ensureTargetSharpPackages;
+exports.ensureTargetClaudeSdkPackage = ensureTargetClaudeSdkPackage;
 
 exports.default = async function afterPack(context) {
   const appOutDir = context.appOutDir;
   const platform = context.electronPlatformName; // 'win32' | 'darwin' | 'linux'
   const arch = resolveArch(context.arch);
 
-  console.log(`[after-pack] Target: ${platform}/${arch}`);
+  
 
   let resourcesDir;
   if (platform === 'darwin') {
@@ -1083,7 +1220,7 @@ exports.default = async function afterPack(context) {
     return;
   }
 
-  console.log('[after-pack] Materializing openclaw package from build/openclaw ...');
+  
   if (existsSync(openclawRoot)) rmSync(openclawRoot, { recursive: true, force: true });
   cpSync(buildOpenclawRoot, openclawRoot, { recursive: true, dereference: true });
 
@@ -1094,13 +1231,13 @@ exports.default = async function afterPack(context) {
   }
 
   if (!existsSync(dest)) {
-    console.log('[after-pack] Copying openclaw node_modules (missing after materialize) ...');
+    
     cpSync(src, dest, { recursive: true });
   } else {
     const depCount = readdirSync(src, { withFileTypes: true })
       .filter(d => d.isDirectory() && d.name !== '.bin')
       .length;
-    console.log(`[after-pack] ✅ openclaw materialized with ${depCount} dependencies.`);
+    
   }
 
   // Patch broken modules whose CJS transpiled output sets module.exports = undefined,
@@ -1138,10 +1275,10 @@ exports.default = async function afterPack(context) {
     if (plugin.type === 'local') {
       const preBuildDir = join(preBuildRoot, plugin.pluginId);
       const rawSourceDir = resolveLocalPluginSourceDir(localPluginSourceRoot, plugin.localDir);
-      console.log(`[after-pack] Bundling local plugin ${plugin.pluginId} -> ${pluginDestDir}`);
+      
       ok = bundleLocalPlugin(preBuildDir, rawSourceDir, nodeModulesRoot, pluginDestDir);
     } else {
-      console.log(`[after-pack] Bundling plugin ${plugin.npmName} -> ${pluginDestDir}`);
+      
       ok = bundlePlugin(nodeModulesRoot, plugin.npmName, pluginDestDir);
     }
 
@@ -1162,7 +1299,7 @@ exports.default = async function afterPack(context) {
   const legacyToolkitSibling = join(pluginsDestRoot, STO_TOOLKIT_DIR);
   if (existsSync(legacyToolkitSibling)) {
     rmSync(normWin(legacyToolkitSibling), { recursive: true, force: true });
-    console.log(`[after-pack] Removed legacy extensions/${STO_TOOLKIT_DIR} sibling`);
+    
   }
   if (existsSync(join(workflowDestDir, 'openclaw.plugin.json'))) {
     const nestedToolkitDir = join(workflowDestDir, STO_TOOLKIT_DIR);
@@ -1175,7 +1312,7 @@ exports.default = async function afterPack(context) {
           ? toolkitSourceDir
           : null;
     if (toolkitSource) {
-      console.log(`[after-pack] Copying ${STO_TOOLKIT_DIR} -> ${nestedToolkitDir}`);
+      
       if (existsSync(normWin(nestedToolkitDir))) rmSync(normWin(nestedToolkitDir), { recursive: true, force: true });
       mkdirSync(normWin(nestedToolkitDir), { recursive: true });
       cpSync(normWin(toolkitSource), normWin(nestedToolkitDir), {
@@ -1195,9 +1332,9 @@ exports.default = async function afterPack(context) {
   }
 
   // 2. General cleanup on the full openclaw directory (not just node_modules)
-  console.log('[after-pack] 🧹 Cleaning up unnecessary files ...');
+  
   const removedRoot = cleanupUnnecessaryFiles(openclawRoot);
-  console.log(`[after-pack] ✅ Removed ${removedRoot} unnecessary files/directories.`);
+  
 
   // Install target @img/sharp before stripping host-platform native packages (cross-compile).
   ensureTargetSharpPackages(dest, platform, arch);
@@ -1205,20 +1342,20 @@ exports.default = async function afterPack(context) {
   // 3. Platform-specific: strip koffi non-target platform binaries
   const koffiRemoved = cleanupKoffi(dest, platform, arch);
   if (koffiRemoved > 0) {
-    console.log(`[after-pack] ✅ koffi: removed ${koffiRemoved} non-target platform binaries (kept ${platform}_${arch}).`);
+    
   }
 
   // 4. Platform-specific: strip wrong-platform native packages
   const nativeRemoved = cleanupNativePlatformPackages(dest, platform, arch);
   if (nativeRemoved > 0) {
-    console.log(`[after-pack] ✅ Removed ${nativeRemoved} non-target native platform packages.`);
+    
   }
 
   // 5. Remove @node-llama-cpp entirely (not needed, using Ollama/vLLM HTTP API instead)
   const llamaCppDir = join(dest, '@node-llama-cpp');
   if (existsSync(llamaCppDir)) {
     rmSync(llamaCppDir, { recursive: true, force: true });
-    console.log('[after-pack] ✅ Removed @node-llama-cpp (not needed, using Ollama/vLLM HTTP API instead).');
+    
   }
 
   // 5.1 Dedupe plugin node_modules against openclaw runtime (same name + version)
@@ -1230,7 +1367,7 @@ exports.default = async function afterPack(context) {
     totalPluginDeduped += dedupePluginNodeModules(pluginDestDir, openclawPackageIndex);
   }
   if (totalPluginDeduped > 0) {
-    console.log(`[after-pack] ✅ Deduped ${totalPluginDeduped} plugin packages already in openclaw runtime.`);
+    
   }
 
   // 6. Remove excluded OpenClaw built-in skills (not needed for StoClaw distribution)
@@ -1276,7 +1413,7 @@ exports.default = async function afterPack(context) {
       }
     }
     if (removedSkills > 0) {
-      console.log(`[after-pack] ✅ Removed ${removedSkills} excluded built-in skills.`);
+      
     }
   }
 
@@ -1292,18 +1429,18 @@ exports.default = async function afterPack(context) {
       }
     }
     if (removedDistSkills > 0) {
-      console.log(`[after-pack] ✅ Removed ${removedDistSkills} excluded skills from dist/.`);
+      
     }
   }
 
   // 7. Validate + pack openclaw + plugins into ASAR archives to reduce NSIS file count.
   removeUnindexedBundledExtensions(openclawRoot);
   validateOpenclawBundleBeforeAsar(openclawRoot);
-  console.log('[after-pack] ✅ OpenClaw bundle validation passed (yaml/zod runtime paths present).');
+  
 
   const looseFileCount = countFilesRecursive(openclawRoot)
     + countFilesRecursive(pluginsDestRoot);
-  console.log(`[after-pack] Loose resource files before ASAR pack: ${looseFileCount}`);
+  
 
   await packDirectoryToAsar(openclawRoot, join(resourcesDir, 'openclaw.asar'), 'OpenClaw runtime');
 
@@ -1335,5 +1472,7 @@ exports.default = async function afterPack(context) {
     { packageName: 'require-from-string', resolveFromPackageName: 'ajv' },
     'uri-js',
   ]);
+  ensureTargetClaudeSdkPackage(resourcesDir, platform, arch);
+  cleanupClaudeSdkPackages(resourcesDir, platform, arch);
   validateBundledClaudeSdk(resourcesDir, platform, arch);
 };

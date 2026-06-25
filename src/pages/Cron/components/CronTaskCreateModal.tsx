@@ -182,13 +182,13 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
           {/* Instructions */}
           <div>
             <label className="block text-[13.5px] font-medium text-foreground mb-1.5">
-              让 STO Claw 帮你做什么…
+              让 S Claw 帮你做什么…
             </label>
             <textarea
               value={message}
               onChange={(e) => { setMessage(e.target.value); if (errors.message) setErrors(p => ({ ...p, message: undefined })); }}
               rows={6}
-              placeholder="让 STO Claw 帮你做什么…"
+              placeholder="让 S Claw 帮你做什么…"
               className={cn(
                 "w-full px-3 py-2.5 text-[13px] rounded-lg border bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-none transition-colors leading-relaxed",
                 errors.message ? "border-destructive focus:border-destructive focus:ring-destructive/20" : "border-border"

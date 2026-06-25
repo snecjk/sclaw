@@ -6,6 +6,11 @@
       "autoEnable": true
     },
     {
+      "slug": "sto-distinctive-design",
+      "local": true,
+      "autoEnable": true
+    },
+    {
       "slug": "pdf",
       "repo": "anthropics/skills",
       "repoPath": "skills/pdf",
@@ -35,11 +40,6 @@
       "repoPath": "skills/pptx",
       "ref": "main",
       "version": "main",
-      "autoEnable": true
-    },
-    {
-      "slug": "ppt-generator",
-      "local": true,
       "autoEnable": true
     },
     {

@@ -4,6 +4,11 @@
 import { toast } from 'sonner';
 import { invokeIpc } from '@/lib/api-client';
 import { beginWorkflowRunSseTrace } from '@/lib/workflow-api';
+import {
+  ensureWorkflowCardsInMessages,
+  getAssistantMessageText,
+  patchLastAssistantWithWorkflowCard,
+} from '@/lib/workflow-card-injection';
 import { appendWorkflowStartedLocalTurn } from '@/lib/workflow-local-turn';
 import { canStartWorkflow } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
@@ -66,12 +71,24 @@ export async function applyWorkflowRunStarted(
   if (presentation === 'local_turn') {
     appendWorkflowStartedLocalTurn({
       userText: resolvedUserText,
+      templateId: wfRecord?.templateId,
       templateName,
       runId,
       workflowId,
       assistantText:
         assistantText
         ?? `正在启动工作流「${templateName}」（工作流 ID: ${workflowId}）…`,
+    });
+  } else {
+    useChatStore.setState((s) => {
+      let next = patchLastAssistantWithWorkflowCard(
+        s.messages,
+        runId,
+        templateName,
+        getAssistantMessageText,
+      );
+      next = ensureWorkflowCardsInMessages(next, sessionKey, getAssistantMessageText);
+      return next === s.messages ? s : { messages: next };
     });
   }
 

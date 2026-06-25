@@ -2,6 +2,15 @@ import { ChevronRight } from 'lucide-react';
 import { useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import {
+  homeHubCardDescClass,
+  homeHubCardGridClass,
+  homeHubCardTagClass,
+  homeHubCardTitleClass,
+  homeHubInteractiveCardShellClass,
+  homeHubTextPrimary,
+  homeHubTextSecondary,
+} from './home-hub-surface-styles';
 import avatar01 from '@/assets/avatars/avatar-01.png.png';
 import avatar02 from '@/assets/avatars/avatar-02.png.png';
 import avatar03 from '@/assets/avatars/avatar-03.png.png';
@@ -43,7 +52,7 @@ function StatusChip({ children, variant }: { children: React.ReactNode; variant:
 
 function CategoryPill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="shrink-0 rounded-md bg-[#FFF5E6] px-2 py-0.5 text-xs font-medium text-[#D95700] dark:bg-amber-950/45 dark:text-amber-200">
+    <span className={cn('shrink-0', homeHubCardTagClass)}>
       {children}
     </span>
   );
@@ -64,11 +73,11 @@ function StatBlock({
   if (!label.trim() && !value.trim()) return null;
   return (
     <div className="min-w-0 text-left">
-      <div className="text-[13px] leading-snug text-[#86909C] dark:text-muted-foreground">{label}</div>
+      <div className={cn('text-[13px] leading-snug', homeHubTextSecondary)}>{label}</div>
       <div
         className={cn(
           'mt-1 truncate text-lg font-bold tabular-nums leading-tight sm:text-xl',
-          highlight ? 'text-[#FF6F00] dark:text-[#FF8D2A]' : 'text-[#1D2129] dark:text-foreground',
+          highlight ? 'text-primary' : homeHubTextPrimary,
         )}
       >
         {value}
@@ -76,7 +85,7 @@ function StatBlock({
           <span
             className={cn(
               'text-[15px] font-semibold',
-              highlight ? 'text-[#FF6F00] dark:text-[#FF8D2A]' : 'text-[#1D2129] dark:text-foreground',
+              highlight ? 'text-primary' : homeHubTextPrimary,
             )}
           >
             {' '}
@@ -103,10 +112,7 @@ function AvatarStack({ urls }: { urls: readonly [string, string, string] }) {
   );
 }
 
-const cardShell = cn(
-  'relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border bg-white p-5 shadow-[0_2px_12px_rgba(29,33,41,0.06)]',
-  'dark:border-border dark:bg-card',
-);
+const cardShell = homeHubInteractiveCardShellClass;
 
 type GuideCardBase = 'monitor' | 'recon' | 'cost';
 
@@ -137,16 +143,14 @@ function GuideCard({
     onSend?.(t(`${p}.createPrompt`));
   }, [disabled, onSend, p, t]);
 
-  const footerHintClass = disabled
-    ? 'text-[#86909C] dark:text-muted-foreground'
-    : 'text-[#4760FE] dark:text-blue-400';
+  const footerHintClass = disabled ? homeHubTextSecondary : 'text-[#4760FE] dark:text-blue-400';
 
   const inner = (
     <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-bold leading-snug text-[#1D2129] dark:text-foreground">{t(`${p}.title`)}</h3>
+            <h3 className={homeHubCardTitleClass}>{t(`${p}.title`)}</h3>
             <CategoryPill>{t(`${p}.pill`)}</CategoryPill>
           </div>
         </div>
@@ -155,8 +159,8 @@ function GuideCard({
 
       {mode === 'configure' ? (
         <div className="mt-5 min-h-[4.5rem]">
-          <p className="text-[13px] leading-snug text-[#86909C] dark:text-muted-foreground">{t(`${p}.bodyCaption`)}</p>
-          <p className="mt-1.5 text-[15px] leading-relaxed text-[#86909C] dark:text-muted-foreground">{t(`${p}.bodyDetail`)}</p>
+          <p className={homeHubCardDescClass}>{t(`${p}.bodyCaption`)}</p>
+          <p className={cn('mt-1.5', homeHubCardDescClass)}>{t(`${p}.bodyDetail`)}</p>
         </div>
       ) : (
         <div className="mt-5 grid min-h-[4.5rem] grid-cols-3 gap-3">
@@ -181,7 +185,7 @@ function GuideCard({
 
       <div className="mt-5 flex min-h-[40px] items-center gap-3 border-t border-[#E5E6EB] pt-4 dark:border-border">
         <AvatarStack urls={avatarUrls} />
-        <p className="min-w-0 flex-1 truncate text-center text-[13px] text-[#86909C] dark:text-muted-foreground" title={t(`${p}.footerTeam`)}>
+        <p className={cn('min-w-0 flex-1 truncate text-center text-[13px]', homeHubTextSecondary)} title={t(`${p}.footerTeam`)}>
           {t(`${p}.footerTeam`)}
         </p>
         <span
@@ -197,7 +201,7 @@ function GuideCard({
     </>
   );
 
-  const shellClass = cn(cardShell, disabled && 'border-[#E5E6EB]');
+  const shellClass = cardShell;
 
   if (disabled) {
     return (
@@ -205,7 +209,7 @@ function GuideCard({
         <div className="pointer-events-none select-none">{inner}</div>
         <div
           className={cn(
-            'pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl',
+            'pointer-events-none absolute inset-0 flex items-center justify-center rounded-[18px]',
             'bg-white/45 dark:bg-background/50',
           )}
         >
@@ -221,10 +225,7 @@ function GuideCard({
     <button
       type="button"
       onClick={handleClick}
-      className={cn(
-        shellClass,
-        'w-full text-left transition-shadow duration-200 hover:shadow-[0_8px_24px_rgba(29,33,41,0.1)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)]',
-      )}
+      className={shellClass}
     >
       {inner}
     </button>
@@ -244,7 +245,7 @@ export function HomeWorkflowGuideCards({
       <h2 id="home-workflow-guide-heading" className="sr-only">
         {t('site.workflowGuide.heading')}
       </h2>
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-3 md:gap-5">
+      <div className={homeHubCardGridClass}>
         <GuideCard
           avatarSeed="site-monitor-setup"
           base="monitor"
@@ -253,8 +254,8 @@ export function HomeWorkflowGuideCards({
           hideStatus
           onSend={onSend}
         />
-        <GuideCard avatarSeed="site-hq-reconciliation" base="recon" statusVariant="ok" mode="disabled" hideStatus />
-        <GuideCard avatarSeed="site-cost-analysis" base="cost" statusVariant="ok" mode="disabled" hideStatus />
+        <GuideCard avatarSeed="site-hq-reconciliation" base="recon" statusVariant="pending" mode="configure" hideStatus onSend={onSend} />
+        <GuideCard avatarSeed="site-cost-analysis" base="cost" statusVariant="pending" mode="configure" hideStatus onSend={onSend} />
       </div>
     </section>
   );

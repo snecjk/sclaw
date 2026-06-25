@@ -48,6 +48,7 @@ export interface AuthState {
   ssoEnvironment: SsoEnvironment;
   user: SsoUserInfo | null;
   systemCode: string;
+  impersonationOrigin?: SsoUserInfo | null;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -169,8 +170,24 @@ export async function clearAuthUser(): Promise<void> {
   logger.info('Clear auth user...');
   store.set('isAuthenticated', false);
   store.set('user', null);
+  store.set('impersonationOrigin', null);
   await removeSsoAuthFromSaiCli(previousUser);
   await removeSsoAuthFromOpenClaw();
+}
+
+export async function getImpersonationOrigin(): Promise<SsoUserInfo | null> {
+  const store = await getAuthStore();
+  return (store.get('impersonationOrigin', null) as SsoUserInfo | null) ?? null;
+}
+
+export async function setImpersonationOrigin(user: SsoUserInfo | null): Promise<void> {
+  const store = await getAuthStore();
+  store.set('impersonationOrigin', user);
+}
+
+export async function clearImpersonationOrigin(): Promise<void> {
+  const store = await getAuthStore();
+  store.set('impersonationOrigin', null);
 }
 
 export async function getSsoEnvironment(): Promise<SsoEnvironment> {

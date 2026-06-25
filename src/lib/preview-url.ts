@@ -1,8 +1,27 @@
 import type { AttachedFileMeta } from '@/stores/chat';
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
+import {
+  extensionFromBasename,
+  normalizeArtifactPathPrefix,
+} from '../../shared/artifact-path';
 
 export function isHttpUrl(path: string): boolean {
   return path.startsWith('http://') || path.startsWith('https://');
+}
+
+/**
+ * Windows drive paths only: use forward slashes so markdown link parsers do not treat
+ * `\.` as an escaped dot (e.g. `admin\.stoclaw` → `admin.stoclaw`). Unix paths unchanged.
+ */
+export function toMarkdownPreviewPath(filePath: string): string {
+  const path = filePath.trim();
+  if (!path || isHttpUrl(path) || path.startsWith('preview://') || path.startsWith('artifact://')) {
+    return path;
+  }
+  if (isWindowsDrivePath(path)) {
+    return path.replace(/\\/g, '/');
+  }
+  return path;
 }
 
 /**
@@ -19,7 +38,16 @@ export function normalizeLocalFilePath(filePath: string): string {
     path = once.includes('%') ? safeDecodeURIComponent(once) : once;
   }
 
-  return path;
+  const homeDir = typeof process !== 'undefined'
+    ? (process.env.HOME || process.env.USERPROFILE || '')
+    : '';
+  if (homeDir) {
+    path = normalizeArtifactPathPrefix(path, homeDir);
+  } else {
+    path = toMarkdownPreviewPath(path);
+  }
+
+  return toMarkdownPreviewPath(path);
 }
 
 /** True for Windows drive paths (C:\ or C:/). */
@@ -81,12 +109,12 @@ function extFromPathOrUrl(pathOrUrl: string): string {
     if (!urlPathHasFileExtension(pathOrUrl)) return '';
     try {
       const last = new URL(pathOrUrl).pathname.split('/').filter(Boolean).pop() || '';
-      return last.split('.').pop()?.toLowerCase() || '';
+      return extensionFromBasename(last);
     } catch {
       // fall through to basename
     }
   }
-  return previewBasename(pathOrUrl).split('.').pop()?.toLowerCase() || '';
+  return extensionFromBasename(previewBasename(pathOrUrl));
 }
 
 /** http(s) URL whose path has no file extension — treat as a web page (e.g. https://www.baidu.com). */

@@ -3,13 +3,23 @@ import { useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
+import {
+  homeHubCardDescClass,
+  homeHubCardGridClass,
+  homeHubCardTagClass,
+  homeHubCardTitleClass,
+  homeHubInteractiveCardShellClass,
+  homeHubTextPrimary,
+  homeHubTextSecondary,
+} from './home-hub-surface-styles';
 import { formatLocalYmd } from '@/lib/sto-task-entry-label';
+import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
 import {
   STO_TASK_PENDING_COMPOSE_KEY,
   STO_TASK_SUBITEM_NAV_SCROLL_END,
 } from '@/lib/sto-task-compose-storage';
-import { useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
+import { useStoTaskSubitemsStore, stoTaskSubitemKey } from '@/stores/sto-task-subitems';
+import { useChatStore } from '@/stores/chat';
 import avatar01 from '@/assets/avatars/avatar-01.png.png';
 import avatar02 from '@/assets/avatars/avatar-02.png.png';
 import avatar03 from '@/assets/avatars/avatar-03.png.png';
@@ -50,10 +60,9 @@ function StatusChip({ children, variant }: { children: React.ReactNode; variant:
   );
 }
 
-/** 分类标签：Brand-1 底 + Brand-7 字（sto-design） */
 function CategoryPill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="shrink-0 rounded-md bg-[#FFF5E6] px-2 py-0.5 text-xs font-medium text-[#D95700] dark:bg-amber-950/45 dark:text-amber-200">
+    <span className={cn('shrink-0', homeHubCardTagClass)}>
       {children}
     </span>
   );
@@ -64,10 +73,10 @@ function StatBlock({ label, value, unit }: { label: string; value: string; unit?
   if (!label.trim() && !value.trim()) return null;
   return (
     <div className="min-w-0 text-left">
-      <div className="text-[13px] leading-snug text-[#86909C] dark:text-muted-foreground">{label}</div>
-      <div className="mt-1 truncate text-lg font-bold tabular-nums leading-tight text-[#1D2129] dark:text-foreground sm:text-xl">
+      <div className={cn('text-[13px] leading-snug', homeHubTextSecondary)}>{label}</div>
+      <div className={cn('mt-1 truncate text-lg font-bold tabular-nums leading-tight sm:text-xl', homeHubTextPrimary)}>
         {value}
-        {u ? <span className="text-[15px] font-semibold text-[#1D2129] dark:text-foreground"> {u}</span> : null}
+        {u ? <span className="text-[15px] font-semibold"> {u}</span> : null}
       </div>
     </div>
   );
@@ -88,10 +97,7 @@ function AvatarStack({ urls }: { urls: readonly [string, string, string] }) {
   );
 }
 
-const cardShell = cn(
-  'relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-[#E5E6EB] bg-white p-5 shadow-[0_2px_12px_rgba(29,33,41,0.06)]',
-  'dark:border-border dark:bg-card',
-);
+const cardShell = homeHubInteractiveCardShellClass;
 
 type SummaryCardBase = 'recon' | 'customer' | 'cost';
 
@@ -125,6 +131,21 @@ function SummaryCard(props: SummaryCardProps) {
     const entryIdToday = formatLocalYmd(new Date());
     const hadToday = useStoTaskSubitemsStore.getState().listEntries(stoTaskTarget).includes(entryIdToday);
     ensureSubitem(stoTaskTarget, entryIdToday);
+
+    const subitemKey = stoTaskSubitemKey(stoTaskTarget, entryIdToday);
+    const sessionKey = useStoTaskSubitemsStore.getState().sessionKeyBySubitem[subitemKey];
+    if (!sessionKey) return;
+
+    const cardTitle = t(`summary.${base}.title`);
+    const chat = useChatStore.getState();
+    if (!chat.sessions.some((session) => session.key === sessionKey)) {
+      useChatStore.setState((state) => ({
+        sessions: [...state.sessions, { key: sessionKey, label: cardTitle }],
+      }));
+    }
+    chat.renameSession(sessionKey, cardTitle);
+    chat.switchSession(sessionKey);
+
     const path = taskDetailPath(stoTaskTarget, entryIdToday);
     if (!hadToday) {
       try {
@@ -139,7 +160,7 @@ function SummaryCard(props: SummaryCardProps) {
     } else {
       navigate(path, { state: { [STO_TASK_SUBITEM_NAV_SCROLL_END]: true } });
     }
-  }, [base, ensureSubitem, navigate, stoTaskTarget]);
+  }, [base, ensureSubitem, navigate, stoTaskTarget, t]);
 
   const p = `summary.${base}` as const;
   const bodyCaption = t(`${p}.bodyCaption`, { defaultValue: '' }).trim();
@@ -151,7 +172,7 @@ function SummaryCard(props: SummaryCardProps) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-bold leading-snug text-[#1D2129] dark:text-foreground">{t(`${p}.title`)}</h3>
+            <h3 className={homeHubCardTitleClass}>{t(`${p}.title`)}</h3>
             <CategoryPill>{t(`${p}.pill`)}</CategoryPill>
           </div>
         </div>
@@ -160,8 +181,8 @@ function SummaryCard(props: SummaryCardProps) {
 
       {showStackBody ? (
         <div className="mt-5 min-h-[4.5rem]">
-          <p className="text-[13px] leading-snug text-[#86909C] dark:text-muted-foreground">{bodyCaption}</p>
-          <p className="mt-1.5 text-[15px] font-semibold leading-relaxed text-[#1D2129] dark:text-foreground">
+          <p className={homeHubCardDescClass}>{bodyCaption}</p>
+          <p className={cn('mt-1.5 text-[15px] font-semibold leading-relaxed', homeHubTextPrimary)}>
             {t(`${p}.bodyDetail`)}
           </p>
         </div>
@@ -182,10 +203,10 @@ function SummaryCard(props: SummaryCardProps) {
 
       <div className="mt-5 flex min-h-[40px] items-center gap-3 border-t border-[#E5E6EB] pt-4 dark:border-border">
         <AvatarStack urls={avatarUrls} />
-        <p className="min-w-0 flex-1 truncate text-center text-[13px] text-[#86909C] dark:text-muted-foreground" title={t(`${p}.footerTeam`)}>
+        <p className={cn('min-w-0 flex-1 truncate text-center text-[13px]', homeHubTextSecondary)} title={t(`${p}.footerTeam`)}>
           {t(`${p}.footerTeam`)}
         </p>
-        <span className="flex max-w-[48%] shrink-0 items-center justify-end gap-0.5 truncate text-[13px] font-medium text-[#86909C] dark:text-muted-foreground">
+        <span className={cn('flex max-w-[48%] shrink-0 items-center justify-end gap-0.5 truncate text-[13px] font-medium', homeHubTextSecondary)}>
           {t(`${p}.footerHint`)}
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C] opacity-80 dark:text-muted-foreground" aria-hidden />
         </span>
@@ -204,7 +225,7 @@ function SummaryCard(props: SummaryCardProps) {
         <div className="pointer-events-none select-none">{inner}</div>
         <div
           className={cn(
-            'pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl',
+            'pointer-events-none absolute inset-0 flex items-center justify-center rounded-[18px]',
             // 轻蒙层即可看清底层（设计稿）；不用 backdrop-blur，避免整卡发糊
             'bg-white/45 dark:bg-background/50',
           )}
@@ -221,10 +242,7 @@ function SummaryCard(props: SummaryCardProps) {
     <button
       type="button"
       onClick={openSubitem}
-      className={cn(
-        cardShell,
-        'w-full text-left transition-shadow duration-200 hover:shadow-[0_8px_24px_rgba(29,33,41,0.1)] dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.35)]',
-      )}
+      className={cardShell}
     >
       {inner}
     </button>
@@ -238,7 +256,7 @@ export function HomeSummaryCards({ className }: { className?: string }) {
       <h2 id="home-summary-heading" className="sr-only">
         {t('summary.heading')}
       </h2>
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-3 md:gap-5">
+      <div className={homeHubCardGridClass}>
         <SummaryCard
           avatarSeed="hq-reconciliation:recon"
           stoTaskTarget="hq-reconciliation"

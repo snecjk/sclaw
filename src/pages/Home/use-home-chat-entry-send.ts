@@ -12,6 +12,7 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 /**
  * 首页入口（省区工作台 / Agent Hub）与聊天页保持一致：
  * 在首页默认主会话首次发送时创建一个真实会话，之后追问都复用当前会话。
+ * 模型选择通过 pendingNewSessionModel → newSession → applyWorkspaceDefaultToNewSession 落盘。
  */
 export function useHomeChatEntrySend() {
   const { t } = useTranslation('home');

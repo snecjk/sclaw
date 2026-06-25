@@ -13,7 +13,7 @@ async function main() {
 
   await mkdir(BASELINE_DIR, { recursive: true });
   await writeFile(BASELINE_FILE, JSON.stringify(current, null, 2));
-  console.log(`Updated comms baseline: ${BASELINE_FILE}`);
+  
 }
 
 main().catch((error) => {

@@ -1,86 +1,57 @@
 /**
- * Chat Preview Panel
- * Right-hand side panel for previewing locally-generated files (HTML, PDFs, Office docs, web links)
- * attached to chat messages. Supports tab switching between files.
+ * ChatPreviewPanel — 三栏预览区右侧面板（圆角内容壳 + 文件预览）
+ *
+ * Tab 行（☰ + 产物 pill）在 ContentHeader 与搜索/刷新等 icon 同一行。
  */
 import { useCallback, useMemo, useState } from 'react';
 import {
-  X,
-  ExternalLink,
   RefreshCw,
   Download,
-  FileText,
-  FileCode,
-  File,
-  ChevronDown,
-  Presentation,
-  Table2,
   MonitorPlay,
   Eye,
+  Share2,
+  ExternalLink,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import type { OnEditWorkflowNavigate } from '@/lib/preview-workflow-navigation';
 import { isHttpUrl, inferMimeTypeFromUrl } from '@/lib/preview-url';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { FilePreviewViewer } from '@/components/file-preview/FilePreviewViewer';
-import { WorkflowPreviewPanel } from '@/components/workflow/WorkflowPreviewPanel';
+import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
+import { buildArtifactShareDraft, shareToDingTalk } from '@/lib/dingtalk-share';
+import {
+  stoPreviewActionButtonClass,
+  stoPreviewActionRowClass,
+  stoPreviewContentShellClass,
+} from '@/lib/surfaces';
 import type { AttachedFileMeta } from '@/stores/chat';
-import type { WorkflowDetailResponse } from '@/types/workflow';
 
-interface ChatPreviewPanelProps {
+export interface ChatPreviewPanelProps {
+  /** 当前可见的产物列表（已过滤 dismissed） */
   files: AttachedFileMeta[];
   activeFilePath: string | null;
-  onSelectFile: (filePath: string) => void;
-  onClose: () => void;
-  className?: string;
-  /** When false, hide the workflow tab entirely. */
-  showWorkflowTab?: boolean;
+  /** 有工作流上下文时在操作行展示「编辑工作流」（跳转，不切换预览内容） */
+  showEditWorkflow?: boolean;
   workflowId?: string | null;
-  workflowDetail?: WorkflowDetailResponse | null;
-  workflowLoading?: boolean;
-  workflowError?: string | null;
-  activeTab?: PreviewTab;
-  onActiveTabChange?: (tab: PreviewTab) => void;
-}
-
-type PreviewTab = 'product' | 'workflow';
-
-function fileIcon(mimeType: string) {
-  if (mimeType === 'text/html' || mimeType === 'text/markdown') return FileCode;
-  if (mimeType === 'application/pdf') return FileText;
-  if (
-    mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
-    mimeType === 'application/vnd.ms-powerpoint'
-  ) return Presentation;
-  if (
-    mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-    mimeType === 'application/vnd.ms-excel' ||
-    mimeType === 'text/csv' ||
-    mimeType === 'text/tab-separated-values'
-  ) return Table2;
-  return File;
+  onEditWorkflow?: OnEditWorkflowNavigate;
+  className?: string;
 }
 
 export function ChatPreviewPanel({
   files,
   activeFilePath,
-  onSelectFile,
-  onClose,
-  className,
-  showWorkflowTab = false,
+  showEditWorkflow = false,
   workflowId = null,
-  workflowDetail = null,
-  workflowLoading = false,
-  workflowError = null,
-  activeTab: controlledTab,
-  onActiveTabChange,
+  onEditWorkflow,
+  className,
 }: ChatPreviewPanelProps) {
-  const [internalTab, setInternalTab] = useState<PreviewTab>('product');
-  const activeTab = controlledTab ?? internalTab;
-  const setActiveTab = onActiveTabChange ?? setInternalTab;
-  const [showFileList, setShowFileList] = useState(false);
+  const { t } = useTranslation('chat');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareDraft, setShareDraft] = useState<ReturnType<typeof buildArtifactShareDraft> | null>(null);
 
   const activeFile = useMemo(() => {
     if (!activeFilePath) return null;
@@ -97,6 +68,26 @@ export function ChatPreviewPanel({
     }
     return null;
   }, [files, activeFilePath]);
+
+  const handleOpenShareDialog = useCallback(() => {
+    if (!activeFile?.filePath) return;
+    setShareDraft(buildArtifactShareDraft({
+      fileName: activeFile.fileName,
+      filePath: activeFile.filePath,
+    }));
+    setShareDialogOpen(true);
+  }, [activeFile]);
+
+  const handleConfirmShare = useCallback(async (values: { title: string; text: string; url: string }) => {
+    await shareToDingTalk({
+      title: values.title,
+      text: values.text,
+      url: values.url,
+    });
+    toast.success(t('preview.shareDialog.success'));
+    setShareDialogOpen(false);
+    setShareDraft(null);
+  }, [t]);
 
   const handleOpenExternal = useCallback(() => {
     if (!activeFile?.filePath) return;
@@ -144,177 +135,110 @@ export function ChatPreviewPanel({
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      // Fallback to opening externally
       handleOpenExternal();
     }
   }, [activeFile, handleOpenExternal]);
 
-  if (files.length === 0 && !showWorkflowTab) return null;
+  const handleEditWorkflow = useCallback(() => {
+    if (workflowId === null || workflowId === '') return;
+    onEditWorkflow?.(workflowId);
+  }, [workflowId, onEditWorkflow]);
+
+  if (files.length === 0) return null;
 
   return (
-    <div
-      className={cn(
-        'flex min-h-0 min-w-0 flex-col border-l border-border/40 bg-[var(--sto-page-bg)] dark:bg-background',
-        className,
-      )}
-    >
-      {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-border/40 px-4 py-3">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setActiveTab('product')}
-            className={cn(
-              'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-              activeTab === 'product'
-                ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            产物
-          </button>
-          {showWorkflowTab && (
-            <button
-              onClick={() => setActiveTab('workflow')}
-              className={cn(
-                'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                activeTab === 'workflow'
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              工作流
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          {activeTab === 'product' && (
-            <>
-              <ActionButton onClick={handleFullscreen} title="全屏放映">
-                <MonitorPlay className="h-3.5 w-3.5" />
-              </ActionButton>
-              <ActionButton onClick={handleRefresh} title="刷新">
-                <RefreshCw className="h-3.5 w-3.5" />
-              </ActionButton>
-              <ActionButton onClick={handleDownload} title="下载">
-                <Download className="h-3.5 w-3.5" />
-              </ActionButton>
-              <ActionButton onClick={handleOpenExternal} title="在浏览器中打开">
-                <ExternalLink className="h-3.5 w-3.5" />
-              </ActionButton>
-            </>
-          )}
-          <ActionButton onClick={onClose} title="关闭">
-            <X className="h-3.5 w-3.5" />
-          </ActionButton>
-        </div>
-      </div>
-
-      {/* File switcher */}
-      {activeTab === 'product' && files.length > 1 && (
-        <div className="shrink-0 border-b border-border/30 px-4 py-2">
-          <button
-            onClick={() => setShowFileList((v) => !v)}
-            className="flex w-full items-center gap-2 rounded-lg border border-border/30 bg-white/[0.04] px-3 py-2 text-left text-xs transition-colors hover:bg-white/[0.08]"
-          >
-            {activeFile && (() => {
-              const Icon = fileIcon(activeFile.mimeType);
-              return <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />;
-            })()}
-            <span className="flex-1 truncate text-foreground">
-              {activeFile?.fileName || '选择文件'}
-            </span>
-            <ChevronDown
-              className={cn(
-                'h-3 w-3 shrink-0 text-muted-foreground transition-transform',
-                showFileList && 'rotate-180',
-              )}
-            />
-          </button>
-          <AnimatePresence>
-            {showFileList && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.15 }}
-                className="overflow-hidden"
-              >
-                <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-border/30 bg-popover shadow-md">
-                  {files.map((file) => {
-                    const Icon = fileIcon(file.mimeType);
-                    const isActive = file.filePath === activeFile?.filePath;
-                    return (
-                      <button
-                        key={file.filePath || file.fileName}
-                        onClick={() => {
-                          onSelectFile(file.filePath!);
-                          setShowFileList(false);
-                        }}
-                        className={cn(
-                          'flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors',
-                          isActive
-                            ? 'bg-primary/10 text-primary'
-                            : 'text-foreground hover:bg-accent',
-                        )}
-                      >
-                        <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                        <span className="flex-1 truncate">{file.fileName}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
-
-      {/* Content */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" data-preview-viewer>
-        {activeTab === 'product' && activeFile ? (
-          <FilePreviewViewer
-            key={`${activeFile.filePath}-${refreshKey}`}
-            filePath={activeFile.filePath!}
-            fileName={activeFile.fileName}
-            mimeType={activeFile.mimeType}
-            className="h-full w-full"
-          />
-        ) : activeTab === 'product' ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
-            <Eye className="h-8 w-8 opacity-30" />
-            <p>点击消息中的文件链接进行预览</p>
-            <p className="text-xs opacity-50">或从上方下拉菜单选择文件</p>
+    <div className={cn('flex min-h-0 min-w-0 flex-1 flex-col', className)}>
+      <div className={stoPreviewContentShellClass}>
+        <div className={stoPreviewActionRowClass}>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium leading-5 text-foreground">
+              {activeFile?.fileName ?? t('preview.emptyHint')}
+            </p>
           </div>
-        ) : showWorkflowTab ? (
-          <WorkflowPreviewPanel
-            detail={workflowDetail}
-            loading={workflowLoading}
-            error={workflowError}
-            workflowId={workflowId}
-          />
-        ) : null}
+          <div className="flex shrink-0 items-center gap-2">
+            {activeFile ? (
+              <>
+                <PreviewActionButton onClick={handleFullscreen} aria-label={t('preview.fullscreen')}>
+                  <MonitorPlay className="h-4 w-4" aria-hidden />
+                </PreviewActionButton>
+                <PreviewActionButton onClick={handleRefresh} aria-label={t('preview.refresh')}>
+                  <RefreshCw className="h-4 w-4" aria-hidden />
+                </PreviewActionButton>
+                <PreviewActionButton onClick={handleDownload} aria-label={t('preview.download')}>
+                  <Download className="h-4 w-4" aria-hidden />
+                </PreviewActionButton>
+                <PreviewActionButton onClick={handleOpenShareDialog} aria-label={t('preview.share')}>
+                  <Share2 className="h-4 w-4" aria-hidden />
+                </PreviewActionButton>
+                <PreviewActionButton onClick={handleOpenExternal} aria-label={t('preview.openExternal')}>
+                  <ExternalLink className="h-4 w-4" aria-hidden />
+                </PreviewActionButton>
+                {showEditWorkflow && workflowId ? (
+                  <button
+                    type="button"
+                    className="shrink-0 text-sm leading-[18px] text-foreground transition-colors hover:text-primary"
+                    onClick={handleEditWorkflow}
+                  >
+                    {t('preview.editWorkflow')}
+                  </button>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" data-preview-viewer>
+          {activeFile ? (
+            <FilePreviewViewer
+              key={`${activeFile.filePath}-${refreshKey}`}
+              filePath={activeFile.filePath!}
+              fileName={activeFile.fileName}
+              mimeType={activeFile.mimeType}
+              className="h-full w-full"
+            />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
+              <Eye className="h-8 w-8 opacity-30" aria-hidden />
+              <p>{t('preview.emptyHint')}</p>
+              <p className="text-xs opacity-50">{t('preview.emptyHintSub')}</p>
+            </div>
+          )}
+        </div>
       </div>
+
+      <ArtifactShareDialog
+        open={shareDialogOpen}
+        draft={shareDraft}
+        onConfirm={handleConfirmShare}
+        onCancel={() => {
+          setShareDialogOpen(false);
+          setShareDraft(null);
+        }}
+        onError={(error) => {
+          toast.error(error instanceof Error ? error.message : t('preview.shareDialog.failed'));
+        }}
+      />
     </div>
   );
 }
 
-function ActionButton({
+function PreviewActionButton({
   children,
   onClick,
-  title,
+  'aria-label': ariaLabel,
 }: {
   children: React.ReactNode;
   onClick: () => void;
-  title: string;
+  'aria-label': string;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      title={title}
-      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      aria-label={ariaLabel}
+      className={stoPreviewActionButtonClass}
     >
       {children}
     </button>
   );
 }
-

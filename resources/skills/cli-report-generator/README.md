@@ -19,7 +19,7 @@ cp configs/network-report.json.example configs/network-report.json
   "cliCommand": "your-cli-tool get-stats --format json",
   "workingDir": "/path/to/cli",
   "template": "assets/network-report-template.html",
-  "outputDir": "reports"
+  "outputDir": ".claw-output",
 }
 ```
 

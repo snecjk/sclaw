@@ -1,4 +1,7 @@
+import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { hostApiFetch } from '@/lib/host-api';
+import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
+import { useAgentsStore } from '@/stores/agents';
 import {
   getCanonicalPrefixFromSessions,
   getMessageText,
@@ -14,7 +17,11 @@ import {
   parseScheduledTaskSessionKey,
 } from './cron-session-utils';
 import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
-import { useAgentsStore } from '@/stores/agents';
+import {
+  applyStoredSessionLabels,
+  resolveStoredSessionLabel,
+  shouldAutoDeriveSessionLabel,
+} from '@/lib/session-label';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
@@ -109,6 +116,8 @@ export function createSessionActions(
 
         // If a local cron job has virtual dated sessions, drop its base session
         // from Gateway to avoid duplicate entries in the sidebar.
+        // Also drop run sessions when the job already has dated sessions — the run
+        // session's runtime state will be mapped to the aggregate session key.
         const cronJobIdsWithDates = new Set<string>();
         for (const s of rawSessions) {
           const key = String(s.key || '');
@@ -122,6 +131,10 @@ export function createSessionActions(
             const key = String(s.key || '');
             const parsed = parseCronSessionKey(key);
             if (parsed && !parsed.date && !parsed.runSessionId && cronJobIdsWithDates.has(parsed.jobId)) {
+              return false;
+            }
+            // Filter out run sessions when the job has dated aggregate sessions
+            if (parsed?.runSessionId && cronJobIdsWithDates.has(parsed.jobId)) {
               return false;
             }
             return true;
@@ -174,9 +187,12 @@ export function createSessionActions(
           }
         }
         if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
-          // Current session not found in the backend list
-          const isNewEmptySession = get().messages.length === 0;
-          if (!isNewEmptySession) {
+          // Keep locally-created pending sessions even after the first optimistic send.
+          const hasLocalPendingSession =
+            isTemporaryAgentSessionKey(nextSessionKey)
+            || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
+            || localSessions.some((session) => session.key === nextSessionKey);
+          if (!hasLocalPendingSession) {
             nextSessionKey = dedupedSessions[0].key;
           }
         }
@@ -194,11 +210,14 @@ export function createSessionActions(
             key: nextSessionKey,
             label: localCurrentSession?.label ?? NEW_SESSION_TEMP_LABEL,
             engineType: localCurrentSession?.engineType,
+            model: localCurrentSession?.model,
           }]
           : dedupedSessions;
 
+        const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, get().sessionLabels);
+
         const discoveredActivity = Object.fromEntries(
-          sessionsWithCurrent
+          labeledSessions
             .filter((session) => typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt))
             .map((session) => [session.key, session.updatedAt!]),
         );
@@ -210,11 +229,40 @@ export function createSessionActions(
         try {
           const jobsResult = await hostApiFetch<Array<{ id: string; name: string }>>('/api/cron/jobs');
           const jobNameMap = new Map(jobsResult.map((j) => [j.id, j.name]));
+
+          // Identify cron sessions whose name was not resolved from the
+          // Gateway-backed /api/cron/jobs list — these will be resolved
+          // from the local cron/jobs.json fallback below.
+          const unresolvedCronJobIds = new Set<string>();
           for (const session of sessionsWithCurrent) {
             const parsed = parseCronSessionKey(session.key);
             if (parsed) {
               const name = jobNameMap.get(parsed.jobId);
-              if (name) session.displayName = name;
+              if (name) {
+                session.displayName = name;
+              } else {
+                unresolvedCronJobIds.add(parsed.jobId);
+              }
+            }
+          }
+
+          // Fallback: if any cron session name was not resolved from the
+          // Gateway, read names from the local cron/jobs.json file. This
+          // handles the race window where /api/cron/jobs is temporarily
+          // empty (e.g. during a cron.trigger provider-sync re-init).
+          if (unresolvedCronJobIds.size > 0) {
+            try {
+              const fallbackJobs = await hostApiFetch<Array<{ id: string; name: string }>>('/api/cron/local-job-names');
+              const fallbackMap = new Map(fallbackJobs.map((j) => [j.id, j.name]));
+              for (const session of sessionsWithCurrent) {
+                const parsed = parseCronSessionKey(session.key);
+                if (parsed && unresolvedCronJobIds.has(parsed.jobId) && !session.displayName) {
+                  const fallbackName = fallbackMap.get(parsed.jobId);
+                  if (fallbackName) session.displayName = fallbackName;
+                }
+              }
+            } catch {
+              // Fallback is best-effort; ignore errors.
             }
           }
         } catch {
@@ -308,7 +356,7 @@ export function createSessionActions(
         }
 
         set((state) => ({
-          sessions: sessionsWithCurrent,
+          sessions: labeledSessions,
           currentSessionKey: nextSessionKey,
           currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
           sessionLastActivity: {
@@ -323,10 +371,14 @@ export function createSessionActions(
 
         // Background: hydrate only the first screen of missing metadata.
         // Avoid N * full-history fan-out when many sessions exist.
-        const sessionsToHydrate = sessionsWithCurrent
+        const sessionsToHydrate = labeledSessions
           .filter((session) => {
             if (session.key.endsWith(':main')) return false;
-            const hasUsableTitle = Boolean(session.label?.trim() || session.displayName?.trim() || get().sessionLabels[session.key]);
+            const hasUsableTitle = Boolean(
+              session.label?.trim()
+              || session.displayName?.trim()
+              || resolveStoredSessionLabel(session.key, get().sessionLabels),
+            );
             const hasActivity = Boolean(session.updatedAt || get().sessionLastActivity[session.key]);
             return !hasUsableTitle || !hasActivity;
           })
@@ -349,8 +401,7 @@ export function createSessionActions(
                 const lastMsg = msgs[msgs.length - 1];
                 set((s) => {
                   const next: Partial<typeof s> = {};
-                  const existingLabel = s.sessionLabels[session.key];
-                  if (firstUser && (!existingLabel || isCorruptedSessionLabel(existingLabel))) {
+                  if (firstUser && shouldAutoDeriveSessionLabel(session.key, s.sessionLabels, isCorruptedSessionLabel)) {
                     const labelText = deriveSessionLabelFromUserText(getMessageText(firstUser.content));
                     if (labelText) {
                       const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
@@ -422,11 +473,13 @@ export function createSessionActions(
       // The main process renames <suffix>.jsonl → <suffix>.deleted.jsonl so that
       // sessions.list skips it automatically.
       try {
+        const session = get().sessions.find((item) => item.key === key);
+        const agent = useAgentsStore.getState().agents.find((item) => item.id === get().currentAgentId);
         const result = await hostApiFetch<{ success: boolean; error?: string }>('/api/sessions/delete', {
           method: 'POST',
           body: JSON.stringify({
             sessionKey: key,
-            engineType: getSessionEngineType(get().sessions.find((session) => session.key === key)),
+            engineType: resolveChatSessionEngineType(session, agent?.engineType, key),
           }),
         });
         const typedResult = result as {
@@ -475,6 +528,7 @@ export function createSessionActions(
     },
 
     // ── New session ──
+    // NOTE: Runtime store is src/stores/chat.ts (monolithic). Keep logic in sync when refactoring.
 
     newSession: () => {
       // Generate a new unique session key and switch to it.

@@ -300,6 +300,11 @@ export interface DwsInstallResponse {
   error?: string;
 }
 
+/** Suppress low-level "fetch failed" noise in dws install UI only. */
+export function isDwsInstallFetchFailedMessage(message: string): boolean {
+  return message.toLowerCase().includes('fetch failed');
+}
+
 export async function installDwsCli(): Promise<DwsInstallResponse> {
   return hostApiFetch<DwsInstallResponse>('/api/dingtalk/install', {
     method: 'POST',

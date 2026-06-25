@@ -18,6 +18,7 @@ import {
   clearAllBindingsForChannel,
   clearChannelBinding,
   listAgentsSnapshot,
+  saveWeChatChannelWithBinding,
 } from '../../utils/agent-config';
 import {
   ensureDingTalkPluginInstalled,
@@ -34,7 +35,6 @@ import {
   OPENCLAW_WECHAT_CHANNEL_TYPE,
   UI_WECHAT_CHANNEL_TYPE,
   buildQrChannelEventName,
-  isWechatChannelType,
   toOpenClawChannelType,
   toUiChannelType,
 } from '../../utils/channel-alias';
@@ -135,8 +135,7 @@ async function awaitWeChatQrLogin(
       baseUrl: result.baseUrl,
       userId: result.userId,
     });
-    await saveChannelConfig(UI_WECHAT_CHANNEL_TYPE, { enabled: true }, normalizedAccountId);
-    await ensureScopedChannelBinding(UI_WECHAT_CHANNEL_TYPE, normalizedAccountId);
+    await saveWeChatChannelWithBinding(normalizedAccountId, 'main');
     scheduleGatewayChannelSaveRefresh(ctx, OPENCLAW_WECHAT_CHANNEL_TYPE, `wechat:loginSuccess:${normalizedAccountId}`);
 
     if (!isActiveQrLogin(loginKey, sessionKey)) {
@@ -190,7 +189,14 @@ function scheduleGatewayChannelSaveRefresh(
     return;
   }
 
-  // Binding-only updates do not need plugin teardown; in-process reload is enough.
+  // Plugin channels (WeChat, WhatsApp, etc.) must fully restart to pick up binding
+  // changes — SIGUSR1 in-process reload does not reinitialize plugin connections.
+  if (kind === 'binding' && FORCE_RESTART_CHANNELS.has(storedChannelType)) {
+    ctx.gatewayManager.debouncedRestart(PLUGIN_CHANNEL_RESTART_DEBOUNCE_MS);
+    void reason;
+    return;
+  }
+
   if (kind === 'binding') {
     ctx.gatewayManager.debouncedReload();
     void reason;
@@ -247,12 +253,6 @@ async function ensureScopedChannelBinding(channelType: string, accountId?: strin
 
   const ownerKey = `${storedChannelType}:${accountId}`;
   if (agents.channelAccountOwners[ownerKey]) {
-    return;
-  }
-
-  // WeChat: default route new/unbound accounts to the primary agent; user can change later.
-  if (isWechatChannelType(channelType) && agents.agents.some((entry) => entry.id === 'main')) {
-    await assignChannelAccountToAgent('main', storedChannelType, accountId);
     return;
   }
 
@@ -363,19 +363,6 @@ async function buildChannelAccountsView(ctx: HostApiContext): Promise<ChannelAcc
       .map((account) => account.accountId)
       .filter((accountId): accountId is string => typeof accountId === 'string' && accountId.trim().length > 0);
     const accountIds = Array.from(new Set([...channelAccountsFromConfig, ...runtimeAccountIds, defaultAccountId]));
-
-    // Backfill first-time default for WeChat accounts that connected before auto-bind existed.
-    if (isWechatChannelType(rawChannelType)) {
-      let backfilledBinding = false;
-      for (const accountId of accountIds) {
-        if (agentsSnapshot.channelAccountOwners[`${rawChannelType}:${accountId}`]) continue;
-        await ensureScopedChannelBinding(uiChannelType, accountId);
-        backfilledBinding = true;
-      }
-      if (backfilledBinding) {
-        agentsSnapshot = await listAgentsSnapshot();
-      }
-    }
 
     const accounts: ChannelAccountView[] = accountIds.map((accountId) => {
       const runtime = runtimeAccounts.find((item) => item.accountId === accountId);

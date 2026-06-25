@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Search, ChevronDown, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { stoPageTitleClass } from '@/lib/surfaces';
 
 interface TaskHeroProps {
   searchQuery: string;
@@ -39,7 +40,7 @@ export function TaskHero({ searchQuery, onSearchChange, sortValue, onSortChange,
   return (
     <header className="mb-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-3">
-        <h1 className="text-2xl font-semibold text-foreground">定时任务</h1>
+        <h1 className={stoPageTitleClass}>定时任务</h1>
         <div className="flex items-center gap-3">
           {/* Search */}
           <label className="relative flex items-center">

@@ -26,6 +26,8 @@ export const TIMEOUTS = {
   DEFAULT_FETCH: 15_000,
   /** Skill ZIP download + extract (plaza / sto-skills / clawhub install) */
   SKILL_INSTALL: 180_000,
+  /** DingTalk dws CLI download + skill zip + gateway restart prompt */
+  DWS_INSTALL: 300_000,
   /** SSO login flow */
   AUTH_LOGIN: 300_000,
 } as const;

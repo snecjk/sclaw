@@ -19,6 +19,7 @@ import {
   isConcreteModelId,
   normalizeModelIdForChat,
   resolveChatToolbarModelId,
+  type ChatModelOption,
 } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
 import { cn } from '@/lib/utils';
@@ -26,7 +27,7 @@ import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { toast } from 'sonner';
 
 const pillBase = cn(
-  'flex min-w-0 max-w-[min(100vw-11rem,260px)] flex-1 items-stretch rounded-xl border border-border/70',
+  'flex min-w-0 max-w-[min(100vw-11rem,260px)] items-stretch rounded-xl border border-border/70',
   'bg-[linear-gradient(180deg,rgba(255,255,255,0.10),transparent),rgba(255,255,255,0.30)]',
   'shadow-[0_4px_12px_rgba(15,23,42,0.05)]',
   'dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent),rgba(255,255,255,0.04)]',
@@ -39,14 +40,115 @@ const pillBtn = cn(
   'disabled:pointer-events-none disabled:opacity-60',
 );
 
+const pillStatic = cn(
+  'flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg py-0 pl-2.5 pr-2',
+);
+
+/** 首页 HomeComposer 内联引擎/模型：灰底 pill；flex-1 + truncate 与对侧 pill 同步截断文字 */
+const inlinePillTrigger = cn(
+  'flex h-[30px] min-w-0 items-center gap-1 rounded-[20px] bg-[#F5F6F7] px-3 outline-none',
+  'text-sm font-normal text-foreground transition-colors hover:bg-black/[0.04]',
+  'focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
+  'disabled:pointer-events-none disabled:opacity-60 dark:bg-muted dark:hover:bg-white/[0.06]',
+);
+
+function isModelNotAllowedError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /model not allowed/i.test(message);
+}
+
+function isStoBuiltinModelOption(option: ChatModelOption | undefined): boolean {
+  return option?.isBuiltin === true && option.accountId === 'sto';
+}
+
+async function applyClaudeSessionModel(params: {
+  currentSessionKey: string;
+  modelId: string;
+  option?: ChatModelOption;
+  currentAgentId: string;
+}): Promise<string> {
+  const result = await hostApiFetch<{
+    model?: string;
+    modelOverride?: string | null;
+  }>('/api/sessions/model', {
+    method: 'POST',
+    body: JSON.stringify({
+      sessionKey: params.currentSessionKey,
+      model: params.modelId,
+      accountId: params.option?.accountId,
+      agentId: params.currentAgentId || undefined,
+      engineType: 'claude',
+    }),
+  });
+  return (result.modelOverride || result.model || params.modelId).trim();
+}
+
+async function applyOpenClawSessionModel(params: {
+  currentSessionKey: string;
+  modelId: string;
+  option?: ChatModelOption;
+  currentAgentId: string;
+}): Promise<string> {
+  const result = await hostApiFetch<{
+    model?: string;
+    modelOverride?: string | null;
+  }>('/api/sessions/model', {
+    method: 'POST',
+    body: JSON.stringify({
+      sessionKey: params.currentSessionKey,
+      model: params.modelId,
+      accountId: params.option?.accountId,
+      agentId: params.currentAgentId || undefined,
+      engineType: 'openclaw',
+    }),
+  });
+  return (result.modelOverride || result.model || params.modelId).trim();
+}
+
+async function repairStoCatalogAndRetrySessionModel(params: {
+  currentSessionKey: string;
+  modelId: string;
+  option?: ChatModelOption;
+  currentAgentId: string;
+}): Promise<string> {
+  await hostApiFetch('/api/sto-model-sync', { method: 'POST' });
+  await useProviderStore.getState().refreshProviderSnapshot();
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+  return applyOpenClawSessionModel(params);
+}
+
+function resolveClaudeToolbarModelId(input: {
+  currentSessionKey: string;
+  sessionModel?: string;
+  agentModelDisplay?: string;
+  workspaceDefaultModelId: string;
+}): string {
+  if (input.currentSessionKey !== DEFAULT_SESSION_KEY) {
+    return (
+      normalizeModelIdForChat(input.sessionModel)
+      || (isConcreteModelId(input.agentModelDisplay)
+        ? normalizeModelIdForChat(input.agentModelDisplay)
+        : (input.workspaceDefaultModelId || ''))
+    );
+  }
+  return isConcreteModelId(input.agentModelDisplay)
+    ? normalizeModelIdForChat(input.agentModelDisplay)
+    : (input.workspaceDefaultModelId || '');
+}
+
 /* ── Engine Selector ─────────────────────────────────────────── */
 
-export function ChatEngineSelector({ className }: { className?: string }) {
+export function ChatEngineSelector({
+  className,
+  variant = 'toolbar',
+}: {
+  className?: string;
+  variant?: 'toolbar' | 'inline';
+}) {
   const sending = useChatStore((s) => s.sending);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessions = useChatStore((s) => s.sessions);
-  const loadSessions = useChatStore((s) => s.loadSessions);
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
@@ -65,14 +167,15 @@ export function ChatEngineSelector({ className }: { className?: string }) {
     : currentSession?.engineType ?? agentDefaultEngineType;
   const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
   const currentSessionEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
-  const showSessionEngineHint = currentSessionKey !== DEFAULT_SESSION_KEY
+  const canSwitchEngine = currentSessionKey === DEFAULT_SESSION_KEY;
+  const showSessionEngineHint = !canSwitchEngine
     && currentSession?.engineType != null
     && currentSession.engineType !== agentDefaultEngineType;
 
   const [engineSaving, setEngineSaving] = useState(false);
 
   const handleEngineSwitch = async (engineType: 'openclaw' | 'claude') => {
-    if (!currentAgentId || engineType === agentDefaultEngineType) return;
+    if (!canSwitchEngine || engineType === agentDefaultEngineType) return;
     setEngineSaving(true);
     try {
       await hostApiFetch(`/api/agents/${encodeURIComponent(currentAgentId)}/engine`, {
@@ -80,7 +183,6 @@ export function ChatEngineSelector({ className }: { className?: string }) {
         body: JSON.stringify({ engineType }),
       });
       await fetchAgents();
-      await loadSessions();
       toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : 'OpenClaw'} 引擎`);
     } catch (err) {
       toast.error(`切换引擎失败: ${String(err)}`);
@@ -91,48 +193,84 @@ export function ChatEngineSelector({ className }: { className?: string }) {
 
   const engineSelectDisabled = sending || !currentAgentId;
 
+  const engineMenu = (
+    <DropdownMenuContent
+      align="end"
+      side="bottom"
+      className="min-w-[12rem] max-w-[min(100vw-2rem,300px)]"
+    >
+      {(['openclaw', 'claude'] as const).map((engineType) => {
+        const label = engineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
+        const isSelected = agentDefaultEngineType === engineType;
+        return (
+          <DropdownMenuItem
+            key={engineType}
+            className={cn('flex items-center gap-2', isSelected && 'bg-primary/8 font-medium')}
+            onSelect={() => void handleEngineSwitch(engineType)}
+          >
+            <span className="min-w-0 flex-1 truncate text-[13px]">{label}</span>
+            {isSelected ? <Check className="h-4 w-4 shrink-0 text-primary" /> : null}
+          </DropdownMenuItem>
+        );
+      })}
+    </DropdownMenuContent>
+  );
+
+  if (variant === 'inline') {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild disabled={engineSelectDisabled || engineSaving || !canSwitchEngine}>
+          <button
+            type="button"
+            title="切换新会话执行引擎"
+            className={cn(
+              inlinePillTrigger,
+              'min-w-0 max-w-none flex-1',
+              (engineSaving || !canSwitchEngine) && 'pointer-events-none opacity-60',
+              className,
+            )}
+          >
+            <span className="min-w-0 flex-1 truncate">{agentDefaultEngineLabel}</span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
+          </button>
+        </DropdownMenuTrigger>
+        {engineMenu}
+      </DropdownMenu>
+    );
+  }
+
   return (
     <div className={cn('flex min-w-0 items-center gap-1.5', className)}>
       <span className="shrink-0 whitespace-nowrap px-1 text-[11px] font-medium text-muted-foreground/90 sm:text-[12px]">
         引擎
       </span>
-      <DropdownMenu>
-        <div className={cn(pillBase, 'max-w-[min(100vw-11rem,200px)]')}>
-          <DropdownMenuTrigger asChild disabled={engineSelectDisabled || engineSaving}>
-            <button
-              type="button"
-              title="切换新会话执行引擎"
-              className={cn(pillBtn, engineSaving && 'opacity-60 pointer-events-none')}
-            >
-              <Bot className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-              <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground/90">
-                {agentDefaultEngineLabel}
-              </span>
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
-            </button>
-          </DropdownMenuTrigger>
-        </div>
-        <DropdownMenuContent
-          align="end"
-          side="bottom"
-          className="min-w-[12rem] max-w-[min(100vw-2rem,300px)]"
-        >
-          {(['openclaw', 'claude'] as const).map((engineType) => {
-            const label = engineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
-            const isSelected = agentDefaultEngineType === engineType;
-            return (
-              <DropdownMenuItem
-                key={engineType}
-                className={cn('flex items-center gap-2', isSelected && 'bg-primary/8 font-medium')}
-                onSelect={() => void handleEngineSwitch(engineType)}
+      {canSwitchEngine ? (
+        <DropdownMenu>
+          <div className={cn(pillBase, 'max-w-[min(100vw-11rem,200px)]')}>
+            <DropdownMenuTrigger asChild disabled={engineSelectDisabled || engineSaving}>
+              <button
+                type="button"
+                title="切换新会话执行引擎"
+                className={cn(pillBtn, engineSaving && 'pointer-events-none opacity-60')}
               >
-                <span className="min-w-0 flex-1 truncate text-[13px]">{label}</span>
-                {isSelected ? <Check className="h-4 w-4 shrink-0 text-primary" /> : null}
-              </DropdownMenuItem>
-            );
-          })}
-        </DropdownMenuContent>
-      </DropdownMenu>
+                <Bot className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground/90">
+                  {agentDefaultEngineLabel}
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
+              </button>
+            </DropdownMenuTrigger>
+          </div>
+          {engineMenu}
+        </DropdownMenu>
+      ) : (
+        <div className={cn(pillBase, pillStatic, 'max-w-[min(100vw-11rem,200px)] opacity-75')}>
+          <Bot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-muted-foreground">
+            {currentSessionEngineLabel}
+          </span>
+        </div>
+      )}
       {showSessionEngineHint ? (
         <Tooltip delayDuration={150}>
           <TooltipTrigger asChild>
@@ -158,12 +296,17 @@ export function ChatEngineSelector({ className }: { className?: string }) {
 
 /* ── Model Selector ──────────────────────────────────────────── */
 
-export function ChatModelSelector({ className }: { className?: string }) {
+export function ChatModelSelector({
+  className,
+  variant = 'toolbar',
+}: {
+  className?: string;
+  variant?: 'toolbar' | 'inline';
+}) {
   const sending = useChatStore((s) => s.sending);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessions = useChatStore((s) => s.sessions);
-  const loadSessions = useChatStore((s) => s.loadSessions);
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
   const gatewayStatus = useGatewayStore((s) => s.status);
@@ -207,21 +350,18 @@ export function ChatModelSelector({ className }: { className?: string }) {
 
   useEffect(() => {
     if (modelSaving) return;
-    // On the new-conversation page (DEFAULT_SESSION_KEY), show the user's
-    // pending choice or the workspace default — NOT the agent's explicit model,
-    // because the user expects new conversations to start with the global default.
     if (currentSessionKey === DEFAULT_SESSION_KEY && currentEngineType !== 'claude') {
       const pending = normalizeModelIdForChat(pendingNewSessionModel);
-      const resolved = pending || workspaceDefaultModelId || '';
-      setSelectedModelId(resolved);
+      setSelectedModelId(pending || workspaceDefaultModelId || '');
       return;
     }
     const resolved = currentEngineType === 'claude'
-      ? (
-        isConcreteModelId(currentAgent?.modelDisplay)
-          ? normalizeModelIdForChat(currentAgent?.modelDisplay?.trim())
-          : (workspaceDefaultModelId || '')
-      )
+      ? resolveClaudeToolbarModelId({
+        currentSessionKey,
+        sessionModel: currentSession?.model,
+        agentModelDisplay: currentAgent?.modelDisplay,
+        workspaceDefaultModelId,
+      })
       : resolveChatToolbarModelId({
         sessionModel: currentSession?.model,
         agentModelDisplay: currentAgent?.modelDisplay,
@@ -258,10 +398,6 @@ export function ChatModelSelector({ className }: { className?: string }) {
     const rawModelId = option?.modelId ?? normalizedId;
     setSelectedModelId(normalizedId);
 
-    // On the new-conversation page (DEFAULT_SESSION_KEY), /api/sessions/model
-    // will reject because the key does not start with 'agent:'.  Instead,
-    // store the chosen model as pendingNewSessionModel so newSession() carries
-    // it into the real session created when the user sends the first message.
     if (currentSessionKey === DEFAULT_SESSION_KEY) {
       useChatStore.getState().setPendingNewSessionModel(rawModelId);
       return;
@@ -271,33 +407,29 @@ export function ChatModelSelector({ className }: { className?: string }) {
     try {
       let persistedModel = rawModelId;
       if (currentEngineType === 'claude' && currentAgentId) {
-        const result = await hostApiFetch<{ snapshot?: { agents?: Array<{ id: string; modelDisplay?: string }> } }>(
-          `/api/agents/${encodeURIComponent(currentAgentId)}/model`,
-          {
-            method: 'PUT',
-            body: JSON.stringify({
-              model: rawModelId,
-              accountId: option?.accountId,
-            }),
-          },
-        );
-        persistedModel = result.snapshot?.agents?.find((agent) => agent.id === currentAgentId)?.modelDisplay?.trim() || rawModelId;
+        persistedModel = await applyClaudeSessionModel({
+          currentSessionKey,
+          modelId: rawModelId,
+          option,
+          currentAgentId,
+        });
         await fetchAgents();
       } else {
-        const result = await hostApiFetch<{
-          model?: string;
-          modelOverride?: string | null;
-        }>('/api/sessions/model', {
-          method: 'POST',
-          body: JSON.stringify({
-            sessionKey: currentSessionKey,
-            model: rawModelId,
-            accountId: option?.accountId,
-            agentId: currentAgentId || undefined,
-            engineType: currentSession?.engineType,
-          }),
-        });
-        persistedModel = (result.modelOverride || result.model || rawModelId).trim();
+        const sessionParams = {
+          currentSessionKey,
+          modelId: rawModelId,
+          option,
+          currentAgentId,
+        };
+        try {
+          persistedModel = await applyOpenClawSessionModel(sessionParams);
+        } catch (err) {
+          if (isModelNotAllowedError(err) && isStoBuiltinModelOption(option)) {
+            persistedModel = await repairStoCatalogAndRetrySessionModel(sessionParams);
+          } else {
+            throw err;
+          }
+        }
       }
       useChatStore.setState((state) => ({
         sessions: state.sessions.map((session) => (
@@ -306,15 +438,15 @@ export function ChatModelSelector({ className }: { className?: string }) {
             : session
         )),
       }));
-      void loadSessions();
     } catch (err) {
       toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));
       const resolved = currentEngineType === 'claude'
-        ? (
-          isConcreteModelId(currentAgent?.modelDisplay)
-            ? normalizeModelIdForChat(currentAgent?.modelDisplay?.trim())
-            : (workspaceDefaultModelId || '')
-        )
+        ? resolveClaudeToolbarModelId({
+          currentSessionKey,
+          sessionModel: currentSession?.model,
+          agentModelDisplay: currentAgent?.modelDisplay,
+          workspaceDefaultModelId,
+        })
         : resolveChatToolbarModelId({
           sessionModel: currentSession?.model,
           agentModelDisplay: currentAgent?.modelDisplay,
@@ -329,6 +461,61 @@ export function ChatModelSelector({ className }: { className?: string }) {
   };
 
   const modelSelectDisabled = (currentEngineType === 'openclaw' && !isGatewayRunning) || sending || modelOptions.length === 0;
+
+  const modelMenu = (
+    <DropdownMenuContent
+      align="end"
+      side="bottom"
+      className="min-w-[14rem] max-w-[min(100vw-2rem,360px)]"
+    >
+      {modelOptions.length === 0 ? (
+        <DropdownMenuItem disabled>
+          <span className="text-muted-foreground">{t('toolbar.noModels')}</span>
+        </DropdownMenuItem>
+      ) : (
+        modelOptions.map((option) => (
+          <DropdownMenuItem
+            key={option.key}
+            className={cn('flex items-center gap-2', option.normalizedId === selectedModelId && 'bg-primary/8 font-medium')}
+            onSelect={() => void handleModelSwitch(option.normalizedId)}
+          >
+            <span className="min-w-0 flex-1 truncate text-[13px]">{option.displayName}</span>
+            <span className={cn(
+              'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
+              option.isBuiltin
+                ? 'bg-link-muted text-link dark:bg-[hsl(231_35%_18%)] dark:text-[hsl(var(--link))]'
+                : 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
+            )}>
+              {option.isBuiltin ? t('toolbar.modelTagBuiltin') : t('toolbar.modelTagCustom')}
+            </span>
+          </DropdownMenuItem>
+        ))
+      )}
+    </DropdownMenuContent>
+  );
+
+  if (variant === 'inline') {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild disabled={modelSelectDisabled}>
+          <button
+            type="button"
+            title={t('toolbar.switchModelTitle')}
+            className={cn(
+              inlinePillTrigger,
+              'min-w-0 max-w-none flex-1',
+              modelSaving && 'pointer-events-none opacity-60',
+              className,
+            )}
+          >
+            <span className="min-w-0 flex-1 truncate">{modelDisplayText}</span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
+          </button>
+        </DropdownMenuTrigger>
+        {modelMenu}
+      </DropdownMenu>
+    );
+  }
 
   return (
     <div className={cn('flex min-w-0 items-center gap-1.5', className)}>
@@ -361,35 +548,7 @@ export function ChatModelSelector({ className }: { className?: string }) {
             </button>
           </DropdownMenuTrigger>
         </div>
-        <DropdownMenuContent
-          align="end"
-          side="bottom"
-          className="min-w-[14rem] max-w-[min(100vw-2rem,360px)]"
-        >
-          {modelOptions.length === 0 ? (
-            <DropdownMenuItem disabled>
-              <span className="text-muted-foreground">{t('toolbar.noModels')}</span>
-            </DropdownMenuItem>
-          ) : (
-            modelOptions.map((option) => (
-              <DropdownMenuItem
-                key={option.key}
-                className={cn('flex items-center gap-2', option.normalizedId === selectedModelId && 'bg-primary/8 font-medium')}
-                onSelect={() => void handleModelSwitch(option.normalizedId)}
-              >
-                <span className="min-w-0 flex-1 truncate text-[13px]">{option.displayName}</span>
-                <span className={cn(
-                  'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
-                  option.isBuiltin
-                    ? 'bg-link-muted text-link dark:bg-[hsl(231_35%_18%)] dark:text-[hsl(var(--link))]'
-                    : 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
-                )}>
-                  {option.isBuiltin ? t('toolbar.modelTagBuiltin') : t('toolbar.modelTagCustom')}
-                </span>
-              </DropdownMenuItem>
-            ))
-          )}
-        </DropdownMenuContent>
+        {modelMenu}
       </DropdownMenu>
     </div>
   );

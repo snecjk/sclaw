@@ -32,7 +32,10 @@
         "searchPrev": "上一条",
         "searchNext": "下一条",
         "searchClear": "清空搜索",
-        "searchClose": "关闭搜索"
+        "searchClose": "关闭搜索",
+        "openPreview": "打开预览",
+        "closePreview": "关闭预览",
+        "closeSession": "关闭当前会话"
     },
     "composer": {
         "attachFiles": "添加文件",
@@ -58,7 +61,7 @@
         "dingtalkLoadMore": "加载更多",
         "dingtalkNoResults": "未找到匹配结果",
         "dingtalkNeedsInstall": "使用 @ 提及钉钉联系人需要先安装 CLI",
-        "dingtalkInstall": "安装钉钉 CLI",
+        "dingtalkInstall": "授权钉钉",
         "dingtalkInstalling": "安装中…",
         "dingtalkNeedsAuth": "需要登录钉钉后才能搜索联系人",
         "dingtalkLogin": "登录钉钉",
@@ -69,6 +72,8 @@
         "dingtalkSentPreviewToGroup": "已发送至群聊",
         "dingtalkSentPreviewMessageTitle": "消息标题：{{title}}",
         "pickWorkflow": "选择工作流",
+        "dingTalkMention": "钉钉通讯录",
+        "micComingSoon": "即将上线",
         "workflowPlaceholder": "搜索工作流模板...",
         "workflowLoading": "加载中...",
         "workflowNoResults": "未找到匹配模板",
@@ -77,7 +82,13 @@
     },
     "streaming": {
         "connectingModel": "连接模型中...",
+        "understandingQuestion": "正在理解你的问题…",
+        "awaitingReply": "Claw将在你回复后继续工作…",
         "thinkingProcessTitle": "思考过程",
+        "deepThinkingLabel": "深度思考",
+        "collapsedSummary": "思考 {{thoughtCount}} 次，使用 {{toolCount}} 个工具",
+        "invokeToolLabel": "调用工具 – {{toolName}}",
+        "paramsConfirmedLabel": "参数已确认",
         "toolCallLabel": "工具调用 {{index}}",
         "processMessageLabel": "过程消息 {{count}}",
         "generatingWithTool": "生成回复中 {{tool}}...",
@@ -91,6 +102,10 @@
         "completedLabel": "以上信息由 AI 提供",
         "completedBadge": "已完成",
         "jumpToLatest": "回到最新"
+    },
+    "parameterForm": {
+        "defaultSelectedPrefix": "默认已选类型：",
+        "submitFailed": "表单提交失败，请刷新页面后重试"
     },
     "sessionList": {
         "mainSessionTitle": "主会话"
@@ -137,6 +152,47 @@
         "durationHalfHour": "半小时",
         "durationHours": "{{count}} 小时",
         "durationHoursHalf": "{{count}} 个半小时",
-        "durationHoursMinutes": "{{hours}} 小时 {{minutes}} 分钟"
+        "durationHoursMinutes": "{{hours}} 小时 {{minutes}} 分钟",
+        "defaultName": "工作流",
+        "backgroundRunningWithId": "工作流 ID: {{workflowId}}",
+        "withId": "工作流 ID: {{workflowId}}",
+        "viewArtifact": "查看产物",
+        "openArtifactLink": "打开链接",
+        "viewWorkflowAction": "查看工作流",
+        "createScheduledTaskAction": "创建定时任务"
+    },
+    "artifact": {
+        "typeDocument": "文档",
+        "typeSpreadsheet": "表格",
+        "typeImage": "图片",
+        "typeArchive": "压缩包",
+        "typeMedia": "媒体",
+        "typeFile": "文件"
+    },
+    "preview": {
+        "collapsePanel": "收起预览区",
+        "overflowMenu": "全部产物",
+        "fullscreen": "全屏放映",
+        "refresh": "刷新",
+        "download": "下载",
+        "share": "分享到钉钉",
+        "openExternal": "在浏览器打开",
+        "editWorkflow": "编辑工作流",
+        "workflowTab": "工作流",
+        "emptyHint": "点击消息中的文件链接进行预览",
+        "emptyHintSub": "或从上方选择产物",
+        "dismissTab": "关闭此产物",
+        "shareDialog": {
+            "title": "分享到钉钉",
+            "description": "确认分享内容后，将唤起钉钉选人窗口。",
+            "fieldTitle": "标题",
+            "fieldBody": "正文",
+            "fieldLink": "链接",
+            "localUrlHint": "当前链接为本机预览地址，仅在同一网络内可访问的同事可能无法打开。",
+            "cancel": "取消",
+            "confirm": "确认分享",
+            "success": "已唤起钉钉选人窗口",
+            "failed": "分享失败，请稍后重试"
+        }
     }
 }

@@ -14,6 +14,7 @@ import {
   updateAgentModelProvider,
 } from '../../utils/openclaw-auth';
 import { logger } from '../../utils/logger';
+import { STO_CANONICAL_ACCOUNT_ID } from './sto-placeholder-utils';
 
 const GOOGLE_OAUTH_RUNTIME_PROVIDER = 'google-gemini-cli';
 const GOOGLE_OAUTH_DEFAULT_MODEL_REF = `${GOOGLE_OAUTH_RUNTIME_PROVIDER}/gemini-3-pro-preview`;
@@ -62,6 +63,10 @@ function shouldUseExplicitDefaultOverride(config: ProviderConfig, runtimeProvide
 }
 
 export function getOpenClawProviderKey(type: string, providerId: string): string {
+  // Canonical STO account always maps to openclaw key "sto", never "custom-sto".
+  if (providerId === STO_CANONICAL_ACCOUNT_ID) {
+    return STO_CANONICAL_ACCOUNT_ID;
+  }
   if (type === 'custom') {
     const suffix = providerId.replace(/-/g, '').slice(0, 8);
     return `${type}-${suffix}`;
@@ -320,10 +325,14 @@ async function syncCustomProviderAgentModel(
   // Default input capabilities for custom/sto provider models (support both text and image)
   const DEFAULT_MODEL_INPUT: string[] = ['text', 'image'];
 
+  const account = await getProviderAccount(config.id);
+  const customModels = account?.metadata?.customModels ?? [];
+  const useStoModelCatalog =
+    config.type === 'sto'
+    || (config.id === STO_CANONICAL_ACCOUNT_ID && customModels.length > 0);
+
   // For STO providers, sync all models from metadata.customModels
-  if (config.type === 'sto') {
-    const account = await getProviderAccount(config.id);
-    const customModels = account?.metadata?.customModels ?? [];
+  if (useStoModelCatalog) {
     const models = customModels.length > 0
       ? customModels.map((id) => ({ id, name: id, input: DEFAULT_MODEL_INPUT }))
       : config.model ? [{ id: config.model, name: config.model, input: DEFAULT_MODEL_INPUT }] : [];

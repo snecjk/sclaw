@@ -134,13 +134,12 @@ export class ClawHubService {
             }
 
             const commandArgs = this.useNodeRunner ? [this.cliEntryPath, ...args] : args;
-            const displayCommand = [this.cliPath, ...commandArgs].join(' ');
-            console.log(`Running ClawHub command: ${displayCommand}`);
+            
 
             const isWin = process.platform === 'win32';
             const useShell = isWin && !this.useNodeRunner;
             const { NODE_OPTIONS: _nodeOptions, ...baseEnv } = process.env;
-            const env = {
+            const env: any = {
                 ...baseEnv,
                 CI: 'true',
                 FORCE_COLOR: '0',
@@ -318,7 +317,7 @@ export class ClawHubService {
         // 1. Delete the skill directory
         const skillDir = path.join(this.workDir, 'skills', params.slug);
         if (fs.existsSync(skillDir)) {
-            console.log(`Deleting skill directory: ${skillDir}`);
+            
             await fsPromises.rm(skillDir, { recursive: true, force: true });
         }
 
@@ -328,7 +327,7 @@ export class ClawHubService {
             try {
                 const lockData = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
                 if (lockData.skills && lockData.skills[params.slug]) {
-                    console.log(`Removing ${params.slug} from lock.json`);
+                    
                     delete lockData.skills[params.slug];
                     await fsPromises.writeFile(lockFile, JSON.stringify(lockData, null, 2));
                 }

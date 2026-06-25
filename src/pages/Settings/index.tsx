@@ -50,7 +50,7 @@ import { useTranslation } from 'react-i18next';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { hostApiFetch } from '@/lib/host-api';
 import { cn } from '@/lib/utils';
-import { glassSectionSurface } from '@/lib/surfaces';
+import { glassSectionSurface, stoMainInnerShell } from '@/lib/surfaces';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
 
 const proxyFieldInputClassName = cn(
@@ -580,7 +580,7 @@ export function Settings() {
         {activeSection === 'models' && <Models />}
         {activeSection === 'channels' && <Channels />}
         {activeSection === 'general' && (
-    <div className="flex w-full max-w-3xl flex-col gap-8 pb-10">
+    <div className={cn(stoMainInnerShell, 'flex flex-col gap-8 pb-10')}>
       <header className="shrink-0 border-b border-border pb-6">
         <div className="flex items-start gap-3">
           <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(255,111,0,0.10)]">
@@ -669,7 +669,7 @@ export function Settings() {
 
         {/* Gateway section */}
         {activeSection === 'gateway' && (
-    <div className="flex w-full max-w-3xl flex-col gap-8 pb-10">
+    <div className={cn(stoMainInnerShell, 'flex flex-col gap-8 pb-10')}>
       <div className="flex flex-col gap-6">
           <section className={glassSectionSurface}>
             <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
@@ -787,7 +787,7 @@ export function Settings() {
 
         {/* Developer section */}
         {activeSection === 'developer' && devModeUnlocked && (
-    <div className="flex w-full max-w-3xl flex-col gap-8 pb-10">
+    <div className={cn(stoMainInnerShell, 'flex flex-col gap-8 pb-10')}>
       <div className="flex flex-col gap-6">
             <section className={glassSectionSurface}>
                 <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
@@ -1169,7 +1169,7 @@ export function Settings() {
 
         {/* Updates section */}
         {activeSection === 'updates' && (
-    <div className="flex w-full max-w-3xl flex-col gap-8 pb-10">
+    <div className={cn(stoMainInnerShell, 'flex flex-col gap-8 pb-10')}>
       <div className="flex flex-col gap-6">
           <section className={glassSectionSurface}>
             <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">

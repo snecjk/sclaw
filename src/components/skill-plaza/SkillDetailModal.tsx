@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { X, Play, Download, Users, ArrowDownToLine } from 'lucide-react';
+import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { useChatStore } from '@/stores/chat';
@@ -37,13 +38,31 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
   };
 
   const handleInstall = () => {
+    if (isInstalling) return;
+    const isUpdate = liveSkill.updateAvailable;
     const { installSkill, fetchPlazaSkills } = useSkillPlazaStore.getState();
     installSkill(liveSkill.slug, {
       version: liveSkill.version,
       force: liveSkill.updateAvailable,
       title: liveSkill.title,
       description: liveSkill.description,
-    }).then(() => fetchPlazaSkills({ reset: true })).catch(() => {});
+    })
+      .then(() => {
+        fetchPlazaSkills({ reset: true });
+        toast.success(
+          isUpdate
+            ? t('plaza.toast.updateSuccess', { defaultValue: '更新成功，正在生效' })
+            : t('plaza.toast.installSuccess', { defaultValue: '安装成功，正在生效' }),
+        );
+      })
+      .catch((err) => {
+        toast.error(
+          isUpdate
+            ? t('plaza.toast.updateError', { defaultValue: '更新失败' })
+            : t('plaza.toast.installError', { defaultValue: '安装失败' }),
+          { description: String(err) },
+        );
+      });
   };
 
   const tag = liveSkill.installed

@@ -3,7 +3,7 @@
 CLI Report Generator - Generate HTML reports from CLI data sources
 
 Usage:
-    uv run python scripts/generate_report.py --cli-command "your-cli --json" --template assets/template.html --output reports/output.html
+    uv run python scripts/generate_report.py --cli-command "your-cli --json" --template assets/template.html --output .claw-output/output.html
     uv run python scripts/generate_report.py --config config.json
 """
 
@@ -15,6 +15,33 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+
+_DEFAULT_OUTPUT_DIR = (
+    Path.home() / ".stoclaw" / "openclaw" / "workspace" / ".claw-output"
+)
+
+
+def get_output_dir() -> Path:
+    env_output = os.environ.get("STOCLAW_OUTPUT_DIR", "").strip()
+    if env_output:
+        return Path(env_output).expanduser().resolve()
+    env_workspace = os.environ.get("STOCLAW_WORKSPACE", "").strip()
+    if env_workspace:
+        return (Path(env_workspace).expanduser() / ".claw-output").resolve()
+    return _DEFAULT_OUTPUT_DIR.resolve()
+
+
+def resolve_output_path(output_arg: str) -> Path:
+    """Relative paths resolve under .claw-output (not skill cwd)."""
+    output_dir = get_output_dir()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    candidate = Path(output_arg).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    parts = candidate.parts
+    if parts and parts[0] == '.claw-output':
+        candidate = Path(*parts[1:]) if len(parts) > 1 else Path(candidate.name)
+    return (output_dir / candidate).resolve()
 
 
 def parse_args():
@@ -142,17 +169,15 @@ def render_template(template_path, data):
 
 def save_report(content, output_path):
     """Save rendered report to file"""
-    # Create output directory if needed
-    output_dir = os.path.dirname(output_path)
-    if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
-    
-    with open(output_path, 'w', encoding='utf-8') as f:
+    resolved = resolve_output_path(output_path)
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(resolved, 'w', encoding='utf-8') as f:
         f.write(content)
-    
-    print(f"✅ Report saved to: {output_path}")
+
+    print(f"✅ Report saved to: {resolved}")
     print("注意：不要执行 open 命令，不要在浏览器中打开此文件。对话界面会自动预览。")
-    return output_path
+    return str(resolved)
 
 
 def main():

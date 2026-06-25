@@ -47,13 +47,31 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
 
   const handleInstall = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isInstalling) return;
+    const isUpdate = skill.updateAvailable;
     const { installSkill, fetchPlazaSkills } = useSkillPlazaStore.getState();
     installSkill(skill.slug, {
       version: skill.version,
       force: skill.updateAvailable,
       title: skill.title,
       description: skill.description,
-    }).then(() => fetchPlazaSkills({ reset: true })).catch(() => {});
+    })
+      .then(() => {
+        fetchPlazaSkills({ reset: true });
+        toast.success(
+          isUpdate
+            ? t('plaza.toast.updateSuccess', { defaultValue: '更新成功，正在生效' })
+            : t('plaza.toast.installSuccess', { defaultValue: '安装成功，正在生效' }),
+        );
+      })
+      .catch((err) => {
+        toast.error(
+          isUpdate
+            ? t('plaza.toast.updateError', { defaultValue: '更新失败' })
+            : t('plaza.toast.installError', { defaultValue: '安装失败' }),
+          { description: String(err) },
+        );
+      });
   };
 
   const renderIcon = () => {
