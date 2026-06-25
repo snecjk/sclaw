@@ -694,13 +694,14 @@ function extractAgentId(sessionKey: string): string {
   return (agentId || 'main').trim().toLowerCase();
 }
 
-async function consumeClaudeQuery(
+export async function consumeClaudeQuery(
   sessionKey: string,
   sessionId: string,
   cwd: string,
   query: AsyncIterable<Record<string, unknown>> & { close(): void },
   eventSink: ClaudeEventSink | null,
   runId: string,
+  onMessage?: (message: Record<string, unknown>) => void | Promise<void>,
 ): Promise<void> {
   let title: string | undefined;
   let seq = 0;
@@ -847,6 +848,11 @@ async function consumeClaudeQuery(
         model: (await getEngineSessionRegistryEntry(sessionKey))?.model,
         accountId: (await getEngineSessionRegistryEntry(sessionKey))?.accountId,
       });
+      // Allow callers (e.g. the scheduled-task worker) to capture per-message
+      // data they need (run-record summary/runtimeResult) while reusing this
+      // loop's event emission + liveClaudeMessages population. Not called for
+      // stream_event messages, which `continue` above.
+      await onMessage?.(message);
     }
   } catch (error) {
     errorThrown = true;

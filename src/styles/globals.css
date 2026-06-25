@@ -24,6 +24,11 @@
     --accent-foreground: 26 100% 36%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
+    /* Success #28C840 / Warning #FEBC2E — docs/sto-design.md + 02-styles.mdc */
+    --success: 130 67% 47%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 99% 59%;
+    --warning-foreground: 220 26% 14%;
     /* Grey-4 #E5E6EB */
     --border: 220 13% 91%;
     --input: 220 13% 91%;
@@ -149,6 +154,10 @@
     --accent-foreground: 32 100% 88%;
     --destructive: 0 72% 56%;
     --destructive-foreground: 0 0% 100%;
+    --success: 130 60% 42%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 90% 52%;
+    --warning-foreground: 220 26% 14%;
     --border: 220 14% 22%;
     --input: 220 14% 20%;
     --ring: 26 100% 55%;

@@ -2,9 +2,9 @@ import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { useCronStore } from '@/stores/cron';
 import { useAgentsStore } from '@/stores/agents';
+import { useMyTaskStore } from '@/pages/MyTask/store';
 import { prepareDingTalkAgentTurnMessage } from '@/lib/scheduled-task-recipients';
-import { buildWorkflowCronTaskMessage } from '@/lib/workflow-cron-task';
-import type { CronTaskFormInput } from '@/pages/Cron/components/CronTaskCreateModal';
+import type { TaskCreateInputWithRun } from '@/pages/MyTask/components/TaskCreateModal';
 
 function resolvePreferredAgent(
   agents: Array<{ id: string; workspace: string }>,
@@ -19,10 +19,18 @@ export function useWorkflowCronTaskModal() {
   const agents = useAgentsStore((s) => s.agents);
   const defaultAgentId = useAgentsStore((s) => s.defaultAgentId);
   const [open, setOpen] = useState(false);
-  const [initialValues, setInitialValues] = useState<{ message?: string }>();
+  const [initialValues, setInitialValues] = useState<{ workflowCode?: string }>();
 
-  const openForWorkflow = useCallback((workflowId: string) => {
-    setInitialValues({ message: buildWorkflowCronTaskMessage(workflowId) });
+  const openForWorkflow = useCallback(async (workflowId: string) => {
+    // 确保 modal 内 select 有数据，使组件侧能解析 label 生成 instructions 模板
+    if (useMyTaskStore.getState().workflowOptions.length === 0) {
+      try {
+        await useMyTaskStore.getState().fetchWorkflows();
+      } catch {
+        // 忽略，modal 内 select 兜底空列表
+      }
+    }
+    setInitialValues({ workflowCode: workflowId });
     setOpen(true);
   }, []);
 
@@ -32,7 +40,7 @@ export function useWorkflowCronTaskModal() {
   }, []);
 
   const handleSave = useCallback(
-    async (input: CronTaskFormInput) => {
+    async (input: TaskCreateInputWithRun) => {
       const selectedAgent = resolvePreferredAgent(agents, defaultAgentId);
       try {
         if (input.engineType === 'claude') {
@@ -49,6 +57,7 @@ export function useWorkflowCronTaskModal() {
               agentId: selectedAgent.id,
               workspacePath: input.claudeWorkspacePath || selectedAgent.workspace,
               permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
+              workflowCode: input.workflowCode,
             },
           });
         } else {
@@ -60,6 +69,7 @@ export function useWorkflowCronTaskModal() {
               schedule: input.schedule,
               enabled: input.enabled,
               dingTalkMentions: input.dingTalkMentions,
+              workflowCode: input.workflowCode,
             },
           });
         }

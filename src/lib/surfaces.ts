@@ -197,9 +197,10 @@ export const formFieldOpenClass = cn(
   'dark:border-primary/50 dark:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
 );
 
-/** 反色主钮底色/字色：亮色深底白字；暗色浅底深字（弹窗保存、空状态 CTA、工作流主操作等共用） */
+/** 反色主钮底色/字色：亮色深底白字；暗色浅底深字（背景 80% 不透明，避免暗色下过亮） */
 export const invertedPrimarySurfaceClass = cn(
-  'bg-foreground text-primary-foreground dark:text-background hover:bg-foreground/90',
+  'bg-foreground text-primary-foreground hover:bg-foreground/90',
+  'dark:bg-foreground/80 dark:text-background dark:hover:bg-foreground/90',
 );
 
 /** 弹窗底栏主提交钮（新建/编辑定时任务等） */
@@ -236,15 +237,15 @@ export function dropdownOptionClass(isActive: boolean): string {
 export function scheduleToggleTrackClass(checked: boolean): string {
   return cn(
     'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-none p-0 transition-colors duration-fast',
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-    checked ? 'bg-success' : 'bg-border',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+    checked ? 'bg-success dark:bg-success/90' : 'bg-border dark:bg-muted',
   );
 }
 
-/** 排期开关滑块 */
+/** 排期开关滑块（暗色下用浅底，避免与卡片底色融为一体） */
 export const scheduleToggleThumbClass = cn(
-  'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-card',
-  'shadow-[0_1px_2px_rgba(15,23,42,0.15)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.35)]',
+  'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-card dark:bg-foreground/80',
+  'shadow-[0_1px_2px_rgba(15,23,42,0.15)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.45)]',
   'transition-transform duration-fast',
 );
 
@@ -758,20 +759,28 @@ export const workflowHeroComposer = cn(
 /** Hero 快捷提示 chip 行 + 手动创建 */
 export const workflowHeroQuickPromptsRowClass = 'flex min-w-0 w-full items-center';
 
-/** 工作流 Hero 快捷提示 chip：12px / 行高 16px，上下 8px、左右 16px */
+/**
+ * 工作流 Hero 快捷提示 chip（MasterGo 214:64646 / 组 7063）
+ * 白 35% 底 + 白描边 + 12px 圆角 + backdrop-blur；文案 12/14 Regular Grey-9 #4E5969
+ */
 export const workflowHeroQuickChipClass = cn(
-  'shrink-0 whitespace-nowrap rounded-full border border-border bg-card px-4 py-2 text-xs font-normal leading-4',
-  'text-[var(--sto-grey-9)] transition-colors duration-fast hover:border-primary/30 hover:text-primary',
+  'shrink-0 whitespace-nowrap rounded-xl border border-white bg-white/35 py-[10px] pl-[14px] pr-4',
+  'text-xs font-normal leading-[14px] text-[var(--sto-grey-9)]',
+  'shadow-[0_2px_24px_rgba(43,17,0,0.03)] backdrop-blur-[2px]',
+  'transition-[background-color,box-shadow] duration-fast hover:bg-white/50',
+  'dark:border-white/20 dark:bg-white/10 dark:shadow-[0_2px_24px_rgba(0,0,0,0.22)] dark:hover:bg-white/15',
 );
 
 /**
- * 工作流 Hero「手动创建」：文字与 chip 一致；icon 16×16，左 12px、与文字间距 6px、右 16px。
+ * 工作流 Hero「手动创建」（MasterGo 214:59127 / 组 7064）
+ * 白底 + 12px 圆角 + 轻阴影；icon 16×16 + 文案 12/14 Medium Grey-10 #1D2129；内距 9/14/16
  */
 export const workflowHeroManualCreateClass = cn(
-  'relative z-[2] box-border inline-flex shrink-0 flex-nowrap items-center gap-1.5 whitespace-nowrap rounded-[18px] border border-border bg-card',
-  'pl-3 pr-4 py-2 text-xs font-normal leading-4 text-[var(--sto-grey-9)]',
-  'shadow-[0_2px_24px_rgba(43,17,0,0.03)] dark:shadow-[0_2px_24px_rgba(0,0,0,0.22)]',
-  'transition-colors duration-fast hover:border-primary/30 hover:text-primary',
+  'relative z-[2] box-border inline-flex shrink-0 flex-nowrap items-center gap-1.5 whitespace-nowrap rounded-xl bg-card',
+  'py-[9px] pl-[14px] pr-4 text-xs font-medium leading-[14px] text-foreground',
+  'shadow-[0_2px_20px_rgba(0,0,0,0.06)]',
+  'transition-[background-color,box-shadow] duration-fast hover:bg-card/90',
+  'dark:shadow-[0_2px_20px_rgba(0,0,0,0.22)]',
 );
 
 /**
@@ -869,14 +878,14 @@ export const workflowListCardCoverWrapClass = 'px-1 pt-1';
 /** 工作流卡片头图内圆角（外框 18px − 内边距 4px） */
 export const workflowListCardCoverClass = 'rounded-[14px]';
 
-/** 工作流卡片内容区：与底栏固定 gap-4（16px）；上区 flex-1 吸收同行等高差 */
+/** 工作流卡片内容区：描述区与底栏间距 20px（gap-5）；上区 flex-1 吸收同行等高差 */
 export const workflowListCardBodyClass =
-  'flex flex-1 flex-col gap-4 px-[18px] pt-[13px] pb-4';
+  'flex flex-1 flex-col gap-5 px-[18px] pt-[13px] pb-4';
 
-/** 工作流卡片主内容区（标题 / 描述 / 节点模块）；增高落在节点模块下方 */
-export const workflowListCardMainClass = 'flex min-h-0 flex-1 flex-col gap-[9px]';
+/** 工作流卡片主内容区（标题 / 描述 / 节点模块）；标题区与描述间距 4px */
+export const workflowListCardMainClass = 'flex min-h-0 flex-1 flex-col gap-1';
 
-/** 工作流卡片底栏：固定距节点模块 16px（由 body gap-4） */
+/** 工作流卡片底栏：固定距主内容区 20px（由 body gap-5） */
 export const workflowListCardFooterClass = 'shrink-0';
 
 /** 标题 + 调度：标题与「每日运行」间距 4px（gap-1） */
