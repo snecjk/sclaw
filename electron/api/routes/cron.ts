@@ -605,6 +605,26 @@ export async function handleCronRoutes(
   url: URL,
   ctx: HostApiContext,
 ): Promise<boolean> {
+  if (url.pathname === '/api/cron/beautify-instruction' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{
+        instruction: string;
+        taskName?: string;
+        cronExpr?: string;
+        workflowId?: string;
+        workflowName?: string;
+      }>(req);
+      const { beautifyScheduledTaskInstruction } = await import(
+        '../../services/scheduled-task-instruction-beautifier'
+      );
+      const result = await beautifyScheduledTaskInstruction(body);
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, 400, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/cron/session-history' && req.method === 'GET') {
     const sessionKey = url.searchParams.get('sessionKey')?.trim() || '';
     const parsedSession = parseCronSessionKey(sessionKey);
@@ -731,6 +751,8 @@ export async function handleCronRoutes(
         enabled?: boolean;
         agentId?: string;
         dingTalkMentions?: DingTalkMention[];
+        workflowCode?: string;
+        workflowName?: string;
       }>(req);
       const agentId = input.agentId?.trim() || null;
       const description = buildCronDescription(agentId, input.dingTalkMentions);
@@ -760,6 +782,8 @@ export async function handleCronRoutes(
         schedule?: string;
         agentId?: string;
         dingTalkMentions?: DingTalkMention[];
+        workflowCode?: string;
+        workflowName?: string;
       }>(req);
       const patch = { ...input };
       if (typeof patch.schedule === 'string') {

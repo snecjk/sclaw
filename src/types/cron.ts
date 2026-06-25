@@ -64,6 +64,7 @@ export interface CronJobCreateInput {
   enabled?: boolean;
   dingTalkMentions?: DingTalkMention[];
   workflowCode?: string;
+  workflowName?: string;
 }
 
 /**

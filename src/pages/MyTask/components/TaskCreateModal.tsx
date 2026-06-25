@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Loader2, ChevronDown, Check } from 'lucide-react';
+import { X, Loader2, ChevronDown, Check, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
 import { DingTalkRecipientField } from '@/components/dingtalk/DingTalkRecipientField';
@@ -10,10 +10,15 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { ManagedLocalTask } from '@/stores/cron';
 import { useAgentsStore } from '@/stores/agents';
 import type { AgentSummary } from '@/types/agent';
+import { hostApiFetch } from '@/lib/host-api';
+import { toast } from 'sonner';
 
 type TaskEngineType = 'openclaw' | 'claude';
 
-export type TaskCreateInputWithRun = CronJobCreateInput & { engineType: TaskEngineType };
+export type TaskCreateInputWithRun = CronJobCreateInput & {
+  engineType: TaskEngineType;
+  workflowName?: string;
+};
 
 interface TaskCreateModalProps {
   job?: ManagedLocalTask | null;
@@ -67,7 +72,6 @@ function cronToScheduleValue(cron: string | unknown): ScheduleValue {
   const [min, hour, day, , weekday] = parts;
   const time = `${hour.padStart(2, '0')}:${min.padStart(2, '0')}`;
 
-  // Parse weekday part: could be "*", "1-5", "1,3,5", or single digit
   if (weekday !== '*' && day === '*') {
     if (weekday === '1-5') {
       return { frequency: 'weekly', time, weekDays: [1, 2, 3, 4, 5] };
@@ -98,8 +102,8 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
   const [recipients, setRecipients] = useState<DingTalkMention[]>([]);
   const [errors, setErrors] = useState<{ name?: string; instructions?: string }>({});
   const [engineType, setEngineType] = useState<TaskEngineType>('openclaw');
+  const [beautifying, setBeautifying] = useState(false);
 
-  // 关联工作流下拉
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState<string>('');
   const workflowRef = useRef<HTMLDivElement>(null);
@@ -121,9 +125,8 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
   }, [workflowOpen]);
 
   const isEditing = !!job;
-
-  // 工作流选择联动：选中时自动填充描述框并 disabled
   const workflowDisabled = !!selectedWorkflow;
+
   useEffect(() => {
     if (selectedWorkflow) {
       const wf = workflowOptions.find(o => o.value === selectedWorkflow);
@@ -131,7 +134,6 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
         setInstructions(`帮我执行 id 为：${wf.value} 的工作流 【${wf.label}】`);
       }
     } else {
-      // 取消选择工作流时，清空描述框
       setInstructions('');
     }
   }, [selectedWorkflow, workflowOptions]);
@@ -151,7 +153,6 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
           setEngineType('openclaw');
           setSchedule(cronToScheduleValue(job.schedule));
         }
-        // 编辑模式不回显已选工作流
         setSelectedWorkflow('');
       } else if (initialValues) {
         setName(initialValues.name || '');
@@ -169,9 +170,61 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
       setRecipients([]);
       setErrors({});
       setSaving(false);
-
+      setBeautifying(false);
     }
   }, [open, job, initialValues, defaultAgentId, agents]);
+
+  const handleBeautify = async () => {
+    const trimmed = instructions.trim();
+    if (!trimmed) {
+      setErrors((prev) => ({ ...prev, instructions: '请先填写任务描述' }));
+      return;
+    }
+
+    const selectedWorkflowOption = selectedWorkflow
+      ? workflowOptions.find((option) => option.value === selectedWorkflow)
+      : undefined;
+
+    setBeautifying(true);
+    try {
+      const result = await hostApiFetch<{
+        instruction: string;
+        changed: boolean;
+        source: 'model' | 'rules-fallback';
+        model?: string;
+      }>('/api/cron/beautify-instruction', {
+        method: 'POST',
+        body: JSON.stringify({
+          instruction: trimmed,
+          taskName: name.trim() || undefined,
+          cronExpr: scheduleValueToCron(schedule),
+          workflowId: selectedWorkflow || undefined,
+          workflowName: selectedWorkflowOption?.label,
+        }),
+      });
+
+      setInstructions(result.instruction);
+      if (errors.instructions) {
+        setErrors((prev) => ({ ...prev, instructions: undefined }));
+      }
+
+      if (!result.changed) {
+        toast.info('描述已较规范，无需调整');
+        return;
+      }
+
+      if (result.source === 'rules-fallback') {
+        toast.warning('模型暂时不可用，已使用基础规则优化');
+        return;
+      }
+
+      toast.success(result.model ? `AI 已美化（${result.model}）` : 'AI 已美化任务描述');
+    } catch (err) {
+      toast.error(String(err) || 'AI 美化失败，请稍后重试');
+    } finally {
+      setBeautifying(false);
+    }
+  };
 
   const handleSubmit = async () => {
     const newErrors: typeof errors = {};
@@ -182,6 +235,10 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
       return;
     }
 
+    const selectedWorkflowOption = selectedWorkflow
+      ? workflowOptions.find((option) => option.value === selectedWorkflow)
+      : undefined;
+
     setSaving(true);
     try {
       await onSave({
@@ -191,11 +248,11 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
         enabled: true,
         dingTalkMentions: !isClaudeTask && recipients.length > 0 ? recipients : undefined,
         workflowCode: selectedWorkflow || undefined,
+        workflowName: selectedWorkflowOption?.label,
         engineType,
       });
       onClose();
     } catch (err) {
-      // Error is handled by parent - don't close modal on error
       const message = String(err);
       if (message.includes('409') || message.includes('任务名称已存在')) {
         setErrors({ name: '任务名称已存在，请使用其他名称' });
@@ -216,7 +273,6 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
         className="w-full max-w-[min(820px,100%)] bg-background rounded-[22px] border border-border shadow-2xl my-8 flex flex-col max-h-[calc(100vh-4rem)]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="flex items-start justify-between gap-4 mb-6 px-[18px] pt-[18px] flex-shrink-0">
           <div className="min-w-0">
             <h2 className="text-xl font-bold text-foreground tracking-[-0.02em] leading-[1.3] mb-2.5">
@@ -236,9 +292,7 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
           </button>
         </div>
 
-        {/* Form */}
         <div className="px-[18px] pb-[16px] flex flex-col gap-5 flex-1 overflow-y-auto min-h-0">
-          {/* Name */}
           <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">
               任务名称
@@ -249,15 +303,14 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
               onChange={(e) => { setName(e.target.value); if (errors.name) setErrors(p => ({ ...p, name: undefined })); }}
               placeholder="描述你的任务"
               className={cn(
-                "w-full h-[42px] px-3.5 text-sm rounded-[10px] border bg-background placeholder:text-muted-foreground focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] transition-colors",
-                errors.name ? "border-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.12)]" : "border-border"
+                'w-full h-[42px] px-3.5 text-sm rounded-[10px] border bg-background placeholder:text-muted-foreground focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] transition-colors',
+                errors.name ? 'border-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.12)]' : 'border-border',
               )}
               autoComplete="off"
             />
             {errors.name && <p className="text-xs text-red-600">{errors.name}</p>}
           </div>
 
-          {/* Engine Type */}
           <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">
               执行引擎
@@ -279,7 +332,6 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
             </p>
           </div>
 
-          {/* Workflow */}
           <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">
               关联工作流
@@ -289,11 +341,11 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
                 type="button"
                 onClick={() => setWorkflowOpen(!workflowOpen)}
                 className={cn(
-                  "flex items-center justify-between gap-1.5 w-full h-[42px] px-3.5 pr-2.5 text-sm font-medium rounded-[10px] border bg-background cursor-pointer outline-none transition-colors",
-                  workflowOpen ? "border-[#c5cad3] shadow-[0_0_0_3px_rgba(15,23,42,0.06)]" : "border-border hover:border-[#c5cad3]"
+                  'flex items-center justify-between gap-1.5 w-full h-[42px] px-3.5 pr-2.5 text-sm font-medium rounded-[10px] border bg-background cursor-pointer outline-none transition-colors',
+                  workflowOpen ? 'border-[#c5cad3] shadow-[0_0_0_3px_rgba(15,23,42,0.06)]' : 'border-border hover:border-[#c5cad3]',
                 )}
               >
-                <span className={cn("truncate", !selectedWorkflow && "text-muted-foreground font-normal")}>
+                <span className={cn('truncate', !selectedWorkflow && 'text-muted-foreground font-normal')}>
                   {selectedWorkflow ? workflowOptions.find(o => o.value === selectedWorkflow)?.label : '请选择'}
                 </span>
                 <ChevronDown className={cn('h-3 w-3 shrink-0 text-muted-foreground transition-transform', workflowOpen && 'rotate-180')} />
@@ -311,7 +363,6 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
                           key={opt.value}
                           type="button"
                           onClick={() => {
-                            // 点击已选中的工作流则取消选择
                             if (isSelected) {
                               setSelectedWorkflow('');
                             } else {
@@ -321,7 +372,7 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
                           }}
                           className={cn(
                             'flex items-center justify-between gap-2 w-full min-h-9 px-2.5 py-2 rounded-lg text-sm transition-colors',
-                            isSelected ? 'font-semibold' : 'text-foreground'
+                            isSelected ? 'font-semibold' : 'text-foreground',
                           )}
                           style={isSelected ? { background: '#fff7ed', color: '#c2410c' } : undefined}
                           onMouseEnter={(e) => { if (!isSelected) { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#c2410c'; } }}
@@ -338,30 +389,53 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
             </div>
           </div>
 
-          {/* Instructions */}
           <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">
               让 S Claw 帮你做什么…
             </label>
-            <textarea
-              value={instructions}
-              onChange={(e) => { setInstructions(e.target.value); if (errors.instructions) setErrors(p => ({ ...p, instructions: undefined })); }}
-              rows={7}
-              disabled={workflowDisabled}
-              placeholder="让 S Claw 帮你做什么…"
-              className={cn(
-                "w-full px-3.5 py-2.5 text-sm rounded-[10px] border bg-background placeholder:text-muted-foreground focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] resize-none transition-colors leading-relaxed",
-                errors.instructions ? "border-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.12)]" : "border-border",
-                workflowDisabled && "bg-muted cursor-not-allowed opacity-70"
-              )}
-            />
+            <div className="relative">
+              <textarea
+                value={instructions}
+                onChange={(e) => { setInstructions(e.target.value); if (errors.instructions) setErrors(p => ({ ...p, instructions: undefined })); }}
+                rows={7}
+                disabled={workflowDisabled}
+                placeholder="让 S Claw 帮你做什么…"
+                className={cn(
+                  'w-full px-3.5 pt-2.5 pb-11 text-sm rounded-[10px] border bg-background placeholder:text-muted-foreground focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] resize-none transition-colors leading-relaxed',
+                  errors.instructions ? 'border-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.12)]' : 'border-border',
+                  workflowDisabled && 'bg-muted cursor-not-allowed opacity-70',
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => { void handleBeautify(); }}
+                disabled={workflowDisabled || !instructions.trim() || beautifying}
+                className={cn(
+                  'absolute bottom-2.5 right-2.5 inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium transition-colors',
+                  'border border-[#FFD7A3] bg-[#FFF5E6] text-[#C2410C]',
+                  'hover:bg-[#FFEDD5] hover:border-[#FFC17A]',
+                  'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#FFF5E6]',
+                )}
+                aria-label="AI 美化任务描述"
+              >
+                {beautifying ? (
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                )}
+                {beautifying ? '美化中…' : 'AI美化'}
+              </button>
+            </div>
             {errors.instructions && <p className="text-xs text-red-600">{errors.instructions}</p>}
-            {workflowDisabled && (
+            {workflowDisabled ? (
               <p className="text-xs text-muted-foreground">已关联工作流，描述内容自动生成</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                计划时间请在上方的「计划时间」中设置；可点击 AI美化 由模型优化执行描述。
+              </p>
             )}
           </div>
 
-          {/* Schedule */}
           <div className="flex flex-col gap-2">
             <span className="block text-sm font-semibold text-foreground">
               计划时间
@@ -369,7 +443,6 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
             <SchedulePicker value={schedule} onChange={setSchedule} />
           </div>
 
-          {/* Recipients */}
           {!isClaudeTask && (
             <div className="flex flex-col gap-2">
               <label className="block text-sm font-semibold text-foreground">
@@ -380,7 +453,6 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
           )}
         </div>
 
-        {/* Footer */}
         <div className="flex justify-end gap-3 px-[18px] py-4 border-t border-border bg-muted/20 rounded-b-[22px] flex-shrink-0">
           <Button variant="outline" onClick={onClose} className="rounded-[10px] px-5 h-[42px] text-sm">
             取消

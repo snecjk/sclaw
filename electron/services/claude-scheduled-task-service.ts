@@ -54,6 +54,8 @@ export interface ClaudeScheduledTaskCreateInput {
   model?: string;
   permissionProfile?: ClaudeTaskPermissionProfile;
   timeoutSec?: number;
+  workflowId?: string;
+  workflowName?: string;
   retryPolicy?: {
     maxAttempts?: number;
     backoffSec?: number;

@@ -316,6 +316,8 @@ export default function MyTask() {
                 promptTemplate: input.message,
                 agentId: selectedAgent.id,
                 workspacePath: selectedAgent.workspace,
+                workflowId: input.workflowCode,
+                workflowName: input.workflowName,
               },
             });
           } else {
@@ -327,6 +329,8 @@ export default function MyTask() {
                 schedule: input.schedule,
                 enabled: input.enabled,
                 dingTalkMentions: input.dingTalkMentions,
+                workflowCode: input.workflowCode,
+                workflowName: input.workflowName,
               },
             });
           }

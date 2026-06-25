@@ -30,6 +30,8 @@ export const TIMEOUTS = {
   DWS_INSTALL: 300_000,
   /** SSO login flow */
   AUTH_LOGIN: 300_000,
+  /** Scheduled task instruction AI beautify */
+  BEAUTIFY_INSTRUCTION: 60_000,
 } as const;
 
 /**

@@ -1384,10 +1384,7 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
         },
       },
     };
-    // sto-scheduled-task-tool disabled: cloud scheduled tasks not live this release
-    if (entries['sto-scheduled-task-tool']) {
-      delete entries['sto-scheduled-task-tool'];
-    }
+    entries['sto-scheduled-task-tool'] = { enabled: true, config: {} };
     entries['sto-workflow-tool'] = {
       enabled: true,
       config: {
