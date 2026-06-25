@@ -75,7 +75,6 @@ export function Chat() {
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
   const agents = useAgentsStore((s) => s.agents);
-  const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
 
@@ -138,10 +137,6 @@ export function Chat() {
       cleanupEmptySession();
     };
   }, [cleanupEmptySession]);
-
-  useEffect(() => {
-    void fetchAgents();
-  }, [fetchAgents]);
 
   // Update timestamp when sending starts
   useEffect(() => {

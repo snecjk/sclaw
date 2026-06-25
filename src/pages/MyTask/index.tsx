@@ -12,7 +12,10 @@ import type { ManagedLocalTask } from '@/stores/cron';
 import { useChatStore } from '@/stores/chat';
 import { useAgentsStore } from '@/stores/agents';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
-import { stripInstructionFromTaskMessage } from '@/lib/scheduled-task-recipients';
+import {
+  stripInstructionFromTaskMessage,
+  prepareDingTalkAgentTurnMessage,
+} from '@/lib/scheduled-task-recipients';
 import { useShallow } from 'zustand/react/shallow';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
@@ -25,10 +28,7 @@ import {
   workflowListToolbarClass,
 } from '@/lib/surfaces';
 import { toast } from 'sonner';
-import {
-  TaskCreateModal,
-  type TaskCreateInputWithRun,
-} from './components/TaskCreateModal';
+import { TaskCreateModal, type TaskCreateInputWithRun } from './components/TaskCreateModal';
 
 import { useMyTaskStore, selectRecordCounts, selectCurrentRecords } from './store';
 import type { TaskView, TaskViewModel, ExecutionRecord } from './types';
@@ -49,18 +49,18 @@ import { RecordDetailModal } from './components/RecordDetailModal';
 /** 将 ManagedLocalTask 转换为页面 TaskViewModel */
 function managedTaskToViewModel(
   task: ManagedLocalTask,
-  workflowMap: Map<string, string>,
+  workflowMap: Map<string, string>
 ): TaskViewModel {
   if (task.engineType === 'claude') {
     return {
       id: task.id,
       name: task.name,
-      description: task.promptTemplate || '',
+      description: stripInstructionFromTaskMessage(task.promptTemplate || ''),
       cronExpr: task.cronExpr,
       enabled: task.enabled,
       nextRunAt: task.nextRunAt ?? null,
-      workflowCode: undefined,
-      workflowName: undefined,
+      workflowCode: task.workflowCode || undefined,
+      workflowName: task.workflowCode ? workflowMap.get(task.workflowCode) : undefined,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
       agentId: task.agentId,
@@ -98,11 +98,11 @@ function sortTasks(tasks: TaskViewModel[], sort: string): TaskViewModel[] {
   switch (sort) {
     case 'created-asc':
       return sorted.sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );
     case 'created-desc':
       return sorted.sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
     case 'name-asc':
       return sorted.sort((a, b) => a.name.localeCompare(b.name));
@@ -113,15 +113,14 @@ function sortTasks(tasks: TaskViewModel[], sort: string): TaskViewModel[] {
   }
 }
 
-/** 根据引擎类型解析首选 Agent */
+/** 解析首选 Agent（与 Cron 页面一致，不按引擎过滤） */
 function resolvePreferredAgentByEngine(
   agents: Array<{ id: string; engineType?: 'openclaw' | 'claude'; workspace: string }>,
   defaultAgentId: string,
-  engineType: 'openclaw' | 'claude',
+  _engineType: 'openclaw' | 'claude'
 ) {
-  const engineAgents = agents.filter((agent) => (agent.engineType ?? 'openclaw') === engineType);
-  if (engineAgents.length === 0) return null;
-  return engineAgents.find((agent) => agent.id === defaultAgentId) ?? engineAgents[0] ?? null;
+  if (agents.length === 0) return null;
+  return agents.find((agent) => agent.id === defaultAgentId) ?? agents[0] ?? null;
 }
 
 // ──── 主组件 ────
@@ -188,8 +187,8 @@ export default function MyTask() {
           createdAt: null,
           updatedAt: null,
           nodeCount: Number(item.nodeCount) || 0,
-          nodes: Array.isArray(item.nodes) ? item.nodes as Record<string, unknown>[] : [],
-          edges: Array.isArray(item.edges) ? item.edges as Record<string, unknown>[] : [],
+          nodes: Array.isArray(item.nodes) ? (item.nodes as Record<string, unknown>[]) : [],
+          edges: Array.isArray(item.edges) ? (item.edges as Record<string, unknown>[]) : [],
         }));
         setOfficialCards(officialItems.map(mapTemplateMineItemToOfficialCard));
       })
@@ -208,7 +207,7 @@ export default function MyTask() {
   // ── 工作流 code → name 映射 ──
   const workflowMap = useMemo(
     () => new Map(workflowOptions.map((o) => [o.value, o.label])),
-    [workflowOptions],
+    [workflowOptions]
   );
 
   // ── 任务视图模型列表 ──
@@ -216,7 +215,7 @@ export default function MyTask() {
 
   const allTasks = useMemo(
     () => safeJobs.map((j) => managedTaskToViewModel(j, workflowMap)),
-    [safeJobs, workflowMap],
+    [safeJobs, workflowMap]
   );
 
   const filteredTasks = useMemo(() => {
@@ -224,7 +223,7 @@ export default function MyTask() {
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter(
-        (t) => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q),
+        (t) => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)
       );
     }
     return sortTasks(result, sortValue);
@@ -241,7 +240,7 @@ export default function MyTask() {
         toast.error(String(err));
       }
     },
-    [toggleJob],
+    [toggleJob]
   );
 
   const handleTrigger = useCallback(
@@ -265,18 +264,23 @@ export default function MyTask() {
         toast.error(String(err));
       }
     },
-    [triggerJob, navigate, location.pathname],
+    [triggerJob, navigate, location.pathname]
   );
 
   const handleSave = useCallback(
     async (input: TaskCreateInputWithRun) => {
       const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, input.engineType);
+      console.log('创建input -->', input, '所选 agent -->', selectedAgent, 'edit--> ', editingJob);
       try {
         if (editingJob) {
           if (editingJob.engineType === 'claude') {
-            if (!selectedAgent?.workspace) {
+            if (!selectedAgent?.id) {
               throw new Error('所选 Claude 代理缺少工作区，无法更新本地定时任务');
             }
+            const promptTemplate = prepareDingTalkAgentTurnMessage(
+              input.message,
+              input.dingTalkMentions
+            );
             await updateJob(editingJob.id, {
               engineType: 'claude',
               payload: {
@@ -284,9 +288,11 @@ export default function MyTask() {
                 name: input.name,
                 enabled: editingJob.enabled,
                 cronExpr: input.schedule,
-                promptTemplate: input.message,
+                promptTemplate,
                 agentId: selectedAgent.id,
-                workspacePath: selectedAgent.workspace,
+                workspacePath: input.claudeWorkspacePath || selectedAgent.workspace,
+                permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
+                workflowCode: input.workflowCode,
               },
             });
           } else {
@@ -299,23 +305,30 @@ export default function MyTask() {
                 enabled: input.enabled,
                 dingTalkMentions: input.dingTalkMentions,
                 agentId: editingJob.agentId ?? undefined,
+                workflowCode: input.workflowCode,
               },
             });
           }
           toast.success('任务已更新');
         } else {
           if (input.engineType === 'claude') {
-            if (!selectedAgent?.workspace) {
+            if (!selectedAgent?.id) {
               throw new Error('所选 Claude 代理缺少工作区，无法创建本地定时任务');
             }
+            const promptTemplate = prepareDingTalkAgentTurnMessage(
+              input.message,
+              input.dingTalkMentions
+            );
             await createJob({
               engineType: 'claude',
               payload: {
                 name: input.name,
                 cronExpr: input.schedule,
-                promptTemplate: input.message,
+                promptTemplate,
                 agentId: selectedAgent.id,
-                workspacePath: selectedAgent.workspace,
+                workspacePath: input.claudeWorkspacePath || selectedAgent.workspace,
+                permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
+                workflowCode: input.workflowCode,
               },
             });
           } else {
@@ -327,6 +340,7 @@ export default function MyTask() {
                 schedule: input.schedule,
                 enabled: input.enabled,
                 dingTalkMentions: input.dingTalkMentions,
+                workflowCode: input.workflowCode,
               },
             });
           }
@@ -335,17 +349,23 @@ export default function MyTask() {
         await fetchJobs().catch(() => {});
       } catch (err) {
         const errStr = String(err);
-        let userMessage = '操作失败，请稍后重试';
-        if (errStr.includes('409') || errStr.includes('already exists') || errStr.includes('duplicate')) {
-          userMessage = '任务名称已存在，请使用其他名称';
-        } else if (errStr.includes('422') || errStr.includes('validation')) {
-          userMessage = '输入内容不符合要求，请检查字段';
-        }
-        toast.error(userMessage);
+        toast.error(errStr);
+        // console.log(err, errStr);
+        // let userMessage = '操作失败，请稍后重试';
+        // if (
+        //   errStr.includes('409') ||
+        //   errStr.includes('already exists') ||
+        //   errStr.includes('duplicate')
+        // ) {
+        //   userMessage = '任务名称已存在，请使用其他名称';
+        // } else if (errStr.includes('422') || errStr.includes('validation')) {
+        //   userMessage = '输入内容不符合要求，请检查字段';
+        // }
+        // toast.error(userMessage);
         throw err;
       }
     },
-    [agents, defaultAgentId, editingJob, createJob, updateJob, fetchJobs],
+    [agents, defaultAgentId, editingJob, createJob, updateJob, fetchJobs]
   );
 
   const handleDelete = useCallback(async () => {
@@ -361,11 +381,14 @@ export default function MyTask() {
     }
   }, [deleteTarget, deleteJob, fetchJobs]);
 
-  const handleTemplateInstall = useCallback((card: OfficialWorkflowCard) => {
-    const q = encodeURIComponent(`/${card.name}`);
-    const wid = encodeURIComponent(card.id);
-    navigate(`/?q=${q}&workflowId=${wid}`);
-  }, [navigate]);
+  const handleTemplateInstall = useCallback(
+    (card: OfficialWorkflowCard) => {
+      const q = encodeURIComponent(`/${card.name}`);
+      const wid = encodeURIComponent(card.id);
+      navigate(`/?q=${q}&workflowId=${wid}`);
+    },
+    [navigate]
+  );
 
   // ── 渲染 ──
   const isTasksView = activeView === 'tasks';
@@ -408,10 +431,7 @@ export default function MyTask() {
                 onSortChange={setSortValue}
               />
             ) : (
-              <RecordToolbar
-                searchQuery={recordSearch}
-                onSearchChange={setRecordSearch}
-              />
+              <RecordToolbar searchQuery={recordSearch} onSearchChange={setRecordSearch} />
             )}
           </div>
 
@@ -477,15 +497,11 @@ export default function MyTask() {
                   该状态下暂无执行记录
                 </div>
               ) : (
-                  <div className="flex flex-col gap-2.5">
-                    {currentRecords.map((record) => (
-                      <RecordItem
-                        key={record.id}
-                        record={record}
-                        onViewDetail={setDetailRecord}
-                      />
-                    ))}
-                  </div>
+                <div className="flex flex-col gap-2.5">
+                  {currentRecords.map((record) => (
+                    <RecordItem key={record.id} record={record} onViewDetail={setDetailRecord} />
+                  ))}
+                </div>
               )}
             </section>
           )}

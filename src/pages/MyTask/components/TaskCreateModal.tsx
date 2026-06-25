@@ -2,18 +2,30 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Loader2, ChevronDown, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
+import {
+  scheduleValueToCron,
+  cronToScheduleValue,
+  defaultScheduleValue,
+} from '@/pages/Cron/components/schedule-utils';
 import { DingTalkRecipientField } from '@/components/dingtalk/DingTalkRecipientField';
 import { useMyTaskStore } from '../store';
 import { cn } from '@/lib/utils';
+import {
+  stripInstructionFromTaskMessage,
+  resolveScheduledTaskMentions,
+} from '@/lib/scheduled-task-recipients';
 import type { CronJobCreateInput } from '@/types/cron';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { ClaudeTaskPermissionProfile } from '@/types/scheduled-task';
 import type { ManagedLocalTask } from '@/stores/cron';
-import { useAgentsStore } from '@/stores/agents';
-import type { AgentSummary } from '@/types/agent';
 
 type TaskEngineType = 'openclaw' | 'claude';
 
-export type TaskCreateInputWithRun = CronJobCreateInput & { engineType: TaskEngineType };
+export type TaskCreateInputWithRun = CronJobCreateInput & {
+  engineType: TaskEngineType;
+  claudeWorkspacePath?: string;
+  claudePermissionProfile?: ClaudeTaskPermissionProfile;
+};
 
 interface TaskCreateModalProps {
   job?: ManagedLocalTask | null;
@@ -23,90 +35,99 @@ interface TaskCreateModalProps {
   initialValues?: { name?: string; message?: string; schedule?: string };
 }
 
-function resolvePreferredAgentByEngine(
-  agents: AgentSummary[],
-  defaultAgentId: string,
-  engineType: TaskEngineType,
-): AgentSummary | null {
-  const engineAgents = agents.filter((agent) => (agent.engineType ?? 'openclaw') === engineType);
-  if (engineAgents.length === 0) return null;
-  return engineAgents.find((agent) => agent.id === defaultAgentId) ?? engineAgents[0] ?? null;
+interface TaskCreateModalInnerProps {
+  job?: ManagedLocalTask | null;
+  onClose: () => void;
+  onSave: (input: TaskCreateInputWithRun) => Promise<void>;
+  initialValues?: { name?: string; message?: string; schedule?: string };
 }
 
-function defaultScheduleValue(): ScheduleValue {
+function computeInitialValues(
+  job: ManagedLocalTask | null | undefined,
+  initialValues: { name?: string; message?: string; schedule?: string } | undefined
+) {
+
+  if (job) {
+    if (job.engineType === 'claude') {
+      return {
+        name: job.name || '',
+        instructions: stripInstructionFromTaskMessage(job.promptTemplate || ''),
+        schedule: cronToScheduleValue(job.cronExpr),
+        recipients: resolveScheduledTaskMentions(job.promptTemplate || ''),
+        engineType: 'claude' as TaskEngineType,
+        selectedWorkflow: job.workflowCode || '',
+      };
+    }
+    return {
+      name: job.name || '',
+      instructions: stripInstructionFromTaskMessage(job.message || ''),
+      schedule: cronToScheduleValue(job.schedule),
+      recipients: resolveScheduledTaskMentions(job.message || ''),
+      engineType: 'openclaw' as TaskEngineType,
+      selectedWorkflow: job.workflowCode || '',
+    };
+  }
+
+  if (initialValues) {
+    return {
+      name: initialValues.name || '',
+      instructions: initialValues.message || '',
+      schedule: initialValues.schedule
+        ? cronToScheduleValue(initialValues.schedule)
+        : defaultScheduleValue(),
+      recipients: [] as DingTalkMention[],
+      engineType: 'openclaw' as TaskEngineType,
+      selectedWorkflow: '',
+    };
+  }
+
   return {
-    frequency: 'daily',
-    time: '09:00',
-    weekDays: [1, 2, 3, 4, 5],
-    monthDay: 1,
+    name: '',
+    instructions: '',
+    schedule: defaultScheduleValue(),
+    recipients: [] as DingTalkMention[],
+    engineType: 'openclaw' as TaskEngineType,
+    selectedWorkflow: '',
   };
 }
 
-function scheduleValueToCron(value: ScheduleValue): string {
-  const [hour, minute] = value.time.split(':');
-  const m = minute || '00';
-  const h = hour || '09';
-  switch (value.frequency) {
-    case 'daily': return `${m} ${h} * * *`;
-    case 'weekly': {
-      const days = value.weekDays;
-      if (days.length === 0) return `${m} ${h} * * *`;
-      if (days.length === 7) return `${m} ${h} * * *`;
-      return `${m} ${h} * * ${days.join(',')}`;
-    }
-    case 'monthly': return `${m} ${h} ${value.monthDay ?? 1} * *`;
-    case 'once': return `${m} ${h} ${value.onceDate ? new Date(value.onceDate).getDate() : 1} ${value.onceDate ? new Date(value.onceDate).getMonth() + 1 : 1} *`;
-    default: return `${m} ${h} * * *`;
-  }
+export function TaskCreateModal({
+  job,
+  open,
+  onClose,
+  onSave,
+  initialValues,
+}: TaskCreateModalProps) {
+  if (!open) return null;
+  return (
+    <TaskCreateModalInner
+      key={job?.id ?? '__create__'}
+      job={job}
+      onClose={onClose}
+      onSave={onSave}
+      initialValues={initialValues}
+    />
+  );
 }
 
-function cronToScheduleValue(cron: string | unknown): ScheduleValue {
-  if (typeof cron !== 'string') return defaultScheduleValue();
-  const parts = cron.split(' ');
-  if (parts.length !== 5) return defaultScheduleValue();
-  const [min, hour, day, , weekday] = parts;
-  const time = `${hour.padStart(2, '0')}:${min.padStart(2, '0')}`;
-
-  // Parse weekday part: could be "*", "1-5", "1,3,5", or single digit
-  if (weekday !== '*' && day === '*') {
-    if (weekday === '1-5') {
-      return { frequency: 'weekly', time, weekDays: [1, 2, 3, 4, 5] };
-    }
-    if (weekday.includes(',')) {
-      const days = weekday.split(',').map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d));
-      return { frequency: 'weekly', time, weekDays: days };
-    }
-    const wd = parseInt(weekday, 10);
-    if (!isNaN(wd)) {
-      return { frequency: 'weekly', time, weekDays: [wd] };
-    }
-  }
-  if (day !== '*') {
-    const md = parseInt(day, 10);
-    return { frequency: 'monthly', time, monthDay: isNaN(md) ? 1 : md, weekDays: [1, 2, 3, 4, 5] };
-  }
-  return { frequency: 'daily', time, weekDays: [1, 2, 3, 4, 5] };
-}
-
-export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: TaskCreateModalProps) {
-  const agents = useAgentsStore((s) => s.agents);
-  const defaultAgentId = useAgentsStore((s) => s.defaultAgentId);
-  const [name, setName] = useState('');
-  const [instructions, setInstructions] = useState('');
-  const [schedule, setSchedule] = useState<ScheduleValue>(defaultScheduleValue());
-  const [saving, setSaving] = useState(false);
-  const [recipients, setRecipients] = useState<DingTalkMention[]>([]);
-  const [errors, setErrors] = useState<{ name?: string; instructions?: string }>({});
-  const [engineType, setEngineType] = useState<TaskEngineType>('openclaw');
-
-  // 关联工作流下拉
-  const [workflowOpen, setWorkflowOpen] = useState(false);
-  const [selectedWorkflow, setSelectedWorkflow] = useState<string>('');
-  const workflowRef = useRef<HTMLDivElement>(null);
+function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreateModalInnerProps) {
   const workflowOptions = useMyTaskStore((s) => s.workflowOptions);
 
-  const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, engineType);
-  const isClaudeTask = job?.engineType === 'claude' || selectedAgent?.engineType === 'claude';
+  const init = computeInitialValues(job, initialValues);
+
+  const [name, setName] = useState(init.name);
+  const [instructions, setInstructions] = useState(init.instructions);
+  const [schedule, setSchedule] = useState<ScheduleValue>(init.schedule);
+  const [saving, setSaving] = useState(false);
+  const [recipients, setRecipients] = useState<DingTalkMention[]>(init.recipients);
+  const [errors, setErrors] = useState<{ name?: string; instructions?: string }>({});
+  const [engineType, setEngineType] = useState<TaskEngineType>(init.engineType);
+
+  const [workflowOpen, setWorkflowOpen] = useState(false);
+  const [selectedWorkflow, setSelectedWorkflow] = useState<string>(init.selectedWorkflow);
+  const workflowRef = useRef<HTMLDivElement>(null);
+
+  const workflowDisabled = !!selectedWorkflow;
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -121,57 +142,6 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
   }, [workflowOpen]);
 
   const isEditing = !!job;
-
-  // 工作流选择联动：选中时自动填充描述框并 disabled
-  const workflowDisabled = !!selectedWorkflow;
-  useEffect(() => {
-    if (selectedWorkflow) {
-      const wf = workflowOptions.find(o => o.value === selectedWorkflow);
-      if (wf) {
-        setInstructions(`帮我执行 id 为：${wf.value} 的工作流 【${wf.label}】`);
-      }
-    } else {
-      // 取消选择工作流时，清空描述框
-      setInstructions('');
-    }
-  }, [selectedWorkflow, workflowOptions]);
-
-  useEffect(() => {
-    if (open) {
-      if (job) {
-        setName(job.name || '');
-        if (job.engineType === 'claude') {
-          setInstructions(job.promptTemplate || '');
-          setRecipients([]);
-          setEngineType('claude');
-          setSchedule(cronToScheduleValue(job.cronExpr));
-        } else {
-          setInstructions(job.message || '');
-          setRecipients([]);
-          setEngineType('openclaw');
-          setSchedule(cronToScheduleValue(job.schedule));
-        }
-        // 编辑模式不回显已选工作流
-        setSelectedWorkflow('');
-      } else if (initialValues) {
-        setName(initialValues.name || '');
-        setInstructions(initialValues.message || '');
-        setSchedule(initialValues.schedule ? cronToScheduleValue(initialValues.schedule) : defaultScheduleValue());
-        setSelectedWorkflow('');
-        setEngineType(resolvePreferredAgentByEngine(agents, defaultAgentId, 'claude') ? 'claude' : 'openclaw');
-      } else {
-        setName('');
-        setInstructions('');
-        setSchedule(defaultScheduleValue());
-        setSelectedWorkflow('');
-        setEngineType(resolvePreferredAgentByEngine(agents, defaultAgentId, 'claude') ? 'claude' : 'openclaw');
-      }
-      setRecipients([]);
-      setErrors({});
-      setSaving(false);
-
-    }
-  }, [open, job, initialValues, defaultAgentId, agents]);
 
   const handleSubmit = async () => {
     const newErrors: typeof errors = {};
@@ -189,13 +159,14 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
         message: instructions.trim(),
         schedule: scheduleValueToCron(schedule),
         enabled: true,
-        dingTalkMentions: !isClaudeTask && recipients.length > 0 ? recipients : undefined,
+        dingTalkMentions: recipients.length > 0 ? recipients : undefined,
         workflowCode: selectedWorkflow || undefined,
         engineType,
+        claudeWorkspacePath: undefined,
+        claudePermissionProfile: engineType === 'claude' ? 'dangerous-bypass' : undefined,
       });
       onClose();
     } catch (err) {
-      // Error is handled by parent - don't close modal on error
       const message = String(err);
       if (message.includes('409') || message.includes('任务名称已存在')) {
         setErrors({ name: '任务名称已存在，请使用其他名称' });
@@ -204,8 +175,6 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
       setSaving(false);
     }
   };
-
-  if (!open) return null;
 
   return (
     <div
@@ -240,17 +209,20 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
         <div className="px-[18px] pb-[16px] flex flex-col gap-5 flex-1 overflow-y-auto min-h-0">
           {/* Name */}
           <div className="flex flex-col gap-2">
-            <label className="block text-sm font-semibold text-foreground">
-              任务名称
-            </label>
+            <label className="block text-sm font-semibold text-foreground">任务名称</label>
             <input
               type="text"
               value={name}
-              onChange={(e) => { setName(e.target.value); if (errors.name) setErrors(p => ({ ...p, name: undefined })); }}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (errors.name) setErrors((p) => ({ ...p, name: undefined }));
+              }}
               placeholder="描述你的任务"
               className={cn(
-                "w-full h-[42px] px-3.5 text-sm rounded-[10px] border bg-background placeholder:text-muted-foreground focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] transition-colors",
-                errors.name ? "border-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.12)]" : "border-border"
+                'w-full h-[42px] px-3.5 text-sm rounded-[10px] border bg-background placeholder:text-muted-foreground focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] transition-colors',
+                errors.name
+                  ? 'border-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.12)]'
+                  : 'border-border'
               )}
               autoComplete="off"
             />
@@ -259,50 +231,68 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
 
           {/* Engine Type */}
           <div className="flex flex-col gap-2">
-            <label className="block text-sm font-semibold text-foreground">
-              执行引擎
-            </label>
+            <label className="block text-sm font-semibold text-foreground">执行引擎</label>
             <select
               value={engineType}
               onChange={(e) => setEngineType(e.target.value as TaskEngineType)}
-              className="w-full h-[42px] px-3.5 text-sm rounded-[10px] border border-border bg-background focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] transition-colors"
+              disabled={isEditing}
+              className={cn(
+                'w-full h-[42px] px-3.5 text-sm rounded-[10px] border bg-background focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] transition-colors',
+                isEditing
+                  ? 'border-border text-muted-foreground cursor-not-allowed opacity-70'
+                  : 'border-border'
+              )}
             >
               <option value="openclaw">OpenClaw</option>
-              {resolvePreferredAgentByEngine(agents, defaultAgentId, 'claude') ? (
-                <option value="claude">Claude Agent</option>
-              ) : null}
+              <option value="claude">Claude Agent</option>
             </select>
             <p className="text-[11.5px] text-muted-foreground">
-              {selectedAgent?.engineType === 'claude'
-                ? '将创建 Claude 本地定时任务，独立在本机运行。'
-                : '将创建 OpenClaw 本地定时任务。'}
+              {isEditing
+                ? '执行引擎在创建时确定，编辑时不可更改。'
+                : engineType === 'claude'
+                  ? '将创建 Claude 本地定时任务，独立在本机运行。'
+                  : '将创建 OpenClaw 本地定时任务。'}
             </p>
           </div>
 
           {/* Workflow */}
           <div className="flex flex-col gap-2">
-            <label className="block text-sm font-semibold text-foreground">
-              关联工作流
-            </label>
+            <label className="block text-sm font-semibold text-foreground">关联工作流</label>
             <div className="relative w-full" ref={workflowRef}>
               <button
                 type="button"
                 onClick={() => setWorkflowOpen(!workflowOpen)}
                 className={cn(
-                  "flex items-center justify-between gap-1.5 w-full h-[42px] px-3.5 pr-2.5 text-sm font-medium rounded-[10px] border bg-background cursor-pointer outline-none transition-colors",
-                  workflowOpen ? "border-[#c5cad3] shadow-[0_0_0_3px_rgba(15,23,42,0.06)]" : "border-border hover:border-[#c5cad3]"
+                  'flex items-center justify-between gap-1.5 w-full h-[42px] px-3.5 pr-2.5 text-sm font-medium rounded-[10px] border bg-background cursor-pointer outline-none transition-colors',
+                  workflowOpen
+                    ? 'border-[#c5cad3] shadow-[0_0_0_3px_rgba(15,23,42,0.06)]'
+                    : 'border-border hover:border-[#c5cad3]'
                 )}
               >
-                <span className={cn("truncate", !selectedWorkflow && "text-muted-foreground font-normal")}>
-                  {selectedWorkflow ? workflowOptions.find(o => o.value === selectedWorkflow)?.label : '请选择'}
+                <span
+                  className={cn(
+                    'truncate',
+                    !selectedWorkflow && 'text-muted-foreground font-normal'
+                  )}
+                >
+                  {selectedWorkflow
+                    ? workflowOptions.find((o) => o.value === selectedWorkflow)?.label
+                    : '请选择'}
                 </span>
-                <ChevronDown className={cn('h-3 w-3 shrink-0 text-muted-foreground transition-transform', workflowOpen && 'rotate-180')} />
+                <ChevronDown
+                  className={cn(
+                    'h-3 w-3 shrink-0 text-muted-foreground transition-transform',
+                    workflowOpen && 'rotate-180'
+                  )}
+                />
               </button>
               {workflowOpen && (
                 <div className="absolute top-[calc(100%+6px)] left-0 z-20 w-full min-w-[140px]">
                   <div className="flex flex-col gap-0.5 max-h-[280px] p-1.5 overflow-y-auto border border-border rounded-xl bg-background shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
                     {workflowOptions.length === 0 && (
-                      <div className="px-2.5 py-3 text-sm text-muted-foreground text-center">暂无可用工作流</div>
+                      <div className="px-2.5 py-3 text-sm text-muted-foreground text-center">
+                        暂无可用工作流
+                      </div>
                     )}
                     {workflowOptions.map((opt) => {
                       const isSelected = selectedWorkflow === opt.value;
@@ -311,11 +301,14 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
                           key={opt.value}
                           type="button"
                           onClick={() => {
-                            // 点击已选中的工作流则取消选择
                             if (isSelected) {
                               setSelectedWorkflow('');
+                              setInstructions('');
                             } else {
                               setSelectedWorkflow(opt.value);
+                              setInstructions(
+                                `帮我执行 id 为：${opt.value} 的工作流 【${opt.label}】`
+                              );
                             }
                             setWorkflowOpen(false);
                           }}
@@ -323,12 +316,27 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
                             'flex items-center justify-between gap-2 w-full min-h-9 px-2.5 py-2 rounded-lg text-sm transition-colors',
                             isSelected ? 'font-semibold' : 'text-foreground'
                           )}
-                          style={isSelected ? { background: '#fff7ed', color: '#c2410c' } : undefined}
-                          onMouseEnter={(e) => { if (!isSelected) { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#c2410c'; } }}
-                          onMouseLeave={(e) => { if (!isSelected) { e.currentTarget.style.background = ''; e.currentTarget.style.color = ''; } }}
+                          style={
+                            isSelected ? { background: '#fff7ed', color: '#c2410c' } : undefined
+                          }
+                          onMouseEnter={(e) => {
+                            if (!isSelected) {
+                              e.currentTarget.style.background = '#fff7ed';
+                              e.currentTarget.style.color = '#c2410c';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSelected) {
+                              e.currentTarget.style.background = '';
+                              e.currentTarget.style.color = '';
+                            }
+                          }}
                         >
                           <span>{opt.label}</span>
-                          <Check className="w-4 h-4 shrink-0" style={{ color: '#c2410c', opacity: isSelected ? 1 : 0 }} />
+                          <Check
+                            className="w-4 h-4 shrink-0"
+                            style={{ color: '#c2410c', opacity: isSelected ? 1 : 0 }}
+                          />
                         </button>
                       );
                     })}
@@ -345,14 +353,19 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
             </label>
             <textarea
               value={instructions}
-              onChange={(e) => { setInstructions(e.target.value); if (errors.instructions) setErrors(p => ({ ...p, instructions: undefined })); }}
-              rows={7}
+              onChange={(e) => {
+                setInstructions(e.target.value);
+                if (errors.instructions) setErrors((p) => ({ ...p, instructions: undefined }));
+              }}
+              rows={8}
               disabled={workflowDisabled}
               placeholder="让 S Claw 帮你做什么…"
               className={cn(
-                "w-full px-3.5 py-2.5 text-sm rounded-[10px] border bg-background placeholder:text-muted-foreground focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] resize-none transition-colors leading-relaxed",
-                errors.instructions ? "border-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.12)]" : "border-border",
-                workflowDisabled && "bg-muted cursor-not-allowed opacity-70"
+                'w-full px-3.5 py-2.5 text-sm rounded-[10px] border bg-background placeholder:text-muted-foreground focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] resize-none transition-colors leading-relaxed',
+                errors.instructions
+                  ? 'border-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.12)]'
+                  : 'border-border',
+                workflowDisabled && 'bg-muted cursor-not-allowed opacity-70'
               )}
             />
             {errors.instructions && <p className="text-xs text-red-600">{errors.instructions}</p>}
@@ -363,29 +376,31 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
 
           {/* Schedule */}
           <div className="flex flex-col gap-2">
-            <span className="block text-sm font-semibold text-foreground">
-              计划时间
-            </span>
+            <span className="block text-sm font-semibold text-foreground">计划时间</span>
             <SchedulePicker value={schedule} onChange={setSchedule} />
           </div>
 
           {/* Recipients */}
-          {!isClaudeTask && (
-            <div className="flex flex-col gap-2">
-              <label className="block text-sm font-semibold text-foreground">
-                发送对象
-              </label>
-              <DingTalkRecipientField value={recipients} onChange={setRecipients} />
-            </div>
-          )}
+          <div className="flex flex-col gap-2">
+            <label className="block text-sm font-semibold text-foreground">发送对象</label>
+            <DingTalkRecipientField value={recipients} onChange={setRecipients} />
+          </div>
         </div>
 
         {/* Footer */}
         <div className="flex justify-end gap-3 px-[18px] py-4 border-t border-border bg-muted/20 rounded-b-[22px] flex-shrink-0">
-          <Button variant="outline" onClick={onClose} className="rounded-[10px] px-5 h-[42px] text-sm">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="rounded-[10px] px-5 h-[42px] text-sm"
+          >
             取消
           </Button>
-          <Button onClick={handleSubmit} disabled={saving} className="rounded-[10px] px-5 h-[42px] text-sm bg-[#111] text-white border-none shadow-[0_2px_10px_rgba(0,0,0,0.15)] hover:bg-[#111]">
+          <Button
+            onClick={handleSubmit}
+            disabled={saving}
+            className="rounded-[10px] px-5 h-[42px] text-sm bg-[#111] text-white border-none shadow-[0_2px_10px_rgba(0,0,0,0.15)] hover:bg-[#111]"
+          >
             {saving ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />

@@ -544,8 +544,8 @@ function transformCronJob(job: GatewayCronJob) {
     ? new Date(job.state.nextRunAtMs).toISOString()
     : undefined;
 
-  // Extract agentId stored in description JSON metadata
-  const agentId = extractAgentIdFromDescription(job.description);
+  // Extract metadata stored in description JSON (agentId, workflowCode)
+  const meta = parseCronDescriptionMeta(job.description);
 
   return {
     id: job.id,
@@ -554,7 +554,8 @@ function transformCronJob(job: GatewayCronJob) {
     schedule: job.schedule,
     target,
     enabled: job.enabled,
-    agentId,
+    agentId: meta.agentId ?? null,
+    workflowCode: meta.workflowCode,
     createdAt: new Date(job.createdAtMs).toISOString(),
     updatedAt: new Date(job.updatedAtMs).toISOString(),
     lastRun,
@@ -565,6 +566,7 @@ function transformCronJob(job: GatewayCronJob) {
 interface CronDescriptionMeta {
   agentId?: string;
   dingTalkMentions?: DingTalkMention[];
+  workflowCode?: string;
 }
 
 /** Extract metadata stored in a job's description field. */
@@ -588,10 +590,12 @@ function extractAgentIdFromDescription(description?: string): string | null {
 function buildCronDescription(
   agentId: string | null,
   mentions?: DingTalkMention[],
+  workflowCode?: string,
 ): string | undefined {
   const meta: CronDescriptionMeta = {};
   if (agentId) meta.agentId = agentId;
   if (hasResolvedDingTalkMentions(mentions)) meta.dingTalkMentions = mentions;
+  if (workflowCode) meta.workflowCode = workflowCode;
   return Object.keys(meta).length > 0 ? JSON.stringify(meta) : undefined;
 }
 
@@ -731,9 +735,10 @@ export async function handleCronRoutes(
         enabled?: boolean;
         agentId?: string;
         dingTalkMentions?: DingTalkMention[];
+        workflowCode?: string;
       }>(req);
       const agentId = input.agentId?.trim() || null;
-      const description = buildCronDescription(agentId, input.dingTalkMentions);
+      const description = buildCronDescription(agentId, input.dingTalkMentions, input.workflowCode);
       const message = buildCronMessage(input.message, input.dingTalkMentions);
       const result = await ctx.gatewayManager.rpc('cron.add', {
         name: input.name,
@@ -760,6 +765,7 @@ export async function handleCronRoutes(
         schedule?: string;
         agentId?: string;
         dingTalkMentions?: DingTalkMention[];
+        workflowCode?: string;
       }>(req);
       const patch = { ...input };
       if (typeof patch.schedule === 'string') {
@@ -772,13 +778,15 @@ export async function handleCronRoutes(
         };
         delete patch.message;
       }
-      if (patch.dingTalkMentions !== undefined || patch.agentId !== undefined) {
+      if (patch.dingTalkMentions !== undefined || patch.agentId !== undefined || patch.workflowCode !== undefined) {
         const agentId = typeof patch.agentId === 'string' ? patch.agentId.trim() || null : null;
         const mentions = Array.isArray(patch.dingTalkMentions) ? patch.dingTalkMentions as DingTalkMention[] : undefined;
-        const description = buildCronDescription(agentId, mentions);
+        const workflowCode = typeof patch.workflowCode === 'string' ? patch.workflowCode : undefined;
+        const description = buildCronDescription(agentId, mentions, workflowCode);
         if (description) patch.description = description;
         delete patch.agentId;
         delete patch.dingTalkMentions;
+        delete patch.workflowCode;
       }
       sendJson(res, 200, await ctx.gatewayManager.rpc('cron.update', { jobId: id, patch }));
     } catch (error) {
