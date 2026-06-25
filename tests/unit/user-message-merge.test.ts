@@ -77,4 +77,35 @@ describe('user-message-merge', () => {
     expect(deduped).toHaveLength(1);
     expect(deduped[0]?.content).toBe('你仔细看下');
   });
+
+  it('preserves non-adjacent identical-text user messages as distinct turns', () => {
+    // Regression: two separate sends of the same text, separated by an
+    // assistant reply, used to be collapsed by the text-based fallback —
+    // dropping the second user message and merging the two assistant replies
+    // into one turn (the "identical input overwrites previous output" bug).
+    const messages = [
+      { id: 'user-1', role: 'user', content: 'hello', timestamp: 1710000000 },
+      { id: 'assistant-1', role: 'assistant', content: 'reply-1', timestamp: 1710000003 },
+      { id: 'user-2', role: 'user', content: 'hello', timestamp: 1710000010 },
+      { id: 'assistant-2', role: 'assistant', content: 'reply-2', timestamp: 1710000013 },
+    ] as RawMessage[];
+
+    const deduped = dedupeRedundantUserMessages(messages, 1710000010000);
+
+    expect(deduped.map((message) => message.content)).toEqual([
+      'hello', 'reply-1', 'hello', 'reply-2',
+    ]);
+  });
+
+  it('drops a non-adjacent user duplicate only when ids match', () => {
+    const messages = [
+      { id: 'same-id', role: 'user', content: 'hello', timestamp: 1710000000 },
+      { id: 'assistant-1', role: 'assistant', content: 'reply', timestamp: 1710000003 },
+      { id: 'same-id', role: 'user', content: 'hello', timestamp: 1710000010 },
+    ] as RawMessage[];
+
+    const deduped = dedupeRedundantUserMessages(messages, null);
+
+    expect(deduped.map((message) => message.content)).toEqual(['hello', 'reply']);
+  });
 });

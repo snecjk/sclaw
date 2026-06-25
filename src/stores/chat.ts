@@ -2701,7 +2701,12 @@ export const useChatStore = create<ChatState>()(
     setTimeout(checkStuck, 30_000);
 
     try {
-      const idempotencyKey = crypto.randomUUID();
+      // Reuse the optimistic user message id as the idempotency key so the
+      // Gateway can round-trip it back on the user message record (chat.history).
+      // That lets isSameUserMessage pair the optimistic copy with its server echo
+      // by id instead of falling back to text matching. Inert until the Gateway
+      // echoes this id; harmless before then (still a unique UUID per send).
+      const idempotencyKey = userMsg.id;
       const hasMedia = attachments && attachments.length > 0;
 
       // Cache image attachments BEFORE the IPC call to avoid race condition:
