@@ -19,6 +19,7 @@ import {
   isConcreteModelId,
   normalizeModelIdForChat,
   resolveChatToolbarModelId,
+  resolveProviderRawModelId,
   type ChatModelOption,
 } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
@@ -89,6 +90,15 @@ async function applyOpenClawSessionModel(params: {
   option?: ChatModelOption;
   currentAgentId: string;
 }): Promise<string> {
+  const { accounts } = useProviderStore.getState();
+  const resolved = resolveProviderRawModelId(
+    accounts,
+    params.modelId,
+    params.option?.accountId,
+  );
+  const modelToSend = resolved?.modelId ?? params.modelId;
+  const accountId = resolved?.accountId ?? params.option?.accountId;
+
   const result = await hostApiFetch<{
     model?: string;
     modelOverride?: string | null;
@@ -96,13 +106,13 @@ async function applyOpenClawSessionModel(params: {
     method: 'POST',
     body: JSON.stringify({
       sessionKey: params.currentSessionKey,
-      model: params.modelId,
-      accountId: params.option?.accountId,
+      model: modelToSend,
+      accountId,
       agentId: params.currentAgentId || undefined,
       engineType: 'openclaw',
     }),
   });
-  return (result.modelOverride || result.model || params.modelId).trim();
+  return (result.modelOverride || result.model || modelToSend).trim();
 }
 
 async function repairStoCatalogAndRetrySessionModel(params: {

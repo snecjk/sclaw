@@ -46,7 +46,7 @@ export function useHomeChatEntrySend() {
       }
 
       if (currentSessionKey === DEFAULT_SESSION_KEY) {
-        newSession();
+        await newSession();
       }
 
       const { dispatchChatSend } = await import('@/hooks/dispatch-chat-send');

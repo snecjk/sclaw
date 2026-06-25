@@ -34,6 +34,55 @@ export function getWorkspaceDefaultModelId(
 }
 
 /**
+ * Match bare or partial model id to a provider catalog entry
+ * (e.g. qwen3.6-plus → dashscope/qwen3.6-plus for STO OpenClaw).
+ */
+export function resolveProviderRawModelId(
+  accounts: ProviderAccount[],
+  model: string,
+  preferredAccountId?: string | null,
+): { modelId: string; accountId: string } | null {
+  const trimmed = model.trim();
+  if (!trimmed) return null;
+
+  const tryAccount = (account: ProviderAccount): { modelId: string; accountId: string } | null => {
+    const customModels = account.metadata?.customModels as string[] | undefined;
+    const candidates = [
+      ...(customModels ?? []),
+      ...(account.model?.trim() ? [account.model.trim()] : []),
+    ];
+    for (const catalogId of candidates) {
+      if (HIDDEN_PROVIDER_IDS.has(catalogId)) continue;
+      if (catalogId === trimmed) {
+        return { modelId: catalogId, accountId: account.id };
+      }
+      if (normalizeModelIdForChat(catalogId) === normalizeModelIdForChat(trimmed)) {
+        return { modelId: catalogId, accountId: account.id };
+      }
+    }
+    return null;
+  };
+
+  if (preferredAccountId) {
+    const preferred = accounts.find((account) => account.id === preferredAccountId);
+    if (preferred) {
+      const hit = tryAccount(preferred);
+      if (hit) return hit;
+    }
+  }
+
+  for (const account of accounts) {
+    const hit = tryAccount(account);
+    if (hit) return hit;
+  }
+
+  const fallbackAccountId = preferredAccountId?.trim()
+    || accounts.find((account) => account.isDefault)?.id
+    || accounts[0]?.id;
+  return fallbackAccountId ? { modelId: trimmed, accountId: fallbackAccountId } : null;
+}
+
+/**
  * Workspace default model — raw value (preserves supplier sub-prefix).
  * Use this when sending the model ID to the backend / Gateway, where the
  * full original name (e.g. "dashscope/kimi-k2.6") is required.
@@ -46,10 +95,11 @@ export function getWorkspaceDefaultRawModelId(
   const account = accounts.find((a) => a.id === defaultAccountId);
   if (!account) return '';
   const model = account.model?.trim();
-  if (model) return model;
   const customModels = account.metadata?.customModels as string[] | undefined;
   const first = customModels?.find((m) => !HIDDEN_PROVIDER_IDS.has(m));
-  return first ?? '';
+  const seed = model || first || '';
+  if (!seed) return '';
+  return resolveProviderRawModelId(accounts, seed, defaultAccountId)?.modelId ?? seed;
 }
 
 /**

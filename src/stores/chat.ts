@@ -1839,7 +1839,7 @@ export const useChatStore = create<ChatState>()(
 
   // ── New session ──
 
-  newSession: () => {
+  newSession: async () => {
     // Generate a new unique session key and switch to it.
     // NOTE: We intentionally do NOT call sessions.reset on the old session.
     // sessions.reset archives (renames) the session JSONL file, making old
@@ -1856,7 +1856,11 @@ export const useChatStore = create<ChatState>()(
     const newKey = `${prefix}:session-${Date.now()}`;
     const newAgentId = getAgentIdFromSessionKey(newKey);
     const pendingModel = get().pendingNewSessionModel?.trim();
-    const carriedModel = sessions.find((s) => s.key === currentSessionKey)?.model?.trim();
+    // Placeholder main session carries agent OpenClaw default (e.g. qwen3.5); do not
+    // treat it as user choice — workspace default from Settings applies instead.
+    const carriedModel = currentSessionKey !== DEFAULT_SESSION_KEY
+      ? sessions.find((s) => s.key === currentSessionKey)?.model?.trim()
+      : undefined;
     const chosenModel = pendingModel || carriedModel;
     const newSessionEntry: ChatSession = {
       key: newKey,
@@ -1899,7 +1903,7 @@ export const useChatStore = create<ChatState>()(
         pendingToolImages: [],
       };
     });
-    void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
+    await applyWorkspaceDefaultToNewSession(newKey, newAgentId);
   },
 
   // ── Cleanup empty session on navigate away ──

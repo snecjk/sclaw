@@ -6,9 +6,11 @@ import { hostApiFetch } from '@/lib/host-api';
 import {
   getWorkspaceDefaultRawModelId,
   normalizeModelIdForChat,
+  resolveProviderRawModelId,
   shouldSyncSessionToWorkspaceDefault,
 } from '@/lib/chat-model-options';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
+import type { ChatEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useProviderStore } from '@/stores/providers';
@@ -64,6 +66,34 @@ export async function syncWorkspaceDefaultModelToChat(opts: {
   }
 }
 
+async function persistSessionModelToGateway(opts: {
+  sessionKey: string;
+  model: string;
+  accountId: string;
+  agentId: string;
+  engineType: ChatEngineType;
+}): Promise<string | null> {
+  const { accounts } = useProviderStore.getState();
+  const resolved = resolveProviderRawModelId(accounts, opts.model, opts.accountId);
+  if (!resolved) return null;
+
+  const result = await hostApiFetch<{
+    model?: string;
+    modelOverride?: string | null;
+  }>('/api/sessions/model', {
+    method: 'POST',
+    body: JSON.stringify({
+      sessionKey: opts.sessionKey,
+      model: resolved.modelId,
+      accountId: resolved.accountId,
+      agentId: opts.agentId.trim() || undefined,
+      engineType: opts.engineType,
+    }),
+  });
+
+  return (result.modelOverride || result.model || resolved.modelId).trim() || null;
+}
+
 /** Apply workspace default model to a newly created session (toolbar + gateway).
  *  If the session already carries a model (e.g. from pendingNewSessionModel),
  *  that user-chosen model wins over the global workspace default. */
@@ -78,29 +108,28 @@ export async function applyWorkspaceDefaultToNewSession(
   const agent = useAgentsStore.getState().agents.find((item) => item.id === agentId);
   const engineType = resolveChatSessionEngineType(existingSession, agent?.engineType, trimmedKey);
   const { accounts, defaultAccountId } = useProviderStore.getState();
-  const accountId = defaultAccountId?.trim() ?? '';
-  if (!accountId) return;
+  const fallbackAccountId = defaultAccountId?.trim() ?? '';
+  if (!fallbackAccountId) return;
 
   const userChosenModel = existingSession?.model?.trim();
   if (userChosenModel) {
     try {
-      await hostApiFetch('/api/sessions/model', {
-        method: 'POST',
-        body: JSON.stringify({
-          sessionKey: trimmedKey,
-          model: userChosenModel,
-          accountId,
-          agentId: agentId.trim() || undefined,
-          engineType,
-        }),
+      const persisted = await persistSessionModelToGateway({
+        sessionKey: trimmedKey,
+        model: userChosenModel,
+        accountId: fallbackAccountId,
+        agentId,
+        engineType,
       });
-      useChatStore.setState((state) => ({
-        sessions: state.sessions.map((session) => (
-          session.key === trimmedKey
-            ? { ...session, model: userChosenModel }
-            : session
-        )),
-      }));
+      if (persisted) {
+        useChatStore.setState((state) => ({
+          sessions: state.sessions.map((session) => (
+            session.key === trimmedKey
+              ? { ...session, model: persisted }
+              : session
+          )),
+        }));
+      }
     } catch (err) {
       console.warn('[applyWorkspaceDefaultToNewSession] failed to persist user-chosen model:', err);
     }
@@ -112,23 +141,22 @@ export async function applyWorkspaceDefaultToNewSession(
   if (!rawModelId) return;
 
   try {
-    await hostApiFetch('/api/sessions/model', {
-      method: 'POST',
-      body: JSON.stringify({
-        sessionKey: trimmedKey,
-        model: rawModelId,
-        accountId,
-        agentId: agentId.trim() || undefined,
-        engineType,
-      }),
+    const persisted = await persistSessionModelToGateway({
+      sessionKey: trimmedKey,
+      model: rawModelId,
+      accountId: fallbackAccountId,
+      agentId,
+      engineType,
     });
-    useChatStore.setState((state) => ({
-      sessions: state.sessions.map((session) => (
-        session.key === trimmedKey
-          ? { ...session, model: rawModelId }
-          : session
-      )),
-    }));
+    if (persisted) {
+      useChatStore.setState((state) => ({
+        sessions: state.sessions.map((session) => (
+          session.key === trimmedKey
+            ? { ...session, model: persisted }
+            : session
+        )),
+      }));
+    }
     void useChatStore.getState().loadSessions();
     void useAgentsStore.getState().fetchAgents();
   } catch (err) {
