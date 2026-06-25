@@ -19,9 +19,11 @@ import {
   isConcreteModelId,
   normalizeModelIdForChat,
   resolveChatToolbarModelId,
+  upsertSessionModel,
   type ChatModelOption,
 } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
+import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { cn } from '@/lib/utils';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { toast } from 'sonner';
@@ -143,11 +145,16 @@ export function ChatEngineSelector({
   );
 
   const agentDefaultEngineType = currentAgent?.engineType ?? 'openclaw';
-  const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
-    ? agentDefaultEngineType
-    : currentSession?.engineType ?? agentDefaultEngineType;
+  const currentEngineType = resolveChatSessionEngineType(
+    currentSession,
+    agentDefaultEngineType,
+    currentSessionKey,
+  );
   const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
   const currentSessionEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
+  const displayEngineLabel = currentSessionKey === DEFAULT_SESSION_KEY
+    ? agentDefaultEngineLabel
+    : currentSessionEngineLabel;
   const canSwitchEngine = currentSessionKey === DEFAULT_SESSION_KEY;
   const showSessionEngineHint = !canSwitchEngine
     && currentSession?.engineType != null
@@ -211,7 +218,7 @@ export function ChatEngineSelector({
               className,
             )}
           >
-            <span className="min-w-0 flex-1 truncate">{agentDefaultEngineLabel}</span>
+            <span className="min-w-0 flex-1 truncate">{displayEngineLabel}</span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
           </button>
         </DropdownMenuTrigger>
@@ -248,7 +255,7 @@ export function ChatEngineSelector({
         <div className={cn(pillBase, pillStatic, 'max-w-[min(100vw-11rem,200px)] opacity-75')}>
           <Bot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
           <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-muted-foreground">
-            {currentSessionEngineLabel}
+            {displayEngineLabel}
           </span>
         </div>
       )}
@@ -324,9 +331,11 @@ export function ChatModelSelector({
   }, [accounts]);
 
   const agentDefaultEngineType = currentAgent?.engineType ?? 'openclaw';
-  const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
-    ? agentDefaultEngineType
-    : currentSession?.engineType ?? agentDefaultEngineType;
+  const currentEngineType = resolveChatSessionEngineType(
+    currentSession,
+    agentDefaultEngineType,
+    currentSessionKey,
+  );
 
   useEffect(() => {
     if (modelSaving) return;
@@ -421,11 +430,12 @@ export function ChatModelSelector({
         }
       }
       useChatStore.setState((state) => ({
-        sessions: state.sessions.map((session) => (
-          session.key === currentSessionKey
-            ? { ...session, model: persistedModel || modelId }
-            : session
-        )),
+        sessions: upsertSessionModel(
+          state.sessions,
+          currentSessionKey,
+          persistedModel || modelId,
+          { engineType: currentEngineType, label: '新对话' },
+        ),
       }));
     } catch (err) {
       toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));

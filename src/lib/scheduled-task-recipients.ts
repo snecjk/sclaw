@@ -120,6 +120,7 @@ export function mentionsToScheduledTaskFields(mentions: DingTalkMention[]): {
 interface CronDescriptionMeta {
   agentId?: string;
   dingTalkMentions?: DingTalkMention[];
+  workflowCode?: string;
 }
 
 export function parseCronDescriptionMeta(description?: string | null): CronDescriptionMeta {
@@ -136,9 +137,11 @@ export function parseCronDescriptionMeta(description?: string | null): CronDescr
 export function buildCronDescriptionMeta(
   agentId: string | null | undefined,
   mentions?: DingTalkMention[],
+  workflowCode?: string,
 ): string | undefined {
   const meta: CronDescriptionMeta = {};
   if (agentId?.trim()) meta.agentId = agentId.trim();
   if (hasResolvedDingTalkMentions(mentions)) meta.dingTalkMentions = mentions;
+  if (workflowCode?.trim()) meta.workflowCode = workflowCode.trim();
   return Object.keys(meta).length > 0 ? JSON.stringify(meta) : undefined;
 }

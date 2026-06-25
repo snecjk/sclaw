@@ -29,6 +29,7 @@ import { useSettingsStore } from './stores/settings';
 import { useAuthStore } from './stores/auth';
 import { useGatewayStore } from './stores/gateway';
 import { useProviderStore } from './stores/providers';
+import { useAgentsStore } from './stores/agents';
 import { useChatStore } from './stores/chat';
 import { useScheduledTaskUnreadStore } from './stores/scheduled-task-unread';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
@@ -114,6 +115,7 @@ function App() {
   const setupComplete = useSettingsStore((state) => state.setupComplete);
   const initGateway = useGatewayStore((state) => state.init);
   const initProviders = useProviderStore((state) => state.init);
+  const fetchAgents = useAgentsStore((state) => state.fetchAgents);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isAuthInitialized = useAuthStore((state) => state.isInitialized);
   const accessDenied = useAuthStore((state) => state.accessDenied);
@@ -140,6 +142,11 @@ function App() {
   useEffect(() => {
     initProviders();
   }, [initProviders]);
+
+  // Initialize agents data on mount
+  useEffect(() => {
+    fetchAgents().catch(() => {});
+  }, [fetchAgents]);
 
   // Auth guard: redirect to login if not authenticated, then to setup if not complete
   // Skip auth guard for sprite and float-icon routes (they manage their own initialization)

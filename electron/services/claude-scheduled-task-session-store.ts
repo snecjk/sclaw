@@ -58,6 +58,10 @@ export function buildClaudeTaskRunSessionKey(taskId: string, runId: string): str
   return `claude-task-run:${taskId}:${runId}`;
 }
 
+export function buildClaudeTaskDatedSessionKey(taskId: string, date: string): string {
+  return `claude-task:${taskId}:${date}`;
+}
+
 async function ensureParentDir(filePath: string): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
 }
@@ -156,6 +160,28 @@ async function ensureSummarySession(
   return createSummarySessionEntry(definition.id, sessionKey, definition.name);
 }
 
+/**
+ * Ensures a dated aggregate session exists for a Claude task.
+ * Dated sessions follow the format: claude-task:{taskId}:{YYYY-MM-DD}
+ */
+async function ensureDatedSession(
+  definition: ClaudeScheduledTaskDefinition,
+  date: string,
+): Promise<SessionStoreEntry> {
+  const sessionKey = buildClaudeTaskDatedSessionKey(definition.id, date);
+  const store = await readSessionStore(definition.id);
+  const existing = findSessionEntry(store, sessionKey);
+  if (existing) {
+    try {
+      await access(existing.sessionFile);
+      return existing;
+    } catch {
+      // Recreate if the jsonl file is missing.
+    }
+  }
+  return createSummarySessionEntry(definition.id, sessionKey, definition.name);
+}
+
 function normalizeTimestamp(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim()) {
@@ -208,7 +234,18 @@ export async function appendClaudeScheduledTaskSummaryRun(
   definition: ClaudeScheduledTaskDefinition,
   run: ClaudeScheduledTaskRunRecord,
 ): Promise<void> {
-  const session = await ensureSummarySession(definition);
+  // Determine the date from the run's scheduled time (or startedAt as fallback)
+  const runDateStr = run.scheduledFor ?? run.startedAt ?? new Date().toISOString();
+  const runDate = new Date(runDateStr);
+  const y = runDate.getFullYear();
+  const m = String(runDate.getMonth() + 1).padStart(2, '0');
+  const d = String(runDate.getDate()).padStart(2, '0');
+  const dateStr = `${y}-${m}-${d}`;
+
+  // Write to both the base summary session AND the dated aggregate session
+  const summarySession = await ensureSummarySession(definition);
+  const datedSession = await ensureDatedSession(definition, dateStr);
+
   const now = run.completedAt ?? run.startedAt ?? new Date().toISOString();
   const lines = [
     JSON.stringify({
@@ -228,7 +265,9 @@ export async function appendClaudeScheduledTaskSummaryRun(
       },
     }),
   ];
-  await appendFile(session.sessionFile, `${lines.join('\n')}\n`, 'utf8');
+  const content = `${lines.join('\n')}\n`;
+  await appendFile(summarySession.sessionFile, content, 'utf8');
+  await appendFile(datedSession.sessionFile, content, 'utf8');
 }
 
 export async function listClaudeScheduledTaskSummarySessions(): Promise<ClaudeScheduledTaskSessionListItem[]> {
@@ -244,26 +283,84 @@ export async function listClaudeScheduledTaskSummarySessions(): Promise<ClaudeSc
   }
 
   for (const taskId of taskIds) {
-    const sessionKey = buildClaudeTaskSummarySessionKey(taskId);
     const store = await readSessionStore(taskId);
-    const entry = findSessionEntry(store, sessionKey);
-    if (!entry) continue;
 
-    let updatedAt: number | undefined;
-    try {
-      updatedAt = (await stat(entry.sessionFile)).mtimeMs;
-    } catch {
-      // Ignore missing file metadata.
+    // Include base summary session
+    const baseKey = buildClaudeTaskSummarySessionKey(taskId);
+    const baseEntry = findSessionEntry(store, baseKey);
+    if (baseEntry) {
+      let updatedAt: number | undefined;
+      try {
+        updatedAt = (await stat(baseEntry.sessionFile)).mtimeMs;
+      } catch {
+        // Ignore missing file metadata.
+      }
+      items.push({
+        key: baseKey,
+        label: baseEntry.label || `Claude 定时任务 ${taskId}`,
+        displayName: baseEntry.label || `Claude 定时任务 ${taskId}`,
+        sessionFile: baseEntry.sessionFile,
+        updatedAt,
+        engineType: 'claude',
+      });
     }
 
-    items.push({
-      key: sessionKey,
-      label: entry.label || `Claude 定时任务 ${taskId}`,
-      displayName: entry.label || `Claude 定时任务 ${taskId}`,
-      sessionFile: entry.sessionFile,
-      updatedAt,
-      engineType: 'claude',
-    });
+    // Include dated aggregate sessions (claude-task:{taskId}:{YYYY-MM-DD})
+    // Scan the store for all keys matching the dated format
+    for (const [key, value] of Object.entries(store)) {
+      if (typeof value !== 'object' || value === null) continue;
+      const entry = value as Record<string, unknown>;
+      if (typeof entry.sessionId !== 'string' || typeof entry.sessionFile !== 'string') continue;
+
+      // Check if key matches claude-task:{taskId}:{date}
+      if (key.startsWith(`claude-task:${taskId}:`)) {
+        const datePart = key.slice(`claude-task:${taskId}:`.length);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+          let updatedAt: number | undefined;
+          try {
+            updatedAt = (await stat(String(entry.sessionFile))).mtimeMs;
+          } catch {
+            // Ignore missing file metadata.
+          }
+          items.push({
+            key,
+            label: (typeof entry.label === 'string' ? entry.label : '') || `Claude 定时任务 ${taskId}`,
+            displayName: (typeof entry.label === 'string' ? entry.label : '') || `Claude 定时任务 ${taskId}`,
+            sessionFile: String(entry.sessionFile),
+            updatedAt,
+            engineType: 'claude',
+          });
+        }
+      }
+    }
+
+    // Also check the sessions array (legacy format)
+    if (Array.isArray(store.sessions)) {
+      for (const item of store.sessions) {
+        if (!item.sessionKey || !item.sessionFile) continue;
+        if (item.sessionKey.startsWith(`claude-task:${taskId}:`)) {
+          const datePart = item.sessionKey.slice(`claude-task:${taskId}:`.length);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+            // Skip if already added from Object.entries
+            if (items.some((i) => i.key === item.sessionKey)) continue;
+            let updatedAt: number | undefined;
+            try {
+              updatedAt = (await stat(item.sessionFile)).mtimeMs;
+            } catch {
+              // Ignore missing file metadata.
+            }
+            items.push({
+              key: item.sessionKey!,
+              label: item.label || `Claude 定时任务 ${taskId}`,
+              displayName: item.label || `Claude 定时任务 ${taskId}`,
+              sessionFile: item.sessionFile,
+              updatedAt,
+              engineType: 'claude',
+            });
+          }
+        }
+      }
+    }
   }
 
   items.sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0));
@@ -274,15 +371,36 @@ export async function readClaudeScheduledTaskSessionHistory(
   sessionKey: string,
   limit = 100,
 ): Promise<ClaudeScheduledTaskSessionMessage[]> {
-  if (!sessionKey.startsWith('claude-task:')) {
+  // 支持 claude-task:{taskId}（汇总会话）、claude-task:{taskId}:{YYYY-MM-DD}（按天聚合）和 claude-task-run:{taskId}:{runId}（运行会话）三种格式
+  let taskId: string;
+  let effectiveSessionKey: string;
+
+  if (sessionKey.startsWith('claude-task-run:')) {
+    const parts = sessionKey.split(':');
+    taskId = parts[1] ?? '';
+    if (!taskId) return [];
+    // 运行会话的历史记录回退到对应的汇总会话
+    effectiveSessionKey = `claude-task:${taskId}`;
+  } else if (sessionKey.startsWith('claude-task:')) {
+    const rest = sessionKey.slice('claude-task:'.length);
+    const parts = rest.split(':');
+    if (parts.length === 2 && /^\d{4}-\d{2}-\d{2}$/.test(parts[1] ?? '')) {
+      // claude-task:{taskId}:{YYYY-MM-DD} — dated aggregate
+      taskId = parts[0] ?? '';
+      if (!taskId) return [];
+      effectiveSessionKey = sessionKey;
+    } else {
+      // claude-task:{taskId} — base summary
+      taskId = rest;
+      if (!taskId) return [];
+      effectiveSessionKey = sessionKey;
+    }
+  } else {
     return [];
   }
 
-  const taskId = sessionKey.slice('claude-task:'.length);
-  if (!taskId) return [];
-
   const store = await readSessionStore(taskId);
-  const entry = findSessionEntry(store, sessionKey);
+  const entry = findSessionEntry(store, effectiveSessionKey);
   if (!entry) return [];
 
   let raw = '';

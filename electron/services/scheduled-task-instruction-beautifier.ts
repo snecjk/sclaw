@@ -26,8 +26,6 @@ const SYSTEM_PROMPT = [
 
 export interface BeautifyScheduledTaskInstructionInput {
   instruction: string;
-  taskName?: string;
-  cronExpr?: string;
   workflowId?: string;
   workflowName?: string;
 }
@@ -147,6 +145,8 @@ function normalizeRulesFallbackInstruction(
     workflowId: undefined,
     workflowName: undefined,
   });
+}
+
 function sanitizeModelOutput(text: string): string {
   let result = text.trim();
   if (result.startsWith('```')) {

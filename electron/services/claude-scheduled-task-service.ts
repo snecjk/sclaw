@@ -27,6 +27,7 @@ export interface ClaudeScheduledTaskSummary {
   model?: string;
   permissionProfile: ClaudeTaskPermissionProfile;
   timeoutSec: number;
+  workflowCode?: string;
   nextRunAt?: string;
   lastRun?: Pick<ClaudeScheduledTaskRunRecord, 'runId' | 'status' | 'scheduledFor' | 'completedAt' | 'summary' | 'error'> | null;
   createdAt: string;
@@ -54,8 +55,7 @@ export interface ClaudeScheduledTaskCreateInput {
   model?: string;
   permissionProfile?: ClaudeTaskPermissionProfile;
   timeoutSec?: number;
-  workflowId?: string;
-  workflowName?: string;
+  workflowCode?: string;
   retryPolicy?: {
     maxAttempts?: number;
     backoffSec?: number;
@@ -117,6 +117,7 @@ function buildDefinitionFromCreateInput(input: ClaudeScheduledTaskCreateInput): 
     model: input.model?.trim() || undefined,
     permissionProfile: normalizePermissionProfile(input.permissionProfile),
     timeoutSec: Math.max(1, input.timeoutSec ?? 300),
+    workflowCode: input.workflowCode?.trim() || undefined,
     retryPolicy: {
       maxAttempts: Math.max(1, input.retryPolicy?.maxAttempts ?? 1),
       backoffSec: Math.max(1, input.retryPolicy?.backoffSec ?? 30),
@@ -145,6 +146,7 @@ function applyUpdate(
     ...(input.model !== undefined ? { model: input.model?.trim() || undefined } : {}),
     ...(input.permissionProfile != null ? { permissionProfile: normalizePermissionProfile(input.permissionProfile) } : {}),
     ...(input.timeoutSec != null ? { timeoutSec: Math.max(1, input.timeoutSec) } : {}),
+    ...(input.workflowCode !== undefined ? { workflowCode: input.workflowCode?.trim() || undefined } : {}),
     ...(input.retryPolicy != null ? {
       retryPolicy: {
         maxAttempts: Math.max(1, input.retryPolicy.maxAttempts ?? existing.retryPolicy.maxAttempts),
@@ -190,6 +192,7 @@ export class ClaudeScheduledTaskService {
       model: definition.model,
       permissionProfile: definition.permissionProfile,
       timeoutSec: definition.timeoutSec,
+      workflowCode: definition.workflowCode,
       nextRunAt: state.tasks?.[definition.id]?.nextRunAt,
       lastRun: await getLatestClaudeScheduledTaskRunRecord(definition.id).then((run) => (
         run

@@ -20,6 +20,7 @@ export interface ClaudeScheduledTaskDefinition {
   model?: string;
   permissionProfile: ClaudeTaskPermissionProfile;
   timeoutSec: number;
+  workflowCode?: string;
   retryPolicy: {
     maxAttempts: number;
     backoffSec: number;

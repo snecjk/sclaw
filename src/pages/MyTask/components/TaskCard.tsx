@@ -83,8 +83,8 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
 
   const scheduleLabel = task.scheduleText ?? parseScheduleToLabel(task.cronExpr);
   const nextRunLabel = formatNextRunLabel(task.nextRunAt, task.enabled);
-  /** 从 description 中提取 wf_ 开头的工作流 ID */
-  const workflowId = task.description?.match(/wf_\w+/)?.[0] ?? null;
+  /** 关联工作流 code，用于显示"工作流"badge */
+  const workflowId = task.workflowCode ?? null;
 
   return (
     <article
