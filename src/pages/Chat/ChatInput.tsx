@@ -777,10 +777,14 @@ export function ChatInput({
           <div className={cn(
             'px-4',
             isHomeComposer
-              ? attachments.length > 0 ? 'pt-1' : 'pt-3'
+              ? cn(
+                  // flex-1 吸收 min-h-[120px] 剩余高度，避免底栏下方出现额外空白（底栏 pb-3 ≈ 12px）
+                  'flex min-h-0 flex-1 flex-col',
+                  attachments.length > 0 ? 'pt-1' : 'pt-3',
+                )
               : cn(attachments.length > 0 ? 'pt-1.5' : 'pt-2.5'),
           )}>
-            <div ref={mentionPopoverRef} className={cn('relative', !isHomeComposer && 'flex-1')}>
+            <div ref={mentionPopoverRef} className="relative flex-1">
               <DingTalkMentionPopover
                 open={dingTalkMentionOpen}
                 items={dingTalkItems}

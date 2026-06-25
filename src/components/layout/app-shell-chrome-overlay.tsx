@@ -31,7 +31,7 @@ function WindowsControlsOverlay() {
   }, []);
 
   return (
-    <div className="no-drag absolute right-0 top-0 z-40 flex min-h-[var(--sto-chrome-h)] items-start pr-1 pt-[var(--sto-chrome-toggle-inset-top)]">
+    <div className="no-drag pointer-events-auto absolute right-0 top-0 z-50 flex min-h-[var(--sto-chrome-h)] items-start pr-1 pt-[var(--sto-chrome-toggle-inset-top)]">
       <button
         type="button"
         onClick={() => invokeIpc('window:minimize')}
