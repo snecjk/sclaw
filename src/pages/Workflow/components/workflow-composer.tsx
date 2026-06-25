@@ -1,8 +1,8 @@
 /**
  * WorkflowComposer - 工作流列表 Hero 输入区
  *
- * 与首页 HomeComposer、对话页 ChatInput（composerLayout=home）共用同一套输入复合框：
- * 附件 / @提及 / 引擎·模型选择 / 圆角 22px 壳层。
+ * 使用 Workflow 专用输入框（无底栏工具行，仅右下角发送箭头），
+ * 与首页 HomeComposer、对话页 ChatInput 解耦，互不影响。
  * 使用位置：src/pages/Workflow/components/workflow-dashboard.tsx
  */
 import { useCallback, useMemo } from 'react';
@@ -12,11 +12,9 @@ import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
 import { stoParameterFormDockLayout } from '@/lib/surfaces';
-import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
+import { WorkflowComposerInput } from '@/pages/Workflow/components/workflow-composer-input';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
-import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
-import type { DingTalkMention } from '@/types/dingtalk-mention';
 
 export interface WorkflowComposerProps {
   /** 快捷 chip 或外部填入的一次性种子文案 */
@@ -51,13 +49,7 @@ export function WorkflowComposer({ seedText, onGenerate, className }: WorkflowCo
   const requiresGateway = resolvedEngineType !== 'claude';
 
   const handleGenerateSend = useCallback(
-    (
-      text: string,
-      _attachments?: FileAttachment[],
-      _targetAgentId?: string | null,
-      _dingTalkMentions?: DingTalkMention[],
-      _workflowId?: string | null,
-    ) => {
+    (text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
       onGenerate(trimmed);
@@ -65,28 +57,15 @@ export function WorkflowComposer({ seedText, onGenerate, className }: WorkflowCo
     [onGenerate],
   );
 
-  const inlineToolbarSelectors = (
-    <div className="flex min-w-0 flex-1 items-center gap-2">
-      <ChatEngineSelector variant="inline" className="min-w-0 flex-1" />
-      <ChatModelSelector variant="inline" className="min-w-0 flex-1" />
-    </div>
-  );
-
   return (
     <div className={cn('flex flex-col', className)}>
       <ParameterFormDock layout={stoParameterFormDockLayout('home')} />
       <section className="flex flex-col" aria-label={t('generate.sendAria')}>
-        <ChatInput
+        <WorkflowComposerInput
           onSend={handleGenerateSend}
-          onQueue={handleGenerateSend}
           disabled={requiresGateway && !isGatewayRunning}
-          sending={false}
-          variant="embedded"
           seedText={seedText}
           placeholder={t('generate.placeholder')}
-          composerLayout="home"
-          toolbarInlineSelectors={inlineToolbarSelectors}
-          engineType={resolvedEngineType}
         />
       </section>
     </div>
