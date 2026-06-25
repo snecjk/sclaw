@@ -159,6 +159,7 @@ export function useWorkflowList(): UseWorkflowListResult {
         schedule: '',
         scheduleIcon: 'clock' as const,
         description: item.description ?? '',
+        // TODO: 官方推荐流程节点 — POST /agent/v1/workflow-templates nodes/edges 未就绪，暂不接 card.flow
         flow: [],
         coverKey: pickCoverKeyFromWorkflowId(item.id),
       })));

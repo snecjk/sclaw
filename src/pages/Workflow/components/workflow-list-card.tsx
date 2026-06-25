@@ -148,12 +148,14 @@ export function WorkflowMineListCard({
               aria-label={card.enabled ? t('card.pauseSchedule') : t('card.resumeSchedule')}
             /> */}
           </div>
-          <div className={cn(workflowListCardScheduleRowClass, 'flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5')}>
-            <span className={cn(card.scheduleMuted && 'text-muted-foreground/80')}>{card.schedule}</span>
-            {card.showPausedLabel ? (
-              <span className="text-warning">{t('card.pausedLabel')}</span>
-            ) : null}
-          </div>
+          {card.schedule.trim() || card.showPausedLabel ? (
+            <div className={cn(workflowListCardScheduleRowClass, 'flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5')}>
+              <span className={cn(card.scheduleMuted && 'text-muted-foreground/80')}>{card.schedule}</span>
+              {card.showPausedLabel ? (
+                <span className="text-warning">{t('card.pausedLabel')}</span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <p className="m-0 text-[13px] leading-relaxed text-foreground/80">{card.description}</p>
@@ -207,7 +209,7 @@ export interface WorkflowOfficialListCardProps {
   onCreateFromTemplate: () => void;
 }
 
-/** 「官方推荐」卡片：标题+排期+描述+流程+分类标签+预览/安装 */
+/** 「官方推荐」卡片：标题+排期+描述+分类标签+预览/安装（流程节点待接口就绪后接入） */
 export function WorkflowOfficialListCard({
   card,
   onCardClick,
@@ -224,10 +226,13 @@ export function WorkflowOfficialListCard({
           <div className={workflowListCardTitleRowClass}>
             <div className="min-w-0 flex-1 text-[15px] font-semibold text-foreground">{card.name}</div>
           </div>
-          <div className={workflowListCardScheduleRowClass}>{card.schedule}</div>
+          {card.schedule.trim() ? (
+            <div className={workflowListCardScheduleRowClass}>{card.schedule}</div>
+          ) : null}
         </div>
         <p className="m-0 text-[13px] leading-relaxed text-foreground/80">{card.description}</p>
-        <WorkflowFlowRow flow={card.flow} />
+        {/* TODO: POST /agent/v1/workflow-templates 节点摘要未就绪，card.flow 暂为空；接口稳定后恢复 WorkflowFlowRow */}
+        {/* {card.flow.length > 0 ? <WorkflowFlowRow flow={card.flow} /> : null} */}
       </div>
       <div className={cn(workflowListCardFooterClass, 'flex flex-wrap items-center justify-end gap-2')}>
         <span className="mr-auto rounded-lg bg-muted px-2 py-0.5 text-xs text-foreground/80">{card.category}</span>
