@@ -4,6 +4,10 @@
  */
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  parameterFormDockOptionHoverClass,
+  parameterFormDockOptionSelectedClass,
+} from '@/lib/surfaces';
 import type { FormFieldOption } from '@/types/user-form';
 
 export type OptionCardMode = 'single' | 'multi' | 'display';
@@ -91,8 +95,8 @@ export function OptionCardList({
                   ? isDisplay
                     ? 'bg-muted/60'
                     : selected
-                      ? 'bg-transparent'
-                      : 'bg-transparent hover:bg-[#FAFAFA]'
+                      ? parameterFormDockOptionSelectedClass
+                      : parameterFormDockOptionHoverClass
                   : isDisplay
                     ? 'border-[#E5E6EB] bg-[#F5F6F7]'
                     : selected
@@ -108,7 +112,7 @@ export function OptionCardList({
                     ? cn(
                         'mt-0.5 h-[18px] w-[18px] rounded-[9px] text-[10px] leading-[10px]',
                         isDisplay || !selected
-                          ? 'bg-[#E5E6EB] text-[#4E5969]'
+                          ? 'bg-muted text-muted-foreground'
                           : 'bg-primary text-primary-foreground',
                       )
                     : 'mt-0.5 h-6 w-6 rounded-full bg-[var(--sto-brand-6)] text-[11px] font-bold text-white',
@@ -134,7 +138,7 @@ export function OptionCardList({
                   <p
                     className={cn(
                       isDock
-                        ? 'mt-0.5 text-xs leading-[14px] text-[#8C8C8C]'
+                        ? 'mt-0.5 text-xs leading-[14px] text-muted-foreground'
                         : 'mt-1 text-[12.5px] leading-relaxed text-[#86909C]',
                     )}
                   >

@@ -245,7 +245,7 @@ export function WorkflowCard({
         >
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate text-[13px] font-medium leading-4 text-[#1A1A1A]">
+              <p className="truncate text-[13px] font-medium leading-4 text-foreground">
                 {resolvedName}
               </p>
               {durationLabel && (isRunning || (isTerminal && display.completedAt)) ? (

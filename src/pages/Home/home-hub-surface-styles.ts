@@ -8,8 +8,11 @@ export const homeHubTextPrimary = 'text-[#1D2129] dark:text-foreground';
 
 export const homeHubTextSecondary = 'text-[#86909C] dark:text-muted-foreground';
 
-/** MasterGo 卡片壳：r18、白底、shadow-glow，设计稿无描边 */
-export const homeHubCardShellClass = 'flex flex-col rounded-[18px] bg-card p-4 shadow-glow';
+/** MasterGo 卡片壳：r18、白底、shadow-glow，设计稿无描边；暗色用 secondary 与主卡片底色分层 */
+export const homeHubCardShellClass = cn(
+  'flex flex-col rounded-[18px] bg-card p-4 shadow-glow',
+  'dark:bg-secondary dark:shadow-soft',
+);
 
 /** 可点击卡片（工作流 / 经营管理卡）在统一壳层上保留 hover */
 export const homeHubInteractiveCardShellClass = cn(

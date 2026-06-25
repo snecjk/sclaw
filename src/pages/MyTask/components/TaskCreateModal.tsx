@@ -5,6 +5,14 @@ import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
 import { DingTalkRecipientField } from '@/components/dingtalk/DingTalkRecipientField';
 import { useMyTaskStore } from '../store';
 import { cn } from '@/lib/utils';
+import {
+  dropdownOptionClass,
+  dropdownPanelClass,
+  formFieldFocusClass,
+  formFieldHoverBorderClass,
+  formFieldOpenClass,
+  modalPrimarySubmitButtonClass,
+} from '@/lib/surfaces';
 import type { CronJobCreateInput } from '@/types/cron';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { ManagedLocalTask } from '@/stores/cron';
@@ -249,12 +257,13 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
               onChange={(e) => { setName(e.target.value); if (errors.name) setErrors(p => ({ ...p, name: undefined })); }}
               placeholder="描述你的任务"
               className={cn(
-                "w-full h-[42px] px-3.5 text-sm rounded-[10px] border bg-background placeholder:text-muted-foreground focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] transition-colors",
-                errors.name ? "border-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.12)]" : "border-border"
+                'h-[42px] w-full rounded-[10px] border bg-background px-3.5 text-sm transition-colors placeholder:text-muted-foreground',
+                formFieldFocusClass,
+                errors.name ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]' : 'border-border',
               )}
               autoComplete="off"
             />
-            {errors.name && <p className="text-xs text-red-600">{errors.name}</p>}
+            {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
 
           {/* Engine Type */}
@@ -265,7 +274,10 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
             <select
               value={engineType}
               onChange={(e) => setEngineType(e.target.value as TaskEngineType)}
-              className="w-full h-[42px] px-3.5 text-sm rounded-[10px] border border-border bg-background focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] transition-colors"
+              className={cn(
+                'h-[42px] w-full rounded-[10px] border border-border bg-background px-3.5 text-sm transition-colors',
+                formFieldFocusClass,
+              )}
             >
               <option value="openclaw">OpenClaw</option>
               {resolvePreferredAgentByEngine(agents, defaultAgentId, 'claude') ? (
@@ -289,8 +301,8 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
                 type="button"
                 onClick={() => setWorkflowOpen(!workflowOpen)}
                 className={cn(
-                  "flex items-center justify-between gap-1.5 w-full h-[42px] px-3.5 pr-2.5 text-sm font-medium rounded-[10px] border bg-background cursor-pointer outline-none transition-colors",
-                  workflowOpen ? "border-[#c5cad3] shadow-[0_0_0_3px_rgba(15,23,42,0.06)]" : "border-border hover:border-[#c5cad3]"
+                  'flex h-[42px] w-full cursor-pointer items-center justify-between gap-1.5 rounded-[10px] border bg-background px-3.5 pr-2.5 text-sm font-medium outline-none transition-colors',
+                  workflowOpen ? formFieldOpenClass : cn('border-border', formFieldHoverBorderClass),
                 )}
               >
                 <span className={cn("truncate", !selectedWorkflow && "text-muted-foreground font-normal")}>
@@ -300,7 +312,7 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
               </button>
               {workflowOpen && (
                 <div className="absolute top-[calc(100%+6px)] left-0 z-20 w-full min-w-[140px]">
-                  <div className="flex flex-col gap-0.5 max-h-[280px] p-1.5 overflow-y-auto border border-border rounded-xl bg-background shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
+                  <div className={cn('flex max-h-[280px] flex-col gap-0.5 overflow-y-auto rounded-xl p-1.5', dropdownPanelClass)}>
                     {workflowOptions.length === 0 && (
                       <div className="px-2.5 py-3 text-sm text-muted-foreground text-center">暂无可用工作流</div>
                     )}
@@ -320,15 +332,12 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
                             setWorkflowOpen(false);
                           }}
                           className={cn(
-                            'flex items-center justify-between gap-2 w-full min-h-9 px-2.5 py-2 rounded-lg text-sm transition-colors',
-                            isSelected ? 'font-semibold' : 'text-foreground'
+                            'flex w-full min-h-9 items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm',
+                            dropdownOptionClass(isSelected),
                           )}
-                          style={isSelected ? { background: '#fff7ed', color: '#c2410c' } : undefined}
-                          onMouseEnter={(e) => { if (!isSelected) { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#c2410c'; } }}
-                          onMouseLeave={(e) => { if (!isSelected) { e.currentTarget.style.background = ''; e.currentTarget.style.color = ''; } }}
                         >
                           <span>{opt.label}</span>
-                          <Check className="w-4 h-4 shrink-0" style={{ color: '#c2410c', opacity: isSelected ? 1 : 0 }} />
+                          <Check className={cn('h-4 w-4 shrink-0 text-primary', isSelected ? 'opacity-100' : 'opacity-0')} />
                         </button>
                       );
                     })}
@@ -350,12 +359,13 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
               disabled={workflowDisabled}
               placeholder="让 S Claw 帮你做什么…"
               className={cn(
-                "w-full px-3.5 py-2.5 text-sm rounded-[10px] border bg-background placeholder:text-muted-foreground focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] resize-none transition-colors leading-relaxed",
-                errors.instructions ? "border-red-600 shadow-[0_0_0_3px_rgba(220,38,38,0.12)]" : "border-border",
-                workflowDisabled && "bg-muted cursor-not-allowed opacity-70"
+                'w-full resize-none rounded-[10px] border bg-background px-3.5 py-2.5 text-sm leading-relaxed transition-colors placeholder:text-muted-foreground',
+                formFieldFocusClass,
+                errors.instructions ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]' : 'border-border',
+                workflowDisabled && 'cursor-not-allowed bg-muted opacity-70',
               )}
             />
-            {errors.instructions && <p className="text-xs text-red-600">{errors.instructions}</p>}
+            {errors.instructions && <p className="text-xs text-destructive">{errors.instructions}</p>}
             {workflowDisabled && (
               <p className="text-xs text-muted-foreground">已关联工作流，描述内容自动生成</p>
             )}
@@ -385,7 +395,11 @@ export function TaskCreateModal({ job, open, onClose, onSave, initialValues }: T
           <Button variant="outline" onClick={onClose} className="rounded-[10px] px-5 h-[42px] text-sm">
             取消
           </Button>
-          <Button onClick={handleSubmit} disabled={saving} className="rounded-[10px] px-5 h-[42px] text-sm bg-[#111] text-white border-none shadow-[0_2px_10px_rgba(0,0,0,0.15)] hover:bg-[#111]">
+          <Button
+            onClick={handleSubmit}
+            disabled={saving}
+            className={modalPrimarySubmitButtonClass}
+          >
             {saving ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />

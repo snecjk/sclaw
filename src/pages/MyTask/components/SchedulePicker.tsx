@@ -1,6 +1,12 @@
 import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback, type RefObject } from 'react';
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  dropdownOptionClass,
+  formFieldOpenClass,
+  schedulePickerDropdownPanelClass,
+  schedulePickerTriggerClass,
+} from '@/lib/surfaces';
 
 export interface ScheduleValue {
   frequency: 'daily' | 'weekly' | 'monthly' | 'once';
@@ -69,9 +75,13 @@ const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
 const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
 const MONTH_DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
 
-// 设计稿颜色 token
-const ORANGE = '#ff8c00';
-const ORANGE_SOFT = '#fff3e0';
+const scheduleCalendarNavButtonClass = cn(
+  'flex h-7 w-7 items-center justify-center rounded-md text-base text-muted-foreground transition-colors',
+  'hover:bg-muted hover:text-foreground',
+);
+
+const scheduleCalendarDayHoverClass =
+  'text-foreground hover:bg-primary/10 hover:text-primary';
 
 interface SchedulePickerProps {
   value: ScheduleValue;
@@ -136,17 +146,14 @@ function FrequencyPicker({
       <button
         type="button"
         onClick={toggle}
-        className={cn(
-          "flex items-center justify-between gap-1.5 w-full h-[42px] px-3.5 pr-2.5 text-sm font-medium rounded-[10px] border bg-background text-foreground cursor-pointer outline-none transition-colors",
-          open ? "border-[#c5cad3] shadow-[0_0_0_3px_rgba(15,23,42,0.06)]" : "border-border hover:border-[#c5cad3]"
-        )}
+        className={cn(schedulePickerTriggerClass, open ? formFieldOpenClass : 'border-border')}
       >
         <span className="truncate">{displayLabel}</span>
         <span className="shrink-0 text-muted-foreground"><ChevronDownIcon /></span>
       </button>
       {open && (
         <div className={cn(dropdownPositionClass(dir), 'w-full min-w-[140px]')}>
-          <div className="flex flex-col gap-0.5 max-h-[280px] p-1.5 overflow-y-auto border border-border rounded-xl bg-background shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
+          <div className={cn(schedulePickerDropdownPanelClass, 'flex max-h-[280px] flex-col gap-0.5 overflow-y-auto p-1.5')}>
             {FREQUENCY_OPTIONS.map((opt) => {
               const selected = value === opt.value;
               return (
@@ -155,16 +162,13 @@ function FrequencyPicker({
                   type="button"
                   onClick={() => { onChange(opt.value); setOpen(false); onOpenChange(false); }}
                   className={cn(
-                    "flex items-center justify-between gap-2 w-full min-h-9 px-2.5 py-2 rounded-lg text-sm transition-colors",
-                    selected ? "font-semibold" : "text-foreground"
+                    'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm',
+                    dropdownOptionClass(selected),
                   )}
-                  style={selected ? { background: ORANGE_SOFT, color: ORANGE } : undefined}
-                  onMouseEnter={(e) => { if (!selected) { (e.currentTarget.style.background = ORANGE_SOFT); (e.currentTarget.style.color = ORANGE); } }}
-                  onMouseLeave={(e) => { if (!selected) { (e.currentTarget.style.background = ''); (e.currentTarget.style.color = ''); } }}
                 >
                   <span>{opt.label}</span>
-                  <span className="shrink-0 w-4 h-4 flex" style={{ color: ORANGE, opacity: selected ? 1 : 0 }}>
-                    <Check className="w-4 h-4" />
+                  <span className={cn('flex h-4 w-4 shrink-0 text-primary', !selected && 'opacity-0')}>
+                    <Check className="h-4 w-4" />
                   </span>
                 </button>
               );
@@ -229,9 +233,9 @@ function WeekdaysPicker({
         type="button"
         onClick={toggle}
         className={cn(
-          "flex items-center justify-between gap-1.5 w-full h-[42px] px-3.5 pr-2.5 text-sm font-medium rounded-[10px] border bg-background cursor-pointer outline-none transition-colors",
-          weekDays.length === 0 ? "text-muted-foreground" : "text-foreground",
-          open ? "border-[#c5cad3] shadow-[0_0_0_3px_rgba(15,23,42,0.06)]" : "border-border hover:border-[#c5cad3]"
+          schedulePickerTriggerClass,
+          weekDays.length === 0 ? 'text-muted-foreground' : 'text-foreground',
+          open ? formFieldOpenClass : 'border-border',
         )}
       >
         <span className="truncate">{displayLabel}</span>
@@ -239,7 +243,7 @@ function WeekdaysPicker({
       </button>
       {open && (
         <div className={cn(dropdownPositionClass(dir), 'w-full min-w-[140px]')}>
-          <div className="flex flex-col gap-0.5 max-h-[280px] p-1.5 overflow-y-auto border border-border rounded-xl bg-background shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
+          <div className={cn(schedulePickerDropdownPanelClass, 'flex max-h-[280px] flex-col gap-0.5 overflow-y-auto p-1.5')}>
             {WEEKDAY_DROPDOWN_OPTIONS.map((opt) => {
               const checked = weekDays.includes(opt.value);
               return (
@@ -248,16 +252,13 @@ function WeekdaysPicker({
                   type="button"
                   onClick={() => handleOptionClick(opt.value)}
                   className={cn(
-                    "flex items-center justify-between gap-2 w-full min-h-9 px-2.5 py-2 rounded-lg text-sm transition-colors",
-                    checked ? "font-semibold" : "text-foreground"
+                    'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm',
+                    dropdownOptionClass(checked),
                   )}
-                  style={checked ? { background: ORANGE_SOFT, color: ORANGE } : undefined}
-                  onMouseEnter={(e) => { if (!checked) { (e.currentTarget.style.background = ORANGE_SOFT); (e.currentTarget.style.color = ORANGE); } }}
-                  onMouseLeave={(e) => { if (!checked) { (e.currentTarget.style.background = ''); (e.currentTarget.style.color = ''); } }}
                 >
                   <span>{opt.label}</span>
-                  <span className="shrink-0 w-4 h-4 flex" style={{ color: ORANGE, opacity: checked ? 1 : 0 }}>
-                    <Check className="w-4 h-4" />
+                  <span className={cn('flex h-4 w-4 shrink-0 text-primary', !checked && 'opacity-0')}>
+                    <Check className="h-4 w-4" />
                   </span>
                 </button>
               );
@@ -364,27 +365,24 @@ function OnceDatePicker({
       <button
         type="button"
         onClick={toggle}
-        className={cn(
-          "flex items-center justify-between gap-1.5 w-full h-[42px] px-3.5 pr-2.5 text-sm font-medium rounded-[10px] border bg-background text-foreground cursor-pointer outline-none transition-colors tabular-nums",
-          open ? "border-[#c5cad3] shadow-[0_0_0_3px_rgba(15,23,42,0.06)]" : "border-border hover:border-[#c5cad3]"
-        )}
+        className={cn(schedulePickerTriggerClass, 'tabular-nums', open ? formFieldOpenClass : 'border-border')}
       >
-        <span className={cn("truncate", !onceDate && "text-muted-foreground font-normal")}>{displayLabel}</span>
+        <span className={cn('truncate', !onceDate && 'font-normal text-muted-foreground')}>{displayLabel}</span>
         <span className="shrink-0 text-muted-foreground"><ChevronDownIcon /></span>
       </button>
       {open && (
         <div className={cn(dir === 'up' ? 'absolute bottom-[calc(100%+6px)] left-0 z-[25]' : 'absolute top-[calc(100%+6px)] left-0 z-[25]', 'w-[min(300px,calc(100vw-48px))]')}>
-          <div className="p-3 pb-2.5 border border-border rounded-xl bg-background shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
+          <div className={cn(schedulePickerDropdownPanelClass, 'p-3 pb-2.5')}>
             {/* Header nav */}
-            <div className="flex items-center justify-center gap-1 mb-2.5">
-              <button type="button" onClick={() => setViewYear(v => v - 1)} className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-[#f0f1f3] hover:text-foreground transition-colors text-base">«</button>
-              <button type="button" onClick={() => { if (viewMonth === 0) { setViewMonth(11); setViewYear(v => v - 1); } else setViewMonth(m => m - 1); }} className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-[#f0f1f3] hover:text-foreground transition-colors text-base">‹</button>
-              <span className="flex-1 text-[15px] font-semibold text-center text-foreground">{title}</span>
-              <button type="button" onClick={() => { if (viewMonth === 11) { setViewMonth(0); setViewYear(v => v + 1); } else setViewMonth(m => m + 1); }} className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-[#f0f1f3] hover:text-foreground transition-colors text-base">›</button>
-              <button type="button" onClick={() => setViewYear(v => v + 1)} className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-[#f0f1f3] hover:text-foreground transition-colors text-base">»</button>
+            <div className="mb-2.5 flex items-center justify-center gap-1">
+              <button type="button" onClick={() => setViewYear(v => v - 1)} className={scheduleCalendarNavButtonClass}>«</button>
+              <button type="button" onClick={() => { if (viewMonth === 0) { setViewMonth(11); setViewYear(v => v - 1); } else setViewMonth(m => m - 1); }} className={scheduleCalendarNavButtonClass}>‹</button>
+              <span className="flex-1 text-center text-[15px] font-semibold text-foreground">{title}</span>
+              <button type="button" onClick={() => { if (viewMonth === 11) { setViewMonth(0); setViewYear(v => v + 1); } else setViewMonth(m => m + 1); }} className={scheduleCalendarNavButtonClass}>›</button>
+              <button type="button" onClick={() => setViewYear(v => v + 1)} className={scheduleCalendarNavButtonClass}>»</button>
             </div>
             {/* Weekday header */}
-            <div className="grid grid-cols-7 gap-0.5 mb-1 text-[13px] font-medium text-center text-muted-foreground">
+            <div className="mb-1 grid grid-cols-7 gap-0.5 text-center text-[13px] font-medium text-muted-foreground">
               {['一', '二', '三', '四', '五', '六', '日'].map(w => <span key={w}>{w}</span>)}
             </div>
             {/* Day grid */}
@@ -401,17 +399,13 @@ function OnceDatePicker({
                     disabled={isPast}
                     onClick={() => selectDate(cell.date)}
                     className={cn(
-                      "flex items-center justify-center h-[34px] rounded-lg text-sm tabular-nums transition-colors",
-                      !cell.inMonth && "text-[#b8bcc4]",
-                      isPast && "text-[#b8bcc4] opacity-72 cursor-not-allowed",
-                      !isPast && !isSelected && "text-foreground hover:bg-[#fff7ed] hover:text-[#c2410c]",
-                      isSelected && "text-white font-semibold",
-                      isToday && !isSelected && "text-[#c2410c]"
+                      'flex h-[34px] items-center justify-center rounded-lg text-sm tabular-nums transition-colors',
+                      !cell.inMonth && 'text-muted-foreground/70',
+                      isPast && 'cursor-not-allowed text-muted-foreground/70 opacity-72',
+                      !isPast && !isSelected && scheduleCalendarDayHoverClass,
+                      isSelected && 'bg-primary font-semibold text-primary-foreground',
+                      isToday && !isSelected && 'text-primary ring-1 ring-inset ring-primary',
                     )}
-                    style={{
-                      ...(isSelected ? { background: ORANGE } : {}),
-                      ...(isToday && !isSelected ? { boxShadow: `inset 0 0 0 1px ${ORANGE}` } : {}),
-                    }}
                   >
                     {cell.day}
                   </button>
@@ -419,11 +413,11 @@ function OnceDatePicker({
               })}
             </div>
             {/* Today button */}
-            <div className="mt-2.5 pt-2.5 border-t border-border text-center">
+            <div className="mt-2.5 border-t border-border pt-2.5 text-center">
               <button
                 type="button"
                 onClick={goToday}
-                className="px-3 py-1 rounded-md text-sm font-medium text-foreground hover:bg-[#fff7ed] hover:text-[#c2410c] transition-colors"
+                className={cn('rounded-md px-3 py-1 text-sm font-medium transition-colors', scheduleCalendarDayHoverClass)}
               >
                 今天
               </button>
@@ -474,17 +468,14 @@ function MonthDayPicker({
       <button
         type="button"
         onClick={toggle}
-        className={cn(
-          "flex items-center justify-between gap-1.5 w-full h-[42px] px-3.5 pr-2.5 text-sm font-medium rounded-[10px] border bg-background text-foreground cursor-pointer outline-none transition-colors tabular-nums",
-          open ? "border-[#c5cad3] shadow-[0_0_0_3px_rgba(15,23,42,0.06)]" : "border-border hover:border-[#c5cad3]"
-        )}
+        className={cn(schedulePickerTriggerClass, 'tabular-nums', open ? formFieldOpenClass : 'border-border')}
       >
         <span className="truncate">{displayLabel}</span>
         <span className="shrink-0 text-muted-foreground"><ChevronDownIcon /></span>
       </button>
       {open && (
         <div className={cn(dir === 'up' ? 'absolute bottom-[calc(100%+6px)] left-0 z-20' : 'absolute top-[calc(100%+6px)] left-0 z-20', 'w-[min(280px,calc(100vw-48px))]')}>
-          <div className="grid grid-cols-7 gap-1 p-3 border border-border rounded-xl bg-background shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
+          <div className={cn(schedulePickerDropdownPanelClass, 'grid grid-cols-7 gap-1 p-3')}>
             {MONTH_DAYS.map(d => {
               const selected = d === monthDay;
               return (
@@ -493,10 +484,11 @@ function MonthDayPicker({
                   type="button"
                   onClick={() => { onChange(d); setOpen(false); onOpenChange(false); }}
                   className={cn(
-                    "flex items-center justify-center h-[34px] rounded-lg text-sm tabular-nums transition-colors",
-                    selected ? "text-white font-semibold" : "text-foreground hover:bg-[#fff7ed] hover:text-[#c2410c]"
+                    'flex h-[34px] items-center justify-center rounded-lg text-sm tabular-nums transition-colors',
+                    selected
+                      ? 'bg-primary font-semibold text-primary-foreground'
+                      : scheduleCalendarDayHoverClass,
                   )}
-                  style={selected ? { background: ORANGE } : undefined}
                 >
                   {d}
                 </button>
@@ -575,10 +567,7 @@ function TimePicker({
       <button
         type="button"
         onClick={toggle}
-        className={cn(
-          "flex items-center justify-between gap-1.5 w-full h-[42px] px-3.5 pr-2.5 text-sm font-medium rounded-[10px] border bg-background text-foreground cursor-pointer outline-none transition-colors tabular-nums",
-          open ? "border-[#c5cad3] shadow-[0_0_0_3px_rgba(15,23,42,0.06)]" : "border-border hover:border-[#c5cad3]"
-        )}
+        className={cn(schedulePickerTriggerClass, 'tabular-nums', open ? formFieldOpenClass : 'border-border')}
       >
         <span className="flex items-center gap-1.5 truncate">
           <span className="shrink-0 text-muted-foreground"><ClockIcon /></span>
@@ -588,9 +577,9 @@ function TimePicker({
       </button>
       {open && (
         <div className={cn(dropdownPositionClassRight(dir), 'min-w-[200px]')}>
-          <div className="flex overflow-hidden border border-border rounded-xl bg-background shadow-[0_12px_32px_rgba(15,23,42,0.12)]">
+          <div className={cn(schedulePickerDropdownPanelClass, 'flex overflow-hidden')}>
             {/* Hour column */}
-            <div ref={hourRef} className="flex-1 min-w-0 max-h-[228px] overflow-y-auto py-1.5 px-1 scrollbar-thin">
+            <div ref={hourRef} className="scrollbar-thin max-h-[228px] min-w-0 flex-1 overflow-y-auto px-1 py-1.5">
               {HOURS.map(h => {
                 const selected = h === hour;
                 return (
@@ -600,16 +589,13 @@ function TimePicker({
                     data-value={h}
                     onClick={() => selectHour(h)}
                     className={cn(
-                      "flex items-center justify-between gap-2 w-full min-h-9 px-2.5 py-2 rounded-lg text-sm tabular-nums transition-colors",
-                      selected ? "font-semibold" : "text-foreground"
+                      'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm tabular-nums',
+                      dropdownOptionClass(selected),
                     )}
-                    style={selected ? { background: ORANGE_SOFT, color: ORANGE } : undefined}
-                    onMouseEnter={(e) => { if (!selected) { (e.currentTarget.style.background = ORANGE_SOFT); (e.currentTarget.style.color = ORANGE); } }}
-                    onMouseLeave={(e) => { if (!selected) { (e.currentTarget.style.background = ''); (e.currentTarget.style.color = ''); } }}
                   >
                     <span>{h}</span>
-                    <span className="shrink-0 w-4 h-4 flex" style={{ color: ORANGE, opacity: selected ? 1 : 0 }}>
-                      <Check className="w-4 h-4" />
+                    <span className={cn('flex h-4 w-4 shrink-0 text-primary', !selected && 'opacity-0')}>
+                      <Check className="h-4 w-4" />
                     </span>
                   </button>
                 );
@@ -618,7 +604,7 @@ function TimePicker({
             {/* Divider */}
             <div className="w-px bg-border" />
             {/* Minute column */}
-            <div ref={minuteRef} className="flex-1 min-w-0 max-h-[228px] overflow-y-auto py-1.5 px-1 scrollbar-thin">
+            <div ref={minuteRef} className="scrollbar-thin max-h-[228px] min-w-0 flex-1 overflow-y-auto px-1 py-1.5">
               {MINUTES.map(m => {
                 const selected = m === minute;
                 return (
@@ -628,16 +614,13 @@ function TimePicker({
                     data-value={m}
                     onClick={() => selectMinute(m)}
                     className={cn(
-                      "flex items-center justify-between gap-2 w-full min-h-9 px-2.5 py-2 rounded-lg text-sm tabular-nums transition-colors",
-                      selected ? "font-semibold" : "text-foreground"
+                      'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm tabular-nums',
+                      dropdownOptionClass(selected),
                     )}
-                    style={selected ? { background: ORANGE_SOFT, color: ORANGE } : undefined}
-                    onMouseEnter={(e) => { if (!selected) { (e.currentTarget.style.background = ORANGE_SOFT); (e.currentTarget.style.color = ORANGE); } }}
-                    onMouseLeave={(e) => { if (!selected) { (e.currentTarget.style.background = ''); (e.currentTarget.style.color = ''); } }}
                   >
                     <span>{m}</span>
-                    <span className="shrink-0 w-4 h-4 flex" style={{ color: ORANGE, opacity: selected ? 1 : 0 }}>
-                      <Check className="w-4 h-4" />
+                    <span className={cn('flex h-4 w-4 shrink-0 text-primary', !selected && 'opacity-0')}>
+                      <Check className="h-4 w-4" />
                     </span>
                   </button>
                 );

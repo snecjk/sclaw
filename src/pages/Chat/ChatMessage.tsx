@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
 import { cn } from '@/lib/utils';
-import { assistantChatCardBg, assistantChatCardBgStreaming, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
+import { assistantChatCardBg, assistantChatCardBgStreaming, userChatBubbleSurfaceClass, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
@@ -856,10 +856,6 @@ function previewUrlTransform(url: string): string {
 
 // ── Message Bubble ──────────────────────────────────────────────
 
-/** 用户消息气泡（MasterGo 8:3912 Background）：#F0F2F5 底 / 12px 圆角 / 12px 内距 / 无边框无阴影 */
-const userMessageBubbleSurfaceClass =
-  'rounded-xl bg-[#F0F2F5] p-3 text-foreground shadow-none';
-
 function MessageBubble({
   text,
   isUser,
@@ -914,7 +910,7 @@ function MessageBubble({
         'relative overflow-hidden transition-[background-color,border-color,box-shadow] duration-300',
         !isUser && 'w-full',
         isUser
-          ? userMessageBubbleSurfaceClass
+          ? userChatBubbleSurfaceClass
           : cn(
               showWorkflowGuidanceStreaming
                 ? cn(workflowParamsSummaryCardClass, 'text-[13px] leading-5 text-foreground')

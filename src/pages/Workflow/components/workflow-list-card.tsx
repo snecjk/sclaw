@@ -151,7 +151,7 @@ export function WorkflowMineListCard({
           <div className={cn(workflowListCardScheduleRowClass, 'flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5')}>
             <span className={cn(card.scheduleMuted && 'text-muted-foreground/80')}>{card.schedule}</span>
             {card.showPausedLabel ? (
-              <span className="text-[#FEBC2E]">{t('card.pausedLabel')}</span>
+              <span className="text-warning">{t('card.pausedLabel')}</span>
             ) : null}
           </div>
         </div>

@@ -21,6 +21,35 @@ export const assistantChatCardBgStreaming = cn(
   'dark:bg-[linear-gradient(180deg,hsl(var(--muted)),hsl(var(--card)))]',
 );
 
+/**
+ * 用户消息气泡（MasterGo 8:3912）：浅色 Grey-3 #F0F2F5；暗色 muted 层级，与 assistant 白/渐变卡区分。
+ * 使用位置：ChatMessage MessageBubble、对话列表用户侧。
+ */
+export const userChatBubbleSurfaceClass = cn(
+  'rounded-xl bg-[#F0F2F5] p-3 text-foreground shadow-none',
+  'dark:bg-muted dark:shadow-none',
+);
+
+/**
+ * 首页/对话页 home 布局输入复合框壳（rounded-[22px]）。
+ * 使用位置：ChatInput composerLayout=home。
+ */
+export const chatComposerHomeShellClass = cn(
+  'relative flex min-h-[120px] flex-col overflow-visible rounded-[22px] border border-border bg-card',
+  'shadow-[0_6px_30px_rgba(43,17,0,0.03)] transition-[box-shadow,border-color,ring-width,ring-color] duration-200',
+  'dark:shadow-[0_4px_14px_rgba(0,0,0,0.22)]',
+);
+
+/** home 输入壳：拖拽文件悬停 */
+export const chatComposerHomeShellDragOverClass =
+  'border-primary ring-2 ring-primary/25 dark:ring-primary/30';
+
+/** home 输入壳：默认 hover / focus-within */
+export const chatComposerHomeShellIdleClass = cn(
+  'hover:border-primary/80 dark:hover:border-primary/70',
+  'focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 dark:focus-within:ring-primary/28',
+);
+
 /** 任务子项聊天：与省区 MainLayout 白卡片 {@link stoMainCardShellClass} 同色，避免输入框下方露出 gutter 灰 */
 export const stoTaskSubitemChatCanvasBg = cn(
   'bg-[var(--sto-main-card-bg)]',
@@ -94,13 +123,13 @@ export const myTaskPageHeaderRowClass = 'flex min-w-0 items-center justify-betwe
 export const myTaskCreateButtonClass = cn(
   'inline-flex shrink-0 items-center gap-1.5 h-[34px] px-3.5 text-sm font-medium',
   'rounded-[10px] bg-border text-foreground',
-  'transition-colors duration-fast hover:bg-black/[0.04] active:scale-[0.98]',
+  'transition-colors duration-fast hover:bg-black/[0.04] dark:hover:bg-white/[0.06] active:scale-[0.98]',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
 
 /** 我的任务卡片外框（MasterGo 容器 7377）：18px 圆角 + 16px 内距 + glow，无描边；等高网格内 h-full */
 export const myTaskCardShellClass = cn(
-  'relative flex h-full min-w-0 flex-col rounded-[18px] bg-card p-4 shadow-glow',
+  'relative flex h-full min-w-0 flex-col rounded-[18px] bg-card p-4 shadow-glow dark:bg-secondary',
   'transition-[box-shadow] duration-base hover:shadow-soft',
 );
 
@@ -144,6 +173,130 @@ export function myTaskCardMenuItemClass(isDestructive = false): string {
     isDestructive ? 'text-destructive hover:bg-muted' : 'text-foreground hover:bg-muted',
   );
 }
+
+/** 表单字段 focus（input / select / textarea） */
+export const formFieldFocusClass = cn(
+  'focus:outline-none focus:ring-0',
+  'focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)]',
+  'dark:focus:border-primary/50 dark:focus:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
+);
+
+/** 表单触发器 focus-visible（button 类下拉） */
+export const formFieldFocusVisibleClass = cn(
+  'focus-visible:outline-none focus-visible:ring-0',
+  'focus-visible:border-[#c5cad3] focus-visible:shadow-[0_0_0_3px_rgba(15,23,42,0.06)]',
+  'dark:focus-visible:border-primary/50 dark:focus-visible:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
+);
+
+/** 表单触发器 hover 描边 */
+export const formFieldHoverBorderClass = 'hover:border-[#c5cad3] dark:hover:border-primary/40';
+
+/** 表单触发器展开态 */
+export const formFieldOpenClass = cn(
+  'border-[#c5cad3] shadow-[0_0_0_3px_rgba(15,23,42,0.06)]',
+  'dark:border-primary/50 dark:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
+);
+
+/** 反色主钮底色/字色：亮色深底白字；暗色浅底深字（弹窗保存、空状态 CTA、工作流主操作等共用） */
+export const invertedPrimarySurfaceClass = cn(
+  'bg-foreground text-primary-foreground dark:text-background hover:bg-foreground/90',
+);
+
+/** 弹窗底栏主提交钮（新建/编辑定时任务等） */
+export const modalPrimarySubmitButtonClass = cn(
+  'h-[42px] rounded-[10px] border-none px-5 text-sm shadow-soft',
+  invertedPrimarySurfaceClass,
+);
+
+/** SchedulePicker 触发器（与 formField 系列一致） */
+export const schedulePickerTriggerClass = cn(
+  'flex h-[42px] w-full cursor-pointer items-center justify-between gap-1.5',
+  'rounded-[10px] border bg-background px-3.5 pr-2.5 text-sm font-medium text-foreground',
+  'outline-none transition-colors',
+  formFieldHoverBorderClass,
+);
+
+/** SchedulePicker 下拉面板 */
+export const schedulePickerDropdownPanelClass = cn(
+  'overflow-hidden rounded-xl border border-border bg-popover',
+  'shadow-[0_12px_32px_rgba(15,23,42,0.12)] dark:shadow-modal',
+);
+
+/** 下拉选项：选中 / hover 统一 primary 浅底 */
+export function dropdownOptionClass(isActive: boolean): string {
+  return cn(
+    'transition-[background,color]',
+    isActive
+      ? 'bg-primary/10 font-semibold text-primary'
+      : 'text-foreground hover:bg-primary/10 hover:text-primary',
+  );
+}
+
+/** 我的任务 / 工作流排期开关轨道 */
+export function scheduleToggleTrackClass(checked: boolean): string {
+  return cn(
+    'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-none p-0 transition-colors duration-fast',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+    checked ? 'bg-success' : 'bg-border',
+  );
+}
+
+/** 排期开关滑块 */
+export const scheduleToggleThumbClass = cn(
+  'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-card',
+  'shadow-[0_1px_2px_rgba(15,23,42,0.15)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.35)]',
+  'transition-transform duration-fast',
+);
+
+/** 我的任务卡片：关联工作流 badge（复用 cover purple token） */
+export const myTaskWorkflowBadgeClass = cn(
+  'ml-[6px] inline-flex shrink-0 items-center gap-[4px] whitespace-nowrap rounded-full',
+  'border border-[var(--sto-wf-cover-purple-accent)] bg-[var(--sto-wf-cover-purple-bg)]',
+  'px-[7px] py-[1px] text-[11px] font-medium leading-[1.55] text-[var(--sto-wf-cover-purple-icon)]',
+);
+
+/** 执行记录单行：暗色用 secondary 与主卡片底色分层 */
+export const myTaskRecordItemShellClass = cn(
+  'flex items-center gap-3.5 rounded-[12px] border border-border bg-card p-[14px_16px]',
+  'dark:bg-secondary',
+);
+
+/** 执行记录「查看详情」 */
+export const myTaskRecordDetailButtonClass = cn(
+  'shrink-0 cursor-pointer rounded-lg border border-border bg-card px-3.5 py-1.5',
+  'font-[inherit] text-[13px] text-muted-foreground transition-colors',
+  'hover:bg-muted hover:text-foreground dark:hover:bg-white/[0.06]',
+);
+
+/** 空状态主 CTA（新建定时任务） */
+export const myTaskEmptyPrimaryCtaClass = cn(
+  'inline-flex items-center justify-center gap-1.5 h-[34px] px-[14px]',
+  'rounded-lg text-sm font-semibold shadow-soft',
+  invertedPrimarySurfaceClass,
+  'transition-[background,transform,filter] duration-75 active:scale-[0.98]',
+);
+
+/** 空状态官方推荐模板卡 */
+export const myTaskEmptyTemplateCardClass = cn(
+  'flex min-w-0 cursor-pointer flex-col rounded-[var(--radius-lg,12px)]',
+  'border border-border bg-card p-[14px_16px]',
+  'transition-[border-color,box-shadow] duration-75 hover:shadow-soft',
+);
+
+/** 空状态模板「添加」按钮 */
+export const myTaskEmptyTemplateAddButtonClass = cn(
+  'inline-flex min-h-[28px] cursor-pointer items-center justify-center rounded-lg',
+  'border-none bg-muted px-2.5 text-xs font-medium text-foreground',
+  'transition-[background,color] duration-75 hover:bg-muted/80 dark:hover:bg-white/[0.08]',
+);
+
+/** 我的任务排序触发器 */
+export const myTaskSortTriggerClass = cn(
+  'flex h-[34px] items-center gap-[6px] rounded-[10px] border border-border bg-card',
+  'px-[10px] text-[13px] font-medium text-foreground transition-[border-color,box-shadow]',
+  formFieldHoverBorderClass,
+  formFieldFocusVisibleClass,
+);
 
 /** 首页对话整列（toolbar + 消息 + 输入同宽居中，列内内容区最大 780px） */
 export const stoChatShellHomeColumnClass = cn(
@@ -288,6 +441,49 @@ export function stoParameterFormDockLayout(variant: StoChatColumnVariant): 'home
   return variant === 'home' ? 'home' : 'page';
 }
 
+/** ParameterForm chat-dock 顶部条（浅灰底；暗色 secondary，避免白条） */
+export const parameterFormDockHeaderClass =
+  'shrink-0 rounded-t-[18px] bg-[#FAFBFC] px-3.5 pb-2 pt-3 dark:border-b dark:border-border dark:bg-secondary';
+
+/** ParameterForm chat-dock 继续 / 确认主按钮（暗色用品牌主色，避免整颗白钮） */
+export const parameterFormDockPrimaryButtonClass = cn(
+  'inline-flex h-6 items-center gap-1 rounded-[7px] px-3 text-xs font-medium transition-colors disabled:opacity-50',
+  'bg-foreground text-primary-foreground hover:bg-foreground/90',
+  'dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90',
+);
+
+/** ParameterForm chat-dock 可选项 hover（暗色不用 #FAFAFA 白底） */
+export const parameterFormDockOptionHoverClass =
+  'bg-transparent hover:bg-muted/40 dark:hover:bg-muted/60';
+
+/** ParameterForm chat-dock 可选项选中底 */
+export const parameterFormDockOptionSelectedClass =
+  'bg-muted/30 dark:bg-muted/50';
+
+/** ParameterForm chat-dock 规则行 / 数字字段卡片外框 */
+export const parameterFormDockFieldRowClass =
+  'rounded-[10px] border border-border p-2';
+
+/** ParameterForm chat-dock 序号徽章（规则 1–6 等） */
+export const parameterFormDockIndexBadgeClass = cn(
+  'flex shrink-0 items-center justify-center rounded-[9px] bg-muted text-[10px] text-muted-foreground',
+  'h-[18px] w-[18px]',
+);
+
+/** ParameterForm chat-dock 步进器外壳（− 数字 + 一体边框） */
+export const parameterFormDockStepperShellClass =
+  'inline-flex h-7 items-stretch overflow-hidden rounded-md border border-border bg-card';
+
+/** ParameterForm chat-dock 步进器 ± 按钮 */
+export const parameterFormDockStepperButtonClass =
+  'flex items-center justify-center bg-muted/50 text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50';
+
+/** ParameterForm chat-dock 步进器 / 区间输入框 */
+export const parameterFormDockStepperInputClass = cn(
+  'border-border bg-card text-center text-[13px] text-foreground',
+  'focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20',
+);
+
 /** Hero / 大输入复合框壳层（最大 780px 居中，与首页 Hero 区同源变量） */
 export const stoHeroInputShellClass =
   'mx-auto flex w-full min-w-0 max-w-[var(--sto-hero-input-max-w)] flex-col';
@@ -310,13 +506,16 @@ export const stoPreviewContentShellClass = cn(
 /** @deprecated 整卡描边已拆至 {@link stoPreviewContentShellClass}，tab 行在外 */
 export const stoSplitPreviewCardClass = stoPreviewContentShellClass;
 
-/** 预览产物 tab pill（选中 #E5E6EB / 未选 #F5F6F7；高度与 {@link contentHeaderActionBtnClass} 一致） */
+/** 预览产物 tab pill（选中 #E5E6EB / 未选 #F5F6F7；暗色未选用 muted 底 + 次级字色） */
 export function stoPreviewArtifactTabClass(isActive: boolean): string {
   return cn(
     'inline-flex h-8 max-w-[143px] shrink-0 items-center gap-1 rounded-[10px] px-2 text-sm leading-none transition-colors duration-fast',
     isActive
       ? 'bg-border text-foreground'
-      : 'bg-[#F5F6F7] text-foreground hover:bg-muted',
+      : cn(
+          'bg-[#F5F6F7] text-foreground hover:bg-muted',
+          'dark:bg-muted/50 dark:text-muted-foreground dark:hover:bg-muted/70',
+        ),
   );
 }
 
@@ -511,6 +710,31 @@ export const contentHeaderActionBtnClass = cn(
 export const contentHeaderActionBtnActiveClass = 'bg-primary/10 text-primary';
 
 /**
+ * 列表页搜索/表单 focus：浅色 Grey-5 描边；暗色 primary 轻 ring。
+ * 使用位置：工作流列表搜索、我的任务工具栏（阶段 2 接入 TaskCreateModal）。
+ */
+export const listSearchFocusClass = cn(
+  'focus:outline-none focus:ring-0',
+  'focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)]',
+  'dark:focus:border-primary/50 dark:focus:shadow-[0_0_0_3px_rgba(255,111,0,0.15)]',
+);
+
+/** 下拉/浮层面板阴影：工作流/我的任务排序、SchedulePicker 等 */
+export const dropdownPanelShadowClass = cn(
+  'shadow-[0_12px_32px_rgba(15,23,42,0.12)]',
+  'dark:shadow-[0_12px_32px_rgba(0,0,0,0.45)]',
+);
+
+/** 浮动菜单/下拉容器（border + bg-card + 阴影） */
+export const dropdownPanelClass = cn('border border-border bg-card', dropdownPanelShadowClass);
+
+/** 下拉面板容器（圆角 12 + padding） */
+export const dropdownPanelRoundedClass = cn(
+  'rounded-[12px] p-[6px]',
+  dropdownPanelClass,
+);
+
+/**
  * 工作流 Hero 输入复合框（MasterGo 2:7326）：白底 + Grey-4 描边 + 22px 圆角 + 轻阴影。
  * @see .cursor/rules/02-styles.mdc §工作流列表 Hero
  */
@@ -528,7 +752,7 @@ export const workflowHeroInteractiveShellClass = cn(stoHeroInputShellClass, 'mt-
 
 export const workflowHeroComposer = cn(
   'flex h-[120px] w-full min-w-0 flex-col overflow-hidden rounded-[22px] border border-border bg-card',
-  'shadow-[0_6px_24px_rgba(43,17,0,0.03)]',
+  'shadow-[0_6px_24px_rgba(43,17,0,0.03)] dark:shadow-[0_4px_14px_rgba(0,0,0,0.22)]',
 );
 
 /** Hero 快捷提示 chip 行 + 手动创建 */
@@ -537,7 +761,7 @@ export const workflowHeroQuickPromptsRowClass = 'flex min-w-0 w-full items-cente
 /** 工作流 Hero 快捷提示 chip：12px / 行高 16px，上下 8px、左右 16px */
 export const workflowHeroQuickChipClass = cn(
   'shrink-0 whitespace-nowrap rounded-full border border-border bg-card px-4 py-2 text-xs font-normal leading-4',
-  '!text-[#4E5969] transition-colors duration-fast hover:border-primary/30 hover:!text-primary',
+  'text-[var(--sto-grey-9)] transition-colors duration-fast hover:border-primary/30 hover:text-primary',
 );
 
 /**
@@ -545,8 +769,9 @@ export const workflowHeroQuickChipClass = cn(
  */
 export const workflowHeroManualCreateClass = cn(
   'relative z-[2] box-border inline-flex shrink-0 flex-nowrap items-center gap-1.5 whitespace-nowrap rounded-[18px] border border-border bg-card',
-  'pl-3 pr-4 py-2 text-xs font-normal leading-4 !text-[#4E5969]',
-  'shadow-[0_2px_24px_rgba(43,17,0,0.03)] transition-colors duration-fast hover:border-primary/30 hover:!text-primary',
+  'pl-3 pr-4 py-2 text-xs font-normal leading-4 text-[var(--sto-grey-9)]',
+  'shadow-[0_2px_24px_rgba(43,17,0,0.03)] dark:shadow-[0_2px_24px_rgba(0,0,0,0.22)]',
+  'transition-colors duration-fast hover:border-primary/30 hover:text-primary',
 );
 
 /**
@@ -558,7 +783,7 @@ export const workflowPageShadingLayerClass =
 
 /** 底纹平铺层：repeat-x + 与切图像素一致的 background-size，避免多 img 横排亚像素缝 */
 export const workflowPageShadingPatternClass =
-  'h-full w-full bg-left-top bg-repeat-x bg-[length:var(--sto-wf-page-shading-tile-w)_var(--sto-wf-page-shading-h)]';
+  'h-full w-full bg-left-top bg-repeat-x bg-[length:var(--sto-wf-page-shading-tile-w)_var(--sto-wf-page-shading-h)] opacity-[var(--sto-wf-page-shading-opacity)]';
 
 /** 工作流列表页根容器：底纹与内容叠层 */
 export const workflowPageRootClass = 'relative min-w-0';
@@ -587,7 +812,7 @@ export const workflowListSearchIconWrapClass = 'absolute left-3 text-muted-foreg
 export const workflowListSearchInputClass = cn(
   'h-[34px] w-[184px] rounded-[8px] border border-border bg-card py-0 pl-[30px] pr-[10px]',
   'text-[13px] placeholder:text-muted-foreground',
-  'focus:outline-none focus:border-[#c5cad3] focus:shadow-[0_0_0_3px_rgba(15,23,42,0.06)] focus:ring-0',
+  listSearchFocusClass,
 );
 
 /**
@@ -632,9 +857,10 @@ export const workflowListCardGridClass =
 
 /** 工作流列表卡片外框 */
 export const workflowListCardShellClass = cn(
-  'flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[18px] bg-card',
-  'shadow-[0_0_4px_rgba(0,0,0,0.04)] transition-[box-shadow] duration-base',
-  'hover:shadow-[0_0_16px_rgba(0,0,0,0.06)]',
+  'flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[18px] bg-card dark:bg-secondary',
+  'shadow-[0_0_4px_rgba(0,0,0,0.04)] dark:shadow-glow',
+  'transition-[box-shadow] duration-base',
+  'hover:shadow-[0_0_16px_rgba(0,0,0,0.06)] dark:hover:shadow-soft',
 );
 
 /** 工作流卡片头图：距卡片边框上/左/右 4px（设计稿） */
@@ -662,9 +888,9 @@ export const workflowListCardTitleRowClass = 'flex min-w-0 items-center justify-
 /** 调度说明行 */
 export const workflowListCardScheduleRowClass = 'text-xs text-muted-foreground';
 
-/** 工作流节点灰底区块：描边 #F2F3F5、圆角 8px、底 #FAFBFC；标题与流程间距 6px */
+/** 工作流节点灰底区块：描边/底走 CSS 变量，亮暗色在 globals.css 切换 */
 export const workflowListCardFlowBlockClass =
-  'flex flex-col gap-1.5 rounded-md border border-[#F2F3F5] bg-[#FAFBFC] px-[10px] py-2 text-xs';
+  'flex flex-col gap-1.5 rounded-md border border-[var(--sto-wf-flow-block-border)] bg-[var(--sto-wf-flow-block-bg)] px-[10px] py-2 text-xs';
 
 /** 工作流节点标题行（灰底内，带图标） */
 export const workflowListCardFlowTitleClass =
@@ -676,7 +902,7 @@ export const workflowListCardFlowStepsClass = 'flex flex-wrap items-center gap-x
 export const workflowListCardFlowSepClass = 'font-medium leading-snug text-foreground';
 
 export const workflowListCardFlowStepClass =
-  'rounded-md bg-card px-2 py-0.5 text-xs leading-snug text-foreground';
+  'rounded-md bg-card px-2 py-0.5 text-xs leading-snug text-foreground dark:bg-background';
 
 /** 工作流卡片底栏三钮共用圆角 8px（`rounded-lg` = `--radius`） */
 export const workflowListCardActionRadiusClass = 'rounded-lg';
@@ -684,27 +910,30 @@ export const workflowListCardActionRadiusClass = 'rounded-lg';
 /** 工作流卡片底栏主操作钮（立即运行 / 安装） */
 export const workflowListCardPrimaryActionClass = cn(
   workflowListCardActionRadiusClass,
-  'bg-foreground px-4 py-1.5 text-[13px] font-semibold text-primary-foreground',
-  'transition-[transform,background-color] duration-fast hover:bg-foreground/90 active:scale-[0.98]',
+  'px-4 py-1.5 text-[13px] font-semibold',
+  invertedPrimarySurfaceClass,
+  'transition-[transform,background-color] duration-fast active:scale-[0.98]',
 );
 
 /** 工作流卡片底栏次操作钮（编辑流程 / 预览） */
 export const workflowListCardSecondaryActionClass = cn(
   'inline-flex items-center gap-1 border border-border bg-transparent px-3 py-1.5 text-[13px] font-medium text-foreground',
   workflowListCardActionRadiusClass,
-  'transition-colors duration-fast hover:bg-black/[0.02]',
+  'transition-colors duration-fast hover:bg-black/[0.02] dark:hover:bg-white/[0.06]',
 );
 
 /** 工作流卡片更多菜单钮（···） */
 export const workflowListCardMoreActionClass = cn(
   workflowListCardActionRadiusClass,
   'border border-border px-2 py-1.5 text-muted-foreground',
-  'transition-colors duration-fast hover:bg-black/[0.02] hover:text-foreground',
+  'transition-colors duration-fast hover:bg-black/[0.02] hover:text-foreground dark:hover:bg-white/[0.06]',
 );
 
 /** 工作流卡片浮动菜单容器 */
-export const workflowListCardMenuClass =
-  'fixed z-[126] w-[200px] rounded-xl border border-border bg-card p-1.5 shadow-[0_8px_40px_rgba(0,0,0,0.16)]';
+export const workflowListCardMenuClass = cn(
+  'fixed z-[126] w-[200px] rounded-xl border border-border bg-card p-1.5',
+  'shadow-[0_8px_40px_rgba(0,0,0,0.16)] dark:shadow-modal',
+);
 
 /** 工作流卡片浮动菜单项 */
 export const workflowListCardMenuItemClass =
@@ -785,8 +1014,10 @@ export const workflowDetailModalSkillTagClass = cn(
 );
 
 /** 详情弹窗更多菜单（浮动下拉菜单容器） */
-export const workflowDetailModalMenuClass =
-  'absolute right-0 top-full z-10 mt-1.5 min-w-[160px] rounded-xl border border-border bg-card p-1.5 shadow-[0_8px_40px_rgba(0,0,0,0.16)]';
+export const workflowDetailModalMenuClass = cn(
+  'absolute right-0 top-full z-10 mt-1.5 min-w-[160px] rounded-xl border border-border bg-card p-1.5',
+  'shadow-[0_8px_40px_rgba(0,0,0,0.16)] dark:shadow-modal',
+);
 
 /** 详情弹窗底栏 */
 export const workflowDetailModalFooterClass =
@@ -795,8 +1026,8 @@ export const workflowDetailModalFooterClass =
 /** 详情弹窗底栏主钮（立即运行） */
 export const workflowDetailModalPrimaryActionClass = cn(
   'h-[34px] rounded-xl px-4 text-sm font-medium',
-  'bg-foreground text-primary-foreground transition-[transform,background-color] duration-fast',
-  'hover:bg-foreground/90 active:scale-[0.98]',
+  invertedPrimarySurfaceClass,
+  'transition-[transform,background-color] duration-fast active:scale-[0.98]',
 );
 
 /** 详情弹窗底栏次钮（编辑流程） */

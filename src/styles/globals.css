@@ -123,6 +123,13 @@
     --sto-wf-detail-status-on-text: #5f9274;
     --sto-wf-detail-status-off-bg: #f0f1f2;
     --sto-wf-detail-status-off-text: #86909c;
+
+    /* 工作流卡片节点灰底区块（Grey-2 / Grey-3 描边） */
+    --sto-wf-flow-block-bg: #fafbfc;
+    --sto-wf-flow-block-border: #f2f3f5;
+
+    /* 工作流页底纹可见度（暗色在 .dark 中隐藏） */
+    --sto-wf-page-shading-opacity: 1;
   }
 
   .dark {
@@ -191,9 +198,38 @@
     --sto-split-default-preview: 50%;
     --sto-main-pad-y-total: 2.5rem;
 
-    --sto-wf-hero-input-bg: hsl(32 100% 97% / 0.08);
+    --sto-grey-9: #a4aab3;
+
+    --sto-wf-hero-input-bg: hsl(220 22% 11%);
     --sto-wf-hero-input-border: hsl(var(--primary) / 0.35);
     --sto-wf-hero-input-ring: 255 140 0;
+
+    --sto-wf-cover-teal-bg: hsl(160 28% 14%);
+    --sto-wf-cover-teal-accent: hsl(160 32% 22%);
+    --sto-wf-cover-teal-icon: #6ee7b7;
+    --sto-wf-cover-coral-bg: hsl(18 32% 14%);
+    --sto-wf-cover-coral-accent: hsl(18 36% 22%);
+    --sto-wf-cover-coral-icon: #fca58a;
+    --sto-wf-cover-purple-bg: hsl(248 28% 16%);
+    --sto-wf-cover-purple-accent: hsl(248 32% 24%);
+    --sto-wf-cover-purple-icon: #a5b4fc;
+    --sto-wf-cover-pink-bg: hsl(330 28% 14%);
+    --sto-wf-cover-pink-accent: hsl(330 32% 22%);
+    --sto-wf-cover-pink-icon: #f9a8d4;
+
+    --sto-wf-detail-modal-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+    --sto-wf-detail-cover-bg: hsl(220 16% 15%);
+    --sto-wf-detail-category-bg: hsl(32 45% 14%);
+    --sto-wf-detail-category-text: #ffb366;
+    --sto-wf-detail-status-on-bg: rgba(40, 200, 64, 0.14);
+    --sto-wf-detail-status-on-text: #6ee7a0;
+    --sto-wf-detail-status-off-bg: hsl(220 16% 15%);
+    --sto-wf-detail-status-off-text: #86909c;
+
+    --sto-wf-flow-block-bg: hsl(220 16% 14%);
+    --sto-wf-flow-block-border: hsl(220 14% 20%);
+
+    --sto-wf-page-shading-opacity: 0;
   }
 }
 
@@ -212,6 +248,13 @@
       radial-gradient(circle at 85% 18%, rgba(229, 230, 235, 0.45), transparent 26%),
       linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 36%);
     background-attachment: fixed;
+  }
+
+  /** 暗色：去掉 body 浅色径向渐变，避免主内容区被洗成发灰 */
+  .dark body {
+    background-image:
+      radial-gradient(circle at top, hsl(var(--primary) / 0.06), transparent 34%),
+      radial-gradient(circle at 85% 18%, hsl(220 14% 22% / 0.35), transparent 26%);
   }
 
   /** 省区 AppShell：无整行顶栏，全高由壳 + 卡片承担 */
@@ -547,7 +590,7 @@
   margin: 0.75rem 0;
   overflow-x: auto;
   border-radius: 0.5rem;
-  border: 1px solid #f2f3f5;
+  border: 1px solid hsl(var(--border));
 }
 
 .prose-chat-reply .prose-table-wrap table {
@@ -560,9 +603,9 @@
 }
 
 .prose-chat-reply .prose-table-wrap th {
-  background-color: #f5f6f7;
+  background-color: hsl(var(--muted));
   border: 0;
-  border-bottom: 1px solid #f2f3f5;
+  border-bottom: 1px solid hsl(var(--border));
   padding: 9px 12px;
   font-weight: 500;
   text-align: left;
@@ -571,15 +614,17 @@
 
 .prose-chat-reply .prose-table-wrap td {
   border: 0;
-  border-bottom: 1px solid #f2f3f5;
+  border-bottom: 1px solid hsl(var(--border));
   padding: 11px 12px;
   text-align: left;
   background-color: hsl(var(--card));
   color: hsl(var(--foreground));
 }
 
+/** 斑马纹：用语义 secondary，暗色下不再落 #fafbfc 白底 */
 .prose-chat-reply .prose-table-wrap tbody tr:nth-child(even) td {
-  background-color: #fafbfc;
+  background-color: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
 }
 
 .prose-chat-reply .prose-table-wrap tbody tr:last-child td {

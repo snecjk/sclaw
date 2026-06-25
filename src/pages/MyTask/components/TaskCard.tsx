@@ -21,6 +21,9 @@ import {
   myTaskCardShellClass,
   myTaskCardTitleClass,
   myTaskCardTopRowClass,
+  myTaskWorkflowBadgeClass,
+  scheduleToggleThumbClass,
+  scheduleToggleTrackClass,
 } from '@/lib/surfaces';
 import type { TaskViewModel } from '../types';
 
@@ -103,16 +106,10 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
             e.stopPropagation();
             onToggle?.(!task.enabled);
           }}
-          className={cn(
-            'relative h-5 w-9 shrink-0 cursor-pointer rounded-full border-none p-0 transition-colors',
-            task.enabled ? 'bg-[#22c55e]' : 'bg-[#e5e7eb]',
-          )}
+          className={scheduleToggleTrackClass(task.enabled)}
         >
           <span
-            className={cn(
-              'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow-[0_1px_2px_rgba(15,23,42,0.15)] transition-transform',
-              task.enabled && 'translate-x-4',
-            )}
+            className={cn(scheduleToggleThumbClass, task.enabled && 'translate-x-4')}
           />
         </button>
 
@@ -195,7 +192,7 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
         <h3 className={cn(myTaskCardTitleClass, 'flex items-center gap-0')}>
           <span className="truncate">{task.name}</span>
           {workflowId && (
-            <span className="inline-flex items-center gap-[4px] ml-[6px] px-[7px] py-[1px] rounded-full text-[11px] font-medium leading-[1.55] text-[#4f46a8] bg-[#eeedfe] border border-[#dcd9f7] whitespace-nowrap shrink-0">
+            <span className={myTaskWorkflowBadgeClass}>
               <svg className="w-[11px] h-[11px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="6" cy="6" r="2.1" /><circle cx="18" cy="18" r="2.1" /><path d="M8 6h6.5a3 3 0 0 1 3 3v6.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
               工作流
             </span>
