@@ -10,6 +10,7 @@ import {
 } from './dingtalk-mention-pending.js';
 import { buildDingTalkMentionSystemContext } from './shared/dingtalk-mention-context';
 import { fixDwsChatMessageSendToolParams } from './shared/dws-send-text';
+import { DINGTALK_SHARE_TOOL_PROMPT, registerShareToDingTalkTool } from './share-to-dingtalk.js';
 
 const TAG = 'sto-dingtalk-send-guard';
 
@@ -28,34 +29,39 @@ export default definePluginEntry({
   register(api: OpenClawPluginApi) {
     api.logger.info?.(`[${TAG}] plugin registering`);
 
+    registerShareToDingTalkTool(api);
+
     api.on('before_prompt_build', async (_event, ctx) => {
       api.logger.debug?.(
         `[${TAG}] before_prompt_build: fired — agentId=${ctx.agentId ?? '(none)'}, sessionKey=${ctx.sessionKey ?? '(none)'}`,
       );
 
-      if (!ctx.sessionKey) return undefined;
+      const appendBlocks: string[] = [DINGTALK_SHARE_TOOL_PROMPT];
 
-      const pendingMentions = await readDingTalkMentionPending(ctx.sessionKey);
-      if (!pendingMentions) {
-        api.logger.debug?.(
-          `[${TAG}] before_prompt_build: no pending DingTalk mentions for sessionKey=${ctx.sessionKey}`,
-        );
-        return undefined;
+      if (ctx.sessionKey) {
+        const pendingMentions = await readDingTalkMentionPending(ctx.sessionKey);
+        if (pendingMentions) {
+          api.logger.info?.(
+            `[${TAG}] before_prompt_build: pending DingTalk mentions found (${pendingMentions.mentions.length} recipients) sessionKey=${ctx.sessionKey}`,
+          );
+
+          const block = buildDingTalkMentionSystemContext(pendingMentions.mentions, {
+            sendFileIntent: pendingMentions.sendFileIntent,
+            attachedFiles: pendingMentions.attachedFiles,
+          });
+          await clearDingTalkMentionPending(ctx.sessionKey);
+          api.logger.debug?.(
+            `[${TAG}] before_prompt_build: injected DingTalk mention context (${pendingMentions.mentions.length} recipients)`,
+          );
+          appendBlocks.push(block);
+        } else {
+          api.logger.debug?.(
+            `[${TAG}] before_prompt_build: no pending DingTalk mentions for sessionKey=${ctx.sessionKey}`,
+          );
+        }
       }
 
-      api.logger.info?.(
-        `[${TAG}] before_prompt_build: pending DingTalk mentions found (${pendingMentions.mentions.length} recipients) sessionKey=${ctx.sessionKey}`,
-      );
-
-      const block = buildDingTalkMentionSystemContext(pendingMentions.mentions, {
-        sendFileIntent: pendingMentions.sendFileIntent,
-        attachedFiles: pendingMentions.attachedFiles,
-      });
-      await clearDingTalkMentionPending(ctx.sessionKey);
-      api.logger.debug?.(
-        `[${TAG}] before_prompt_build: injected DingTalk mention context (${pendingMentions.mentions.length} recipients)`,
-      );
-      return { appendSystemContext: block };
+      return { appendSystemContext: appendBlocks.join('\n\n') };
     });
 
     api.on(
@@ -107,6 +113,6 @@ export default definePluginEntry({
       { priority: 100 },
     );
 
-    api.logger.info?.(`[${TAG}] plugin registered`);
+    api.logger.info?.(`[${TAG}] plugin registered (share_to_dingtalk + send guard)`);
   },
 });

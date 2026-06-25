@@ -176,7 +176,7 @@
     "auth": "Sign-in status",
     "authenticated": "Signed in",
     "notAuthenticated": "Not signed in",
-    "install": "Install DingTalk CLI",
+    "install": "Authorize DingTalk",
     "reinstall": "Check for updates",
     "installing": "Installing…",
     "login": "Sign in to DingTalk",

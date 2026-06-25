@@ -10,14 +10,18 @@ import {
   MonitorPlay,
   Eye,
   Share2,
+  ExternalLink,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { OnEditWorkflowNavigate } from '@/lib/preview-workflow-navigation';
 import { isHttpUrl, inferMimeTypeFromUrl } from '@/lib/preview-url';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { FilePreviewViewer } from '@/components/file-preview/FilePreviewViewer';
+import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
+import { buildArtifactShareDraft, shareToDingTalk } from '@/lib/dingtalk-share';
 import {
   stoPreviewActionButtonClass,
   stoPreviewActionRowClass,
@@ -46,6 +50,8 @@ export function ChatPreviewPanel({
 }: ChatPreviewPanelProps) {
   const { t } = useTranslation('chat');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareDraft, setShareDraft] = useState<ReturnType<typeof buildArtifactShareDraft> | null>(null);
 
   const activeFile = useMemo(() => {
     if (!activeFilePath) return null;
@@ -62,6 +68,26 @@ export function ChatPreviewPanel({
     }
     return null;
   }, [files, activeFilePath]);
+
+  const handleOpenShareDialog = useCallback(() => {
+    if (!activeFile?.filePath) return;
+    setShareDraft(buildArtifactShareDraft({
+      fileName: activeFile.fileName,
+      filePath: activeFile.filePath,
+    }));
+    setShareDialogOpen(true);
+  }, [activeFile]);
+
+  const handleConfirmShare = useCallback(async (values: { title: string; text: string; url: string }) => {
+    await shareToDingTalk({
+      title: values.title,
+      text: values.text,
+      url: values.url,
+    });
+    toast.success(t('preview.shareDialog.success'));
+    setShareDialogOpen(false);
+    setShareDraft(null);
+  }, [t]);
 
   const handleOpenExternal = useCallback(() => {
     if (!activeFile?.filePath) return;
@@ -141,8 +167,11 @@ export function ChatPreviewPanel({
                 <PreviewActionButton onClick={handleDownload} aria-label={t('preview.download')}>
                   <Download className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>
-                <PreviewActionButton onClick={handleOpenExternal} aria-label={t('preview.openExternal')}>
+                <PreviewActionButton onClick={handleOpenShareDialog} aria-label={t('preview.share')}>
                   <Share2 className="h-4 w-4" aria-hidden />
+                </PreviewActionButton>
+                <PreviewActionButton onClick={handleOpenExternal} aria-label={t('preview.openExternal')}>
+                  <ExternalLink className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>
                 {showEditWorkflow && workflowId ? (
                   <button
@@ -176,6 +205,19 @@ export function ChatPreviewPanel({
           )}
         </div>
       </div>
+
+      <ArtifactShareDialog
+        open={shareDialogOpen}
+        draft={shareDraft}
+        onConfirm={handleConfirmShare}
+        onCancel={() => {
+          setShareDialogOpen(false);
+          setShareDraft(null);
+        }}
+        onError={(error) => {
+          toast.error(error instanceof Error ? error.message : t('preview.shareDialog.failed'));
+        }}
+      />
     </div>
   );
 }

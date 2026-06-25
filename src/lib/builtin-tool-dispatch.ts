@@ -148,6 +148,11 @@ export async function dispatchBuiltinToolResult(
     return true;
   }
 
+  if (envelope?.type === 'dingtalk_share_picker_opened' && envelope.success) {
+    toast.success(envelope.message ?? '已唤起钉钉选人发送页面');
+    return true;
+  }
+
   if (
     msg.toolName === 'create_scheduled_task'
     || envelope?.type === 'scheduled_task_confirmation'
