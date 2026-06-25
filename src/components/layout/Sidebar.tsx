@@ -61,6 +61,8 @@ import {
   isAnyCronSessionKey,
 } from '@/stores/chat/cron-session-utils';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
+import { buildScheduledTaskGroupDisplayName } from '@/lib/scheduled-task-group-name';
+import { useScheduledTaskNameMaps } from '@/hooks/use-scheduled-task-name-maps';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
@@ -678,6 +680,7 @@ export function Sidebar() {
   const sidebarExpandedBeforeWorkflowRef = useRef<boolean | null>(null);
   const [taskListSectionOpen, setTaskListSectionOpen] = useState(false);
   const [taskListShowAll, setTaskListShowAll] = useState(false);
+  const scheduledTaskNameMaps = useScheduledTaskNameMaps(!sidebarCollapsed, sessions.length);
   const [recentOpen, setRecentOpen] = useState(true);
   const [workspaceSectionOpen, setWorkspaceSectionOpen] = useState(true);
   const [bucketOpen, setBucketOpen] = useState<Record<SessionBucketKey, boolean>>({
@@ -895,9 +898,15 @@ export function Sidebar() {
 
   const sessionsOrderedForCollapse = recentSessionsSorted.slice(0, SIDEBAR_COLLAPSED_SESSION_LIMIT);
 
-  // Group scheduled-task sessions by task name for the task-list section
+  // Group scheduled-task sessions by task id; titles resolved from task definitions + session metadata.
   const scheduledTaskGroups = useMemo(() => {
-    const groups = new Map<string, { key: string; name: string; sessions: typeof visibleSessions }>();
+    type GroupDraft = {
+      key: string;
+      kind: 'st' | 'cron' | 'claude';
+      taskId: number | string;
+      sessions: typeof visibleSessions;
+    };
+    const groups = new Map<string, GroupDraft>();
 
     for (const session of taskListScheduledSessions) {
       const stParsed = parseScheduledTaskAgentSessionKey(session.key);
@@ -905,49 +914,52 @@ export function Sidebar() {
       const claudeTaskRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
       const claudeTaskDatedParsed = parseClaudeScheduledTaskSessionKey(session.key);
 
+      let draft: GroupDraft | undefined;
       if (stParsed) {
-        const taskName = session.displayName || session.label?.split(' - ')[0] || `定时任务 ${stParsed.taskId}`;
-        const groupKey = `st:${stParsed.taskId}`;
-        if (!groups.has(groupKey)) {
-          groups.set(groupKey, { key: groupKey, name: taskName, sessions: [] });
-        }
-        groups.get(groupKey)!.sessions.push(session);
+        draft = { key: `st:${stParsed.taskId}`, kind: 'st', taskId: stParsed.taskId, sessions: [] };
       } else if (cronParsed) {
-        const jobName = session.displayName || session.label || `定时任务 ${cronParsed.jobId}`;
-        const groupKey = `cron:${cronParsed.jobId}`;
-        if (!groups.has(groupKey)) {
-          groups.set(groupKey, { key: groupKey, name: jobName, sessions: [] });
-        }
-        groups.get(groupKey)!.sessions.push(session);
+        draft = { key: `cron:${cronParsed.jobId}`, kind: 'cron', taskId: cronParsed.jobId, sessions: [] };
       } else if (claudeTaskDatedParsed) {
-        // Claude task session: covers base (claude-task:{taskId}), dated (claude-task:{taskId}:{date}), and any future variants
-        const taskName = session.displayName || session.label || `Claude 定时任务 ${claudeTaskDatedParsed.taskId}`;
-        const groupKey = `claude-task:${claudeTaskDatedParsed.taskId}`;
-        if (!groups.has(groupKey)) {
-          groups.set(groupKey, { key: groupKey, name: taskName, sessions: [] });
-        }
-        groups.get(groupKey)!.sessions.push(session);
+        draft = {
+          key: `claude-task:${claudeTaskDatedParsed.taskId}`,
+          kind: 'claude',
+          taskId: claudeTaskDatedParsed.taskId,
+          sessions: [],
+        };
       } else if (claudeTaskRunParsed) {
-        const taskName = session.displayName || session.label || `Claude 定时任务 ${claudeTaskRunParsed.taskId}`;
-        const groupKey = `claude-task:${claudeTaskRunParsed.taskId}`;
-        if (!groups.has(groupKey)) {
-          groups.set(groupKey, { key: groupKey, name: taskName, sessions: [] });
-        }
-        groups.get(groupKey)!.sessions.push(session);
+        draft = {
+          key: `claude-task:${claudeTaskRunParsed.taskId}`,
+          kind: 'claude',
+          taskId: claudeTaskRunParsed.taskId,
+          sessions: [],
+        };
+      }
+
+      if (!draft) continue;
+      const existing = groups.get(draft.key);
+      if (existing) {
+        existing.sessions.push(session);
+      } else {
+        groups.set(draft.key, { ...draft, sessions: [session] });
       }
     }
 
-    // Sort sessions within each group by activity desc
+    const resolvedGroups: ScheduledTaskSidebarGroup[] = [];
     for (const group of groups.values()) {
       group.sessions.sort((a, b) => {
         const aAct = sessionLastActivity[a.key] ?? a.updatedAt ?? 0;
         const bAct = sessionLastActivity[b.key] ?? b.updatedAt ?? 0;
         return bAct - aAct;
       });
+      resolvedGroups.push({
+        key: group.key,
+        name: buildScheduledTaskGroupDisplayName(group.kind, group.taskId, group.sessions, scheduledTaskNameMaps),
+        sessions: group.sessions,
+      });
     }
 
-    return Array.from(groups.values());
-  }, [taskListScheduledSessions, sessionLastActivity]);
+    return resolvedGroups;
+  }, [taskListScheduledSessions, sessionLastActivity, scheduledTaskNameMaps]);
 
   const taskListRenderPlan = useMemo(
     () => buildTaskListRenderPlan(scheduledTaskGroups, taskListShowAll),

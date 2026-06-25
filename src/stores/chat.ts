@@ -24,6 +24,11 @@ import {
 } from './chat/cron-session-utils';
 import { mergeSessionLastActivity, sanitizeSessionDisplayField } from './chat/helpers';
 import {
+  resolveClaudeGroupNameFromSession,
+  resolveCronGroupNameFromSession,
+  resolveStoScheduledGroupNameFromSession,
+} from '@/lib/scheduled-task-group-name';
+import {
   DEFAULT_CANONICAL_PREFIX,
   DEFAULT_SESSION_KEY,
   type AttachedFileMeta,
@@ -1812,6 +1817,23 @@ export const useChatStore = create<ChatState>()(
             }
           } catch {
             // Ignore Claude scheduled-task name enrichment failure
+          }
+
+          // 4) Label-based fallback when task APIs are unavailable (401 / Gateway down)
+          for (const session of labeledSessions) {
+            if (session.displayName?.trim()) continue;
+            const stAgentParsed = parseScheduledTaskAgentSessionKey(session.key);
+            const cronParsed = parseCronSessionKey(session.key);
+            const claudeSummaryParsed = parseClaudeScheduledTaskSessionKey(session.key);
+            const claudeRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
+            const fromLabel = stAgentParsed
+              ? resolveStoScheduledGroupNameFromSession(session)
+              : cronParsed
+                ? resolveCronGroupNameFromSession(session)
+                : (claudeSummaryParsed || claudeRunParsed)
+                  ? resolveClaudeGroupNameFromSession(session)
+                  : undefined;
+            if (fromLabel) session.displayName = fromLabel;
           }
 
           const discoveredActivity = Object.fromEntries(

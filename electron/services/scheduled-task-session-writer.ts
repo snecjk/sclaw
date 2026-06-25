@@ -497,8 +497,22 @@ function findAgentSessionEntry(store: AgentSessionStore, sessionKey: string): Ag
 export interface ScheduledTaskSessionListItem {
   key: string;
   label: string;
+  displayName?: string;
   sessionFile: string;
   updatedAt?: number;
+}
+
+function resolveScheduledTaskDisplayName(
+  label: string | undefined,
+  sessionKey: string,
+): string | undefined {
+  if (!label || label === sessionKey) return undefined;
+  const head = label.split(' - ')[0]?.trim();
+  if (head && head !== sessionKey && !head.startsWith('agent:')) return head;
+  if (!label.startsWith('agent:') && !label.startsWith('scheduled-task:')) {
+    return label.trim();
+  }
+  return undefined;
 }
 
 function isScheduledTaskAgentSessionKey(sessionKey: string): boolean {
@@ -547,6 +561,7 @@ export async function listAllScheduledTaskSessions(): Promise<ScheduledTaskSessi
       sessions.push({
         key: sessionKey,
         label: entry.label || `定时任务 ${taskId}`,
+        displayName: entry.label || `定时任务 ${taskId}`,
         sessionFile: entry.sessionFile,
         updatedAt,
       });
@@ -592,9 +607,11 @@ export async function listAllScheduledTaskSessions(): Promise<ScheduledTaskSessi
         // ignore
       }
 
+      const rawLabel = typeof record.label === 'string' ? record.label : undefined;
       sessions.push({
         key,
-        label: typeof record.label === 'string' ? record.label : key,
+        label: rawLabel ?? key,
+        displayName: resolveScheduledTaskDisplayName(rawLabel, key),
         sessionFile,
         updatedAt,
       });

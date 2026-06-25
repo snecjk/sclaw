@@ -270,12 +270,25 @@ async function readSessionStoreEntry(
 interface CronSessionListItem {
   key: string;
   label: string;
+  displayName?: string;
   updatedAt?: number;
 }
 
 async function listAllCronSessions(): Promise<CronSessionListItem[]> {
   const sessions: CronSessionListItem[] = [];
   const { stat, readdir, readFile: fsReadFile } = await import('node:fs/promises');
+
+  const jobNamesById = new Map<string, string>();
+  try {
+    const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
+    const jobsRaw = await readFile(jobsFile, 'utf8');
+    const jobsData = JSON.parse(jobsRaw) as { jobs?: Array<{ id: string; name?: string }> };
+    for (const job of jobsData.jobs ?? []) {
+      if (job.id && job.name?.trim()) jobNamesById.set(job.id, job.name.trim());
+    }
+  } catch {
+    // ignore
+  }
 
   // 1) Scan agents/*/sessions/sessions.json for physical dated sessions
   const agentsDir = join(getOpenClawConfigDir(), 'agents');
@@ -325,9 +338,12 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
           // ignore
         }
 
+        const rawLabel = typeof record.label === 'string' ? record.label : undefined;
+        const jobId = parsed.jobId;
         sessions.push({
           key,
-          label: typeof record.label === 'string' ? record.label : key,
+          label: rawLabel ?? key,
+          displayName: jobNamesById.get(jobId),
           updatedAt,
         });
       }
@@ -337,20 +353,7 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
   }
 
   // 2) Generate virtual dated sessions from cron run logs for local cron jobs
-  // Read job names from local cron/jobs.json and base session labels from sessions.json
-  const jobNamesById = new Map<string, string>();
-  try {
-    const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
-    const jobsRaw = await readFile(jobsFile, 'utf8');
-    const jobsData = JSON.parse(jobsRaw) as { jobs?: Array<{ id: string; name?: string }> };
-    for (const job of jobsData.jobs ?? []) {
-      if (job.name) jobNamesById.set(job.id, job.name);
-    }
-  } catch {
-    // ignore
-  }
-
-  // Also read base session labels from agents/main/sessions/sessions.json as fallback
+  // Read base session labels from sessions.json
   const baseSessionLabels = new Map<string, string>();
   try {
     const sessionsFile = join(getOpenClawConfigDir(), 'agents', 'main', 'sessions', 'sessions.json');
