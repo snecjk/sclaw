@@ -11,7 +11,7 @@ import { openExternalUrl } from '@/lib/preview-url';
 import type { SsoEnvironment } from '@/stores/auth';
 import { useAuthStore } from '@/stores/auth';
 
-export const MC_WEB_TEST_BASE = 'https://front-test.sto.cn/group/memory-center-web';
+export const MC_WEB_TEST_BASE = 'http://localhost:5174';
 export const MC_WEB_PROD_BASE = 'https://front.sto.cn/group/memory-center-web';
 /** 本地跑 memory-center-web 时可在 .env.development.local 覆盖 */
 export const MC_WEB_LOCAL_DEV_BASE = 'http://localhost:5173';
@@ -82,14 +82,20 @@ export function getMemoryCenterWebBase(ssoEnvironment?: SsoEnvironment): string 
   return MC_WEB_BASE[env] ?? MC_WEB_PROD_BASE;
 }
 
+/** 构造 /workflows-workbench/{id} 路径，可选追加 ?prompt=（AI 创建时 MC 自动打开 AI 面板用） */
+function buildDesignerPath(base: string, workflowId: string, prompt?: string): string {
+  const path = `${base}/workflows-workbench/${encodeURIComponent(workflowId)}`;
+  const trimmed = prompt?.trim();
+  return trimmed ? `${path}?prompt=${encodeURIComponent(trimmed)}` : path;
+}
+
 export function buildMemoryCenterDesignerRedirectPath(
   workflowId: string,
   ssoEnvironment?: SsoEnvironment,
+  prompt?: string,
 ): string {
   const pathname = getMcWebPathname(getMemoryCenterWebBase(ssoEnvironment));
-  return appendMcEmbedQuery(
-    `${pathname}/workflows-workbench/${encodeURIComponent(workflowId)}`,
-  );
+  return appendMcEmbedQuery(buildDesignerPath(pathname, workflowId, prompt));
 }
 
 /** /sso/login/callback?stoToken=&redirect= — 写入 token 后一次跳转到目标页 */
@@ -106,49 +112,54 @@ export function buildMemoryCenterSsoCallbackUrl(
   return `${base}/sso/login/callback?${params.toString()}`;
 }
 
-/** /workflows-workbench/{workflowId} */
+/** /workflows-workbench/{workflowId}?prompt= — 编辑或 AI 创建（带 prompt 时 MC 自动打开 AI 面板并发起） */
 export function buildMemoryCenterWorkflowDesignerUrl(
   workflowId: string,
   ssoEnvironment?: SsoEnvironment,
+  prompt?: string,
 ): string {
   const base = getMemoryCenterWebBase(ssoEnvironment);
-  return appendMcEmbedQuery(
-    `${base}/workflows-workbench/${encodeURIComponent(workflowId)}`,
-  );
+  return appendMcEmbedQuery(buildDesignerPath(base, workflowId, prompt));
 }
 
 /**
  * iframe 嵌入编辑器 URL：
  * - 同会话已登录 MC：直达编辑器（1 次加载）
  * - 首次：SSO 回调 + redirect 直达编辑器（MC 部署 redirect 后 1 次加载）
+ * - prompt 非空时：MC 端 workflow 加载完成后自动打开 AI 助手并发起创建
  */
 export function buildMemoryCenterWorkflowDesignerEmbedUrl(
   workflowId: string,
   stoToken?: string,
   ssoEnvironment?: SsoEnvironment,
+  prompt?: string,
 ): string {
-  const designerUrl = buildMemoryCenterWorkflowDesignerUrl(workflowId, ssoEnvironment);
+  const designerUrl = buildMemoryCenterWorkflowDesignerUrl(workflowId, ssoEnvironment, prompt);
   const token = stoToken?.trim();
   if (!token || isMcWebAuthedInSession()) {
     return designerUrl;
   }
 
   return buildMemoryCenterSsoCallbackUrl(token, {
-    redirectPath: buildMemoryCenterDesignerRedirectPath(workflowId, ssoEnvironment),
+    redirectPath: buildMemoryCenterDesignerRedirectPath(workflowId, ssoEnvironment, prompt),
     ssoEnvironment,
   });
 }
 
 /** 浏览器打开 */
-export function openMemoryCenterWorkflowDesigner(workflowId: string, stoToken?: string): void {
+export function openMemoryCenterWorkflowDesigner(
+  workflowId: string,
+  stoToken?: string,
+  prompt?: string,
+): void {
   const token = stoToken?.trim() || useAuthStore.getState().user?.stoToken?.trim();
   const ssoEnvironment = useAuthStore.getState().ssoEnvironment;
   const url = token
     ? buildMemoryCenterSsoCallbackUrl(token, {
-        redirectPath: buildMemoryCenterDesignerRedirectPath(workflowId, ssoEnvironment),
+        redirectPath: buildMemoryCenterDesignerRedirectPath(workflowId, ssoEnvironment, prompt),
         ssoEnvironment,
       })
-    : buildMemoryCenterWorkflowDesignerUrl(workflowId, ssoEnvironment);
+    : buildMemoryCenterWorkflowDesignerUrl(workflowId, ssoEnvironment, prompt);
   openExternalUrl(url);
 }
 

@@ -41,6 +41,32 @@ describe('memory-center-web-url', () => {
     );
   });
 
+  it('builds designer url with prompt', () => {
+    expect(buildMemoryCenterWorkflowDesignerUrl('wf_123', 'daily-external', 'daily-recon')).toBe(
+      'https://front-test.sto.cn/group/memory-center-web/workflows-workbench/wf_123?prompt=daily-recon&embedded=stoclaw&inClaw=1',
+    );
+  });
+
+  it('builds designer redirect path with prompt', () => {
+    expect(buildMemoryCenterDesignerRedirectPath('wf_123', 'daily-external', 'daily-recon')).toBe(
+      '/group/memory-center-web/workflows-workbench/wf_123?prompt=daily-recon&embedded=stoclaw&inClaw=1',
+    );
+  });
+
+  it('uses callback on first designer embed with prompt and direct url after session auth', () => {
+    expect(
+      buildMemoryCenterWorkflowDesignerEmbedUrl('wf_123', 'tok-abc', 'daily-external', 'daily-recon'),
+    ).toContain('/sso/login/callback?');
+
+    markMcWebAuthedInSession();
+    expect(isMcWebAuthedInSession()).toBe(true);
+    expect(
+      buildMemoryCenterWorkflowDesignerEmbedUrl('wf_123', 'tok-abc', 'daily-external', 'daily-recon'),
+    ).toBe(
+      'https://front-test.sto.cn/group/memory-center-web/workflows-workbench/wf_123?prompt=daily-recon&embedded=stoclaw&inClaw=1',
+    );
+  });
+
   it('builds sso callback url with redirect', () => {
     const redirect = buildMemoryCenterDesignerRedirectPath('wf_123', 'daily-external');
     expect(redirect).toBe(
