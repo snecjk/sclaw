@@ -296,10 +296,10 @@ function getMessageText(content: unknown): string {
 /** Extract media file refs from [media attached: <path> (<mime>) | ...] patterns */
 function extractMediaRefs(text: string): Array<{ filePath: string; mimeType: string }> {
   const refs: Array<{ filePath: string; mimeType: string }> = [];
-  const regex = /\[media attached:\s*([^\s(]+)\s*\(([^)]+)\)\s*\|[^\]]*\]/g;
+  const regex = /\[media attached:\s*([^(]+?)\s*\(([^)]+)\)\s*\|[^\]]*\]/g;
   let match;
   while ((match = regex.exec(text)) !== null) {
-    refs.push({ filePath: match[1], mimeType: match[2] });
+    refs.push({ filePath: match[1].trim(), mimeType: match[2].trim() });
   }
   return refs;
 }

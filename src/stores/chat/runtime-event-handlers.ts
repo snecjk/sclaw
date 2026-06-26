@@ -86,10 +86,18 @@ export function handleRuntimeEventState(
               }
               const text = getMessageText(finalMsg.content);
               if (text) {
-                const mediaRefs = extractMediaRefs(text);
+                const mediaRefs = extractMediaRefs(text, {
+                  source: 'tool-result:media-attached',
+                  messageId: finalMsg.id,
+                  toolCallId: finalMsg.toolCallId,
+                });
                 const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
                 for (const ref of mediaRefs) toolFiles.push(makeAttachedFile(ref));
-                for (const ref of extractRawFilePaths(text)) {
+                for (const ref of extractRawFilePaths(text, {
+                  source: 'tool-result:raw-path',
+                  messageId: finalMsg.id,
+                  toolCallId: finalMsg.toolCallId,
+                })) {
                   if (!mediaRefPaths.has(ref.filePath)) toolFiles.push(makeAttachedFile(ref));
                 }
               }

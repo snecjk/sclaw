@@ -4,7 +4,7 @@ import {
   evaluateScheduledTaskCreationBlock,
   isScheduledTaskExecutionSessionKey,
   SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT,
-} from "../../../shared/scheduled-task-instruction.js";
+} from "./shared/scheduled-task-instruction.js";
 
 export default definePluginEntry({
   id: "sto-scheduled-task-tool",

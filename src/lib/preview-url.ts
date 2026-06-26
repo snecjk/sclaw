@@ -202,8 +202,8 @@ export function isUserFacingArtifactUrl(url: string | undefined | null): boolean
 
 /** Open http(s) links in the system browser — required in Electron (plain <a> navigates in-app). */
 export function openExternalUrl(url: string): void {
-  if (!url?.trim() || !isHttpUrl(url)) return;
-  void window.electron?.openExternal(url);
+  if (!url?.trim()) return;
+  void window.electron?.openExternal(url.trim());
 }
 
 /** Resolve bare filenames / artifact names to OSS URL from hydrated workflow card state. */

@@ -37,6 +37,11 @@ import {
   resolvePreviewLinkTarget,
   toMarkdownPreviewPath,
 } from '@/lib/preview-url';
+import {
+  coerceHrefForMarkdownTransform,
+  resolvePreviewHrefAction,
+  resolvePreviewPathOnHost,
+} from '@/lib/preview-href';
 import { dedupeAttachedFiles, mergePreviewFileLists, normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 import { isFilePreviewDebugEnabled, logFilePreview } from '@/lib/file-preview-debug';
@@ -205,7 +210,7 @@ export const ChatMessage = memo(function ChatMessage({
   const workflowCardStatesForRefs = workflowCardStates;
   const candidateRefs = useMemo(
     () =>
-      extractPreviewableRefs(text)
+      extractPreviewableRefs(text, { messageId: message.id })
         .filter((ref) => !attachedFiles.some((f) => previewFileRefsMatch(f, ref)))
         .filter((ref) => isPreviewableFile(ref)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -230,12 +235,24 @@ export const ChatMessage = memo(function ChatMessage({
     const seen = new Set<string>();
     const result: typeof candidateRefs = [];
     for (const ref of candidateRefs) {
+      const exists = refExistence[ref.filePath];
       const resolved = resolvePreviewCandidate(
         { ...ref, fileSize: 0, preview: null },
-        refExistence[ref.filePath],
+        exists,
         workflowCardStatesForRefs,
       );
-      if (!resolved) continue;
+      if (!resolved) {
+        logFilePreview('extract-filtered', {
+          messageId: message.id,
+          filePath: ref.filePath,
+          fileName: ref.fileName,
+          exists,
+          reason: exists === false
+            ? 'local path does not exist and no workflow artifact fallback'
+            : 'existence check pending or unresolvable',
+        });
+        continue;
+      }
       const key = normalizePreviewFileKey(resolved.filePath, resolved.fileName);
       if (seen.has(key)) continue;
       if (workflowArtifactUrls.has(resolved.filePath)) continue;
@@ -855,9 +872,10 @@ function AssistantHoverBar({
   );
 }
 
-/** Allow custom preview:// links — react-markdown strips unknown URL schemes by default. */
+/** ReactMarkdown urlTransform — local hrefs → preview://; external schemes pass through. */
 function previewUrlTransform(url: string): string {
-  if (url.startsWith('preview://')) return url;
+  const coerced = coerceHrefForMarkdownTransform(url);
+  if (coerced !== null) return coerced;
   return defaultUrlTransform(url);
 }
 
@@ -1001,19 +1019,36 @@ function MessageBubble({
                   return <span className="text-link break-words break-all">{children}</span>;
                 }
 
-                const target = resolvePreviewLinkTarget(rawHref, workflowCardStates);
+                const action = resolvePreviewHrefAction(
+                  rawHref.startsWith('preview://') ? rawHref : rawHref,
+                );
 
-                if (onPreviewFile && isHttpUrl(target) && isPreviewableRemoteUrl(target)) {
+                if (action.action === 'open-external') {
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        logFilePreview('link-click', { branch: 'external', target: action.url });
+                        openExternalUrl(action.url);
+                      }}
+                      className="inline cursor-pointer break-all break-words border-0 bg-transparent p-0 font-inherit text-link underline-offset-2 hover:underline"
+                    >
+                      {children}
+                    </button>
+                  );
+                }
+
+                if (action.action === 'preview-remote' && onPreviewFile) {
                   const previewFile = artifactToPreviewFile({
-                    name: previewHttpUrlLabel(target),
-                    type: inferMimeTypeFromUrl(target),
-                    url: target,
+                    name: previewHttpUrlLabel(action.url),
+                    type: inferMimeTypeFromUrl(action.url),
+                    url: action.url,
                   });
                   return (
                     <button
                       type="button"
                       onClick={() => {
-                        logFilePreview('link-click', { branch: 'remote-preview', target });
+                        logFilePreview('link-click', { branch: 'remote-preview', target: action.url });
                         onPreviewFile(previewFile);
                       }}
                       className="inline cursor-pointer break-all break-words border-0 bg-transparent p-0 font-inherit text-link underline-offset-2 hover:underline"
@@ -1023,37 +1058,34 @@ function MessageBubble({
                   );
                 }
 
-                if (isHttpUrl(target)) {
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        logFilePreview('link-click', { branch: 'external-http', target });
-                        openExternalUrl(target);
-                      }}
-                      className="inline cursor-pointer break-all break-words border-0 bg-transparent p-0 font-inherit text-link underline-offset-2 hover:underline"
-                    >
-                      {children}
-                    </button>
+                if (action.action === 'preview-local' && onPreviewFile) {
+                  const hintPath = action.path;
+                  const workflowTarget = resolvePreviewLinkTarget(
+                    rawHref.startsWith('preview://') ? rawHref : `preview://${hintPath}`,
+                    workflowCardStates,
                   );
-                }
-
-                if (onPreviewFile && target) {
-                  const fileName = target.split('/').pop() || 'preview';
-                  const mimeType = inferMimeTypeFromUrl(target);
+                  const openLocal = async () => {
+                    let filePath = workflowTarget && isHttpUrl(workflowTarget)
+                      ? workflowTarget
+                      : hintPath;
+                    if (!isHttpUrl(filePath)) {
+                      const resolved = await resolvePreviewPathOnHost(filePath);
+                      if (resolved.exists) filePath = resolved.path;
+                    }
+                    const fileName = filePath.split('/').pop()?.split('\\').pop() || 'preview';
+                    logFilePreview('link-click', { branch: 'local-preview', target: filePath, fileName });
+                    onPreviewFile({
+                      filePath,
+                      fileName,
+                      mimeType: inferMimeTypeFromUrl(filePath),
+                      fileSize: 0,
+                      preview: null,
+                    });
+                  };
                   return (
                     <button
                       type="button"
-                      onClick={() => {
-                        logFilePreview('link-click', { branch: 'local-preview', target, fileName, mimeType });
-                        onPreviewFile({
-                          filePath: target,
-                          fileName,
-                          mimeType,
-                          fileSize: 0,
-                          preview: null,
-                        });
-                      }}
+                      onClick={() => { void openLocal(); }}
                       className="inline cursor-pointer break-all break-words border-0 bg-transparent p-0 font-inherit text-link underline-offset-2 hover:underline"
                     >
                       {children}

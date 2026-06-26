@@ -1,19 +1,39 @@
+import { hostApiFetch } from '@/lib/host-api';
+
 /**
- * Dev-only diagnostics for chat file preview rendering.
- * Open DevTools → Console, filter by `[StoClaw file-preview]`.
+ * Diagnostics for chat file preview extraction/rendering.
  *
- * Disable: localStorage.setItem('stoclaw:debug-file-preview', '0')
- * Re-enable: localStorage.removeItem('stoclaw:debug-file-preview')
+ * Dev: on by default. Prod: off unless `localStorage.setItem('stoclaw:debug-file-preview', '1')`.
+ * Disable: `localStorage.setItem('stoclaw:debug-file-preview', '0')`
+ *
+ * Logs go to DevTools console and Main log file (`~/Library/Application Support/StoClaw/logs/`).
+ * Filter log file by `[PreviewExtract]` or `[StoClaw file-preview]`.
  */
 export function isFilePreviewDebugEnabled(): boolean {
-  if (!import.meta.env.DEV) return false;
   try {
-    return localStorage.getItem('stoclaw:debug-file-preview') !== '0';
+    const flag = localStorage.getItem('stoclaw:debug-file-preview');
+    if (flag === '0') return false;
+    if (flag === '1') return true;
+    return !!import.meta.env.DEV;
   } catch {
-    return true;
+    return !!import.meta.env.DEV;
   }
 }
 
-export function logFilePreview(_stage: string, _payload: Record<string, unknown>): void {
+export function logFilePreview(stage: string, payload: Record<string, unknown>): void {
   if (!isFilePreviewDebugEnabled()) return;
+
+  const message = `[StoClaw file-preview] stage=${stage}`;
+  const data = { stage, ...payload, timestamp: new Date().toISOString() };
+
+  console.info(message, data);
+
+  void hostApiFetch('/api/logs/client', {
+    method: 'POST',
+    body: JSON.stringify({
+      level: 'info',
+      message,
+      data,
+    }),
+  }).catch(() => undefined);
 }
