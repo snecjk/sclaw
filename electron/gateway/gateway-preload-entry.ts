@@ -202,6 +202,8 @@ function patchChildProcess(): void {
               }
               return originalExecFile(...(execFileArgs as Parameters<typeof originalExecFile>));
             }
+            mutable[0] = fixDwsChatMessageSendShellScript(mutable[0]);
+            cmd = mutable[0] as string;
           } else {
             mutable[0] = fixDwsChatMessageSendShellScript(mutable[0]);
             cmd = mutable[0] as string;
@@ -263,6 +265,8 @@ function patchChildProcess(): void {
               }
               return originalExecFileSync(...(execFileArgs as Parameters<typeof originalExecFileSync>));
             }
+            mutable[0] = fixDwsChatMessageSendShellScript(mutable[0]);
+            cmd = mutable[0] as string;
           } else {
             mutable[0] = fixDwsChatMessageSendShellScript(mutable[0]);
             cmd = mutable[0] as string;

@@ -3,6 +3,7 @@
  * 一级 Tab 切换：定时任务 / 执行记录（无下划线，与工作流列表主 Tab 一致）
  */
 
+import { useTranslation } from 'react-i18next';
 import { workflowListTabClass } from '@/lib/surfaces';
 import type { TaskView } from '../types';
 
@@ -14,14 +15,16 @@ interface ViewTabsProps {
 }
 
 /** 视图 Tab 配置 */
-const VIEW_TABS: { value: TaskView; label: string }[] = [
-  { value: 'tasks', label: '定时任务' },
-  { value: 'records', label: '执行记录' },
+const VIEW_TABS: { value: TaskView; i18nKey: string }[] = [
+  { value: 'tasks', i18nKey: 'myTask.viewTabs.tasks' },
+  { value: 'records', i18nKey: 'myTask.viewTabs.records' },
 ];
 
 export function ViewTabs({ activeView, onViewChange }: ViewTabsProps) {
+  const { t } = useTranslation('tasks');
+
   return (
-    <div className="flex items-center gap-5" role="tablist" aria-label="任务视图">
+    <div className="flex items-center gap-5" role="tablist" aria-label={t('myTask.viewTabs.aria')}>
       {VIEW_TABS.map((tab) => {
         const isActive = activeView === tab.value;
         return (
@@ -33,7 +36,7 @@ export function ViewTabs({ activeView, onViewChange }: ViewTabsProps) {
             onClick={() => onViewChange(tab.value)}
             className={workflowListTabClass(isActive)}
           >
-            {tab.label}
+            {t(tab.i18nKey)}
           </button>
         );
       })}

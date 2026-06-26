@@ -4,9 +4,27 @@
  * 对应原型 .task-record
  */
 
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { myTaskRecordDetailButtonClass, myTaskRecordItemShellClass } from '@/lib/surfaces';
+import { STATUS_I18N_KEY } from '../constants';
 import type { ExecutionRecord } from '../types';
+
+/** Format duration from milliseconds into a localized string */
+function formatDurationI18n(
+  durationMs: number,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (durationMs < 0) return '-';
+  if (durationMs === 0) return t('myTask.recordItem.durationLessThanOneSecond');
+  const seconds = Math.floor(durationMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remainSeconds = seconds % 60;
+  if (minutes > 0) {
+    return t('myTask.recordItem.durationMinutesSeconds', { minutes, seconds: String(remainSeconds).padStart(2, '0') });
+  }
+  return t('myTask.recordItem.durationSeconds', { seconds });
+}
 
 interface RecordItemProps {
   /** 执行记录数据 */
@@ -15,14 +33,8 @@ interface RecordItemProps {
   onViewDetail?: (record: ExecutionRecord) => void;
 }
 
-const STATUS_CONFIG = {
-  running: { label: '执行中', textClass: 'text-primary' },
-  success: { label: '执行成功', textClass: 'text-success' },
-  failed: { label: '执行失败', textClass: 'text-destructive' },
-} as const;
-
 export function RecordItem({ record, onViewDetail }: RecordItemProps) {
-  const statusConfig = STATUS_CONFIG[record.status];
+  const { t } = useTranslation('tasks');
 
   return (
     <article className={myTaskRecordItemShellClass}>
@@ -32,7 +44,8 @@ export function RecordItem({ record, onViewDetail }: RecordItemProps) {
           <span
             className={cn(
               'inline-flex shrink-0 items-center gap-[5px] text-[12.5px] font-medium',
-              statusConfig.textClass,
+              record.status === 'running' ? 'text-primary' :
+              record.status === 'success' ? 'text-success' : 'text-destructive',
             )}
           >
             <span
@@ -43,21 +56,21 @@ export function RecordItem({ record, onViewDetail }: RecordItemProps) {
                   : 'h-[7px] w-[7px]',
               )}
             />
-            {statusConfig.label}
+            {t(STATUS_I18N_KEY[record.status])}
           </span>
         </div>
         <div className="mt-[3px] text-[12.5px] text-muted-foreground">
           {record.startTime} ·{' '}
           {record.status === 'running'
-            ? '进行中'
+            ? t('myTask.recordItem.inProgress')
             : record.status === 'failed'
-              ? `失败${record.failReason ? ` · ${record.failReason}` : ''}`
-              : `耗时 ${record.duration}`}
+              ? t('myTask.recordItem.failedWithReason', { reason: record.failReason || '' })
+              : formatDurationI18n(record.durationMs, t)}
         </div>
       </div>
 
       <button type="button" onClick={() => onViewDetail?.(record)} className={myTaskRecordDetailButtonClass}>
-        查看详情
+        {t('myTask.recordItem.viewDetail')}
       </button>
     </article>
   );

@@ -11,6 +11,8 @@ import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-opt
 import { hostApiFetch } from '@/lib/host-api';
 import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
 import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
+import { markSessionUnreadAfterSuccessfulRun } from '@/lib/session-unread-notify';
+import { useSessionUnreadStore } from '@/stores/session-unread';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
@@ -18,6 +20,8 @@ import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime
 import {
   buildCronSessionHistoryPath, getCronRunSessionAggregateKey, getClaudeTaskRunSessionAggregateKey,
   isCronSessionKey, isCronDatedSessionKey,
+  isAnyCronSessionKey, isScheduledTaskSessionKey,
+  isVirtualTaskSessionKey,
   parseCronSessionKey, parseScheduledTaskSessionKey, parseScheduledTaskAgentSessionKey,
   // Claude 任务相关
   isClaudeScheduledTaskSessionKey, isClaudeScheduledTaskRunSessionKey, isClaudeScheduledTaskDatedSessionKey,
@@ -875,7 +879,9 @@ function ensureSessionEntry(sessions: ChatSession[], sessionKey: string): ChatSe
   const engineType: ChatSession['engineType'] =
     isClaudeScheduledTaskSessionKey(sessionKey) || isClaudeScheduledTaskRunSessionKey(sessionKey) || isClaudeScheduledTaskDatedSessionKey(sessionKey)
       ? 'claude'
-      : getAgentEngineType(getAgentIdFromSessionKey(sessionKey)) ?? 'openclaw';
+      : isAnyCronSessionKey(sessionKey) || isScheduledTaskSessionKey(sessionKey)
+        ? 'openclaw'
+        : getAgentEngineType(getAgentIdFromSessionKey(sessionKey)) ?? 'openclaw';
   return [...sessions, { key: sessionKey, engineType }];
 }
 
@@ -1125,17 +1131,23 @@ function handleBackgroundSessionEvent(
 
       const toolOnly = isToolOnlyMessage(finalMsg);
       const hasOutput = hasNonToolAssistantContent(finalMsg);
-      set((s) => patchSessionRuntimeState(s, sessionKey, (runtime) => ({
-        sending: hasOutput ? false : runtime.sending,
-        activeRunId: hasOutput ? null : runtime.activeRunId,
-        streamingText: '',
-        streamingMessage: null,
-        streamingTools: hasOutput ? [] : (updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools),
-        pendingFinal: hasOutput ? false : true,
-        pendingToolImages: hasOutput ? [] : runtime.pendingToolImages,
-        lastUserMessageAt: hasOutput ? null : runtime.lastUserMessageAt,
-        error: null,
-      })));
+      set((s) => {
+        const next = patchSessionRuntimeState(s, sessionKey, (runtime) => ({
+          sending: hasOutput ? false : runtime.sending,
+          activeRunId: hasOutput ? null : runtime.activeRunId,
+          streamingText: '',
+          streamingMessage: null,
+          streamingTools: hasOutput ? [] : (updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools),
+          pendingFinal: hasOutput ? false : true,
+          pendingToolImages: hasOutput ? [] : runtime.pendingToolImages,
+          lastUserMessageAt: hasOutput ? null : runtime.lastUserMessageAt,
+          error: null,
+        }));
+        if (hasOutput && sessionKey !== s.currentSessionKey) {
+          markSessionUnreadAfterSuccessfulRun(sessionKey, s.currentSessionKey);
+        }
+        return next;
+      });
       if (toolOnly) break;
       break;
     }
@@ -1730,7 +1742,11 @@ export const useChatStore = create<ChatState>()(
               isTemporaryAgentSessionKey(nextSessionKey)
               || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
               || localSessions.some((session) => session.key === nextSessionKey);
-            if (!hasLocalPendingSession) {
+            // Virtual task/cron keys (e.g. a freshly triggered `claude-task:*` or
+            // `agent:*:cron:*` dated session) are resolved by key prefix in
+            // loadHistory and may not be in the backend list yet — keep them, or
+            // the composer falls back to the default agent's engine.
+            if (!hasLocalPendingSession && !isVirtualTaskSessionKey(nextSessionKey)) {
               nextSessionKey = mergedRemoteSessions[0].key;
             }
           }
@@ -1935,6 +1951,7 @@ export const useChatStore = create<ChatState>()(
 
   switchSession: (key: string) => {
     if (key === get().currentSessionKey) return;
+    useSessionUnreadStore.getState().markSessionRead(key);
     set((s) => buildSessionSwitchPatch(s, key));
     const targetSession = get().sessions.find((session) => session.key === key);
     if (key !== DEFAULT_SESSION_KEY && !targetSession?.engineType) {
@@ -1975,6 +1992,7 @@ export const useChatStore = create<ChatState>()(
     }
 
     rememberOptimisticDeletedSessionKey(key);
+    useSessionUnreadStore.getState().markSessionRead(key);
 
     const { currentSessionKey, sessions } = get();
     const remaining = sessions.filter((s) => s.key !== key);
@@ -2391,6 +2409,7 @@ export const useChatStore = create<ChatState>()(
 
       if ((recentAssistant || currentRecentAssistant) && (!shouldKeepClaudeRunActive || claudeRuntimeDone)) {
         clearHistoryPoll();
+        useSessionUnreadStore.getState().markSessionRead(targetSessionKey);
         set((s) => patchSessionRuntimeState(s, targetSessionKey, {
           sending: false,
           activeRunId: null,

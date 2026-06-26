@@ -3,6 +3,9 @@
  *
  * 使用 Workflow 专用输入框（无底栏工具行，仅右下角发送箭头），
  * 与首页 HomeComposer、对话页 ChatInput 解耦，互不影响。
+ *
+ * 注意：不渲染 ParameterFormDock——工作流列表页无 chat session 上下文，
+ * 参数表单属于对话区运行场景，不应在此展示。
  * 使用位置：src/pages/Workflow/components/workflow-dashboard.tsx
  */
 import { useCallback, useMemo } from 'react';
@@ -11,9 +14,7 @@ import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { cn } from '@/lib/utils';
-import { stoParameterFormDockLayout } from '@/lib/surfaces';
 import { WorkflowComposerInput } from '@/pages/Workflow/components/workflow-composer-input';
-import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 
 export interface WorkflowComposerProps {
@@ -59,7 +60,6 @@ export function WorkflowComposer({ seedText, onGenerate, className }: WorkflowCo
 
   return (
     <div className={cn('flex flex-col', className)}>
-      <ParameterFormDock layout={stoParameterFormDockLayout('home')} />
       <section className="flex flex-col" aria-label={t('generate.sendAria')}>
         <WorkflowComposerInput
           onSend={handleGenerateSend}
