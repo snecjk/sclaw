@@ -177,6 +177,12 @@ export interface ChatState {
   showThinking: boolean;
   thinkingLevel: string | null;
 
+  /** Model selected on the new-conversation page (DEFAULT_SESSION_KEY) before sending.
+   *  Carried into the real session created by newSession() so the user's choice
+   *  is preserved instead of reverting to the global default. */
+  pendingNewSessionModel: string | null;
+  setPendingNewSessionModel: (model: string | null) => void;
+
   // Workflow
   workflowCardStates: Record<string, WorkflowExecutionState>;
   setWorkflowCardState: (runId: string, state: WorkflowExecutionState) => void;
@@ -201,7 +207,7 @@ export interface ChatState {
   switchSession: (key: string) => void;
   /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
   switchToAgentMainSession: (agentId: string) => void;
-  newSession: () => void;
+  newSession: () => Promise<void>;
   deleteSession: (key: string) => Promise<void>;
   cleanupEmptySession: () => void;
   loadHistory: (quiet?: boolean) => Promise<void>;

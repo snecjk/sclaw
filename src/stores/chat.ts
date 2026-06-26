@@ -1522,6 +1522,11 @@ export const useChatStore = create<ChatState>()(
     }));
   },
 
+  pendingNewSessionModel: null,
+  setPendingNewSessionModel: (model) => {
+    set({ pendingNewSessionModel: model });
+  },
+
   pendingWorkflow: null,
   setPendingWorkflow: (pending) => {
     set({ pendingWorkflow: pending });
@@ -1991,7 +1996,7 @@ export const useChatStore = create<ChatState>()(
 
   // ── New session ──
 
-  newSession: () => {
+  newSession: async () => {
     // Generate a new unique session key and switch to it.
     // NOTE: We intentionally do NOT call sessions.reset on the old session.
     // sessions.reset archives (renames) the session JSONL file, making old
@@ -2007,21 +2012,27 @@ export const useChatStore = create<ChatState>()(
       ?? DEFAULT_CANONICAL_PREFIX;
     const newKey = `${prefix}:session-${Date.now()}`;
     const newAgentId = getAgentIdFromSessionKey(newKey);
-    // Carry over model from home/default session or Claude agent toolbar selection
-    let currentSessionModel = sessions.find((s) => s.key === currentSessionKey)?.model;
-    if (!currentSessionModel?.trim()) {
-      const carryAgent = useAgentsStore.getState().agents.find(
-        (agent) => agent.id === (getAgentIdFromSessionKey(currentSessionKey) ?? get().currentAgentId),
-      );
-      if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
-        currentSessionModel = normalizeModelIdForChat(carryAgent.modelDisplay);
+    const pendingModel = get().pendingNewSessionModel?.trim();
+    let chosenModel = pendingModel;
+    if (!chosenModel) {
+      if (currentSessionKey !== DEFAULT_SESSION_KEY) {
+        chosenModel = sessions.find((s) => s.key === currentSessionKey)?.model?.trim();
+      } else {
+        // Placeholder main may carry gateway agent default (e.g. qwen3.5) — not user choice.
+        // Explicit toolbar picks use pendingNewSessionModel; Claude uses agent-scoped model.
+        const carryAgent = useAgentsStore.getState().agents.find(
+          (agent) => agent.id === get().currentAgentId,
+        );
+        if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
+          chosenModel = normalizeModelIdForChat(carryAgent.modelDisplay);
+        }
       }
     }
     const newSessionEntry: ChatSession = {
       key: newKey,
       label: NEW_SESSION_TEMP_LABEL,
       engineType: getAgentEngineType(newAgentId),
-      ...(currentSessionModel ? { model: currentSessionModel } : {}),
+      ...(chosenModel ? { model: chosenModel } : {}),
     };
     set((s) => {
       const nextRuntimeBySessionKey = {
@@ -2058,7 +2069,7 @@ export const useChatStore = create<ChatState>()(
         pendingToolImages: [],
       };
     });
-    void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
+    await applyWorkspaceDefaultToNewSession(newKey, newAgentId);
   },
 
   // ── Cleanup empty session on navigate away ──
@@ -2385,12 +2396,12 @@ export const useChatStore = create<ChatState>()(
       try {
         // Gateway chat.history does not support offset; load up to the hard max in one call.
         let thinkingLevel: string | null = null;
+        // engineType is not accepted by Gateway chat.history schema
         const data = await useGatewayStore.getState().rpc<Record<string, unknown>>(
           'chat.history',
           {
             sessionKey: targetSessionKey,
             limit: CHAT_HISTORY_LENGTH_MAX_LIMIT,
-            engineType: resolveEngineTypeForSession(get().sessions, targetSessionKey, get().currentAgentId),
           },
         );
         if (get().currentSessionKey !== targetSessionKey) return;
@@ -2723,6 +2734,8 @@ export const useChatStore = create<ChatState>()(
           },
         );
       } else {
+        // engineType is used only by Main-process routes to select the adapter;
+        // Gateway chat.send schema does not accept it, so we must NOT forward it.
         const rpcResult = await useGatewayStore.getState().rpc<{ runId?: string }>(
           'chat.send',
           {
@@ -2730,7 +2743,6 @@ export const useChatStore = create<ChatState>()(
             message: messageWithContext,
             deliver: false,
             idempotencyKey,
-            engineType: currentSessionEngineType,
             ...dingTalkRpcExtras,
             // NOTE: workflowId/runId are not forwarded to Gateway chat.send yet
             // because the Gateway schema does not accept them. Workflow state
@@ -2790,11 +2802,11 @@ export const useChatStore = create<ChatState>()(
     }));
 
     try {
+      // engineType is not accepted by Gateway chat.abort schema
       await useGatewayStore.getState().rpc(
         'chat.abort',
         {
           sessionKey: currentSessionKey,
-          engineType: resolveEngineTypeForSession(get().sessions, currentSessionKey, get().currentAgentId),
         },
       );
     } catch (err) {

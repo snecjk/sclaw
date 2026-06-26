@@ -62,11 +62,11 @@ export async function fetchApolloConfigValue(key: string): Promise<string | null
 
 /**
  * Load site department types from Apollo config and update the shared cache.
- * Key: claw.site.department
+ * Key: cli.registry.security.scope.group.site
  * Returns a Set of category codes (e.g. "承包区", "独立网点").
  */
 export async function loadSiteDepartmentTypes(): Promise<Set<string>> {
-  const value = await fetchApolloConfigValue('claw.site.department');
+  const value = await fetchApolloConfigValue('cli.registry.security.scope.group.site');
   setSiteDepartmentTypes(value);
   const types = new Set(
     value

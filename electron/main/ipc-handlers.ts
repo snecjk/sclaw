@@ -1592,6 +1592,10 @@ function registerGatewayHandlers(
       }
 
       rpcParams = await preprocessChatSendParams(rpcParams) as Record<string, unknown>;
+      // Defensive: Gateway chat.send schema does not accept engineType
+      if ('engineType' in rpcParams) {
+        delete rpcParams.engineType;
+      }
       const outboundMessage = typeof rpcParams.message === 'string' ? rpcParams.message : message;
 
       logger.info(`[chat:sendWithMedia] Sending: message="${outboundMessage.substring(0, 100)}", attachments=${imageAttachments.length}, fileRefs=${fileReferences.length}`);

@@ -19,6 +19,7 @@ import {
   isConcreteModelId,
   normalizeModelIdForChat,
   resolveChatToolbarModelId,
+  resolveProviderRawModelId,
   upsertSessionModel,
   type ChatModelOption,
 } from '@/lib/chat-model-options';
@@ -91,6 +92,15 @@ async function applyOpenClawSessionModel(params: {
   option?: ChatModelOption;
   currentAgentId: string;
 }): Promise<string> {
+  const { accounts } = useProviderStore.getState();
+  const resolved = resolveProviderRawModelId(
+    accounts,
+    params.modelId,
+    params.option?.accountId,
+  );
+  const modelToSend = resolved?.modelId ?? params.modelId;
+  const accountId = resolved?.accountId ?? params.option?.accountId;
+
   const result = await hostApiFetch<{
     model?: string;
     modelOverride?: string | null;
@@ -98,13 +108,13 @@ async function applyOpenClawSessionModel(params: {
     method: 'POST',
     body: JSON.stringify({
       sessionKey: params.currentSessionKey,
-      model: params.modelId,
-      accountId: params.option?.accountId,
+      model: modelToSend,
+      accountId,
       agentId: params.currentAgentId || undefined,
       engineType: 'openclaw',
     }),
   });
-  return (result.modelOverride || result.model || params.modelId).trim();
+  return (result.modelOverride || result.model || modelToSend).trim();
 }
 
 async function repairStoCatalogAndRetrySessionModel(params: {
@@ -117,6 +127,25 @@ async function repairStoCatalogAndRetrySessionModel(params: {
   await useProviderStore.getState().refreshProviderSnapshot();
   await new Promise((resolve) => setTimeout(resolve, 2500));
   return applyOpenClawSessionModel(params);
+}
+
+function resolveClaudeToolbarModelId(input: {
+  currentSessionKey: string;
+  sessionModel?: string;
+  agentModelDisplay?: string;
+  workspaceDefaultModelId: string;
+}): string {
+  if (input.currentSessionKey !== DEFAULT_SESSION_KEY) {
+    return (
+      normalizeModelIdForChat(input.sessionModel)
+      || (isConcreteModelId(input.agentModelDisplay)
+        ? normalizeModelIdForChat(input.agentModelDisplay)
+        : (input.workspaceDefaultModelId || ''))
+    );
+  }
+  return isConcreteModelId(input.agentModelDisplay)
+    ? normalizeModelIdForChat(input.agentModelDisplay)
+    : (input.workspaceDefaultModelId || '');
 }
 
 /* ── Engine Selector ─────────────────────────────────────────── */
@@ -302,6 +331,7 @@ export function ChatModelSelector({
   const { t } = useTranslation('chat');
 
   const { accounts, statuses, vendors, defaultAccountId, init } = useProviderStore();
+  const pendingNewSessionModel = useChatStore((s) => s.pendingNewSessionModel);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [modelSaving, setModelSaving] = useState(false);
 
@@ -339,21 +369,18 @@ export function ChatModelSelector({
 
   useEffect(() => {
     if (modelSaving) return;
+    if (currentSessionKey === DEFAULT_SESSION_KEY && currentEngineType !== 'claude') {
+      const pending = normalizeModelIdForChat(pendingNewSessionModel);
+      setSelectedModelId(pending || workspaceDefaultModelId || '');
+      return;
+    }
     const resolved = currentEngineType === 'claude'
-      ? (
-        currentSessionKey !== DEFAULT_SESSION_KEY
-          ? (
-            normalizeModelIdForChat(currentSession?.model)
-            || (isConcreteModelId(currentAgent?.modelDisplay)
-              ? normalizeModelIdForChat(currentAgent?.modelDisplay)
-              : (workspaceDefaultModelId || ''))
-          )
-          : (
-            isConcreteModelId(currentAgent?.modelDisplay)
-              ? normalizeModelIdForChat(currentAgent?.modelDisplay)
-              : (workspaceDefaultModelId || '')
-          )
-      )
+      ? resolveClaudeToolbarModelId({
+        currentSessionKey,
+        sessionModel: currentSession?.model,
+        agentModelDisplay: currentAgent?.modelDisplay,
+        workspaceDefaultModelId,
+      })
       : resolveChatToolbarModelId({
         sessionModel: currentSession?.model,
         agentModelDisplay: currentAgent?.modelDisplay,
@@ -363,9 +390,10 @@ export function ChatModelSelector({
       });
     setSelectedModelId(resolved || '');
   }, [
+    currentSessionKey,
     currentEngineType,
     modelSaving,
-    currentSessionKey,
+    pendingNewSessionModel,
     currentSession?.model,
     currentAgent?.modelDisplay,
     currentAgent?.inheritedModel,
@@ -374,7 +402,7 @@ export function ChatModelSelector({
   ]);
 
   const selectedModel = useMemo(
-    () => modelOptions.find((option) => option.modelId === selectedModelId),
+    () => modelOptions.find((option) => option.normalizedId === selectedModelId),
     [modelOptions, selectedModelId],
   );
   const claudeModelConfigured = isConcreteModelId(currentAgent?.modelDisplay);
@@ -383,39 +411,76 @@ export function ChatModelSelector({
       ? (workspaceDefaultModelId || t('toolbar.modelNotConfigured'))
       : t('toolbar.currentModel'));
 
-  const handleModelSwitch = async (modelId: string) => {
-    if (!currentSessionKey || modelId === selectedModelId) return;
-    const option = modelOptions.find((item) => item.modelId === modelId);
-    setSelectedModelId(modelId);
-    setModelSaving(true);
-    try {
-      let persistedModel = modelId;
-      if (currentEngineType === 'claude' && currentAgentId) {
-        if (currentSessionKey !== DEFAULT_SESSION_KEY) {
-          persistedModel = await applyClaudeSessionModel({
-            currentSessionKey,
-            modelId,
-            option,
-            currentAgentId,
+  const handleModelSwitch = async (normalizedId: string) => {
+    if (!currentSessionKey || normalizedId === selectedModelId) return;
+    const option = modelOptions.find((item) => item.normalizedId === normalizedId);
+    const rawModelId = option?.modelId ?? normalizedId;
+    setSelectedModelId(normalizedId);
+
+    if (currentSessionKey === DEFAULT_SESSION_KEY) {
+      useChatStore.getState().setPendingNewSessionModel(rawModelId);
+      setModelSaving(true);
+      try {
+        let persistedModel = rawModelId;
+        if (currentEngineType === 'claude' && currentAgentId) {
+          const result = await hostApiFetch<{
+            snapshot?: { agents?: Array<{ id: string; modelDisplay?: string }> };
+          }>(`/api/agents/${encodeURIComponent(currentAgentId)}/model`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              model: rawModelId,
+              accountId: option?.accountId,
+            }),
           });
-        } else {
-          const result = await hostApiFetch<{ snapshot?: { agents?: Array<{ id: string; modelDisplay?: string }> } }>(
-            `/api/agents/${encodeURIComponent(currentAgentId)}/model`,
-            {
-              method: 'PUT',
-              body: JSON.stringify({
-                model: modelId,
-                accountId: option?.accountId,
-              }),
-            },
-          );
-          persistedModel = result.snapshot?.agents?.find((agent) => agent.id === currentAgentId)?.modelDisplay?.trim() || modelId;
+          persistedModel = result.snapshot?.agents?.find((agent) => agent.id === currentAgentId)?.modelDisplay?.trim()
+            || rawModelId;
           await fetchAgents();
         }
+        useChatStore.setState((state) => ({
+          sessions: upsertSessionModel(
+            state.sessions,
+            currentSessionKey,
+            persistedModel,
+            { engineType: currentEngineType, label: '新对话' },
+          ),
+        }));
+      } catch (err) {
+        toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));
+        const resolved = currentEngineType === 'claude'
+          ? (
+            isConcreteModelId(currentAgent?.modelDisplay)
+              ? normalizeModelIdForChat(currentAgent?.modelDisplay)
+              : (workspaceDefaultModelId || '')
+          )
+          : resolveChatToolbarModelId({
+            sessionModel: currentSession?.model,
+            agentModelDisplay: currentAgent?.modelDisplay,
+            agentInheritedModel: currentAgent?.inheritedModel,
+            workspaceDefaultModel: workspaceDefaultModelId,
+            stoCatalogModelIds,
+          });
+        setSelectedModelId(resolved || '');
+      } finally {
+        setModelSaving(false);
+      }
+      return;
+    }
+
+    setModelSaving(true);
+    try {
+      let persistedModel = rawModelId;
+      if (currentEngineType === 'claude' && currentAgentId) {
+        persistedModel = await applyClaudeSessionModel({
+          currentSessionKey,
+          modelId: rawModelId,
+          option,
+          currentAgentId,
+        });
+        await fetchAgents();
       } else {
         const sessionParams = {
           currentSessionKey,
-          modelId,
+          modelId: rawModelId,
           option,
           currentAgentId,
         };
@@ -433,27 +498,19 @@ export function ChatModelSelector({
         sessions: upsertSessionModel(
           state.sessions,
           currentSessionKey,
-          persistedModel || modelId,
+          persistedModel || rawModelId,
           { engineType: currentEngineType, label: '新对话' },
         ),
       }));
     } catch (err) {
       toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));
       const resolved = currentEngineType === 'claude'
-        ? (
-          currentSessionKey !== DEFAULT_SESSION_KEY
-            ? (
-              normalizeModelIdForChat(currentSession?.model)
-              || (isConcreteModelId(currentAgent?.modelDisplay)
-                ? normalizeModelIdForChat(currentAgent?.modelDisplay)
-                : (workspaceDefaultModelId || ''))
-            )
-            : (
-              isConcreteModelId(currentAgent?.modelDisplay)
-                ? normalizeModelIdForChat(currentAgent?.modelDisplay)
-                : (workspaceDefaultModelId || '')
-            )
-        )
+        ? resolveClaudeToolbarModelId({
+          currentSessionKey,
+          sessionModel: currentSession?.model,
+          agentModelDisplay: currentAgent?.modelDisplay,
+          workspaceDefaultModelId,
+        })
         : resolveChatToolbarModelId({
           sessionModel: currentSession?.model,
           agentModelDisplay: currentAgent?.modelDisplay,
@@ -483,8 +540,8 @@ export function ChatModelSelector({
         modelOptions.map((option) => (
           <DropdownMenuItem
             key={option.key}
-            className={cn('flex items-center gap-2', option.modelId === selectedModelId && 'bg-primary/8 font-medium')}
-            onSelect={() => void handleModelSwitch(option.modelId)}
+            className={cn('flex items-center gap-2', option.normalizedId === selectedModelId && 'bg-primary/8 font-medium')}
+            onSelect={() => void handleModelSwitch(option.normalizedId)}
           >
             <span className="min-w-0 flex-1 truncate text-[13px]">{option.displayName}</span>
             <span className={cn(

@@ -234,27 +234,32 @@ export async function handleAuthRoutes(
         await signOut(baseUrl, state.user.openId);
       }
 
+      // 先清理 STO 模型/SK 缓存（需要 user 信息），再清除登录态
+      try {
+        await getStoModelSyncService().cleanupOnLogout(state.user);
+      } catch (err) {
+        logger.warn('STO model cleanup on logout failed:', err);
+      }
+
       await clearAuthUser();
       void removeSsoAuthFromOpenClaw();
       void removeStoDynamicRoutePluginFromOpenClaw().catch((err) =>
         logger.warn('STO dynamic route plugin cleanup on logout failed:', err),
       );
 
-      // Cleanup STO models and stop periodic sync (fire-and-forget)
-      const stoSyncLogout = getStoModelSyncService();
-      void stoSyncLogout.cleanupOnLogout().catch((err) =>
-        logger.warn('STO model cleanup on logout failed:', err),
-      );
-
       sendJson(res, 200, { success: true });
     } catch {
+      // 错误路径也尽量先清 SK（user 可能仍在 store 中）
+      try {
+        await getStoModelSyncService().cleanupOnLogout();
+      } catch {
+        // ignore
+      }
+
       // Always clear local auth even if SSO signOut fails
       await clearAuthUser().catch(() => {});
       void removeSsoAuthFromOpenClaw();
       void removeStoDynamicRoutePluginFromOpenClaw().catch(() => {});
-
-      // Best-effort STO cleanup on error path too
-      void getStoModelSyncService().cleanupOnLogout().catch(() => {});
 
       sendJson(res, 200, { success: true });
     }

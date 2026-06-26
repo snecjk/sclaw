@@ -4,9 +4,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { syncClaudeSkillsForAgent } from '../services/claude-skill-bridge';
 import { getDefaultProviderAccountId, getProviderAccount } from '../services/providers/provider-store';
-import { StoModelSyncService } from '../services/providers/sto-model-sync';
+import { applyStoClaudeInferenceEnv } from '../services/sto-claude-inference-env';
 import { getAgentPreferredModel, getAgentWorkspacePath } from '../utils/agent-config';
-import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import { getClaudeConfigDir } from '../utils/paths';
 import { getApiKey } from '../utils/secure-storage';
@@ -90,18 +89,7 @@ async function buildClaudeEnvForAccount(accountId?: string): Promise<NodeJS.Proc
   }
 
   if (account.vendorId === 'sto') {
-    const token = await getStoToken();
-    const ssoEnv = await getSsoEnvironment();
-    const domain = StoModelSyncService.resolveDomain(ssoEnv);
-    if (token) {
-      const baseUrl = `${domain}/v1/anthropic`;
-      base.ANTHROPIC_BASE_URL = baseUrl;
-      base.ANTHROPIC_API_KEY = token;
-      base.ANTHROPIC_AUTH_TOKEN = token;
-      logger.info(`[claude-env] STO provider: base_url=${baseUrl}`);
-    } else {
-      logger.warn('[claude-env] STO provider but no stoToken available');
-    }
+    await applyStoClaudeInferenceEnv(base, account);
     return base;
   }
 

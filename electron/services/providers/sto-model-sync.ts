@@ -9,8 +9,7 @@
 
 import type { GatewayManager } from '../../gateway/manager';
 import type { ProviderAccount } from '../../shared/providers/types';
-import type { SsoEnvironment } from '../../utils/auth-store';
-import { getStoToken, getSsoEnvironment } from '../../utils/auth-store';
+import type { SsoEnvironment, SsoUserInfo } from '../../utils/auth-store';
 import { getProviderService } from './provider-service';
 import { listProviderAccounts, getDefaultProviderAccountId } from './provider-store';
 import { providerAccountToConfig } from './provider-store';
@@ -22,7 +21,6 @@ import {
   syncProviderApiKeyToRuntime,
 } from './provider-runtime-sync';
 import { logger } from '../../utils/logger';
-import { buildStoMemoryCenterAuthHeaders } from '../../utils/sto-memory-api-auth';
 import { getOpenClawProvidersConfig, removeProviderFromOpenClaw } from '../../utils/openclaw-auth';
 import {
   extractOpenClawProviderModelIds,
@@ -32,6 +30,7 @@ import {
   STO_CANONICAL_ACCOUNT_ID,
   isStoCatalogReady,
 } from './sto-placeholder-utils';
+import crypto from 'crypto';
 import {
   detectStoCatalogLegacyState,
   markStoCatalogMigrationComplete,
@@ -53,9 +52,6 @@ const STO_DOMAINS: Record<string, string> = {
   'local': 'http://127.0.0.1:7001/agent',
 };
 const STO_DOMAIN_DEFAULT = 'https://baseinfo-aimemory.sto.cn/agent';
-
-/** Standard OpenAI-compatible model list path. */
-const STO_MODEL_LIST_PATH = '/v1/models';
 
 const SYNC_INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
 
@@ -117,47 +113,6 @@ export class StoModelSyncService {
     );
   }
 
-  // -- Remote fetch --------------------------------------------------------
-
-  /**
-   * Fetch model list from the STO API using standard OpenAI /v1/models
-   * endpoint. Auth headers 与 client-update 等 Memory Center API 共用 buildStoMemoryCenterAuthHeaders。
-   */
-  async fetchRemoteModels(
-    domain: string,
-    token: string,
-  ): Promise<StoRemoteModel[]> {
-    const url = `${domain}${STO_MODEL_LIST_PATH}`;
-    const headers = buildStoMemoryCenterAuthHeaders(token);
-    logger.info(`[sto-sync] >>> fetchRemoteModels url=${url}`);
-    logger.info(`[sto-sync] >>> fetchRemoteModels headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    let response: Response;
-    try {
-      response = await fetch(url, { headers, signal: controller.signal });
-    } finally {
-      clearTimeout(timeoutId);
-    }
-    const bodyText = await response.text();
-    logger.info(`[sto-sync] <<< fetchRemoteModels status=${response.status} body=${bodyText.slice(0, 500)}`);
-
-    if (!response.ok) {
-      throw new Error(
-        `STO model list request failed: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    const data = JSON.parse(bodyText) as {
-      data?: StoRemoteModel[];
-      models?: StoRemoteModel[];
-    };
-
-    // Support both OpenAI standard format { data: [...] } and legacy { models: [...] }
-    return data.data ?? data.models ?? [];
-  }
-
   // -- Core sync -----------------------------------------------------------
 
   /**
@@ -187,15 +142,23 @@ export class StoModelSyncService {
       defaultSet: null,
     };
 
-    // Step 1 — Auth preconditions: get stotoken from SSO state
-    const token = await getStoToken();
-    if (!token) {
-      result.error = 'no-token';
+    // Step 1 — Get user SK
+    const { getUserSk } = await import('../user-sk-service');
+    const sk = await getUserSk();
+    if (!sk) {
+      result.error = 'no-sk';
       return result;
     }
 
-    const env = await getSsoEnvironment();
-    const domain = StoModelSyncService.resolveDomain(env);
+    // Step 2 — Get user code for secret header
+    const { getAuthState } = await import('../../utils/auth-store');
+    const authState = await getAuthState();
+    const userCode = authState.user?.code || '';
+    if (!userCode) {
+      result.error = 'no-user-code';
+      return result;
+    }
+    const secretHeader = crypto.createHash('md5').update(userCode).digest('hex');
 
     const legacyState = await detectStoCatalogLegacyState();
     if (legacyState.needsMigration) {
@@ -206,13 +169,21 @@ export class StoModelSyncService {
       result.deleted.push(...preMigrate.deletedAccountIds);
     }
 
-    // Step 2 — Fetch remote models via OpenAI-compatible /v1/models
+    // Step 3 — Fetch remote models and supplier domain via strategy (网点/非网点)
+    const { resolveStrategy } = await import('../sto-sk-strategy');
+    const strategy = await resolveStrategy(authState.user);
     let remoteModels: StoRemoteModel[];
+    let supplierDomain: string;
     try {
-      remoteModels = await this.fetchRemoteModels(domain, token);
+      if (!strategy || !authState.user) {
+        throw new Error('No strategy or user available');
+      }
+      const models = await strategy.getUserModels(authState.user);
+      remoteModels = (models ?? []).map((id) => ({ id, name: id }));
+      supplierDomain = await strategy.getSupplierDomain();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      logger.warn(`[sto-sync] Failed to fetch remote models: ${message}`);
+      logger.warn(`[sto-sync] Failed to fetch remote models or domain via strategy: ${message}`);
       result.error = `fetch-failed: ${message}`;
       return result;
     }
@@ -228,7 +199,7 @@ export class StoModelSyncService {
     const providerService = getProviderService();
     const allAccounts = await listProviderAccounts();
 
-    // Step 3 — Delete stale STO placeholder accounts (legacy sto-model-*, custom-sto, etc.)
+    // Step 4 — Delete stale STO placeholder accounts (legacy sto-model-*, custom-sto, etc.)
     const staleAccounts = allAccounts.filter(shouldDeleteStaleStoPlaceholder);
 
     let legacyDefaultWasSto = false;
@@ -267,13 +238,12 @@ export class StoModelSyncService {
       }
     }
 
-    // Step 4 — Create or update the single STO account
+    // Step 5 — Create or update the single STO account
     const existingAccount = allAccounts.find((a) => a.id === STO_ACCOUNT_ID);
-    const expectedBaseUrl = `${domain}/v1`;
+    const expectedBaseUrl = `${supplierDomain}/v1`;
     const now = new Date().toISOString();
 
     if (!existingAccount) {
-      // Create new single STO account
       const account: ProviderAccount = {
         id: STO_ACCOUNT_ID,
         vendorId: 'sto',
@@ -284,6 +254,9 @@ export class StoModelSyncService {
         model: remoteModelIds[0],
         enabled: true,
         isDefault: false,
+        headers: {
+          secret: secretHeader,
+        },
         metadata: {
           managedBy: 'sto-auto-sync',
           customModels: remoteModelIds,
@@ -293,10 +266,10 @@ export class StoModelSyncService {
       };
 
       try {
-        await providerService.createAccount(account, token);
+        await providerService.createAccount(account, sk);
         await syncSavedProviderToRuntime(
           providerAccountToConfig(account),
-          token,
+          sk,
           runtimeGateway,
         );
         result.created.push(STO_ACCOUNT_ID);
@@ -304,7 +277,6 @@ export class StoModelSyncService {
         logger.warn(`[sto-sync] Failed to create STO account:`, err);
       }
     } else {
-      // Check if existing account needs updating
       const currentModels = existingAccount.metadata?.customModels ?? [];
       const modelsChanged =
         currentModels.length !== remoteModelIds.length ||
@@ -312,12 +284,14 @@ export class StoModelSyncService {
       const baseUrlChanged = existingAccount.baseUrl !== expectedBaseUrl;
       const currentModelRemoved =
         existingAccount.model && !remoteModelIds.includes(existingAccount.model);
+      const headersChanged = existingAccount.headers?.secret !== secretHeader;
       const vendorIdNeedsNormalize = existingAccount.vendorId !== 'sto';
 
       if (
         modelsChanged
         || baseUrlChanged
         || currentModelRemoved
+        || headersChanged
         || !existingAccount.enabled
         || vendorIdNeedsNormalize
       ) {
@@ -325,6 +299,7 @@ export class StoModelSyncService {
           vendorId: 'sto',
           baseUrl: expectedBaseUrl,
           enabled: true,
+          headers: { secret: secretHeader },
           metadata: {
             ...existingAccount.metadata,
             managedBy: 'sto-auto-sync',
@@ -338,7 +313,7 @@ export class StoModelSyncService {
         }
 
         try {
-          await providerService.updateAccount(STO_ACCOUNT_ID, patch, token);
+          await providerService.updateAccount(STO_ACCOUNT_ID, patch, sk);
           const updatedAccount = {
             ...existingAccount,
             ...patch,
@@ -347,7 +322,7 @@ export class StoModelSyncService {
           };
           await syncSavedProviderToRuntime(
             providerAccountToConfig(updatedAccount),
-            token,
+            sk,
             runtimeGateway,
           );
           result.updated.push(STO_ACCOUNT_ID);
@@ -355,12 +330,11 @@ export class StoModelSyncService {
           logger.warn(`[sto-sync] Failed to update STO account:`, err);
         }
       } else {
-        // No config change — just make sure the API key (stotoken) is current
         try {
           const currentKey = await getApiKey(STO_ACCOUNT_ID);
-          if (currentKey !== token) {
-            await storeApiKey(STO_ACCOUNT_ID, token);
-            await syncProviderApiKeyToRuntime('sto', STO_ACCOUNT_ID, token);
+          if (currentKey !== sk) {
+            await storeApiKey(STO_ACCOUNT_ID, sk);
+            await syncProviderApiKeyToRuntime('sto', STO_ACCOUNT_ID, sk);
             result.updated.push(STO_ACCOUNT_ID);
           }
         } catch (err) {
@@ -369,11 +343,10 @@ export class StoModelSyncService {
       }
     }
 
-    // Step 4b — Provider store may be ready while openclaw.json still has legacy residue
-    // (custom-sto primary, incomplete sto.models[], Windows restart cooldown, etc.).
-    await this.ensureStoCatalogMirroredToOpenClaw(token, runtimeGateway, result);
+    // Step 5b — Provider store may be ready while openclaw.json still has legacy residue
+    await this.ensureStoCatalogMirroredToOpenClaw(sk, runtimeGateway, result);
 
-    // Step 5 — Set default provider if needed
+    // Step 6 — Set default provider if needed
     const currentDefault = await getDefaultProviderAccountId();
     const needsNewDefault =
       !currentDefault || legacyDefaultWasSto;
@@ -424,7 +397,7 @@ export class StoModelSyncService {
    * (missing sto, incomplete models[], or legacy custom-sto primary), mirror runtime.
    */
   private async ensureStoCatalogMirroredToOpenClaw(
-    token: string,
+    sk: string,
     runtimeGateway: GatewayManager | undefined,
     result: StoSyncResult,
   ): Promise<void> {
@@ -455,7 +428,7 @@ export class StoModelSyncService {
     try {
       await syncSavedProviderToRuntime(
         providerAccountToConfig(stoAccount),
-        token,
+        sk,
         runtimeGateway,
       );
       if (!result.updated.includes(STO_ACCOUNT_ID)) {
@@ -482,7 +455,7 @@ export class StoModelSyncService {
 
   startPeriodicSync(): void {
     if (this.syncTimer) {
-      return; // already running
+      return;
     }
     this.syncTimer = setInterval(() => {
       void this.syncModels().catch((err) => {
@@ -490,7 +463,6 @@ export class StoModelSyncService {
       });
     }, SYNC_INTERVAL_MS);
 
-    // Allow Node to exit even if the timer is active
     if (typeof this.syncTimer === 'object' && 'unref' in this.syncTimer) {
       this.syncTimer.unref();
     }
@@ -505,8 +477,11 @@ export class StoModelSyncService {
 
   // -- Logout cleanup ------------------------------------------------------
 
-  async cleanupOnLogout(): Promise<void> {
+  async cleanupOnLogout(userOverride?: SsoUserInfo | null): Promise<void> {
     this.stopPeriodicSync();
+
+    const { clearUserSk } = await import('../user-sk-service');
+    await clearUserSk(userOverride);
 
     const accounts = await listProviderAccounts();
     const stoAccounts = accounts.filter((a) =>
