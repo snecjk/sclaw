@@ -267,6 +267,8 @@ importers:
 
   sto-plugin/openclaw/sto-dingtalk-send-guard: {}
 
+  sto-plugin/openclaw/sto-distinctive-design-guard: {}
+
   sto-plugin/openclaw/sto-dynamic-agent-route: {}
 
   sto-plugin/openclaw/sto-media-understanding: {}
