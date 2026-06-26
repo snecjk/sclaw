@@ -1,7 +1,7 @@
 {
     "steps": {
         "welcome": {
-            "title": "欢迎使用 StoClaw",
+            "title": "欢迎使用 SClaw",
             "description": "您的 AI 助手已准备好进行配置"
         },
         "runtime": {
@@ -18,12 +18,12 @@
         },
         "complete": {
             "title": "准备就绪！",
-            "description": "StoClaw 已准备好使用"
+            "description": "SClaw 已准备好使用"
         }
     },
     "welcome": {
-        "title": "欢迎使用 StoClaw",
-        "description": "StoClaw 是 OpenClaw 的图形界面，让您可以在喜爱的消息平台上轻松使用 AI 助手。",
+        "title": "欢迎使用 SClaw",
+        "description": "SClaw 是 OpenClaw 的图形界面，让您可以在喜爱的消息平台上轻松使用 AI 助手。",
         "features": {
             "noCommand": "无需命令行",
             "modernUI": "现代美观的界面",
@@ -109,7 +109,7 @@
     },
     "complete": {
         "title": "设置完成！",
-        "subtitle": "StoClaw 已配置并准备就绪。您现在可以开始与您的 AI 助手聊天了。",
+        "subtitle": "SClaw 已配置并准备就绪。您现在可以开始与您的 AI 助手聊天了。",
         "components": "组件",
         "envReady": "环境已就绪",
         "gateway": "网关",

@@ -36,7 +36,7 @@ function buildContextMenu(): Menu {
 
   return Menu.buildFromTemplate([
     {
-      label: `显示 StoClaw${envSuffix}`,
+      label: `显示 SClaw${envSuffix}`,
       click: showWindow,
     },
     {
@@ -98,7 +98,7 @@ function buildContextMenu(): Menu {
       type: 'separator',
     },
     {
-      label: `退出 StoClaw${envSuffix}`,
+      label: `退出 SClaw${envSuffix}`,
       click: () => {
         app.quit();
       },
@@ -150,7 +150,7 @@ export function createTray(mainWindow: BrowserWindow, _onToggleSprite?: () => vo
   tray = new Tray(icon);
 
   // Set tooltip
-  tray.setToolTip(`StoClaw - AI 助手${envSuffix}`);
+  tray.setToolTip(`SClaw - AI 助手${envSuffix}`);
 
   tray.setContextMenu(buildContextMenu());
 
@@ -180,7 +180,7 @@ export function createTray(mainWindow: BrowserWindow, _onToggleSprite?: () => vo
  */
 export function updateTrayStatus(status: string): void {
   if (tray) {
-    tray.setToolTip(`StoClaw - ${status}`);
+    tray.setToolTip(`SClaw - ${status}`);
   }
 }
 
