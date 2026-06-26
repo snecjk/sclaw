@@ -877,7 +877,11 @@ export function Sidebar() {
   };
 
   const recentSessionsSorted = useMemo(
-    () => [...normalSessions].sort((a, b) => getEffectiveActivityMs(b) - getEffectiveActivityMs(a)),
+    () => [...normalSessions].sort((a, b) => {
+      const activityDiff = getEffectiveActivityMs(b) - getEffectiveActivityMs(a);
+      if (activityDiff !== 0) return activityDiff;
+      return b.key.localeCompare(a.key);
+    }),
     // getEffectiveActivityMs 依赖 sessionLastActivity / currentSessionKey / sessionLabels / nowMs
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [normalSessions, sessionLastActivity, currentSessionKey, sessionLabels, nowMs],

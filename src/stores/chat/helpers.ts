@@ -899,6 +899,20 @@ function sanitizeSessionDisplayField(
   return d;
 }
 
+/** Keep the newest activity timestamp when merging local state with backend metadata. */
+function mergeSessionLastActivity(
+  existing: Record<string, number>,
+  discovered: Record<string, number>,
+): Record<string, number> {
+  if (Object.keys(discovered).length === 0) return existing;
+  const merged = { ...existing };
+  for (const [key, backendAt] of Object.entries(discovered)) {
+    if (!Number.isFinite(backendAt) || backendAt <= 0) continue;
+    merged[key] = Math.max(existing[key] ?? 0, backendAt);
+  }
+  return merged;
+}
+
 export {
   toMs,
   clearErrorRecoveryTimer,
@@ -928,4 +942,5 @@ export {
   getLastChatEventAt,
   looksLikeTechnicalSessionDisplay,
   sanitizeSessionDisplayField,
+  mergeSessionLastActivity,
 };

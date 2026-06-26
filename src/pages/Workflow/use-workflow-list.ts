@@ -1,4 +1,4 @@
-/** 工作流列表数据 hook：个人模板调用 /api/my-tasks/agent/v1/my-workflow，官方推荐调用 POST /agent/v1/workflow-templates */
+/** 工作流列表数据 hook：个人模板调用 /api/my-tasks/agent/v1/my-workflow，官方推荐调用 POST /agent/v1/workflow-templates。搜索由前端本地按名称过滤，不触发后端 API。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { hostApiFetch } from '@/lib/host-api';
@@ -12,9 +12,6 @@ interface MineWorkflowResponse {
   data?: Array<{ id: string; name: string; description?: string; templateId?: string }>;
 }
 
-/** 搜索关键词 debounce 时长（ms） */
-const SEARCH_DEBOUNCE_MS = 300;
-
 export interface UseWorkflowListResult {
   /** 当前展示的工作流卡片列表 */
   cards: WorkflowCardItem[];
@@ -26,11 +23,10 @@ export interface UseWorkflowListResult {
   officialLoading: boolean;
   /** 请求错误信息，无错误时为 null */
   error: string | null;
-  /** 手动触发重新拉取当前激活 Tab 的数据 */
+  /** 手动触发重新拉取我的工作流数据 */
   refetchMine: () => Promise<void>;
+  /** 手动触发重新拉取官方推荐数据 */
   refetchOfficial: () => Promise<void>;
-  /** 设置搜索关键词（内部 debounce 后触发 API 请求） */
-  setSearchKeyword: (keyword: string) => void;
   /** 各 Tab（published / installed / draft）下的卡片数量，由 cards 派生 */
   mineCounts: Record<WorkflowMineListKind, number>;
   /** 系统官方推荐的工作流卡片列表 */
@@ -53,8 +49,6 @@ export function useWorkflowList(): UseWorkflowListResult {
   const [mineLoading, setMineLoading] = useState(true);
   const [officialLoading, setOfficialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchKeyword, setSearchKeyword] = useState('');
-  const [debouncedKeyword, setDebouncedKeyword] = useState('');
 
   /** 跟踪 API 刷新时序号，防止旧请求覆盖新结果 */
   const mineFetchSeq = useRef(0);
@@ -66,27 +60,16 @@ export function useWorkflowList(): UseWorkflowListResult {
     officialTemplateIdsRef.current = new Set(officialCards.map((c) => c.id));
   }, [officialCards]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedKeyword(searchKeyword.trim());
-    }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [searchKeyword]);
-
-  /** 个人工作流数据拉取 */
+  /** 个人工作流数据拉取（全量，搜索由前端本地过滤） */
   const fetchMine = useCallback(async () => {
     const seq = mineFetchSeq.current + 1;
     mineFetchSeq.current = seq;
     setMineLoading(true);
     setError(null);
 
-    const query = debouncedKeyword
-      ? `?keyword=${encodeURIComponent(debouncedKeyword)}`
-      : '';
-
     try {
       const mineResponse = await hostApiFetch<MineWorkflowResponse>(
-        `/api/my-tasks/agent/v1/my-workflow${query}`,
+        '/api/my-tasks/agent/v1/my-workflow',
       );
       if (mineFetchSeq.current !== seq) return;
 
@@ -126,7 +109,7 @@ export function useWorkflowList(): UseWorkflowListResult {
     } finally {
       if (mineFetchSeq.current === seq) setMineLoading(false);
     }
-  }, [debouncedKeyword, t]);
+  }, [t]);
 
   /** 官方推荐数据拉取 */
   const fetchOfficial = useCallback(async () => {
@@ -159,6 +142,7 @@ export function useWorkflowList(): UseWorkflowListResult {
         schedule: '',
         scheduleIcon: 'clock' as const,
         description: item.description ?? '',
+        // TODO: 官方推荐流程节点 — POST /agent/v1/workflow-templates nodes/edges 未就绪，暂不接 card.flow
         flow: [],
         coverKey: pickCoverKeyFromWorkflowId(item.id),
       })));
@@ -202,7 +186,6 @@ export function useWorkflowList(): UseWorkflowListResult {
     error,
     refetchMine: fetchMine,
     refetchOfficial: fetchOfficial,
-    setSearchKeyword,
     mineCounts,
     officialCards,
   };

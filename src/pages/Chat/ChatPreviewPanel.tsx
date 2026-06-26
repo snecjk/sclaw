@@ -9,7 +9,6 @@ import {
   Download,
   MonitorPlay,
   Eye,
-  Share2,
   ExternalLink,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -69,14 +68,14 @@ export function ChatPreviewPanel({
     return null;
   }, [files, activeFilePath]);
 
-  const handleOpenShareDialog = useCallback(() => {
-    if (!activeFile?.filePath) return;
-    setShareDraft(buildArtifactShareDraft({
-      fileName: activeFile.fileName,
-      filePath: activeFile.filePath,
-    }));
-    setShareDialogOpen(true);
-  }, [activeFile]);
+  // const handleOpenShareDialog = useCallback(() => {
+  //   if (!activeFile?.filePath) return;
+  //   setShareDraft(buildArtifactShareDraft({
+  //     fileName: activeFile.fileName,
+  //     filePath: activeFile.filePath,
+  //   }));
+  //   setShareDialogOpen(true);
+  // }, [activeFile]);
 
   const handleConfirmShare = useCallback(async (values: { title: string; text: string; url: string }) => {
     await shareToDingTalk({
@@ -167,9 +166,12 @@ export function ChatPreviewPanel({
                 <PreviewActionButton onClick={handleDownload} aria-label={t('preview.download')}>
                   <Download className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>
+                {/* Temporarily hide artifact share entry until the feature is re-enabled. */}
+                {/*
                 <PreviewActionButton onClick={handleOpenShareDialog} aria-label={t('preview.share')}>
                   <Share2 className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>
+                */}
                 <PreviewActionButton onClick={handleOpenExternal} aria-label={t('preview.openExternal')}>
                   <ExternalLink className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>

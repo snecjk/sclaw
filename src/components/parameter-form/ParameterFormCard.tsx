@@ -8,6 +8,10 @@
 import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { ChevronLeft, ChevronRight, Check, ChevronUp, Loader2, CornerDownLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  parameterFormDockHeaderClass,
+  parameterFormDockPrimaryButtonClass,
+} from '@/lib/surfaces';
 import { Button } from '@/components/ui/button';
 import { FormFieldRenderer, type FormFieldVariant } from './FormFieldRenderer';
 import { isEmptyFormValue, normalizeWorkflowFieldValue } from '@/lib/workflow-form-utils';
@@ -431,11 +435,11 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
   if (isDock) {
     return (
       <div className="flex max-h-[320px] flex-col overflow-hidden rounded-[18px] border border-border bg-card shadow-soft">
-        <div className="shrink-0 rounded-t-[18px] bg-[#FAFBFC] px-3.5 pb-2 pt-3">
+        <div className={parameterFormDockHeaderClass}>
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-1.5 text-xs leading-[14px]">
-              <span className="truncate font-medium text-[#6B7280]">{workflowTitle}</span>
-              <span className="text-[#C4C4C4]" aria-hidden>
+              <span className="truncate font-medium text-muted-foreground">{workflowTitle}</span>
+              <span className="text-muted-foreground/50" aria-hidden>
                 ·
               </span>
               <span className="truncate text-muted-foreground">{stepShortTitle}</span>
@@ -447,11 +451,11 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
                   onClick={handlePrev}
                   disabled={isFirst}
                   aria-label={config.prevLabel ?? '上一步'}
-                  className="flex h-[18px] w-[18px] items-center justify-center rounded-sm transition-colors hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-30"
+                  className="flex h-[18px] w-[18px] items-center justify-center rounded-sm transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-30"
                 >
-                  <ChevronLeft className="h-2.5 w-2.5 text-[#8A919A]" />
+                  <ChevronLeft className="h-2.5 w-2.5 text-muted-foreground" />
                 </button>
-                <span className="min-w-[2rem] px-1 text-center text-xs tabular-nums text-[#8C8C8C]">
+                <span className="min-w-[2rem] px-1 text-center text-xs tabular-nums text-muted-foreground">
                   {currentStep + 1} / {steps.length}
                 </span>
                 <button
@@ -459,16 +463,16 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
                   onClick={handleNext}
                   disabled={isLast}
                   aria-label={config.nextLabel ?? '下一步'}
-                  className="flex h-[18px] w-[18px] items-center justify-center rounded-sm transition-colors hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-30"
+                  className="flex h-[18px] w-[18px] items-center justify-center rounded-sm transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-30"
                 >
                   <ChevronRight className="h-2.5 w-2.5 text-foreground" />
                 </button>
               </div>
-              <span className="h-3.5 w-px bg-[#DFE3E8]" aria-hidden />
+              <span className="h-3.5 w-px bg-border" aria-hidden />
               <button
                 type="button"
                 onClick={() => setCollapsed((c) => !c)}
-                className="text-xs text-[#8C8C8C] transition-colors hover:text-foreground"
+                className="text-xs text-muted-foreground transition-colors hover:text-foreground"
               >
                 {collapsed ? '展开' : '收起'}
               </button>
@@ -501,7 +505,7 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
               <p className="min-w-0 truncate text-xs leading-[14px]">
                 {selectedSummaryLabels.length > 0 ? (
                   <>
-                    <span className="text-[#C9CDD4]">
+                    <span className="text-muted-foreground/70">
                       {t('parameterForm.defaultSelectedPrefix', { defaultValue: '默认已选类型：' })}
                     </span>
                     <span className="text-muted-foreground">{selectedSummaryLabels.join('、')}</span>
@@ -516,7 +520,7 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
                     type="button"
                     onClick={handleSubmit}
                     disabled={submitting}
-                    className="inline-flex h-6 items-center gap-1 rounded-[7px] bg-[#1A1A1A] px-3 text-xs font-medium text-white transition-colors hover:bg-foreground/90 disabled:opacity-50"
+                    className={parameterFormDockPrimaryButtonClass}
                   >
                     {submitting ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -531,7 +535,7 @@ function ParameterFormCardInner({ config, context, onSubmit, variant = 'default'
                   <button
                     type="button"
                     onClick={handleNext}
-                    className="inline-flex h-6 items-center gap-1 rounded-[7px] bg-[#1A1A1A] px-3 text-xs font-medium text-white transition-colors hover:bg-foreground/90"
+                    className={parameterFormDockPrimaryButtonClass}
                   >
                     <span>{config.nextLabel ?? '继续'}</span>
                     <CornerDownLeft className="h-3.5 w-3.5" aria-hidden />

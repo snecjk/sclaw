@@ -1,0 +1,70 @@
+import { describe, expect, it } from 'vitest';
+import {
+  deriveSessionLabelFromHistory,
+  deriveSessionLabelFromUserText,
+  extractSubagentTaskLabel,
+  isCorruptedSessionLabel,
+  isSubagentContextOnlyLabel,
+} from '@/lib/workflow-session-hint';
+
+const SUBAGENT_KICKOFF = `[Subagent Context] You are running as a subagent (depth 1/1). Results auto-announce to your requester; do not busy-poll for status.
+
+[Subagent Task]
+Research sai-cli policy commands for sewage discharge metrics
+
+Begin. Execute the assigned task to completion.`;
+
+describe('subagent session label helpers', () => {
+  it('extracts delegated task from OpenClaw subagent kickoff message', () => {
+    expect(extractSubagentTaskLabel(SUBAGENT_KICKOFF)).toBe(
+      'Research sai-cli policy commands for sewage discharge metrics',
+    );
+  });
+
+  it('does not treat subagent boilerplate as a user-visible title', () => {
+    expect(deriveSessionLabelFromUserText(SUBAGENT_KICKOFF)).toBe(
+      'Research sai-cli policy commands for sewage discharge metrics',
+    );
+    expect(isSubagentContextOnlyLabel('[Subagent Context] You are running as a subagent')).toBe(true);
+    expect(isCorruptedSessionLabel('[Subagent Context] You are running as a…')).toBe(true);
+  });
+
+  it('uses the first real user message when subagent injection is absent', () => {
+    const label = deriveSessionLabelFromHistory(
+      [
+        { role: 'user', content: '全国排污水量是多少' },
+        { role: 'assistant', content: '正在查询…' },
+      ],
+      (content) => String(content ?? ''),
+    );
+    expect(label).toBe('全国排污水量是多少');
+  });
+
+  it('falls back to parent session title when subagent task text is missing', () => {
+    const label = deriveSessionLabelFromHistory(
+      [
+        {
+          role: 'user',
+          content: '[Subagent Context] You are running as a subagent (depth 1/1).\n\nBegin. Execute the assigned task to completion.',
+        },
+      ],
+      (content) => String(content ?? ''),
+      {
+        sessionKey: 'agent:main:subagent:child-1',
+        spawnedBy: 'agent:main:session-parent',
+        sessionLabels: { 'agent:main:session-parent': '全国排污水量是多少' },
+        sessions: [{ key: 'agent:main:session-parent', label: '全国排污水量是多少' }],
+      },
+    );
+    expect(label).toBe('全国排污水量是多少');
+  });
+
+  it('prefers spawn label from gateway metadata when provided', () => {
+    const label = deriveSessionLabelFromHistory(
+      [{ role: 'user', content: SUBAGENT_KICKOFF }],
+      (content) => String(content ?? ''),
+      { gatewayLabel: 'policy-research' },
+    );
+    expect(label).toBe('policy-research');
+  });
+});

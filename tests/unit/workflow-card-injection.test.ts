@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   appendWorkflowCardBlockToMessage,
+  dedupeWorkflowCardsForParamsConfirmedTurn,
   ensureWorkflowCardsInMessages,
   patchLastAssistantWithWorkflowCard,
 } from '@/lib/workflow-card-injection';
@@ -145,6 +146,30 @@ describe('workflow-card-injection', () => {
     expect(patched[1].content).toEqual(messages[1].content);
 
     localStorage.removeItem(storageKey);
+  });
+
+  it('dedupeWorkflowCardsForParamsConfirmedTurn strips card from model reply when params confirmed owns run', () => {
+    const messages: RawMessage[] = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: '工作流已开始执行 run_dup' },
+          { type: 'workflow_card', runId: 'run_dup', templateName: '测试' },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: '参数已确认，工作流已在后台启动执行（工作流 ID: wf_1）' },
+          { type: 'workflow_card', runId: 'run_dup', templateName: '测试' },
+        ],
+      },
+    ];
+    const deduped = dedupeWorkflowCardsForParamsConfirmedTurn(messages, 'run_dup', getMessageText);
+    expect(deduped[0].content).toEqual([
+      { type: 'text', text: '工作流已开始执行 run_dup' },
+    ]);
+    expect(deduped[1].content).toEqual(messages[1].content);
   });
 
   it('patchLastAssistantWithWorkflowCard attaches to tool-only assistant snapshot', () => {

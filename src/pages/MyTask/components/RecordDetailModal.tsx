@@ -15,22 +15,22 @@ interface RecordDetailModalProps {
   onClose: () => void;
 }
 
-/** 状态 pill 配置 */
+/** 状态 pill 配置（语义 token，亮暗色通用） */
 const STATUS_PILL: Record<RecordStatus, { label: string; icon: string; className: string }> = {
   success: {
     label: '成功',
     icon: '✓',
-    className: 'text-[#1f9d57] bg-[#e3f7ec]',
+    className: 'bg-success/10 text-success',
   },
   failed: {
     label: '失败',
     icon: '✕',
-    className: 'text-[#d04338] bg-[#fdeceb]',
+    className: 'bg-destructive/10 text-destructive',
   },
   running: {
     label: '执行中',
     icon: '',
-    className: 'text-[#3b82f6] bg-[#e8f1fe]',
+    className: 'bg-primary/10 text-primary',
   },
 };
 
@@ -69,14 +69,14 @@ export function RecordDetailModal({ record, onClose }: RecordDetailModalProps) {
     <div className="fixed inset-0 z-[10050] flex items-center justify-center p-5">
       {/* 遮罩层 */}
       <div
-        className="absolute inset-0 bg-[rgba(15,23,42,0.42)]"
+        className="absolute inset-0 bg-black/20 dark:bg-black/45"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* 面板 */}
       <div
-        className="relative z-10 w-full max-w-[440px] bg-background rounded-2xl shadow-2xl overflow-hidden"
+        className="relative z-10 w-full max-w-[440px] overflow-hidden rounded-2xl border border-border bg-card shadow-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="record-detail-title"
@@ -89,7 +89,7 @@ export function RecordDetailModal({ record, onClose }: RecordDetailModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="text-[22px] leading-none text-gray-400 hover:text-gray-600 px-1 transition-colors"
+            className="px-1 text-[22px] leading-none text-muted-foreground transition-colors hover:text-foreground"
             aria-label="关闭"
           >
             ×
@@ -123,7 +123,7 @@ export function RecordDetailModal({ record, onClose }: RecordDetailModalProps) {
           {/* 失败原因：仅 failed 状态显示 */}
           {isFailed && (
             <DetailRow label="失败原因">
-              <span className="text-[#d04338]">{record.failReason}</span>
+              <span className="text-destructive">{record.failReason}</span>
             </DetailRow>
           )}
         </div>

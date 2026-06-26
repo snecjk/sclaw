@@ -8,8 +8,11 @@ export const homeHubTextPrimary = 'text-[#1D2129] dark:text-foreground';
 
 export const homeHubTextSecondary = 'text-[#86909C] dark:text-muted-foreground';
 
-/** MasterGo 卡片壳：r18、白底、shadow-glow，设计稿无描边 */
-export const homeHubCardShellClass = 'flex flex-col rounded-[18px] bg-card p-4 shadow-glow';
+/** MasterGo 卡片壳：r18、白底、shadow-glow，设计稿无描边；暗色用 secondary 与主卡片底色分层 */
+export const homeHubCardShellClass = cn(
+  'flex flex-col rounded-[18px] bg-card p-4 shadow-glow',
+  'dark:bg-secondary dark:shadow-soft',
+);
 
 /** 可点击卡片（工作流 / 经营管理卡）在统一壳层上保留 hover */
 export const homeHubInteractiveCardShellClass = cn(
@@ -31,10 +34,14 @@ export const homeHubCardGridClass = 'grid w-full gap-4 sm:grid-cols-3';
 export const homeHubContentMaxWidthClass =
   'mx-auto w-full min-w-0 max-w-[var(--sto-hero-input-max-w)]';
 
-/** Hero + 卡片主滚动区（与底部输入框同宽居中） */
+/** 首页主列容器：供 container query 判断中间区高度（矮屏顶对齐 / 高屏居中 Hero） */
+export const homeHubMainScrollHostClass =
+  'home-hub-main-scroll-host flex min-h-0 flex-1 flex-col overflow-hidden';
+
+/** Hero + 卡片主滚动区（与底部输入框同宽居中；对齐策略见 globals.css @container home-hub-main） */
 export const homeHubMainScrollClass = cn(
   homeHubContentMaxWidthClass,
-  'flex min-h-0 flex-1 flex-col justify-center gap-10 overflow-y-auto overscroll-y-contain pb-6',
+  'home-hub-main-scroll flex min-h-0 flex-1 flex-col justify-start gap-10 overflow-y-auto overscroll-y-contain pb-6 pt-4 sm:pt-6',
 );
 
 /** 底部输入 + 免责区外壳（底边距与对话列一致，仅依赖 MainLayout body pb-5） */

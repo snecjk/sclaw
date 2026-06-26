@@ -5,7 +5,6 @@
  */
 import { useState, useCallback, useEffect, useMemo, memo } from 'react';
 import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, CircleCheck } from 'lucide-react';
-import { motion } from 'framer-motion';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { createPortal } from 'react-dom';
@@ -14,7 +13,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
 import { cn } from '@/lib/utils';
-import { assistantChatCardBg, assistantChatCardBgStreaming, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
+import { assistantChatCardBg, userChatBubbleSurfaceClass, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
@@ -26,7 +25,7 @@ import {
   resolveParameterFormForAssistantMessage,
 } from '@/stores/chat/parameter-form-recovery';
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
-import { RUN_ID_IN_TEXT } from '@/lib/workflow-card-injection';
+import { RUN_ID_IN_TEXT, sessionHasParamsConfirmedWorkflowForRun } from '@/lib/workflow-card-injection';
 import { getExecutionByRunId } from '@/stores/workflow-memory';
 import {
   artifactToPreviewFile,
@@ -85,7 +84,6 @@ interface ChatMessageProps {
     summary?: string;
   }>;
   onPreviewFile?: (file: AttachedFileMeta) => void;
-  onViewWorkflow?: (workflowId: string) => void;
   onCreateScheduledTask?: (workflowId: string) => void;
   onEditMessage?: (text: string) => void;
   /** Used when rendered inside AssistantTurnMessage */
@@ -110,7 +108,6 @@ export const ChatMessage = memo(function ChatMessage({
   isStreaming = false,
   streamingTools = [],
   onPreviewFile,
-  onViewWorkflow,
   onCreateScheduledTask,
   onEditMessage,
   hideAvatar = false,
@@ -156,16 +153,26 @@ export const ChatMessage = memo(function ChatMessage({
   const workflowCard = useMemo(() => {
     if (isUser) return null;
     const fromBlock = extractWorkflowCard(message);
-    if (fromBlock) return fromBlock;
+    const resolveCard = (card: { runId: string; templateName: string }) => {
+      if (
+        !/参数已确认/.test(text)
+        && sessionHasParamsConfirmedWorkflowForRun(sessionMessages, card.runId, message.id)
+      ) {
+        return null;
+      }
+      return card;
+    };
+    if (fromBlock) return resolveCard(fromBlock);
     const runIds = [...text.matchAll(RUN_ID_IN_TEXT)].map((m) => m[1]).filter(Boolean);
     for (let i = runIds.length - 1; i >= 0; i -= 1) {
       const runId = runIds[i]!;
       if (!workflowCardStates[runId]) continue;
       const exec = getExecutionByRunId(runId, sessionKey);
-      return { runId, templateName: exec?.templateName ?? '工作流' };
+      const card = { runId, templateName: exec?.templateName ?? '工作流' };
+      return resolveCard(card);
     }
     return null;
-  }, [isUser, message, text, workflowCardStates, sessionKey]);
+  }, [isUser, message, text, workflowCardStates, sessionKey, sessionMessages]);
   const parameterForm = useMemo(() => {
     if (isUser) return null;
     return resolveParameterFormForAssistantMessage(message, {
@@ -575,6 +582,7 @@ export const ChatMessage = memo(function ChatMessage({
             runId={workflowCard.runId}
             templateName={workflowCard.templateName}
             onPreviewArtifact={onPreviewFile}
+            onCreateScheduledTask={onCreateScheduledTask}
           />
         ) : null}
 
@@ -584,7 +592,6 @@ export const ChatMessage = memo(function ChatMessage({
             runId={workflowCard.runId}
             templateName={workflowCard.templateName}
             onPreviewArtifact={onPreviewFile}
-            onViewWorkflow={onViewWorkflow}
             onCreateScheduledTask={onCreateScheduledTask}
           />
         ) : null}
@@ -856,10 +863,6 @@ function previewUrlTransform(url: string): string {
 
 // ── Message Bubble ──────────────────────────────────────────────
 
-/** 用户消息气泡（MasterGo 8:3912 Background）：#F0F2F5 底 / 12px 圆角 / 12px 内距 / 无边框无阴影 */
-const userMessageBubbleSurfaceClass =
-  'rounded-xl bg-[#F0F2F5] p-3 text-foreground shadow-none';
-
 function MessageBubble({
   text,
   isUser,
@@ -911,20 +914,16 @@ function MessageBubble({
   return (
     <div
       className={cn(
-        'relative overflow-hidden transition-[background-color,border-color,box-shadow] duration-300',
+        'relative transition-[border-color] duration-200',
         !isUser && 'w-full',
         isUser
-          ? userMessageBubbleSurfaceClass
+          ? userChatBubbleSurfaceClass
           : cn(
               showWorkflowGuidanceStreaming
                 ? cn(workflowParamsSummaryCardClass, 'text-[13px] leading-5 text-foreground')
                 : 'rounded-2xl px-4 py-3',
               showStreamingChrome
-                ? cn(
-                    'border border-border text-foreground shadow-[0_0_0_1px_rgba(15,23,42,0.04),0_18px_34px_rgba(15,23,42,0.08)]',
-                    'dark:border-border dark:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_14px_32px_rgba(0,0,0,0.45)]',
-                    assistantChatCardBgStreaming,
-                  )
+                ? 'rounded-2xl border border-border bg-transparent px-4 py-3 text-foreground shadow-none'
                 : showWorkflowGuidanceStreaming
                   ? null
                   : assistantVariant === 'workflowOverview'
@@ -939,24 +938,24 @@ function MessageBubble({
             ),
       )}
     >
-      {showStreamingChrome && (
-        <>
-          <motion.div
-            className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-primary/10 to-transparent"
-            initial={{ x: '-120%' }}
-            animate={{ x: '120%' }}
-            transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
-          />
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
-        </>
-      )}
-
       {isUser ? (
         <p className="whitespace-pre-wrap break-words break-all text-sm font-normal leading-6 text-foreground">
           {renderUserMessageMentionNodes(text)}
         </p>
       ) : (
-        <div className="prose prose-sm prose-chat-reply max-w-none break-words break-all text-sm leading-6 text-foreground dark:prose-invert">
+        <div
+          className={cn(
+            'max-w-none text-sm leading-6 text-foreground',
+            showStreamingChrome && 'flex items-start gap-2',
+          )}
+        >
+          {showStreamingChrome ? (
+            <Loader2
+              className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary"
+              aria-hidden
+            />
+          ) : null}
+          <div className="prose prose-sm prose-chat-reply min-w-0 flex-1 break-words break-all dark:prose-invert">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             urlTransform={previewUrlTransform}
@@ -1080,16 +1079,13 @@ function MessageBubble({
               </p>
             </div>
           ) : null}
-          {isStreaming && !workflowGuidanceShell ? (
-            <StreamingCursor />
-          ) : null}
+        </div>
         </div>
       )}
 
       {showStreamingChrome && (
         <div className="relative mt-3 flex items-center justify-between gap-3 border-t border-border pt-2 text-[11px] text-muted-foreground">
-          <div className="flex items-center gap-2 min-w-0">
-            <StreamingPulse />
+          <div className="flex min-w-0 items-center gap-2">
             <span className="truncate font-medium tracking-[0.02em] text-foreground/80">
               {streamingLabel}
             </span>
@@ -1221,40 +1217,6 @@ function preprocessTextForPreviewLinks(text: string): string {
   text = text.replace(/__CODE_BLOCK_(\d+)__/g, (_, i) => codeBlocks[Number(i)]);
 
   return text;
-}
-
-function StreamingCursor() {
-  return (
-    <motion.span
-      className="ml-1 inline-flex h-[0.95rem] w-6 rounded-full align-[-0.1em] bg-primary/45 shadow-[0_0_0_1px_rgba(255,111,0,0.18)]"
-      animate={{
-        opacity: [0.35, 1, 0.45],
-        scaleX: [0.92, 1.08, 0.96],
-      }}
-      transition={{
-        duration: 1.4,
-        repeat: Infinity,
-        ease: 'easeInOut',
-      }}
-    />
-  );
-}
-
-function StreamingPulse() {
-  return (
-    <div className="relative flex h-2.5 w-2.5 items-center justify-center">
-      <motion.span
-        className="absolute h-2.5 w-2.5 rounded-full bg-primary/25"
-        animate={{ scale: [0.8, 1.8], opacity: [0.45, 0] }}
-        transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
-      />
-      <motion.span
-        className="relative h-1.5 w-1.5 rounded-full bg-primary"
-        animate={{ scale: [0.92, 1.15, 0.92] }}
-        transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
-      />
-    </div>
-  );
 }
 
 // ── File Card (assistant / user attachments → 产物卡样式) ─────────
@@ -1523,17 +1485,19 @@ interface ParamsConfirmedFoldRowProps {
   runId: string;
   templateName: string;
   onPreviewArtifact?: (file: AttachedFileMeta) => void;
+  onCreateScheduledTask?: (workflowId: string) => void;
 }
 
 /**
  * B4：助手侧「参数已确认」折叠块（MasterGo 148:049849）
- * 扁平标题行 + 左竖线展开区（状态文案 + 工作流执行卡），无外层描边壳。
+ * 折叠区内：左竖线 + 启动说明 + 状态行；摘要/产物/操作与折叠块平级（无左竖线缩进）。
  */
 function ParamsConfirmedFoldRow({
   statusMessage,
   runId,
   templateName,
   onPreviewArtifact,
+  onCreateScheduledTask,
 }: ParamsConfirmedFoldRowProps) {
   const { t } = useTranslation('chat');
   const [expanded, setExpanded] = useState(true);
@@ -1542,8 +1506,16 @@ function ParamsConfirmedFoldRow({
     && (isWorkflowStartAssistantBoilerplate(statusMessage)
       || !/^参数已确认$/.test(statusMessage.trim()));
 
+  const workflowCardProps = {
+    runId,
+    templateName,
+    layout: 'inline' as const,
+    onPreviewArtifact,
+    onCreateScheduledTask,
+  };
+
   return (
-    <div className="flex w-full flex-col gap-1.5 text-[13px] leading-5">
+    <div className="flex w-full flex-col gap-2 text-[13px] leading-5">
       <ParamsConfirmedHeader
         label={t('streaming.paramsConfirmedLabel')}
         expanded={expanded}
@@ -1559,15 +1531,11 @@ function ParamsConfirmedFoldRow({
             {showStatusLine ? (
               <p className="font-normal text-muted-foreground">{statusMessage}</p>
             ) : null}
-            <WorkflowCard
-              runId={runId}
-              templateName={templateName}
-              layout="inline"
-              onPreviewArtifact={onPreviewArtifact}
-            />
+            <WorkflowCard {...workflowCardProps} section="status" />
           </div>
         </div>
       ) : null}
+      <WorkflowCard {...workflowCardProps} section="results" />
     </div>
   );
 }

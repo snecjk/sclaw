@@ -29,7 +29,12 @@ import { Button } from '@/components/ui/button';
 import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
-import { stoChatShellHomeClass } from '@/lib/surfaces';
+import {
+  chatComposerHomeShellClass,
+  chatComposerHomeShellDragOverClass,
+  chatComposerHomeShellIdleClass,
+  stoChatShellHomeClass,
+} from '@/lib/surfaces';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
@@ -717,12 +722,8 @@ export function ChatInput({
           className={cn(
             isHomeComposer
               ? cn(
-                  // min-h 保留设计稿默认高度；随 DingTalkMentionEditor 增高，避免多行内容溢出边框
-                  'relative flex min-h-[120px] flex-col overflow-visible rounded-[22px] border border-border bg-card',
-                  'shadow-[0_6px_30px_rgba(43,17,0,0.03)] transition-[box-shadow,border-color,ring-width,ring-color] duration-200',
-                  dragOver
-                    ? 'border-primary ring-2 ring-primary/25'
-                    : 'focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20',
+                  chatComposerHomeShellClass,
+                  dragOver ? chatComposerHomeShellDragOverClass : chatComposerHomeShellIdleClass,
                 )
               : cn(
                   // sto-design: Grey-4 默认描边；Brand-3 悬停边、Brand-5/6 聚焦与拖拽（与 hub 顶栏 hover:border-[#FFC17A] 一致）
@@ -929,7 +930,7 @@ export function ChatInput({
                     className={cn(
                       'h-[30px] w-[30px] shrink-0 rounded-[16px] border transition-all',
                       sending
-                        ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-white/90'
+                        ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-white/80 dark:bg-white/80 dark:text-slate-900 dark:hover:bg-white/90'
                         : canSend
                           ? 'border-primary/80 bg-primary text-primary-foreground shadow-[0_6px_16px_rgba(255,111,0,0.22)] hover:bg-primary/90'
                           : 'border-black/8 bg-black/5 text-muted-foreground/55 dark:border-white/10 dark:bg-white/[0.06]',
@@ -1075,7 +1076,7 @@ export function ChatInput({
                 className={cn(
                   'h-9 w-9 shrink-0 rounded-full border transition-all',
                   sending
-                    ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-white/90'
+                    ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-white/80 dark:bg-white/80 dark:text-slate-900 dark:hover:bg-white/90'
                     : canSend
                       ? 'border-primary/80 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_6px_16px_rgba(255,111,0,0.22)]'
                       : 'border-black/8 bg-black/5 text-muted-foreground/55 dark:border-white/10 dark:bg-white/[0.06]'
