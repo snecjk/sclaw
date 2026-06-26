@@ -220,11 +220,8 @@ export function TokenQuotaDialog({
             </div>
           )}
           {fetchState.status === 'error' && (
-            <div className="flex flex-col items-center justify-center gap-3 py-12">
-              <FeedbackState state="error" title={t('tokenQuotaDialog.loadFailed', '档位信息加载失败')} />
-              <Button variant="outline" size="sm" onClick={() => void loadTiers()}>
-                {t('tokenQuotaDialog.retry', '重试')}
-              </Button>
+            <div className="flex items-center justify-center py-12">
+              <FeedbackState state="empty" title={t('tokenQuotaDialog.noTiers', '暂无档位信息')} />
             </div>
           )}
           {fetchState.status === 'done' && (
