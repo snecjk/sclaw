@@ -9,7 +9,6 @@ import {
   Puzzle,
   Clock,
   Settings as SettingsIcon,
-  Trash2,
   LogOut,
   ChevronRight,
   Globe,
@@ -49,6 +48,10 @@ import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { SidebarRunningIcon } from '@/components/layout/sidebar-running-icon';
 import { SidebarRecentSessionRowTrailing } from '@/components/layout/sidebar-recent-session-row-trailing';
+import {
+  SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
+  SidebarTaskSubitemDeleteTrailing,
+} from '@/components/layout/sidebar-task-subitem-delete-trailing';
 import { useTranslation } from 'react-i18next';
 import { resolveSessionLabel } from '@/lib/session-label';
 import { taskDetailPath, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
@@ -128,9 +131,9 @@ const SIDEBAR_SHOW_TASK_GROUP_CHEVRON = true;
 /** 任务组二级行 */
 const SIDEBAR_TASK_GROUP_ROW_CLASS =
   'flex h-9 w-full items-center justify-between gap-2 rounded-lg px-[10px] py-2 text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring';
-/** 三级子项容器 — 竖线过二级 icon 中心（10px 行内距 + 8px 半宽），子项文案仍与标题左缘对齐 */
+/** 三级子项容器 — 竖线过二级 icon 中心；w-[calc(100%-18px)] 避免 ml+w-full 右侧溢出被裁切 */
 const SIDEBAR_TASK_SUBITEMS_CONTAINER_CLASS =
-  'ml-[18px] flex w-full flex-col gap-0.5 border-l border-border pl-4';
+  'ml-[18px] flex w-[calc(100%-18px)] flex-col gap-0.5 border-l border-border pl-4';
 
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   if (!activityMs || activityMs <= 0) return 'older';
@@ -246,7 +249,7 @@ function SidebarTaskDateLinks({
         const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
         const label = t('tasks:sidebarMaterialTitle', { date: dateLabel });
         return (
-          <div key={entryId} className="group relative flex w-full items-center">
+          <div key={entryId} className="group relative flex w-full min-w-0 items-center">
             <NavLink
               to={to}
               onClick={() => {
@@ -255,7 +258,8 @@ function SidebarTaskDateLinks({
                 if (a > 0) markSubitemReadFromActivity(taskId, entryId, a);
               }}
               className={cn(
-                'relative z-[1] inline-flex h-7 w-full max-w-full items-center justify-between gap-2 rounded-lg px-[10px] py-1 pr-9 text-left transition-colors',
+                'relative z-[1] inline-flex h-7 w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
+                SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
                 active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
               )}
             >
@@ -268,22 +272,10 @@ function SidebarTaskDateLinks({
               ) : null}
             </NavLink>
             {sk ? (
-              <button
-                type="button"
-                aria-label={t('common:actions.delete')}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onRequestDeleteSubitem({ taskId, entryId, label, sessionKey: sk });
-                }}
-                className={cn(
-                  'absolute right-1 z-[2] flex items-center justify-center rounded p-0.5 transition-opacity',
-                  'opacity-0 group-hover:opacity-100',
-                  'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
-                )}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              <SidebarTaskSubitemDeleteTrailing
+                isActive={active}
+                onDelete={() => onRequestDeleteSubitem({ taskId, entryId, label, sessionKey: sk })}
+              />
             ) : null}
           </div>
         );
@@ -456,7 +448,6 @@ function SidebarScheduledTaskGroup({
   const { switchSession, currentSessionKey } = useChatStore();
   const navigate = useNavigate();
   const location = useLocation();
-  const { t } = useTranslation(['common', 'tasks']);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
   const isSending = useChatStore((s) => s.sending);
@@ -528,7 +519,7 @@ function SidebarScheduledTaskGroup({
             }
             const active = currentSessionKey === s.key;
             return (
-              <div key={s.key} className="group relative flex items-center">
+              <div key={s.key} className="group relative flex w-full min-w-0 items-center">
                 <button
                   type="button"
                   onClick={() => {
@@ -536,12 +527,13 @@ function SidebarScheduledTaskGroup({
                   }}
                   title={label}
                   className={cn(
-                    'h-7 w-full rounded-lg px-[10px] py-1 pr-7 text-left transition-colors',
+                    'h-7 w-full min-w-0 overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
+                    SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
                     active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
                   )}
                 >
-                  <span className="flex items-center gap-1.5">
-                    <span className="block min-w-0 truncate">{label}</span>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="min-w-0 flex-1 truncate">{label}</span>
                     {(() => {
                       const isSessionSending = runtimeBySessionKey[s.key]?.sending
                         || (s.key === currentSessionKey && isSending);
@@ -551,21 +543,10 @@ function SidebarScheduledTaskGroup({
                     })()}
                   </span>
                 </button>
-                <button
-                  type="button"
-                  aria-label={t('common:actions.delete')}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRequestDelete({ key: s.key, label });
-                  }}
-                  className={cn(
-                    'absolute right-1 flex items-center justify-center rounded p-0.5 transition-opacity',
-                    'opacity-0 group-hover:opacity-100',
-                    'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
-                  )}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                <SidebarTaskSubitemDeleteTrailing
+                  isActive={active}
+                  onDelete={() => onRequestDelete({ key: s.key, label })}
+                />
               </div>
             );
           })}
