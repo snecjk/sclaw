@@ -16,6 +16,8 @@ import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime
 import {
   buildCronSessionHistoryPath, getCronRunSessionAggregateKey, getClaudeTaskRunSessionAggregateKey,
   isCronSessionKey, isCronDatedSessionKey,
+  isAnyCronSessionKey, isScheduledTaskSessionKey,
+  isVirtualTaskSessionKey,
   parseCronSessionKey, parseScheduledTaskSessionKey, parseScheduledTaskAgentSessionKey,
   // Claude 任务相关
   isClaudeScheduledTaskSessionKey, isClaudeScheduledTaskRunSessionKey, isClaudeScheduledTaskDatedSessionKey,
@@ -868,7 +870,9 @@ function ensureSessionEntry(sessions: ChatSession[], sessionKey: string): ChatSe
   const engineType: ChatSession['engineType'] =
     isClaudeScheduledTaskSessionKey(sessionKey) || isClaudeScheduledTaskRunSessionKey(sessionKey) || isClaudeScheduledTaskDatedSessionKey(sessionKey)
       ? 'claude'
-      : getAgentEngineType(getAgentIdFromSessionKey(sessionKey)) ?? 'openclaw';
+      : isAnyCronSessionKey(sessionKey) || isScheduledTaskSessionKey(sessionKey)
+        ? 'openclaw'
+        : getAgentEngineType(getAgentIdFromSessionKey(sessionKey)) ?? 'openclaw';
   return [...sessions, { key: sessionKey, engineType }];
 }
 
@@ -1720,7 +1724,11 @@ export const useChatStore = create<ChatState>()(
               isTemporaryAgentSessionKey(nextSessionKey)
               || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
               || localSessions.some((session) => session.key === nextSessionKey);
-            if (!hasLocalPendingSession) {
+            // Virtual task/cron keys (e.g. a freshly triggered `claude-task:*` or
+            // `agent:*:cron:*` dated session) are resolved by key prefix in
+            // loadHistory and may not be in the backend list yet — keep them, or
+            // the composer falls back to the default agent's engine.
+            if (!hasLocalPendingSession && !isVirtualTaskSessionKey(nextSessionKey)) {
               nextSessionKey = mergedRemoteSessions[0].key;
             }
           }
