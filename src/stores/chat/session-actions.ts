@@ -1,6 +1,7 @@
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { hostApiFetch } from '@/lib/host-api';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
+import { useSessionUnreadStore } from '@/stores/session-unread';
 import { useAgentsStore } from '@/stores/agents';
 import {
   getCanonicalPrefixFromSessions,
@@ -434,6 +435,7 @@ export function createSessionActions(
     // ── Switch session ──
 
     switchSession: (key: string) => {
+      useSessionUnreadStore.getState().markSessionRead(key);
       const { currentSessionKey, messages, sessionLastActivity, sessionLabels } = get();
       // 仅将没有任何历史记录且无活动时间的会话视为空会话。
       // 单纯依赖 messages.length 是不可靠的，因为 switchSession 会在真正调用 loadHistory 前抢先清空当前 messages，
