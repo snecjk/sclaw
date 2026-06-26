@@ -3,6 +3,7 @@
  * Uses Host API + SSE for lifecycle/status and a direct renderer WebSocket for runtime RPC.
  */
 import { create } from 'zustand';
+import { markSessionUnreadAfterSuccessfulRun } from '@/lib/session-unread-notify';
 import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { subscribeHostEvent } from '@/lib/host-events';
@@ -238,6 +239,7 @@ function scheduleCompletedRunFinalization(runId: unknown, sessionKey: unknown): 
               },
             },
           }));
+          markSessionUnreadAfterSuccessfulRun(completionSessionKey, latest.currentSessionKey);
         })
         .catch(() => {});
     }, delayMs);

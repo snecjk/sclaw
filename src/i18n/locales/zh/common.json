@@ -29,7 +29,7 @@
         "expandHistoryPanel": "展开历史会话",
         "collapseHistoryPanel": "收起历史会话",
         "subscriptions": "订阅",
-        "taskList": "任务列表",
+        "taskList": "任务",
         "recent": "最近",
         "taskHqReconciliation": "周会材料生成",
         "taskWeeklyPpt": "生成周报 PPT",
@@ -37,6 +37,9 @@
         "expandAllTaskList": "展开全部",
         "toggleRecentSection": "展开或收起最近",
         "toggleWorkspaceSection": "展开或收起工作台",
+        "sessionRunning": "运行中",
+        "sessionFailed": "执行失败",
+        "sessionUnread": "未读",
         "compactAccountMenu": "账户与设置"
     },
     "actions": {

@@ -9,6 +9,8 @@ import { toast } from 'sonner';
 import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-to-chat';
 import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
+import { markSessionUnreadAfterSuccessfulRun } from '@/lib/session-unread-notify';
+import { useSessionUnreadStore } from '@/stores/session-unread';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
@@ -1122,17 +1124,23 @@ function handleBackgroundSessionEvent(
 
       const toolOnly = isToolOnlyMessage(finalMsg);
       const hasOutput = hasNonToolAssistantContent(finalMsg);
-      set((s) => patchSessionRuntimeState(s, sessionKey, (runtime) => ({
-        sending: hasOutput ? false : runtime.sending,
-        activeRunId: hasOutput ? null : runtime.activeRunId,
-        streamingText: '',
-        streamingMessage: null,
-        streamingTools: hasOutput ? [] : (updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools),
-        pendingFinal: hasOutput ? false : true,
-        pendingToolImages: hasOutput ? [] : runtime.pendingToolImages,
-        lastUserMessageAt: hasOutput ? null : runtime.lastUserMessageAt,
-        error: null,
-      })));
+      set((s) => {
+        const next = patchSessionRuntimeState(s, sessionKey, (runtime) => ({
+          sending: hasOutput ? false : runtime.sending,
+          activeRunId: hasOutput ? null : runtime.activeRunId,
+          streamingText: '',
+          streamingMessage: null,
+          streamingTools: hasOutput ? [] : (updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools),
+          pendingFinal: hasOutput ? false : true,
+          pendingToolImages: hasOutput ? [] : runtime.pendingToolImages,
+          lastUserMessageAt: hasOutput ? null : runtime.lastUserMessageAt,
+          error: null,
+        }));
+        if (hasOutput && sessionKey !== s.currentSessionKey) {
+          markSessionUnreadAfterSuccessfulRun(sessionKey, s.currentSessionKey);
+        }
+        return next;
+      });
       if (toolOnly) break;
       break;
     }
@@ -1916,6 +1924,7 @@ export const useChatStore = create<ChatState>()(
 
   switchSession: (key: string) => {
     if (key === get().currentSessionKey) return;
+    useSessionUnreadStore.getState().markSessionRead(key);
     set((s) => buildSessionSwitchPatch(s, key));
     const targetSession = get().sessions.find((session) => session.key === key);
     if (key !== DEFAULT_SESSION_KEY && !targetSession?.engineType) {
@@ -1960,6 +1969,8 @@ export const useChatStore = create<ChatState>()(
     } catch (err) {
       console.warn(`[deleteSession] IPC call failed for ${key}:`, err);
     }
+
+    useSessionUnreadStore.getState().markSessionRead(key);
 
     const { currentSessionKey, sessions } = get();
     const remaining = sessions.filter((s) => s.key !== key);
@@ -2374,6 +2385,7 @@ export const useChatStore = create<ChatState>()(
 
       if ((recentAssistant || currentRecentAssistant) && (!shouldKeepClaudeRunActive || claudeRuntimeDone)) {
         clearHistoryPoll();
+        useSessionUnreadStore.getState().markSessionRead(targetSessionKey);
         set((s) => patchSessionRuntimeState(s, targetSessionKey, {
           sending: false,
           activeRunId: null,
