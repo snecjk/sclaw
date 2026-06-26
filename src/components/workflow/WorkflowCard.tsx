@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Circle, Clock, GitBranch, Loader2, XCircle } from 'lucide-react';
+import { CheckCircle2, Circle, Clock, Loader2, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { workflowResultSummaryClass } from '@/lib/surfaces';
 import {
   breakdownWorkflowDurationMs,
   getWorkflowDurationMs,
@@ -27,8 +28,13 @@ interface WorkflowCardProps {
   templateName: string;
   /** default：对话流独立块（与消息气泡/输入框同宽，仅 mt-3 间距）；inline：嵌在参数已确认展开区内（外层 pl-5 竖线区） */
   layout?: 'default' | 'inline';
+  /**
+   * full：状态行 + 结果区（独立场景默认）
+   * status：仅状态行（参数已确认折叠区内）
+   * results：仅摘要 + 产物 + 操作（与折叠块平级，无左竖线缩进）
+   */
+  section?: 'full' | 'status' | 'results';
   onPreviewArtifact?: (file: AttachedFileMeta) => void;
-  onViewWorkflow?: (workflowId: string) => void;
   onCreateScheduledTask?: (workflowId: string) => void;
 }
 
@@ -153,8 +159,8 @@ export function WorkflowCard({
   runId,
   templateName,
   layout = 'default',
+  section = 'full',
   onPreviewArtifact,
-  onViewWorkflow,
   onCreateScheduledTask,
 }: WorkflowCardProps) {
   const { t } = useTranslation('chat');
@@ -205,7 +211,6 @@ export function WorkflowCard({
   const theme = STATUS_THEMES[statusKey];
   const StatusIcon = theme.icon;
   const isRunning = display.status === 'running';
-  const isCompleted = display.status === 'completed';
   const isTerminal = isTerminalWorkflowRunStatus(display.status);
   const durationLabel = useDurationLabel(display.startedAt, display.completedAt, isRunning);
   const showProgress = isRunning && display.progress > 0;
@@ -220,69 +225,72 @@ export function WorkflowCard({
   );
   const showWorkflowActions = isTerminal
     && !!display.workflowId
-    && (onViewWorkflow || onCreateScheduledTask);
-  // MCP 执行成功态：仅展示产物卡，不重复状态行
-  const showStatusRow = !(isCompleted && primaryArtifact);
+    && !!onCreateScheduledTask;
 
-  return (
+  const showStatus = section === 'full' || section === 'status';
+  const showResults = section === 'full' || section === 'results';
+  const hasResultsContent = showResults && (
+    Boolean(display.result?.summary)
+    || Boolean(primaryArtifact)
+    || showWorkflowActions
+  );
+
+  const statusRow = showStatus ? (
     <div
       className={cn(
-        'w-full space-y-2',
-        layout === 'default' && 'mt-3',
+        workflowRowShellClass,
+        layout === 'inline' ? 'bg-transparent' : 'bg-card',
+        'px-3.5 py-3',
       )}
     >
-      {display.result?.summary ? (
-        <p className="text-sm leading-6 text-foreground">{display.result.summary}</p>
-      ) : null}
-
-      {showStatusRow ? (
-        <div
-          className={cn(
-            workflowRowShellClass,
-            layout === 'inline' ? 'bg-transparent' : 'bg-card',
-            'px-3.5 py-3',
-          )}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate text-[13px] font-medium leading-4 text-[#1A1A1A]">
-                {resolvedName}
-              </p>
-              {durationLabel && (isRunning || (isTerminal && display.completedAt)) ? (
-                <p className="shrink-0 text-[13px] leading-5 text-muted-foreground">{durationLabel}</p>
-              ) : null}
-            </div>
-            <div
-              className={cn(
-                'inline-flex shrink-0 items-center gap-1.5 text-sm font-medium leading-[18px]',
-                theme.statusTextClass,
-              )}
-            >
-              <StatusIcon
-                className={cn('h-4 w-4', theme.statusIconClass, theme.spin && 'animate-spin')}
-                strokeWidth={2}
-                aria-hidden
-              />
-              {t(theme.labelKey)}
-            </div>
-          </div>
-
-          {showProgress ? (
-            <div className="mt-2.5">
-              <div className="h-1 overflow-hidden rounded-full bg-muted">
-                {/* 动态进度宽：Tailwind 无法静态表达百分比，保留 inline width */}
-                <div
-                  className={cn('h-full rounded-full transition-all duration-500', theme.progressClass)}
-                  style={{ width: `${Math.max(display.progress, 8)}%` }}
-                />
-              </div>
-            </div>
-          ) : null}
-
-          {display.error ? (
-            <p className="mt-2 text-[13px] leading-5 text-destructive">{display.error}</p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate text-[13px] font-medium leading-4 text-foreground">
+            {resolvedName}
+          </p>
+          {durationLabel && (isRunning || (isTerminal && display.completedAt)) ? (
+            <p className="shrink-0 text-[13px] leading-5 text-muted-foreground">{durationLabel}</p>
           ) : null}
         </div>
+        <div
+          className={cn(
+            'inline-flex shrink-0 items-center gap-1.5 text-sm font-medium leading-[18px]',
+            theme.statusTextClass,
+          )}
+        >
+          <StatusIcon
+            className={cn('h-4 w-4', theme.statusIconClass, theme.spin && 'animate-spin')}
+            strokeWidth={2}
+            aria-hidden
+          />
+          {t(theme.labelKey)}
+        </div>
+      </div>
+
+      {showProgress ? (
+        <div className="mt-2.5">
+          <div className="h-1 overflow-hidden rounded-full bg-muted">
+            {/* 动态进度宽：Tailwind 无法静态表达百分比，保留 inline width */}
+            <div
+              className={cn('h-full rounded-full transition-all duration-500', theme.progressClass)}
+              style={{ width: `${Math.max(display.progress, 8)}%` }}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {display.error ? (
+        <p className="mt-2 text-[13px] leading-5 text-destructive">{display.error}</p>
+      ) : null}
+    </div>
+  ) : null;
+
+  const resultsBlock = hasResultsContent ? (
+    <>
+      {display.result?.summary ? (
+        <p className={workflowResultSummaryClass}>
+          {display.result.summary}
+        </p>
       ) : null}
 
       {primaryArtifact ? (
@@ -308,28 +316,30 @@ export function WorkflowCard({
 
       {showWorkflowActions ? (
         <div className={cn('flex flex-wrap gap-2', layout === 'default' && 'pl-0')}>
-          {onViewWorkflow ? (
-            <button
-              type="button"
-              onClick={() => onViewWorkflow(display.workflowId)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:border-primary/30 hover:bg-primary/[0.06]"
-            >
-              <GitBranch className="h-3.5 w-3.5 text-primary" aria-hidden />
-              {t('workflow.viewWorkflowAction')}
-            </button>
-          ) : null}
-          {onCreateScheduledTask ? (
-            <button
-              type="button"
-              onClick={() => onCreateScheduledTask(display.workflowId)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:border-primary/30 hover:bg-primary/[0.06]"
-            >
-              <Clock className="h-3.5 w-3.5 text-primary" aria-hidden />
-              {t('workflow.createScheduledTaskAction')}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={() => onCreateScheduledTask!(display.workflowId)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:border-primary/30 hover:bg-primary/[0.06]"
+          >
+            <Clock className="h-3.5 w-3.5 text-primary" aria-hidden />
+            {t('workflow.createScheduledTaskAction')}
+          </button>
         </div>
       ) : null}
+    </>
+  ) : null;
+
+  if (!statusRow && !resultsBlock) return null;
+
+  return (
+    <div
+      className={cn(
+        'w-full space-y-2',
+        layout === 'default' && section === 'full' && 'mt-3',
+      )}
+    >
+      {statusRow}
+      {resultsBlock}
     </div>
   );
 }

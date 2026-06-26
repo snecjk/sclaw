@@ -89,19 +89,34 @@ export function dedupeRedundantUserMessages(
       if (drop.has(j)) continue;
       const second = messages[j];
       if (second.role !== 'user') continue;
-      if (!isSameUserMessage(second, first, refAt) && !isSameUserMessage(first, second, refAt)) {
-        // Adjacent duplicate with identical text (e.g. optimistic append after server user).
-        if (j === i + 1) {
-          const firstText = normalizeUserMessageText(first.content);
-          const secondText = normalizeUserMessageText(second.content);
-          if (firstText && firstText === secondText && attachmentsMatch(first, second)) {
-            drop.add(j);
-            continue;
-          }
-        }
+
+      // True duplicate (same id) — drop regardless of position.
+      if (first.id && second.id && first.id === second.id) {
+        drop.add(j);
         continue;
       }
-      drop.add(j);
+
+      // Only ADJACENT user messages can be the same turn (an optimistic user
+      // message and its server echo, or a double insert). They sit next to each
+      // other with no other message between them. Two user messages separated by
+      // an assistant reply (or anything else) are distinct turns and must be kept
+      // — even when their text is identical. Collapsing them by text alone was
+      // the "identical input overwrites the previous output" bug: the second
+      // user message was dropped, the two assistant replies merged into one turn,
+      // and only the latest reply rendered.
+      if (j !== i + 1) continue;
+
+      // Adjacent pair: drop if recognized as the same turn by content/time.
+      if (isSameUserMessage(second, first, refAt) || isSameUserMessage(first, second, refAt)) {
+        drop.add(j);
+        continue;
+      }
+      // Adjacent identical-text fallback (covers cases isSameUserMessage misses).
+      const firstText = normalizeUserMessageText(first.content);
+      const secondText = normalizeUserMessageText(second.content);
+      if (firstText && firstText === secondText && attachmentsMatch(first, second)) {
+        drop.add(j);
+      }
     }
   }
 

@@ -5,6 +5,13 @@
  * modes can share the same field rendering logic.
  */
 import { cn } from '@/lib/utils';
+import {
+  parameterFormDockFieldRowClass,
+  parameterFormDockIndexBadgeClass,
+  parameterFormDockStepperButtonClass,
+  parameterFormDockStepperInputClass,
+  parameterFormDockStepperShellClass,
+} from '@/lib/surfaces';
 import type {
   FormField,
   TextField,
@@ -190,13 +197,13 @@ function NumberStepperControl({
 
   return (
     <div className="flex items-center gap-1">
-      <div className="inline-flex h-7 items-stretch overflow-hidden rounded-md border border-[#E5E7EB] bg-card">
+      <div className={parameterFormDockStepperShellClass}>
         <button
           type="button"
           aria-label="减少"
           disabled={field.disabled}
           onClick={() => applyDelta(-step)}
-          className="flex w-[26px] items-center justify-center bg-[#FAFAFA] text-sm text-[#6B7280] transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          className={cn('w-[26px] text-sm', parameterFormDockStepperButtonClass)}
         >
           −
         </button>
@@ -209,20 +216,23 @@ function NumberStepperControl({
           max={field.max}
           step={field.step}
           disabled={field.disabled}
-          className="h-[26px] w-10 border-x border-[#E5E7EB] bg-card px-1 text-center text-[13px] text-foreground focus:border-primary focus:outline-none"
+          className={cn(
+            'h-[26px] w-10 border-x',
+            parameterFormDockStepperInputClass,
+          )}
         />
         <button
           type="button"
           aria-label="增加"
           disabled={field.disabled}
           onClick={() => applyDelta(step)}
-          className="flex w-[26px] items-center justify-center border-l border-[#E5E7EB] bg-[#FAFAFA] text-sm text-[#6B7280] transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          className={cn('w-[26px] border-l border-border text-sm', parameterFormDockStepperButtonClass)}
         >
           +
         </button>
       </div>
       {field.suffix ? (
-        <span className="text-xs text-[#8C8C8C]">{field.suffix}</span>
+        <span className="text-xs text-muted-foreground">{field.suffix}</span>
       ) : null}
       {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
     </div>
@@ -239,11 +249,11 @@ function renderNumberField(
 ) {
   if (variant === 'chat-dock') {
     return (
-      <div key={field.name} className="flex items-center gap-2.5 rounded-[10px] border border-[#F2F3F5] p-2">
+      <div key={field.name} className={cn('flex items-center gap-2.5', parameterFormDockFieldRowClass)}>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-medium leading-[18px] text-foreground">{field.label}</div>
           {field.description ? (
-            <p className="text-xs leading-[14px] text-[#8C8C8C]">{field.description}</p>
+            <p className="text-xs leading-[14px] text-muted-foreground">{field.description}</p>
           ) : null}
         </div>
         <NumberStepperControl field={field} value={value} onChange={onChange} error={error} />
@@ -663,14 +673,18 @@ function renderTitledGroupField(
               key={item.fieldKey}
               className={cn(
                 isDock
-                  ? 'flex min-w-[calc(50%-6px)] flex-1 basis-[calc(50%-6px)] items-center gap-2.5 rounded-[10px] border border-[#F2F3F5] p-2'
+                  ? cn(
+                      'flex min-w-[calc(50%-6px)] flex-1 basis-[calc(50%-6px)] items-center gap-2.5',
+                      parameterFormDockFieldRowClass,
+                    )
                   : 'flex items-center gap-3',
               )}
             >
               <span
                 className={cn(
-                  'flex shrink-0 items-center justify-center rounded-[9px] bg-[#E5E6EB] text-[10px] text-[#4E5969]',
-                  isDock ? 'h-[18px] w-[18px]' : 'h-6 w-6 rounded-full bg-[var(--sto-brand-6)] text-[11px] font-bold text-white',
+                  isDock
+                    ? parameterFormDockIndexBadgeClass
+                    : 'flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--sto-brand-6)] text-[11px] font-bold text-white',
                 )}
               >
                 {index + 1}
@@ -680,7 +694,7 @@ function renderTitledGroupField(
                   {item.label}
                 </label>
                 {item.description && (
-                  <p className={cn(isDock ? 'text-xs leading-[14px] text-[#8C8C8C]' : 'text-[12px] text-[#86909C]')}>
+                  <p className={cn(isDock ? 'text-xs leading-[14px] text-muted-foreground' : 'text-[12px] text-[#86909C]')}>
                     {item.description}
                   </p>
                 )}
@@ -702,8 +716,8 @@ function renderTitledGroupField(
                         updateField(item.fieldKey, String(num - 1));
                       }}
                       className={cn(
-                        'flex items-center justify-center rounded-md border border-[#E5E7EB] bg-[#FAFAFA] transition-colors hover:bg-muted',
-                        isDock ? 'h-[26px] w-[26px]' : 'h-8 w-8 rounded-lg',
+                        parameterFormDockStepperButtonClass,
+                        isDock ? 'h-[26px] w-[26px] rounded-md border border-border' : 'h-8 w-8 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA]',
                       )}
                     >
                       <Minus className="h-4 w-4" />
@@ -713,8 +727,8 @@ function renderTitledGroupField(
                       value={String(itemValue)}
                       onChange={(e) => updateField(item.fieldKey, e.target.value)}
                       className={cn(
-                        'rounded-md border border-[#E5E7EB] bg-card text-center text-[13px] focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20',
-                        isDock ? 'h-[26px] w-10' : 'w-16 rounded-lg px-2 py-1.5',
+                        parameterFormDockStepperInputClass,
+                        isDock ? 'h-[26px] w-10 rounded-md border' : 'w-16 rounded-lg border border-[#E5E7EB] px-2 py-1.5',
                       )}
                     />
                     <button
@@ -725,8 +739,8 @@ function renderTitledGroupField(
                         updateField(item.fieldKey, String(num + 1));
                       }}
                       className={cn(
-                        'flex items-center justify-center rounded-md border border-[#E5E7EB] bg-[#FAFAFA] transition-colors hover:bg-muted',
-                        isDock ? 'h-[26px] w-[26px]' : 'h-8 w-8 rounded-lg',
+                        parameterFormDockStepperButtonClass,
+                        isDock ? 'h-[26px] w-[26px] rounded-md border border-border' : 'h-8 w-8 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA]',
                       )}
                     >
                       <Plus className="h-4 w-4" />
@@ -734,7 +748,7 @@ function renderTitledGroupField(
                   </>
                 )}
                 {item.label && !isRangePair ? (
-                  <span className="ml-1 text-xs text-[#8C8C8C]">
+                  <span className="ml-1 text-xs text-muted-foreground">
                     {extractUnit(item.label)}
                   </span>
                 ) : null}
@@ -772,16 +786,16 @@ function RangeInlineInputs({
         type="text"
         value={low}
         onChange={(e) => update(e.target.value, high)}
-        className="h-[26px] w-10 rounded-md border border-[#E5E7EB] bg-card px-1 text-center text-[13px] focus:border-primary focus:outline-none"
+        className={cn('h-[26px] w-10 rounded-md border px-1', parameterFormDockStepperInputClass)}
       />
-      <span className="text-xs text-[#9CA3AF]">~</span>
+      <span className="text-xs text-muted-foreground">~</span>
       <input
         type="text"
         value={high}
         onChange={(e) => update(low, e.target.value)}
-        className="h-[26px] w-10 rounded-md border border-[#E5E7EB] bg-card px-1 text-center text-[13px] focus:border-primary focus:outline-none"
+        className={cn('h-[26px] w-10 rounded-md border px-1', parameterFormDockStepperInputClass)}
       />
-      {suffix ? <span className="text-xs text-[#9CA3AF]">{suffix}</span> : null}
+      {suffix ? <span className="text-xs text-muted-foreground">{suffix}</span> : null}
     </div>
   );
 }
@@ -811,12 +825,12 @@ function renderDisplayField(field: FormField, value: unknown, error?: string, va
       <div
         className={cn(
           isDock
-            ? 'rounded-[10px] border border-[#F2F3F5] bg-muted/30 px-3 py-2'
+            ? cn('rounded-[10px] border border-border bg-muted/30 px-3 py-2')
             : 'rounded-xl border border-[#E5E6EB] bg-[#FAFBFC] px-4 py-3.5',
         )}
       >
-        <div className="text-[14px] font-semibold text-[#1D2129]">{field.label}</div>
-        <div className="mt-1 text-[13px] text-[#4E5969]">{displayValue}</div>
+        <div className={cn('text-[14px] font-semibold', isDock ? 'text-foreground' : 'text-[#1D2129]')}>{field.label}</div>
+        <div className={cn('mt-1 text-[13px]', isDock ? 'text-muted-foreground' : 'text-[#4E5969]')}>{displayValue}</div>
       </div>
       {field.description && (
         <p className="mt-2 text-[12px] text-[#86909C]">{field.description}</p>

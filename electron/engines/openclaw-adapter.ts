@@ -52,14 +52,31 @@ function resolveSessionFile(
   return null;
 }
 
-async function loadOpenClawSessionUpdatedAt(): Promise<Map<string, number>> {
-  const updatedAtByKey = new Map<string, number>();
+interface OpenClawSessionStoreMetadata {
+  updatedAt?: number;
+  spawnedBy?: string;
+  label?: string;
+}
+
+function readSessionStoreEntryFields(entry: unknown): Pick<OpenClawSessionStoreMetadata, 'spawnedBy' | 'label'> {
+  if (!entry || typeof entry !== 'object') return {};
+  const record = entry as Record<string, unknown>;
+  const spawnedBy = typeof record.spawnedBy === 'string' ? record.spawnedBy.trim() : undefined;
+  const label = typeof record.label === 'string' ? record.label.trim() : undefined;
+  return {
+    spawnedBy: spawnedBy || undefined,
+    label: label || undefined,
+  };
+}
+
+async function loadOpenClawSessionStoreMetadata(): Promise<Map<string, OpenClawSessionStoreMetadata>> {
+  const metadataByKey = new Map<string, OpenClawSessionStoreMetadata>();
   const agentsDir = join(getOpenClawConfigDir(), 'agents');
   let entries: Awaited<ReturnType<typeof readdir>>;
   try {
     entries = await readdir(agentsDir, { withFileTypes: true });
   } catch {
-    return updatedAtByKey;
+    return metadataByKey;
   }
   const agentIds = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
 
@@ -73,7 +90,7 @@ async function loadOpenClawSessionUpdatedAt(): Promise<Map<string, number>> {
       return;
     }
 
-    const candidates: Array<{ key: string; filePath: string }> = [];
+    const candidates: Array<{ key: string; filePath: string; spawnedBy?: string; label?: string }> = [];
     if (Array.isArray(store.sessions)) {
       for (const item of store.sessions) {
         if (!item || typeof item !== 'object') continue;
@@ -85,27 +102,38 @@ async function loadOpenClawSessionUpdatedAt(): Promise<Map<string, number>> {
             : '';
         if (!key) continue;
         const filePath = resolveSessionFile(sessionsDir, record);
-        if (filePath) candidates.push({ key, filePath });
+        if (!filePath) continue;
+        candidates.push({ key, filePath, ...readSessionStoreEntryFields(record) });
       }
     }
 
     for (const [key, value] of Object.entries(store)) {
       if (key === 'sessions' || !key) continue;
       const filePath = resolveSessionFile(sessionsDir, value);
-      if (filePath) candidates.push({ key, filePath });
+      if (!filePath) continue;
+      candidates.push({ key, filePath, ...readSessionStoreEntryFields(value) });
     }
 
-    await runLimited(candidates, OPENCLAW_SESSION_STAT_CONCURRENCY, async ({ key, filePath }) => {
+    await runLimited(candidates, OPENCLAW_SESSION_STAT_CONCURRENCY, async ({ key, filePath, spawnedBy, label }) => {
+      const existing = metadataByKey.get(key) ?? {};
+      metadataByKey.set(key, {
+        ...existing,
+        spawnedBy: spawnedBy ?? existing.spawnedBy,
+        label: label ?? existing.label,
+      });
       try {
         const fileStat = await stat(filePath);
-        updatedAtByKey.set(key, fileStat.mtimeMs);
+        metadataByKey.set(key, {
+          ...metadataByKey.get(key),
+          updatedAt: fileStat.mtimeMs,
+        });
       } catch {
         // Ignore missing/deleted transcripts; the gateway decides visibility.
       }
     });
   }));
 
-  return updatedAtByKey;
+  return metadataByKey;
 }
 
 export const openClawAdapter: EngineAdapter = {
@@ -114,21 +142,30 @@ export const openClawAdapter: EngineAdapter = {
   async listSessions(ctx: EngineAdapterContext) {
     try {
       const result = await ctx.gatewayManager.rpc<Record<string, unknown>>('sessions.list', {});
-      const updatedAtByKey = await loadOpenClawSessionUpdatedAt();
+      const metadataByKey = await loadOpenClawSessionStoreMetadata();
       const sessions: EngineSessionSummary[] = Array.isArray(result.sessions)
         ? result.sessions
           .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
-          .map((entry): EngineSessionSummary => ({
-            key: typeof entry.key === 'string' ? entry.key : '',
-            label: typeof entry.label === 'string' ? entry.label : undefined,
-            displayName: typeof entry.displayName === 'string' ? entry.displayName : undefined,
-            thinkingLevel: typeof entry.thinkingLevel === 'string' ? entry.thinkingLevel : undefined,
-            model: typeof entry.model === 'string' ? entry.model : undefined,
-            updatedAt: typeof entry.updatedAt === 'number' || typeof entry.updatedAt === 'string'
-              ? entry.updatedAt
-              : updatedAtByKey.get(typeof entry.key === 'string' ? entry.key : ''),
-            engineType: 'openclaw',
-          }))
+          .map((entry): EngineSessionSummary => {
+            const key = typeof entry.key === 'string' ? entry.key : '';
+            const storeMeta = metadataByKey.get(key);
+            return {
+              key,
+              label: typeof entry.label === 'string'
+                ? entry.label
+                : storeMeta?.label,
+              displayName: typeof entry.displayName === 'string' ? entry.displayName : undefined,
+              thinkingLevel: typeof entry.thinkingLevel === 'string' ? entry.thinkingLevel : undefined,
+              model: typeof entry.model === 'string' ? entry.model : undefined,
+              updatedAt: typeof entry.updatedAt === 'number' || typeof entry.updatedAt === 'string'
+                ? entry.updatedAt
+                : storeMeta?.updatedAt,
+              spawnedBy: typeof entry.spawnedBy === 'string'
+                ? entry.spawnedBy
+                : storeMeta?.spawnedBy,
+              engineType: 'openclaw',
+            };
+          })
           .filter((entry) => Boolean(entry.key))
         : [];
       return { success: true, result: { sessions } };

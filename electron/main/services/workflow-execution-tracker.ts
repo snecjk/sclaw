@@ -4,7 +4,7 @@
  * Main Process service that polls backend workflow execution status
  * and broadcasts state updates to Renderer via IPC.
  */
-import { webContents } from 'electron';
+import { safeBroadcastToAllWebContents } from '../safe-web-contents-send';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { logger } from '../../utils/logger';
 import { PORTS } from '../../utils/config';
@@ -336,9 +336,7 @@ class WorkflowExecutionTracker {
       data: rawRun,
     };
 
-    for (const wc of webContents.getAllWebContents()) {
-      wc.send('workflow:poll-trace', payload);
-    }
+    safeBroadcastToAllWebContents('workflow:poll-trace', payload);
   }
 
   private broadcastState(session: ExecutionSession) {
@@ -348,9 +346,7 @@ class WorkflowExecutionTracker {
       sessionKey: session.sessionKey,
     };
 
-    for (const wc of webContents.getAllWebContents()) {
-      wc.send('workflow:status-update', payload);
-    }
+    safeBroadcastToAllWebContents('workflow:status-update', payload);
   }
 
   private evictOldestCompleted() {

@@ -12,14 +12,14 @@ import type { ExecutionRecord, RecordStatus, StatusCounts } from './types';
 
 // ──── 映射工具 ────
 
-/** 将后端工作流状态映射为前端 RecordStatus */
+/** 将后端工作流状态映射为前端 RecordStatus；CANCELLED 归为失败，其余归为执行中 */
 function mapStatus(raw: string): RecordStatus {
   switch (raw) {
     case 'SUCCEEDED':
       return 'success';
     case 'FAILED':
+    case 'CANCELLED':
       return 'failed';
-    case 'RUNNING':
     default:
       return 'running';
   }

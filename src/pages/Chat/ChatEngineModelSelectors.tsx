@@ -20,9 +20,11 @@ import {
   normalizeModelIdForChat,
   resolveChatToolbarModelId,
   resolveProviderRawModelId,
+  upsertSessionModel,
   type ChatModelOption,
 } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
+import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { cn } from '@/lib/utils';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { toast } from 'sonner';
@@ -172,11 +174,16 @@ export function ChatEngineSelector({
   );
 
   const agentDefaultEngineType = currentAgent?.engineType ?? 'openclaw';
-  const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
-    ? agentDefaultEngineType
-    : currentSession?.engineType ?? agentDefaultEngineType;
+  const currentEngineType = resolveChatSessionEngineType(
+    currentSession,
+    agentDefaultEngineType,
+    currentSessionKey,
+  );
   const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
   const currentSessionEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
+  const displayEngineLabel = currentSessionKey === DEFAULT_SESSION_KEY
+    ? agentDefaultEngineLabel
+    : currentSessionEngineLabel;
   const canSwitchEngine = currentSessionKey === DEFAULT_SESSION_KEY;
   const showSessionEngineHint = !canSwitchEngine
     && currentSession?.engineType != null
@@ -240,7 +247,7 @@ export function ChatEngineSelector({
               className,
             )}
           >
-            <span className="min-w-0 flex-1 truncate">{agentDefaultEngineLabel}</span>
+            <span className="min-w-0 flex-1 truncate">{displayEngineLabel}</span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
           </button>
         </DropdownMenuTrigger>
@@ -277,7 +284,7 @@ export function ChatEngineSelector({
         <div className={cn(pillBase, pillStatic, 'max-w-[min(100vw-11rem,200px)] opacity-75')}>
           <Bot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
           <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-muted-foreground">
-            {currentSessionEngineLabel}
+            {displayEngineLabel}
           </span>
         </div>
       )}
@@ -354,9 +361,11 @@ export function ChatModelSelector({
   }, [accounts]);
 
   const agentDefaultEngineType = currentAgent?.engineType ?? 'openclaw';
-  const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
-    ? agentDefaultEngineType
-    : currentSession?.engineType ?? agentDefaultEngineType;
+  const currentEngineType = resolveChatSessionEngineType(
+    currentSession,
+    agentDefaultEngineType,
+    currentSessionKey,
+  );
 
   useEffect(() => {
     if (modelSaving) return;
@@ -410,6 +419,50 @@ export function ChatModelSelector({
 
     if (currentSessionKey === DEFAULT_SESSION_KEY) {
       useChatStore.getState().setPendingNewSessionModel(rawModelId);
+      setModelSaving(true);
+      try {
+        let persistedModel = rawModelId;
+        if (currentEngineType === 'claude' && currentAgentId) {
+          const result = await hostApiFetch<{
+            snapshot?: { agents?: Array<{ id: string; modelDisplay?: string }> };
+          }>(`/api/agents/${encodeURIComponent(currentAgentId)}/model`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              model: rawModelId,
+              accountId: option?.accountId,
+            }),
+          });
+          persistedModel = result.snapshot?.agents?.find((agent) => agent.id === currentAgentId)?.modelDisplay?.trim()
+            || rawModelId;
+          await fetchAgents();
+        }
+        useChatStore.setState((state) => ({
+          sessions: upsertSessionModel(
+            state.sessions,
+            currentSessionKey,
+            persistedModel,
+            { engineType: currentEngineType, label: '新对话' },
+          ),
+        }));
+      } catch (err) {
+        toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));
+        const resolved = currentEngineType === 'claude'
+          ? (
+            isConcreteModelId(currentAgent?.modelDisplay)
+              ? normalizeModelIdForChat(currentAgent?.modelDisplay)
+              : (workspaceDefaultModelId || '')
+          )
+          : resolveChatToolbarModelId({
+            sessionModel: currentSession?.model,
+            agentModelDisplay: currentAgent?.modelDisplay,
+            agentInheritedModel: currentAgent?.inheritedModel,
+            workspaceDefaultModel: workspaceDefaultModelId,
+            stoCatalogModelIds,
+          });
+        setSelectedModelId(resolved || '');
+      } finally {
+        setModelSaving(false);
+      }
       return;
     }
 
@@ -442,11 +495,12 @@ export function ChatModelSelector({
         }
       }
       useChatStore.setState((state) => ({
-        sessions: state.sessions.map((session) => (
-          session.key === currentSessionKey
-            ? { ...session, model: persistedModel || rawModelId }
-            : session
-        )),
+        sessions: upsertSessionModel(
+          state.sessions,
+          currentSessionKey,
+          persistedModel || rawModelId,
+          { engineType: currentEngineType, label: '新对话' },
+        ),
       }));
     } catch (err) {
       toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));

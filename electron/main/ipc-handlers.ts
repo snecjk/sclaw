@@ -25,6 +25,7 @@ import {
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { buildOpenClawControlUiUrl } from '../utils/openclaw-control-ui';
 import { logger } from '../utils/logger';
+import { safeWebContentsSend } from './safe-web-contents-send';
 import {
   saveChannelConfig,
   getChannelConfig,
@@ -87,6 +88,7 @@ export function registerIpcHandlers(
   mainWindow: BrowserWindow,
   getSpriteWindow?: () => BrowserWindow | null,
   getFloatIconWindow?: () => BrowserWindow | null,
+  getMainWindow?: () => BrowserWindow | null,
 ): void {
   // Unified request protocol (non-breaking: legacy channels remain available)
   registerUnifiedRequestHandlers(gatewayManager);
@@ -96,7 +98,12 @@ export function registerIpcHandlers(
   registerWorkflowStreamHandlers();
 
   // Gateway handlers
-  registerGatewayHandlers(gatewayManager, mainWindow, getSpriteWindow, getFloatIconWindow);
+  registerGatewayHandlers(
+    gatewayManager,
+    getMainWindow ?? (() => mainWindow),
+    getSpriteWindow,
+    getFloatIconWindow,
+  );
 
   // ClawHub handlers
   registerClawHubHandlers(clawHubService);
@@ -1167,22 +1174,23 @@ function registerLogHandlers(): void {
  */
 function registerGatewayHandlers(
   gatewayManager: GatewayManager,
-  mainWindow: BrowserWindow,
+  getMainWindow: () => BrowserWindow | null,
   getSpriteWindow?: () => BrowserWindow | null,
   getFloatIconWindow?: () => BrowserWindow | null,
 ): void {
   // Helper: broadcast an event to all renderer windows (main + sprite + float-icon)
   const broadcast = (channel: string, ...args: unknown[]) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(channel, ...args);
+    const mainWindow = getMainWindow();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      safeWebContentsSend(mainWindow.webContents, channel, ...args);
     }
     const sprite = getSpriteWindow?.();
     if (sprite && !sprite.isDestroyed()) {
-      sprite.webContents.send(channel, ...args);
+      safeWebContentsSend(sprite.webContents, channel, ...args);
     }
     const floatIcon = getFloatIconWindow?.();
     if (floatIcon && !floatIcon.isDestroyed()) {
-      floatIcon.webContents.send(channel, ...args);
+      safeWebContentsSend(floatIcon.webContents, channel, ...args);
     }
   };
   type GatewayHttpProxyRequest = {

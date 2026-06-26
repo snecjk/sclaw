@@ -16,6 +16,17 @@ import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EngineSe
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ImageBlockParam, MessageParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
 
+/**
+ * Minimal event sink used to forward Claude streaming events to the renderer.
+ * Backed at runtime by the GatewayManager EventEmitter (see EngineAdapterContext),
+ * which bridges `chat:message` / `notification` events to the same IPC broadcast
+ * the OpenClaw Gateway uses — so the renderer's existing state machine handles
+ * them without any renderer-side changes.
+ */
+type ClaudeEventSink = {
+  emit(event: string, payload: unknown): boolean;
+};
+
 type ActiveClaudeQuery = {
   close: () => void;
   runId: string;
@@ -671,19 +682,82 @@ function extractAgentId(sessionKey: string): string {
   return (agentId || 'main').trim().toLowerCase();
 }
 
-async function consumeClaudeQuery(
+export async function consumeClaudeQuery(
   sessionKey: string,
   sessionId: string,
   cwd: string,
   query: AsyncIterable<Record<string, unknown>> & { close(): void },
+  eventSink: ClaudeEventSink | null,
+  runId: string,
+  onMessage?: (message: Record<string, unknown>) => void | Promise<void>,
 ): Promise<void> {
   let title: string | undefined;
+  let seq = 0;
+  let seenResult = false;
+  let errorThrown = false;
+  // Accumulated streaming text for the current assistant message. The SDK yields
+  // content_block_delta/text_delta *fragments* (not a growing snapshot), and each
+  // stream_event carries a per-event uuid (not a stable message id), so we must
+  // rebuild the full text so far in a single variable. Each emitted delta carries
+  // the accumulated text; the renderer replaces streamingMessage wholesale
+  // (matching the OpenClaw Gateway's delta shape), producing token-by-token
+  // appending output. Reset on message_start and when the complete assistant
+  // message is emitted as 'final'.
+  let streamText = '';
+
+  const emitChat = (payload: Record<string, unknown>) => {
+    if (!eventSink) return;
+    eventSink.emit('chat:message', { message: { ...payload, runId, sessionKey, seq: seq++ } });
+  };
+  const emitAgentCompleted = () => {
+    if (!eventSink) return;
+    eventSink.emit('notification', { method: 'agent', params: { phase: 'completed', runId, sessionKey } });
+  };
 
   try {
+    // Mirror the OpenClaw Gateway's 'started' event so the renderer adopts the
+    // runId/sending state immediately, before the first token arrives.
+    emitChat({ state: 'started' });
+
     for await (const message of query) {
       const messageSessionId = typeof message.session_id === 'string' ? message.session_id : sessionId;
+
+      // Partial streaming events (only yielded when includePartialMessages is on).
+      // Forward text deltas as live 'delta' chat events for token-by-token rendering.
+      // thinking_delta / input_json_delta are intentionally not streamed here; the
+      // complete assistant message (emitted as 'final' below) carries them.
+      if (message.type === 'stream_event') {
+        const event = (message as { event?: Record<string, unknown> }).event;
+        if (event) {
+          if (event.type === 'message_start') {
+            // A new assistant message begins — reset the accumulator.
+            streamText = '';
+          } else if (event.type === 'content_block_delta') {
+            const delta = event.delta as { type?: string; text?: string } | undefined;
+            if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
+              streamText += delta.text;
+              emitChat({
+                state: 'delta',
+                message: {
+                  role: 'assistant',
+                  id: runId,
+                  content: [{ type: 'text', text: streamText }],
+                },
+              });
+            }
+          }
+        }
+        continue;
+      }
+
       if (message.type === 'result') {
         claudeRuntimeResults.set(sessionKey, toClaudeRuntimeResult(message));
+        seenResult = true;
+        // Terminal signal: the renderer's isClaudeRunFragment guard keeps the run
+        // active until this 'completed' notification fires
+        // scheduleCompletedRunFinalization, which sets sending=false and
+        // reconciles history.
+        emitAgentCompleted();
       }
       if (!title && message.type === 'user' && 'message' in message && !shouldHideClaudeUserMessage(message, (message as { message?: unknown }).message)) {
         title = stringifyClaudeContent((message as { message?: unknown }).message);
@@ -732,6 +806,23 @@ async function consumeClaudeQuery(
         } else {
           liveClaudeMessages.set(sessionKey, [...current, nextEntry]);
         }
+
+        // Emit a 'final' event for complete assistant messages so the renderer
+        // commits them to messages[] and clears streamingMessage. For Claude the
+        // isClaudeRunFragment guard keeps these non-terminal (sending stays true)
+        // until the 'result' -> agent completed notification finalizes the run.
+        if (liveMessage.type === 'assistant') {
+          streamText = '';
+          emitChat({
+            state: 'final',
+            message: {
+              id: nextEntry.id,
+              role: 'assistant',
+              content: nextEntry.content,
+              timestamp: nextEntry.timestamp,
+            },
+          });
+        }
       }
 
       await upsertEngineSessionRegistryEntry({
@@ -745,9 +836,23 @@ async function consumeClaudeQuery(
         model: (await getEngineSessionRegistryEntry(sessionKey))?.model,
         accountId: (await getEngineSessionRegistryEntry(sessionKey))?.accountId,
       });
+      // Allow callers (e.g. the scheduled-task worker) to capture per-message
+      // data they need (run-record summary/runtimeResult) while reusing this
+      // loop's event emission + liveClaudeMessages population. Not called for
+      // stream_event messages, which `continue` above.
+      await onMessage?.(message);
     }
+  } catch (error) {
+    errorThrown = true;
+    emitChat({ state: 'error', errorMessage: String(error) });
+    throw error;
   } finally {
     activeClaudeQueries.delete(sessionKey);
+    // If the loop ended without a result and without an error, the query was
+    // closed (e.g. user abort) — emit 'aborted' so the renderer finalizes.
+    if (!seenResult && !errorThrown) {
+      emitChat({ state: 'aborted' });
+    }
   }
 }
 
@@ -780,6 +885,7 @@ async function startClaudeQuery(
   prompt: string | AsyncIterable<SDKUserMessage>,
   options?: {
     additionalDirectories?: string[];
+    eventSink?: ClaudeEventSink | null;
   },
 ): Promise<{ success: boolean; result?: { runId: string }; error?: string }> {
   try {
@@ -823,6 +929,9 @@ async function startClaudeQuery(
       allowDangerouslySkipPermissions: true,
       settingSources: ['user' as const],
       skills: 'all' as const,
+      // Enable token-level streaming events (SDKPartialAssistantMessage) so the
+      // consumer loop can forward text deltas to the renderer in real time.
+      includePartialMessages: true,
       settings: launchSelection.model ? { model: launchSelection.model } : undefined,
       additionalDirectories: options?.additionalDirectories,
       pathToClaudeCodeExecutable,
@@ -871,7 +980,7 @@ async function startClaudeQuery(
       accountId: launchSelection.accountId,
     });
 
-    void consumeClaudeQuery(sessionKey, sessionId, cwd, query as AsyncIterable<Record<string, unknown>> & { close(): void }).catch((error) => {
+    void consumeClaudeQuery(sessionKey, sessionId, cwd, query as AsyncIterable<Record<string, unknown>> & { close(): void }, options?.eventSink ?? null, runId).catch((error) => {
       logger.error('Claude query failed:', error);
       cacheClaudeErrorMessage(sessionKey, error);
       void upsertEngineSessionRegistryEntry({
@@ -952,11 +1061,11 @@ export const claudeAdapter: EngineAdapter = {
     }
   },
 
-  async sendMessage(_ctx: EngineAdapterContext, params) {
-    return startClaudeQuery(params.sessionKey, params.message);
+  async sendMessage(ctx: EngineAdapterContext, params) {
+    return startClaudeQuery(params.sessionKey, params.message, { eventSink: ctx.gatewayManager });
   },
 
-  async sendMessageWithMedia(_ctx, params) {
+  async sendMessageWithMedia(ctx, params) {
     const entry = await ensureClaudeRegistryEntry(params.sessionKey);
     const cwd = entry?.cwd;
     if (!cwd) {
@@ -964,7 +1073,7 @@ export const claudeAdapter: EngineAdapter = {
     }
     const additionalDirectories = getAdditionalDirectories(cwd, params.media ?? []);
     const prompt = await buildClaudeUserMessage(params.message, params.media ?? []);
-    return startClaudeQuery(params.sessionKey, toClaudePromptStream(prompt), { additionalDirectories });
+    return startClaudeQuery(params.sessionKey, toClaudePromptStream(prompt), { additionalDirectories, eventSink: ctx.gatewayManager });
   },
 
   async abortRun(_ctx, params) {

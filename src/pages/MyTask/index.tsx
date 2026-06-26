@@ -246,14 +246,25 @@ export default function MyTask() {
   const handleTrigger = useCallback(
     async (task: TaskViewModel) => {
       try {
-        const result = await triggerJob(task.id, task.engineType);
-        if (task.engineType === 'claude' && result && 'sessionKey' in result) {
+        await triggerJob(task.id, task.engineType);
+        if (task.engineType === 'claude') {
+          // Build dated aggregate key instead of using result.sessionKey (which is claude-task-run:{taskId}:{runId})
+          const today = new Date();
+          const y = today.getFullYear();
+          const m = String(today.getMonth() + 1).padStart(2, '0');
+          const d = String(today.getDate()).padStart(2, '0');
+          const sessionKey = `claude-task:${task.id}:${y}-${m}-${d}`;
           navigateToMainChatHome(navigate, location.pathname, () => {
-            useChatStore.getState().switchSession(result.sessionKey);
+            useChatStore.getState().switchSession(sessionKey);
           });
           void useChatStore.getState().loadSessions();
         } else {
-          const sessionKey = `agent:${task.agentId ?? 'main'}:cron:${task.id}`;
+          // Build dated session key instead of base key to avoid adding base session back
+          const today = new Date();
+          const y = today.getFullYear();
+          const m = String(today.getMonth() + 1).padStart(2, '0');
+          const d = String(today.getDate()).padStart(2, '0');
+          const sessionKey = `agent:${task.agentId ?? 'main'}:cron:${task.id}:${y}-${m}-${d}`;
           navigateToMainChatHome(navigate, location.pathname, () => {
             useChatStore.getState().switchSession(sessionKey);
           });

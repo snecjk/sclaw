@@ -1,4 +1,5 @@
 import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-to-chat';
+import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { hostApiFetch } from '@/lib/host-api';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
@@ -6,6 +7,7 @@ import { useAgentsStore } from '@/stores/agents';
 import {
   getCanonicalPrefixFromSessions,
   getMessageText,
+  mergeSessionLastActivity,
   sanitizeSessionDisplayField,
   toMs,
 } from './helpers';
@@ -17,12 +19,8 @@ import {
   parseScheduledTaskAgentSessionKey,
   parseScheduledTaskSessionKey,
 } from './cron-session-utils';
-import { deriveSessionLabelFromUserText, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
-import {
-  applyStoredSessionLabels,
-  resolveStoredSessionLabel,
-  shouldAutoDeriveSessionLabel,
-} from '@/lib/session-label';
+import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSessionLabel } from '@/lib/workflow-session-hint';
+import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, hasUsableSessionTitle, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
@@ -155,6 +153,7 @@ export function createSessionActions(
             thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
             model: s.model ? String(s.model) : undefined,
             updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
+            spawnedBy: typeof s.spawnedBy === 'string' ? s.spawnedBy : undefined,
             engineType,
           };
         }).filter((s) => Boolean(s.key)) as ChatSession[];
@@ -215,7 +214,8 @@ export function createSessionActions(
           }]
           : dedupedSessions;
 
-        const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, get().sessionLabels);
+        const scrubbedSessionLabels = scrubCorruptedSessionLabels(get().sessionLabels);
+        const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels);
 
         const discoveredActivity = Object.fromEntries(
           labeledSessions
@@ -309,12 +309,15 @@ export function createSessionActions(
           const cronParsed = parseCronSessionKey(session.key);
           const stParsed = parseScheduledTaskAgentSessionKey(session.key);
           const claudeRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
+          const claudeDatedParsed = parseClaudeScheduledTaskSessionKey(session.key);
           let taskId: string | undefined;
           const ts = session.updatedAt;
           if (cronParsed) {
             taskId = `cron:${cronParsed.jobId}`;
           } else if (stParsed) {
             taskId = `st:${stParsed.taskId}`;
+          } else if (claudeDatedParsed?.date) {
+            taskId = `claude-task:${claudeDatedParsed.taskId}`;
           } else if (claudeRunParsed) {
             taskId = `claude-task:${claudeRunParsed.taskId}`;
           }
@@ -329,12 +332,15 @@ export function createSessionActions(
           const cronParsed = parseCronSessionKey(session.key);
           const stParsed = parseScheduledTaskAgentSessionKey(session.key);
           const claudeRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
+          const claudeDatedParsed = parseClaudeScheduledTaskSessionKey(session.key);
           let taskId: string | undefined;
           const ts = session.updatedAt;
           if (cronParsed) {
             taskId = `cron:${cronParsed.jobId}`;
           } else if (stParsed) {
             taskId = `st:${stParsed.taskId}`;
+          } else if (claudeDatedParsed?.date) {
+            taskId = `claude-task:${claudeDatedParsed.taskId}`;
           } else if (claudeRunParsed) {
             taskId = `claude-task:${claudeRunParsed.taskId}`;
           }
@@ -360,10 +366,8 @@ export function createSessionActions(
           sessions: labeledSessions,
           currentSessionKey: nextSessionKey,
           currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
-          sessionLastActivity: {
-            ...state.sessionLastActivity,
-            ...discoveredActivity,
-          },
+          sessionLastActivity: mergeSessionLastActivity(state.sessionLastActivity, discoveredActivity),
+          sessionLabels: scrubCorruptedSessionLabels(state.sessionLabels),
         }));
 
         if (currentSessionKey !== nextSessionKey) {
@@ -375,13 +379,8 @@ export function createSessionActions(
         const sessionsToHydrate = labeledSessions
           .filter((session) => {
             if (session.key.endsWith(':main')) return false;
-            const hasUsableTitle = Boolean(
-              session.label?.trim()
-              || session.displayName?.trim()
-              || resolveStoredSessionLabel(session.key, get().sessionLabels),
-            );
             const hasActivity = Boolean(session.updatedAt || get().sessionLastActivity[session.key]);
-            return !hasUsableTitle || !hasActivity;
+            return !hasUsableSessionTitle(session, scrubbedSessionLabels) || !hasActivity;
           })
           .sort((left, right) => {
             const leftAt = left.updatedAt ?? get().sessionLastActivity[left.key] ?? 0;
@@ -398,19 +397,31 @@ export function createSessionActions(
                     : ''),
                 );
                 const msgs = Array.isArray(history.result?.messages) ? history.result.messages : [];
-                const firstUser = msgs.find((m) => m.role === 'user');
                 const lastMsg = msgs[msgs.length - 1];
                 set((s) => {
                   const next: Partial<typeof s> = {};
-                  if (firstUser && shouldAutoDeriveSessionLabel(session.key, s.sessionLabels, isCorruptedSessionLabel)) {
-                    const labelText = deriveSessionLabelFromUserText(getMessageText(firstUser.content));
+                  if (shouldAutoDeriveSessionLabel(session.key, s.sessionLabels, isCorruptedSessionLabel)) {
+                    const labelText = deriveSessionLabelFromHistory(
+                      msgs,
+                      getMessageText,
+                      buildSessionLabelDerivationOptions(session.key, s.sessions, s.sessionLabels),
+                    );
                     if (labelText) {
-                      const truncated = labelText.length > 50 ? `${labelText.slice(0, 50)}…` : labelText;
-                      next.sessionLabels = { ...s.sessionLabels, [session.key]: truncated };
+                      next.sessionLabels = {
+                        ...s.sessionLabels,
+                        [session.key]: truncateSessionLabel(labelText),
+                      };
                     }
                   }
-                  if (lastMsg?.timestamp && !s.sessionLastActivity[session.key]) {
-                    next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: toMs(lastMsg.timestamp) };
+                  if (lastMsg?.timestamp) {
+                    const lastAt = toMs(lastMsg.timestamp);
+                    if (lastAt > 0) {
+                      const currentAt = s.sessionLastActivity[session.key] ?? 0;
+                      const nextAt = Math.max(currentAt, lastAt);
+                      if (nextAt !== currentAt) {
+                        next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: nextAt };
+                      }
+                    }
                   }
                   return next;
                 });
@@ -541,10 +552,24 @@ export function createSessionActions(
       const newKey = `${prefix}:session-${Date.now()}`;
       const newAgentId = getAgentIdFromSessionKey(newKey);
       const pendingModel = get().pendingNewSessionModel?.trim();
-      const carriedModel = currentSessionKey !== DEFAULT_SESSION_KEY
-        ? sessions.find((s) => s.key === currentSessionKey)?.model?.trim()
-        : undefined;
-      const chosenModel = pendingModel || carriedModel;
+      let chosenModel = pendingModel;
+      if (!chosenModel) {
+        if (currentSessionKey !== DEFAULT_SESSION_KEY) {
+          chosenModel = sessions.find((s) => s.key === currentSessionKey)?.model?.trim();
+        } else {
+          const upsertedModel = sessions.find((s) => s.key === DEFAULT_SESSION_KEY)?.model?.trim();
+          if (upsertedModel) {
+            chosenModel = upsertedModel;
+          } else {
+            const carryAgent = useAgentsStore.getState().agents.find(
+              (agent) => agent.id === get().currentAgentId,
+            );
+            if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
+              chosenModel = normalizeModelIdForChat(carryAgent.modelDisplay);
+            }
+          }
+        }
+      }
       const agentEngineType = useAgentsStore.getState().agents
         .find((agent) => agent.id.trim().toLowerCase() === newAgentId.trim().toLowerCase())?.engineType;
       const newSessionEntry: ChatSession = {

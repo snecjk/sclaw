@@ -5,6 +5,7 @@
 import { hostApiFetch } from '@/lib/host-api';
 import {
   getWorkspaceDefaultRawModelId,
+  isConcreteModelId,
   normalizeModelIdForChat,
   resolveProviderRawModelId,
   shouldSyncSessionToWorkspaceDefault,
@@ -134,6 +135,11 @@ export async function applyWorkspaceDefaultToNewSession(
       console.warn('[applyWorkspaceDefaultToNewSession] failed to persist user-chosen model:', err);
     }
     useChatStore.getState().setPendingNewSessionModel(null);
+    return;
+  }
+
+  // Claude agent-scoped model from home toolbar — skip workspace default.
+  if (agent?.engineType === 'claude' && isConcreteModelId(agent.modelDisplay)) {
     return;
   }
 

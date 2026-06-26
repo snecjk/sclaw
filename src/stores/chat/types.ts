@@ -106,6 +106,8 @@ export interface ChatSession {
   model?: string;
   updatedAt?: number;
   engineType?: 'openclaw' | 'claude';
+  /** Parent session key when this session was spawned as an OpenClaw subagent. */
+  spawnedBy?: string;
 }
 
 export interface ToolStatus {

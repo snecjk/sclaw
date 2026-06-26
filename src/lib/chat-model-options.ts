@@ -4,6 +4,7 @@
 import type { ProviderListItem } from '@/lib/provider-accounts';
 import type { ProviderAccount } from '@/lib/providers';
 import { HIDDEN_PROVIDER_IDS } from '@/lib/providers';
+import type { ChatSession } from '@/stores/chat/types';
 
 /** Strip provider prefix (e.g. sto/qwen3.5-plus → qwen3.5-plus) for UI option matching. */
 export function normalizeModelIdForChat(raw: string | undefined | null): string {
@@ -16,6 +17,49 @@ export function normalizeModelIdForChat(raw: string | undefined | null): string 
 export function isConcreteModelId(raw: string | undefined | null): boolean {
   const normalized = normalizeModelIdForChat(raw);
   return Boolean(normalized) && normalized.toLowerCase() !== 'not configured';
+}
+
+/** Home / default session: session override, else Claude agent-scoped model from toolbar switch. */
+export function resolveHomePageCarryoverModel(input: {
+  sessionKey: string;
+  sessions: ChatSession[];
+  agentEngineType?: ChatSession['engineType'];
+  agentModelDisplay?: string;
+}): string | undefined {
+  const fromSession = input.sessions.find((session) => session.key === input.sessionKey)?.model;
+  if (fromSession?.trim()) return normalizeModelIdForChat(fromSession);
+  if (
+    input.agentEngineType === 'claude'
+    && isConcreteModelId(input.agentModelDisplay)
+  ) {
+    return normalizeModelIdForChat(input.agentModelDisplay);
+  }
+  return undefined;
+}
+
+/** Upsert session model — home page starts with empty sessions[] until first switch. */
+export function upsertSessionModel(
+  sessions: ChatSession[],
+  sessionKey: string,
+  model: string,
+  partial?: Pick<ChatSession, 'label' | 'engineType'>,
+): ChatSession[] {
+  const normalized = model.trim();
+  if (!normalized) return sessions;
+  if (sessions.some((session) => session.key === sessionKey)) {
+    return sessions.map((session) => (
+      session.key === sessionKey ? { ...session, model: normalized } : session
+    ));
+  }
+  return [
+    ...sessions,
+    {
+      key: sessionKey,
+      label: partial?.label ?? '新对话',
+      engineType: partial?.engineType,
+      model: normalized,
+    },
+  ];
 }
 
 /** Workspace default model from the default provider account (normalized for UI). */

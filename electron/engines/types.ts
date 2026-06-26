@@ -10,6 +10,7 @@ export interface EngineSessionSummary {
   model?: string;
   updatedAt?: number | string;
   engineType?: AgentEngineType;
+  spawnedBy?: string;
 }
 
 export interface EngineHistoryResult {

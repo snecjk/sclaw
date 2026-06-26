@@ -28,6 +28,7 @@ import { useMessageQueueStore, createAutoSendWatcher } from '@/stores/message-qu
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
+import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { cn } from '@/lib/utils';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
 import {
@@ -47,7 +48,7 @@ import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { useBuiltinToolListener } from '@/hooks/use-builtin-tool-listener';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
-import { CronTaskCreateModal } from '@/pages/Cron/components/CronTaskCreateModal';
+import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
 export function Chat() {
@@ -109,9 +110,11 @@ export function Chat() {
     () => agents.find((agent) => agent.id === currentAgentId),
     [agents, currentAgentId],
   );
-  const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
-    ? currentAgent?.engineType
-    : currentSession?.engineType ?? currentAgent?.engineType;
+  const currentEngineType = resolveChatSessionEngineType(
+    currentSession,
+    currentAgent?.engineType,
+    currentSessionKey,
+  );
   const composerRequiresGateway = currentEngineType === 'openclaw';
   const composerDisabled = composerRequiresGateway && !isGatewayRunning;
   const composerStatusText = currentEngineType === 'claude'
@@ -536,7 +539,6 @@ export function Chat() {
                       matchedMessageIds={matchedMessageIds}
                       activeMessageId={activeSearchMatch?.id ?? null}
                       onPreviewFile={openArtifactPreview}
-                      onViewWorkflow={openWorkflowPreview}
                       onCreateScheduledTask={openWorkflowCronTaskModal}
                       onEditMessage={handleEditMessage}
                     />
@@ -550,7 +552,6 @@ export function Chat() {
                     isSearchMatch={!!item.message.id && matchedMessageIds.has(item.message.id)}
                     isSearchActive={!!item.message.id && item.message.id === activeSearchMatch?.id}
                     onPreviewFile={openArtifactPreview}
-                    onViewWorkflow={openWorkflowPreview}
                     onCreateScheduledTask={openWorkflowCronTaskModal}
                     onEditMessage={handleEditMessage}
                   />
@@ -568,7 +569,6 @@ export function Chat() {
                   activeMessageId={activeSearchMatch?.id ?? null}
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={openArtifactPreview}
-                  onViewWorkflow={openWorkflowPreview}
                   onCreateScheduledTask={openWorkflowCronTaskModal}
                   onEditMessage={handleEditMessage}
                 />
@@ -723,7 +723,7 @@ export function Chat() {
         )}
       </AnimatePresence>
     </div>
-    <CronTaskCreateModal
+    <TaskCreateModal
       open={workflowCronModalOpen}
       onClose={closeWorkflowCronTaskModal}
       onSave={handleWorkflowCronTaskSave}
