@@ -6,6 +6,7 @@
  */
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useCronStore } from '@/stores/cron';
@@ -248,42 +249,44 @@ export default function MyTask() {
 
   const handleTrigger = useCallback(
     async (task: TaskViewModel) => {
+      const buildDatedSessionKey = (task: TaskViewModel) => {
+        const today = new Date();
+        const y = today.getFullYear();
+        const m = String(today.getMonth() + 1).padStart(2, '0');
+        const d = String(today.getDate()).padStart(2, '0');
+        if (task.engineType === 'claude') {
+          return `claude-task:${task.id}:${y}-${m}-${d}`;
+        }
+        return `agent:${task.agentId ?? 'main'}:cron:${task.id}:${y}-${m}-${d}`;
+      };
+
+      const sessionKey = buildDatedSessionKey(task);
+      flushSync(() => {
+        useChatStore.getState().markScheduledSessionActivating(sessionKey);
+      });
       try {
         await triggerJob(task.id, task.engineType);
-        if (task.engineType === 'claude') {
-          // Build dated aggregate key instead of using result.sessionKey (which is claude-task-run:{taskId}:{runId})
+        forgetOptimisticDeletedSessionKey(sessionKey);
+        if (task.engineType !== 'claude' && task.agentId && task.agentId !== 'main') {
           const today = new Date();
           const y = today.getFullYear();
           const m = String(today.getMonth() + 1).padStart(2, '0');
           const d = String(today.getDate()).padStart(2, '0');
-          const sessionKey = `claude-task:${task.id}:${y}-${m}-${d}`;
-          forgetOptimisticDeletedSessionKey(sessionKey);
-          navigateToMainChatHome(navigate, location.pathname, () => {
-            useChatStore.getState().switchSession(sessionKey);
-          });
-          void useChatStore.getState().loadSessions();
-        } else {
-          // Build dated session key instead of base key to avoid adding base session back
-          const today = new Date();
-          const y = today.getFullYear();
-          const m = String(today.getMonth() + 1).padStart(2, '0');
-          const d = String(today.getDate()).padStart(2, '0');
-          const sessionKey = `agent:${task.agentId ?? 'main'}:cron:${task.id}:${y}-${m}-${d}`;
-          forgetOptimisticDeletedSessionKey(sessionKey);
-          if (task.agentId && task.agentId !== 'main') {
-            forgetOptimisticDeletedSessionKey(`agent:main:cron:${task.id}:${y}-${m}-${d}`);
-          }
-          navigateToMainChatHome(navigate, location.pathname, () => {
-            useChatStore.getState().switchSession(sessionKey);
-          });
-          void useChatStore.getState().loadSessions();
+          forgetOptimisticDeletedSessionKey(`agent:main:cron:${task.id}:${y}-${m}-${d}`);
         }
+        navigateToMainChatHome(navigate, location.pathname, () => {
+          useChatStore.getState().switchSession(sessionKey);
+        });
+        await useChatStore.getState().loadSessions();
         toast.success(t('myTask.toast.triggered'));
       } catch (err) {
+        useChatStore.getState().clearScheduledSessionActivating(sessionKey);
         toast.error(String(err));
+      } finally {
+        useChatStore.getState().releaseScheduledSessionActivating(sessionKey);
       }
     },
-    [triggerJob, navigate, location.pathname]
+    [triggerJob, navigate, location.pathname, t]
   );
 
   const handleSave = useCallback(

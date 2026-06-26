@@ -121,9 +121,17 @@ export type SessionActivitySortOptions = {
   runtimeBySessionKey?: Record<string, SessionRuntimeActivityHint | undefined>;
   currentSessionKey?: string | null;
   currentSessionSending?: boolean;
+  activatingScheduledSessionAt?: Record<string, number>;
   /** Wall clock for in-flight task ordering; pass from UI to keep sort stable per render. */
   nowMs?: number;
 };
+
+function isSessionActiveForSort(sessionKey: string, options?: SessionActivitySortOptions): boolean {
+  const runtime = options?.runtimeBySessionKey?.[sessionKey];
+  if (runtime?.sending || runtime?.activeRunId) return true;
+  if (options?.activatingScheduledSessionAt?.[sessionKey]) return true;
+  return options?.currentSessionKey === sessionKey && Boolean(options?.currentSessionSending);
+}
 
 function resolveActiveSessionActivityBoost(
   sessionKey: string,
@@ -134,7 +142,12 @@ function resolveActiveSessionActivityBoost(
   const runtime = options?.runtimeBySessionKey?.[sessionKey];
   const runtimeActive = Boolean(runtime?.sending || runtime?.activeRunId);
   const isCurrentSession = options?.currentSessionKey === sessionKey;
+  const activatingAt = options?.activatingScheduledSessionAt?.[sessionKey] ?? 0;
   const nowMs = options?.nowMs ?? Date.now();
+
+  if (activatingAt > 0) {
+    return Math.max(base, activatingAt);
+  }
 
   if (runtimeActive) {
     const runtimeAt = runtime?.updatedAt && runtime.updatedAt > 0 ? runtime.updatedAt : nowMs;
@@ -182,11 +195,16 @@ export function getGroupFirstTriggeredAtMs(
   options?: SessionActivitySortOptions,
 ): number {
   let earliest = 0;
+  let latestActive = 0;
   for (const session of sessions) {
     const activity = getSessionActivityMs(session, sessionLastActivity, options);
     if (activity <= 0) continue;
     if (earliest === 0 || activity < earliest) earliest = activity;
+    if (isSessionActiveForSort(session.key, options)) {
+      latestActive = Math.max(latestActive, activity);
+    }
   }
+  if (latestActive > 0) return latestActive;
   return earliest;
 }
 

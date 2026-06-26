@@ -152,4 +152,52 @@ describe('scheduled-task-group-name', () => {
     });
     expect(sorted.map((g) => g.name)).toEqual(['测试', '优美的问候语']);
   });
+
+  it('activating session key sorts before loadSessions/switchSession race settles', () => {
+    const afternoon = new Date(2026, 5, 25, 15, 0, 0).getTime();
+    const activatingAt = new Date(2026, 5, 25, 16, 30, 0).getTime();
+    const day = '2026-06-25';
+    const runningKey = `agent:main:cron:running:${day}`;
+    const groups = [
+      {
+        key: 'cron:other',
+        name: '优美的问候语',
+        sessions: [{ key: `agent:main:cron:other:${day}`, updatedAt: afternoon }],
+      },
+      {
+        key: 'cron:running',
+        name: '测试2号',
+        sessions: [{ key: runningKey }],
+      },
+    ];
+    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {}, {
+      activatingScheduledSessionAt: { [runningKey]: activatingAt },
+    });
+    expect(sorted.map((g) => g.name)).toEqual(['测试2号', '优美的问候语']);
+  });
+
+  it('active group with old history still sorts by latest active session', () => {
+    const oldDay = '2026-06-10';
+    const today = '2026-06-25';
+    const activatingAt = new Date(2026, 5, 25, 16, 30, 0).getTime();
+    const groups = [
+      {
+        key: 'cron:running',
+        name: '测试2号',
+        sessions: [
+          { key: `agent:main:cron:running:${oldDay}`, updatedAt: Date.parse(oldDay) },
+          { key: `agent:main:cron:running:${today}` },
+        ],
+      },
+      {
+        key: 'cron:other',
+        name: '优美的问候语',
+        sessions: [{ key: `agent:main:cron:other:${today}`, updatedAt: activatingAt - 1000 }],
+      },
+    ];
+    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {}, {
+      activatingScheduledSessionAt: { [`agent:main:cron:running:${today}`]: activatingAt },
+    });
+    expect(sorted.map((g) => g.name)).toEqual(['测试2号', '优美的问候语']);
+  });
 });

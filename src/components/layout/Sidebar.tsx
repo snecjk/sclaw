@@ -710,6 +710,7 @@ export function Sidebar() {
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
   const sending = useChatStore((s) => s.sending);
+  const activatingScheduledSessionAt = useChatStore((s) => s.activatingScheduledSessionAt);
   const switchSession = useChatStore((s) => s.switchSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
   const renameSession = useChatStore((s) => s.renameSession);
@@ -1019,13 +1020,14 @@ export function Sidebar() {
     }
 
     const resolvedGroups: ScheduledTaskSidebarGroup[] = [];
+    const sessionSortOptions = {
+      runtimeBySessionKey,
+      currentSessionKey,
+      currentSessionSending: sending,
+      activatingScheduledSessionAt,
+      nowMs,
+    };
     for (const group of groups.values()) {
-      const sessionSortOptions = {
-        runtimeBySessionKey,
-        currentSessionKey,
-        currentSessionSending: sending,
-        nowMs,
-      };
       group.sessions.sort((a, b) => {
         const aAct = getSessionActivityMs(a, sessionLastActivity, sessionSortOptions);
         const bAct = getSessionActivityMs(b, sessionLastActivity, sessionSortOptions);
@@ -1038,13 +1040,8 @@ export function Sidebar() {
       });
     }
 
-    return sortScheduledTaskGroupsByFirstTriggerDesc(resolvedGroups, sessionLastActivity, {
-      runtimeBySessionKey,
-      currentSessionKey,
-      currentSessionSending: sending,
-      nowMs,
-    });
-  }, [taskListScheduledSessions, sessionLastActivity, scheduledTaskNameMaps, runtimeBySessionKey, currentSessionKey, sending, nowMs]);
+    return sortScheduledTaskGroupsByFirstTriggerDesc(resolvedGroups, sessionLastActivity, sessionSortOptions);
+  }, [taskListScheduledSessions, sessionLastActivity, scheduledTaskNameMaps, runtimeBySessionKey, currentSessionKey, sending, activatingScheduledSessionAt, nowMs]);
 
   const taskListRenderPlan = useMemo(
     () => buildTaskListRenderPlan(scheduledTaskGroups, taskListShowAll),

@@ -172,6 +172,8 @@ export interface ChatState {
   sessionLabels: Record<string, string>;
   /** Last message timestamp (ms) per session key, used for sorting */
   sessionLastActivity: Record<string, number>;
+  /** Task session keys being triggered; stabilizes sidebar order before switchSession/runtime. */
+  activatingScheduledSessionAt: Record<string, number>;
 
   // Thinking
   showThinking: boolean;
@@ -212,6 +214,10 @@ export interface ChatState {
   refresh: () => Promise<void>;
   clearError: () => void;
   renameSession: (key: string, newName: string) => void;
+  markScheduledSessionActivating: (sessionKey: string) => void;
+  clearScheduledSessionActivating: (sessionKey: string) => void;
+  /** Clear activating hint only after runtime/activity has taken over sort ordering. */
+  releaseScheduledSessionActivating: (sessionKey: string) => void;
 }
 
 export const DEFAULT_CANONICAL_PREFIX = 'agent:main';

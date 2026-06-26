@@ -980,10 +980,42 @@ function patchSessionRuntimeState(
       [sessionKey]: nextRuntime,
     },
   };
+  if (nextRuntime.sending || nextRuntime.activeRunId) {
+    const nextActivating = clearActivatingSessionIfHandedOff(
+      state.activatingScheduledSessionAt,
+      sessionKey,
+      nextPatch.runtimeBySessionKey as Record<string, SessionRuntimeState>,
+      state.sessionLastActivity,
+      state.sessions,
+    );
+    if (nextActivating !== state.activatingScheduledSessionAt) {
+      nextPatch.activatingScheduledSessionAt = nextActivating;
+    }
+  }
   if (sessionKey === state.currentSessionKey) {
     Object.assign(nextPatch, runtimePatchFromSessionRuntime(nextRuntime));
   }
   return nextPatch;
+}
+
+function clearActivatingSessionIfHandedOff(
+  activatingScheduledSessionAt: Record<string, number>,
+  sessionKey: string,
+  runtimeBySessionKey: Record<string, SessionRuntimeState>,
+  sessionLastActivity: Record<string, number>,
+  sessions: ChatSession[],
+): Record<string, number> {
+  if (!activatingScheduledSessionAt[sessionKey]) return activatingScheduledSessionAt;
+  const runtime = runtimeBySessionKey[sessionKey];
+  const session = sessions.find((item) => item.key === sessionKey);
+  const hasActivity = (sessionLastActivity[sessionKey] ?? 0) > 0
+    || (typeof session?.updatedAt === 'number' && Number.isFinite(session.updatedAt) && session.updatedAt > 0);
+  if (!runtime?.sending && !runtime?.activeRunId && !hasActivity) {
+    return activatingScheduledSessionAt;
+  }
+  const next = { ...activatingScheduledSessionAt };
+  delete next[sessionKey];
+  return next;
 }
 
 function buildSessionSwitchPatch(
@@ -1530,6 +1562,7 @@ export const useChatStore = create<ChatState>()(
   runtimeBySessionKey: {},
   sessionLabels: {},
   sessionLastActivity: {},
+  activatingScheduledSessionAt: {},
 
   showThinking: true,
   thinkingLevel: null,
@@ -1863,13 +1896,27 @@ export const useChatStore = create<ChatState>()(
               .map((session) => [session.key, session.updatedAt!]),
           );
 
-          set((state) => ({
-            sessions: labeledSessions,
-            currentSessionKey: nextSessionKey,
-            currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
-            sessionLastActivity: mergeSessionLastActivity(state.sessionLastActivity, discoveredActivity),
-            sessionLabels: scrubCorruptedSessionLabels(state.sessionLabels),
-          }));
+          set((state) => {
+            const sessionLastActivity = mergeSessionLastActivity(state.sessionLastActivity, discoveredActivity);
+            let activatingScheduledSessionAt = state.activatingScheduledSessionAt;
+            for (const sessionKey of Object.keys(discoveredActivity)) {
+              activatingScheduledSessionAt = clearActivatingSessionIfHandedOff(
+                activatingScheduledSessionAt,
+                sessionKey,
+                state.runtimeBySessionKey,
+                sessionLastActivity,
+                labeledSessions,
+              );
+            }
+            return {
+              sessions: labeledSessions,
+              currentSessionKey: nextSessionKey,
+              currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
+              sessionLastActivity,
+              sessionLabels: scrubCorruptedSessionLabels(state.sessionLabels),
+              activatingScheduledSessionAt,
+            };
+          });
 
           if (currentSessionKey !== nextSessionKey) {
             void get().loadHistory();
@@ -3367,6 +3414,44 @@ export const useChatStore = create<ChatState>()(
         session.key === key ? { ...session, label: trimmed } : session
       )),
     }));
+  },
+
+  markScheduledSessionActivating: (sessionKey: string) => {
+    const key = sessionKey.trim();
+    if (!key) return;
+    set((s) => ({
+      activatingScheduledSessionAt: {
+        ...s.activatingScheduledSessionAt,
+        [key]: Date.now(),
+      },
+    }));
+  },
+
+  clearScheduledSessionActivating: (sessionKey: string) => {
+    const key = sessionKey.trim();
+    if (!key) return;
+    set((s) => {
+      if (!s.activatingScheduledSessionAt[key]) return s;
+      const next = { ...s.activatingScheduledSessionAt };
+      delete next[key];
+      return { activatingScheduledSessionAt: next };
+    });
+  },
+
+  releaseScheduledSessionActivating: (sessionKey: string) => {
+    const key = sessionKey.trim();
+    if (!key) return;
+    set((s) => {
+      const nextActivating = clearActivatingSessionIfHandedOff(
+        s.activatingScheduledSessionAt,
+        key,
+        s.runtimeBySessionKey,
+        s.sessionLastActivity,
+        s.sessions,
+      );
+      if (nextActivating === s.activatingScheduledSessionAt) return s;
+      return { activatingScheduledSessionAt: nextActivating };
+    });
   },
 }), {
   name: 'stoclaw-chat-session-labels',
