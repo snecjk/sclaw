@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback, type RefObject } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -52,22 +53,15 @@ function dropdownPositionClassRight(dir: DropDirection): string {
     : 'absolute top-[calc(100%+6px)] right-0 z-20';
 }
 
-const FREQUENCY_OPTIONS = [
-  { value: 'daily' as const, label: '每天' },
-  { value: 'weekly' as const, label: '每周' },
-  { value: 'monthly' as const, label: '每月' },
-];
+/** 频率选项 i18n key 映射 */
+const FREQUENCY_I18N_KEYS = {
+  daily: 'myTask.schedule.daily',
+  weekly: 'myTask.schedule.weekly',
+  monthly: 'myTask.schedule.monthly',
+} as const;
 
-const WEEKDAY_FULL_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-const WEEKDAY_DROPDOWN_OPTIONS: { value: number; label: string }[] = [
-  { value: 0, label: '周日' },
-  { value: 1, label: '周一' },
-  { value: 2, label: '周二' },
-  { value: 3, label: '周三' },
-  { value: 4, label: '周四' },
-  { value: 5, label: '周五' },
-  { value: 6, label: '周六' },
-];
+/** 星期下拉选项 */
+const WEEKDAY_DROPDOWN_VALUES: number[] = [0, 1, 2, 3, 4, 5, 6];
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
 const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
@@ -110,10 +104,11 @@ function FrequencyPicker({
   onChange: (v: ScheduleValue['frequency']) => void;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useTranslation('tasks');
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const dir = useDropdownDirection(ref, open);
-  const displayLabel = FREQUENCY_OPTIONS.find(o => o.value === value)?.label || '每天';
+  const displayLabel = t(FREQUENCY_I18N_KEYS[value]);
 
   const toggle = () => {
     const next = !open;
@@ -147,19 +142,19 @@ function FrequencyPicker({
       {open && (
         <div className={cn(dropdownPositionClass(dir), 'w-full min-w-[140px]')}>
           <div className={cn(schedulePickerDropdownPanelClass, 'flex max-h-[280px] flex-col gap-0.5 overflow-y-auto p-1.5')}>
-            {FREQUENCY_OPTIONS.map((opt) => {
-              const selected = value === opt.value;
+            {(Object.keys(FREQUENCY_I18N_KEYS) as Array<ScheduleValue['frequency']>).map((freq) => {
+              const selected = value === freq;
               return (
                 <button
-                  key={opt.value}
+                  key={freq}
                   type="button"
-                  onClick={() => { onChange(opt.value); setOpen(false); onOpenChange(false); }}
+                  onClick={() => { onChange(freq); setOpen(false); onOpenChange(false); }}
                   className={cn(
                     'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm',
                     dropdownOptionClass(selected),
                   )}
                 >
-                  <span>{opt.label}</span>
+                  <span>{t(FREQUENCY_I18N_KEYS[freq])}</span>
                   <span className={cn('flex h-4 w-4 shrink-0 text-primary', !selected && 'opacity-0')}>
                     <Check className="h-4 w-4" />
                   </span>
@@ -183,16 +178,19 @@ function WeekdaysPicker({
   onChange: (days: number[]) => void;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t, i18n } = useTranslation('tasks');
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const dir = useDropdownDirection(ref, open);
 
   const displayLabel = useMemo(() => {
-    if (weekDays.length === 7) return '每天';
-    if (weekDays.length === 5 && weekDays.every(d => [1, 2, 3, 4, 5].includes(d))) return '工作日';
-    if (weekDays.length === 0) return '请选择';
-    return weekDays.slice().sort((a, b) => a - b).map(d => WEEKDAY_FULL_LABELS[d]).join('、');
-  }, [weekDays]);
+    if (weekDays.length === 7) return t('myTask.schedule.everyDay');
+    if (weekDays.length === 5 && weekDays.every(d => [1, 2, 3, 4, 5].includes(d))) return t('myTask.schedule.workday');
+    if (weekDays.length === 0) return t('myTask.schedule.pleaseSelect');
+    // Use locale-appropriate separator: '、' for zh/ja, ', ' for en
+    const separator = i18n.language?.startsWith('zh') || i18n.language?.startsWith('ja') ? '、' : ', ';
+    return weekDays.slice().sort((a, b) => a - b).map(d => t(`myTask.schedule.weekday.${d}`)).join(separator);
+  }, [weekDays, t, i18n.language]);
 
   const toggle = () => {
     const next = !open;
@@ -237,19 +235,19 @@ function WeekdaysPicker({
       {open && (
         <div className={cn(dropdownPositionClass(dir), 'w-full min-w-[140px]')}>
           <div className={cn(schedulePickerDropdownPanelClass, 'flex max-h-[280px] flex-col gap-0.5 overflow-y-auto p-1.5')}>
-            {WEEKDAY_DROPDOWN_OPTIONS.map((opt) => {
-              const checked = weekDays.includes(opt.value);
+            {WEEKDAY_DROPDOWN_VALUES.map((optValue) => {
+              const checked = weekDays.includes(optValue);
               return (
                 <button
-                  key={String(opt.value)}
+                  key={String(optValue)}
                   type="button"
-                  onClick={() => handleOptionClick(opt.value)}
+                  onClick={() => handleOptionClick(optValue)}
                   className={cn(
                     'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm',
                     dropdownOptionClass(checked),
                   )}
                 >
-                  <span>{opt.label}</span>
+                  <span>{t(`myTask.schedule.weekday.${optValue}`)}</span>
                   <span className={cn('flex h-4 w-4 shrink-0 text-primary', !checked && 'opacity-0')}>
                     <Check className="h-4 w-4" />
                   </span>
@@ -273,10 +271,11 @@ function MonthDayPicker({
   onChange: (d: number) => void;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useTranslation('tasks');
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const dir = useDropdownDirection(ref, open);
-  const displayLabel = `${monthDay} 号`;
+  const displayLabel = t('myTask.schedule.monthDay', { day: monthDay });
 
   const toggle = () => {
     const next = !open;

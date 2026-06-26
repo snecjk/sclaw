@@ -24,13 +24,17 @@ import {
 import { cn } from '@/lib/utils';
 import { WorkflowCardCover } from '@/pages/Workflow/components/workflow-card-cover';
 // import { WorkflowScheduleToggle } from '@/pages/Workflow/components/workflow-schedule-toggle';
-import type { OfficialWorkflowCard, WorkflowCardItem, WorkflowCoverKey } from '@/pages/Workflow/types';
+import type {
+  OfficialWorkflowCard,
+  WorkflowCardItem,
+  WorkflowCoverKey,
+} from '@/pages/Workflow/types';
 
 interface WorkflowCardShellProps {
   id: string;
   coverKey: WorkflowCoverKey;
   dimmed?: boolean;
-  onCardClick: () => void;
+  onCardClick?: () => void;
   children: ReactNode;
 }
 
@@ -47,7 +51,9 @@ function WorkflowFlowRow({ flow }: { flow: string[] }) {
         {flow.map((step, i) => (
           <Fragment key={step}>
             {i > 0 ? (
-              <span className={workflowListCardFlowSepClass} aria-hidden>›</span>
+              <span className={workflowListCardFlowSepClass} aria-hidden>
+                ›
+              </span>
             ) : null}
             <span className={workflowListCardFlowStepClass}>{step}</span>
           </Fragment>
@@ -58,7 +64,13 @@ function WorkflowFlowRow({ flow }: { flow: string[] }) {
 }
 
 /** 卡片通用外壳：头图 + body 区域，点击整体触发 onCardClick */
-function WorkflowCardShell({ id, coverKey, dimmed, onCardClick, children }: WorkflowCardShellProps) {
+function WorkflowCardShell({
+  id,
+  coverKey,
+  dimmed,
+  onCardClick,
+  children,
+}: WorkflowCardShellProps) {
   return (
     <article
       data-workflow-id={id}
@@ -66,7 +78,7 @@ function WorkflowCardShell({ id, coverKey, dimmed, onCardClick, children }: Work
       onClick={(e) => {
         // if ((e.target as HTMLElement).closest('button, [role="switch"]')) return;
         if ((e.target as HTMLElement).closest('button')) return;
-        onCardClick();
+        onCardClick?.();
       }}
     >
       <div className={workflowListCardCoverWrapClass}>
@@ -84,7 +96,7 @@ export interface WorkflowMineListCardProps {
   onRenameCommit: (name: string) => void;
   // TODO: 等待后端 API 对接
   // onToggleEnabled: (enabled: boolean) => void;
-  onCardClick: () => void;
+  onCardClick?: () => void;
   onRun: () => void;
   onEdit: () => void;
   onMore: (e: React.MouseEvent<HTMLButtonElement>) => void;
@@ -149,8 +161,15 @@ export function WorkflowMineListCard({
             /> */}
           </div>
           {card.schedule.trim() || card.showPausedLabel ? (
-            <div className={cn(workflowListCardScheduleRowClass, 'flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5')}>
-              <span className={cn(card.scheduleMuted && 'text-muted-foreground/80')}>{card.schedule}</span>
+            <div
+              className={cn(
+                workflowListCardScheduleRowClass,
+                'flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5'
+              )}
+            >
+              <span className={cn(card.scheduleMuted && 'text-muted-foreground/80')}>
+                {card.schedule}
+              </span>
               {card.showPausedLabel ? (
                 <span className="text-warning">{t('card.pausedLabel')}</span>
               ) : null}
@@ -203,8 +222,9 @@ export function WorkflowMineListCard({
 
 export interface WorkflowOfficialListCardProps {
   card: OfficialWorkflowCard;
-  onCardClick: () => void;
-  onPreview: () => void;
+  onCardClick?: () => void;
+  // TODO: 预览/详情弹窗暂不启用
+  // onPreview: () => void;
   onInstall: () => void;
   onCreateFromTemplate: () => void;
 }
@@ -213,7 +233,8 @@ export interface WorkflowOfficialListCardProps {
 export function WorkflowOfficialListCard({
   card,
   onCardClick,
-  onPreview,
+  // TODO: 预览/详情弹窗暂不启用
+  // onPreview,
   onInstall,
   onCreateFromTemplate,
 }: WorkflowOfficialListCardProps) {
@@ -224,7 +245,9 @@ export function WorkflowOfficialListCard({
       <div className={workflowListCardMainClass}>
         <div className={workflowListCardHeadClass}>
           <div className={workflowListCardTitleRowClass}>
-            <div className="min-w-0 flex-1 text-[15px] font-semibold text-foreground">{card.name}</div>
+            <div className="min-w-0 flex-1 text-[15px] font-semibold text-foreground">
+              {card.name}
+            </div>
           </div>
           {card.schedule.trim() ? (
             <div className={workflowListCardScheduleRowClass}>{card.schedule}</div>
@@ -234,8 +257,12 @@ export function WorkflowOfficialListCard({
         {/* TODO: POST /agent/v1/workflow-templates 节点摘要未就绪，card.flow 暂为空；接口稳定后恢复 WorkflowFlowRow */}
         {/* {card.flow.length > 0 ? <WorkflowFlowRow flow={card.flow} /> : null} */}
       </div>
-      <div className={cn(workflowListCardFooterClass, 'flex flex-wrap items-center justify-end gap-2')}>
-        <span className="mr-auto rounded-lg bg-muted px-2 py-0.5 text-xs text-foreground/80">{card.category}</span>
+      <div
+        className={cn(workflowListCardFooterClass, 'flex flex-wrap items-center justify-end gap-2')}
+      >
+        <span className="mr-auto rounded-lg bg-muted px-2 py-0.5 text-xs text-foreground/80">
+          {card.category}
+        </span>
         <button
           type="button"
           className={workflowListCardSecondaryActionClass}
@@ -244,7 +271,7 @@ export function WorkflowOfficialListCard({
             onCreateFromTemplate();
           }}
         >
-          依此模板创建
+          {t('card.createFromTemplate')}
         </button>
         {/* <button
           type="button"

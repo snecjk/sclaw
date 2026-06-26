@@ -36,5 +36,159 @@
       "threadLine1": "系统：已根据当前周会材料生成 HTML 版本，版式为 A4 横向，页边距已按打印预设。",
       "threadLine2": "用户：我想查看 Html 格式"
     }
+  },
+  "myTask": {
+    "pageTitle": "我的任务",
+    "subtitle": "按计划自动执行任务，也可随时手动触发。在任意对话中描述你想定期做的事，即可快速创建。",
+    "newTask": "+ 新建定时任务",
+    "viewTabs": {
+      "tasks": "定时任务",
+      "records": "执行记录",
+      "aria": "任务视图"
+    },
+    "taskView": {
+      "aria": "定时任务",
+      "emptyNoRecords": "该状态下暂无执行记录"
+    },
+    "recordView": {
+      "aria": "执行记录"
+    },
+    "delete": {
+      "title": "删除定时任务？",
+      "message": "确定要删除「{{name}}」吗？此操作无法撤销。",
+      "confirm": "删除",
+      "cancel": "取消"
+    },
+    "toast": {
+      "enabled": "任务已启用",
+      "paused": "任务已暂停",
+      "triggered": "测试运行已触发",
+      "updated": "任务已更新",
+      "created": "任务已创建",
+      "deleted": "任务已删除"
+    },
+    "error": {
+      "claudeAgentNoWorkspaceUpdate": "所选 Claude 代理缺少工作区，无法更新本地定时任务",
+      "claudeAgentNoWorkspaceCreate": "所选 Claude 代理缺少工作区，无法创建本地定时任务",
+      "nameDuplicate": "任务名称已存在，请使用其他名称"
+    },
+    "toolbar": {
+      "searchSrOnly": "搜索定时任务名称",
+      "searchPlaceholder": "搜索任务名称",
+      "sortAria": "排序方式"
+    },
+    "recordToolbar": {
+      "searchSrOnly": "搜索执行记录任务名称",
+      "searchPlaceholder": "搜索任务名称"
+    },
+    "recordStatusNav": {
+      "aria": "按执行状态筛选"
+    },
+    "empty": {
+      "searchNoMatch": "未找到匹配的任务",
+      "noTasks": "无定时任务",
+      "noTasksDescription": "创建定时任务来自动化执行周期性 AI 代理工作",
+      "officialAria": "官方推荐工作流",
+      "templateFallbackCategory": "工作流模版",
+      "addTemplate": "添加"
+    },
+    "createModal": {
+      "editTitle": "编辑定时任务",
+      "createTitle": "新建定时任务",
+      "subtitle": "按计划自动执行任务，也可随时手动触发。在任意对话中描述你想定期做的事，即可快速创建。",
+      "closeAria": "关闭",
+      "nameLabel": "任务名称",
+      "namePlaceholder": "描述你的任务",
+      "nameRequired": "请填写任务名称",
+      "engineLabel": "执行引擎",
+      "engineEditHint": "执行引擎在创建时确定，编辑时不可更改。",
+      "engineClaudeHint": "将创建 Claude 本地定时任务，独立在本机运行。",
+      "engineOpenclawHint": "将创建 OpenClaw 本地定时任务。",
+      "workflowLabel": "关联工作流",
+      "workflowPlaceholder": "请选择",
+      "workflowEmpty": "暂无可用工作流",
+      "instructionsLabel": "让 S Claw 帮你做什么…",
+      "instructionsPlaceholder": "让 S Claw 帮你做什么…",
+      "instructionsRequired": "请描述让 S Claw 帮你做什么",
+      "workflowAutoHint": "已关联工作流，描述内容自动生成",
+      "scheduleLabel": "计划时间",
+      "recipientsLabel": "发送对象",
+      "recipientsPlaceholder": "输入 @ 搜索联系人和群，可多选",
+      "recipientsHint": "任务执行完成后，结果将自动发送给选中的对象",
+      "cancel": "取消",
+      "saving": "保存中…",
+      "save": "保存",
+      "buildWorkflowInstructions": "帮我执行 id 为：{{workflowCode}} 的工作流 【{{label}}】",
+      "buildWorkflowInstructionsNoLabel": "帮我执行 id 为：{{workflowCode}} 的工作流"
+    },
+    "card": {
+      "toggleAria": "启用或暂停任务",
+      "moreAria": "更多",
+      "runNow": "立即执行",
+      "running": "执行中…",
+      "edit": "编辑任务",
+      "delete": "删除任务",
+      "workflowBadge": "工作流",
+      "nextRunNow": "即将执行",
+      "nextRunMinutes": "下次执行{{count}}分钟后",
+      "nextRunHours": "下次执行{{count}}小时后",
+      "nextRunDays": "下次执行{{count}}天后"
+    },
+    "schedule": {
+      "daily": "每天",
+      "weekly": "每周",
+      "monthly": "每月",
+      "weekday": {
+        "0": "周日",
+        "1": "周一",
+        "2": "周二",
+        "3": "周三",
+        "4": "周四",
+        "5": "周五",
+        "6": "周六"
+      },
+      "everyDay": "每天",
+      "workday": "工作日",
+      "pleaseSelect": "请选择",
+      "monthDay": "{{day}} 号"
+    },
+    "sort": {
+      "createdDesc": "按创建时间倒序",
+      "createdAsc": "按创建时间正序",
+      "nameAsc": "按名称 A-Z",
+      "nameDesc": "按名称 Z-A"
+    },
+    "recordStatus": {
+      "running": "执行中",
+      "success": "执行成功",
+      "failed": "执行失败"
+    },
+    "recordItem": {
+      "running": "执行中",
+      "success": "执行成功",
+      "failed": "执行失败",
+      "inProgress": "进行中",
+      "failedWithReason": "失败 · {{reason}}",
+      "duration": "耗时 {{duration}}",
+      "durationLessThanOneSecond": "< 1 秒",
+      "durationSeconds": "{{seconds}} 秒",
+      "durationMinutesSeconds": "{{minutes}} 分 {{seconds}} 秒",
+      "viewDetail": "查看详情"
+    },
+    "recordDetail": {
+      "title": "执行记录详情",
+      "closeAria": "关闭",
+      "taskName": "任务名称",
+      "workflow": "关联工作流",
+      "status": "执行状态",
+      "startTime": "执行时间",
+      "duration": "执行耗时",
+      "failReason": "失败原因",
+      "statusPill": {
+        "success": "成功",
+        "failed": "失败",
+        "running": "执行中"
+      }
+    }
   }
 }

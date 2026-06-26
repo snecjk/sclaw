@@ -4,6 +4,7 @@
  * 对应原型 .task-center-empty
  */
 
+import { useTranslation } from 'react-i18next';
 import listEmptyIcon from '@/assets/task-list-empty-icon.png';
 import searchEmptyIcon from '@/assets/task-search-empty-icon.png';
 import { cn } from '@/lib/utils';
@@ -26,6 +27,8 @@ interface TaskEmptyStateProps {
 }
 
 export function TaskEmptyState({ searchQuery, onCreate, officialCards, onTemplateInstall }: TaskEmptyStateProps) {
+  const { t } = useTranslation('tasks');
+
   if (searchQuery) {
     return (
       <div className="flex w-full flex-col items-start">
@@ -39,7 +42,7 @@ export function TaskEmptyState({ searchQuery, onCreate, officialCards, onTemplat
             className="pointer-events-none mb-0.5 block h-auto w-[min(120px,32vw)] select-none opacity-90 dark:opacity-75"
           />
           <h2 className="m-0 text-center text-[18px] font-semibold leading-[1.4] text-foreground">
-            未找到匹配的任务
+            {t('myTask.empty.searchNoMatch')}
           </h2>
         </div>
       </div>
@@ -58,13 +61,13 @@ export function TaskEmptyState({ searchQuery, onCreate, officialCards, onTemplat
           className="pointer-events-none mb-0.5 block h-auto w-[min(120px,32vw)] select-none opacity-90 dark:opacity-75"
         />
         <h2 className="m-0 text-center text-[18px] font-semibold leading-[1.4] text-foreground">
-          无定时任务
+          {t('myTask.empty.noTasks')}
         </h2>
         <p className="m-0 max-w-[420px] text-center text-sm font-normal leading-[1.5] text-muted-foreground">
-          创建定时任务来自动化执行周期性 AI 代理工作
+          {t('myTask.empty.noTasksDescription')}
         </p>
         <button type="button" onClick={onCreate} className={cn('mt-1.5 mb-0', myTaskEmptyPrimaryCtaClass)}>
-          + 新建定时任务
+          {t('myTask.newTask')}
         </button>
       </div>
 
@@ -72,7 +75,7 @@ export function TaskEmptyState({ searchQuery, onCreate, officialCards, onTemplat
         <div className="mt-auto w-full shrink-0 self-stretch">
           <div
             role="list"
-            aria-label="官方推荐工作流"
+            aria-label={t('myTask.empty.officialAria')}
             className="grid grid-cols-1 gap-[clamp(12px,1.4vw,16px)] sm:grid-cols-2 lg:grid-cols-3"
           >
             {officialCards.map((card) => (
@@ -100,14 +103,14 @@ export function TaskEmptyState({ searchQuery, onCreate, officialCards, onTemplat
                 </p>
                 <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-2.5 text-xs">
                   <span className="inline-flex min-w-0 items-center font-normal leading-[1.4] text-muted-foreground">
-                    {card.category || '工作流模版'}
+                    {card.category || t('myTask.empty.templateFallbackCategory')}
                   </span>
                   <button
                     type="button"
                     onClick={() => onTemplateInstall(card)}
                     className={myTaskEmptyTemplateAddButtonClass}
                   >
-                    添加
+                    {t('myTask.empty.addTemplate')}
                   </button>
                 </div>
               </article>
