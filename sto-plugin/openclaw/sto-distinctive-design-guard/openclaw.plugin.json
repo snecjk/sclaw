@@ -1,0 +1,23 @@
+{
+  "id": "sto-distinctive-design-guard",
+  "name": "STO Distinctive Design Guard",
+  "description": "默认将 HTML 产物路由到 sto-distinctive-design：prompt 注入、写 HTML 前技能门禁、lint.py 后置校验。",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "description": "是否启用 guard（默认 true）"
+      },
+      "enforceRead": {
+        "type": "boolean",
+        "description": "写 HTML 前是否强制已读 sto-distinctive-design（默认 true）"
+      },
+      "lintEnabled": {
+        "type": "boolean",
+        "description": "HTML 写入后是否运行 lint.py（默认 true）"
+      }
+    }
+  }
+}

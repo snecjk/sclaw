@@ -219,6 +219,7 @@ const LOCAL_PLUGIN_DIRS: Record<string, string> = {
   'sto-skill-call-monitor': 'sto-skill-call-monitor',
   'sto-media-understanding': 'sto-media-understanding',
   'sto-dingtalk-send-guard': 'sto-dingtalk-send-guard',
+  'sto-distinctive-design-guard': 'sto-distinctive-design-guard',
 };
 
 function getLocalPluginSourceCandidates(localDir: string): string[] {
@@ -781,6 +782,14 @@ export function ensureStoDingTalkSendGuardPluginInstalled(): { installed: boolea
   );
 }
 
+export function ensureStoDistinctiveDesignGuardPluginInstalled(): { installed: boolean; warning?: string } {
+  return ensurePluginInstalled(
+    'sto-distinctive-design-guard',
+    buildCandidateSources('sto-distinctive-design-guard'),
+    'STO Distinctive Design Guard',
+  );
+}
+
 // ── Bulk startup installer ───────────────────────────────────────────────────
 
 /**
@@ -798,6 +807,7 @@ const ALL_BUNDLED_PLUGINS = [
   { fn: ensureStoSkillCallMonitorPluginInstalled, label: 'STO Skill Call Monitor' },
   { fn: ensureStoMediaUnderstandingPluginInstalled, label: 'STO Media Understanding' },
   { fn: ensureStoDingTalkSendGuardPluginInstalled, label: 'STO DingTalk Send Guard' },
+  { fn: ensureStoDistinctiveDesignGuardPluginInstalled, label: 'STO Distinctive Design Guard' },
 ] as const;
 
 async function ensurePluginInstalledAsync(
@@ -919,6 +929,7 @@ export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
     { dirName: 'sto-skill-call-monitor', label: 'STO Skill Call Monitor' },
     { dirName: 'sto-media-understanding', label: 'STO Media Understanding' },
     { dirName: 'sto-dingtalk-send-guard', label: 'STO DingTalk Send Guard' },
+    { dirName: 'sto-distinctive-design-guard', label: 'STO Distinctive Design Guard' },
   ] as const;
 
   for (const { dirName, label } of pluginSpecs) {

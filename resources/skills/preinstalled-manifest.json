@@ -44,23 +44,7 @@
     },
     {
       "slug": "cli-report-generator",
-      "local": true,
-      "autoEnable": true
-    },
-    {
-      "slug": "claw-render-base",
-      "local": true,
-      "autoEnable": true
-    },
-    {
-      "slug": "claw-editable",
-      "local": true,
-      "autoEnable": true
-    },
-    {
-      "slug": "claw-archiver",
-      "local": true,
-      "autoEnable": true
+      "local": true
     },
     {
       "slug": "long-output-saver",

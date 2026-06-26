@@ -1,5 +1,8 @@
 import type { HookCallbackMatcher, HookEvent, McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import {
+  buildStoDistinctiveDesignGuardClaudeRuntimeOptions,
+} from '../../sto-plugin/claude/sto-distinctive-design-guard/sdk';
+import {
   buildStoDingTalkSendGuardClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk';
 import {
@@ -116,6 +119,11 @@ const agentTelemetryExtension: ClaudeRuntimeExtension = {
   build: ({ sessionKey }) => buildStoAgentTelemetryClaudeRuntimeOptions(sessionKey),
 };
 
+const distinctiveDesignGuardExtension: ClaudeRuntimeExtension = {
+  id: 'sto-distinctive-design-guard',
+  build: ({ sessionKey }) => buildStoDistinctiveDesignGuardClaudeRuntimeOptions(sessionKey),
+};
+
 const ssoUserContextExtension: ClaudeRuntimeExtension = {
   id: 'sto-sso-user-context',
   async build() {
@@ -162,6 +170,7 @@ const ssoUserContextExtension: ClaudeRuntimeExtension = {
 };
 
 const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
+  distinctiveDesignGuardExtension,
   dingTalkSendGuardExtension,
   workflowToolExtension,
   scheduledTaskToolExtension,
