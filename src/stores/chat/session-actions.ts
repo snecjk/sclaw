@@ -557,16 +557,11 @@ export function createSessionActions(
         if (currentSessionKey !== DEFAULT_SESSION_KEY) {
           chosenModel = sessions.find((s) => s.key === currentSessionKey)?.model?.trim();
         } else {
-          const upsertedModel = sessions.find((s) => s.key === DEFAULT_SESSION_KEY)?.model?.trim();
-          if (upsertedModel) {
-            chosenModel = upsertedModel;
-          } else {
-            const carryAgent = useAgentsStore.getState().agents.find(
-              (agent) => agent.id === get().currentAgentId,
-            );
-            if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
-              chosenModel = normalizeModelIdForChat(carryAgent.modelDisplay);
-            }
+          const carryAgent = useAgentsStore.getState().agents.find(
+            (agent) => agent.id === get().currentAgentId,
+          );
+          if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
+            chosenModel = normalizeModelIdForChat(carryAgent.modelDisplay);
           }
         }
       }

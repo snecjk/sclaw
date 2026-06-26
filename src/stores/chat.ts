@@ -2018,16 +2018,13 @@ export const useChatStore = create<ChatState>()(
       if (currentSessionKey !== DEFAULT_SESSION_KEY) {
         chosenModel = sessions.find((s) => s.key === currentSessionKey)?.model?.trim();
       } else {
-        const upsertedModel = sessions.find((s) => s.key === DEFAULT_SESSION_KEY)?.model?.trim();
-        if (upsertedModel) {
-          chosenModel = upsertedModel;
-        } else {
-          const carryAgent = useAgentsStore.getState().agents.find(
-            (agent) => agent.id === get().currentAgentId,
-          );
-          if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
-            chosenModel = normalizeModelIdForChat(carryAgent.modelDisplay);
-          }
+        // Placeholder main may carry gateway agent default (e.g. qwen3.5) — not user choice.
+        // Explicit toolbar picks use pendingNewSessionModel; Claude uses agent-scoped model.
+        const carryAgent = useAgentsStore.getState().agents.find(
+          (agent) => agent.id === get().currentAgentId,
+        );
+        if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
+          chosenModel = normalizeModelIdForChat(carryAgent.modelDisplay);
         }
       }
     }
