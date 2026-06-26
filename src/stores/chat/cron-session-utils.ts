@@ -202,6 +202,23 @@ export function isClaudeScheduledTaskRunSessionKey(sessionKey: string): boolean 
   return parseClaudeScheduledTaskRunSessionKey(sessionKey) != null;
 }
 
+/**
+ * True for "virtual" task/cron session keys that loadHistory resolves by key
+ * prefix — they may be absent from the backend sessions list right after a task
+ * is triggered, because the run transcript is materialized asynchronously.
+ * loadSessions must not reset `currentSessionKey` away from these, or the
+ * composer falls back to the default agent's engine instead of the triggered
+ * task's engine.
+ */
+export function isVirtualTaskSessionKey(sessionKey: string): boolean {
+  return (
+    isAnyCronSessionKey(sessionKey)
+    || isScheduledTaskSessionKey(sessionKey)
+    || isClaudeScheduledTaskSessionKey(sessionKey)
+    || isClaudeScheduledTaskRunSessionKey(sessionKey)
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Cron Run Session → Daily Aggregate Key Mapping
 // ---------------------------------------------------------------------------

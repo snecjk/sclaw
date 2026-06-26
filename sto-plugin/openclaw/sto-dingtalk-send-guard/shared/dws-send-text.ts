@@ -207,13 +207,13 @@ const TOOL_COMMAND_PARAM_KEYS = [
 /**
  * Rewrite tool params so `dws chat message send --text` uses real newlines.
  * Run after send-guard checks on the original command (guard blocks `$'` upfront).
- * On Windows leave the shell string unchanged — gateway preload parses argv instead.
+ * Windows also uses Git Bash (`bash -c`); double-quoted `--text "...\n..."` does not
+ * expand `\n`, so apply the same `$'...'` rewrite as on Unix (gateway preload is backup).
  */
 export function fixDwsChatMessageSendToolParams(
   params: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   if (!params) return undefined;
-  if (process.platform === 'win32') return undefined;
 
   for (const key of TOOL_COMMAND_PARAM_KEYS) {
     const value = params[key];

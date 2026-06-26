@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { appendDingTalkAgentSendDisclaimer } from '../../shared/dingtalk-disclaimer';
 import { buildDingTalkMentionSystemContext } from '../../shared/dingtalk-mention-context';
 import {
@@ -35,13 +35,23 @@ describe('dws-send-text normalization', () => {
     expect(normalized).not.toContain('\\n');
   });
 
-  it('fixDwsChatMessageSendToolParams rewrites exec tool command on non-win32', () => {
-    if (process.platform === 'win32') return;
-
+  it('fixDwsChatMessageSendToolParams rewrites exec tool command', () => {
     const params = { command: cmd };
     const fixed = fixDwsChatMessageSendToolParams(params);
     expect(fixed?.command).toContain("$'");
     expect(fixed?.command).not.toMatch(/--text\s+"[^"]*\\n/);
+  });
+
+  it('fixDwsChatMessageSendToolParams rewrites exec tool command on win32', () => {
+    vi.stubGlobal('process', { ...process, platform: 'win32' });
+    try {
+      const params = { command: cmd };
+      const fixed = fixDwsChatMessageSendToolParams(params);
+      expect(fixed?.command).toContain("$'");
+      expect(fixed?.command).not.toMatch(/--text\s+"[^"]*\\n/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('prompt example round-trips through fixDwsChatMessageSendShellScript', () => {
