@@ -1,0 +1,86 @@
+import {
+  isAnyCronSessionKey,
+  parseClaudeScheduledTaskRunSessionKey,
+  parseClaudeScheduledTaskSessionKey,
+  parseScheduledTaskAgentSessionKey,
+} from '@/stores/chat/cron-session-utils';
+import type { ChatSession } from '@/stores/chat/types';
+
+export function isSidebarRecentChatSessionKey(sessionKey: string): boolean {
+  return !isAnyCronSessionKey(sessionKey)
+    && !parseScheduledTaskAgentSessionKey(sessionKey)
+    && !parseClaudeScheduledTaskRunSessionKey(sessionKey)
+    && !parseClaudeScheduledTaskSessionKey(sessionKey);
+}
+
+export function getSessionActivityForSort(
+  session: Pick<ChatSession, 'key' | 'updatedAt'>,
+  sessionLastActivity: Record<string, number>,
+): number {
+  const recorded = sessionLastActivity[session.key] ?? 0;
+  const listed = typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt)
+    ? session.updatedAt
+    : 0;
+  return Math.max(recorded, listed);
+}
+
+export function sortSessionsByRecentActivity(
+  sessions: ChatSession[],
+  sessionLastActivity: Record<string, number>,
+): ChatSession[] {
+  return [...sessions].sort((left, right) => {
+    const activityDiff = getSessionActivityForSort(right, sessionLastActivity)
+      - getSessionActivityForSort(left, sessionLastActivity);
+    if (activityDiff !== 0) return activityDiff;
+    return right.key.localeCompare(left.key);
+  });
+}
+
+/** Snapshot sidebar order on first load (time descending at that moment). */
+export function buildInitialSidebarRecentOrder(
+  sessions: ChatSession[],
+  sessionLastActivity: Record<string, number>,
+): string[] {
+  const recent = sessions.filter((session) => isSidebarRecentChatSessionKey(session.key));
+  return sortSessionsByRecentActivity(recent, sessionLastActivity).map((session) => session.key);
+}
+
+export function mergeSidebarRecentOrder(existing: string[], currentKeys: string[]): string[] {
+  const currentSet = new Set(currentKeys);
+  const next = existing.filter((key) => currentSet.has(key));
+  for (const key of currentKeys) {
+    if (!existing.includes(key)) next.push(key);
+  }
+  return next;
+}
+
+export function prependSidebarRecentOrder(existing: string[], sessionKey: string): string[] {
+  return [sessionKey, ...existing.filter((key) => key !== sessionKey)];
+}
+
+export function removeSidebarRecentOrderKey(existing: string[], sessionKey: string): string[] {
+  return existing.filter((key) => key !== sessionKey);
+}
+
+export function sortSessionsByFrozenRecentOrder<T extends { key: string }>(
+  sessions: T[],
+  order: string[],
+  sessionLastActivity: Record<string, number>,
+): T[] {
+  if (order.length === 0) {
+    return sortSessionsByRecentActivity(
+      sessions as ChatSession[],
+      sessionLastActivity,
+    ) as T[];
+  }
+  const orderIndex = new Map(order.map((key, index) => [key, index]));
+  return [...sessions].sort((left, right) => {
+    const leftIndex = orderIndex.get(left.key);
+    const rightIndex = orderIndex.get(right.key);
+    if (leftIndex !== undefined && rightIndex !== undefined) return leftIndex - rightIndex;
+    if (leftIndex !== undefined) return -1;
+    if (rightIndex !== undefined) return 1;
+    return getSessionActivityForSort(right as ChatSession, sessionLastActivity)
+      - getSessionActivityForSort(left as ChatSession, sessionLastActivity);
+  });
+}

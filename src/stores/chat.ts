@@ -40,6 +40,17 @@ import {
   resolveCronGroupNameFromSession,
   resolveStoScheduledGroupNameFromSession,
 } from '@/lib/scheduled-task-group-name';
+import { appendPendingLocalVirtualTaskSessions } from '@/stores/chat/session-list-merge';
+import {
+  buildInitialSidebarRecentOrder,
+  isSidebarRecentChatSessionKey,
+  mergeSidebarRecentOrder,
+  prependSidebarRecentOrder,
+  removeSidebarRecentOrderKey,
+} from '@/lib/sidebar-recent-order';
+import {
+  scheduleSessionLabelHydrationForStore,
+} from '@/stores/chat/session-metadata-hydrate';
 import {
   DEFAULT_CANONICAL_PREFIX,
   DEFAULT_SESSION_KEY,
@@ -75,7 +86,7 @@ import {
   dispatchBuiltinToolResult,
 } from '@/lib/builtin-tool-dispatch';
 import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSessionLabel } from '@/lib/workflow-session-hint';
-import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, hasUsableSessionTitle, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
+import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { traceChatSession } from '../../shared/chat-session-trace';
@@ -183,9 +194,6 @@ const SESSION_LOAD_MIN_INTERVAL_MS = 1_200;
 const HISTORY_LOAD_MIN_INTERVAL_MS = 800;
 const HISTORY_POLL_SILENCE_WINDOW_MS = 2_500;
 const CHAT_EVENT_DEDUPE_TTL_MS = 30_000;
-const SESSION_METADATA_HISTORY_LIMIT = 2;
-const SESSION_METADATA_HYDRATE_LIMIT = 40;
-const SESSION_METADATA_HYDRATE_CONCURRENCY = 4;
 const _chatEventDedupe = new Map<string, number>();
 
 function clearErrorRecoveryTimer(): void {
@@ -425,16 +433,11 @@ function parseSessionUpdatedAtMs(value: unknown): number | undefined {
   return undefined;
 }
 
-async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
-  let nextIndex = 0;
-  const workerCount = Math.min(Math.max(limit, 1), items.length);
-  await Promise.all(Array.from({ length: workerCount }, async () => {
-    while (nextIndex < items.length) {
-      const item = items[nextIndex];
-      nextIndex += 1;
-      await task(item);
-    }
-  }));
+function scheduleSessionLabelHydrationFromStore(
+  set: ChatSet,
+  get: () => ChatState,
+): void {
+  scheduleSessionLabelHydrationForStore(get, set);
 }
 
 async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
@@ -1180,6 +1183,7 @@ export const useChatStore = create<ChatState>()(
   runtimeBySessionKey: {},
   sessionLabels: {},
   sessionLastActivity: {},
+  sidebarRecentOrder: [],
   activatingScheduledSessionAt: {},
 
   showThinking: true,
@@ -1223,9 +1227,11 @@ export const useChatStore = create<ChatState>()(
     const now = Date.now();
     if (_loadSessionsInFlight) {
       await _loadSessionsInFlight;
+      scheduleSessionLabelHydrationFromStore(set, get);
       return;
     }
     if (now - _lastLoadSessionsAt < SESSION_LOAD_MIN_INTERVAL_MS) {
+      scheduleSessionLabelHydrationFromStore(set, get);
       return;
     }
 
@@ -1379,6 +1385,11 @@ export const useChatStore = create<ChatState>()(
               model: remote.model ?? local.model,
             };
           });
+          const mergedSessions = appendPendingLocalVirtualTaskSessions(
+            mergedRemoteSessions,
+            localSessions,
+            deletedKeys,
+          );
           let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
           if (!nextSessionKey.startsWith('agent:')) {
             const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
@@ -1386,7 +1397,7 @@ export const useChatStore = create<ChatState>()(
               nextSessionKey = canonicalMatch;
             }
           }
-          if (!mergedRemoteSessions.find((s) => s.key === nextSessionKey) && mergedRemoteSessions.length > 0) {
+          if (!mergedSessions.find((s) => s.key === nextSessionKey) && mergedSessions.length > 0) {
             // Preserve only locally-created pending sessions. On initial boot the
             // default ghost key (`agent:main:main`) should yield to real history.
             const hasLocalPendingSession =
@@ -1398,19 +1409,19 @@ export const useChatStore = create<ChatState>()(
             // loadHistory and may not be in the backend list yet — keep them, or
             // the composer falls back to the default agent's engine.
             if (!hasLocalPendingSession && !isVirtualTaskSessionKey(nextSessionKey)) {
-              nextSessionKey = mergedRemoteSessions[0].key;
+              nextSessionKey = mergedSessions[0].key;
             }
           }
 
           const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
-          const sessionsWithCurrent = !mergedRemoteSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
-            ? [...mergedRemoteSessions, {
+          const sessionsWithCurrent = !mergedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
+            ? [...mergedSessions, {
               key: nextSessionKey,
               label: localCurrentSession?.label ?? NEW_SESSION_TEMP_LABEL,
               engineType: localCurrentSession?.engineType,
               model: localCurrentSession?.model,
             }]
-            : mergedRemoteSessions;
+            : mergedSessions;
 
           const scrubbedSessionLabels = scrubCorruptedSessionLabels(get().sessionLabels);
           const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels);
@@ -1526,6 +1537,14 @@ export const useChatStore = create<ChatState>()(
                 labeledSessions,
               );
             }
+            const recentSessions = labeledSessions.filter((session) => isSidebarRecentChatSessionKey(session.key));
+            const recentKeys = recentSessions.map((session) => session.key);
+            let sidebarRecentOrder = state.sidebarRecentOrder;
+            if (sidebarRecentOrder.length === 0 && recentKeys.length > 0) {
+              sidebarRecentOrder = buildInitialSidebarRecentOrder(recentSessions, sessionLastActivity);
+            } else if (sidebarRecentOrder.length > 0) {
+              sidebarRecentOrder = mergeSidebarRecentOrder(sidebarRecentOrder, recentKeys);
+            }
             return {
               sessions: labeledSessions,
               currentSessionKey: nextSessionKey,
@@ -1533,6 +1552,7 @@ export const useChatStore = create<ChatState>()(
               sessionLastActivity,
               sessionLabels: scrubCorruptedSessionLabels(state.sessionLabels),
               activatingScheduledSessionAt,
+              sidebarRecentOrder,
             };
           });
 
@@ -1540,63 +1560,8 @@ export const useChatStore = create<ChatState>()(
             void get().loadHistory();
           }
 
-          // Background: hydrate only the first screen of missing metadata.
-          // Avoid the old N * full-history fan-out, which became very expensive
-          // when users had hundreds of sessions.
-          const sessionsToHydrate = labeledSessions
-            .filter((session) => {
-              if (session.key.endsWith(':main')) return false;
-              const hasActivity = Boolean(session.updatedAt || get().sessionLastActivity[session.key]);
-              return !hasUsableSessionTitle(session, scrubbedSessionLabels) || !hasActivity;
-            })
-            .sort((left, right) => {
-              const leftAt = left.updatedAt ?? get().sessionLastActivity[left.key] ?? 0;
-              const rightAt = right.updatedAt ?? get().sessionLastActivity[right.key] ?? 0;
-              return rightAt - leftAt;
-            })
-            .slice(0, SESSION_METADATA_HYDRATE_LIMIT);
-
-          if (sessionsToHydrate.length > 0) {
-            void runLimited(sessionsToHydrate, SESSION_METADATA_HYDRATE_CONCURRENCY, async (session) => {
-              try {
-                const r = await useGatewayStore.getState().rpc<Record<string, unknown>>(
-                  'chat.history',
-                  { sessionKey: session.key, limit: SESSION_METADATA_HISTORY_LIMIT },
-                );
-                const msgs = Array.isArray(r.messages) ? r.messages as RawMessage[] : [];
-                const lastMsg = msgs[msgs.length - 1];
-                set((s) => {
-                  const next: Partial<typeof s> = {};
-                  if (shouldAutoDeriveSessionLabel(session.key, s.sessionLabels, isCorruptedSessionLabel)) {
-                    const labelText = deriveSessionLabelFromHistory(
-                      msgs,
-                      getMessageText,
-                      buildSessionLabelDerivationOptions(session.key, s.sessions, s.sessionLabels),
-                    );
-                    if (labelText) {
-                      next.sessionLabels = {
-                        ...s.sessionLabels,
-                        [session.key]: truncateSessionLabel(labelText),
-                      };
-                    }
-                  }
-                  if (lastMsg?.timestamp) {
-                    const lastAt = toMs(lastMsg.timestamp);
-                    if (lastAt > 0) {
-                      const currentAt = s.sessionLastActivity[session.key] ?? 0;
-                      const nextAt = Math.max(currentAt, lastAt);
-                      if (nextAt !== currentAt) {
-                        next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: nextAt };
-                      }
-                    }
-                  }
-                  return next;
-                });
-              } catch {
-                // ignore per-session errors
-              }
-            });
-          }
+          // Background: hydrate sidebar titles from history (retries until Gateway is ready).
+          scheduleSessionLabelHydrationFromStore(set, get);
         }
       } catch (err) {
         console.warn('Failed to load sessions:', err);
@@ -1670,6 +1635,7 @@ export const useChatStore = create<ChatState>()(
         runtimeBySessionKey: clearSessionEntryFromMap(s.runtimeBySessionKey, key),
         sessionLabels: Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== key)),
         sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
+        sidebarRecentOrder: removeSidebarRecentOrderKey(s.sidebarRecentOrder, key),
         messages: [],
         streamingText: '',
         streamingMessage: null,
@@ -1692,6 +1658,7 @@ export const useChatStore = create<ChatState>()(
         runtimeBySessionKey: clearSessionEntryFromMap(s.runtimeBySessionKey, key),
         sessionLabels: Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== key)),
         sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
+        sidebarRecentOrder: removeSidebarRecentOrderKey(s.sidebarRecentOrder, key),
       }));
     }
     void get().loadSessions();
@@ -1741,6 +1708,10 @@ export const useChatStore = create<ChatState>()(
         delete nextRuntimeBySessionKey[currentSessionKey];
       }
       nextRuntimeBySessionKey[newKey] = createIdleSessionRuntimeState();
+      let sidebarRecentOrder = prependSidebarRecentOrder(s.sidebarRecentOrder, newKey);
+      if (leavingEmpty) {
+        sidebarRecentOrder = removeSidebarRecentOrderKey(sidebarRecentOrder, currentSessionKey);
+      }
       return {
         currentSessionKey: newKey,
         currentAgentId: newAgentId,
@@ -1755,6 +1726,7 @@ export const useChatStore = create<ChatState>()(
         sessionLastActivity: leavingEmpty
           ? Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey))
           : s.sessionLastActivity,
+        sidebarRecentOrder,
         messages: [],
         sending: false,
         streamingText: '',
@@ -1795,6 +1767,7 @@ export const useChatStore = create<ChatState>()(
       sessionLastActivity: Object.fromEntries(
         Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey),
       ),
+      sidebarRecentOrder: removeSidebarRecentOrderKey(s.sidebarRecentOrder, currentSessionKey),
     }));
   },
 

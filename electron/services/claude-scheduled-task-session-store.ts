@@ -4,6 +4,8 @@ import { dirname, join } from 'node:path';
 import { getClaudeScheduledTasksDir } from '../utils/paths';
 import { filterDeletedSessions } from '../utils/scheduled-task-poller-store';
 import { reviveClaudeTaskDatedExecutionSession } from '../utils/revive-deleted-execution-session';
+import { buildFirstTriggeredClaudeSessionPlaceholders } from '../utils/ensure-dated-execution-session';
+import { listTaskGroupFirstTriggeredAt } from '../utils/task-group-first-trigger-store';
 import type {
   ClaudeScheduledTaskDefinition,
   ClaudeScheduledTaskRunRecord,
@@ -184,6 +186,22 @@ async function ensureDatedSession(
     }
   }
   return createSummarySessionEntry(definition.id, sessionKey, definition.name);
+}
+
+/** Create dated Claude session placeholder so sidebar survives refresh before run completes. */
+export async function ensureClaudeDatedExecutionSessionPlaceholder(
+  taskId: string,
+  taskName: string,
+  date?: string,
+): Promise<void> {
+  const dateStr = date ?? (() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  })();
+  await ensureDatedSession({ id: taskId, name: taskName } as ClaudeScheduledTaskDefinition, dateStr);
 }
 
 function normalizeTimestamp(value: unknown): number | undefined {
@@ -383,6 +401,25 @@ export async function listClaudeScheduledTaskSummarySessions(): Promise<
   }
 
   items.sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0));
+
+  const taskNamesById = new Map<string, string>();
+  for (const item of items) {
+    const dated = item.key.match(/^claude-task:([^:]+):\d{4}-\d{2}-\d{2}$/);
+    if (dated && item.displayName?.trim()) {
+      taskNamesById.set(dated[1] ?? '', item.displayName.trim());
+    }
+  }
+  const firstTriggered = await listTaskGroupFirstTriggeredAt();
+  const existingKeys = new Set(items.map((item) => item.key));
+  for (const placeholder of buildFirstTriggeredClaudeSessionPlaceholders(firstTriggered, existingKeys, taskNamesById)) {
+    items.push({
+      ...placeholder,
+      sessionFile: '',
+      engineType: 'claude',
+    });
+  }
+  items.sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0));
+
   return filterDeletedSessions(items);
 }
 

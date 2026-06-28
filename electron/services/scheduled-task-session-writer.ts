@@ -15,6 +15,8 @@ import { getOpenClawConfigDir } from '../utils/paths';
 import { logger } from '../utils/logger';
 import { filterDeletedSessions } from '../utils/scheduled-task-poller-store';
 import { reviveScheduledTaskAgentDatedExecutionSession } from '../utils/revive-deleted-execution-session';
+import { ensureTaskGroupFirstTriggeredOnRun } from '../utils/task-group-first-trigger-store';
+import { stoCloudTaskGroupKey } from '../../shared/task-group-key';
 
 const CURRENT_SESSION_VERSION = 1;
 
@@ -279,6 +281,7 @@ export async function appendTriggerResultToSession(
   const agentSessionKey = `agent:${agentId}:scheduled-task:${taskId}:${entryId}`;
 
   await reviveScheduledTaskAgentDatedExecutionSession(taskId, agentId, entryId);
+  await ensureTaskGroupFirstTriggeredOnRun(stoCloudTaskGroupKey(taskId));
 
   const executionContent = run.executionResult?.trim() || `任务执行完成 (状态：${run.status})`;
   await appendMessageToAgentSession(

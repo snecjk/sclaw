@@ -12,6 +12,12 @@ import { useTranslation } from 'react-i18next';
 import { useCronStore } from '@/stores/cron';
 import type { ManagedLocalTask } from '@/stores/cron';
 import { forgetOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
+import {
+  ensureTaskGroupFirstTriggeredOnRun,
+  getCachedTaskGroupFirstTriggeredMap,
+  rememberOptimisticTaskGroupFirstTriggered,
+} from '@/lib/task-group-first-trigger';
+import { resolveTaskGroupKeyFromSessionKey } from '../../../shared/task-group-key';
 import { useChatStore } from '@/stores/chat';
 import { useAgentsStore } from '@/stores/agents';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
@@ -261,11 +267,19 @@ export default function MyTask() {
       };
 
       const sessionKey = buildDatedSessionKey(task);
+      const groupKey = resolveTaskGroupKeyFromSessionKey(sessionKey);
+      const triggeredAt = Date.now();
       flushSync(() => {
         useChatStore.getState().markScheduledSessionActivating(sessionKey);
+        if (groupKey && !getCachedTaskGroupFirstTriggeredMap()[groupKey]) {
+          rememberOptimisticTaskGroupFirstTriggered(groupKey, triggeredAt);
+        }
       });
       try {
         await triggerJob(task.id, task.engineType);
+        if (groupKey) {
+          void ensureTaskGroupFirstTriggeredOnRun(groupKey, triggeredAt);
+        }
         forgetOptimisticDeletedSessionKey(sessionKey);
         if (task.engineType !== 'claude' && task.agentId && task.agentId !== 'main') {
           const today = new Date();

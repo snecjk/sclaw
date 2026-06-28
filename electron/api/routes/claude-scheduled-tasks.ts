@@ -5,8 +5,11 @@ import { getClaudeScheduledTaskService } from '../../services/claude-scheduled-t
 import {
   listClaudeScheduledTaskSummarySessions,
   readClaudeScheduledTaskSessionHistory,
+  ensureClaudeDatedExecutionSessionPlaceholder,
 } from '../../services/claude-scheduled-task-session-store';
 import { reviveClaudeTaskDatedExecutionSession } from '../../utils/revive-deleted-execution-session';
+import { ensureTaskGroupFirstTriggeredOnRun } from '../../utils/task-group-first-trigger-store';
+import { claudeTaskGroupKey } from '../../../shared/task-group-key';
 
 export async function handleClaudeScheduledTaskRoutes(
   req: IncomingMessage,
@@ -125,7 +128,11 @@ export async function handleClaudeScheduledTaskRoutes(
       const y = runDate.getFullYear();
       const m = String(runDate.getMonth() + 1).padStart(2, '0');
       const d = String(runDate.getDate()).padStart(2, '0');
-      await reviveClaudeTaskDatedExecutionSession(id, `${y}-${m}-${d}`);
+      const dateKey = `${y}-${m}-${d}`;
+      await reviveClaudeTaskDatedExecutionSession(id, dateKey);
+      const task = await getClaudeScheduledTaskService().getTask(id);
+      await ensureClaudeDatedExecutionSessionPlaceholder(id, task?.name ?? `Claude 定时任务 ${id}`, dateKey);
+      await ensureTaskGroupFirstTriggeredOnRun(claudeTaskGroupKey(id));
       sendJson(res, 200, run);
     } catch (error) {
       sendJson(res, 400, { success: false, error: String(error) });

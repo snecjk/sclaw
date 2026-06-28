@@ -1,7 +1,7 @@
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
 import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSessionLabel } from '@/lib/workflow-session-hint';
-import { buildSessionLabelDerivationOptions } from '@/lib/session-label';
+import { buildSessionLabelDerivationOptions, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { mergeLocalWorkflowTurnsFromCurrent } from '@/lib/workflow-local-turn';
 import {
   mergeParameterFormBlocksFromCurrent,
@@ -142,8 +142,7 @@ export function createHistoryActions(
         // displayName (e.g. the configured agent name "StoClaw") instead.
         const isMainSession = currentSessionKey.endsWith(':main');
         if (!isMainSession) {
-          const existingLabel = get().sessionLabels[currentSessionKey];
-          if (!existingLabel || isCorruptedSessionLabel(existingLabel)) {
+          if (shouldAutoDeriveSessionLabel(currentSessionKey, get().sessionLabels, isCorruptedSessionLabel)) {
             const labelText = deriveSessionLabelFromHistory(
               finalMessages,
               getMessageText,
