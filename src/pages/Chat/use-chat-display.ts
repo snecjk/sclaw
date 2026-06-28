@@ -34,8 +34,9 @@ export function useChatDisplay(params: {
   streamMsg: { role?: string; content?: unknown; timestamp?: number; id?: string } | null;
   streamText: string;
   streamingTools: StreamingTool[];
+  lastUserMessageAt: number | null;
 }) {
-  const { messages, sending, pendingFinal, showThinking, lastChatEventAt, streamMsg, streamText, streamingTools } = params;
+  const { messages, sending, pendingFinal, showThinking, lastChatEventAt, streamMsg, streamText, streamingTools, lastUserMessageAt } = params;
 
   const [, staleTick] = useState(0);
   useEffect(() => {
@@ -87,8 +88,13 @@ export function useChatDisplay(params: {
       isStillExecuting,
     };
 
+    // Only promote the last assistant turn/message into activeTurn when the
+    // current send was triggered by a user message (lastUserMessageAt is set).
+    // For cron/background triggers (lastUserMessageAt === null), creating a
+    // fresh activeTurn ensures the loading indicator appears as a new line
+    // rather than overlaying the previous completed answer.
     const last = displayItems[displayItems.length - 1];
-    if (last?.type === 'assistant-turn') {
+    if (lastUserMessageAt != null && last?.type === 'assistant-turn') {
       return {
         staticItems: displayItems.slice(0, -1),
         activeTurn: {
@@ -100,7 +106,7 @@ export function useChatDisplay(params: {
       };
     }
 
-    if (last?.type === 'single' && isAssistantRole(last.message.role)) {
+    if (lastUserMessageAt != null && last?.type === 'single' && isAssistantRole(last.message.role)) {
       return {
         staticItems: displayItems.slice(0, -1),
         activeTurn: {
@@ -130,6 +136,7 @@ export function useChatDisplay(params: {
     streamText,
     streamingTools,
     isStillExecuting,
+    lastUserMessageAt,
   ]);
 
   return { staticItems, activeTurn, shouldRenderStreaming, hasAnyStreamContent };
