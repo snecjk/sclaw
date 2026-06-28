@@ -351,9 +351,11 @@ function SidebarTaskGroup({
   }, [taskId]); // Only depend on taskId, not entries
   const underTask = pathname.startsWith(`/tasks/${taskId}`);
 
+  // Expand once when entering this task route; do not re-run on parent re-renders (e.g. chat streaming).
   useEffect(() => {
     if (underTask) onRequestExpand();
-  }, [underTask, onRequestExpand]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [underTask, taskId]);
 
   if (entries.length === 0) {
     return null;
@@ -1148,13 +1150,13 @@ export function Sidebar() {
     && !taskListShowAll
     && taskListRenderPlan.totalRows > SIDEBAR_TASK_LIST_INITIAL_ROW_LIMIT;
 
-  const handleTaskGroupToggle = (groupKey: string) => {
+  const handleTaskGroupToggle = useCallback((groupKey: string) => {
     setExpandedTaskGroupKey((prev) => (prev === groupKey ? null : groupKey));
-  };
+  }, []);
 
-  const handleTaskGroupExpand = (groupKey: string) => {
+  const handleTaskGroupExpand = useCallback((groupKey: string) => {
     setExpandedTaskGroupKey(groupKey);
-  };
+  }, []);
 
   const toggleBucket = (key: SessionBucketKey) => {
     setBucketOpen((prev) => ({ ...prev, [key]: !prev[key] }));

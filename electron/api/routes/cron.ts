@@ -10,7 +10,11 @@ import { parseJsonBody, sendJson } from '../route-utils';
 import { getOpenClawConfigDir } from '../../utils/paths';
 import { filterDeletedSessions } from '../../utils/scheduled-task-poller-store';
 import { reviveCronDatedExecutionSession } from '../../utils/revive-deleted-execution-session';
-import { ensureTaskGroupFirstTriggeredOnRun } from '../../utils/task-group-first-trigger-store';
+import {
+  buildFirstTriggeredCronSessionPlaceholders,
+  ensureCronDatedExecutionSessionPlaceholder,
+} from '../../utils/ensure-dated-execution-session';
+import { ensureTaskGroupFirstTriggeredOnRun, listTaskGroupFirstTriggeredAt } from '../../utils/task-group-first-trigger-store';
 import { cronTaskGroupKey } from '../../../shared/task-group-key';
 
 interface GatewayCronJob {
@@ -423,6 +427,13 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
 
   sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 
+  const firstTriggered = await listTaskGroupFirstTriggeredAt();
+  const existingKeys = new Set(sessions.map((session) => session.key));
+  sessions.push(
+    ...buildFirstTriggeredCronSessionPlaceholders(firstTriggered, existingKeys, jobNamesById),
+  );
+  sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+
   return filterDeletedSessions(sessions);
 }
 
@@ -825,6 +836,17 @@ export async function handleCronRoutes(
       const body = await parseJsonBody<{ id: string }>(req);
       const result = await ctx.gatewayManager.rpc('cron.run', { id: body.id, mode: 'force' });
       await reviveCronDatedExecutionSession(body.id, 'main');
+      let jobLabel: string | undefined;
+      try {
+        const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
+        const jobsRaw = await readFile(jobsFile, 'utf8');
+        const jobsData = JSON.parse(jobsRaw) as { jobs?: Array<{ id: string; name?: string }> };
+        const name = jobsData.jobs?.find((job) => job.id === body.id)?.name?.trim();
+        if (name) jobLabel = `Cron: ${name}`;
+      } catch {
+        // ignore
+      }
+      await ensureCronDatedExecutionSessionPlaceholder(body.id, 'main', { label: jobLabel });
       await ensureTaskGroupFirstTriggeredOnRun(cronTaskGroupKey(body.id));
       sendJson(res, 200, result);
     } catch (error) {

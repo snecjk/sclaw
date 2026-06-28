@@ -22,6 +22,7 @@ import {
 import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSessionLabel } from '@/lib/workflow-session-hint';
 import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, hasUsableSessionTitle, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
+import { appendPendingLocalVirtualTaskSessions } from './session-list-merge';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 const SESSION_METADATA_HISTORY_LIMIT = 2;
@@ -182,6 +183,11 @@ export function createSessionActions(
         const visibleDedupedSessions = omitDeletedSessionKeys(dedupedSessions, deletedKeys);
 
         const { currentSessionKey, sessions: localSessions, sessionLastActivity, sessionLabels } = get();
+        const mergedSessions = appendPendingLocalVirtualTaskSessions(
+          visibleDedupedSessions,
+          localSessions,
+          deletedKeys,
+        );
         let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
         if (!nextSessionKey.startsWith('agent:')) {
           const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
@@ -189,14 +195,14 @@ export function createSessionActions(
             nextSessionKey = canonicalMatch;
           }
         }
-        if (!visibleDedupedSessions.find((s) => s.key === nextSessionKey) && visibleDedupedSessions.length > 0) {
+        if (!mergedSessions.find((s) => s.key === nextSessionKey) && mergedSessions.length > 0) {
           // Keep locally-created pending sessions even after the first optimistic send.
           const hasLocalPendingSession =
             isTemporaryAgentSessionKey(nextSessionKey)
             || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
             || localSessions.some((session) => session.key === nextSessionKey);
           if (!hasLocalPendingSession) {
-            nextSessionKey = visibleDedupedSessions[0].key;
+            nextSessionKey = mergedSessions[0].key;
           }
         }
 
@@ -204,18 +210,18 @@ export function createSessionActions(
         const hasLocalSessionActivity = Boolean(sessionLastActivity[nextSessionKey] || sessionLabels[nextSessionKey]);
         const shouldAppendCurrentSession = Boolean(
           nextSessionKey
-          && !visibleDedupedSessions.find((s) => s.key === nextSessionKey)
+          && !mergedSessions.find((s) => s.key === nextSessionKey)
           && (hasLocalPendingSession || hasLocalSessionActivity),
         );
         const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
         const sessionsWithCurrent = shouldAppendCurrentSession
-          ? [...visibleDedupedSessions, {
+          ? [...mergedSessions, {
             key: nextSessionKey,
             label: localCurrentSession?.label ?? NEW_SESSION_TEMP_LABEL,
             engineType: localCurrentSession?.engineType,
             model: localCurrentSession?.model,
           }]
-          : visibleDedupedSessions;
+          : mergedSessions;
 
         const scrubbedSessionLabels = scrubCorruptedSessionLabels(get().sessionLabels);
         const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels);

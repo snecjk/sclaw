@@ -34,6 +34,7 @@ import {
   resolveCronGroupNameFromSession,
   resolveStoScheduledGroupNameFromSession,
 } from '@/lib/scheduled-task-group-name';
+import { appendPendingLocalVirtualTaskSessions } from '@/stores/chat/session-list-merge';
 import {
   DEFAULT_CANONICAL_PREFIX,
   DEFAULT_SESSION_KEY,
@@ -1360,6 +1361,11 @@ export const useChatStore = create<ChatState>()(
               model: remote.model ?? local.model,
             };
           });
+          const mergedSessions = appendPendingLocalVirtualTaskSessions(
+            mergedRemoteSessions,
+            localSessions,
+            deletedKeys,
+          );
           let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
           if (!nextSessionKey.startsWith('agent:')) {
             const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
@@ -1367,7 +1373,7 @@ export const useChatStore = create<ChatState>()(
               nextSessionKey = canonicalMatch;
             }
           }
-          if (!mergedRemoteSessions.find((s) => s.key === nextSessionKey) && mergedRemoteSessions.length > 0) {
+          if (!mergedSessions.find((s) => s.key === nextSessionKey) && mergedSessions.length > 0) {
             // Preserve only locally-created pending sessions. On initial boot the
             // default ghost key (`agent:main:main`) should yield to real history.
             const hasLocalPendingSession =
@@ -1379,19 +1385,19 @@ export const useChatStore = create<ChatState>()(
             // loadHistory and may not be in the backend list yet — keep them, or
             // the composer falls back to the default agent's engine.
             if (!hasLocalPendingSession && !isVirtualTaskSessionKey(nextSessionKey)) {
-              nextSessionKey = mergedRemoteSessions[0].key;
+              nextSessionKey = mergedSessions[0].key;
             }
           }
 
           const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
-          const sessionsWithCurrent = !mergedRemoteSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
-            ? [...mergedRemoteSessions, {
+          const sessionsWithCurrent = !mergedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
+            ? [...mergedSessions, {
               key: nextSessionKey,
               label: localCurrentSession?.label ?? NEW_SESSION_TEMP_LABEL,
               engineType: localCurrentSession?.engineType,
               model: localCurrentSession?.model,
             }]
-            : mergedRemoteSessions;
+            : mergedSessions;
 
           const scrubbedSessionLabels = scrubCorruptedSessionLabels(get().sessionLabels);
           const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels);
