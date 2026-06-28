@@ -1,4 +1,5 @@
 import { isHttpUrl, normalizeLocalFilePath } from '@/lib/preview-url';
+import { isTruncatedLocalPathPrefix } from '../../shared/preview-raw-path';
 
 /** Canonical key for comparing local/remote preview file references (Windows-safe). */
 export function normalizePreviewFileKey(filePath?: string, fileName?: string): string {
@@ -27,8 +28,30 @@ export function dedupeAttachedFiles<T extends {
   fileSize?: number;
   preview?: string | null;
 }>(files: T[]): T[] {
-  const result: T[] = [];
+  const withoutTruncatedSiblings: T[] = [];
   for (const file of files) {
+    const fp = file.filePath || file.fileName;
+    if (
+      fp
+      && withoutTruncatedSiblings.some((existing) => {
+        const ep = existing.filePath || existing.fileName;
+        return ep ? isTruncatedLocalPathPrefix(fp, ep) : false;
+      })
+    ) {
+      continue;
+    }
+    for (let i = withoutTruncatedSiblings.length - 1; i >= 0; i -= 1) {
+      const existing = withoutTruncatedSiblings[i]!;
+      const ep = existing.filePath || existing.fileName;
+      if (ep && fp && isTruncatedLocalPathPrefix(ep, fp)) {
+        withoutTruncatedSiblings.splice(i, 1);
+      }
+    }
+    withoutTruncatedSiblings.push(file);
+  }
+
+  const result: T[] = [];
+  for (const file of withoutTruncatedSiblings) {
     const dupIdx = result.findIndex((existing) => previewFileRefsMatch(existing, file));
     if (dupIdx < 0) {
       result.push(file);

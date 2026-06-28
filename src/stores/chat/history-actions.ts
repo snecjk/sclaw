@@ -32,6 +32,7 @@ import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 import {
   dedupeRedundantUserMessages,
   mergeOptimisticUserIntoHistory,
+  traceLoadHistoryUserReconciliation,
 } from './user-message-merge';
 
 async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
@@ -96,10 +97,13 @@ export function createHistoryActions(
         // until the run completes, causing it to flash out of the UI.
         let finalMessages = enrichedMessages;
         const userMsgAt = get().lastUserMessageAt;
+        const historyUserCountBefore = enrichedMessages.filter((m) => m.role === 'user').length;
+        const historyMessageCountBefore = enrichedMessages.length;
         if (userMsgAt) {
           finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
             userMessageAt: userMsgAt,
             sending: get().sending,
+            sessionKey: currentSessionKey,
           });
         }
 
@@ -109,7 +113,18 @@ export function createHistoryActions(
           getMessageText,
         );
         finalMessages = mergeLocalWorkflowTurnsFromCurrent(finalMessages, get().messages);
-        finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null);
+        finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null, {
+          sessionKey: currentSessionKey,
+        });
+        traceLoadHistoryUserReconciliation({
+          sessionKey: currentSessionKey,
+          userMessageAt: userMsgAt,
+          sending: get().sending,
+          beforeCount: historyMessageCountBefore,
+          afterCount: finalMessages.length,
+          userCountBefore: historyUserCountBefore,
+          userCountAfter: finalMessages.filter((m) => m.role === 'user').length,
+        });
         const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
           sessionKey: currentSessionKey,
           get,
