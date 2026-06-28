@@ -1519,13 +1519,21 @@ export const useChatStore = create<ChatState>()(
             if (fromLabel) session.displayName = fromLabel;
           }
 
-          const discoveredActivity = Object.fromEntries(
-            labeledSessions
-              .filter((session) => typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt))
-              .map((session) => [session.key, session.updatedAt!]),
-          );
-
           set((state) => {
+            const discoveredActivity = Object.fromEntries(
+              labeledSessions
+                .filter((session) => typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt))
+                .map((session) => {
+                  const listedAt = session.updatedAt!;
+                  if (session.engineType === 'claude') {
+                    const persistedAt = state.sessionLastActivity[session.key] ?? 0;
+                    // Claude registry updatedAt was previously bumped on history reads; prefer
+                    // persisted transcript activity when we already have it locally.
+                    if (persistedAt > 0) return [session.key, persistedAt];
+                  }
+                  return [session.key, listedAt];
+                }),
+            );
             const sessionLastActivity = mergeSessionLastActivity(state.sessionLastActivity, discoveredActivity);
             let activatingScheduledSessionAt = state.activatingScheduledSessionAt;
             for (const sessionKey of Object.keys(discoveredActivity)) {

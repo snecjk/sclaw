@@ -231,6 +231,20 @@ function toEpochMs(value: unknown): number | undefined {
   return undefined;
 }
 
+/** Last message timestamp in a Claude transcript — used for sidebar sort, not read time. */
+function resolveClaudeTranscriptActivityMs(
+  messages: Array<{ timestamp?: number }>,
+): number {
+  let lastAt = 0;
+  for (const message of messages) {
+    const ts = typeof message.timestamp === 'number' && Number.isFinite(message.timestamp)
+      ? message.timestamp
+      : 0;
+    if (ts > lastAt) lastAt = ts;
+  }
+  return lastAt;
+}
+
 function isPathWithinDirectory(targetPath: string, rootPath: string): boolean {
   const resolvedRoot = resolve(rootPath);
   const resolvedTarget = resolve(targetPath);
@@ -663,13 +677,15 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
       toolName,
     }));
 
+  const transcriptActivityAt = resolveClaudeTranscriptActivityMs(mergedMessages);
   await upsertEngineSessionRegistryEntry({
     sessionKey,
     sessionId: sessionId || entry?.sessionId,
     cwd,
     agentId: extractAgentId(sessionKey),
     engineType: 'claude',
-    updatedAt: Date.now(),
+    // Never bump activity on read — sidebar order must reflect last message time only.
+    ...(transcriptActivityAt > 0 ? { updatedAt: transcriptActivityAt } : {}),
     model: entry?.model,
     accountId: entry?.accountId,
     archivedClaudeSessionIds: entry?.archivedClaudeSessionIds,
@@ -843,7 +859,7 @@ export async function consumeClaudeQuery(
         cwd,
         agentId: extractAgentId(sessionKey),
         engineType: 'claude',
-        updatedAt: Date.now(),
+        updatedAt: toEpochMs(message.timestamp) ?? Date.now(),
         title,
         model: (await getEngineSessionRegistryEntry(sessionKey))?.model,
         accountId: (await getEngineSessionRegistryEntry(sessionKey))?.accountId,
