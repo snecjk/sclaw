@@ -9,7 +9,7 @@ import {
   readDingTalkMentionPending,
 } from './dingtalk-mention-pending.js';
 import { buildDingTalkMentionSystemContext } from './shared/dingtalk-mention-context';
-import { fixDwsChatMessageSendToolParams } from './shared/dws-send-text';
+import { fixDwsChatMessageSendToolParamsForOpenClawExec } from './shared/dws-send-text';
 import { DINGTALK_SHARE_TOOL_PROMPT, registerShareToDingTalkTool } from './share-to-dingtalk.js';
 
 const TAG = 'sto-dingtalk-send-guard';
@@ -87,9 +87,16 @@ export default definePluginEntry({
           );
         }
 
-        const fixedParams = fixDwsChatMessageSendToolParams(event.params);
+        const fixedParams = fixDwsChatMessageSendToolParamsForOpenClawExec(event.params);
         if (fixedParams) {
-          api.logger.debug?.(`[${TAG}] normalized dws chat message send --text for tool=${event.toolName}`);
+          const commandKey = ['command', 'cmd', 'script', 'input', 'bash_command'].find(
+            (key) => typeof fixedParams[key] === 'string',
+          );
+          const rewritten = commandKey ? String(fixedParams[commandKey]) : '';
+          const win32Direct = process.platform === 'win32' && rewritten.includes('execFileSync');
+          api.logger.info?.(
+            `[${TAG}] normalized dws chat message send --text tool=${event.toolName}${win32Direct ? ' (win32 node execFileSync)' : ''}`,
+          );
           return { params: fixedParams };
         }
       },
