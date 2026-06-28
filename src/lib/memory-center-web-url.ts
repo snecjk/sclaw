@@ -11,7 +11,7 @@ import { openExternalUrl } from '@/lib/preview-url';
 import type { SsoEnvironment } from '@/stores/auth';
 import { useAuthStore } from '@/stores/auth';
 
-export const MC_WEB_TEST_BASE = 'http://localhost:5174';
+export const MC_WEB_TEST_BASE = 'https://front-test.sto.cn/group/memory-center-web';
 export const MC_WEB_PROD_BASE = 'https://front.sto.cn/group/memory-center-web';
 /** 本地跑 memory-center-web 时可在 .env.development.local 覆盖 */
 export const MC_WEB_LOCAL_DEV_BASE = 'http://localhost:5173';
