@@ -490,15 +490,17 @@ export async function buildCronSessionFallbackMessages(params: {
 
   // For each run, load full transcript from the run session jsonl file
   for (const entry of matchingRuns) {
-    // First add the summary message from the run log
-    const message = buildCronRunMessage(entry, matchingRuns.indexOf(entry));
-    if (message) messages.push(message);
-
-    // Then load full conversation from the run session file
     if (entry.sessionKey) {
       const runMessages = await readRunSessionMessages(entry.sessionKey);
-      messages.push(...runMessages);
+      if (runMessages.length > 0) {
+        // Full transcript available — use it and skip synthetic summary to avoid duplicates
+        messages.push(...runMessages);
+        continue;
+      }
     }
+    // No transcript — fall back to synthetic summary message from the run log
+    const message = buildCronRunMessage(entry, matchingRuns.indexOf(entry));
+    if (message) messages.push(message);
   }
 
   if (matchingRuns.length === 0) {

@@ -19,7 +19,9 @@ vi.mock('electron', () => ({
 }));
 
 vi.mock('../../electron/utils/paths', async () => {
-  const actual = await vi.importActual<typeof import('../../electron/utils/paths')>('../../electron/utils/paths');
+  const actual = await vi.importActual<typeof import('../../electron/utils/paths')>(
+    '../../electron/utils/paths'
+  );
   return {
     ...actual,
     getClawXConfigDir: () => testRoot,
@@ -75,17 +77,24 @@ describe('claude scheduled task session store', () => {
           permissionProfile: 'readonly-safe',
           pluginPaths: [],
         },
-      },
+      }
     );
 
     const sessions = await sessionStore.listClaudeScheduledTaskSummarySessions();
-    expect(sessions).toHaveLength(1);
-    expect(sessions[0]?.key).toBe('claude-task:task-42');
+    expect(sessions).toHaveLength(2);
+    const baseSession = sessions.find((s) => s.key === 'claude-task:task-42');
+    const datedSession = sessions.find((s) => s.key === 'claude-task:task-42:2026-06-15');
+    expect(baseSession).toBeDefined();
+    expect(datedSession).toBeDefined();
 
     const history = await sessionStore.readClaudeScheduledTaskSessionHistory('claude-task:task-42');
-    expect(history).toHaveLength(2);
-    expect(history[0]?.content).toContain('digest ready');
-    expect(history[1]?.content).toContain('sessionKey: claude-task-run:task-42:run-1');
+    expect(history).toHaveLength(3);
+    expect(history[0]?.role).toBe('user');
+    expect(history[0]?.content).toBe('digest');
+    expect(history[1]?.role).toBe('assistant');
+    expect(history[1]?.content).toContain('digest ready');
+    expect(history[2]?.role).toBe('system');
+    expect(history[2]?.content).toContain('sessionKey: claude-task-run:task-42:run-1');
   });
 
   it('deletes summary sessions without touching other task stores', async () => {
@@ -123,14 +132,17 @@ describe('claude scheduled task session store', () => {
             permissionProfile: 'readonly-safe',
             pluginPaths: [],
           },
-        },
+        }
       );
     }
 
     await sessionStore.deleteClaudeScheduledTaskSummarySession('claude-task:task-a');
 
     const sessions = await sessionStore.listClaudeScheduledTaskSummarySessions();
-    expect(sessions).toHaveLength(1);
-    expect(sessions[0]?.key).toBe('claude-task:task-b');
+    expect(sessions).toHaveLength(3);
+    const remainingKeys = sessions.map((s) => s.key);
+    expect(remainingKeys).toContain('claude-task:task-a:2026-06-15');
+    expect(remainingKeys).toContain('claude-task:task-b');
+    expect(remainingKeys).toContain('claude-task:task-b:2026-06-15');
   });
 });
