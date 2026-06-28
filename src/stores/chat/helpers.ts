@@ -12,6 +12,7 @@ import {
   createFileUrlInTextRegex,
   isAttachableRawLocalPath,
   localPathFromFileUrlCapture,
+  shouldSkipRawPathToolText,
 } from '../../../shared/preview-raw-path';
 import type { AttachedFileMeta, ChatSession, ContentBlock, RawMessage, ToolStatus } from './types';
 
@@ -230,6 +231,17 @@ function extractRawFilePaths(
   trace?: PreviewExtractTraceContext,
 ): Array<{ filePath: string; mimeType: string }> {
   const cleanText = stripCodeBlocks(text);
+  if (trace?.scanTarget === 'tool-result' && shouldSkipRawPathToolText(text)) {
+    if (trace) {
+      traceRawFilePathScanStart(trace, { rawText: text, cleanText });
+      traceRawFilePathScanDone(trace, {
+        rawTextLength: text.length,
+        cleanTextLength: cleanText.length,
+        refs: [],
+      });
+    }
+    return [];
+  }
   if (trace) {
     traceRawFilePathScanStart(trace, { rawText: text, cleanText });
   }
@@ -460,7 +472,7 @@ function collectToolCallPaths(msg: RawMessage, paths: Map<string, string>): void
  * Handles:
  *   - Image content blocks (base64 / url)
  *   - [media attached: path (mime) | path] text patterns in tool result output
- *   - Raw file paths in tool result text
+ * Raw file paths are NOT scanned from tool text — preview refs come from assistant body only.
  */
 function enrichWithToolResultFiles(messages: RawMessage[]): RawMessage[] {
   const pending: AttachedFileMeta[] = [];
@@ -497,20 +509,8 @@ function enrichWithToolResultFiles(messages: RawMessage[]): RawMessage[] {
           toolCallId: msg.toolCallId,
         };
         const mediaRefs = extractMediaRefs(text, traceCtx);
-        const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
         for (const ref of mediaRefs) {
           pending.push(makeAttachedFile(ref));
-        }
-        const rawTrace: PreviewExtractTraceContext = {
-          source: 'tool-result:raw-path',
-          messageId: msg.id,
-          toolCallId: msg.toolCallId,
-          scanTarget: 'tool-result',
-        };
-        for (const ref of extractRawFilePaths(text, rawTrace)) {
-          if (!mediaRefPaths.has(ref.filePath)) {
-            pending.push(makeAttachedFile(ref));
-          }
         }
       }
 
@@ -560,12 +560,7 @@ function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
     const mediaRefs = extractMediaRefs(text, historyTrace);
     const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
 
-    // Path 2: Raw file paths.
-    // For assistant messages: scan own text AND the nearest preceding user message text,
-    // but only for non-tool-only assistant messages (i.e. the final answer turn).
-    // Tool-only messages (thinking + tool calls) should not show file previews — those
-    // belong to the final answer message that comes after the tool results.
-    // User messages never get raw-path previews so the image is not shown twice.
+    // Path 2: Raw file paths in assistant message text only (same scope as extractPreviewableRefs).
     let rawRefs: Array<{ filePath: string; mimeType: string }> = [];
     if (msg.role === 'assistant' && !isToolOnlyMessage(msg)) {
       const rawTrace = {
@@ -574,27 +569,6 @@ function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
         scanTarget: 'assistant-self' as const,
       };
       rawRefs = extractRawFilePaths(text, rawTrace).filter(r => !mediaRefPaths.has(r.filePath));
-
-      // Nearest preceding user message text (look back up to 5 messages)
-      const seenPaths = new Set(rawRefs.map(r => r.filePath));
-      for (let i = idx - 1; i >= Math.max(0, idx - 5); i--) {
-        const prev = messages[i];
-        if (!prev) break;
-        if (prev.role === 'user') {
-          const prevText = getMessageText(prev.content);
-          for (const ref of extractRawFilePaths(prevText, {
-            ...rawTrace,
-            messageId: prev.id,
-            scanTarget: 'preceding-user',
-          })) {
-            if (!mediaRefPaths.has(ref.filePath) && !seenPaths.has(ref.filePath)) {
-              seenPaths.add(ref.filePath);
-              rawRefs.push(ref);
-            }
-          }
-          break; // only use the nearest user message
-        }
-      }
     }
 
     const allRefs = [...mediaRefs, ...rawRefs];

@@ -22,7 +22,7 @@ import {
   buildClaudeScheduledTaskSessionHistoryPath,
   parseClaudeScheduledTaskSessionKey, parseClaudeScheduledTaskRunSessionKey,
 } from './chat/cron-session-utils';
-import { mergeSessionLastActivity, sanitizeSessionDisplayField, enrichWithToolResultFiles, enrichWithCachedImages, extractMediaRefs, extractRawFilePaths, makeAttachedFile, getMessageText, isToolResultRole, extractImagesAsAttachedFiles, getToolCallFilePath } from './chat/helpers';
+import { mergeSessionLastActivity, sanitizeSessionDisplayField, enrichWithToolResultFiles, enrichWithCachedImages, extractMediaRefs, makeAttachedFile, getMessageText, isToolResultRole, extractImagesAsAttachedFiles, getToolCallFilePath } from './chat/helpers';
 import {
   DEFAULT_CANONICAL_PREFIX,
   DEFAULT_SESSION_KEY,
@@ -61,9 +61,11 @@ import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSession
 import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, hasUsableSessionTitle, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
+import { traceChatSession } from '../../shared/chat-session-trace';
 import {
   dedupeRedundantUserMessages,
   mergeOptimisticUserIntoHistory,
+  traceLoadHistoryUserReconciliation,
 } from './chat/user-message-merge';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
@@ -703,16 +705,7 @@ function handleBackgroundSessionEvent(
               messageId: finalMsg.id,
               toolCallId: finalMsg.toolCallId,
             });
-            const mediaRefPaths = new Set(mediaRefs.map((ref) => ref.filePath));
             for (const ref of mediaRefs) toolFiles.push(makeAttachedFile(ref));
-            for (const ref of extractRawFilePaths(text, {
-              source: 'tool-result:raw-path',
-              messageId: finalMsg.id,
-              toolCallId: finalMsg.toolCallId,
-              scanTarget: 'tool-result',
-            })) {
-              if (!mediaRefPaths.has(ref.filePath)) toolFiles.push(makeAttachedFile(ref));
-            }
           }
           return patchSessionRuntimeState(s, sessionKey, {
             pendingFinal: true,
@@ -1743,10 +1736,13 @@ export const useChatStore = create<ChatState>()(
       // until the run completes, causing it to flash out of the UI.
       let finalMessages = enrichedMessages;
       const userMsgAt = get().lastUserMessageAt;
+      const historyUserCountBefore = enrichedMessages.filter((m) => m.role === 'user').length;
+      const historyMessageCountBefore = enrichedMessages.length;
       if (userMsgAt) {
         finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
           userMessageAt: userMsgAt,
           sending: get().sending,
+          sessionKey: targetSessionKey,
         });
       }
 
@@ -1763,7 +1759,18 @@ export const useChatStore = create<ChatState>()(
       finalMessages = mergeWorkflowCardBlocksFromCurrent(finalMessages, get().messages);
       finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
       finalMessages = ensureWorkflowCardsInMessages(finalMessages, targetSessionKey, getMessageText);
-      finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null);
+      finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null, {
+        sessionKey: targetSessionKey,
+      });
+      traceLoadHistoryUserReconciliation({
+        sessionKey: targetSessionKey,
+        userMessageAt: userMsgAt,
+        sending: get().sending,
+        beforeCount: historyMessageCountBefore,
+        afterCount: finalMessages.length,
+        userCountBefore: historyUserCountBefore,
+        userCountAfter: finalMessages.filter((m) => m.role === 'user').length,
+      });
       const restoredCardStates = buildWorkflowCardStatesForSession(targetSessionKey);
       const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
         sessionKey: targetSessionKey,
@@ -2188,8 +2195,24 @@ export const useChatStore = create<ChatState>()(
         filePath: a.stagedPath,
       })),
     };
+    traceChatSession({
+      phase: 'merge-optimistic',
+      action: 'optimistic-insert',
+      sessionKey: currentSessionKey,
+      userMessageAt: nowMs,
+      sending: true,
+      optimisticId: userMsg.id,
+      reason: 'sendMessage',
+      detail: {
+        displayLen: displayText.length,
+        gatewayLen: messageWithContext.length,
+        idempotencyKey: userMsg.id,
+      },
+    });
     set((s) => ({
-      messages: dedupeRedundantUserMessages([...s.messages, userMsg], nowMs),
+      messages: dedupeRedundantUserMessages([...s.messages, userMsg], nowMs, {
+        sessionKey: currentSessionKey,
+      }),
       sending: true,
       error: null,
       streamingText: '',
@@ -2588,16 +2611,7 @@ export const useChatStore = create<ChatState>()(
                 messageId: finalMsg.id,
                 toolCallId: finalMsg.toolCallId,
               });
-              const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
               for (const ref of mediaRefs) toolFiles.push(makeAttachedFile(ref));
-              for (const ref of extractRawFilePaths(text, {
-                source: 'tool-result:raw-path',
-                messageId: finalMsg.id,
-                toolCallId: finalMsg.toolCallId,
-                scanTarget: 'tool-result',
-              })) {
-                if (!mediaRefPaths.has(ref.filePath)) toolFiles.push(makeAttachedFile(ref));
-              }
             }
             set((s) => {
               const currentStream = s.streamingMessage as RawMessage | null;

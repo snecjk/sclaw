@@ -27,14 +27,41 @@ export function localPathFromFileUrlCapture(captured: string): string {
 }
 
 /** True when basename ends with a known attachable extension (filename may contain spaces). */
+export function isPlausibleLocalFilePath(filePath: string): boolean {
+  const trimmed = filePath.trim();
+  if (!trimmed) return false;
+
+  // Reject extension-list fragments like "/ .docx / .xlsx / .pdf / .csv" from skill docs.
+  if (/^\/\s*(?:\.\w+\s*(?:\/\s*)?)+\.?\w*\s*$/i.test(trimmed)) return false;
+
+  const segments = trimmed.split(/[\\/]/).filter((s) => s.trim().length > 0);
+  if (segments.length === 0) return false;
+  if (segments.every((s) => /^\s*\.\w+\s*$/i.test(s))) return false;
+
+  const base = segments[segments.length - 1]!.trim();
+  if (/^\.\w+$/i.test(base)) return false;
+
+  const stem = base.replace(/\.[^.\\/]+$/, '').trim();
+  if (!stem || !/[\w\u4e00-\u9fff-]/.test(stem)) return false;
+
+  return true;
+}
+
 export function isAttachableRawLocalPath(filePath: string): boolean {
   const trimmed = filePath.trim();
   if (!trimmed || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return false;
   }
+  if (!isPlausibleLocalFilePath(trimmed)) return false;
   const base = trimmed.split(/[\\/]/).pop() || '';
   if (!base || base === '.' || base === '..') return false;
   return RAW_ATTACHABLE_BASENAME_RE.test(base);
+}
+
+/** Skip raw-path scan on tool output that is skill/doc front matter, not user artifacts. */
+export function shouldSkipRawPathToolText(text: string): boolean {
+  const trimmed = text.trimStart();
+  return trimmed.startsWith('--- name:') && trimmed.includes('\ndescription:');
 }
 
 /** Absolute path regexes — last path segment may contain spaces before the extension. */
