@@ -36,5 +36,20 @@
       "threadLine1": "系统：已根据当前周会材料生成 HTML 版本，版式为 A4 横向，页边距已按打印预设。",
       "threadLine2": "用户：我想查看 Html 格式"
     }
+  },
+  "myTask": {
+    "createModal": {
+      "instructionsRequired": "请描述让 S Claw 帮你做什么",
+      "workflowAutoHint": "已关联工作流，描述内容自动生成",
+      "instructionsHint": "计划时间请在上方的「计划时间」中设置；可点击 AI美化 由模型优化执行描述。",
+      "beautifyAria": "AI 美化任务描述",
+      "beautifyButton": "AI美化",
+      "beautifying": "美化中…",
+      "beautifyNoChange": "描述已较规范，无需调整",
+      "beautifyFallback": "模型暂时不可用，已使用基础规则优化",
+      "beautifySuccess": "AI 已美化任务描述",
+      "beautifySuccessWithModel": "AI 已美化（{{model}}）",
+      "beautifyFailed": "AI 美化失败，请稍后重试"
+    }
   }
 }

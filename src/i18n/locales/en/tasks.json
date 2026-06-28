@@ -36,5 +36,20 @@
       "threadLine1": "System: An HTML version was generated from the weekly meeting materials with A4 landscape print margins.",
       "threadLine2": "User: I want to view the HTML format"
     }
+  },
+  "myTask": {
+    "createModal": {
+      "instructionsRequired": "Please describe what S Claw should do",
+      "workflowAutoHint": "Linked workflow — description auto-generated",
+      "instructionsHint": "Set the schedule above; click AI Beautify to refine the task description with the model.",
+      "beautifyAria": "AI beautify task description",
+      "beautifyButton": "AI Beautify",
+      "beautifying": "Beautifying…",
+      "beautifyNoChange": "Description is already clear; no changes needed",
+      "beautifyFallback": "Model unavailable; applied basic rule-based polish",
+      "beautifySuccess": "Task description beautified",
+      "beautifySuccessWithModel": "Beautified with {{model}}",
+      "beautifyFailed": "AI beautify failed; please try again"
+    }
   }
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Loader2, ChevronDown, Check, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
@@ -127,6 +128,7 @@ export function TaskCreateModal({
 }
 
 function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreateModalInnerProps) {
+  const { t } = useTranslation('tasks');
   const workflowOptions = useMyTaskStore((s) => s.workflowOptions);
 
   const init = computeInitialValues(job, initialValues);
@@ -173,7 +175,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   const handleBeautify = async () => {
     const trimmed = instructions.trim();
     if (!trimmed) {
-      setErrors((prev) => ({ ...prev, instructions: '请先填写任务描述' }));
+      setErrors((prev) => ({ ...prev, instructions: t('myTask.createModal.instructionsRequired') }));
       return;
     }
 
@@ -203,18 +205,22 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
       }
 
       if (!result.changed) {
-        toast.info('描述已较规范，无需调整');
+        toast.info(t('myTask.createModal.beautifyNoChange'));
         return;
       }
 
       if (result.source === 'rules-fallback') {
-        toast.warning('模型暂时不可用，已使用基础规则优化');
+        toast.warning(t('myTask.createModal.beautifyFallback'));
         return;
       }
 
-      toast.success(result.model ? `AI 已美化（${result.model}）` : 'AI 已美化任务描述');
+      toast.success(
+        result.model
+          ? t('myTask.createModal.beautifySuccessWithModel', { model: result.model })
+          : t('myTask.createModal.beautifySuccess'),
+      );
     } catch (err) {
-      toast.error(String(err) || 'AI 美化失败，请稍后重试');
+      toast.error(String(err) || t('myTask.createModal.beautifyFailed'));
     } finally {
       setBeautifying(false);
     }
@@ -425,22 +431,24 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                   'hover:bg-[#FFEDD5] hover:border-[#FFC17A]',
                   'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#FFF5E6]',
                 )}
-                aria-label="AI 美化任务描述"
+                aria-label={t('myTask.createModal.beautifyAria')}
               >
                 {beautifying ? (
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
                 ) : (
                   <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 )}
-                {beautifying ? '美化中…' : 'AI美化'}
+                {beautifying
+                  ? t('myTask.createModal.beautifying')
+                  : t('myTask.createModal.beautifyButton')}
               </button>
             </div>
             {errors.instructions && <p className="text-xs text-destructive">{errors.instructions}</p>}
             {workflowDisabled ? (
-              <p className="text-xs text-muted-foreground">已关联工作流，描述内容自动生成</p>
+              <p className="text-xs text-muted-foreground">{t('myTask.createModal.workflowAutoHint')}</p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                计划时间请在上方的「计划时间」中设置；可点击 AI美化 由模型优化执行描述。
+                {t('myTask.createModal.instructionsHint')}
               </p>
             )}
           </div>
