@@ -226,7 +226,6 @@ export interface WorkflowOfficialListCardProps {
   // TODO: 预览/详情弹窗暂不启用
   // onPreview: () => void;
   onInstall: () => void;
-  onCreateFromTemplate: () => void;
 }
 
 /** 「官方推荐」卡片：标题+排期+描述+分类标签+预览/安装（流程节点待接口就绪后接入） */
@@ -236,7 +235,6 @@ export function WorkflowOfficialListCard({
   // TODO: 预览/详情弹窗暂不启用
   // onPreview,
   onInstall,
-  onCreateFromTemplate,
 }: WorkflowOfficialListCardProps) {
   const { t } = useTranslation('workflow');
 
@@ -263,16 +261,6 @@ export function WorkflowOfficialListCard({
         <span className="mr-auto rounded-lg bg-muted px-2 py-0.5 text-xs text-foreground/80">
           {card.category}
         </span>
-        <button
-          type="button"
-          className={workflowListCardSecondaryActionClass}
-          onClick={(e) => {
-            e.stopPropagation();
-            onCreateFromTemplate();
-          }}
-        >
-          {t('card.createFromTemplate')}
-        </button>
         {/* <button
           type="button"
           className={workflowListCardSecondaryActionClass}
