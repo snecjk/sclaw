@@ -16,6 +16,10 @@ import {
   createClaudeScheduledTaskMcpServer,
 } from '../../sto-plugin/claude/claude-scheduled-task-tool/tools';
 import {
+  isScheduledTaskExecutionSessionKey,
+  SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT,
+} from '../../shared/scheduled-task-instruction';
+import {
   buildStoAgentTelemetryClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-agent-telemetry/sdk';
 import { getAuthState, getStoToken } from '../utils/auth-store';
@@ -102,8 +106,16 @@ const workflowToolExtension: ClaudeRuntimeExtension = {
 const scheduledTaskToolExtension: ClaudeRuntimeExtension = {
   id: 'claude-scheduled-task-tool',
   async build({ sessionKey }) {
+    const isExecutionContext = isScheduledTaskExecutionSessionKey(sessionKey);
+    if (isExecutionContext) {
+      return {
+        hooks: buildScheduledTaskHooks(sessionKey),
+        systemPromptAppend: SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT,
+      };
+    }
+
     return {
-      hooks: buildScheduledTaskHooks(),
+      hooks: buildScheduledTaskHooks(sessionKey),
       systemPromptAppend: CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT,
       mcpServers: {
         'claude-scheduled-task-tool': createClaudeScheduledTaskMcpServer({

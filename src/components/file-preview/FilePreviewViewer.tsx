@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { hostApiFetch, getHostApiBase } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { isExtensionlessWebUrl, isHttpUrl, isRemoteFileHtmlUrl, normalizeLocalFilePath } from '@/lib/preview-url';
+import { resolvePreviewPathOnHost } from '@/lib/preview-href';
 // @ts-ignore — highlight.js v10 ships without bundled .d.ts
 import hljs from 'highlight.js';
 import 'highlight.js/styles/atom-one-dark.css';
@@ -97,7 +98,49 @@ export function FilePreviewViewer({
   mimeType,
   className,
 }: FilePreviewViewerProps) {
-  const filePath = useMemo(() => normalizeLocalFilePath(rawFilePath), [rawFilePath]);
+  const [resolvedPath, setResolvedPath] = useState(() => normalizeLocalFilePath(rawFilePath));
+  const filePath = useMemo(() => resolvedPath, [resolvedPath]);
+  const resolveAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    const next = normalizeLocalFilePath(rawFilePath);
+    setResolvedPath(next);
+    resolveAttemptedRef.current = false;
+  }, [rawFilePath]);
+
+  const retryResolvePath = useCallback(async (hint: string): Promise<string | null> => {
+    if (isHttpUrl(hint) || resolveAttemptedRef.current) return null;
+    resolveAttemptedRef.current = true;
+    try {
+      const resolved = await resolvePreviewPathOnHost(hint);
+      if (resolved.exists && resolved.path !== hint) {
+        setResolvedPath(normalizeLocalFilePath(resolved.path));
+        return resolved.path;
+      }
+      if (resolved.exists) return resolved.path;
+    } catch {
+      // ignore — fall through to original error UI
+    }
+    return null;
+  }, []);
+
+  useEffect(() => {
+    if (isHttpUrl(resolvedPath)) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const resolved = await resolvePreviewPathOnHost(resolvedPath);
+        if (cancelled || !resolved.exists || resolved.path === resolvedPath) return;
+        resolveAttemptedRef.current = true;
+        setResolvedPath(normalizeLocalFilePath(resolved.path));
+      } catch {
+        // preview still attempts read with original hint
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [rawFilePath]);
   const [mdContent, setMdContent] = useState<string>('');
   const [mdLoading, setMdLoading] = useState(false);
   const [mdError, setMdError] = useState<string>('');
@@ -156,7 +199,12 @@ export function FilePreviewViewer({
         setMdContent(typeof res?.content === 'string' ? res.content : '');
       } catch (e) {
         if (!cancelled) {
-          setMdError(e instanceof Error ? e.message : '读取失败');
+          const msg = e instanceof Error ? e.message : '读取失败';
+          if (!isHttpUrl(filePath) && /ENOENT|不存在|not found/i.test(msg)) {
+            const resolved = await retryResolvePath(filePath);
+            if (resolved && !cancelled) return;
+          }
+          setMdError(msg);
         }
       } finally {
         if (!cancelled) setMdLoading(false);
@@ -166,7 +214,7 @@ export function FilePreviewViewer({
     return () => {
       cancelled = true;
     };
-  }, [filePath, mimeType]);
+  }, [filePath, mimeType, retryResolvePath]);
 
   // Load local plain text / code / json / csv / tsv files
   useEffect(() => {
@@ -201,7 +249,12 @@ export function FilePreviewViewer({
         setTextContent(typeof res?.content === 'string' ? res.content : '');
       } catch (e) {
         if (!cancelled) {
-          setTextError(e instanceof Error ? e.message : '读取失败');
+          const msg = e instanceof Error ? e.message : '读取失败';
+          if (!isHttpUrl(filePath) && /ENOENT|不存在|not found/i.test(msg)) {
+            const resolved = await retryResolvePath(filePath);
+            if (resolved && !cancelled) return;
+          }
+          setTextError(msg);
         }
       } finally {
         if (!cancelled) setTextLoading(false);
@@ -211,9 +264,9 @@ export function FilePreviewViewer({
     return () => {
       cancelled = true;
     };
-  }, [filePath, mimeType]);
+  }, [filePath, mimeType, retryResolvePath]);
 
-  // Fetch remote .html/.htm on OSS/CDN (iframe src may trigger download when Content-Disposition: attachment)
+  // Fetch remote .html/.htm on OSS/CDN
   useEffect(() => {
     const shouldFetch = isHttpUrl(filePath)
       && isHtmlFileType(mimeType, fileName, filePath)
@@ -345,7 +398,12 @@ export function FilePreviewViewer({
         }
       } catch (e) {
         if (!cancelled) {
-          setOfficeError(e instanceof Error ? e.message : '预览失败');
+          const msg = e instanceof Error ? e.message : '预览失败';
+          if (!isHttpUrl(filePath) && /ENOENT|不存在|not found/i.test(msg)) {
+            const resolved = await retryResolvePath(filePath);
+            if (resolved && !cancelled) return;
+          }
+          setOfficeError(msg);
         }
       } finally {
         if (!cancelled) setOfficeLoading(false);
@@ -355,7 +413,7 @@ export function FilePreviewViewer({
     return () => {
       cancelled = true;
     };
-  }, [filePath, mimeType]);
+  }, [filePath, mimeType, retryResolvePath]);
 
   const tableData = useMemo(() => {
     if (!textContent || (mimeType !== 'text/csv' && mimeType !== 'text/tab-separated-values')) return null;

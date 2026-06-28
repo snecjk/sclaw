@@ -7,7 +7,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, extname, basename } from 'node:path';
 import crypto from 'node:crypto';
-import { GatewayManager } from '../gateway/manager';
+import { enrichGatewayPayload } from '../gateway/message-enrich';
 import { getAdapterForSession, listEngineSessions } from '../engines/manager';
 import type { AgentEngineType } from '../engines/types';
 import { ClawHubService, ClawHubSearchParams, ClawHubInstallParams, ClawHubUninstallParams } from '../gateway/clawhub';
@@ -1636,11 +1636,11 @@ function registerGatewayHandlers(
   });
 
   gatewayManager.on('message', (message) => {
-    broadcast('gateway:message', message);
+    broadcast('gateway:message', enrichGatewayPayload(message));
   });
 
   gatewayManager.on('notification', (notification) => {
-    broadcast('gateway:notification', notification);
+    broadcast('gateway:notification', enrichGatewayPayload(notification));
   });
 
   gatewayManager.on('channel:status', (data) => {
@@ -1648,7 +1648,7 @@ function registerGatewayHandlers(
   });
 
   gatewayManager.on('chat:message', (data) => {
-    broadcast('gateway:chat-message', data);
+    broadcast('gateway:chat-message', enrichGatewayPayload(data));
   });
 
   gatewayManager.on('exit', (code) => {

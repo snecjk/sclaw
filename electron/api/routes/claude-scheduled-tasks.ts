@@ -35,6 +35,8 @@ export async function handleClaudeScheduledTaskRoutes(
         workspacePath: string;
         providerAccountId?: string;
         model?: string;
+        workflowId?: string;
+        workflowName?: string;
         permissionProfile?: 'readonly-safe' | 'workspace-write' | 'dangerous-bypass';
         timeoutSec?: number;
         workflowCode?: string;

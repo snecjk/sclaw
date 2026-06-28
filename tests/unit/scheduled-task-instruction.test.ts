@@ -1,0 +1,66 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildWorkflowExecutionInstruction,
+  detectMetaScheduledTaskIntent,
+  evaluateScheduledTaskCreationBlock,
+  isScheduledTaskExecutionSessionKey,
+  normalizeScheduledTaskInstruction,
+} from '../../shared/scheduled-task-instruction';
+
+describe('scheduled-task-instruction', () => {
+  it('detects cron and claude task execution session keys', () => {
+    expect(isScheduledTaskExecutionSessionKey('agent:main:cron:job-1')).toBe(true);
+    expect(isScheduledTaskExecutionSessionKey('agent:main:cron:job-1:2026-06-25')).toBe(true);
+    expect(isScheduledTaskExecutionSessionKey('agent:main:cron:job-1:run:abc')).toBe(true);
+    expect(isScheduledTaskExecutionSessionKey('claude-task-run:task-1:run-1')).toBe(true);
+    expect(isScheduledTaskExecutionSessionKey('agent:main:main')).toBe(false);
+  });
+
+  it('blocks scheduled task creation tools in execution context', () => {
+    expect(evaluateScheduledTaskCreationBlock({
+      sessionKey: 'agent:main:cron:job-1',
+      toolName: 'cron',
+    }).blocked).toBe(true);
+    expect(evaluateScheduledTaskCreationBlock({
+      sessionKey: 'claude-task-run:task-1:run-1',
+      toolName: 'create_claude_scheduled_task',
+    }).blocked).toBe(true);
+    expect(evaluateScheduledTaskCreationBlock({
+      sessionKey: 'agent:main:main',
+      toolName: 'cron',
+    }).blocked).toBe(false);
+  });
+
+  it('normalizes meta scheduled-task wording into execution intent', () => {
+    const result = normalizeScheduledTaskInstruction({
+      instruction: '帮我每天 10 点创建一个执行客户成本分析工作流的任务',
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.instruction).toContain('执行');
+    expect(result.instruction).toContain('客户成本分析工作流');
+    expect(result.instruction).not.toMatch(/创建/);
+    expect(result.instruction).not.toMatch(/10\s*点/);
+  });
+
+  it('uses workflow template when workflow id is provided', () => {
+    const workflowId = 'wf_123';
+    expect(buildWorkflowExecutionInstruction(workflowId, '客户成本分析')).toBe(
+      '帮我执行 id 为：wf_123 的工作流 【客户成本分析】',
+    );
+
+    const result = normalizeScheduledTaskInstruction({
+      instruction: '每天 9 点跑一下',
+      workflowId,
+      workflowName: '客户成本分析',
+    });
+
+    expect(result.instruction).toBe('帮我执行 id 为：wf_123 的工作流 【客户成本分析】');
+    expect(result.changed).toBe(true);
+  });
+
+  it('detects meta task intent', () => {
+    expect(detectMetaScheduledTaskIntent('帮我每天 10 点创建一个定时任务')).toBe(true);
+    expect(detectMetaScheduledTaskIntent('执行客户成本分析工作流')).toBe(false);
+  });
+});

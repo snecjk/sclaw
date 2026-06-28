@@ -6,6 +6,7 @@ import { homedir, tmpdir } from 'node:os';
 import { copyFile, mkdtemp, readFile, unlink } from 'node:fs/promises';
 import { getOpenClawConfigDir } from '../../utils/paths';
 import { resolveWorkspaceFilePath } from '../../utils/artifact-path';
+import { existsSync } from 'node:fs';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -180,6 +181,20 @@ export async function handleFileRoutes(
         }
       }
       sendJson(res, 200, results);
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  // POST /api/files/resolve — resolve hint path to existing file (preview entry)
+  if (url.pathname === '/api/files/resolve' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ path: string }>(req);
+      const raw = body.path?.trim() || '';
+      const resolved = resolveWorkspaceFilePath(raw);
+      const exists = existsSync(resolved);
+      sendJson(res, 200, { path: resolved, exists, requested: raw });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }
