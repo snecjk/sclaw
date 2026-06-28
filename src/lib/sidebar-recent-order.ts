@@ -36,7 +36,7 @@ export function sortSessionsByRecentActivity(
   });
 }
 
-/** Snapshot sidebar order on first load (time descending at that moment). */
+/** Sidebar recency order: last activity descending (mainstream chat UX). */
 export function buildInitialSidebarRecentOrder(
   sessions: ChatSession[],
   sessionLastActivity: Record<string, number>,
@@ -62,25 +62,3 @@ export function removeSidebarRecentOrderKey(existing: string[], sessionKey: stri
   return existing.filter((key) => key !== sessionKey);
 }
 
-export function sortSessionsByFrozenRecentOrder<T extends { key: string }>(
-  sessions: T[],
-  order: string[],
-  sessionLastActivity: Record<string, number>,
-): T[] {
-  if (order.length === 0) {
-    return sortSessionsByRecentActivity(
-      sessions as ChatSession[],
-      sessionLastActivity,
-    ) as T[];
-  }
-  const orderIndex = new Map(order.map((key, index) => [key, index]));
-  return [...sessions].sort((left, right) => {
-    const leftIndex = orderIndex.get(left.key);
-    const rightIndex = orderIndex.get(right.key);
-    if (leftIndex !== undefined && rightIndex !== undefined) return leftIndex - rightIndex;
-    if (leftIndex !== undefined) return -1;
-    if (rightIndex !== undefined) return 1;
-    return getSessionActivityForSort(right as ChatSession, sessionLastActivity)
-      - getSessionActivityForSort(left as ChatSession, sessionLastActivity);
-  });
-}

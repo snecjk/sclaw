@@ -44,8 +44,6 @@ import { appendPendingLocalVirtualTaskSessions } from '@/stores/chat/session-lis
 import {
   buildInitialSidebarRecentOrder,
   isSidebarRecentChatSessionKey,
-  mergeSidebarRecentOrder,
-  prependSidebarRecentOrder,
   removeSidebarRecentOrderKey,
 } from '@/lib/sidebar-recent-order';
 import {
@@ -1547,12 +1545,9 @@ export const useChatStore = create<ChatState>()(
             }
             const recentSessions = labeledSessions.filter((session) => isSidebarRecentChatSessionKey(session.key));
             const recentKeys = recentSessions.map((session) => session.key);
-            let sidebarRecentOrder = state.sidebarRecentOrder;
-            if (sidebarRecentOrder.length === 0 && recentKeys.length > 0) {
-              sidebarRecentOrder = buildInitialSidebarRecentOrder(recentSessions, sessionLastActivity);
-            } else if (sidebarRecentOrder.length > 0) {
-              sidebarRecentOrder = mergeSidebarRecentOrder(sidebarRecentOrder, recentKeys);
-            }
+            const sidebarRecentOrder = recentKeys.length > 0
+              ? buildInitialSidebarRecentOrder(recentSessions, sessionLastActivity)
+              : [];
             return {
               sessions: labeledSessions,
               currentSessionKey: nextSessionKey,
@@ -1707,6 +1702,7 @@ export const useChatStore = create<ChatState>()(
       engineType: getAgentEngineType(newAgentId),
       ...(currentSessionModel ? { model: currentSessionModel } : {}),
     };
+    const createdAtMs = Date.now();
     set((s) => {
       const nextRuntimeBySessionKey = {
         ...s.runtimeBySessionKey,
@@ -1716,25 +1712,27 @@ export const useChatStore = create<ChatState>()(
         delete nextRuntimeBySessionKey[currentSessionKey];
       }
       nextRuntimeBySessionKey[newKey] = createIdleSessionRuntimeState();
-      let sidebarRecentOrder = prependSidebarRecentOrder(s.sidebarRecentOrder, newKey);
-      if (leavingEmpty) {
-        sidebarRecentOrder = removeSidebarRecentOrderKey(sidebarRecentOrder, currentSessionKey);
-      }
+      const nextSessions = [
+        ...(leavingEmpty ? s.sessions.filter((sess) => sess.key !== currentSessionKey) : s.sessions),
+        newSessionEntry,
+      ];
+      const nextSessionLastActivity = {
+        ...(leavingEmpty
+          ? Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey))
+          : s.sessionLastActivity),
+        [newKey]: createdAtMs,
+      };
+      const recentSessions = nextSessions.filter((session) => isSidebarRecentChatSessionKey(session.key));
       return {
         currentSessionKey: newKey,
         currentAgentId: newAgentId,
-        sessions: [
-          ...(leavingEmpty ? s.sessions.filter((sess) => sess.key !== currentSessionKey) : s.sessions),
-          newSessionEntry,
-        ],
+        sessions: nextSessions,
         runtimeBySessionKey: nextRuntimeBySessionKey,
         sessionLabels: leavingEmpty
           ? Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey))
           : s.sessionLabels,
-        sessionLastActivity: leavingEmpty
-          ? Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey))
-          : s.sessionLastActivity,
-        sidebarRecentOrder,
+        sessionLastActivity: nextSessionLastActivity,
+        sidebarRecentOrder: buildInitialSidebarRecentOrder(recentSessions, nextSessionLastActivity),
         messages: [],
         sending: false,
         streamingText: '',

@@ -54,7 +54,7 @@ import {
 } from '@/components/layout/sidebar-task-subitem-delete-trailing';
 import { useTranslation } from 'react-i18next';
 import { resolveSessionLabel } from '@/lib/session-label';
-import { sortSessionsByFrozenRecentOrder } from '@/lib/sidebar-recent-order';
+import { sortSessionsByRecentActivity } from '@/lib/sidebar-recent-order';
 import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
@@ -682,7 +682,6 @@ export function Sidebar() {
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
-  const sidebarRecentOrder = useChatStore((s) => s.sidebarRecentOrder);
   const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
   const sending = useChatStore((s) => s.sending);
   const activatingScheduledSessionAt = useChatStore((s) => s.activatingScheduledSessionAt);
@@ -956,8 +955,8 @@ export function Sidebar() {
   };
 
   const recentSessionsSorted = useMemo(
-    () => sortSessionsByFrozenRecentOrder(normalSessions, sidebarRecentOrder, sessionLastActivity),
-    [normalSessions, sidebarRecentOrder, sessionLastActivity],
+    () => sortSessionsByRecentActivity(normalSessions, sessionLastActivity),
+    [normalSessions, sessionLastActivity],
   );
 
   // Legacy 日期分桶：折叠轨与潜在回滚仍可能读取 bucket 数据
