@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { WorkflowDashboard } from '@/pages/Workflow/components/workflow-dashboard';
 import { WorkflowPageShading } from '@/pages/Workflow/components/workflow-page-shading';
 import { CreateWorkflowWizard } from '@/pages/Workflow/components/create-workflow-wizard';
 import { WorkflowMcIframeEditor } from '@/pages/Workflow/components/workflow-mc-iframe-editor';
-import { createWorkflowStudio } from '@/lib/workflow-studio-api';
+import { cacheAiWorkflowPrompt, createWorkflowStudio } from '@/lib/workflow-studio-api';
 import { workflowPageContentClass, workflowPageRootClass } from '@/lib/surfaces';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
 
@@ -29,8 +29,7 @@ function WorkflowListRoute() {
         <WorkflowDashboard
           onManualCreate={() => navigate('/workflow/new')}
           onGenerate={(prompt) => {
-            const params = new URLSearchParams({ prompt });
-            navigate(`/workflow/generate?${params.toString()}`);
+            navigate('/workflow/generate', { state: { prompt } });
           }}
           onEditCard={(workflowId) => navigate(`/workflow/${encodeURIComponent(workflowId)}`)}
         />
@@ -49,9 +48,13 @@ function WorkflowNewRoute() {
 function WorkflowGenerateRoute() {
   useEditorActive(true);
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
-  const prompt = searchParams.get('prompt') ?? '';
+  // prompt 走 React Router state（不进地址栏）；重载/外链回退到 ?prompt=（legacy）
+  const prompt =
+    (location.state as { prompt?: string } | null)?.prompt ?? searchParams.get('prompt') ?? '';
   const workflowId = searchParams.get('id') ?? '';
+  const promptCacheId = searchParams.get('promptCacheId') ?? '';
   const [createError, setCreateError] = useState<string | null>(null);
   /** 防止 StrictMode 双调用导致 createWorkflowStudio 重复建流程 */
   const createStartedRef = useRef(false);
@@ -66,16 +69,25 @@ function WorkflowGenerateRoute() {
       nodes: [],
       edges: [],
     })
-      .then((created) => {
-        const params = new URLSearchParams({ prompt, id: created.id });
-        navigate(`/workflow/generate?${params.toString()}`, { replace: true });
+      .then(async (created) => {
+        try {
+          // 先把大 prompt 缓存到 MC 后端换短 promptCacheId；地址栏只留 id+promptCacheId，prompt 走 state
+          const cachedId = await cacheAiWorkflowPrompt(prompt, created.id);
+          const params = new URLSearchParams({ id: created.id, promptCacheId: cachedId });
+          navigate(`/workflow/generate?${params.toString()}`, { replace: true, state: { prompt } });
+        } catch {
+          // 缓存失败回退：prompt 走 state 传给 iframe 编辑器，由 URL 构造器以 ?prompt= 送给 MC（legacy）
+          const params = new URLSearchParams({ id: created.id });
+          navigate(`/workflow/generate?${params.toString()}`, { replace: true, state: { prompt } });
+        }
       })
       .catch((err) => {
         setCreateError(err instanceof Error ? err.message : '创建流程失败');
       });
   }, [prompt, workflowId, navigate]);
 
-  if (!prompt.trim()) {
+  // 既无 prompt 又无已建流程 id 才视为非法进入（重载时 prompt state 丢失但 id 在 URL，仍可重入编辑器）
+  if (!prompt.trim() && !workflowId) {
     return <Navigate to="/workflow" replace />;
   }
 
@@ -103,7 +115,8 @@ function WorkflowGenerateRoute() {
     <div className="flex h-full min-h-0 flex-1 flex-col">
       <WorkflowMcIframeEditor
         workflowId={workflowId}
-        prompt={prompt}
+        prompt={prompt || undefined}
+        promptCacheId={promptCacheId || undefined}
         onBack={() => navigate('/workflow')}
       />
     </div>
