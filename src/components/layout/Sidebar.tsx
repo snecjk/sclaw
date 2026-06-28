@@ -66,6 +66,7 @@ import {
   parseCronSessionKey,
   parseScheduledTaskAgentSessionKey,
   isAnyCronSessionKey,
+  isVirtualTaskSessionKey,
 } from '@/stores/chat/cron-session-utils';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { buildScheduledTaskGroupDisplayName, deriveGroupFirstTriggeredFromSessions, getSessionActivityMs, sortScheduledTaskGroupsByFirstTriggerDesc } from '@/lib/scheduled-task-group-name';
@@ -185,6 +186,10 @@ function stoTaskSidebarGroupKey(taskId: StoTaskId): string {
 
 function scheduledTaskSidebarGroupKey(groupKey: string): string {
   return `scheduled:${groupKey}`;
+}
+
+function resolveSidebarExpandKeyForTaskGroup(groupKey: string): string {
+  return groupKey.startsWith('sto:') ? groupKey : scheduledTaskSidebarGroupKey(groupKey);
 }
 
 type ScheduledTaskSidebarGroup = {
@@ -511,6 +516,7 @@ function SidebarScheduledTaskGroup({
               <div key={s.key} className="group relative flex w-full min-w-0 items-center">
                 <button
                   type="button"
+                  data-sidebar-task-session={s.key}
                   onClick={() => {
                     navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
                   }}
@@ -801,6 +807,12 @@ export function Sidebar() {
         const state = useChatStore.getState();
         // Preserve locally-created sessions (workflow run, skill use, etc.) awaiting first send.
         if (isTemporaryAgentSessionKey(state.currentSessionKey)) {
+          return;
+        }
+        // Task/cron execution sessions intentionally open on home chat — do not reset to :main.
+        if (isVirtualTaskSessionKey(state.currentSessionKey)) {
+          const hasExistingMessages = state.messages.length > 0;
+          await loadHistory(hasExistingMessages);
           return;
         }
         if (state.currentSessionKey !== DEFAULT_SESSION_KEY || state.messages.length > 0 || state.loading) {
@@ -1166,6 +1178,102 @@ export function Sidebar() {
   const handleTaskGroupExpand = useCallback((groupKey: string) => {
     setExpandedTaskGroupKey(groupKey);
   }, []);
+
+  const sidebarTaskFocusTokenRef = useRef<string | null>(null);
+
+  const focusTaskExecutionInSidebar = useCallback((sessionKey: string) => {
+    const groupKey = resolveTaskGroupKeyFromSessionKey(sessionKey);
+    if (!groupKey) return;
+    const expandKey = resolveSidebarExpandKeyForTaskGroup(groupKey);
+
+    setTaskListSectionOpen(true);
+
+    const groupVisible = taskListRenderPlan.items.some((item) => {
+      if (item.kind === 'sto') return stoTaskSidebarGroupKey(item.navItem.id) === expandKey;
+      return scheduledTaskSidebarGroupKey(item.group.key) === expandKey;
+    });
+    if (!groupVisible) {
+      setTaskListShowAll(true);
+    }
+
+    setExpandedTaskGroupKey(expandKey);
+  }, [taskListRenderPlan.items]);
+
+  useEffect(() => {
+    if (sidebarCollapsed) return;
+
+    let focusSessionKey: string | null = null;
+
+    const activatingEntries = Object.entries(activatingScheduledSessionAt);
+    if (activatingEntries.length > 0) {
+      activatingEntries.sort((a, b) => b[1] - a[1]);
+      focusSessionKey = activatingEntries[0][0];
+    } else if (resolveTaskGroupKeyFromSessionKey(currentSessionKey)) {
+      focusSessionKey = currentSessionKey;
+    }
+
+    if (!focusSessionKey) {
+      sidebarTaskFocusTokenRef.current = null;
+      return;
+    }
+
+    const focusToken = `${focusSessionKey}:${activatingScheduledSessionAt[focusSessionKey] ?? sessionLastActivity[focusSessionKey] ?? 0}`;
+    if (sidebarTaskFocusTokenRef.current === focusToken) return;
+    sidebarTaskFocusTokenRef.current = focusToken;
+
+    focusTaskExecutionInSidebar(focusSessionKey);
+  }, [
+    sidebarCollapsed,
+    currentSessionKey,
+    activatingScheduledSessionAt,
+    sessionLastActivity,
+    focusTaskExecutionInSidebar,
+  ]);
+
+  useLayoutEffect(() => {
+    if (sidebarCollapsed || !taskListSectionOpen) return;
+
+    let focusSessionKey: string | null = null;
+    const activatingEntries = Object.entries(activatingScheduledSessionAt);
+    if (activatingEntries.length > 0) {
+      activatingEntries.sort((a, b) => b[1] - a[1]);
+      focusSessionKey = activatingEntries[0][0];
+    } else if (resolveTaskGroupKeyFromSessionKey(currentSessionKey)) {
+      focusSessionKey = currentSessionKey;
+    }
+    if (!focusSessionKey) return;
+
+    const groupKey = resolveTaskGroupKeyFromSessionKey(focusSessionKey);
+    if (!groupKey) return;
+
+    const expandKey = resolveSidebarExpandKeyForTaskGroup(groupKey);
+    if (expandedTaskGroupKey !== expandKey) return;
+
+    let cancelled = false;
+    const rafId = requestAnimationFrame(() => {
+      if (cancelled) return;
+      const container = scrollContainerRef.current;
+      const el = container?.querySelector(
+        `[data-sidebar-task-session="${CSS.escape(focusSessionKey)}"]`,
+      );
+      if (el instanceof HTMLElement) {
+        el.scrollIntoView({ block: 'nearest' });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+    };
+  }, [
+    sidebarCollapsed,
+    taskListSectionOpen,
+    currentSessionKey,
+    activatingScheduledSessionAt,
+    expandedTaskGroupKey,
+    scrollContainerRef,
+    taskListRenderPlan.items,
+  ]);
 
   const toggleBucket = (key: SessionBucketKey) => {
     setBucketOpen((prev) => ({ ...prev, [key]: !prev[key] }));
