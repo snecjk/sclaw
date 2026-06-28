@@ -36,7 +36,7 @@ import {
 } from '@/lib/scheduled-task-group-name';
 import { appendPendingLocalVirtualTaskSessions } from '@/stores/chat/session-list-merge';
 import {
-  scheduleSessionLabelHydration,
+  scheduleSessionLabelHydrationForStore,
 } from '@/stores/chat/session-metadata-hydrate';
 import {
   DEFAULT_CANONICAL_PREFIX,
@@ -424,20 +424,7 @@ function scheduleSessionLabelHydrationFromStore(
   set: ChatSet,
   get: () => ChatState,
 ): void {
-  scheduleSessionLabelHydration(
-    () => ({
-      sessions: get().sessions,
-      sessionLabels: get().sessionLabels,
-      sessionLastActivity: get().sessionLastActivity,
-    }),
-    (updater) => {
-      set((state) => updater({
-        sessions: state.sessions,
-        sessionLabels: state.sessionLabels,
-        sessionLastActivity: state.sessionLastActivity,
-      }));
-    },
-  );
+  scheduleSessionLabelHydrationForStore(get, set);
 }
 
 async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {

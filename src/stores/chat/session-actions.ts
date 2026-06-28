@@ -22,26 +22,13 @@ import { applyStoredSessionLabels, scrubCorruptedSessionLabels } from '@/lib/ses
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 import { appendPendingLocalVirtualTaskSessions } from './session-list-merge';
 import {
-  scheduleSessionLabelHydration,
+  scheduleSessionLabelHydrationForStore,
 } from './session-metadata-hydrate';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 
 function scheduleSessionLabelHydrationFromStore(set: ChatSet, get: ChatGet): void {
-  scheduleSessionLabelHydration(
-    () => ({
-      sessions: get().sessions,
-      sessionLabels: get().sessionLabels,
-      sessionLastActivity: get().sessionLastActivity,
-    }),
-    (updater) => {
-      set((state) => updater({
-        sessions: state.sessions,
-        sessionLabels: state.sessionLabels,
-        sessionLastActivity: state.sessionLastActivity,
-      }));
-    },
-  );
+  scheduleSessionLabelHydrationForStore(get, set);
 }
 
 function getAgentIdFromSessionKey(sessionKey: string): string {

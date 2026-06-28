@@ -57,6 +57,7 @@ import { resolveSessionLabel } from '@/lib/session-label';
 import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
+import { scheduleSessionLabelHydrationForStore } from '@/stores/chat/session-metadata-hydrate';
 import { isSidebarHiddenChatSessionKey, buildBuiltinStoGroupSortSessions } from '@/lib/sto-task-session';
 import {
   parseClaudeScheduledTaskSessionKey,
@@ -779,6 +780,17 @@ export function Sidebar() {
     (async () => {
       await loadSessions();
       if (cancelled) return;
+      scheduleSessionLabelHydrationForStore(
+        () => {
+          const state = useChatStore.getState();
+          return {
+            sessions: state.sessions,
+            sessionLabels: state.sessionLabels,
+            sessionLastActivity: state.sessionLastActivity,
+          };
+        },
+        useChatStore.setState,
+      );
 
       // 主页路径只需要会话列表用于侧边栏展示，不需要在启动时尝试恢复当前历史，
       // 否则会把默认 main 会话继续绑定到 OpenClaw 启动态。

@@ -1,9 +1,11 @@
-import { hostApiFetch } from '@/lib/host-api';
 import {
   buildSessionLabelDerivationOptions,
   hasUsableSessionTitle,
   shouldAutoDeriveSessionLabel,
 } from '@/lib/session-label';
+import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
+import { useAgentsStore } from '@/stores/agents';
+import { useGatewayStore } from '@/stores/gateway';
 import {
   deriveSessionLabelFromHistory,
   isCorruptedSessionLabel,
@@ -11,13 +13,14 @@ import {
   truncateSessionLabel,
 } from '@/lib/workflow-session-hint';
 import { getMessageText, toMs } from './helpers';
+import type { ChatSet } from './store-api';
 import type { ChatSession, RawMessage } from './types';
 
 /** Enough messages to skip injected system/workflow preamble and reach the first user turn. */
-export const SESSION_METADATA_HISTORY_LIMIT = 24;
+export const SESSION_METADATA_HISTORY_LIMIT = 64;
 export const SESSION_METADATA_HYDRATE_LIMIT = 80;
 export const SESSION_METADATA_HYDRATE_CONCURRENCY = 4;
-const LABEL_HYDRATE_RETRY_DELAYS_MS = [3_000, 8_000, 20_000];
+const LABEL_HYDRATE_RETRY_DELAYS_MS = [2_000, 5_000, 10_000, 20_000, 40_000];
 
 export type SessionLabelHydrateSnapshot = {
   sessions: ChatSession[];
@@ -32,6 +35,13 @@ export type SessionLabelHydrateCommit = (
 let labelHydrateInFlight: Promise<void> | null = null;
 let labelHydrateRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let labelHydrateRetryAttempt = 0;
+let labelHydratePending = false;
+
+function resolveSessionAgentEngineType(session: ChatSession): ChatSession['engineType'] | undefined {
+  if (!session.key.startsWith('agent:')) return undefined;
+  const agentId = session.key.split(':')[1];
+  return useAgentsStore.getState().agents.find((agent) => agent.id === agentId)?.engineType;
+}
 
 async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
   let nextIndex = 0;
@@ -69,11 +79,20 @@ export function collectSessionsNeedingLabelHydrate(
 export async function fetchSessionHistoryForMetadata(
   session: ChatSession,
 ): Promise<RawMessage[]> {
-  const engineType = session.engineType;
-  const url = `/api/chat/history?sessionKey=${encodeURIComponent(session.key)}&limit=${SESSION_METADATA_HISTORY_LIMIT}`
-    + (engineType ? `&engineType=${encodeURIComponent(engineType)}` : '');
-  const history = await hostApiFetch<{ success?: boolean; result?: { messages?: RawMessage[] } }>(url);
-  return Array.isArray(history.result?.messages) ? history.result.messages : [];
+  const engineType = resolveChatSessionEngineType(
+    session,
+    resolveSessionAgentEngineType(session),
+    session.key,
+  );
+  const data = await useGatewayStore.getState().rpc<{ messages?: RawMessage[] }>(
+    'chat.history',
+    {
+      sessionKey: session.key,
+      limit: SESSION_METADATA_HISTORY_LIMIT,
+      engineType,
+    },
+  );
+  return Array.isArray(data?.messages) ? data.messages : [];
 }
 
 export function deriveStoredSessionLabelFromMessages(
@@ -178,8 +197,31 @@ export function scheduleSessionLabelHydration(
   getSnapshot: () => SessionLabelHydrateSnapshot,
   commit: SessionLabelHydrateCommit,
 ): void {
-  if (labelHydrateInFlight) return;
+  if (labelHydrateInFlight) {
+    labelHydratePending = true;
+    return;
+  }
   labelHydrateInFlight = runSessionLabelHydration(getSnapshot, commit).finally(() => {
     labelHydrateInFlight = null;
+    if (labelHydratePending) {
+      labelHydratePending = false;
+      scheduleSessionLabelHydration(getSnapshot, commit);
+    }
   });
+}
+
+export function scheduleSessionLabelHydrationForStore(
+  getState: () => SessionLabelHydrateSnapshot,
+  setState: ChatSet,
+): void {
+  scheduleSessionLabelHydration(
+    getState,
+    (updater) => {
+      setState((state) => updater({
+        sessions: state.sessions,
+        sessionLabels: state.sessionLabels,
+        sessionLastActivity: state.sessionLastActivity,
+      }));
+    },
+  );
 }
