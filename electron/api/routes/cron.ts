@@ -10,6 +10,8 @@ import { parseJsonBody, sendJson } from '../route-utils';
 import { getOpenClawConfigDir } from '../../utils/paths';
 import { filterDeletedSessions } from '../../utils/scheduled-task-poller-store';
 import { reviveCronDatedExecutionSession } from '../../utils/revive-deleted-execution-session';
+import { ensureTaskGroupFirstTriggeredOnRun } from '../../utils/task-group-first-trigger-store';
+import { cronTaskGroupKey } from '../../../shared/task-group-key';
 
 interface GatewayCronJob {
   id: string;
@@ -823,6 +825,7 @@ export async function handleCronRoutes(
       const body = await parseJsonBody<{ id: string }>(req);
       const result = await ctx.gatewayManager.rpc('cron.run', { id: body.id, mode: 'force' });
       await reviveCronDatedExecutionSession(body.id, 'main');
+      await ensureTaskGroupFirstTriggeredOnRun(cronTaskGroupKey(body.id));
       sendJson(res, 200, result);
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

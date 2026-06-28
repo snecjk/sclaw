@@ -1,6 +1,7 @@
 import { matchPath } from 'react-router-dom';
 import { STO_TASK_IDS, type StoTaskId } from '@/lib/sto-tasks';
 import { parseClaudeScheduledTaskSessionKey, parseCronSessionKey } from '@/stores/chat/cron-session-utils';
+import { stoTaskSubitemKey } from '@/stores/sto-task-subitems';
 
 const ENTRY_YMD = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -63,6 +64,20 @@ export function shouldRestoreMainSessionLeavingTaskSubitem(
   const onSubitem = matchPath({ path: '/tasks/:taskId/:entryId', end: true }, pathname);
   if (onSubitem) return false;
   return isHiddenStoTaskSubitemChatSessionKey(currentSessionKey);
+}
+
+/** Pseudo-sessions for unified sidebar group sort (builtin STO subitems). */
+export function buildBuiltinStoGroupSortSessions(
+  taskId: StoTaskId,
+  entryIds: readonly string[],
+  sessionKeyBySubitem: Record<string, string>,
+): Array<{ key: string; updatedAt?: number }> {
+  return entryIds.map((entryId) => {
+    const sessionKey = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)];
+    return {
+      key: sessionKey ?? `agent:main:sto-${taskId}-${entryId}`,
+    };
+  });
 }
 
 export function parseStoTaskSessionKey(sessionKey: string): { taskId: StoTaskId; entryId: string } | null {

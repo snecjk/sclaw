@@ -126,13 +126,6 @@ export type SessionActivitySortOptions = {
   nowMs?: number;
 };
 
-function isSessionActiveForSort(sessionKey: string, options?: SessionActivitySortOptions): boolean {
-  const runtime = options?.runtimeBySessionKey?.[sessionKey];
-  if (runtime?.sending || runtime?.activeRunId) return true;
-  if (options?.activatingScheduledSessionAt?.[sessionKey]) return true;
-  return options?.currentSessionKey === sessionKey && Boolean(options?.currentSessionSending);
-}
-
 function resolveActiveSessionActivityBoost(
   sessionKey: string,
   base: number,
@@ -188,24 +181,46 @@ export function getSessionActivityMs(
   return resolveActiveSessionActivityBoost(session.key, base, precise.length > 0, options);
 }
 
-/** Earliest known activity for a task group ≈ first trigger time (millisecond precision). */
-export function getGroupFirstTriggeredAtMs(
+/** First trigger time for one session — no runtime/activating boost (for group-level sort). */
+export function getSessionFirstTriggerMs(
+  session: { key: string; updatedAt?: number },
+  sessionLastActivity: Record<string, number>,
+): number {
+  const fromStore = sessionLastActivity[session.key] ?? 0;
+  const fromMeta = typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt)
+    ? session.updatedAt
+    : 0;
+  const precise = [fromStore, fromMeta].filter((t) => t > 0);
+  if (precise.length > 0) {
+    return Math.min(...precise);
+  }
+  return parseDatedSessionKeyMs(session.key) ?? 0;
+}
+
+/** Earliest activity derived from current subitems only (no persisted map). */
+export function deriveGroupFirstTriggeredFromSessions(
   sessions: Array<{ key: string; updatedAt?: number }>,
   sessionLastActivity: Record<string, number>,
-  options?: SessionActivitySortOptions,
 ): number {
   let earliest = 0;
-  let latestActive = 0;
   for (const session of sessions) {
-    const activity = getSessionActivityMs(session, sessionLastActivity, options);
+    const activity = getSessionFirstTriggerMs(session, sessionLastActivity);
     if (activity <= 0) continue;
     if (earliest === 0 || activity < earliest) earliest = activity;
-    if (isSessionActiveForSort(session.key, options)) {
-      latestActive = Math.max(latestActive, activity);
-    }
   }
-  if (latestActive > 0) return latestActive;
   return earliest;
+}
+
+/** Earliest known activity for a task group ≈ first trigger time (millisecond precision). */
+export function getGroupFirstTriggeredAtMs(
+  groupKey: string,
+  sessions: Array<{ key: string; updatedAt?: number }>,
+  sessionLastActivity: Record<string, number>,
+  storedFirstTriggeredAt?: Record<string, number>,
+): number {
+  const stored = storedFirstTriggeredAt?.[groupKey.trim()] ?? 0;
+  if (stored > 0) return stored;
+  return deriveGroupFirstTriggeredFromSessions(sessions, sessionLastActivity);
 }
 
 export type ScheduledTaskSidebarGroupLike = {
@@ -218,11 +233,11 @@ export type ScheduledTaskSidebarGroupLike = {
 export function sortScheduledTaskGroupsByFirstTriggerDesc<T extends ScheduledTaskSidebarGroupLike>(
   groups: T[],
   sessionLastActivity: Record<string, number>,
-  options?: SessionActivitySortOptions,
+  storedFirstTriggeredAt?: Record<string, number>,
 ): T[] {
   return [...groups].sort((left, right) => {
-    const leftFirst = getGroupFirstTriggeredAtMs(left.sessions, sessionLastActivity, options);
-    const rightFirst = getGroupFirstTriggeredAtMs(right.sessions, sessionLastActivity, options);
+    const leftFirst = getGroupFirstTriggeredAtMs(left.key, left.sessions, sessionLastActivity, storedFirstTriggeredAt);
+    const rightFirst = getGroupFirstTriggeredAtMs(right.key, right.sessions, sessionLastActivity, storedFirstTriggeredAt);
     if (leftFirst === 0 && rightFirst === 0) {
       return compareScheduledTaskGroupTieBreak(left, right);
     }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildScheduledTaskGroupDisplayName,
+  getGroupFirstTriggeredAtMs,
+  deriveGroupFirstTriggeredFromSessions,
   looksLikeTechnicalTaskGroupLabel,
   resolveCronGroupNameFromSession,
   resolveStoScheduledGroupNameFromSession,
@@ -103,9 +105,8 @@ describe('scheduled-task-group-name', () => {
     expect(sorted.map((g) => g.key)).toEqual(['cron:job-a', 'cron:job-b']);
   });
 
-  it('active runtime lifts group above start-of-day fallback when triggering today', () => {
+  it('executing subitem does not lift group above groups with earlier first trigger', () => {
     const afternoon = new Date(2026, 5, 25, 15, 0, 0).getTime();
-    const nowMs = new Date(2026, 5, 25, 16, 30, 0).getTime();
     const day = '2026-06-25';
     const runningKey = `agent:main:cron:running:${day}`;
     const groups = [
@@ -120,42 +121,12 @@ describe('scheduled-task-group-name', () => {
         sessions: [{ key: runningKey }],
       },
     ];
-    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {}, {
-      runtimeBySessionKey: {
-        [runningKey]: { sending: true, updatedAt: nowMs },
-      },
-      nowMs,
-    });
-    expect(sorted.map((g) => g.name)).toEqual(['测试', '优美的问候语']);
+    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {});
+    expect(sorted.map((g) => g.name)).toEqual(['优美的问候语', '测试']);
   });
 
-  it('current scheduled session without recorded activity sorts as active', () => {
+  it('activating session key does not change group order', () => {
     const afternoon = new Date(2026, 5, 25, 15, 0, 0).getTime();
-    const nowMs = new Date(2026, 5, 25, 16, 30, 0).getTime();
-    const day = '2026-06-25';
-    const runningKey = `agent:main:cron:running:${day}`;
-    const groups = [
-      {
-        key: 'cron:other',
-        name: '优美的问候语',
-        sessions: [{ key: `agent:main:cron:other:${day}`, updatedAt: afternoon }],
-      },
-      {
-        key: 'cron:running',
-        name: '测试',
-        sessions: [{ key: runningKey }],
-      },
-    ];
-    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {}, {
-      currentSessionKey: runningKey,
-      nowMs,
-    });
-    expect(sorted.map((g) => g.name)).toEqual(['测试', '优美的问候语']);
-  });
-
-  it('activating session key sorts before loadSessions/switchSession race settles', () => {
-    const afternoon = new Date(2026, 5, 25, 15, 0, 0).getTime();
-    const activatingAt = new Date(2026, 5, 25, 16, 30, 0).getTime();
     const day = '2026-06-25';
     const runningKey = `agent:main:cron:running:${day}`;
     const groups = [
@@ -170,13 +141,11 @@ describe('scheduled-task-group-name', () => {
         sessions: [{ key: runningKey }],
       },
     ];
-    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {}, {
-      activatingScheduledSessionAt: { [runningKey]: activatingAt },
-    });
-    expect(sorted.map((g) => g.name)).toEqual(['测试2号', '优美的问候语']);
+    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {});
+    expect(sorted.map((g) => g.name)).toEqual(['优美的问候语', '测试2号']);
   });
 
-  it('active group with old history still sorts by latest active session', () => {
+  it('active group with old history sorts by earliest session (first trigger)', () => {
     const oldDay = '2026-06-10';
     const today = '2026-06-25';
     const activatingAt = new Date(2026, 5, 25, 16, 30, 0).getTime();
@@ -195,9 +164,73 @@ describe('scheduled-task-group-name', () => {
         sessions: [{ key: `agent:main:cron:other:${today}`, updatedAt: activatingAt - 1000 }],
       },
     ];
-    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {}, {
-      activatingScheduledSessionAt: { [`agent:main:cron:running:${today}`]: activatingAt },
-    });
-    expect(sorted.map((g) => g.name)).toEqual(['测试2号', '优美的问候语']);
+    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {});
+    expect(sorted.map((g) => g.name)).toEqual(['优美的问候语', '测试2号']);
+  });
+
+  it('mixes builtin STO with cron by first trigger desc', () => {
+    const groups = [
+      {
+        key: 'sto:hq-reconciliation',
+        name: '周会材料生成',
+        sessions: [{ key: 'agent:main:sto-hq-reconciliation-2026-06-20', updatedAt: Date.parse('2026-06-20') }],
+      },
+      {
+        key: 'cron:newer',
+        name: '测试',
+        sessions: [{ key: 'agent:main:cron:newer:2026-06-25', updatedAt: Date.parse('2026-06-25') }],
+      },
+    ];
+    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {});
+    expect(sorted.map((g) => g.name)).toEqual(['测试', '周会材料生成']);
+  });
+
+  it('prefers persisted first-trigger when session fallback is start-of-day', () => {
+    const day = '2026-06-25';
+    const runningKey = `agent:main:cron:running:${day}`;
+    const afternoon = new Date(2026, 5, 25, 15, 0, 0).getTime();
+    const groups = [
+      {
+        key: 'cron:other',
+        name: '优美的问候语',
+        sessions: [{ key: `agent:main:cron:other:${day}`, updatedAt: afternoon }],
+      },
+      {
+        key: 'cron:running',
+        name: '测试',
+        sessions: [{ key: runningKey }],
+      },
+    ];
+    const stored = { 'cron:running': new Date(2026, 5, 25, 16, 30, 0).getTime() };
+    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {}, stored);
+    expect(sorted.map((g) => g.name)).toEqual(['测试', '优美的问候语']);
+  });
+
+  it('deriveGroupFirstTriggeredFromSessions uses earliest subitem activity', () => {
+    const sessions = [
+      { key: 'agent:main:cron:a:2026-06-25', updatedAt: Date.parse('2026-06-25') },
+      { key: 'agent:main:cron:a:2026-06-28', updatedAt: Date.parse('2026-06-28') },
+    ];
+    expect(deriveGroupFirstTriggeredFromSessions(sessions, {})).toBe(Date.parse('2026-06-25'));
+  });
+
+  it('stored first-trigger ignores remaining subitems after partial delete', () => {
+    const dayOld = '2026-06-25';
+    const dayNew = '2026-06-28';
+    const stored = { 'cron:a': Date.parse(dayOld) };
+    const groups = [
+      {
+        key: 'cron:a',
+        name: '测试',
+        sessions: [{ key: `agent:main:cron:a:${dayNew}`, updatedAt: Date.parse(dayNew) }],
+      },
+      {
+        key: 'cron:b',
+        name: '优美的问候语',
+        sessions: [{ key: 'agent:main:cron:b:2026-06-26', updatedAt: Date.parse('2026-06-26') }],
+      },
+    ];
+    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(groups, {}, stored);
+    expect(sorted.map((g) => g.name)).toEqual(['优美的问候语', '测试']);
   });
 });

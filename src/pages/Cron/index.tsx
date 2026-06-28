@@ -10,6 +10,12 @@ import { useGatewayStore } from '@/stores/gateway';
 import { useChatStore } from '@/stores/chat';
 import { useAgentsStore } from '@/stores/agents';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
+import {
+  ensureTaskGroupFirstTriggeredOnRun,
+  getCachedTaskGroupFirstTriggeredMap,
+  rememberOptimisticTaskGroupFirstTriggered,
+} from '@/lib/task-group-first-trigger';
+import { resolveTaskGroupKeyFromSessionKey } from '../../../shared/task-group-key';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -182,11 +188,19 @@ export function Cron() {
       const openClawSessionKey = `agent:${job.agentId ?? 'main'}:cron:${job.id}:${y}-${m}-${d}`;
       const chat = useChatStore.getState();
       let activeSessionKey = openClawSessionKey;
+      const groupKey = resolveTaskGroupKeyFromSessionKey(openClawSessionKey);
+      const triggeredAt = Date.now();
       flushSync(() => {
         chat.markScheduledSessionActivating(openClawSessionKey);
+        if (groupKey && !getCachedTaskGroupFirstTriggeredMap()[groupKey]) {
+          rememberOptimisticTaskGroupFirstTriggered(groupKey, triggeredAt);
+        }
       });
       try {
         const result = await triggerJob(job.id, job.engineType);
+        if (groupKey) {
+          void ensureTaskGroupFirstTriggeredOnRun(groupKey, triggeredAt);
+        }
         if (job.engineType === 'claude' && result && 'sessionKey' in result) {
           activeSessionKey = result.sessionKey;
           chat.clearScheduledSessionActivating(openClawSessionKey);

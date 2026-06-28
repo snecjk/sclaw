@@ -54,10 +54,10 @@ import {
 } from '@/components/layout/sidebar-task-subitem-delete-trailing';
 import { useTranslation } from 'react-i18next';
 import { resolveSessionLabel } from '@/lib/session-label';
-import { taskDetailPath, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
+import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
-import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
+import { isSidebarHiddenChatSessionKey, buildBuiltinStoGroupSortSessions } from '@/lib/sto-task-session';
 import {
   parseClaudeScheduledTaskSessionKey,
   parseClaudeScheduledTaskRunSessionKey,
@@ -66,7 +66,15 @@ import {
   isAnyCronSessionKey,
 } from '@/stores/chat/cron-session-utils';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
-import { buildScheduledTaskGroupDisplayName, getSessionActivityMs, sortScheduledTaskGroupsByFirstTriggerDesc } from '@/lib/scheduled-task-group-name';
+import { buildScheduledTaskGroupDisplayName, deriveGroupFirstTriggeredFromSessions, getSessionActivityMs, sortScheduledTaskGroupsByFirstTriggerDesc } from '@/lib/scheduled-task-group-name';
+import {
+  clearTaskGroupFirstTriggered,
+  fetchTaskGroupFirstTriggeredMap,
+  rememberOptimisticTaskGroupFirstTriggered,
+  rememberOptimisticTaskGroupFirstTriggeredClear,
+  seedTaskGroupFirstTriggeredIfAbsent,
+} from '@/lib/task-group-first-trigger';
+import { resolveTaskGroupKeyFromSessionKey, stoBuiltinTaskGroupKey } from '../../../shared/task-group-key';
 import { useScheduledTaskNameMaps } from '@/hooks/use-scheduled-task-name-maps';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
@@ -188,24 +196,17 @@ type TaskListRenderItem =
   | { kind: 'scheduled'; group: ScheduledTaskSidebarGroup; maxVisibleSessions?: number };
 
 function buildTaskListRenderPlan(
-  scheduledGroups: ScheduledTaskSidebarGroup[],
+  items: TaskListRenderItem[],
   showAll: boolean,
 ): { items: TaskListRenderItem[]; totalRows: number } {
-  const allItems: TaskListRenderItem[] = [
-    ...STO_TASK_NAV.map((navItem) => ({ kind: 'sto' as const, navItem })),
-    ...scheduledGroups
-      .filter((group) => group.sessions.length > 0)
-      .map((group) => ({ kind: 'scheduled' as const, group })),
-  ];
-
-  const totalRows = allItems.length;
+  const totalRows = items.length;
 
   if (showAll || totalRows <= SIDEBAR_TASK_LIST_INITIAL_ROW_LIMIT) {
-    return { items: allItems, totalRows };
+    return { items, totalRows };
   }
 
   return {
-    items: allItems.slice(0, SIDEBAR_TASK_LIST_INITIAL_ROW_LIMIT),
+    items: items.slice(0, SIDEBAR_TASK_LIST_INITIAL_ROW_LIMIT),
     totalRows,
   };
 }
@@ -354,26 +355,8 @@ function SidebarTaskGroup({
     if (underTask) onRequestExpand();
   }, [underTask, onRequestExpand]);
 
-  const overviewTo = taskOverviewPath(taskId);
-
   if (entries.length === 0) {
-    return (
-      <NavLink
-        to={overviewTo}
-        className={cn(SIDEBAR_TASK_GROUP_ROW_CLASS, 'transition-colors')}
-      >
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          <ClipboardList className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)} aria-hidden />
-          <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>{label}</span>
-        </span>
-        {hasUnreadSubitem ? (
-          <span
-            className={sidebarUnreadDotClass}
-            aria-label={tTasks('unreadBadge', { defaultValue: 'Unread' })}
-          />
-        ) : null}
-      </NavLink>
-    );
+    return null;
   }
 
   const panelId = `sto-sidebar-task-${taskId}-entries`;
@@ -720,7 +703,10 @@ export function Sidebar() {
   const sidebarExpandedBeforeWorkflowRef = useRef<boolean | null>(null);
   const [taskListSectionOpen, setTaskListSectionOpen] = useState(true);
   const [taskListShowAll, setTaskListShowAll] = useState(false);
+  const [taskGroupFirstTriggeredAt, setTaskGroupFirstTriggeredAt] = useState<Record<string, number>>({});
   const scheduledTaskNameMaps = useScheduledTaskNameMaps(!sidebarCollapsed, sessions.length);
+  const stoEntriesByTask = useStoTaskSubitemsStore((s) => s.entriesByTask);
+  const stoSessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
   /** 任务组手风琴：null = 全收起；同时仅一个 groupKey 展开 */
   const [expandedTaskGroupKey, setExpandedTaskGroupKey] = useState<string | null>(null);
   const [recentOpen, setRecentOpen] = useState(true);
@@ -765,6 +751,11 @@ export function Sidebar() {
       setTaskListShowAll(false);
     }
   }, [taskListSectionOpen]);
+
+  useEffect(() => {
+    if (sidebarCollapsed) return;
+    void fetchTaskGroupFirstTriggeredMap().then(setTaskGroupFirstTriggeredAt);
+  }, [sidebarCollapsed, sessions, stoEntriesByTask]);
 
   const handleCollapseTaskSectionFromScroll = useCallback(() => {
     setTaskListSectionOpen(false);
@@ -1021,13 +1012,137 @@ export function Sidebar() {
       });
     }
 
-    return sortScheduledTaskGroupsByFirstTriggerDesc(resolvedGroups, sessionLastActivity, sessionSortOptions);
+    return resolvedGroups;
   }, [taskListScheduledSessions, sessionLastActivity, scheduledTaskNameMaps, runtimeBySessionKey, currentSessionKey, sending, activatingScheduledSessionAt, nowMs]);
 
-  const taskListRenderPlan = useMemo(
-    () => buildTaskListRenderPlan(scheduledTaskGroups, taskListShowAll),
-    [scheduledTaskGroups, taskListShowAll],
-  );
+  const taskListRenderPlan = useMemo(() => {
+    type SortableTaskListEntry = {
+      key: string;
+      name: string;
+      sessions: Array<{ key: string; updatedAt?: number }>;
+      renderItem: TaskListRenderItem;
+    };
+
+    const sortable: SortableTaskListEntry[] = [];
+
+    for (const navItem of STO_TASK_NAV) {
+      const entryIds = stoEntriesByTask[navItem.id] ?? [];
+      if (entryIds.length === 0) continue;
+      sortable.push({
+        key: stoTaskSidebarGroupKey(navItem.id),
+        name: t(`common:sidebar.${navItem.labelKey}`),
+        sessions: buildBuiltinStoGroupSortSessions(navItem.id, entryIds, stoSessionKeyBySubitem),
+        renderItem: { kind: 'sto', navItem },
+      });
+    }
+
+    for (const group of scheduledTaskGroups) {
+      if (group.sessions.length === 0) continue;
+      sortable.push({
+        key: group.key,
+        name: group.name,
+        sessions: group.sessions,
+        renderItem: { kind: 'scheduled', group },
+      });
+    }
+
+    const sorted = sortScheduledTaskGroupsByFirstTriggerDesc(
+      sortable,
+      sessionLastActivity,
+      taskGroupFirstTriggeredAt,
+    );
+    return buildTaskListRenderPlan(sorted.map((entry) => entry.renderItem), taskListShowAll);
+  }, [
+    scheduledTaskGroups,
+    stoEntriesByTask,
+    stoSessionKeyBySubitem,
+    sessionLastActivity,
+    taskListShowAll,
+    taskGroupFirstTriggeredAt,
+    t,
+  ]);
+
+  const maybeClearTaskGroupFirstTriggered = useCallback(async (groupKey: string | null) => {
+    if (!groupKey) return;
+    rememberOptimisticTaskGroupFirstTriggeredClear(groupKey);
+    setTaskGroupFirstTriggeredAt((prev) => {
+      if (!(groupKey in prev)) return prev;
+      const next = { ...prev };
+      delete next[groupKey];
+      return next;
+    });
+    await clearTaskGroupFirstTriggered(groupKey);
+  }, []);
+
+  const countScheduledSessionsInGroup = useCallback((groupKey: string, excludingKey?: string) => {
+    let count = 0;
+    for (const session of taskListScheduledSessions) {
+      if (excludingKey && session.key === excludingKey) continue;
+      if (resolveTaskGroupKeyFromSessionKey(session.key) === groupKey) count += 1;
+    }
+    return count;
+  }, [taskListScheduledSessions]);
+
+  const collectScheduledSessionsForGroup = useCallback((groupKey: string) => (
+    taskListScheduledSessions.filter((session) => resolveTaskGroupKeyFromSessionKey(session.key) === groupKey)
+  ), [taskListScheduledSessions]);
+
+  const applySeededFirstTriggered = useCallback((groupKey: string, triggeredAtMs: number) => {
+    rememberOptimisticTaskGroupFirstTriggered(groupKey, triggeredAtMs);
+    setTaskGroupFirstTriggeredAt((prev) => ({ ...prev, [groupKey]: triggeredAtMs }));
+  }, []);
+
+  const ensureTaskGroupFirstTriggerBeforePartialDelete = useCallback(async (
+    groupKey: string | null,
+    sessions: Array<{ key: string; updatedAt?: number }>,
+  ) => {
+    if (!groupKey || sessions.length === 0) return;
+    if ((taskGroupFirstTriggeredAt[groupKey] ?? 0) > 0) return;
+    const derived = deriveGroupFirstTriggeredFromSessions(sessions, sessionLastActivity);
+    if (derived <= 0) return;
+    const seeded = await seedTaskGroupFirstTriggeredIfAbsent(groupKey, derived);
+    if (seeded) applySeededFirstTriggered(groupKey, derived);
+  }, [taskGroupFirstTriggeredAt, sessionLastActivity, applySeededFirstTriggered]);
+
+  useEffect(() => {
+    if (sidebarCollapsed) return;
+    let cancelled = false;
+    const backfill = async () => {
+      const seeds: Array<{ groupKey: string; atMs: number }> = [];
+      for (const navItem of STO_TASK_NAV) {
+        const entryIds = stoEntriesByTask[navItem.id] ?? [];
+        if (entryIds.length === 0) continue;
+        const groupKey = stoTaskSidebarGroupKey(navItem.id);
+        if ((taskGroupFirstTriggeredAt[groupKey] ?? 0) > 0) continue;
+        const sessions = buildBuiltinStoGroupSortSessions(navItem.id, entryIds, stoSessionKeyBySubitem);
+        const atMs = deriveGroupFirstTriggeredFromSessions(sessions, sessionLastActivity);
+        if (atMs > 0) seeds.push({ groupKey, atMs });
+      }
+      for (const group of scheduledTaskGroups) {
+        if (group.sessions.length === 0) continue;
+        if ((taskGroupFirstTriggeredAt[group.key] ?? 0) > 0) continue;
+        const atMs = deriveGroupFirstTriggeredFromSessions(group.sessions, sessionLastActivity);
+        if (atMs > 0) seeds.push({ groupKey: group.key, atMs });
+      }
+      for (const seed of seeds) {
+        if (cancelled) return;
+        const seeded = await seedTaskGroupFirstTriggeredIfAbsent(seed.groupKey, seed.atMs);
+        if (seeded && !cancelled) applySeededFirstTriggered(seed.groupKey, seed.atMs);
+      }
+    };
+    void backfill();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    sidebarCollapsed,
+    scheduledTaskGroups,
+    stoEntriesByTask,
+    stoSessionKeyBySubitem,
+    sessionLastActivity,
+    taskGroupFirstTriggeredAt,
+    applySeededFirstTriggered,
+  ]);
   const showTaskListExpandAll =
     taskListSectionOpen
     && !taskListShowAll
@@ -1770,9 +1885,19 @@ export function Sidebar() {
         variant="destructive"
         onConfirm={async () => {
           if (!sessionToDelete) return;
-          const deleted = await deleteSession(sessionToDelete.key);
+          const { key } = sessionToDelete;
+          const groupKey = resolveTaskGroupKeyFromSessionKey(key);
+          const remaining = groupKey != null ? countScheduledSessionsInGroup(groupKey, key) : 0;
+          if (groupKey && remaining > 0) {
+            await ensureTaskGroupFirstTriggerBeforePartialDelete(
+              groupKey,
+              collectScheduledSessionsForGroup(groupKey),
+            );
+          }
+          const deleted = await deleteSession(key);
           if (!deleted) return;
-          if (currentSessionKey === sessionToDelete.key) navigateToMainChatHome(navigate, location.pathname);
+          if (groupKey != null && remaining === 0) await maybeClearTaskGroupFirstTriggered(groupKey);
+          if (currentSessionKey === key) navigateToMainChatHome(navigate, location.pathname);
           setSessionToDelete(null);
         }}
         onCancel={() => setSessionToDelete(null)}
@@ -1788,9 +1913,21 @@ export function Sidebar() {
         onConfirm={async () => {
           if (!subitemToDelete) return;
           const { sessionKey, taskId, entryId } = subitemToDelete;
+          const groupKey = stoBuiltinTaskGroupKey(taskId);
+          const entryIds = stoEntriesByTask[taskId] ?? [];
+          const remainingBefore = entryIds.filter((id) => id !== entryId).length;
+          if (remainingBefore > 0) {
+            await ensureTaskGroupFirstTriggerBeforePartialDelete(
+              groupKey,
+              buildBuiltinStoGroupSortSessions(taskId, entryIds, stoSessionKeyBySubitem),
+            );
+          }
           const deleted = await deleteSession(sessionKey);
           if (!deleted) return;
           removeSubitem(taskId, entryId);
+          if (remainingBefore === 0) {
+            await maybeClearTaskGroupFirstTriggered(groupKey);
+          }
           if (currentSessionKey === sessionKey) navigateToMainChatHome(navigate, location.pathname);
           setSubitemToDelete(null);
         }}

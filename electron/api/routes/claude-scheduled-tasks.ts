@@ -7,6 +7,8 @@ import {
   readClaudeScheduledTaskSessionHistory,
 } from '../../services/claude-scheduled-task-session-store';
 import { reviveClaudeTaskDatedExecutionSession } from '../../utils/revive-deleted-execution-session';
+import { ensureTaskGroupFirstTriggeredOnRun } from '../../utils/task-group-first-trigger-store';
+import { claudeTaskGroupKey } from '../../../shared/task-group-key';
 
 export async function handleClaudeScheduledTaskRoutes(
   req: IncomingMessage,
@@ -126,6 +128,7 @@ export async function handleClaudeScheduledTaskRoutes(
       const m = String(runDate.getMonth() + 1).padStart(2, '0');
       const d = String(runDate.getDate()).padStart(2, '0');
       await reviveClaudeTaskDatedExecutionSession(id, `${y}-${m}-${d}`);
+      await ensureTaskGroupFirstTriggeredOnRun(claudeTaskGroupKey(id));
       sendJson(res, 200, run);
     } catch (error) {
       sendJson(res, 400, { success: false, error: String(error) });
