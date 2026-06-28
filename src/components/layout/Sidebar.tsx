@@ -796,7 +796,8 @@ export function Sidebar() {
 
       // 主页路径只需要会话列表用于侧边栏展示，不需要在启动时尝试恢复当前历史，
       // 否则会把默认 main 会话继续绑定到 OpenClaw 启动态。
-      if (window.location.pathname === '/') {
+      // HashRouter: use React Router pathname — window.location.pathname is the HTML file path in Electron.
+      if (isOnHome) {
         const state = useChatStore.getState();
         // Preserve locally-created sessions (workflow run, skill use, etc.) awaiting first send.
         if (isTemporaryAgentSessionKey(state.currentSessionKey)) {
@@ -863,7 +864,7 @@ export function Sidebar() {
     return () => {
       cancelled = true;
     };
-  }, [isGatewayRunning, loadHistory, loadSessions]);
+  }, [isGatewayRunning, isOnHome, loadHistory, loadSessions]);
 
   const getSessionLabel = useCallback(
     (key: string, displayName?: string, label?: string) =>
