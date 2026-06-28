@@ -123,28 +123,19 @@ function applySessionLabelHydratePatch(
   session: ChatSession,
   messages: RawMessage[],
 ): Partial<SessionLabelHydrateSnapshot> {
-  const next: Partial<SessionLabelHydrateSnapshot> = {};
   const labelText = deriveStoredSessionLabelFromMessages(
     session.key,
     snapshot.sessions,
     snapshot.sessionLabels,
     messages,
   );
-  if (labelText) {
-    next.sessionLabels = {
+  if (!labelText) return {};
+  return {
+    sessionLabels: {
       ...snapshot.sessionLabels,
       [session.key]: labelText,
-    };
-  }
-  const lastAt = lastMessageActivityMs(messages);
-  if (lastAt > 0) {
-    const currentAt = snapshot.sessionLastActivity[session.key] ?? 0;
-    const nextAt = Math.max(currentAt, lastAt);
-    if (nextAt !== currentAt) {
-      next.sessionLastActivity = { ...snapshot.sessionLastActivity, [session.key]: nextAt };
-    }
-  }
-  return next;
+    },
+  };
 }
 
 async function runSessionLabelHydration(
