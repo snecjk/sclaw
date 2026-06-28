@@ -26,7 +26,13 @@ import {
   buildClaudeScheduledTaskSessionHistoryPath,
   parseClaudeScheduledTaskSessionKey, parseClaudeScheduledTaskRunSessionKey,
 } from './chat/cron-session-utils';
-import { mergeSessionLastActivity, sanitizeSessionDisplayField, enrichWithToolResultFiles, enrichWithCachedImages, extractMediaRefs, makeAttachedFile, getMessageText, isToolResultRole, extractImagesAsAttachedFiles, getToolCallFilePath } from './chat/helpers';
+import {
+  getLastChatEventAt,
+  mergeSessionLastActivity,
+  sanitizeSessionDisplayField,
+  setLastChatEventAt,
+  enrichWithToolResultFiles, enrichWithCachedImages, extractMediaRefs, makeAttachedFile, getMessageText, isToolResultRole, extractImagesAsAttachedFiles, getToolCallFilePath
+} from './chat/helpers';
 import {
   DEFAULT_CANONICAL_PREFIX,
   DEFAULT_SESSION_KEY,
@@ -68,9 +74,15 @@ import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { traceChatSession } from '../../shared/chat-session-trace';
 import {
   dedupeRedundantUserMessages,
+  isSameUserMessage,
   mergeOptimisticUserIntoHistory,
+  normalizeUserMessageText,
   traceLoadHistoryUserReconciliation,
 } from './chat/user-message-merge';
+import {
+  resolveAssistantFinalTerminalState,
+  shouldAutoCompleteClaudeFromHistory,
+} from './chat/run-completion';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 
@@ -82,12 +94,6 @@ export type {
   ToolStatus,
   WorkflowContextBlock,
 } from './chat/types';
-
-// Module-level timestamp tracking the last chat event received.
-// Used by the safety timeout to avoid false-positive "no response" errors
-// during tool-use conversations where streamingMessage is temporarily cleared
-// between tool-result finals and the next delta.
-let _lastChatEventAt = 0;
 
 /** Normalize a timestamp to milliseconds. Handles seconds, ms, and ISO strings. */
 function toMs(ts: unknown): number {
@@ -495,6 +501,7 @@ function createIdleSessionRuntimeState(): SessionRuntimeState {
     streamingTools: [],
     pendingFinal: false,
     lastUserMessageAt: null,
+    optimisticUserMessage: null,
     pendingToolImages: [],
     error: null,
     updatedAt: 0,
@@ -510,6 +517,7 @@ function runtimePatchFromSessionRuntime(runtime: SessionRuntimeState): Pick<
   | 'streamingTools'
   | 'pendingFinal'
   | 'lastUserMessageAt'
+  | 'optimisticUserMessage'
   | 'pendingToolImages'
   | 'error'
 > {
@@ -521,6 +529,7 @@ function runtimePatchFromSessionRuntime(runtime: SessionRuntimeState): Pick<
     streamingTools: runtime.streamingTools,
     pendingFinal: runtime.pendingFinal,
     lastUserMessageAt: runtime.lastUserMessageAt,
+    optimisticUserMessage: runtime.optimisticUserMessage,
     pendingToolImages: runtime.pendingToolImages,
     error: runtime.error,
   };
@@ -535,6 +544,7 @@ function captureTopLevelRuntime(state: Pick<
   | 'streamingTools'
   | 'pendingFinal'
   | 'lastUserMessageAt'
+  | 'optimisticUserMessage'
   | 'pendingToolImages'
   | 'error'
 >): SessionRuntimeState {
@@ -546,6 +556,7 @@ function captureTopLevelRuntime(state: Pick<
     streamingTools: state.streamingTools,
     pendingFinal: state.pendingFinal,
     lastUserMessageAt: state.lastUserMessageAt,
+    optimisticUserMessage: state.optimisticUserMessage,
     pendingToolImages: state.pendingToolImages,
     error: state.error,
     updatedAt: Date.now(),
@@ -599,6 +610,7 @@ function buildSessionSwitchPatch(
     | 'streamingTools'
     | 'pendingFinal'
     | 'lastUserMessageAt'
+    | 'optimisticUserMessage'
     | 'pendingToolImages'
     | 'error'
   >,
@@ -727,20 +739,31 @@ function handleBackgroundSessionEvent(
       }
 
       const toolOnly = isToolOnlyMessage(finalMsg);
-      const hasOutput = hasNonToolAssistantContent(finalMsg);
       set((s) => {
-        const next = patchSessionRuntimeState(s, sessionKey, (runtime) => ({
-          sending: hasOutput ? false : runtime.sending,
-          activeRunId: hasOutput ? null : runtime.activeRunId,
+        const engineType = resolveEngineTypeForSession(
+          s.sessions,
+          sessionKey,
+          getAgentIdFromSessionKey(sessionKey),
+        );
+        const runtime = getSessionRuntimeState(s.runtimeBySessionKey, sessionKey);
+        const { isTerminalOutput } = resolveAssistantFinalTerminalState(
+          engineType,
+          runtime.sending,
+          event.phase,
+          finalMsg,
+        );
+        const next = patchSessionRuntimeState(s, sessionKey, (currentRuntime) => ({
+          sending: isTerminalOutput ? false : currentRuntime.sending,
+          activeRunId: isTerminalOutput ? null : currentRuntime.activeRunId,
           streamingText: '',
           streamingMessage: null,
-          streamingTools: hasOutput ? [] : (updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools),
-          pendingFinal: hasOutput ? false : true,
-          pendingToolImages: hasOutput ? [] : runtime.pendingToolImages,
-          lastUserMessageAt: hasOutput ? null : runtime.lastUserMessageAt,
+          streamingTools: isTerminalOutput ? [] : (updates.length > 0 ? upsertToolStatuses(currentRuntime.streamingTools, updates) : currentRuntime.streamingTools),
+          pendingFinal: isTerminalOutput ? false : true,
+          pendingToolImages: isTerminalOutput ? [] : currentRuntime.pendingToolImages,
+          lastUserMessageAt: isTerminalOutput ? null : currentRuntime.lastUserMessageAt,
           error: null,
         }));
-        if (hasOutput && sessionKey !== s.currentSessionKey) {
+        if (isTerminalOutput && sessionKey !== s.currentSessionKey) {
           markSessionUnreadAfterSuccessfulRun(sessionKey, s.currentSessionKey);
         }
         return next;
@@ -757,6 +780,7 @@ function handleBackgroundSessionEvent(
         streamingTools: [],
         pendingFinal: false,
         lastUserMessageAt: null,
+        optimisticUserMessage: null,
         pendingToolImages: [],
         error: String(event.errorMessage || 'An error occurred'),
       }));
@@ -771,6 +795,7 @@ function handleBackgroundSessionEvent(
         streamingTools: [],
         pendingFinal: false,
         lastUserMessageAt: null,
+        optimisticUserMessage: null,
         pendingToolImages: [],
         error: null,
       }));
@@ -1069,31 +1094,23 @@ function hasAssistantTextOutput(message: RawMessage | undefined): boolean {
   return false;
 }
 
-function hasPendingToolUse(message: RawMessage | undefined): boolean {
-  if (!message) return false;
-
-  const msg = message as unknown as Record<string, unknown>;
-  const stopReason = msg.stopReason ?? msg.stop_reason;
-  if (String(stopReason ?? '').toLowerCase() === 'tooluse') return true;
-
-  const content = message.content;
-  if (Array.isArray(content)) {
-    if ((content as ContentBlock[]).some((block) => block.type === 'tool_use' || block.type === 'toolCall')) {
-      return true;
-    }
-  }
-
-  const toolCalls = msg.tool_calls ?? msg.toolCalls;
-  return Array.isArray(toolCalls) && toolCalls.length > 0;
+function finalizeMessagesFromHistoryLoad(
+  get: () => ChatState,
+  set: (partial: Partial<ChatState> | ((state: ChatState) => Partial<ChatState>)) => void,
+): void {
+  const sessionKey = get().currentSessionKey;
+  let patched = patchLastAssistantWithWorkflowForm(get().messages, getMessageText);
+  patched = ensureWorkflowCardsInMessages(patched, sessionKey, getMessageText);
+  if (patched !== get().messages) set({ messages: patched });
+  ensureWorkflowParameterFormInjected(getMessageText);
 }
 
-function isClaudeRuntimeResultDone(runtimeResult: unknown): boolean {
-  if (!runtimeResult || typeof runtimeResult !== 'object') return false;
-  const result = runtimeResult as Record<string, unknown>;
-  if (result.type !== 'result') return false;
-  if (result.isError === true) return true;
-  const subtype = typeof result.subtype === 'string' ? result.subtype : '';
-  return subtype === '' || subtype === 'success' || subtype.startsWith('error_');
+function touchLastChatEventAt(
+  set: (partial: Partial<ChatState> | ((state: ChatState) => Partial<ChatState>)) => void,
+): void {
+  const now = Date.now();
+  setLastChatEventAt(now);
+  set({ lastChatEventAt: now });
 }
 
 // ── Store ────────────────────────────────────────────────────────
@@ -1112,7 +1129,9 @@ export const useChatStore = create<ChatState>()(
   streamingMessage: null,
   streamingTools: [],
   pendingFinal: false,
+  lastChatEventAt: 0,
   lastUserMessageAt: null,
+  optimisticUserMessage: null,
   pendingToolImages: [],
   dailyTokenQuotaStatus: null,
 
@@ -1354,7 +1373,7 @@ export const useChatStore = create<ChatState>()(
           const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels);
 
           // ── 定时任务会话名称富化：从任务定义 API 获取 displayName ──
-          // chat.ts 的 loadSessions 直接定义在 store 中，绕过了 session-actions.ts，
+          // loadSessions 定义在本 store 内（非独立 session-actions 模块）。
           // 但遗漏了从任务定义 API 拉取名称填充 displayName 的关键步骤。
           // 当 startTask 异步分离执行时，后端 session 文件尚未写入，本地保留的会话条目缺少 displayName，
           // 导致侧边栏任务分组标题降级为技术 ID 而非人类可读的任务名。
@@ -1590,6 +1609,7 @@ export const useChatStore = create<ChatState>()(
         error: null,
         pendingFinal: false,
         lastUserMessageAt: null,
+        optimisticUserMessage: null,
         pendingToolImages: [],
         currentSessionKey: next?.key ?? DEFAULT_SESSION_KEY,
         currentAgentId: getAgentIdFromSessionKey(next?.key ?? DEFAULT_SESSION_KEY),
@@ -1673,6 +1693,7 @@ export const useChatStore = create<ChatState>()(
         error: null,
         pendingFinal: false,
         lastUserMessageAt: null,
+        optimisticUserMessage: null,
         pendingToolImages: [],
       };
     });
@@ -1708,19 +1729,19 @@ export const useChatStore = create<ChatState>()(
 
   // ── Load chat history ──
 
-  loadHistory: async (quiet = false) => {
+  loadHistory: async (quiet = false, force = false) => {
     const targetSessionKey = get().currentSessionKey;
     const existingLoad = _historyLoadInFlight.get(targetSessionKey);
     if (existingLoad) {
       await existingLoad;
       if (get().currentSessionKey !== targetSessionKey) {
-        return get().loadHistory(quiet);
+        return get().loadHistory(quiet, force);
       }
       return;
     }
 
     const lastLoadAt = _lastHistoryLoadAtBySession.get(targetSessionKey) || 0;
-    if (quiet && Date.now() - lastLoadAt < HISTORY_LOAD_MIN_INTERVAL_MS) {
+    if (quiet && !force && Date.now() - lastLoadAt < HISTORY_LOAD_MIN_INTERVAL_MS) {
       return;
     }
 
@@ -1757,12 +1778,31 @@ export const useChatStore = create<ChatState>()(
       const userMsgAt = get().lastUserMessageAt;
       const historyUserCountBefore = enrichedMessages.filter((m) => m.role === 'user').length;
       const historyMessageCountBefore = enrichedMessages.length;
+      const cachedOptimistic = getSessionRuntimeState(
+        get().runtimeBySessionKey,
+        targetSessionKey,
+      ).optimisticUserMessage ?? get().optimisticUserMessage;
       if (userMsgAt) {
         finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
           userMessageAt: userMsgAt,
           sending: get().sending,
           sessionKey: targetSessionKey,
+          cachedOptimistic,
         });
+        if (cachedOptimistic && finalMessages.some((m) => isSameUserMessage(m, cachedOptimistic, userMsgAt))) {
+          set((s) => patchSessionRuntimeState(s, targetSessionKey, { optimisticUserMessage: null }));
+        } else if (cachedOptimistic) {
+          const cachedNorm = normalizeUserMessageText(cachedOptimistic.content);
+          if (
+            cachedNorm.length > 0
+            && finalMessages.some((m) => (
+              m.role === 'user'
+              && normalizeUserMessageText(m.content) === cachedNorm
+            ))
+          ) {
+            set((s) => patchSessionRuntimeState(s, targetSessionKey, { optimisticUserMessage: null }));
+          }
+        }
       }
 
       if (get().currentSessionKey !== targetSessionKey) return;
@@ -1990,13 +2030,17 @@ export const useChatStore = create<ChatState>()(
 
       if (get().currentSessionKey !== targetSessionKey) return;
 
-      const shouldKeepClaudeRunActive = isSendingNow && activeEngineType === 'claude';
-      const claudeRuntimeDone =
-        activeEngineType === 'claude'
-        && runtimeState?.isRunning === false
-        && isClaudeRuntimeResultDone(runtimeState.runtimeResult);
+      const claudeRuntimeDone = shouldAutoCompleteClaudeFromHistory(
+        activeEngineType,
+        runtimeState,
+        Boolean(recentAssistant || currentRecentAssistant),
+      );
 
-      if ((recentAssistant || currentRecentAssistant) && (!shouldKeepClaudeRunActive || claudeRuntimeDone)) {
+      // Agentic runs write intermediate assistant text between tool rounds.
+      // Only complete from history when Claude runtime reports done.
+      const shouldAutoCompleteFromHistory = claudeRuntimeDone;
+
+      if (shouldAutoCompleteFromHistory) {
         clearHistoryPoll();
         useSessionUnreadStore.getState().markSessionRead(targetSessionKey);
         set((s) => patchSessionRuntimeState(s, targetSessionKey, {
@@ -2004,13 +2048,14 @@ export const useChatStore = create<ChatState>()(
           activeRunId: null,
           pendingFinal: false,
           lastUserMessageAt: null,
+          optimisticUserMessage: null,
           streamingText: '',
           streamingMessage: null,
           streamingTools: [],
           pendingToolImages: [],
           error: null,
         }));
-      } else if (hasRecentAssistantActivity && !pendingFinal) {
+      } else if (hasRecentAssistantActivity && !pendingFinal && isSendingNow) {
         set((s) => patchSessionRuntimeState(s, targetSessionKey, { pendingFinal: true }));
       }
       };
@@ -2240,6 +2285,7 @@ export const useChatStore = create<ChatState>()(
       streamingTools: [],
       pendingFinal: false,
       lastUserMessageAt: nowMs,
+      optimisticUserMessage: userMsg,
     }));
     set((s) => patchSessionRuntimeState(s, currentSessionKey, {
       sending: true,
@@ -2249,6 +2295,7 @@ export const useChatStore = create<ChatState>()(
       streamingTools: [],
       pendingFinal: false,
       lastUserMessageAt: nowMs,
+      optimisticUserMessage: userMsg,
       pendingToolImages: [],
       error: null,
     }));
@@ -2273,7 +2320,7 @@ export const useChatStore = create<ChatState>()(
     // Start the history poll and safety timeout IMMEDIATELY (before the
     // RPC await) because the gateway's chat.send RPC may block until the
     // entire agentic conversation finishes — the poll must run in parallel.
-    _lastChatEventAt = Date.now();
+    touchLastChatEventAt(set);
     clearHistoryPoll();
     clearErrorRecoveryTimer();
 
@@ -2286,7 +2333,7 @@ export const useChatStore = create<ChatState>()(
         _historyPollTimer = setTimeout(pollHistory, POLL_INTERVAL);
         return;
       }
-      if (Date.now() - _lastChatEventAt < HISTORY_POLL_SILENCE_WINDOW_MS) {
+      if (Date.now() - getLastChatEventAt() < HISTORY_POLL_SILENCE_WINDOW_MS) {
         _historyPollTimer = setTimeout(pollHistory, POLL_INTERVAL);
         return;
       }
@@ -2304,7 +2351,7 @@ export const useChatStore = create<ChatState>()(
         setTimeout(checkStuck, 10_000);
         return;
       }
-      if (Date.now() - _lastChatEventAt < SAFETY_TIMEOUT_MS) {
+      if (Date.now() - getLastChatEventAt() < SAFETY_TIMEOUT_MS) {
         setTimeout(checkStuck, 10_000);
         return;
       }
@@ -2314,6 +2361,7 @@ export const useChatStore = create<ChatState>()(
         sending: false,
         activeRunId: null,
         lastUserMessageAt: null,
+        optimisticUserMessage: null,
       });
       set((s) => patchSessionRuntimeState(s, currentSessionKey, {
         sending: false,
@@ -2425,7 +2473,7 @@ export const useChatStore = create<ChatState>()(
     clearHistoryPoll();
     clearErrorRecoveryTimer();
     const { currentSessionKey } = get();
-    set({ sending: false, streamingText: '', streamingMessage: null, pendingFinal: false, lastUserMessageAt: null, pendingToolImages: [] });
+    set({ sending: false, streamingText: '', streamingMessage: null, pendingFinal: false, lastUserMessageAt: null, optimisticUserMessage: null, pendingToolImages: [] });
     set({ streamingTools: [] });
     set((s) => patchSessionRuntimeState(s, currentSessionKey, {
       sending: false,
@@ -2532,7 +2580,7 @@ export const useChatStore = create<ChatState>()(
 
     if (isDuplicateChatEvent(eventState, event)) return;
 
-    _lastChatEventAt = Date.now();
+    touchLastChatEventAt(set);
 
     // Defensive: if state is missing but we have a message, try to infer state.
     let resolvedState = eventState;
@@ -2692,27 +2740,44 @@ export const useChatStore = create<ChatState>()(
             break;
           }
           const toolOnly = isToolOnlyMessage(finalMsg);
-          const hasOutput = hasNonToolAssistantContent(finalMsg);
           const currentEngineType = resolveEngineTypeForSession(
             get().sessions,
             get().currentSessionKey,
             get().currentAgentId,
           );
-          const eventPhase = String(event.phase ?? '').toLowerCase();
-          const isAgentCompletedEvent =
-            eventPhase === 'completed'
-            || eventPhase === 'done'
-            || eventPhase === 'finished'
-            || eventPhase === 'end';
-          const isClaudeRunFragment =
-            currentEngineType === 'claude'
-            && get().sending
-            && !isAgentCompletedEvent;
-          const isTerminalOutput =
-            hasOutput
-            && !hasPendingToolUse(finalMsg)
-            && !isClaudeRunFragment;
-                    const msgId = finalMsg.id || (toolOnly
+          const { isTerminalOutput } = resolveAssistantFinalTerminalState(
+            currentEngineType,
+            get().sending,
+            event.phase,
+            finalMsg,
+          );
+
+          // OpenClaw gateway final events carry a merged stream buffer, not the
+          // transcript's last assistant reply. On terminal final, reload history.
+          const deferFinalToHistory =
+            currentEngineType !== 'claude'
+            && isTerminalOutput
+            && !toolOnly;
+          if (deferFinalToHistory) {
+            set(() => ({
+              streamingText: '',
+              streamingMessage: null,
+              streamingTools: [],
+              pendingToolImages: [],
+              sending: false,
+              activeRunId: null,
+              pendingFinal: false,
+              lastUserMessageAt: null,
+              optimisticUserMessage: null,
+            }));
+            clearHistoryPoll();
+            void get().loadHistory(true, true).then(() => {
+              finalizeMessagesFromHistoryLoad(get, set);
+            });
+            break;
+          }
+
+          const msgId = finalMsg.id || (toolOnly
             ? `run-${runId}-tool-${Date.now()}`
             : isTerminalOutput
               ? `run-${runId || 'unknown'}`
@@ -2842,15 +2907,8 @@ export const useChatStore = create<ChatState>()(
           // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
           if (isTerminalOutput && !toolOnly) {
             clearHistoryPoll();
-            void get().loadHistory(true).then(() => {
-              let patched = patchLastAssistantWithWorkflowForm(get().messages, getMessageText);
-              patched = ensureWorkflowCardsInMessages(
-                patched,
-                get().currentSessionKey,
-                getMessageText,
-              );
-              if (patched !== get().messages) set({ messages: patched });
-              ensureWorkflowParameterFormInjected(getMessageText);
+            void get().loadHistory(true, true).then(() => {
+              finalizeMessagesFromHistoryLoad(get, set);
             });
           }
         } else {
@@ -2913,7 +2971,7 @@ export const useChatStore = create<ChatState>()(
           }, ERROR_RECOVERY_GRACE_MS);
         } else {
           clearHistoryPoll();
-          set({ sending: false, activeRunId: null, lastUserMessageAt: null });
+          set({ sending: false, activeRunId: null, lastUserMessageAt: null, optimisticUserMessage: null });
         }
         break;
       }
@@ -2980,3 +3038,30 @@ export const useChatStore = create<ChatState>()(
     sessionLastActivity: state.sessionLastActivity,
   }),
 }));
+
+/** OpenClaw has no Claude-style runtimeResult; agent.completed is the terminal signal. */
+export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null): void {
+  const state = useChatStore.getState();
+  const targetKey = sessionKey ?? state.currentSessionKey;
+  const engineType = resolveEngineTypeForSession(state.sessions, targetKey, state.currentAgentId);
+  if (engineType !== 'openclaw') return;
+
+  clearHistoryPoll();
+  useChatStore.setState((prev) => patchSessionRuntimeState(prev, targetKey, {
+    sending: false,
+    activeRunId: null,
+    pendingFinal: false,
+    lastUserMessageAt: null,
+    optimisticUserMessage: null,
+    streamingText: '',
+    streamingMessage: null,
+    streamingTools: [],
+    pendingToolImages: [],
+    error: null,
+  }));
+  if (targetKey === state.currentSessionKey) {
+    finalizeMessagesFromHistoryLoad(() => useChatStore.getState(), (partial) => {
+      useChatStore.setState(partial);
+    });
+  }
+}

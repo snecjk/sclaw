@@ -82,6 +82,7 @@
     "streaming": {
         "connectingModel": "モデルに接続中...",
         "understandingQuestion": "ご質問を理解しています…",
+        "stillExecuting": "実行中（ファイルを書き込み中）…",
         "awaitingReply": "返信後、Clawが作業を続けます…",
         "thinkingProcessTitle": "思考過程",
         "deepThinkingLabel": "深い思考",
