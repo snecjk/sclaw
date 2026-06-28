@@ -462,9 +462,6 @@ export function WorkflowDashboard({
                     // TODO: 点击详情弹窗暂不启用
                     // onCardClick={() => openDetailForOfficial(card)}
                     // onPreview={() => openDetailForOfficial(card)}
-                    onCreateFromTemplate={() => {
-                      navigate(`/workflow/new?templateId=${encodeURIComponent(card.id)}`);
-                    }}
                     onInstall={() => {
                       const q = encodeURIComponent(`/${card.name}`);
                       const wid = encodeURIComponent(card.id);
