@@ -66,4 +66,25 @@ describe('preview-file-path', () => {
     expect(merged).toHaveLength(1);
     expect(merged[0]?.fileSize).toBe(13_190_000);
   });
+
+  it('drops truncated local path when full html sibling exists', () => {
+    const deduped = dedupeAttachedFiles([
+      {
+        fileName: '申通快递分析',
+        filePath: '/Users/sto/.claw-output/申通快递分析',
+        fileSize: 0,
+        preview: null,
+        mimeType: 'application/octet-stream',
+      },
+      {
+        fileName: '申通快递分析 -20260628.html',
+        filePath: '/Users/sto/.claw-output/申通快递分析 -20260628.html',
+        fileSize: 0,
+        preview: null,
+        mimeType: 'text/html',
+      },
+    ]);
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0]?.mimeType).toBe('text/html');
+  });
 });

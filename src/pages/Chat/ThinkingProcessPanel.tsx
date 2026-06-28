@@ -44,7 +44,7 @@ function StreamingPulse() {
   );
 }
 
-export type ConnectingLabelKey = 'connectingModel' | 'understandingQuestion';
+export type ConnectingLabelKey = 'connectingModel' | 'understandingQuestion' | 'stillExecuting';
 
 export interface ConnectingModelIndicatorProps {
   className?: string;
@@ -96,6 +96,7 @@ interface ThinkingProcessPanelProps {
   isStreaming?: boolean;
   isConnecting?: boolean;
   isProcessing?: boolean;
+  isStillExecuting?: boolean;
   streamingTools?: StreamingTool[];
   /** @see ConnectingModelIndicatorProps.labelKey */
   connectingLabelKey?: ConnectingLabelKey;
@@ -160,6 +161,7 @@ export function ThinkingProcessPanel({
   isStreaming = false,
   isConnecting = false,
   isProcessing = false,
+  isStillExecuting = false,
   streamingTools = [],
   connectingLabelKey = 'understandingQuestion',
   className,
@@ -170,14 +172,14 @@ export function ThinkingProcessPanel({
   const fetchSkills = useSkillsStore((state) => state.fetchSkills);
 
   useEffect(() => {
-    if (isStreaming || isConnecting || isProcessing) {
+    if (isStreaming || isConnecting || isProcessing || isStillExecuting) {
       setExpanded(true);
       return;
     }
     if (timeline.length > 0) {
       setExpanded(false);
     }
-  }, [isStreaming, isConnecting, isProcessing, timeline.length]);
+  }, [isStreaming, isConnecting, isProcessing, isStillExecuting, timeline.length]);
 
   useEffect(() => {
     if (skills.length === 0) {
@@ -228,7 +230,7 @@ export function ThinkingProcessPanel({
   );
 
   const hasPanelBody =
-    mergedTimeline.length > 0 || isConnecting || isProcessing || !!runningTool;
+    mergedTimeline.length > 0 || isConnecting || isProcessing || isStillExecuting || !!runningTool;
 
   const headerLabel = collapsedSummary ?? t('streaming.thinkingProcessTitle');
 
@@ -285,6 +287,10 @@ export function ThinkingProcessPanel({
               />
             );
           })}
+
+          {isStillExecuting && !isConnecting && !runningTool ? (
+            <ConnectingModelIndicator labelKey="stillExecuting" />
+          ) : null}
 
           {isConnecting ? <ConnectingModelIndicator labelKey={connectingLabelKey} /> : null}
 

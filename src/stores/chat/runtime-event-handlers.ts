@@ -4,7 +4,6 @@ import {
   collectToolUpdates,
   extractImagesAsAttachedFiles,
   extractMediaRefs,
-  extractRawFilePaths,
   formatChatRuntimeError,
   getMessageText,
   getToolCallFilePath,
@@ -86,12 +85,12 @@ export function handleRuntimeEventState(
               }
               const text = getMessageText(finalMsg.content);
               if (text) {
-                const mediaRefs = extractMediaRefs(text);
-                const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
+                const mediaRefs = extractMediaRefs(text, {
+                  source: 'tool-result:media-attached',
+                  messageId: finalMsg.id,
+                  toolCallId: finalMsg.toolCallId,
+                });
                 for (const ref of mediaRefs) toolFiles.push(makeAttachedFile(ref));
-                for (const ref of extractRawFilePaths(text)) {
-                  if (!mediaRefPaths.has(ref.filePath)) toolFiles.push(makeAttachedFile(ref));
-                }
               }
               set((s) => {
                 // Snapshot the current streaming assistant message (thinking + tool_use) into
@@ -171,6 +170,7 @@ export function handleRuntimeEventState(
               const nextMessages = dedupeRedundantUserMessages(
                 [...s.messages, msgWithImages],
                 s.lastUserMessageAt,
+                { sessionKey: get().currentSessionKey },
               );
               return toolOnly ? {
                 messages: nextMessages,

@@ -7,6 +7,7 @@
  */
 import { app } from 'electron';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { existsSync, cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, readdirSync, realpathSync } from 'node:fs';
 import { cp as cpAsync, mkdir as mkdirAsync, rm as rmAsync } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -312,10 +313,86 @@ function removeLegacyStoToolkitExtensionSibling(): void {
 
 const STO_WORKFLOW_DEV_SYNC_FILES = ['index.ts', 'api.ts', 'openclaw-sdk.ts', 'typebox-shim.ts', 'workflow-params.ts', 'workflow-search.ts', 'openclaw.plugin.json', 'package.json'] as const;
 
+const STO_DINGTALK_SEND_GUARD_DEV_SYNC_FILES = [
+  'index.ts',
+  'dingtalk-send-guard.ts',
+  'share-to-dingtalk.ts',
+  'dingtalk-mention-pending.ts',
+  'openclaw.plugin.json',
+  'package.json',
+  'shared/dws-send-text.ts',
+  'shared/dingtalk-disclaimer.ts',
+  'shared/dingtalk-mention-context.ts',
+  'shared/dingtalk-file-send.ts',
+  'shared/dingtalk-mention.ts',
+] as const;
+
+/** Reinstall bundled plugin when these files differ even if package.json version is unchanged. */
+const PLUGIN_CONTENT_SYNC_FILES: Record<string, readonly string[]> = {
+  'sto-dingtalk-send-guard': [
+    'shared/dws-send-text.ts',
+    'index.ts',
+    'dingtalk-send-guard.ts',
+  ],
+};
+
+function hashFileContent(filePath: string): string | null {
+  try {
+    return createHash('sha256').update(readFileSync(fsPath(filePath))).digest('hex');
+  } catch {
+    return null;
+  }
+}
+
+function pluginBundledContentMatches(
+  pluginDirName: string,
+  sourceDir: string,
+  targetDir: string,
+): boolean {
+  const files = PLUGIN_CONTENT_SYNC_FILES[pluginDirName];
+  if (!files?.length) return true;
+
+  for (const rel of files) {
+    const srcHash = hashFileContent(join(sourceDir, rel));
+    const dstHash = hashFileContent(join(targetDir, rel));
+    if (!srcHash || !dstHash || srcHash !== dstHash) return false;
+  }
+  return true;
+}
+
+function shouldRefreshInstalledPlugin(
+  pluginDirName: string,
+  sourceDir: string,
+  targetDir: string,
+  installedVersion: string | null,
+  sourceVersion: string | null,
+): boolean {
+  if (!sourceVersion || !installedVersion) return false;
+  if (sourceVersion !== installedVersion) return true;
+  return !pluginBundledContentMatches(pluginDirName, sourceDir, targetDir);
+}
+
 function ensurePluginRuntimeDeps(pluginDirName: string): void {
   const targetDir = join(getOpenClawConfigDir(), 'extensions', pluginDirName);
   if (!existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) return;
   copyPluginRuntimeDeps(pluginDirName, targetDir);
+}
+
+/** Dev-only: keep ~/.stoclaw extension in sync with sto-plugin sources without a version bump. */
+function syncStoDingTalkSendGuardDevSources(candidateSources: string[]): void {
+  if (app.isPackaged) return;
+  const sourceDir = pickPluginSourceDir('sto-dingtalk-send-guard', candidateSources);
+  if (!sourceDir) return;
+
+  const targetDir = join(getOpenClawConfigDir(), 'extensions', 'sto-dingtalk-send-guard');
+  if (!existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) return;
+
+  for (const file of STO_DINGTALK_SEND_GUARD_DEV_SYNC_FILES) {
+    const src = join(sourceDir, file);
+    if (!existsSync(fsPath(src))) continue;
+    cpSync(fsPath(src), fsPath(join(targetDir, file)), { force: true });
+  }
+  logger.info(`[plugin] Synced sto-dingtalk-send-guard dev sources from ${sourceDir}`);
 }
 
 /** Dev-only: keep ~/.stoclaw extension in sync with sto-plugin sources without a version bump. */
@@ -550,14 +627,20 @@ export function ensurePluginInstalled(
     }
     const installedVersion = readPluginVersion(targetPkgJson);
     const sourceVersion = readPluginVersion(join(sourceDir, 'package.json'));
-    if (!sourceVersion || !installedVersion || sourceVersion === installedVersion) {
+    if (!shouldRefreshInstalledPlugin(pluginDirName, sourceDir, targetDir, installedVersion, sourceVersion)) {
       afterStoPluginInstall(pluginDirName);
-      return { installed: true }; // same version or unable to compare
+      return { installed: true }; // same version/content or unable to compare
     }
-    // Version differs — fall through to overwrite install
-    logger.info(
-      `[plugin] Upgrading ${pluginLabel} plugin: ${installedVersion} → ${sourceVersion}`,
-    );
+    if (sourceVersion && installedVersion && sourceVersion === installedVersion) {
+      logger.info(
+        `[plugin] Refreshing ${pluginLabel} plugin: bundled content changed (version ${installedVersion})`,
+      );
+    } else {
+      // Version differs — fall through to overwrite install
+      logger.info(
+        `[plugin] Upgrading ${pluginLabel} plugin: ${installedVersion} → ${sourceVersion}`,
+      );
+    }
   }
 
   // Fresh install or upgrade — try bundled/build sources first
@@ -775,11 +858,16 @@ export function ensureStoMediaUnderstandingPluginInstalled(): { installed: boole
 }
 
 export function ensureStoDingTalkSendGuardPluginInstalled(): { installed: boolean; warning?: string } {
-  return ensurePluginInstalled(
+  const candidateSources = buildCandidateSources('sto-dingtalk-send-guard');
+  const result = ensurePluginInstalled(
     'sto-dingtalk-send-guard',
-    buildCandidateSources('sto-dingtalk-send-guard'),
+    candidateSources,
     'STO DingTalk Send Guard',
   );
+  if (result.installed) {
+    syncStoDingTalkSendGuardDevSources(candidateSources);
+  }
+  return result;
 }
 
 export function ensureStoDistinctiveDesignGuardPluginInstalled(): { installed: boolean; warning?: string } {
@@ -830,13 +918,19 @@ async function ensurePluginInstalledAsync(
     if (!sourceDir) return { installed: true };
     const installedVersion = readPluginVersion(targetPkgJson);
     const sourceVersion = readPluginVersion(join(sourceDir, 'package.json'));
-    if (!sourceVersion || !installedVersion || sourceVersion === installedVersion) {
+    if (!shouldRefreshInstalledPlugin(pluginDirName, sourceDir, targetDir, installedVersion, sourceVersion)) {
       afterStoPluginInstall(pluginDirName);
       return { installed: true };
     }
-    logger.info(
-      `[plugin] Upgrading ${pluginLabel} plugin: ${installedVersion} → ${sourceVersion}`,
-    );
+    if (sourceVersion && installedVersion && sourceVersion === installedVersion) {
+      logger.info(
+        `[plugin] Refreshing ${pluginLabel} plugin: bundled content changed (version ${installedVersion})`,
+      );
+    } else {
+      logger.info(
+        `[plugin] Upgrading ${pluginLabel} plugin: ${installedVersion} → ${sourceVersion}`,
+      );
+    }
   }
 
   if (!sourceDir) {

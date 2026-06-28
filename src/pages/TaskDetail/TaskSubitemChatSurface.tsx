@@ -66,6 +66,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
+  const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
   const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
   const streamingText = useChatStore((s) => s.streamingText);
   const clearError = useChatStore((s) => s.clearError);
@@ -159,6 +160,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
     sending: sessionSynced && sending,
     pendingFinal,
     showThinking,
+    lastChatEventAt: sessionSynced ? lastChatEventAt : 0,
     streamMsg: streamMsgObj,
     streamText: streamTextResolved,
     streamingTools,

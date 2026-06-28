@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Loader2, ChevronDown, Check } from 'lucide-react';
+import { X, Loader2, ChevronDown, Check, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
 import {
@@ -27,6 +27,8 @@ import type { CronJobCreateInput } from '@/types/cron';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { ClaudeTaskPermissionProfile } from '@/types/scheduled-task';
 import type { ManagedLocalTask } from '@/stores/cron';
+import { hostApiFetch } from '@/lib/host-api';
+import { toast } from 'sonner';
 
 type TaskEngineType = 'openclaw' | 'claude';
 
@@ -151,6 +153,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   const [instructions, setInstructions] = useState(correctedInstructions);
   const [schedule, setSchedule] = useState<ScheduleValue>(init.schedule);
   const [saving, setSaving] = useState(false);
+  const [beautifying, setBeautifying] = useState(false);
   const [recipients, setRecipients] = useState<DingTalkMention[]>(init.recipients);
   const [errors, setErrors] = useState<{ name?: string; instructions?: string }>({});
   const [engineType, setEngineType] = useState<TaskEngineType>(init.engineType);
@@ -174,6 +177,60 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   }, [workflowOpen]);
 
   const isEditing = !!job;
+
+  const handleBeautify = async () => {
+    const trimmed = instructions.trim();
+    if (!trimmed) {
+      setErrors((prev) => ({ ...prev, instructions: t('myTask.createModal.instructionsRequired') }));
+      return;
+    }
+
+    const selectedWorkflowOption = selectedWorkflow
+      ? workflowOptions.find((option) => option.value === selectedWorkflow)
+      : undefined;
+
+    setBeautifying(true);
+    try {
+      const result = await hostApiFetch<{
+        instruction: string;
+        changed: boolean;
+        source: 'model' | 'rules-fallback';
+        model?: string;
+      }>('/api/cron/beautify-instruction', {
+        method: 'POST',
+        body: JSON.stringify({
+          instruction: trimmed,
+          workflowId: selectedWorkflow || undefined,
+          workflowName: selectedWorkflowOption?.label,
+        }),
+      });
+
+      setInstructions(result.instruction);
+      if (errors.instructions) {
+        setErrors((prev) => ({ ...prev, instructions: undefined }));
+      }
+
+      if (!result.changed) {
+        toast.info(t('myTask.createModal.beautifyNoChange'));
+        return;
+      }
+
+      if (result.source === 'rules-fallback') {
+        toast.warning(t('myTask.createModal.beautifyFallback'));
+        return;
+      }
+
+      toast.success(
+        result.model
+          ? t('myTask.createModal.beautifySuccessWithModel', { model: result.model })
+          : t('myTask.createModal.beautifySuccess'),
+      );
+    } catch (err) {
+      toast.error(String(err) || t('myTask.createModal.beautifyFailed'));
+    } finally {
+      setBeautifying(false);
+    }
+  };
 
   const handleSubmit = async () => {
     const newErrors: typeof errors = {};
@@ -217,7 +274,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
         className="w-full max-w-[min(820px,100%)] bg-background rounded-[22px] border border-border shadow-2xl my-8 flex flex-col max-h-[calc(100vh-4rem)]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="flex items-start justify-between gap-4 mb-6 px-[18px] pt-[18px] flex-shrink-0">
           <div className="min-w-0">
             <h2 className="text-xl font-bold text-foreground tracking-[-0.02em] leading-[1.3] mb-2.5">
@@ -237,9 +293,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
           </button>
         </div>
 
-        {/* Form */}
         <div className="px-[18px] pb-[16px] flex flex-col gap-5 flex-1 overflow-y-auto min-h-0">
-          {/* Name */}
           <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.nameLabel')}</label>
             <input
@@ -260,7 +314,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
             {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
 
-          {/* Engine Type */}
           <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.engineLabel')}</label>
             <select
@@ -285,7 +338,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
             </p>
           </div>
 
-          {/* Workflow */}
           <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.workflowLabel')}</label>
             <div className="relative w-full" ref={workflowRef}>
@@ -354,47 +406,70 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
             </div>
           </div>
 
-          {/* Instructions */}
           <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">
               {t('myTask.createModal.instructionsLabel')}
             </label>
-            <textarea
-              value={instructions}
-              onChange={(e) => {
-                setInstructions(e.target.value);
-                if (errors.instructions) setErrors((p) => ({ ...p, instructions: undefined }));
-              }}
-              rows={8}
-              disabled={workflowDisabled}
-              placeholder={t('myTask.createModal.instructionsPlaceholder')}
-              className={cn(
-                'w-full resize-none rounded-[10px] border bg-background px-3.5 py-2.5 text-sm leading-relaxed transition-colors placeholder:text-muted-foreground',
-                formFieldFocusClass,
-                errors.instructions ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]' : 'border-border',
-                workflowDisabled && 'cursor-not-allowed bg-muted opacity-70',
-              )}
-            />
+            <div className="relative">
+              <textarea
+                value={instructions}
+                onChange={(e) => {
+                  setInstructions(e.target.value);
+                  if (errors.instructions) setErrors((p) => ({ ...p, instructions: undefined }));
+                }}
+                rows={8}
+                disabled={workflowDisabled}
+                placeholder={t('myTask.createModal.instructionsPlaceholder')}
+                className={cn(
+                  'w-full resize-none rounded-[10px] border bg-background px-3.5 pt-2.5 pb-11 text-sm leading-relaxed transition-colors placeholder:text-muted-foreground',
+                  formFieldFocusClass,
+                  errors.instructions ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]' : 'border-border',
+                  workflowDisabled && 'cursor-not-allowed bg-muted opacity-70',
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => { void handleBeautify(); }}
+                disabled={workflowDisabled || !instructions.trim() || beautifying}
+                className={cn(
+                  'absolute bottom-2.5 right-2.5 inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium transition-colors',
+                  'border border-[#FFD7A3] bg-[#FFF5E6] text-[#C2410C]',
+                  'hover:bg-[#FFEDD5] hover:border-[#FFC17A]',
+                  'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#FFF5E6]',
+                )}
+                aria-label={t('myTask.createModal.beautifyAria')}
+              >
+                {beautifying ? (
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                )}
+                {beautifying
+                  ? t('myTask.createModal.beautifying')
+                  : t('myTask.createModal.beautifyButton')}
+              </button>
+            </div>
             {errors.instructions && <p className="text-xs text-destructive">{errors.instructions}</p>}
-            {workflowDisabled && (
+            {workflowDisabled ? (
               <p className="text-xs text-muted-foreground">{t('myTask.createModal.workflowAutoHint')}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {t('myTask.createModal.instructionsHint')}
+              </p>
             )}
           </div>
 
-          {/* Schedule */}
           <div className="flex flex-col gap-2">
             <span className="block text-sm font-semibold text-foreground">{t('myTask.createModal.scheduleLabel')}</span>
             <SchedulePicker value={schedule} onChange={setSchedule} />
           </div>
 
-          {/* Recipients */}
           <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.recipientsLabel')}</label>
             <DingTalkRecipientField value={recipients} onChange={setRecipients} />
           </div>
         </div>
 
-        {/* Footer */}
         <div className="flex justify-end gap-3 px-[18px] py-4 border-t border-border bg-muted/20 rounded-b-[22px] flex-shrink-0">
           <Button
             variant="outline"

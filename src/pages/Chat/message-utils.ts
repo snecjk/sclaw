@@ -5,6 +5,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { hostApiFetch } from '@/lib/host-api';
+import { tracePreviewExtract } from '@/lib/preview-extract-trace';
 import { useChatStore } from '@/stores/chat';
 import { sessionHasWorkflowExecution } from '@/stores/workflow-memory';
 import { buildWorkflowFormConfig, buildWorkflowFormId } from '@/lib/workflow-form-utils';
@@ -14,6 +15,7 @@ import {
 } from '@/lib/parameter-form-marker';
 import { resolveParameterFormId } from '@/components/parameter-form/form-handlers';
 import type { RawMessage, ContentBlock } from '@/stores/chat';
+import { truncatePreviewExtractExcerpt } from '../../../shared/preview-extract-trace';
 import {
   stripDingTalkAgentSendDisclaimerForDisplay,
   stripDingTalkMentionContextForDisplay,
@@ -36,6 +38,7 @@ import {
   isPreviewableRemoteUrl,
   resolveArtifactUrlFromWorkflowStates,
   toMarkdownPreviewPath,
+  urlPathHasFileExtension,
 } from '@/lib/preview-url';
 import { normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
 import type { WorkflowExecutionState } from '@/types/workflow';
@@ -810,6 +813,11 @@ function extToMimeType(ext: string): string {
 }
 
 import { PREVIEWABLE_FILE_EXT_PATTERN } from '../../../shared/artifact-path';
+import {
+  createFileUrlInTextRegex,
+  isAttachableRawLocalPath,
+  localPathFromFileUrlCapture,
+} from '../../../shared/preview-raw-path';
 
 /** Shared extension list for previewable local file paths (used by extractPreviewableRefs and preprocessTextForPreviewLinks). */
 export const PREVIEWABLE_FILE_EXTS = PREVIEWABLE_FILE_EXT_PATTERN;
@@ -961,10 +969,32 @@ function extractPathsFromPathOnlyCodeBlocks(text: string): string[] {
  * Code blocks are stripped before matching to avoid false positives.
  * Lookbehind rejects URL path components (e.g. /report.html inside https://example.com/report.html).
  */
-export function extractPreviewableRefs(text: string): Array<{ filePath: string; fileName: string; mimeType: string }> {
+export function extractPreviewableRefs(
+  text: string,
+  trace?: { messageId?: string; sessionKey?: string },
+): Array<{ filePath: string; fileName: string; mimeType: string }> {
   const cleanText = stripCodeBlocks(text);
   const results: Array<{ filePath: string; fileName: string; mimeType: string }> = [];
   const seen = new Set<string>();
+
+  function recordExtract(
+    reason: string,
+    filePath: string,
+    fileName: string,
+    mimeType: string,
+    excerpt: string,
+  ): void {
+    tracePreviewExtract({
+      source: 'assistant-text:previewable-refs',
+      reason,
+      extracted: { filePath, fileName, mimeType },
+      excerpt: truncatePreviewExtractExcerpt(excerpt),
+      context: {
+        messageId: trace?.messageId,
+        sessionKey: trace?.sessionKey,
+      },
+    });
+  }
 
   for (const path of extractPathsFromPathOnlyCodeBlocks(text)) {
     const fileName = path.split(/[\\/]/).pop() || '';
@@ -975,6 +1005,7 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
         const key = normalizePreviewFileKey(path, fileName);
         if (key && !seen.has(key)) {
           seen.add(key);
+          recordExtract('path-only fenced code block or inline code', path, fileName, mimeType, path);
           results.push({ filePath: path, fileName, mimeType });
         }
       }
@@ -992,15 +1023,26 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
     const mimeType = extToMimeType(ext);
     if (mimeType.startsWith('image/')) continue;
     seen.add(key);
+    recordExtract('previewable path line in assistant text', path, fileName, mimeType, line);
     results.push({ filePath: path, fileName, mimeType });
   }
 
-  function addIfNotImage(filePath: string, fileName: string, ext: string) {
+  function addIfNotImage(
+    filePath: string,
+    fileName: string,
+    ext: string,
+    reason: string,
+    excerpt: string,
+  ) {
     const mimeType = extToMimeType(ext);
     if (mimeType.startsWith('image/')) return;
+    if (!filePath.startsWith('http://') && !filePath.startsWith('https://') && !isAttachableRawLocalPath(filePath)) {
+      return;
+    }
     const key = normalizePreviewFileKey(filePath, fileName);
     if (!key || seen.has(key)) return;
     seen.add(key);
+    recordExtract(reason, filePath, fileName, mimeType, excerpt);
     results.push({ filePath, fileName, mimeType });
   }
 
@@ -1008,15 +1050,13 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
   // Regex consumes file:// (2 slashes), capture group gets the 3rd slash + path.
   // For Windows: /C:/Users/... → strip leading / → C:/Users/...
   // For Unix: /Users/... → keep as-is → /Users/...
-  const fileUrlRegex = /file:\/\/(\/[A-Za-z]:[\\/][^\s)\]"',;<>]+|\/[^\s)\]"',;<>]+)/g;
+  const fileUrlRegex = createFileUrlInTextRegex();
   let match;
   while ((match = fileUrlRegex.exec(cleanText)) !== null) {
-    const captured = match[1];
-    // Strip leading / for Windows paths (/C:/ → C:/), keep for Unix (/Users/ → /Users/)
-    const filePath = captured.match(/^\/[A-Za-z]:/) ? captured.slice(1) : captured;
+    const filePath = localPathFromFileUrlCapture(match[1]);
     const fileName = filePath.split('/').pop() || '';
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
-    addIfNotImage(filePath, fileName, ext);
+    addIfNotImage(filePath, fileName, ext, 'file:// URL in assistant text', match[0]);
   }
 
   // Localhost URLs (previewable in side panel)
@@ -1025,16 +1065,21 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
     const url = match[1];
     const fileName = url.split('/').pop() || 'index.html';
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
-    addIfNotImage(url, fileName, ext);
+    addIfNotImage(url, fileName, ext, 'localhost URL in assistant text', match[0]);
   }
 
   // OSS / CDN http(s) links with previewable extensions
   for (const ref of extractPreviewableHttpUrls(cleanText)) {
-    addIfNotImage(ref.filePath, ref.fileName, ref.fileName.split('.').pop()?.toLowerCase() || '');
+    addIfNotImage(
+      ref.filePath,
+      ref.fileName,
+      ref.fileName.split('.').pop()?.toLowerCase() || '',
+      'http(s) URL with previewable extension',
+      ref.filePath,
+    );
   }
 
-  // File paths (relative ./, absolute /, and Windows C:\) — support code, config, doc, and web files
-  // Lookbehind (?<![\\w./:]) rejects matches that are part of a URL path component
+  // File paths (relative ./, absolute /, and Windows C:\)
   const pathRegex = new RegExp(
     `(?<![\\w./:])(\\./(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\n\\r]+[\\\\/])*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`,
     'gi',
@@ -1043,7 +1088,7 @@ export function extractPreviewableRefs(text: string): Array<{ filePath: string; 
     const path = match[1].replace(/\\/g, '/');
     const fileName = path.split(/[\\/]/).pop() || '';
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
-    addIfNotImage(path, fileName, ext);
+    addIfNotImage(path, fileName, ext, 'absolute/relative path regex in assistant text', match[0]);
   }
 
   return results;
@@ -1114,7 +1159,8 @@ export function resolvePreviewCandidate(
 ): { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null } | null {
   if (isHttpUrl(file.filePath)) return file;
   if (exists === true) return file;
-  if (exists === undefined) return null; // verification pending
+  if (exists === undefined) return null;
+  if (file.fileSize > 0) return file;
   const resolved = resolveArtifactUrlFromWorkflowStates(file.filePath, workflowCardStates ?? {});
   if (resolved && isHttpUrl(resolved)) {
     return {
@@ -1122,6 +1168,9 @@ export function resolvePreviewCandidate(
       filePath: resolved,
       mimeType: inferMimeTypeFromUrl(resolved, file.mimeType),
     };
+  }
+  if (urlPathHasFileExtension(file.filePath) || urlPathHasFileExtension(file.fileName)) {
+    return file;
   }
   return null;
 }

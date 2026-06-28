@@ -6,6 +6,7 @@ import {
   fixDwsChatMessageSendArgv,
   fixDwsChatMessageSendShellScript,
   parseDwsChatMessageSendShellCommandArgs,
+  rewriteDwsSendSpawnInvocation,
 } from '../../shared/dws-send-text';
 
 const DWS_CHAT_MSG_SEND = /dws\s+chat\s+message\s+send\b/i;
@@ -34,6 +35,20 @@ function normalizeDwsSendInvocation(cmd: string, argsList: string[]): string[] {
         if (fixedScript !== script) {
           const shellCopy = [...args];
           shellCopy[cIdx + 1] = fixedScript;
+          return shellCopy;
+        }
+      }
+    }
+  }
+  if (/powershell/i.test(c)) {
+    const cmdIdx = args.findIndex((arg) => /^-command$/i.test(String(arg)));
+    if (cmdIdx >= 0 && cmdIdx + 1 < args.length && typeof args[cmdIdx + 1] === 'string') {
+      const script = args[cmdIdx + 1];
+      if (DWS_CHAT_MSG_SEND.test(script)) {
+        const fixedScript = fixDwsChatMessageSendShellScript(script, { execShell: 'powershell' });
+        if (fixedScript !== script) {
+          const shellCopy = [...args];
+          shellCopy[cmdIdx + 1] = fixedScript;
           return shellCopy;
         }
       }
@@ -202,7 +217,7 @@ function patchChildProcess(): void {
               }
               return originalExecFile(...(execFileArgs as Parameters<typeof originalExecFile>));
             }
-            mutable[0] = fixDwsChatMessageSendShellScript(mutable[0]);
+            mutable[0] = fixDwsChatMessageSendShellScript(mutable[0], { execShell: 'powershell' });
             cmd = mutable[0] as string;
           } else {
             mutable[0] = fixDwsChatMessageSendShellScript(mutable[0]);
@@ -210,8 +225,16 @@ function patchChildProcess(): void {
           }
         }
       } else if (Array.isArray(mutable[1])) {
-        mutable[1] = normalizeDwsSendInvocation(cmd, cmdArgs);
-        cmdArgs = mutable[1] as string[];
+        const rewritten = rewriteDwsSendSpawnInvocation(cmd, cmdArgs);
+        if (rewritten) {
+          mutable[0] = rewritten.cmd;
+          mutable[1] = rewritten.args;
+          cmd = rewritten.cmd;
+          cmdArgs = rewritten.args;
+        } else {
+          mutable[1] = normalizeDwsSendInvocation(cmd, cmdArgs);
+          cmdArgs = mutable[1] as string[];
+        }
       }
 
       const blockedErr = resolveBlockedSpawnError(cmd, cmdArgs);
@@ -265,7 +288,7 @@ function patchChildProcess(): void {
               }
               return originalExecFileSync(...(execFileArgs as Parameters<typeof originalExecFileSync>));
             }
-            mutable[0] = fixDwsChatMessageSendShellScript(mutable[0]);
+            mutable[0] = fixDwsChatMessageSendShellScript(mutable[0], { execShell: 'powershell' });
             cmd = mutable[0] as string;
           } else {
             mutable[0] = fixDwsChatMessageSendShellScript(mutable[0]);
@@ -273,8 +296,16 @@ function patchChildProcess(): void {
           }
         }
       } else if (Array.isArray(mutable[1])) {
-        mutable[1] = normalizeDwsSendInvocation(cmd, cmdArgs);
-        cmdArgs = mutable[1] as string[];
+        const rewritten = rewriteDwsSendSpawnInvocation(cmd, cmdArgs);
+        if (rewritten) {
+          mutable[0] = rewritten.cmd;
+          mutable[1] = rewritten.args;
+          cmd = rewritten.cmd;
+          cmdArgs = rewritten.args;
+        } else {
+          mutable[1] = normalizeDwsSendInvocation(cmd, cmdArgs);
+          cmdArgs = mutable[1] as string[];
+        }
       }
 
       const blockedErr = resolveBlockedSpawnError(cmd, cmdArgs);

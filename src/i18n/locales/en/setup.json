@@ -109,7 +109,7 @@
     },
     "complete": {
         "title": "Setup Complete!",
-        "subtitle": "StoClaw is configured and ready to use. You can now start chatting with your AI assistant.",
+        "subtitle": "SClaw is configured and ready to use. You can now start chatting with your AI assistant.",
         "components": "Components",
         "envReady": "Environment ready",
         "gateway": "Gateway",

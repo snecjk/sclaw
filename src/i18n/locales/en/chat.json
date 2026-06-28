@@ -82,6 +82,7 @@
     "streaming": {
         "connectingModel": "Connecting to model...",
         "understandingQuestion": "Understanding your question…",
+        "stillExecuting": "Still running (writing files)…",
         "awaitingReply": "Claw will continue after you reply…",
         "thinkingProcessTitle": "Thinking process",
         "deepThinkingLabel": "Deep thinking",

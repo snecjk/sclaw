@@ -475,15 +475,17 @@ export async function buildCronSessionFallbackMessages(params: {
 
   // For each run, load full transcript from the run session jsonl file
   for (const entry of matchingRuns) {
-    // First add the summary message from the run log
-    const message = buildCronRunMessage(entry, matchingRuns.indexOf(entry));
-    if (message) messages.push(message);
-
-    // Then load full conversation from the run session file
     if (entry.sessionKey) {
       const runMessages = await readRunSessionMessages(entry.sessionKey);
-      messages.push(...runMessages);
+      if (runMessages.length > 0) {
+        // Full transcript available — use it and skip synthetic summary to avoid duplicates
+        messages.push(...runMessages);
+        continue;
+      }
     }
+    // No transcript — fall back to synthetic summary message from the run log
+    const message = buildCronRunMessage(entry, matchingRuns.indexOf(entry));
+    if (message) messages.push(message);
   }
 
   if (matchingRuns.length === 0) {
@@ -594,6 +596,24 @@ export async function handleCronRoutes(
   url: URL,
   ctx: HostApiContext,
 ): Promise<boolean> {
+  if (url.pathname === '/api/cron/beautify-instruction' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{
+        instruction: string;
+        workflowId?: string;
+        workflowName?: string;
+      }>(req);
+      const { beautifyScheduledTaskInstruction } = await import(
+        '../../services/scheduled-task-instruction-beautifier'
+      );
+      const result = await beautifyScheduledTaskInstruction(body);
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, 400, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/cron/session-history' && req.method === 'GET') {
     const sessionKey = url.searchParams.get('sessionKey')?.trim() || '';
     const parsedSession = parseCronSessionKey(sessionKey);
