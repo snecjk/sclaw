@@ -178,11 +178,13 @@ function resolveKnownSessionLabel(
   sessions: Array<{ key: string; label?: string }>,
 ): string | undefined {
   const stored = sessionLabels[sessionKey]?.trim();
-  if (stored && !isCorruptedSessionLabel(stored)) return stored;
+  if (stored && !isCorruptedSessionLabel(stored) && !isPlaceholderSessionLabel(stored)) return stored;
 
   const session = sessions.find((entry) => entry.key === sessionKey);
   const gatewayLabel = session?.label?.trim();
-  if (gatewayLabel && !isCorruptedSessionLabel(gatewayLabel)) return gatewayLabel;
+  if (gatewayLabel && !isCorruptedSessionLabel(gatewayLabel) && !isPlaceholderSessionLabel(gatewayLabel)) {
+    return gatewayLabel;
+  }
 
   return undefined;
 }
@@ -194,7 +196,7 @@ export function deriveSessionLabelFromHistory(
   options: DeriveSessionLabelOptions = {},
 ): string | undefined {
   const gatewayLabel = options.gatewayLabel?.trim();
-  if (gatewayLabel && !isCorruptedSessionLabel(gatewayLabel)) {
+  if (gatewayLabel && !isCorruptedSessionLabel(gatewayLabel) && !isPlaceholderSessionLabel(gatewayLabel)) {
     return gatewayLabel;
   }
 
@@ -226,4 +228,17 @@ export function isCorruptedSessionLabel(label: string): boolean {
   return label.includes('<!-- StoClaw-Workflow')
     || label.includes('## 工作流')
     || isSubagentContextOnlyLabel(label);
+}
+
+/** Default title before the first user message is derived — not a real session title. */
+const PLACEHOLDER_SESSION_LABELS = new Set([
+  '新对话',
+  'New Chat',
+  '新しいチャット',
+]);
+
+export function isPlaceholderSessionLabel(label: string): boolean {
+  const trimmed = label.trim();
+  if (!trimmed) return true;
+  return PLACEHOLDER_SESSION_LABELS.has(trimmed);
 }

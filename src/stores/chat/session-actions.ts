@@ -6,12 +6,11 @@ import { useSessionUnreadStore } from '@/stores/session-unread';
 import { useAgentsStore } from '@/stores/agents';
 import {
   getCanonicalPrefixFromSessions,
-  getMessageText,
   mergeSessionLastActivity,
   sanitizeSessionDisplayField,
   toMs,
 } from './helpers';
-import { DEFAULT_CANONICAL_PREFIX, DEFAULT_SESSION_KEY, type ChatSession, type RawMessage } from './types';
+import { DEFAULT_CANONICAL_PREFIX, DEFAULT_SESSION_KEY, type ChatSession } from './types';
 import {
   parseClaudeScheduledTaskRunSessionKey,
   parseClaudeScheduledTaskSessionKey,
@@ -19,24 +18,36 @@ import {
   parseScheduledTaskAgentSessionKey,
   parseScheduledTaskSessionKey,
 } from './cron-session-utils';
-import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSessionLabel } from '@/lib/workflow-session-hint';
-import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, hasUsableSessionTitle, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
+import { applyStoredSessionLabels, scrubCorruptedSessionLabels } from '@/lib/session-label';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 import { appendPendingLocalVirtualTaskSessions } from './session-list-merge';
+import {
+  scheduleSessionLabelHydration,
+} from './session-metadata-hydrate';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
-const SESSION_METADATA_HISTORY_LIMIT = 2;
-const SESSION_METADATA_HYDRATE_LIMIT = 40;
-const SESSION_METADATA_HYDRATE_CONCURRENCY = 4;
+
+function scheduleSessionLabelHydrationFromStore(set: ChatSet, get: ChatGet): void {
+  scheduleSessionLabelHydration(
+    () => ({
+      sessions: get().sessions,
+      sessionLabels: get().sessionLabels,
+      sessionLastActivity: get().sessionLastActivity,
+    }),
+    (updater) => {
+      set((state) => updater({
+        sessions: state.sessions,
+        sessionLabels: state.sessionLabels,
+        sessionLastActivity: state.sessionLastActivity,
+      }));
+    },
+  );
+}
 
 function getAgentIdFromSessionKey(sessionKey: string): string {
   if (!sessionKey.startsWith('agent:')) return 'main';
   const [, agentId] = sessionKey.split(':');
   return agentId || 'main';
-}
-
-function getSessionEngineType(session: ChatSession | undefined): ChatSession['engineType'] | undefined {
-  return session?.engineType;
 }
 
 function isTemporaryAgentSessionKey(key: string): boolean {
@@ -54,18 +65,6 @@ function parseSessionUpdatedAtMs(value: unknown): number | undefined {
     }
   }
   return undefined;
-}
-
-async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
-  let nextIndex = 0;
-  const workerCount = Math.min(Math.max(limit, 1), items.length);
-  await Promise.all(Array.from({ length: workerCount }, async () => {
-    while (nextIndex < items.length) {
-      const item = items[nextIndex];
-      nextIndex += 1;
-      await task(item);
-    }
-  }));
 }
 
 export function createSessionActions(
@@ -383,60 +382,8 @@ export function createSessionActions(
           await get().loadHistory();
         }
 
-        // Background: hydrate only the first screen of missing metadata.
-        // Avoid N * full-history fan-out when many sessions exist.
-        const sessionsToHydrate = labeledSessions
-          .filter((session) => {
-            if (session.key.endsWith(':main')) return false;
-            const hasActivity = Boolean(session.updatedAt || get().sessionLastActivity[session.key]);
-            return !hasUsableSessionTitle(session, scrubbedSessionLabels) || !hasActivity;
-          })
-          .sort((left, right) => {
-            const leftAt = left.updatedAt ?? get().sessionLastActivity[left.key] ?? 0;
-            const rightAt = right.updatedAt ?? get().sessionLastActivity[right.key] ?? 0;
-            return rightAt - leftAt;
-          })
-          .slice(0, SESSION_METADATA_HYDRATE_LIMIT);
-        if (sessionsToHydrate.length > 0) {
-          void runLimited(sessionsToHydrate, SESSION_METADATA_HYDRATE_CONCURRENCY, async (session) => {
-              try {
-                const history = await hostApiFetch<{ success?: boolean; result?: { messages?: RawMessage[] } }>(
-                  `/api/chat/history?sessionKey=${encodeURIComponent(session.key)}&limit=${SESSION_METADATA_HISTORY_LIMIT}`
-                  + (getSessionEngineType(session) ? `&engineType=${encodeURIComponent(getSessionEngineType(session)!)}`
-                    : ''),
-                );
-                const msgs = Array.isArray(history.result?.messages) ? history.result.messages : [];
-                const lastMsg = msgs[msgs.length - 1];
-                set((s) => {
-                  const next: Partial<typeof s> = {};
-                  if (shouldAutoDeriveSessionLabel(session.key, s.sessionLabels, isCorruptedSessionLabel)) {
-                    const labelText = deriveSessionLabelFromHistory(
-                      msgs,
-                      getMessageText,
-                      buildSessionLabelDerivationOptions(session.key, s.sessions, s.sessionLabels),
-                    );
-                    if (labelText) {
-                      next.sessionLabels = {
-                        ...s.sessionLabels,
-                        [session.key]: truncateSessionLabel(labelText),
-                      };
-                    }
-                  }
-                  if (lastMsg?.timestamp) {
-                    const lastAt = toMs(lastMsg.timestamp);
-                    if (lastAt > 0) {
-                      const currentAt = s.sessionLastActivity[session.key] ?? 0;
-                      const nextAt = Math.max(currentAt, lastAt);
-                      if (nextAt !== currentAt) {
-                        next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: nextAt };
-                      }
-                    }
-                  }
-                  return next;
-                });
-              } catch { /* ignore per-session errors */ }
-            });
-        }
+        // Background: hydrate sidebar titles from history (retries until Gateway is ready).
+        scheduleSessionLabelHydrationFromStore(set, get);
       } catch (err) {
         console.warn('Failed to load sessions:', err);
       }
