@@ -68,6 +68,34 @@ describe('user-message-merge', () => {
     ]);
   });
 
+  it('uses cachedOptimistic when messages[] was cleared by switchSession', () => {
+    const cachedOptimistic = {
+      id: 'local-user-2',
+      role: 'user',
+      content: '切换会话后还在发送',
+      timestamp: 1710000000,
+    } as RawMessage;
+    const enriched = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '连接模型中...',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = mergeOptimisticUserIntoHistory(enriched, [], {
+      userMessageAt: 1710000000000,
+      sending: true,
+      cachedOptimistic,
+    });
+
+    expect(merged.map((message) => message.content)).toEqual([
+      '切换会话后还在发送',
+      '连接模型中...',
+    ]);
+  });
+
   it('removes consecutive duplicate user messages', () => {
     const messages = [
       { id: 'user-1', role: 'user', content: '你仔细看下', timestamp: 1710000000 },
@@ -81,10 +109,6 @@ describe('user-message-merge', () => {
   });
 
   it('preserves non-adjacent identical-text user messages as distinct turns', () => {
-    // Regression: two separate sends of the same text, separated by an
-    // assistant reply, used to be collapsed by the text-based fallback —
-    // dropping the second user message and merging the two assistant replies
-    // into one turn (the "identical input overwrites previous output" bug).
     const messages = [
       { id: 'user-1', role: 'user', content: 'hello', timestamp: 1710000000 },
       { id: 'assistant-1', role: 'assistant', content: 'reply-1', timestamp: 1710000003 },

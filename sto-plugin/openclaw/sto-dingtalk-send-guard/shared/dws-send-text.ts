@@ -47,6 +47,49 @@ function unescapeDoubleQuotedShell(text: string): string {
   return out;
 }
 
+/** Unescape PowerShell double-quoted literals (`n, `"`, `$`, ``). */
+function unescapePowerShellDoubleQuoted(text: string): string {
+  let out = '';
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === '`' && i + 1 < text.length) {
+      const next = text[i + 1];
+      if (next === 'n') {
+        out += '\n';
+        i += 1;
+        continue;
+      }
+      if (next === 'r') {
+        out += '\r';
+        i += 1;
+        continue;
+      }
+      if (next === 't') {
+        out += '\t';
+        i += 1;
+        continue;
+      }
+      if (next === '"') {
+        out += '"';
+        i += 1;
+        continue;
+      }
+      if (next === '$') {
+        out += '$';
+        i += 1;
+        continue;
+      }
+      if (next === '`') {
+        out += '`';
+        i += 1;
+        continue;
+      }
+    }
+    out += ch;
+  }
+  return out;
+}
+
 function stripMistypedDollarPrefix(text: string): string {
   const trimmed = text.trimStart();
   if (!trimmed.startsWith('$')) return text;
@@ -66,15 +109,24 @@ export function parseDwsSendTextFlagSegment(raw: string): string {
     return unescapeBashDollarQuoted(trimmed.slice(2, -1));
   }
 
+  const psHereMatch = trimmed.match(/^\(@'([\s\S]*)'@\)$/);
+  if (psHereMatch) return psHereMatch[1];
+
   if (trimmed.startsWith('"')) {
     const lastQuote = trimmed.lastIndexOf('"');
     if (lastQuote > 0) {
-      return unescapeDoubleQuotedShell(trimmed.slice(1, lastQuote));
+      const inner = trimmed.slice(1, lastQuote);
+      if (/`[nrt"$`]/.test(inner)) return unescapePowerShellDoubleQuoted(inner);
+      return unescapeDoubleQuotedShell(inner);
     }
   }
 
   if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
     return trimmed.slice(1, -1);
+  }
+
+  if (/`[nrt"$`]/.test(trimmed)) {
+    return unescapePowerShellDoubleQuoted(trimmed);
   }
 
   return unescapeLiteralDwsSendText(trimmed);
@@ -91,6 +143,28 @@ export function shellQuoteDwsSendTextForBash(text: string): string {
   return `$'${escaped}'`;
 }
 
+/**
+ * PowerShell double-quoted string for OpenClaw exec on Windows (`powershell -Command`).
+ * Keep the whole exec command on one line; do not embed multiline here-strings in -Command argv.
+ */
+export function shellQuoteDwsSendTextForPowerShell(text: string): string {
+  const escaped = text
+    .replace(/`/g, '``')
+    .replace(/"/g, '`"')
+    .replace(/\$/g, '`$')
+    .replace(/\r/g, '')
+    .replace(/\n/g, '`n');
+  return `"${escaped}"`;
+}
+
+export type DwsSendExecShell = 'bash' | 'powershell';
+
+function shellQuoteDwsSendTextForShell(text: string, execShell: DwsSendExecShell): string {
+  return execShell === 'powershell'
+    ? shellQuoteDwsSendTextForPowerShell(text)
+    : shellQuoteDwsSendTextForBash(text);
+}
+
 /** Parse shell/$' wrappers, unescape literals, then ensure `---` + 唯一代发说明底栏。 */
 export function normalizeDwsChatMessageSendText(text: string): string {
   const parsed = parseDwsSendTextFlagSegment(text);
@@ -99,6 +173,9 @@ export function normalizeDwsChatMessageSendText(text: string): string {
 }
 
 const DWS_CHAT_MSG_SEND = /dws\s+chat\s+message\s+send\b/i;
+
+const DWS_SEND_TEXT_FLAG_RE =
+  /--text\s+([\s\S]*?)(?=\s+--(?:format|uuid|dry-run|media|msg-type|dentry-id|space-id|file-name|file-type|file-path|file-size|open-dingtalk-id)\b|$)/gi;
 
 function tokenizeShellLikeCommand(command: string): string[] {
   const tokens: string[] = [];
@@ -168,16 +245,20 @@ export function parseDwsChatMessageSendShellCommandArgs(command: string): string
   return fixDwsChatMessageSendArgv(tokens.slice(1));
 }
 
-/** Fix `--text` payload inside a shell `-c` script (always re-quote as bash `$'...'`). */
-export function fixDwsChatMessageSendShellScript(script: string): string {
+/** Fix `--text` payload for the target exec shell (Claude/bash vs OpenClaw/PowerShell). */
+export function fixDwsChatMessageSendShellScript(
+  script: string,
+  options?: { execShell?: DwsSendExecShell },
+): string {
   if (!DWS_CHAT_MSG_SEND.test(script) || !/--text\s+/i.test(script)) return script;
+  const execShell = options?.execShell ?? 'bash';
 
   return script.replace(
-    /--text\s+([\s\S]*?)(?=\s+--(?:format|uuid|dry-run|media|msg-type|dentry-id|space-id|file-name|file-type|file-path|file-size|open-dingtalk-id)\b|$)/gi,
+    DWS_SEND_TEXT_FLAG_RE,
     (full, rawValue: string) => {
       const normalized = normalizeDwsChatMessageSendText(rawValue);
       if (!normalized) return full;
-      return `--text ${shellQuoteDwsSendTextForBash(normalized)}`;
+      return `--text ${shellQuoteDwsSendTextForShell(normalized, execShell)}`;
     },
   );
 }
@@ -205,27 +286,150 @@ const TOOL_COMMAND_PARAM_KEYS = [
 ] as const;
 
 /**
- * Rewrite tool params so `dws chat message send --text` uses real newlines.
- * Run after send-guard checks on the original command (guard blocks `$'` upfront).
- * Windows also uses Git Bash (`bash -c`); double-quoted `--text "...\n..."` does not
- * expand `\n`, so apply the same `$'...'` rewrite as on Unix (gateway preload is backup).
+ * Rewrite tool params for Claude/bash exec (default: bash `$'...'` on all platforms).
  */
 export function fixDwsChatMessageSendToolParams(
   params: Record<string, unknown> | undefined,
+  options?: { execShell?: DwsSendExecShell },
 ): Record<string, unknown> | undefined {
   if (!params) return undefined;
+  const execShell = options?.execShell ?? 'bash';
 
   for (const key of TOOL_COMMAND_PARAM_KEYS) {
     const value = params[key];
     if (typeof value !== 'string') continue;
     if (!DWS_CHAT_MSG_SEND.test(value) || !/--text\s+/i.test(value)) continue;
 
-    const fixed = fixDwsChatMessageSendShellScript(value);
+    const fixed = fixDwsChatMessageSendShellScript(value, { execShell });
     if (fixed !== value) {
       return { ...params, [key]: fixed };
     }
   }
   return undefined;
+}
+
+/** Parse agent/exec command into normalized `dws` argv (real newlines in `--text`). */
+export function extractNormalizedDwsSendArgv(rawCommand: string): string[] | null {
+  if (!DWS_CHAT_MSG_SEND.test(rawCommand) || !/--text\s+/i.test(rawCommand)) return null;
+  const rebuilt = rawCommand.replace(
+    DWS_SEND_TEXT_FLAG_RE,
+    (_full, rawValue: string) => {
+      const normalized = normalizeDwsChatMessageSendText(rawValue);
+      return `--text ${JSON.stringify(normalized)}`;
+    },
+  );
+  return parseDwsChatMessageSendShellCommandArgs(rebuilt);
+}
+
+const WIN32_NODE_DWS_B64_RE = /Buffer\.from\('([^']+)','base64'\)/;
+
+function parseWin32NodeDwsExecScript(script: string): string[] | null {
+  if (!/execFileSync\('dws(?:\.exe)?'/i.test(script)) return null;
+  const match = script.match(WIN32_NODE_DWS_B64_RE);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(match[1], 'base64').toString('utf8')) as unknown;
+    if (!Array.isArray(parsed) || parsed[0] !== 'chat') return null;
+    return fixDwsChatMessageSendArgv(parsed as string[]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Windows OpenClaw exec wraps commands in PowerShell `-Command`, which breaks Markdown
+ * newlines even with `n quoting. Encode argv as base64 and invoke via node execFileSync.
+ */
+export function buildWin32DirectDwsExecNodeCommand(rawCommand: string): string | null {
+  const argv = extractNormalizedDwsSendArgv(rawCommand);
+  if (!argv?.length) return null;
+  const payload = Buffer.from(JSON.stringify(argv), 'utf8').toString('base64');
+  if (payload.length > 24_000) return null;
+  return `node -e "require('child_process').execFileSync('dws.exe',JSON.parse(Buffer.from('${payload}','base64').toString('utf8')),{stdio:'inherit',windowsHide:true})"`;
+}
+
+/** OpenClaw Gateway exec on Windows uses PowerShell `-Command`; elsewhere use bash. */
+export function fixDwsChatMessageSendToolParamsForOpenClawExec(
+  params: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!params) return undefined;
+
+  if (process.platform === 'win32') {
+    for (const key of TOOL_COMMAND_PARAM_KEYS) {
+      const value = params[key];
+      if (typeof value !== 'string') continue;
+      if (!DWS_CHAT_MSG_SEND.test(value) || !/--text\s+/i.test(value)) continue;
+
+      const direct = buildWin32DirectDwsExecNodeCommand(value);
+      if (direct && direct !== value) {
+        return { ...params, [key]: direct };
+      }
+    }
+  }
+
+  const execShell: DwsSendExecShell =
+    process.platform === 'win32' ? 'powershell' : 'bash';
+  return fixDwsChatMessageSendToolParams(params, { execShell });
+}
+
+/**
+ * Parse `dws chat message send` out of shell-wrapper spawn argv (bash -c / PowerShell -Command).
+ * Returns normalized dws argv suitable for `spawn('dws', args)` — bypasses shell quoting.
+ */
+export function tryParseDwsSendExecInvocation(
+  cmd: string,
+  argsList: string[],
+): string[] | null {
+  const trimmedCmd = cmd.trim();
+  if (/^dws(\.exe)?$/i.test(trimmedCmd)) {
+    return fixDwsChatMessageSendArgv(argsList);
+  }
+
+  let script: string | undefined;
+  let execShell: DwsSendExecShell = 'bash';
+
+  if (/powershell|pwsh/i.test(trimmedCmd)) {
+    execShell = 'powershell';
+    const cmdIdx = argsList.findIndex((arg) => /^-command$/i.test(String(arg)));
+    if (cmdIdx >= 0 && cmdIdx + 1 < argsList.length && typeof argsList[cmdIdx + 1] === 'string') {
+      script = argsList[cmdIdx + 1];
+    }
+  } else if (/bash|sh|zsh|dash/i.test(trimmedCmd) || /\\bash$|\\sh$/.test(trimmedCmd)) {
+    const cIdx = argsList.indexOf('-c') >= 0 ? argsList.indexOf('-c') : argsList.indexOf('/c');
+    if (cIdx >= 0 && cIdx + 1 < argsList.length && typeof argsList[cIdx + 1] === 'string') {
+      script = argsList[cIdx + 1];
+    }
+  }
+
+  if (!script || !DWS_CHAT_MSG_SEND.test(script)) {
+    const nodeArgv = script ? parseWin32NodeDwsExecScript(script) : null;
+    if (nodeArgv) return nodeArgv;
+    return null;
+  }
+  const fixedScript = fixDwsChatMessageSendShellScript(script, { execShell });
+  return parseDwsChatMessageSendShellCommandArgs(fixedScript);
+}
+
+const SHELL_WRAPPER_CMD =
+  /(?:^|[\\/])(?:powershell|pwsh|bash|sh|zsh|dash|node(?:\.exe)?)(?:\.exe)?$/i;
+
+/** Rewrite shell-wrapper spawn to direct `dws` argv when parseable. */
+export function rewriteDwsSendSpawnInvocation(
+  cmd: string,
+  argsList: string[],
+  options?: { platform?: NodeJS.Platform },
+): { cmd: string; args: string[] } | null {
+  const platform = options?.platform ?? process.platform;
+  const parsedArgs = tryParseDwsSendExecInvocation(cmd, argsList);
+  if (!parsedArgs) return null;
+  if (/^dws(\.exe)?$/i.test(cmd.trim())) {
+    return { cmd: cmd.trim(), args: parsedArgs };
+  }
+  if (!SHELL_WRAPPER_CMD.test(cmd.trim())) return null;
+  return {
+    cmd: platform === 'win32' ? 'dws.exe' : 'dws',
+    args: parsedArgs,
+  };
 }
 
 /** Agent-facing `--text` value: JSON double-quoted string with `\n` escape sequences. */

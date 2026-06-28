@@ -98,6 +98,16 @@ export function resolveChatToolbarModelId(input: {
   const agent = normalizeModelIdForChat(input.agentModelDisplay);
   const catalog = (input.stoCatalogModelIds ?? []).map((id) => normalizeModelIdForChat(id));
 
+  // Agent 绑定的模型已不在 STO 目录（如 qwen3.7-plus → qwen3.7-max 更名后）→ 回退工作区默认
+  if (
+    workspace
+    && agent
+    && catalog.length > 0
+    && !catalog.includes(agent)
+  ) {
+    return workspace;
+  }
+
   // Main 等智能体上残留的 STO 显式模型（如 qwen3.7-max）应让位于 Settings 工作区默认
   if (
     workspace

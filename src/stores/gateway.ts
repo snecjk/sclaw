@@ -141,13 +141,13 @@ function maybeLoadSessions(
 }
 
 function maybeLoadHistory(
-  state: { loadHistory: (quiet?: boolean) => Promise<void> },
+  state: { loadHistory: (quiet?: boolean, force?: boolean) => Promise<void> },
   force = false,
 ): void {
   const now = Date.now();
   if (!force && now - lastLoadHistoryAt < LOAD_HISTORY_MIN_INTERVAL_MS) return;
   lastLoadHistoryAt = now;
-  void state.loadHistory(true);
+  void state.loadHistory(true, force);
 }
 
 function scheduleCompletedRunFinalization(runId: unknown, sessionKey: unknown): void {
@@ -166,7 +166,11 @@ function scheduleCompletedRunFinalization(runId: unknown, sessionKey: unknown): 
           if (!matchesCurrentSession && !matchesActiveRun && !hasBackgroundActiveRuntime) return;
 
           if (matchesCurrentSession || matchesActiveRun) {
-            await state.loadHistory(true);
+            await state.loadHistory(true, true);
+            if (index === 0) {
+              const { finalizeOpenClawRunAfterAgentCompleted } = await import('./chat');
+              finalizeOpenClawRunAfterAgentCompleted(completionSessionKey);
+            }
           }
 
           if (index !== COMPLETION_HISTORY_RELOAD_DELAYS_MS.length - 1) return;
@@ -349,7 +353,7 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
           const hasBackgroundActiveRuntime = Boolean(backgroundRuntime?.sending);
 
           if (matchesCurrentSession || matchesActiveRun) {
-            maybeLoadHistory(state);
+            maybeLoadHistory(state, true);
           }
           if ((matchesCurrentSession || matchesActiveRun) && state.sending) {
             useChatStore.setState({

@@ -35,6 +35,7 @@ export interface ActiveTurnStream {
   streamingTools: StreamingTool[];
   isConnecting: boolean;
   isProcessing: boolean;
+  isStillExecuting?: boolean;
 }
 
 interface AssistantTurnMessageProps {
@@ -78,6 +79,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   const isStreaming = !!activeStream;
   const isConnecting = activeStream?.isConnecting ?? false;
   const isProcessing = activeStream?.isProcessing ?? false;
+  const isStillExecuting = activeStream?.isStillExecuting ?? false;
   const streamingTools = activeStream?.streamingTools ?? [];
   const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
 
@@ -95,7 +97,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     (mergedTimeline.length > 0 ||
       streamingTools.length > 0 ||
       isConnecting ||
-      isProcessing);
+      isProcessing ||
+      isStillExecuting);
 
   const replyMessage = useMemo(() => {
     const fromHistory = pickAssistantReplyMessage(turnMessages);
@@ -201,6 +204,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       isStreaming={isStreaming}
       isConnecting={isConnecting}
       isProcessing={isProcessing}
+      isStillExecuting={isStillExecuting}
       streamingTools={streamingTools}
       connectingLabelKey={connectingLabelKey}
     />

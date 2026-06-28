@@ -72,6 +72,7 @@ export function Chat() {
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
+  const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
   const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
@@ -163,6 +164,7 @@ export function Chat() {
     sending,
     pendingFinal,
     showThinking,
+    lastChatEventAt,
     streamMsg,
     streamText,
     streamingTools,

@@ -135,6 +135,8 @@ export interface SessionRuntimeState {
   streamingTools: ToolStatus[];
   pendingFinal: boolean;
   lastUserMessageAt: number | null;
+  /** Optimistic user message kept across session switches while Gateway has not echoed it. */
+  optimisticUserMessage: RawMessage | null;
   pendingToolImages: AttachedFileMeta[];
   error: string | null;
   updatedAt: number;
@@ -156,7 +158,10 @@ export interface ChatState {
   streamingMessage: unknown | null;
   streamingTools: ToolStatus[];
   pendingFinal: boolean;
+  /** Timestamp (ms) of the last gateway chat event; used for stale-run UI hints. */
+  lastChatEventAt: number;
   lastUserMessageAt: number | null;
+  optimisticUserMessage: RawMessage | null;
   /** Images collected from tool results, attached to the next assistant message */
   pendingToolImages: AttachedFileMeta[];
   /** Last successful daily token quota check result. */
@@ -208,7 +213,7 @@ export interface ChatState {
   newSession: () => void;
   deleteSession: (key: string) => Promise<boolean>;
   cleanupEmptySession: () => void;
-  loadHistory: (quiet?: boolean) => Promise<void>;
+  loadHistory: (quiet?: boolean, force?: boolean) => Promise<void>;
   sendMessage: (options: SendMessageOptions) => Promise<void>;
   abortRun: () => Promise<void>;
   handleChatEvent: (event: Record<string, unknown>) => void;
