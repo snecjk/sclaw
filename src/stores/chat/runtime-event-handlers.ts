@@ -97,6 +97,7 @@ export function handleRuntimeEventState(
                   source: 'tool-result:raw-path',
                   messageId: finalMsg.id,
                   toolCallId: finalMsg.toolCallId,
+                  scanTarget: 'tool-result',
                 })) {
                   if (!mediaRefPaths.has(ref.filePath)) toolFiles.push(makeAttachedFile(ref));
                 }

@@ -8,6 +8,7 @@ import { hostApiFetch } from '@/lib/host-api';
  *
  * Logs go to DevTools console and Main log file (`~/Library/Application Support/StoClaw/logs/`).
  * Filter log file by `[PreviewExtract]` or `[StoClaw file-preview]`.
+ * Raw-path scans also emit `raw-path-scan-start` / `raw-path-scan-done` with full input excerpt + refs list.
  */
 export function isFilePreviewDebugEnabled(): boolean {
   try {

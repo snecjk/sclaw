@@ -18,6 +18,8 @@ export interface PreviewExtractTraceContext {
   messageId?: string;
   toolCallId?: string;
   sessionKey?: string;
+  /** Diagnostics: which message body is being scanned. */
+  scanTarget?: 'assistant-self' | 'preceding-user' | 'tool-result';
 }
 
 export interface PreviewExtractTraceEvent {
@@ -35,6 +37,7 @@ export interface PreviewExtractTraceEvent {
 }
 
 const MAX_EXCERPT_LEN = 320;
+const MAX_SCAN_INPUT_LEN = 800;
 
 export function truncatePreviewExtractExcerpt(text: string, maxLen = MAX_EXCERPT_LEN): string {
   const normalized = text.replace(/\s+/g, ' ').trim();
@@ -47,4 +50,25 @@ export function formatPreviewExtractLogMessage(event: PreviewExtractTraceEvent):
     ?? event.extracted.filePath.split(/[\\/]/).pop()
     ?? event.extracted.filePath;
   return `[PreviewExtract] source=${event.source} reason=${event.reason} path=${event.extracted.filePath} name=${name}`;
+}
+
+export interface RawFilePathScanRef {
+  filePath: string;
+  mimeType: string;
+  fileName?: string;
+}
+
+export interface RawFilePathScanTraceInput {
+  rawText: string;
+  cleanText: string;
+}
+
+export interface RawFilePathScanTraceResult {
+  rawTextLength: number;
+  cleanTextLength: number;
+  refs: RawFilePathScanRef[];
+}
+
+export function truncatePreviewScanInput(text: string, maxLen = MAX_SCAN_INPUT_LEN): string {
+  return truncatePreviewExtractExcerpt(text, maxLen);
 }

@@ -246,7 +246,7 @@ export const ChatMessage = memo(function ChatMessage({
           messageId: message.id,
           filePath: ref.filePath,
           fileName: ref.fileName,
-          exists,
+          exists: exists ?? null,
           reason: exists === false
             ? 'local path does not exist and no workflow artifact fallback'
             : 'existence check pending or unresolvable',

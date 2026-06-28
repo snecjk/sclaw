@@ -2,9 +2,17 @@ import { invokeIpc } from '@/lib/api-client';
 import { normalizePreviewFileKey } from '@/lib/preview-file-path';
 import {
   tracePreviewExtract,
+  traceRawFilePathScanDone,
+  traceRawFilePathScanStart,
   type PreviewExtractTraceContext,
 } from '@/lib/preview-extract-trace';
 import { truncatePreviewExtractExcerpt } from '../../../shared/preview-extract-trace';
+import {
+  buildRawAbsolutePathRegex,
+  createFileUrlInTextRegex,
+  isAttachableRawLocalPath,
+  localPathFromFileUrlCapture,
+} from '../../../shared/preview-raw-path';
 import type { AttachedFileMeta, ChatSession, ContentBlock, RawMessage, ToolStatus } from './types';
 
 // Module-level timestamp tracking the last chat event received.
@@ -222,10 +230,34 @@ function extractRawFilePaths(
   trace?: PreviewExtractTraceContext,
 ): Array<{ filePath: string; mimeType: string }> {
   const cleanText = stripCodeBlocks(text);
+  if (trace) {
+    traceRawFilePathScanStart(trace, { rawText: text, cleanText });
+  }
   const refs: Array<{ filePath: string; mimeType: string }> = [];
   const seen = new Set<string>();
 
   function rememberPath(p: string, reason: string, excerpt: string): boolean {
+    if (!isAttachableRawLocalPath(p)) {
+      if (trace) {
+        tracePreviewExtract({
+          source: trace.source,
+          reason: `rejected: local path lacks attachable file extension (${reason})`,
+          extracted: {
+            filePath: p,
+            mimeType: mimeFromExtension(p),
+            fileName: p.split(/[\\/]/).pop(),
+          },
+          excerpt: truncatePreviewExtractExcerpt(excerpt),
+          context: {
+            messageId: trace.messageId,
+            toolCallId: trace.toolCallId,
+            sessionKey: trace.sessionKey,
+            scanTarget: trace.scanTarget,
+          },
+        });
+      }
+      return false;
+    }
     const key = normalizePreviewFileKey(p);
     if (!key || seen.has(key)) return false;
     seen.add(key);
@@ -243,6 +275,7 @@ function extractRawFilePaths(
           messageId: trace.messageId,
           toolCallId: trace.toolCallId,
           sessionKey: trace.sessionKey,
+          scanTarget: trace.scanTarget,
         },
       });
     }
@@ -250,24 +283,20 @@ function extractRawFilePaths(
   }
 
   // file:// URLs — strip the scheme and use the underlying local path
-  const fileUrlRegex = /file:\/\/(\/[A-Za-z]:[\\/][^\s)\]"',;<>]+|\/[^\s)\]"',;<>]+)/g;
+  const fileUrlRegex = createFileUrlInTextRegex();
   let match;
   while ((match = fileUrlRegex.exec(cleanText)) !== null) {
-    const captured = match[1];
-    const p = captured.match(/^\/[A-Za-z]:/) ? captured.slice(1) : captured;
+    const p = localPathFromFileUrlCapture(match[1]);
     if (p && rememberPath(p, 'matched file:// URL in tool/message text', match[0])) {
       refs.push({ filePath: p, mimeType: mimeFromExtension(p) });
     }
   }
 
-  const exts = 'png|jpe?g|gif|webp|bmp|avif|svg|pdf|docx?|xlsx?|pptx?|txt|csv|md|html?|rtf|epub|zip|tar|gz|rar|7z|mp3|wav|ogg|aac|flac|m4a|mp4|mov|avi|mkv|webm|m4v';
-  const unixRegex = new RegExp(`(?<![\\w./:])((?:\\/|~\\/)[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
-  const winBackslashRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\\\[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
-  const winForwardRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\/[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
+  const absolutePathRegex = buildRawAbsolutePathRegex();
   const pathMatchers: Array<{ regex: RegExp; reason: string }> = [
-    { regex: unixRegex, reason: 'matched Unix absolute path (/ or ~/) with file extension' },
-    { regex: winBackslashRegex, reason: 'matched Windows absolute path (backslash) with file extension' },
-    { regex: winForwardRegex, reason: 'matched Windows absolute path (forward slash) with file extension' },
+    { regex: absolutePathRegex.unix, reason: 'matched Unix absolute path (/ or ~/) with file extension' },
+    { regex: absolutePathRegex.winBackslash, reason: 'matched Windows absolute path (backslash) with file extension' },
+    { regex: absolutePathRegex.winForward, reason: 'matched Windows absolute path (forward slash) with file extension' },
   ];
   for (const { regex, reason } of pathMatchers) {
     while ((match = regex.exec(cleanText)) !== null) {
@@ -276,6 +305,13 @@ function extractRawFilePaths(
         refs.push({ filePath: p, mimeType: mimeFromExtension(p) });
       }
     }
+  }
+  if (trace) {
+    traceRawFilePathScanDone(trace, {
+      rawTextLength: text.length,
+      cleanTextLength: cleanText.length,
+      refs,
+    });
   }
   return refs;
 }
@@ -469,6 +505,7 @@ function enrichWithToolResultFiles(messages: RawMessage[]): RawMessage[] {
           source: 'tool-result:raw-path',
           messageId: msg.id,
           toolCallId: msg.toolCallId,
+          scanTarget: 'tool-result',
         };
         for (const ref of extractRawFilePaths(text, rawTrace)) {
           if (!mediaRefPaths.has(ref.filePath)) {
@@ -531,7 +568,11 @@ function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
     // User messages never get raw-path previews so the image is not shown twice.
     let rawRefs: Array<{ filePath: string; mimeType: string }> = [];
     if (msg.role === 'assistant' && !isToolOnlyMessage(msg)) {
-      const rawTrace = { source: 'history:raw-path' as const, messageId: msg.id };
+      const rawTrace = {
+        source: 'history:raw-path' as const,
+        messageId: msg.id,
+        scanTarget: 'assistant-self' as const,
+      };
       rawRefs = extractRawFilePaths(text, rawTrace).filter(r => !mediaRefPaths.has(r.filePath));
 
       // Nearest preceding user message text (look back up to 5 messages)
@@ -544,6 +585,7 @@ function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
           for (const ref of extractRawFilePaths(prevText, {
             ...rawTrace,
             messageId: prev.id,
+            scanTarget: 'preceding-user',
           })) {
             if (!mediaRefPaths.has(ref.filePath) && !seenPaths.has(ref.filePath)) {
               seenPaths.add(ref.filePath);

@@ -813,6 +813,11 @@ function extToMimeType(ext: string): string {
 }
 
 import { PREVIEWABLE_FILE_EXT_PATTERN } from '../../../shared/artifact-path';
+import {
+  createFileUrlInTextRegex,
+  isAttachableRawLocalPath,
+  localPathFromFileUrlCapture,
+} from '../../../shared/preview-raw-path';
 
 /** Shared extension list for previewable local file paths (used by extractPreviewableRefs and preprocessTextForPreviewLinks). */
 export const PREVIEWABLE_FILE_EXTS = PREVIEWABLE_FILE_EXT_PATTERN;
@@ -1031,6 +1036,9 @@ export function extractPreviewableRefs(
   ) {
     const mimeType = extToMimeType(ext);
     if (mimeType.startsWith('image/')) return;
+    if (!filePath.startsWith('http://') && !filePath.startsWith('https://') && !isAttachableRawLocalPath(filePath)) {
+      return;
+    }
     const key = normalizePreviewFileKey(filePath, fileName);
     if (!key || seen.has(key)) return;
     seen.add(key);
@@ -1042,12 +1050,10 @@ export function extractPreviewableRefs(
   // Regex consumes file:// (2 slashes), capture group gets the 3rd slash + path.
   // For Windows: /C:/Users/... → strip leading / → C:/Users/...
   // For Unix: /Users/... → keep as-is → /Users/...
-  const fileUrlRegex = /file:\/\/(\/[A-Za-z]:[\\/][^)\]"',;<>]+|\/[^)\]"',;<>]+)/g;
+  const fileUrlRegex = createFileUrlInTextRegex();
   let match;
   while ((match = fileUrlRegex.exec(cleanText)) !== null) {
-    const captured = match[1];
-    // Strip leading / for Windows paths (/C:/ → C:/), keep for Unix (/Users/ → /Users/)
-    const filePath = captured.match(/^\/[A-Za-z]:/) ? captured.slice(1) : captured;
+    const filePath = localPathFromFileUrlCapture(match[1]);
     const fileName = filePath.split('/').pop() || '';
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     addIfNotImage(filePath, fileName, ext, 'file:// URL in assistant text', match[0]);
