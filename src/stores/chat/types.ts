@@ -172,6 +172,8 @@ export interface ChatState {
   sessionLabels: Record<string, string>;
   /** Last message timestamp (ms) per session key, used for sorting */
   sessionLastActivity: Record<string, number>;
+  /** Frozen sidebar "Recent" order captured on first load; stable until app restart. */
+  sidebarRecentOrder: string[];
   /** Task session keys being triggered; stabilizes sidebar order before switchSession/runtime. */
   activatingScheduledSessionAt: Record<string, number>;
 

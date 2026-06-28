@@ -54,6 +54,7 @@ import {
 } from '@/components/layout/sidebar-task-subitem-delete-trailing';
 import { useTranslation } from 'react-i18next';
 import { resolveSessionLabel } from '@/lib/session-label';
+import { sortSessionsByFrozenRecentOrder } from '@/lib/sidebar-recent-order';
 import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
@@ -675,6 +676,7 @@ export function Sidebar() {
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
+  const sidebarRecentOrder = useChatStore((s) => s.sidebarRecentOrder);
   const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
   const sending = useChatStore((s) => s.sending);
   const activatingScheduledSessionAt = useChatStore((s) => s.activatingScheduledSessionAt);
@@ -941,14 +943,8 @@ export function Sidebar() {
   };
 
   const recentSessionsSorted = useMemo(
-    () => [...normalSessions].sort((a, b) => {
-      const activityDiff = getEffectiveActivityMs(b) - getEffectiveActivityMs(a);
-      if (activityDiff !== 0) return activityDiff;
-      return b.key.localeCompare(a.key);
-    }),
-    // getEffectiveActivityMs 依赖 sessionLastActivity / currentSessionKey / sessionLabels / nowMs
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [normalSessions, sessionLastActivity, currentSessionKey, sessionLabels, nowMs],
+    () => sortSessionsByFrozenRecentOrder(normalSessions, sidebarRecentOrder, sessionLastActivity),
+    [normalSessions, sidebarRecentOrder, sessionLastActivity],
   );
 
   // Legacy 日期分桶：折叠轨与潜在回滚仍可能读取 bucket 数据

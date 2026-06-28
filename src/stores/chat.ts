@@ -36,6 +36,13 @@ import {
 } from '@/lib/scheduled-task-group-name';
 import { appendPendingLocalVirtualTaskSessions } from '@/stores/chat/session-list-merge';
 import {
+  buildInitialSidebarRecentOrder,
+  isSidebarRecentChatSessionKey,
+  mergeSidebarRecentOrder,
+  prependSidebarRecentOrder,
+  removeSidebarRecentOrderKey,
+} from '@/lib/sidebar-recent-order';
+import {
   scheduleSessionLabelHydrationForStore,
 } from '@/stores/chat/session-metadata-hydrate';
 import {
@@ -1157,6 +1164,7 @@ export const useChatStore = create<ChatState>()(
   runtimeBySessionKey: {},
   sessionLabels: {},
   sessionLastActivity: {},
+  sidebarRecentOrder: [],
   activatingScheduledSessionAt: {},
 
   showThinking: true,
@@ -1510,6 +1518,14 @@ export const useChatStore = create<ChatState>()(
                 labeledSessions,
               );
             }
+            const recentSessions = labeledSessions.filter((session) => isSidebarRecentChatSessionKey(session.key));
+            const recentKeys = recentSessions.map((session) => session.key);
+            let sidebarRecentOrder = state.sidebarRecentOrder;
+            if (sidebarRecentOrder.length === 0 && recentKeys.length > 0) {
+              sidebarRecentOrder = buildInitialSidebarRecentOrder(recentSessions, sessionLastActivity);
+            } else if (sidebarRecentOrder.length > 0) {
+              sidebarRecentOrder = mergeSidebarRecentOrder(sidebarRecentOrder, recentKeys);
+            }
             return {
               sessions: labeledSessions,
               currentSessionKey: nextSessionKey,
@@ -1517,6 +1533,7 @@ export const useChatStore = create<ChatState>()(
               sessionLastActivity,
               sessionLabels: scrubCorruptedSessionLabels(state.sessionLabels),
               activatingScheduledSessionAt,
+              sidebarRecentOrder,
             };
           });
 
@@ -1599,6 +1616,7 @@ export const useChatStore = create<ChatState>()(
         runtimeBySessionKey: clearSessionEntryFromMap(s.runtimeBySessionKey, key),
         sessionLabels: Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== key)),
         sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
+        sidebarRecentOrder: removeSidebarRecentOrderKey(s.sidebarRecentOrder, key),
         messages: [],
         streamingText: '',
         streamingMessage: null,
@@ -1620,6 +1638,7 @@ export const useChatStore = create<ChatState>()(
         runtimeBySessionKey: clearSessionEntryFromMap(s.runtimeBySessionKey, key),
         sessionLabels: Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== key)),
         sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
+        sidebarRecentOrder: removeSidebarRecentOrderKey(s.sidebarRecentOrder, key),
       }));
     }
     void get().loadSessions();
@@ -1669,6 +1688,10 @@ export const useChatStore = create<ChatState>()(
         delete nextRuntimeBySessionKey[currentSessionKey];
       }
       nextRuntimeBySessionKey[newKey] = createIdleSessionRuntimeState();
+      let sidebarRecentOrder = prependSidebarRecentOrder(s.sidebarRecentOrder, newKey);
+      if (leavingEmpty) {
+        sidebarRecentOrder = removeSidebarRecentOrderKey(sidebarRecentOrder, currentSessionKey);
+      }
       return {
         currentSessionKey: newKey,
         currentAgentId: newAgentId,
@@ -1683,6 +1706,7 @@ export const useChatStore = create<ChatState>()(
         sessionLastActivity: leavingEmpty
           ? Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey))
           : s.sessionLastActivity,
+        sidebarRecentOrder,
         messages: [],
         sending: false,
         streamingText: '',
@@ -1722,6 +1746,7 @@ export const useChatStore = create<ChatState>()(
       sessionLastActivity: Object.fromEntries(
         Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey),
       ),
+      sidebarRecentOrder: removeSidebarRecentOrderKey(s.sidebarRecentOrder, currentSessionKey),
     }));
   },
 
