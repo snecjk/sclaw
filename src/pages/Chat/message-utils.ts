@@ -817,6 +817,7 @@ import {
   createFileUrlInTextRegex,
   isAttachableRawLocalPath,
   localPathFromFileUrlCapture,
+  RAW_ATTACHABLE_EXT_PATTERN,
 } from '../../../shared/preview-raw-path';
 
 /** Shared extension list for previewable local file paths (used by extractPreviewableRefs and preprocessTextForPreviewLinks). */
@@ -1092,6 +1093,43 @@ export function extractPreviewableRefs(
   }
 
   return results;
+}
+
+/**
+ * Extract human-readable filenames from assistant text for display-name repair.
+ * Does not require paths to exist on disk (markdown labels, bare filenames).
+ */
+export function extractDisplayFileNameHints(text: string): Array<{ fileName: string }> {
+  if (!text.trim()) return [];
+  const cleanText = stripCodeBlocks(text);
+  const hints: Array<{ fileName: string }> = [];
+  const seen = new Set<string>();
+
+  function addHint(fileName: string) {
+    const trimmed = fileName.trim();
+    if (!trimmed || seen.has(trimmed.toLowerCase())) return;
+    const ext = trimmed.split('.').pop()?.toLowerCase() || '';
+    if (!ext || extToMimeType(ext).startsWith('image/')) return;
+    if (!new RegExp(`\\.(${RAW_ATTACHABLE_EXT_PATTERN})$`, 'i').test(trimmed)) return;
+    seen.add(trimmed.toLowerCase());
+    hints.push({ fileName: trimmed });
+  }
+
+  const mdLinkRegex = /\[([^\]\n]+)\]\((?:preview:\/\/)?[^)\s]+?\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = mdLinkRegex.exec(cleanText)) !== null) {
+    addHint(match[1]);
+  }
+
+  const bareNameRegex = new RegExp(
+    `(?<![\\w./:])([^\\s/\\\\\\[\\]()<>]+\\.(?:${RAW_ATTACHABLE_EXT_PATTERN}))(?![\\w.])`,
+    'gi',
+  );
+  while ((match = bareNameRegex.exec(cleanText)) !== null) {
+    addHint(match[1]);
+  }
+
+  return hints;
 }
 
 // ── Local path existence verification ────────────────────────────
