@@ -68,6 +68,20 @@ function rawMessageHasWorkflowContextForTemplate(
     || text.includes(`"templateId":"${templateId}"`);
 }
 
+function hasLivePendingWorkflowForTemplate(
+  templateId: string,
+  options?: { allowLivePending?: boolean },
+): boolean {
+  if (!options?.allowLivePending) return false;
+  const state = useChatStore.getState();
+  const pending = state.pendingWorkflow;
+  return Boolean(
+    pending?.templateId === templateId
+    && pending.schema
+    && (state.sending || pending.modelGuidanceSent),
+  );
+}
+
 /** `/` picker or sendWithWorkflow hidden workflow_context on the latest user turn. */
 export function lastUserTurnIsWorkflowPicker(
   templateId: string,
@@ -109,7 +123,12 @@ export function isWorkflowFormInjectionAllowed(
     allowLivePending?: boolean;
   },
 ): boolean {
-  if (sessionHasWorkflowExecution(sessionKey, templateId)) return false;
+  if (
+    sessionHasWorkflowExecution(sessionKey, templateId)
+    && !hasLivePendingWorkflowForTemplate(templateId, options)
+  ) {
+    return false;
+  }
 
   const lastUserIdx = findLastUserMessageIndex(uiMessages);
   if (lastUserIdx < 0) return false;
@@ -502,7 +521,12 @@ export function appendWorkflowParameterFormToMessage(
   if (pending.frontendFormInserted) return null;
 
   const sessionKey = useChatStore.getState().currentSessionKey;
-  if (sessionHasWorkflowExecution(sessionKey, pending.templateId)) return null;
+  if (
+    sessionHasWorkflowExecution(sessionKey, pending.templateId)
+    && !hasLivePendingWorkflowForTemplate(pending.templateId, options)
+  ) {
+    return null;
+  }
 
   const uiMessages = useChatStore.getState().messages;
   const targetIdx = uiMessages.findIndex((m) => m.id && m.id === message.id);
@@ -615,7 +639,12 @@ export function buildWorkflowParameterFormFromPending(
 } | null {
   if (!pending.schema || !pending.schemaHash) return null;
   const sessionKey = useChatStore.getState().currentSessionKey;
-  if (sessionHasWorkflowExecution(sessionKey, pending.templateId)) return null;
+  if (
+    sessionHasWorkflowExecution(sessionKey, pending.templateId)
+    && !hasLivePendingWorkflowForTemplate(pending.templateId, { allowLivePending: true })
+  ) {
+    return null;
+  }
 
   const formId = buildWorkflowFormId(pending.templateId);
   return {
@@ -665,6 +694,7 @@ export function resolveParameterFormForAssistantMessage(
         formContext.source === 'workflow'
         && formContext.sourceId
         && sessionHasWorkflowExecution(sessionKey, formContext.sourceId)
+        && !hasLivePendingWorkflowForTemplate(formContext.sourceId, { allowLivePending: true })
       ) {
         return null;
       }
@@ -680,7 +710,12 @@ export function resolveParameterFormForAssistantMessage(
     if (block.type === 'text' && typeof block.text === 'string') {
       const parsed = parseParameterFormMarker(block.text);
       if (!parsed) continue;
-      if (sessionHasWorkflowExecution(sessionKey, parsed.templateId)) return null;
+      if (
+        sessionHasWorkflowExecution(sessionKey, parsed.templateId)
+        && !hasLivePendingWorkflowForTemplate(parsed.templateId, { allowLivePending: true })
+      ) {
+        return null;
+      }
       if (
         !pendingWorkflow
         || pendingWorkflow.templateId !== parsed.templateId
