@@ -1288,8 +1288,37 @@ function timestampToMs(timestamp: unknown): number {
   return timestamp < 1e12 ? timestamp * 1000 : timestamp;
 }
 
+function startOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function calendarDaysBefore(now: Date, then: Date): number {
+  const diffMs = startOfLocalDay(now).getTime() - startOfLocalDay(then).getTime();
+  return Math.floor(diffMs / 86_400_000);
+}
+
+function formatTimeHm(date: Date): string {
+  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatAbsoluteTimestamp(date: Date, now: Date): string {
+  const time = formatTimeHm(date);
+  const dayDiff = calendarDaysBefore(now, date);
+
+  if (dayDiff >= 2 && dayDiff < 7) {
+    return `${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
+  }
+
+  if (dayDiff >= 7 || date.getFullYear() !== now.getFullYear()) {
+    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${time}`;
+  }
+
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
+}
+
 /**
- * Format a Unix timestamp (seconds) to relative time string.
+ * Format message timestamp for chat hover display.
+ * Recent messages use relative time; older ones include calendar day (and year when needed).
  */
 export function formatTimestamp(timestamp: unknown): string {
   const ms = timestampToMs(timestamp);
@@ -1299,9 +1328,20 @@ export function formatTimestamp(timestamp: unknown): string {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
 
-  if (diffMs < 60000) return '刚刚';
-  if (diffMs < 3600000) return `${Math.floor(diffMs / 60000)} 分钟前`;
-  if (diffMs < 86400000) return `${Math.floor(diffMs / 3600000)} 小时前`;
+  if (diffMs < 0) return formatAbsoluteTimestamp(date, now);
 
-  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  if (diffMs < 60_000) return '刚刚';
+  if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)} 分钟前`;
+
+  const dayDiff = calendarDaysBefore(now, date);
+
+  if (dayDiff === 0) {
+    return `${Math.floor(diffMs / 3_600_000)} 小时前`;
+  }
+
+  if (dayDiff === 1) {
+    return `昨天 ${formatTimeHm(date)}`;
+  }
+
+  return formatAbsoluteTimestamp(date, now);
 }
