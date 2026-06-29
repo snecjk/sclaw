@@ -235,7 +235,9 @@ export function UpdateSettings() {
       {updateInfo && (status === 'available' || status === 'downloaded') && (
         <div className="rounded-lg bg-muted p-4 space-y-2">
           <div className="flex items-center justify-between">
-            <p className="font-medium">Version {updateInfo.version}</p>
+            <p className="font-medium">
+              {updateInfo.title?.trim() || `Version ${updateInfo.version}`}
+            </p>
             {updateInfo.releaseDate && (
               <p className="text-sm text-muted-foreground">
                 {new Date(updateInfo.releaseDate).toLocaleDateString()}

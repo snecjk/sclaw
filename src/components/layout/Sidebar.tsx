@@ -36,6 +36,7 @@ import {
   DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { SidebarUpdateNotice } from '@/components/layout/sidebar-update-notice';
 import { useSettingsStore } from '@/stores/settings';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
@@ -1829,6 +1830,8 @@ export function Sidebar() {
             ) : null)}
         </div>
       </div>
+
+      <SidebarUpdateNotice collapsed={sidebarCollapsed} />
 
       {authUser ? (
         <div className="shrink-0 bg-[var(--sto-sidebar-bg)] p-2">
