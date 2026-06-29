@@ -821,10 +821,16 @@ export class SkillPlazaService {
           logger.info(`[getLocalSkills] resolved for ${slug}: isOfficial=${isOfficial}, finalCategoryCode=${finalCategoryCode}, finalCategory=${finalCategory}, summary.category=${summary.category}, plazaHas=${plazaSkillMap.has(slug)}`);
         }
 
+        // 技能广场目录中存在该 slug 时，展示 title/description 以 plaza 为准（与技能广场 tab 一致）
+        const displayTitle = plazaSkill?.title ? plazaSkill.title : summary.title || slug;
+        const displayDescription = plazaSkill?.description
+          ? plazaSkill.description
+          : summary.description || '';
+
         const baseSkill: SkillSummary = {
           slug: summary.slug || slug,
-          title: summary.title || slug,
-          description: summary.description || '',
+          title: displayTitle,
+          description: displayDescription,
           category: finalCategory,
           categoryCode: finalCategoryCode,
           source,
@@ -834,7 +840,7 @@ export class SkillPlazaService {
           useCount: plazaSkill?.useCount ?? 0,
           points: summary.points ?? plazaSkill?.points ?? 8,
           icon: summary.icon ?? plazaSkill?.icon,
-          defaultPrompt: summary.defaultPrompt || summary.title || slug,
+          defaultPrompt: summary.defaultPrompt || displayTitle || slug,
           updatedAt: plazaSkill?.updatedAt,
           version: plazaSkill?.version,
         };
