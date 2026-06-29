@@ -486,17 +486,17 @@ export async function buildCronSessionFallbackMessages(params: {
     });
   }
 
-  // For each run, load full transcript from the run session jsonl file
+  // For each run, prefer the full run-session transcript. The cron run log summary
+  // duplicates the assistant reply when a jsonl transcript is available.
   for (const entry of matchingRuns) {
-    if (entry.sessionKey) {
-      const runMessages = await readRunSessionMessages(entry.sessionKey);
-      if (runMessages.length > 0) {
-        // Full transcript available — use it and skip synthetic summary to avoid duplicates
-        messages.push(...runMessages);
-        continue;
-      }
+    const runMessages = entry.sessionKey
+      ? await readRunSessionMessages(entry.sessionKey)
+      : [];
+    if (runMessages.length > 0) {
+      messages.push(...runMessages);
+      continue;
     }
-    // No transcript — fall back to synthetic summary message from the run log
+
     const message = buildCronRunMessage(entry, matchingRuns.indexOf(entry));
     if (message) messages.push(message);
   }
