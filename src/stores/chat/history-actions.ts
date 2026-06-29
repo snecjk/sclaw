@@ -169,7 +169,10 @@ export function createHistoryActions(
           const lastAt = toMs(lastMsg.timestamp);
           if (lastAt > 0) {
             set((s) => {
-              const listedAt = s.sessions.find((session) => session.key === currentSessionKey)?.updatedAt ?? 0;
+              const targetSession = s.sessions.find((session) => session.key === currentSessionKey);
+              const listedAt = targetSession?.engineType === 'claude'
+                ? 0
+                : targetSession?.updatedAt ?? 0;
               const currentAt = s.sessionLastActivity[currentSessionKey] ?? 0;
               const nextAt = Math.max(currentAt, listedAt, lastAt);
               if (nextAt === currentAt) return {};

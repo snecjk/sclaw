@@ -45,6 +45,7 @@ import {
   buildInitialSidebarRecentOrder,
   isSidebarRecentChatSessionKey,
   removeSidebarRecentOrderKey,
+  scrubClaudeSessionLastActivity,
 } from '@/lib/sidebar-recent-order';
 import {
   scheduleSessionLabelHydrationForStore,
@@ -1532,7 +1533,10 @@ export const useChatStore = create<ChatState>()(
                   return [session.key, listedAt];
                 }),
             );
-            const sessionLastActivity = mergeSessionLastActivity(state.sessionLastActivity, discoveredActivity);
+            const sessionLastActivity = scrubClaudeSessionLastActivity(
+              labeledSessions,
+              mergeSessionLastActivity(state.sessionLastActivity, discoveredActivity),
+            );
             let activatingScheduledSessionAt = state.activatingScheduledSessionAt;
             for (const sessionKey of Object.keys(discoveredActivity)) {
               activatingScheduledSessionAt = clearActivatingSessionIfHandedOff(
@@ -2016,7 +2020,10 @@ export const useChatStore = create<ChatState>()(
         const lastAt = toMs(lastMsg.timestamp);
         if (lastAt > 0) {
           set((s) => {
-            const listedAt = s.sessions.find((session) => session.key === targetSessionKey)?.updatedAt ?? 0;
+            const targetSession = s.sessions.find((session) => session.key === targetSessionKey);
+            const listedAt = targetSession?.engineType === 'claude'
+              ? 0
+              : targetSession?.updatedAt ?? 0;
             const currentAt = s.sessionLastActivity[targetSessionKey] ?? 0;
             const nextAt = Math.max(currentAt, listedAt, lastAt);
             if (nextAt === currentAt) return {};

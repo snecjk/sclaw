@@ -3,6 +3,7 @@ import {
   buildInitialSidebarRecentOrder,
   prependSidebarRecentOrder,
   removeSidebarRecentOrderKey,
+  scrubClaudeSessionLastActivity,
   sortSessionsByRecentActivity,
 } from '@/lib/sidebar-recent-order';
 import type { ChatSession } from '@/stores/chat/types';
@@ -41,6 +42,43 @@ describe('sortSessionsByRecentActivity', () => {
     expect(afterView.map((session) => session.key)).toEqual(
       initial.map((session) => session.key),
     );
+  });
+
+  it('prefers healed transcript activity over inflated Claude registry updatedAt', () => {
+    const mixed: ChatSession[] = [
+      { key: 'agent:main:claude-a', engineType: 'claude', updatedAt: 100 },
+      { key: 'agent:main:openclaw-b', engineType: 'openclaw', updatedAt: 500_000 },
+    ];
+    const activity = scrubClaudeSessionLastActivity(mixed, {
+      'agent:main:claude-a': 999_999,
+    });
+    const sorted = sortSessionsByRecentActivity(mixed, activity);
+    expect(sorted.map((session) => session.key)).toEqual([
+      'agent:main:openclaw-b',
+      'agent:main:claude-a',
+    ]);
+  });
+});
+
+describe('scrubClaudeSessionLastActivity', () => {
+  it('clears legacy read-bump timestamps that exceed transcript activity', () => {
+    const sessions: ChatSession[] = [
+      { key: 'agent:main:claude-a', engineType: 'claude', updatedAt: 100 },
+    ];
+    const scrubbed = scrubClaudeSessionLastActivity(sessions, {
+      'agent:main:claude-a': 999_999,
+    });
+    expect(scrubbed['agent:main:claude-a']).toBe(100);
+  });
+
+  it('keeps recent send activity that is only slightly ahead of transcript time', () => {
+    const sessions: ChatSession[] = [
+      { key: 'agent:main:claude-a', engineType: 'claude', updatedAt: 100 },
+    ];
+    const scrubbed = scrubClaudeSessionLastActivity(sessions, {
+      'agent:main:claude-a': 180_000,
+    });
+    expect(scrubbed['agent:main:claude-a']).toBe(180_000);
   });
 });
 

@@ -14,14 +14,40 @@ export function isSidebarRecentChatSessionKey(sessionKey: string): boolean {
 }
 
 export function getSessionActivityForSort(
-  session: Pick<ChatSession, 'key' | 'updatedAt'>,
+  session: Pick<ChatSession, 'key' | 'updatedAt' | 'engineType'>,
   sessionLastActivity: Record<string, number>,
 ): number {
   const recorded = sessionLastActivity[session.key] ?? 0;
   const listed = typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt)
     ? session.updatedAt
     : 0;
-  return Math.max(recorded, listed);
+  // Prefer locally tracked transcript/send activity; registry updatedAt is fallback only.
+  if (recorded > 0 && listed > 0) return Math.max(recorded, listed);
+  if (recorded > 0) return recorded;
+  return listed;
+}
+
+/** Drop legacy Claude read-bump timestamps that far exceed transcript activity. */
+export function scrubClaudeSessionLastActivity(
+  sessions: Array<Pick<ChatSession, 'key' | 'updatedAt' | 'engineType'>>,
+  sessionLastActivity: Record<string, number>,
+  maxSkewMs = 5 * 60_000,
+): Record<string, number> {
+  let changed = false;
+  const next = { ...sessionLastActivity };
+  for (const session of sessions) {
+    if (session.engineType !== 'claude') continue;
+    const listed = typeof session.updatedAt === 'number' && Number.isFinite(session.updatedAt)
+      ? session.updatedAt
+      : 0;
+    const recorded = next[session.key] ?? 0;
+    if (listed <= 0 || recorded <= listed) continue;
+    if (recorded - listed > maxSkewMs) {
+      next[session.key] = listed;
+      changed = true;
+    }
+  }
+  return changed ? next : sessionLastActivity;
 }
 
 export function sortSessionsByRecentActivity(
