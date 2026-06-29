@@ -184,6 +184,11 @@ async function refreshProviderSnapshot(): Promise<void> {
     console.warn('[auth] Provider snapshot refresh failed:', error);
   }
 }
+function reloadAppAfterAccountSwitch(): void {
+  // HQ ↔ site impersonation changes sidebar menus and home surfaces; reload re-inits all stores.
+  window.location.reload();
+}
+
 async function syncStoModelsAndRefreshProviders(context: 'init' | 'login'): Promise<void> {
   const maxAttempts = 2;
 
@@ -553,14 +558,7 @@ export const useAuthStore = create<AuthState>()(
               })
             : data.stoSync;
           showStoSyncErrorToasts(stoSync);
-          void syncStoModelsAndRefreshProviders('login');
-          void get().refreshCrmWeekReportPolicy();
-          void hostApiFetch<{ types: string[] }>('/api/auth/site-department-types')
-            .then((res) => setSiteDepartmentTypes(res.types))
-            .catch(() => {});
-          toast.success('已切换网点账号', {
-            description: data.user.companyName || data.user.realName || trimmed,
-          });
+          reloadAppAfterAccountSwitch();
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           toast.error('切换网点账号失败', { description: message });
@@ -609,13 +607,7 @@ export const useAuthStore = create<AuthState>()(
               })
             : data.stoSync;
           showStoSyncErrorToasts(stoSync);
-          void syncStoModelsAndRefreshProviders('login');
-          void get().refreshCrmWeekReportPolicy();
-          void hostApiFetch<{ types: string[] }>('/api/auth/site-department-types')
-            .then((res) => setSiteDepartmentTypes(res.types))
-            .catch(() => {});
-          toast.success('已切回总部账号');
-          void get().loadAccountSwitchOptions();
+          reloadAppAfterAccountSwitch();
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           toast.error('切回总部账号失败', { description: message });
