@@ -41,19 +41,25 @@ describe('memory-center-web-url', () => {
     );
   });
 
-  it('builds designer url with prompt', () => {
+  it('builds designer url with promptCacheId', () => {
     expect(buildMemoryCenterWorkflowDesignerUrl('wf_123', 'daily-external', 'daily-recon')).toBe(
+      'https://front-test.sto.cn/group/memory-center-web/workflows-workbench/wf_123?promptCacheId=daily-recon&embedded=stoclaw&inClaw=1',
+    );
+  });
+
+  it('falls back to ?prompt= when no promptCacheId but prompt present (cache-fail legacy)', () => {
+    expect(buildMemoryCenterWorkflowDesignerUrl('wf_123', 'daily-external', undefined, 'daily-recon')).toBe(
       'https://front-test.sto.cn/group/memory-center-web/workflows-workbench/wf_123?prompt=daily-recon&embedded=stoclaw&inClaw=1',
     );
   });
 
-  it('builds designer redirect path with prompt', () => {
+  it('builds designer redirect path with promptCacheId', () => {
     expect(buildMemoryCenterDesignerRedirectPath('wf_123', 'daily-external', 'daily-recon')).toBe(
-      '/group/memory-center-web/workflows-workbench/wf_123?prompt=daily-recon&embedded=stoclaw&inClaw=1',
+      '/group/memory-center-web/workflows-workbench/wf_123?promptCacheId=daily-recon&embedded=stoclaw&inClaw=1',
     );
   });
 
-  it('uses callback on first designer embed with prompt and direct url after session auth', () => {
+  it('uses callback on first designer embed with promptCacheId and direct url after session auth', () => {
     expect(
       buildMemoryCenterWorkflowDesignerEmbedUrl('wf_123', 'tok-abc', 'daily-external', 'daily-recon'),
     ).toContain('/sso/login/callback?');
@@ -63,7 +69,7 @@ describe('memory-center-web-url', () => {
     expect(
       buildMemoryCenterWorkflowDesignerEmbedUrl('wf_123', 'tok-abc', 'daily-external', 'daily-recon'),
     ).toBe(
-      'https://front-test.sto.cn/group/memory-center-web/workflows-workbench/wf_123?prompt=daily-recon&embedded=stoclaw&inClaw=1',
+      'https://front-test.sto.cn/group/memory-center-web/workflows-workbench/wf_123?promptCacheId=daily-recon&embedded=stoclaw&inClaw=1',
     );
   });
 

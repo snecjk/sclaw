@@ -208,6 +208,24 @@ export async function handleWorkflowRoutes(
     return true;
   }
 
+  // 0a. POST /workflow/v1/ai-builder/prompt-cache — AI 创建大 prompt 换短 promptCacheId（代理至 MC 后端）
+  if (pathname === '/workflow/v1/ai-builder/prompt-cache' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ prompt: string; workflowId?: string }>(req);
+      logger.info(
+        '[workflow-trace] POST /workflow/v1/ai-builder/prompt-cache promptLen=%s',
+        body.prompt?.length,
+      );
+      await proxyWorkflowRequest(req, res, '/workflow/v1/ai-builder/prompt-cache', body);
+    } catch (error) {
+      logger.error('[WorkflowRoutes] cache ai prompt failed:', error);
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ success: false, error: String(error) }));
+    }
+    return true;
+  }
+
   // 0b. GET /workflow/v1/workflow-templates/:templateId
   const studioTemplateMatch = pathname.match(/^\/workflow\/v1\/workflow-templates\/([^/]+)$/);
   if (studioTemplateMatch && req.method === 'GET') {

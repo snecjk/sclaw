@@ -74,6 +74,23 @@ export async function createWorkflowStudio(
   return parseStudioJson<WorkflowDefinition>(json);
 }
 
+/** POST /workflow/v1/ai-builder/prompt-cache — 缓存大 prompt 换短 promptCacheId，避免走 URL 超限 */
+export async function cacheAiWorkflowPrompt(
+  prompt: string,
+  workflowId?: string,
+): Promise<string> {
+  const json = await hostApiFetch<unknown>('/workflow/v1/ai-builder/prompt-cache', {
+    method: 'POST',
+    headers: studioHeaders(),
+    body: JSON.stringify({ prompt, workflowId }),
+  });
+  const data = parseStudioJson<{ promptCacheId: string } | undefined>(json);
+  if (!data?.promptCacheId) {
+    throw new Error('缓存 AI 创建 prompt 失败');
+  }
+  return data.promptCacheId;
+}
+
 /** GET /workflow/v1/workflow-templates/{id} — MC fetchWorkflowTemplate */
 export async function getWorkflowStudioTemplate(
   templateId: string,
