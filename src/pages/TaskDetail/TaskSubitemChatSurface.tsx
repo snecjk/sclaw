@@ -18,21 +18,20 @@ import {
 // invokeIpc removed – file preview now opens in side panel instead of externally
 import { cn } from '@/lib/utils';
 import type { StoTaskId } from '@/lib/sto-tasks';
+import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
 import { ChatPreviewHeaderTabs } from '@/pages/Chat/ChatPreviewHeaderTabs';
-import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
-import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
-import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
+import type { FileAttachment } from '@/pages/Chat/ChatInput';
+import { HomeComposer } from '@/pages/Home/HomeComposer';
 // import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
 import { extractText } from '@/pages/Chat/message-utils';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
 import {
-  stoParameterFormDockLayout,
   stoSplitChatScrollClass,
   stoChatScrollContentClass,
   stoSplitGridBodyChatClass,
@@ -49,8 +48,16 @@ import { useContentHeader } from '@/components/layout/content-header-context';
 /* sessionStorage one-shot + gateway-gated auto-send intentionally use setState in effects */
  
 
-export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId; entryId: string }) {
-  const { t } = useTranslation(['home', 'chat', 'common']);
+export function TaskSubitemChatSurface({
+  taskId,
+  entryId,
+  className,
+}: {
+  taskId: StoTaskId;
+  entryId: string;
+  className?: string;
+}) {
+  const { t, i18n } = useTranslation(['home', 'chat', 'common', 'tasks']);
   const location = useLocation();
   const navigate = useNavigate();
   const storeSubKey = useMemo(() => stoTaskSubitemKey(taskId, entryId), [taskId, entryId]);
@@ -326,8 +333,13 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
     ],
   );
 
+  const pageTitle = useMemo(() => {
+    const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
+    return t('tasks:subitemMaterialHeading', { date: dateLabel });
+  }, [entryId, i18n.language, t]);
+
   useContentHeader({
-    title: t('common:sidebar.taskList'),
+    title: pageTitle,
     previewTabs: previewHeaderTabs,
     isSplitLayout: canShowPreviewPanel && showPreviewPanel,
   });
@@ -359,7 +371,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
     markSubitemReadFromActivity(taskId, entryId, activityForSession);
   }, [currentSessionKey, sessionKey, activityForSession, taskId, entryId, markSubitemReadFromActivity]);
 
-  const onSend = useCallback(
+  const handleComposerSend = useCallback(
     async (
       text: string,
       attachments?: FileAttachment[],
@@ -372,15 +384,6 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
     },
     [beginSendScroll, handleSend],
   );
-
-  const chatInputProps = useChatInputBindings({
-    onSend,
-    onQueue: handleQueue,
-    isEmpty,
-    seedText: composeSeed,
-    className: 'pb-0',
-    engineType: currentEngineType,
-  });
 
   const handlePreviewFile = useCallback((file: AttachedFileMeta) => {
     openArtifactPreview(file);
@@ -406,6 +409,7 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
         'relative min-h-0 flex-1 overflow-hidden rounded-xl',
         stoTaskSubitemChatCanvasBg,
         isSplitChatLayout ? stoSplitRowContentsClass : 'flex flex-row',
+        className,
       )}
     >
       {/* Left: Chat area */}
@@ -519,10 +523,13 @@ export function TaskSubitemChatSurface({ taskId, entryId }: { taskId: StoTaskId;
         </div>
 
         <div className="relative z-10 w-full shrink-0">
-          <ParameterFormDock layout={stoParameterFormDockLayout('page')} />
+          <HomeComposer
+            seedText={composeSeed}
+            onSend={handleComposerSend}
+            onQueue={handleQueue}
+            engineType={currentEngineType}
+          />
         </div>
-
-        <ChatInput {...chatInputProps} engineType={currentEngineType} />
       </ChatConversationColumn>
 
       {/* Resizer */}

@@ -1,14 +1,13 @@
-import { Link, Navigate, useParams } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { Navigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { isStoTaskId, isYmdEntryId, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
-import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { TaskSubitemChatSurface } from '@/pages/TaskDetail/TaskSubitemChatSurface';
-import { stoTaskSubitemChatCanvasBg, stoPageFillBelowTitleClass, stoChatShellPageClass } from '@/lib/surfaces';
+import { stoChatShellPageClass } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
 import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
 import { useAuthStore } from '@/stores/auth';
 import { useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
+import { useContentHeader } from '@/components/layout/content-header-context';
 
 function TaskOverviewBody({ taskId }: { taskId: StoTaskId }) {
   const { t } = useTranslation('tasks');
@@ -21,15 +20,19 @@ function TaskOverviewBody({ taskId }: { taskId: StoTaskId }) {
   );
 }
 
-function TaskSubitemPage({
-  id,
-  entryId,
-  heading,
-}: {
-  id: StoTaskId;
-  entryId: string;
-  heading: string;
-}) {
+/** 任务总览：标题走全局 ContentHeader，避免与页内 h1 重复 */
+function TaskOverviewPage({ taskId }: { taskId: StoTaskId }) {
+  const { t } = useTranslation('tasks');
+  useContentHeader({ title: t(`detail.${taskId}.pageTitle`) });
+
+  return (
+    <div className={cn(stoChatShellPageClass, 'pb-10')}>
+      <TaskOverviewBody taskId={taskId} />
+    </div>
+  );
+}
+
+function TaskSubitemPage({ id, entryId }: { id: StoTaskId; entryId: string }) {
   const { isSplitGridPassthrough, splitGridPassthroughClass } = useSplitGridPassthroughClass();
 
   return (
@@ -37,54 +40,16 @@ function TaskSubitemPage({
       className={cn(
         isSplitGridPassthrough
           ? splitGridPassthroughClass
-          : cn(
-              /* Pull into main bottom padding so gateway row sits closer to the window edge. */
-              '-mb-5 flex min-h-0 min-w-0 flex-col overflow-hidden',
-              stoPageFillBelowTitleClass,
-            ),
+          : 'flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden',
       )}
     >
-      {!isSplitGridPassthrough ? (
-        <div
-          className={cn(
-            '-mt-5 sticky -top-5 z-20 w-full shrink-0 pt-0',
-            stoTaskSubitemChatCanvasBg,
-          )}
-        >
-          <div className={cn(stoChatShellPageClass, 'pt-[16px]')}>
-            <Link
-              to="/"
-              className={cn(
-                'group flex min-w-0 max-w-full items-center gap-2.5 rounded-md text-foreground outline-none transition-colors',
-                'hover:text-[var(--sto-brand-6)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sto-page-bg)] dark:focus-visible:ring-offset-background',
-              )}
-            >
-              <ArrowLeft
-                className="h-5 w-5 shrink-0 text-muted-foreground transition-colors group-hover:text-[var(--sto-brand-6)]"
-                strokeWidth={2}
-                aria-hidden
-              />
-              <h1 className="min-w-0 flex-1 truncate text-lg font-semibold leading-snug tracking-tight md:text-xl">{heading}</h1>
-            </Link>
-          </div>
-        </div>
-      ) : null}
-      <div
-        className={cn(
-          isSplitGridPassthrough
-            ? splitGridPassthroughClass
-            : 'flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden',
-        )}
-      >
-        <TaskSubitemChatSurface taskId={id} entryId={entryId} />
-      </div>
+      <TaskSubitemChatSurface taskId={id} entryId={entryId} className="min-h-0 flex-1" />
     </div>
   );
 }
 
 export function TaskDetail() {
   const { taskId, entryId } = useParams<{ taskId: string; entryId?: string }>();
-  const { t, i18n } = useTranslation('tasks');
   const crmWeekReportSurfaceAllowed = useAuthStore((s) => s.crmWeekReportSurfaceAllowed);
   const listEntries = useStoTaskSubitemsStore((s) => s.listEntries);
 
@@ -104,34 +69,8 @@ export function TaskDetail() {
       return <Navigate to={taskOverviewPath(id)} replace />;
     }
     useStoTaskSubitemsStore.getState().ensureSubitem(id, entryId);
-    const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
-    const heading = t('subitemMaterialHeading', { date: dateLabel });
-    return (
-      <TaskSubitemPage id={id} entryId={entryId} heading={heading} />
-    );
+    return <TaskSubitemPage id={id} entryId={entryId} />;
   }
 
-  return (
-    <div className={cn(stoChatShellPageClass, 'pb-10')}>
-      <div className="mb-6">
-        <Link
-          to="/"
-          className={cn(
-            'group flex min-w-0 max-w-full items-center gap-2.5 rounded-md text-foreground outline-none transition-colors',
-            'hover:text-[var(--sto-brand-6)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sto-page-bg)] dark:focus-visible:ring-offset-background',
-          )}
-        >
-          <ArrowLeft
-            className="h-5 w-5 shrink-0 text-muted-foreground transition-colors group-hover:text-[var(--sto-brand-6)]"
-            strokeWidth={2}
-            aria-hidden
-          />
-          <h1 className="min-w-0 flex-1 truncate text-lg font-semibold leading-snug tracking-tight md:text-xl">
-            {t(`detail.${id}.pageTitle`)}
-          </h1>
-        </Link>
-      </div>
-      <TaskOverviewBody taskId={id} />
-    </div>
-  );
+  return <TaskOverviewPage taskId={id} />;
 }
