@@ -121,6 +121,14 @@ describe('session label corruption cleanup', () => {
     expect(scrubCorruptedSessionLabels(input)).toEqual({ good: '@赵志坚 今晚记得学习哦' });
   });
 
+  it('scrubCorruptedSessionLabels removes placeholder titles', () => {
+    const input = {
+      good: '对申通快递进行每日分析',
+      bad: '新对话',
+    };
+    expect(scrubCorruptedSessionLabels(input)).toEqual({ good: '对申通快递进行每日分析' });
+  });
+
   it('applyStoredSessionLabels does not overwrite with corrupted stored labels', () => {
     const sessions = [{ key: 'agent:main:subagent:child-1', label: 'gateway title' }];
     const labels = { 'agent:main:subagent:child-1': '[Subagent Context] You are running as a…' };

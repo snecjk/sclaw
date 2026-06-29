@@ -796,6 +796,7 @@ export function Sidebar() {
             sessions: state.sessions,
             sessionLabels: state.sessionLabels,
             sessionLastActivity: state.sessionLastActivity,
+            sidebarRecentOrder: state.sidebarRecentOrder,
           };
         },
         useChatStore.setState,
