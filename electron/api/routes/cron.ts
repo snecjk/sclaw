@@ -488,17 +488,19 @@ export async function buildCronSessionFallbackMessages(params: {
     });
   }
 
-  // For each run, load full transcript from the run session jsonl file
+  // For each run, prefer the full run-session transcript. The cron run log summary
+  // duplicates the assistant reply when a jsonl transcript is available.
   for (const entry of matchingRuns) {
-    // First add the summary message from the run log
+    const runMessages = entry.sessionKey
+      ? await readRunSessionMessages(entry.sessionKey)
+      : [];
+    if (runMessages.length > 0) {
+      messages.push(...runMessages);
+      continue;
+    }
+
     const message = buildCronRunMessage(entry, matchingRuns.indexOf(entry));
     if (message) messages.push(message);
-
-    // Then load full conversation from the run session file
-    if (entry.sessionKey) {
-      const runMessages = await readRunSessionMessages(entry.sessionKey);
-      messages.push(...runMessages);
-    }
   }
 
   if (matchingRuns.length === 0) {
