@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { basename, dirname, extname, isAbsolute, join, normalize } from 'node:path';
 import { homedir } from 'node:os';
 import { expandPath, getLegacyOpenClawWorkspaceRoot, getOpenClawConfigDir } from './paths';
@@ -14,6 +14,7 @@ const EXT_FUZZY_ALTERNATES: Record<string, string[]> = {
 
 /** Known agent output subdirs under each workspace root (canonical first). */
 const WORKSPACE_OUTPUT_SUBDIRS = ['.claw-output', 'outputs'] as const;
+const MAX_OUTPUT_TREE_DEPTH = 5;
 
 function decodePathSegments(filePath: string): string {
   let path = filePath.trim();
@@ -144,6 +145,62 @@ function findFuzzyInDirs(fileName: string, dirs: string[]): string | null {
   return null;
 }
 
+/** Recursively find basename under an output tree (e.g. .claw-output/stock-analysis/weekly.html). */
+function findBasenameInTree(dir: string, fileName: string, depth: number): string | null {
+  if (depth < 0 || !existsSync(dir)) return null;
+
+  const direct = fuzzyExistingPath(join(dir, fileName));
+  if (direct) return direct;
+
+  if (depth === 0) return null;
+
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return null;
+  }
+
+  let newest: { path: string; mtime: number } | null = null;
+  for (const entry of entries) {
+    const full = join(dir, entry);
+    try {
+      const stat = statSync(full);
+      if (!stat.isDirectory()) continue;
+      const found = findBasenameInTree(full, fileName, depth - 1);
+      if (!found) continue;
+      const mtime = statSync(found).mtimeMs;
+      if (!newest || mtime > newest.mtime) {
+        newest = { path: found, mtime };
+      }
+    } catch {
+      // skip unreadable entries
+    }
+  }
+  return newest?.path ?? null;
+}
+
+/** Deep basename search under workspace .claw-output / outputs (newest match wins). */
+function findDeepInOutputSubdirs(fileName: string, roots: string[]): string | null {
+  let newest: { path: string; mtime: number } | null = null;
+  for (const root of roots) {
+    for (const subdir of WORKSPACE_OUTPUT_SUBDIRS) {
+      const base = join(root, subdir);
+      const found = findBasenameInTree(base, fileName, MAX_OUTPUT_TREE_DEPTH);
+      if (!found) continue;
+      try {
+        const mtime = statSync(found).mtimeMs;
+        if (!newest || mtime > newest.mtime) {
+          newest = { path: found, mtime };
+        }
+      } catch {
+        if (!newest) newest = { path: found, mtime: 0 };
+      }
+    }
+  }
+  return newest?.path ?? null;
+}
+
 function relativePathCandidates(normalized: string): string[] {
   const roots = listWorkspaceRoots();
   const candidates: string[] = [];
@@ -191,6 +248,9 @@ export function resolveWorkspaceFilePath(filePath: string): string {
     const fuzzy = findFuzzyInDirs(fileName, roots);
     if (fuzzy) return fuzzy;
 
+    const deep = findDeepInOutputSubdirs(fileName, roots);
+    if (deep) return deep;
+
     return normalized;
   }
 
@@ -208,5 +268,52 @@ export function resolveWorkspaceFilePath(filePath: string): string {
   const fuzzyByName = findFuzzyInDirs(fileName, roots);
   if (fuzzyByName) return fuzzyByName;
 
+  const deep = findDeepInOutputSubdirs(fileName, roots);
+  if (deep) return deep;
+
   return candidates[0] ?? join(getOpenClawConfigDir(), 'workspace', normalized);
+}
+
+/** Recent Python/skill run directories (newest first) for basename fallback search. */
+export function listRecentPythonRunDirs(limit = 10): string[] {
+  const parents = [
+    join(homedir(), '.kimi', 'daimon', 'runtime', 'python'),
+    join(getOpenClawConfigDir(), 'runtime', 'python'),
+    ...listWorkspaceRoots().flatMap((root) => [
+      join(root, '.claw-output'),
+      join(root, 'outputs'),
+    ]),
+  ];
+
+  const ranked: Array<{ path: string; mtime: number }> = [];
+  for (const parent of parents) {
+    if (!existsSync(parent)) continue;
+    let entries: string[];
+    try {
+      entries = readdirSync(parent);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const full = join(parent, entry);
+      try {
+        const stat = statSync(full);
+        if (!stat.isDirectory()) continue;
+        ranked.push({ path: full, mtime: stat.mtimeMs });
+      } catch {
+        // skip unreadable entries
+      }
+    }
+  }
+
+  ranked.sort((a, b) => b.mtime - a.mtime);
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const { path } of ranked) {
+    if (seen.has(path)) continue;
+    seen.add(path);
+    result.push(path);
+    if (result.length >= limit) break;
+  }
+  return result;
 }

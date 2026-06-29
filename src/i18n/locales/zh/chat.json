@@ -83,6 +83,7 @@
     "streaming": {
         "connectingModel": "连接模型中...",
         "understandingQuestion": "正在理解你的问题…",
+        "stillExecuting": "仍在执行（写文件中…）",
         "awaitingReply": "Claw将在你回复后继续工作…",
         "thinkingProcessTitle": "思考过程",
         "deepThinkingLabel": "深度思考",

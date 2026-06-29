@@ -9,6 +9,7 @@ import {
   workflowListSubnavNavClass,
   workflowListSubnavSlotClass,
 } from '@/lib/surfaces';
+import { useTranslation } from 'react-i18next';
 import { RECORD_STATUS_TABS } from '../constants';
 import type { RecordStatus, StatusCounts } from '../types';
 
@@ -22,9 +23,11 @@ interface RecordStatusNavProps {
 }
 
 export function RecordStatusNav({ activeStatus, counts, onStatusChange }: RecordStatusNavProps) {
+  const { t } = useTranslation('tasks');
+
   return (
     <div className={workflowListSubnavSlotClass}>
-      <nav className={workflowListSubnavNavClass} aria-label="按执行状态筛选">
+      <nav className={workflowListSubnavNavClass} aria-label={t('myTask.recordStatusNav.aria')}>
         {RECORD_STATUS_TABS.map((tab) => {
           const isActive = activeStatus === tab.value;
           const count = counts[tab.value];
@@ -36,7 +39,7 @@ export function RecordStatusNav({ activeStatus, counts, onStatusChange }: Record
               aria-selected={isActive}
               className={workflowListSubnavClass(isActive)}
             >
-              <span>{tab.label}</span>
+              <span>{t(tab.i18nKey)}</span>
               <span className={workflowListSubnavCountClass(isActive)}>{count}</span>
             </button>
           );

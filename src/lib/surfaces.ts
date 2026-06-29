@@ -1111,3 +1111,121 @@ export const workflowBuilderShell = cn(
 export const workflowMcEditorShell = cn(
   '-mx-[var(--sto-content-pad-x)] flex min-h-0 min-w-0 flex-1 flex-col',
 );
+
+/**
+ * 侧栏文字色 — MasterGo 8:46454「调整标题颜色+任务icon」（MCP goto/U0JBJlCx）。
+ * 规范见 `.cursor/rules/02-styles.mdc` §侧栏文字色。
+ */
+
+/** 侧栏正文 14/20 Regular — MCP font_4:0587 / font_4:0607 / font_8:35114（默认态） */
+export const sidebarBodyTextClass = 'text-sm font-normal leading-5';
+
+/** 侧栏正文 14/20 Medium — 仅设计稿明确标注 font_8:34896 的场景（当前侧栏默认不用，保留供后续态） */
+export const sidebarBodyTextMediumClass = 'text-sm font-medium leading-5';
+
+/** 一级正文色 Grey-10 #1D2129 — MCP paint_4:0441「文字/文本-默认」 */
+export const sidebarTextDefaultClass = 'text-[var(--sto-sidebar-text-default)]';
+
+/** 行内图标色 Grey-9 #4E5969 — MCP paint_4:0490「文字/文本-浅色-二级信息」 */
+export const sidebarTextIconClass =
+  'text-[var(--sto-sidebar-text-icon)] [&_svg]:stroke-[var(--sto-sidebar-text-icon)]';
+
+/** 三级文字 Grey-8 #86909C — MCP paint_4:0520「文字/文本-更浅-三级信息」 */
+export const sidebarTextSectionClass = 'text-[var(--sto-sidebar-text-section)]';
+
+/** 品牌头版本号 — Grey-8，MCP font_8:49208（SF Pro 11px）；相对 logo 基线下移 6px */
+export const sidebarBrandVersionClass = cn(
+  'mt-1.5 text-[11px] leading-[13px]',
+  sidebarTextSectionClass,
+);
+
+/** 分区标题（任务 / 最近 / 工作台）默认 Grey-8 Regular；hover/focus → Grey-10 Regular（字重不变） */
+export const sidebarSectionLabelClass = cn(
+  sidebarBodyTextClass,
+  sidebarTextSectionClass,
+  'group-hover/sto-sidebar-section-toggle:text-[var(--sto-sidebar-text-default)]',
+  'group-focus-within/sto-sidebar-section-toggle:text-[var(--sto-sidebar-text-default)]',
+);
+
+/** 分区标题 chevron — 跟随分区标题色态 */
+export const sidebarSectionChevronClass = cn(
+  'shrink-0 transition-colors',
+  sidebarTextSectionClass,
+  'group-hover/sto-sidebar-section-toggle:text-[var(--sto-sidebar-text-default)]',
+  'group-focus-within/sto-sidebar-section-toggle:text-[var(--sto-sidebar-text-default)]',
+);
+
+/**
+ * 侧栏滚动区内分区标题 sticky 壳层 — §5.6 吸顶 + 实底盖住下方列表（无描边）。
+ * 配合 stickyTopClass：任务 top-0 / 最近 top-[var(--sto-sidebar-section-sticky-h)]。
+ */
+export const sidebarSectionStickyShellClass = cn(
+  'sticky bg-[var(--sto-sidebar-bg)]',
+);
+
+/** 任务分区 sticky 锚点 */
+export const sidebarSectionStickyTopTaskClass = 'top-0 z-20';
+
+/** 最近分区 sticky 锚点 — 叠在任务标题下方 */
+export const sidebarSectionStickyTopRecentClass =
+  'top-[var(--sto-sidebar-section-sticky-h)] z-[19]';
+
+/** 侧栏滚动列表 — 层级低于 sticky 分区标题 */
+export const sidebarScrollListClass = 'relative z-0';
+
+/** 展开侧栏主导航 idle — 正文 Grey-10 + 图标 Grey-9 */
+export const sidebarNavExpandedIdleClass = cn(
+  'h-9 min-h-9 rounded-[8px] px-[10px] font-normal leading-5',
+  sidebarTextDefaultClass,
+  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
+  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+);
+
+/** 展开侧栏主导航 active — 底 #EAEAED + Regular（选中仅靠底色，字重与 idle 一致） */
+export const sidebarNavExpandedActiveClass = cn(
+  'h-9 min-h-9 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
+  'bg-[var(--sto-sidebar-nav-active-bg)]',
+  sidebarTextDefaultClass,
+  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
+  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+);
+
+/** 任务组名 / 最近会话 / 三级子项 — Grey-10 Regular */
+export const sidebarListItemTextClass = cn(sidebarBodyTextClass, sidebarTextDefaultClass);
+
+/** 三级子项 idle — Grey-10 Regular */
+export const sidebarSubitemTextIdleClass = cn(
+  sidebarListItemTextClass,
+  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+);
+
+/** 三级子项路由选中 — Grey-10 Regular + Grey-4 底（MCP 子项无加粗） */
+export const sidebarSubitemTextActiveClass = cn(
+  sidebarBodyTextClass,
+  sidebarTextDefaultClass,
+  'bg-[var(--sto-sidebar-subitem-active-bg)]',
+);
+
+/** 「展开全部 / 显示更多」等辅助链 — 12px Regular Grey-8 → hover Grey-10 */
+export const sidebarMetaLinkClass = cn(
+  'text-xs font-normal',
+  sidebarTextSectionClass,
+  'transition-colors hover:bg-[rgba(229,230,235,0.7)] hover:text-[var(--sto-sidebar-text-default)]',
+);
+
+/** 侧栏底部账号名 — MCP 8:46481 / 14px Regular（视觉与列表项一致） */
+export const sidebarFooterNameClass =
+  'truncate text-sm font-normal leading-[18px] text-[var(--sto-sidebar-footer-name)]';
+
+/** 侧栏底部账号元信息 — MCP 8:46481 #8B9099 Grey-6 / 13px Regular */
+export const sidebarFooterMetaClass =
+  'truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-meta)]';
+
+/** 侧栏底部设置图标 — Grey-9 */
+export const sidebarFooterSettingsIconClass = cn('h-5 w-5 shrink-0', sidebarTextIconClass);
+
+/** 最近会话运行中 spinner — MasterGo #5F9274 */
+export const sidebarRunningSpinnerClass = 'text-[var(--sto-sidebar-running-spinner)]';
+
+/** 侧栏未读红点 — 6×6px，destructive */
+export const sidebarUnreadDotClass = 'h-1.5 w-1.5 shrink-0 rounded-full bg-destructive';

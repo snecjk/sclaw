@@ -5,6 +5,7 @@
  */
 
 import { Search } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import {
   workflowListSearchIconWrapClass,
   workflowListSearchInputClass,
@@ -22,11 +23,13 @@ export function RecordToolbar({
   searchQuery,
   onSearchChange,
 }: RecordToolbarProps) {
+  const { t } = useTranslation('tasks');
+
   return (
     <div className="ml-auto flex shrink-0 items-center gap-3">
       {/* 搜索框 */}
       <label className={workflowListSearchLabelClass}>
-        <span className="sr-only">搜索执行记录任务名称</span>
+        <span className="sr-only">{t('myTask.recordToolbar.searchSrOnly')}</span>
         <span className={workflowListSearchIconWrapClass} aria-hidden="true">
           <Search className="h-3.5 w-3.5" />
         </span>
@@ -35,7 +38,7 @@ export function RecordToolbar({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           className={workflowListSearchInputClass}
-          placeholder="搜索任务名称"
+          placeholder={t('myTask.recordToolbar.searchPlaceholder')}
           autoComplete="off"
         />
       </label>

@@ -26,10 +26,11 @@ import {
   workflowListToolbarClass,
 } from '@/lib/surfaces';
 import { WorkflowDeleteConfirm } from '@/pages/Workflow/components/workflow-delete-confirm';
-import {
-  WorkflowDetailModal,
-  type WorkflowDetailMode,
-} from '@/pages/Workflow/components/workflow-detail-modal';
+// TODO: 预览/详情弹窗暂不启用
+// import {
+//   WorkflowDetailModal,
+//   type WorkflowDetailMode,
+// } from '@/pages/Workflow/components/workflow-detail-modal';
 import {
   WorkflowListCardGrid,
   WorkflowMineListCard,
@@ -37,7 +38,8 @@ import {
 } from '@/pages/Workflow/components/workflow-list-card';
 import { EXAMPLE_CHIPS } from '@/pages/Workflow/constants';
 import type {
-  OfficialWorkflowCard,
+  // TODO: 预览/详情弹窗暂不启用
+  // OfficialWorkflowCard,
   WorkflowCardItem,
   WorkflowMineListKind,
 } from '@/pages/Workflow/types';
@@ -66,7 +68,7 @@ export function WorkflowDashboard({
   const { t } = useTranslation('workflow');
   const navigate = useNavigate();
   const location = useLocation();
-  const { cards, setCards, mineLoading, officialLoading, error, refetchMine, officialCards } =
+  const { cards, mineLoading, officialLoading, error, refetchMine, officialCards } =
     useWorkflowList();
   /** chip 点击后 bump key，使 ChatInput 重挂载并应用 seedText */
   const [composerSeed, setComposerSeed] = useState<{ text: string; key: number } | null>(null);
@@ -78,10 +80,11 @@ export function WorkflowDashboard({
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
   const renameRef = useRef<HTMLInputElement>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detailMode, setDetailMode] = useState<WorkflowDetailMode>('installed');
-  const [detailMineCard, setDetailMineCard] = useState<WorkflowCardItem | null>(null);
-  const [detailOfficialCard, setDetailOfficialCard] = useState<OfficialWorkflowCard | null>(null);
+  // TODO: 预览/详情弹窗暂不启用，相关逻辑先注释
+  // const [detailOpen, setDetailOpen] = useState(false);
+  // const [detailMode, setDetailMode] = useState<WorkflowDetailMode>('installed');
+  // const [detailMineCard, setDetailMineCard] = useState<WorkflowCardItem | null>(null);
+  // const [detailOfficialCard, setDetailOfficialCard] = useState<OfficialWorkflowCard | null>(null);
   const [renameLoading, setRenameLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<WorkflowCardItem | null>(null);
@@ -172,37 +175,43 @@ export function WorkflowDashboard({
     [navigate, location.pathname]
   );
 
-  const updateCard = (index: number, patch: Partial<WorkflowCardItem>) => {
-    setCards(cards.map((c, i) => (i === index ? { ...c, ...patch } : c)));
-  };
+  // TODO: 预览/详情弹窗暂不启用 — updateCard 仅在详情弹窗 onToggleSchedule 中使用
+  // const updateCard = (index: number, patch: Partial<WorkflowCardItem>) => {
+  //   setCards(cards.map((c, i) => (i === index ? { ...c, ...patch } : c)));
+  // };
 
-  const openDetailForMine = (card: WorkflowCardItem) => {
-    setDetailMode('installed');
-    setDetailMineCard(card);
-    setDetailOfficialCard(null);
-    setDetailOpen(true);
-  };
+  // TODO: 预览/详情弹窗暂不启用
+  // const openDetailForMine = (card: WorkflowCardItem) => {
+  //   setDetailMode('installed');
+  //   setDetailMineCard(card);
+  //   setDetailOfficialCard(null);
+  //   setDetailOpen(true);
+  // };
 
-  const openDetailForOfficial = (card: OfficialWorkflowCard) => {
-    setDetailMode('preview');
-    setDetailOfficialCard(card);
-    setDetailMineCard(null);
-    setDetailOpen(true);
-  };
+  // TODO: 预览/详情弹窗暂不启用
+  // const openDetailForOfficial = (card: OfficialWorkflowCard) => {
+  //   setDetailMode('preview');
+  //   setDetailOfficialCard(card);
+  //   setDetailMineCard(null);
+  //   setDetailOpen(true);
+  // };
 
-  const closeDetail = () => {
-    setDetailOpen(false);
-    setDetailMineCard(null);
-    setDetailOfficialCard(null);
-  };
+  // TODO: 预览/详情弹窗暂不启用
+  // const closeDetail = () => {
+  //   setDetailOpen(false);
+  //   setDetailMineCard(null);
+  //   setDetailOfficialCard(null);
+  // };
 
-  const detailCard = detailMineCard ?? detailOfficialCard;
-  /** 详情数据暂为 null（待接入详情 API），弹窗已有 null fallback */
-  const detailData = null;
+  // TODO: 预览/详情弹窗暂不启用
+  // const detailCard = detailMineCard ?? detailOfficialCard;
+  // /** 详情数据暂为 null（待接入详情 API），弹窗已有 null fallback */
+  // const detailData = null;
 
-  const handleShare = () => {
-    toast.success(t('toast.shared'));
-  };
+  // TODO: 预览/详情弹窗暂不启用
+  // const handleShare = () => {
+  //   toast.success(t('toast.shared'));
+  // };
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -211,7 +220,7 @@ export function WorkflowDashboard({
       await deleteWorkflow(deleteTarget.id);
       toast.success(t('toast.deleted', { name: deleteTarget.name }));
       setDeleteTarget(null);
-      closeDetail();
+      // closeDetail();
       await refetchMine();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '删除失败');
@@ -453,9 +462,6 @@ export function WorkflowDashboard({
                     // TODO: 点击详情弹窗暂不启用
                     // onCardClick={() => openDetailForOfficial(card)}
                     // onPreview={() => openDetailForOfficial(card)}
-                    onCreateFromTemplate={() => {
-                      navigate(`/workflow/new?templateId=${encodeURIComponent(card.id)}`);
-                    }}
                     onInstall={() => {
                       const q = encodeURIComponent(`/${card.name}`);
                       const wid = encodeURIComponent(card.id);
@@ -545,7 +551,8 @@ export function WorkflowDashboard({
         </>
       ) : null}
 
-      <WorkflowDetailModal
+      {/* TODO: 预览/详情弹窗暂不启用 */}
+      {/* <WorkflowDetailModal
         open={detailOpen}
         mode={detailMode}
         card={detailCard}
@@ -584,7 +591,7 @@ export function WorkflowDashboard({
         onDelete={() => {
           if (detailMineCard) setDeleteTarget(detailMineCard);
         }}
-      />
+      /> */}
 
       <WorkflowDeleteConfirm
         open={deleteTarget !== null}

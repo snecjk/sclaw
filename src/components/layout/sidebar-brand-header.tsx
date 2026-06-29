@@ -1,11 +1,12 @@
 /**
- * SidebarBrandHeader — 侧栏顶品牌区（SClaw + 版本 + 折叠钮）。
+ * SidebarBrandHeader — 侧栏顶品牌区（含字 logo + 版本 + 折叠钮）。
  *
  * 省区 Mac：chrome 行（DEV 在红绿灯后 + 折叠）+ 品牌行；
  * 省区 Win / 完整 layout：单行（Win 在版本号后展示 DEV）。
  */
-import { useTranslation } from 'react-i18next';
+import sidebarLogoSvg from '@/assets/sidebar-logo.svg';
 import { cn } from '@/lib/utils';
+import { sidebarBrandVersionClass } from '@/lib/surfaces';
 import { formatAppDisplayVersion } from '@/lib/format-app-display-version';
 import { ChromeEnvBadge } from '@/components/layout/chrome-env-badge';
 import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
@@ -34,14 +35,16 @@ function SidebarBrandTitle({
   displayVersion: string;
   showEnvBadgeAfterVersion: boolean;
 }) {
-  const { t } = useTranslation('common');
-
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <span className="truncate text-base font-semibold leading-5 text-foreground">
-        {t('sidebar.productName')}
-      </span>
-      <span className="shrink-0 text-xs leading-[18px] text-muted-foreground">{displayVersion}</span>
+      <img
+        src={sidebarLogoSvg}
+        alt="SClaw"
+        width={85}
+        height={28}
+        className="h-7 w-auto max-w-full shrink-0 object-contain object-left"
+      />
+      <span className={cn('shrink-0', sidebarBrandVersionClass)}>{displayVersion}</span>
       {showEnvBadgeAfterVersion ? (
         <span className="no-drag shrink-0">
           <ChromeEnvBadge />

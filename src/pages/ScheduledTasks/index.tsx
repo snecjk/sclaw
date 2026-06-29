@@ -4,8 +4,16 @@
  * Does NOT mix with legacy local cron store.
  */
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useScheduledTasksStore } from '@/stores/scheduledTasks';
+import { forgetOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
+import {
+  ensureTaskGroupFirstTriggeredOnRun,
+  getCachedTaskGroupFirstTriggeredMap,
+  rememberOptimisticTaskGroupFirstTriggered,
+} from '@/lib/task-group-first-trigger';
+import { stoCloudTaskGroupKey } from '../../../shared/task-group-key';
 import { useChatStore } from '@/stores/chat';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { useScheduledTaskUnreadStore } from '@/stores/scheduled-task-unread';
@@ -115,25 +123,37 @@ export default function ScheduledTasks() {
 
   const handleTrigger = useCallback(
     async (job: TaskViewModel) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const agentSessionKey = `agent:main:scheduled-task:${job.id}:${today}`;
+      const groupKey = stoCloudTaskGroupKey(job.id);
+      const triggeredAt = Date.now();
+      flushSync(() => {
+        useChatStore.getState().markScheduledSessionActivating(agentSessionKey);
+        if (!getCachedTaskGroupFirstTriggeredMap()[groupKey]) {
+          rememberOptimisticTaskGroupFirstTriggered(groupKey, triggeredAt);
+        }
+      });
+      const chat = useChatStore.getState();
       try {
         const result = await triggerTask(Number(job.id));
+        void ensureTaskGroupFirstTriggeredOnRun(groupKey, triggeredAt);
         if (result.outcome === 'async_started') {
           toast.success('测试运行已在云端开始执行，结果将通过轮询同步');
         } else if (result.hasSession) {
-          // Switch to the per-run agent session (dated) instead of the summary session
-          const today = new Date().toISOString().slice(0, 10);
-          const agentSessionKey = `agent:main:scheduled-task:${job.id}:${today}`;
+          forgetOptimisticDeletedSessionKey(agentSessionKey);
           navigateToMainChatHome(navigate, location.pathname, () => {
             useChatStore.getState().switchSession(agentSessionKey);
           });
           toast.success('测试运行已完成，结果已添加到会话');
-          // Refresh sessions so the new agent session appears in the sidebar
-          void useChatStore.getState().loadSessions();
+          await useChatStore.getState().loadSessions();
         } else {
           toast.success('测试运行已触发');
         }
       } catch (err) {
+        chat.clearScheduledSessionActivating(agentSessionKey);
         toast.error(String(err));
+      } finally {
+        chat.releaseScheduledSessionActivating(agentSessionKey);
       }
     },
     [triggerTask, navigate, location.pathname],

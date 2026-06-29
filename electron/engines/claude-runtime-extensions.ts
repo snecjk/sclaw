@@ -1,5 +1,8 @@
 import type { HookCallbackMatcher, HookEvent, McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import {
+  buildStoDistinctiveDesignGuardClaudeRuntimeOptions,
+} from '../../sto-plugin/claude/sto-distinctive-design-guard/sdk';
+import {
   buildStoDingTalkSendGuardClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk';
 import {
@@ -12,6 +15,10 @@ import {
   CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT,
   createClaudeScheduledTaskMcpServer,
 } from '../../sto-plugin/claude/claude-scheduled-task-tool/tools';
+import {
+  isScheduledTaskExecutionSessionKey,
+  SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT,
+} from '../../shared/scheduled-task-instruction';
 import {
   buildStoAgentTelemetryClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-agent-telemetry/sdk';
@@ -99,8 +106,16 @@ const workflowToolExtension: ClaudeRuntimeExtension = {
 const scheduledTaskToolExtension: ClaudeRuntimeExtension = {
   id: 'claude-scheduled-task-tool',
   async build({ sessionKey }) {
+    const isExecutionContext = isScheduledTaskExecutionSessionKey(sessionKey);
+    if (isExecutionContext) {
+      return {
+        hooks: buildScheduledTaskHooks(sessionKey),
+        systemPromptAppend: SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT,
+      };
+    }
+
     return {
-      hooks: buildScheduledTaskHooks(),
+      hooks: buildScheduledTaskHooks(sessionKey),
       systemPromptAppend: CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT,
       mcpServers: {
         'claude-scheduled-task-tool': createClaudeScheduledTaskMcpServer({
@@ -114,6 +129,11 @@ const scheduledTaskToolExtension: ClaudeRuntimeExtension = {
 const agentTelemetryExtension: ClaudeRuntimeExtension = {
   id: 'sto-agent-telemetry',
   build: ({ sessionKey }) => buildStoAgentTelemetryClaudeRuntimeOptions(sessionKey),
+};
+
+const distinctiveDesignGuardExtension: ClaudeRuntimeExtension = {
+  id: 'sto-distinctive-design-guard',
+  build: ({ sessionKey }) => buildStoDistinctiveDesignGuardClaudeRuntimeOptions(sessionKey),
 };
 
 const ssoUserContextExtension: ClaudeRuntimeExtension = {
@@ -162,6 +182,7 @@ const ssoUserContextExtension: ClaudeRuntimeExtension = {
 };
 
 const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
+  distinctiveDesignGuardExtension,
   dingTalkSendGuardExtension,
   workflowToolExtension,
   scheduledTaskToolExtension,

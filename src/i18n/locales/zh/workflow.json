@@ -57,6 +57,7 @@
     "delete": "删除工作流",
     "noSchedule": "暂无排期",
     "noScheduleDraft": "还未设置排期",
+    "createFromTemplate": "依此模板创建",
     "noDescription": "暂无描述"
   },
   "detail": {

@@ -36,5 +36,168 @@
       "threadLine1": "システム: 週次会議資料に基づき HTML 版を生成しました（A4 横、印刷余白プリセット）。",
       "threadLine2": "ユーザー: HTML で見たい"
     }
+  },
+  "myTask": {
+    "pageTitle": "マイタスク",
+    "subtitle": "スケジュールに従って自動実行、またはいつでも手動でトリガーできます。定期実行したい内容をチャットで伝えて簡単に作成。",
+    "newTask": "+ 新規定期タスク",
+    "viewTabs": {
+      "tasks": "定期タスク",
+      "records": "実行記録",
+      "aria": "タスクビュー"
+    },
+    "taskView": {
+      "aria": "定期タスク",
+      "emptyNoRecords": "この状態の実行記録はありません"
+    },
+    "recordView": {
+      "aria": "実行記録"
+    },
+    "delete": {
+      "title": "定期タスクを削除しますか？",
+      "message": "「{{name}}」を削除しますか？この操作は取り消せません。",
+      "confirm": "削除",
+      "cancel": "キャンセル"
+    },
+    "toast": {
+      "enabled": "タスクを有効化しました",
+      "paused": "タスクを一時停止しました",
+      "triggered": "テスト実行をトリガーしました",
+      "updated": "タスクを更新しました",
+      "created": "タスクを作成しました",
+      "deleted": "タスクを削除しました"
+    },
+    "error": {
+      "claudeAgentNoWorkspaceUpdate": "選択した Claude エージェントにワークスペースがありません。ローカル定期タスクを更新できません。",
+      "claudeAgentNoWorkspaceCreate": "選択した Claude エージェントにワークスペースがありません。ローカル定期タスクを作成できません。",
+      "nameDuplicate": "タスク名が既に存在します。別の名前を使用してください。"
+    },
+    "toolbar": {
+      "searchSrOnly": "定期タスク名を検索",
+      "searchPlaceholder": "タスク名を検索",
+      "sortAria": "並べ替え"
+    },
+    "recordToolbar": {
+      "searchSrOnly": "実行記録のタスク名を検索",
+      "searchPlaceholder": "タスク名を検索"
+    },
+    "recordStatusNav": {
+      "aria": "実行状態で絞り込む"
+    },
+    "empty": {
+      "searchNoMatch": "一致するタスクが見つかりません",
+      "noTasks": "定期タスクなし",
+      "noTasksDescription": "定期タスクを作成してAIエージェントの定常業務を自動化",
+      "officialAria": "公式おすすめワークフロー",
+      "templateFallbackCategory": "ワークフローテンプレート",
+      "addTemplate": "追加"
+    },
+    "createModal": {
+      "editTitle": "定期タスクを編集",
+      "createTitle": "新規定期タスク",
+      "subtitle": "スケジュールに従って自動実行、またはいつでも手動でトリガーできます。定期実行したい内容をチャットで伝えて簡単に作成。",
+      "closeAria": "閉じる",
+      "nameLabel": "タスク名",
+      "namePlaceholder": "タスクの説明",
+      "nameRequired": "タスク名を入力してください",
+      "engineLabel": "エンジン",
+      "engineEditHint": "エンジンは作成時に決定され、編集時には変更できません。",
+      "engineClaudeHint": "Claudeローカル定期タスクを作成します。このマシンで独立実行。",
+      "engineOpenclawHint": "OpenClawローカル定期タスクを作成します。",
+      "workflowLabel": "関連ワークフロー",
+      "workflowPlaceholder": "選択",
+      "workflowEmpty": "使用可能なワークフローがありません",
+      "instructionsLabel": "S Clawに何をさせますか…",
+      "instructionsPlaceholder": "S Clawに何をさせますか…",
+      "instructionsRequired": "S Clawにさせる内容を説明してください",
+      "workflowAutoHint": "関連ワークフロー — 説明は自動生成されます",
+      "instructionsHint": "スケジュールは上の「スケジュール」で設定してください。AI美化でモデルが実行内容を最適化します。",
+      "beautifyAria": "AIでタスク説明を美化",
+      "beautifyButton": "AI美化",
+      "beautifying": "美化中…",
+      "beautifyNoChange": "説明は十分に整理されています",
+      "beautifyFallback": "モデルが利用できないため、基本ルールで最適化しました",
+      "beautifySuccess": "タスク説明を美化しました",
+      "beautifySuccessWithModel": "AI美化完了（{{model}}）",
+      "beautifyFailed": "AI美化に失敗しました。後でもう一度お試しください",
+      "scheduleLabel": "スケジュール",
+      "recipientsLabel": "送信対象",
+      "recipientsPlaceholder": "@ を入力して連絡先・グループを検索（複数選択可）",
+      "recipientsHint": "タスク完了後、選択した対象に結果を自動送信",
+      "cancel": "キャンセル",
+      "saving": "保存中…",
+      "save": "保存",
+      "buildWorkflowInstructions": "id: {{workflowCode}} のワークフロー【{{label}}】を実行してください",
+      "buildWorkflowInstructionsNoLabel": "id: {{workflowCode}} のワークフローを実行してください"
+    },
+    "card": {
+      "toggleAria": "タスクを有効化/一時停止",
+      "moreAria": "その他",
+      "runNow": "すぐに実行",
+      "running": "実行中…",
+      "edit": "タスクを編集",
+      "delete": "タスクを削除",
+      "workflowBadge": "ワークフロー",
+      "nextRunNow": "まもなく実行",
+      "nextRunMinutes": "{{count}}分後に実行",
+      "nextRunHours": "{{count}}時間後に実行",
+      "nextRunDays": "{{count}}日後に実行"
+    },
+    "schedule": {
+      "daily": "毎日",
+      "weekly": "毎週",
+      "monthly": "毎月",
+      "weekday": {
+        "0": "日",
+        "1": "月",
+        "2": "火",
+        "3": "水",
+        "4": "木",
+        "5": "金",
+        "6": "土"
+      },
+      "everyDay": "毎日",
+      "workday": "営業日",
+      "pleaseSelect": "選択",
+      "monthDay": "{{day}}日"
+    },
+    "sort": {
+      "createdDesc": "作成日（最新）",
+      "createdAsc": "作成日（最古）",
+      "nameAsc": "名前 A-Z",
+      "nameDesc": "名前 Z-A"
+    },
+    "recordStatus": {
+      "running": "実行中",
+      "success": "成功",
+      "failed": "失敗"
+    },
+    "recordItem": {
+      "running": "実行中",
+      "success": "成功",
+      "failed": "失敗",
+      "inProgress": "進行中",
+      "failedWithReason": "失敗 · {{reason}}",
+      "duration": "所要時間 {{duration}}",
+      "durationLessThanOneSecond": "< 1秒",
+      "durationSeconds": "{{seconds}}秒",
+      "durationMinutesSeconds": "{{minutes}}分 {{seconds}}秒",
+      "viewDetail": "詳細を見る"
+    },
+    "recordDetail": {
+      "title": "実行記録詳細",
+      "closeAria": "閉じる",
+      "taskName": "タスク名",
+      "workflow": "関連ワークフロー",
+      "status": "実行状態",
+      "startTime": "開始時刻",
+      "duration": "所要時間",
+      "failReason": "失敗原因",
+      "statusPill": {
+        "success": "成功",
+        "failed": "失敗",
+        "running": "実行中"
+      }
+    }
   }
 }

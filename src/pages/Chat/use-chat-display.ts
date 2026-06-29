@@ -1,10 +1,14 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { RawMessage } from '@/stores/chat';
 import { buildChatDisplayItems, findLastUserMessage, isAssistantRole, type ChatDisplayItem } from './chat-display';
 import type { ActiveTurnStream } from './AssistantTurnMessage';
 import { extractImages, extractThinking, extractToolUse } from './message-utils';
 
 type StreamingTool = ActiveTurnStream['streamingTools'][number];
+
+/** No chat delta for this long while still sending → show "still executing" hint. */
+const STALE_EXECUTION_SILENCE_MS = 45_000;
+const STALE_EXECUTION_TICK_MS = 5_000;
 
 function hasStreamPayload(
   streamMsg: { content?: unknown } | null,
@@ -26,16 +30,32 @@ export function useChatDisplay(params: {
   sending: boolean;
   pendingFinal: boolean;
   showThinking: boolean;
+  lastChatEventAt: number;
   streamMsg: { role?: string; content?: unknown; timestamp?: number; id?: string } | null;
   streamText: string;
   streamingTools: StreamingTool[];
+  lastUserMessageAt: number | null;
 }) {
-  const { messages, sending, pendingFinal, showThinking, streamMsg, streamText, streamingTools } = params;
+  const { messages, sending, pendingFinal, showThinking, lastChatEventAt, streamMsg, streamText, streamingTools, lastUserMessageAt } = params;
+
+  const [, staleTick] = useState(0);
+  useEffect(() => {
+    if (!sending) return;
+    const id = setInterval(() => staleTick((n) => n + 1), STALE_EXECUTION_TICK_MS);
+    return () => clearInterval(id);
+  }, [sending]);
 
   const displayItems = useMemo(() => buildChatDisplayItems(messages), [messages]);
 
   const hasAnyStreamContent = hasStreamPayload(streamMsg, streamText, streamingTools, showThinking);
   const shouldRenderStreaming = sending && hasAnyStreamContent;
+
+  const isStillExecuting = useMemo(() => {
+    if (!sending || pendingFinal) return false;
+    if (hasAnyStreamContent) return false;
+    if (lastChatEventAt <= 0) return false;
+    return Date.now() - lastChatEventAt > STALE_EXECUTION_SILENCE_MS;
+  }, [sending, pendingFinal, hasAnyStreamContent, lastChatEventAt, staleTick]);
 
   const { staticItems, activeTurn } = useMemo(() => {
     if (!sending) {
@@ -63,12 +83,18 @@ export function useChatDisplay(params: {
       streamMessage,
       streamText,
       streamingTools,
-      isConnecting: !pendingFinal && !hasAnyStreamContent,
+      isConnecting: !pendingFinal && !hasAnyStreamContent && !isStillExecuting,
       isProcessing: pendingFinal && !shouldRenderStreaming,
+      isStillExecuting,
     };
 
+    // Only promote the last assistant turn/message into activeTurn when the
+    // current send was triggered by a user message (lastUserMessageAt is set).
+    // For cron/background triggers (lastUserMessageAt === null), creating a
+    // fresh activeTurn ensures the loading indicator appears as a new line
+    // rather than overlaying the previous completed answer.
     const last = displayItems[displayItems.length - 1];
-    if (last?.type === 'assistant-turn') {
+    if (lastUserMessageAt != null && last?.type === 'assistant-turn') {
       return {
         staticItems: displayItems.slice(0, -1),
         activeTurn: {
@@ -80,7 +106,7 @@ export function useChatDisplay(params: {
       };
     }
 
-    if (last?.type === 'single' && isAssistantRole(last.message.role)) {
+    if (lastUserMessageAt != null && last?.type === 'single' && isAssistantRole(last.message.role)) {
       return {
         staticItems: displayItems.slice(0, -1),
         activeTurn: {
@@ -109,6 +135,8 @@ export function useChatDisplay(params: {
     streamMsg,
     streamText,
     streamingTools,
+    isStillExecuting,
+    lastUserMessageAt,
   ]);
 
   return { staticItems, activeTurn, shouldRenderStreaming, hasAnyStreamContent };

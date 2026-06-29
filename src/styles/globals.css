@@ -91,6 +91,23 @@
     --sto-main-pad-y-total: 2.5rem;
     /* Grey-9 次要文字（快捷 chip / 手动创建等） */
     --sto-grey-9: #4e5969;
+    /* Grey-8 三级文字（侧栏分区标题 / 版本号 — MasterGo paint_4:0520） */
+    --sto-grey-8: #86909c;
+    /* Grey-10 侧栏一级正文（MasterGo paint_4:0441「文字/文本-默认」） */
+    --sto-grey-10: #1d2129;
+
+    /* 侧栏文字色（MasterGo 8:46454 调整标题颜色+任务icon，MCP 2026-06） */
+    --sto-sidebar-text-default: var(--sto-grey-10);
+    --sto-sidebar-text-icon: var(--sto-grey-9);
+    --sto-sidebar-text-section: var(--sto-grey-8);
+    --sto-sidebar-row-hover-bg: #eaeaed;
+    --sto-sidebar-nav-active-bg: var(--sto-sidebar-row-hover-bg);
+    /** 分区标题 sticky 行高（任务 top-0，最近叠在其下） */
+    --sto-sidebar-section-sticky-h: 30px;
+    --sto-sidebar-running-spinner: #5f9274;
+    --sto-sidebar-subitem-active-bg: #e5e6eb;
+    --sto-sidebar-footer-name: #1a1a1a;
+    --sto-sidebar-footer-meta: #8b9099;
     /* MainLayout main `[scrollbar-gutter:stable]` 预留宽度，底纹右出血需一并抵消 */
     --sto-main-scrollbar-gutter: 15px;
 

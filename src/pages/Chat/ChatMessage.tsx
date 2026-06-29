@@ -37,6 +37,11 @@ import {
   resolvePreviewLinkTarget,
   toMarkdownPreviewPath,
 } from '@/lib/preview-url';
+import {
+  coerceHrefForMarkdownTransform,
+  resolvePreviewHrefAction,
+  resolvePreviewPathOnHost,
+} from '@/lib/preview-href';
 import { dedupeAttachedFiles, mergePreviewFileLists, normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 import { isFilePreviewDebugEnabled, logFilePreview } from '@/lib/file-preview-debug';
@@ -90,6 +95,9 @@ interface ChatMessageProps {
   hideAvatar?: boolean;
   hideThinkingPanel?: boolean;
 }
+
+const HOVER_REVEAL_CLASS = 'opacity-0 transition-opacity duration-200 group-hover:opacity-100';
+const BODY_HOVER_REVEAL_CLASS = 'opacity-0 transition-opacity duration-200 group-hover/body:opacity-100';
 
 interface ExtractedImage { url?: string; data?: string; mimeType: string; }
 
@@ -205,7 +213,7 @@ export const ChatMessage = memo(function ChatMessage({
   const workflowCardStatesForRefs = workflowCardStates;
   const candidateRefs = useMemo(
     () =>
-      extractPreviewableRefs(text)
+      extractPreviewableRefs(text, { messageId: message.id })
         .filter((ref) => !attachedFiles.some((f) => previewFileRefsMatch(f, ref)))
         .filter((ref) => isPreviewableFile(ref)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -230,12 +238,24 @@ export const ChatMessage = memo(function ChatMessage({
     const seen = new Set<string>();
     const result: typeof candidateRefs = [];
     for (const ref of candidateRefs) {
+      const exists = refExistence[ref.filePath];
       const resolved = resolvePreviewCandidate(
         { ...ref, fileSize: 0, preview: null },
-        refExistence[ref.filePath],
+        exists,
         workflowCardStatesForRefs,
       );
-      if (!resolved) continue;
+      if (!resolved) {
+        logFilePreview('extract-filtered', {
+          messageId: message.id,
+          filePath: ref.filePath,
+          fileName: ref.fileName,
+          exists: exists ?? null,
+          reason: exists === false
+            ? 'local path does not exist and no workflow artifact fallback'
+            : 'existence check pending or unresolvable',
+        });
+        continue;
+      }
       const key = normalizePreviewFileKey(resolved.filePath, resolved.fileName);
       if (seen.has(key)) continue;
       if (workflowArtifactUrls.has(resolved.filePath)) continue;
@@ -452,7 +472,13 @@ export const ChatMessage = memo(function ChatMessage({
         'rounded-[1.6rem] transition-all duration-200',
         isSearchMatch && 'ring-1 ring-primary/25 ring-offset-2 ring-offset-background',
         isSearchActive && 'ring-2 ring-primary/55 bg-primary/[0.04] shadow-[0_0_0_4px_rgba(255,111,0,0.08)]',
-        thinkingOutsideAvatar ? 'flex w-full flex-col gap-2' : isUser && showUserParamsFold ? 'group w-full' : isUser ? 'group flex flex-row-reverse gap-3' : 'group w-full',
+        thinkingOutsideAvatar
+          ? 'flex w-full flex-col gap-2'
+          : isUser && showUserParamsFold
+            ? 'group w-full'
+            : isUser
+              ? 'group flex flex-row-reverse gap-3'
+              : 'w-full',
       )}
     >
       {thinkingOutsideAvatar ? (
@@ -548,31 +574,66 @@ export const ChatMessage = memo(function ChatMessage({
           </div>
         )}
 
-        {/* B4：分组参数（助手 A / 旧数据 fallback，无标题无白底） */}
-        {showAssistantParamsPanel ? (
-          <ParamsConfirmedParamsOnlyPanel
-            text={assistantParamsPanelText}
-            isStreaming={isWorkflowIntroStreaming}
-          />
-        ) : null}
-
         {/* B4：用户参数摘要 fallback（无 intro 时可见，无标题） */}
         {showUserParamsFold ? (
           <ParamsConfirmedParamsOnlyPanel text={text} />
         ) : null}
 
-        {/* Main text bubble */}
+        {/* Main text bubble — assistant hover (timestamp/copy) only triggers on body, not thinking panel */}
         {!showUserParamsFold && !showAssistantParamsPanel && (isUser ? hasText : showAssistantTextBubble) ? (
-          <MessageBubble
-            text={isUser ? text : assistantBubbleText}
-            isUser={isUser}
-            isStreaming={isStreaming}
-            streamingLabel={t('streaming.respondingBadge')}
-            completedLabel={t('streaming.completedLabel')}
-            completedBadge={t('streaming.completedBadge')}
-            onPreviewFile={onPreviewFile}
-            workflowGuidanceShell={workflowGuidanceStreamingShell}
-          />
+          isUser ? (
+            <MessageBubble
+              text={text}
+              isUser={isUser}
+              isStreaming={isStreaming}
+              streamingLabel={t('streaming.respondingBadge')}
+              completedLabel={t('streaming.completedLabel')}
+              completedBadge={t('streaming.completedBadge')}
+              onPreviewFile={onPreviewFile}
+              workflowGuidanceShell={workflowGuidanceStreamingShell}
+            />
+          ) : (
+            <div className="group/body w-full">
+              <MessageBubble
+                text={assistantBubbleText}
+                isUser={isUser}
+                isStreaming={isStreaming}
+                streamingLabel={t('streaming.respondingBadge')}
+                completedLabel={t('streaming.completedLabel')}
+                completedBadge={t('streaming.completedBadge')}
+                onPreviewFile={onPreviewFile}
+                workflowGuidanceShell={workflowGuidanceStreamingShell}
+              />
+              {hasText ? (
+                <AssistantHoverBar
+                  text={text}
+                  timestamp={message.timestamp}
+                  onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
+                  bodyHover
+                />
+              ) : null}
+            </div>
+          )
+        ) : null}
+
+        {/* B4：分组参数（助手 A / 旧数据 fallback，无标题无白底） */}
+        {showAssistantParamsPanel ? (
+          !isUser ? (
+            <div className="group/body w-full">
+              <ParamsConfirmedParamsOnlyPanel
+                text={assistantParamsPanelText}
+                isStreaming={isWorkflowIntroStreaming}
+              />
+              {hasText ? (
+                <AssistantHoverBar
+                  text={text}
+                  timestamp={message.timestamp}
+                  onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
+                  bodyHover
+                />
+              ) : null}
+            </div>
+          ) : null
         ) : null}
 
         {/* B4：助手侧「参数已确认」折叠块（图一：标题 + 左竖线文案 + 工作流卡） */}
@@ -678,15 +739,6 @@ export const ChatMessage = memo(function ChatMessage({
             onEditMessage={onEditMessage}
           />
         )}
-
-        {/* Hover row for assistant messages — only when there is real text content */}
-        {!isUser && hasText && (
-          <AssistantHoverBar
-            text={text}
-            timestamp={message.timestamp}
-            onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
-          />
-        )}
       </div>
 
       {/* Image lightbox portal */}
@@ -786,7 +838,7 @@ function UserHoverBar({
   }, [onEditMessage, text]);
 
   return (
-    <div className="flex select-none items-center gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+    <div className={cn('flex select-none items-center gap-1.5', HOVER_REVEAL_CLASS)}>
       {timestamp ? (
         <span className="mr-1 text-xs text-muted-foreground">
           {formatTimestamp(timestamp)}
@@ -820,10 +872,13 @@ function AssistantHoverBar({
   text,
   timestamp,
   onCopyDebugSnapshot,
+  bodyHover = false,
 }: {
   text: string;
   timestamp?: number;
   onCopyDebugSnapshot?: () => Promise<void> | void;
+  /** When true, reveal on `group-hover/body` (正文区域), not the whole message shell. */
+  bodyHover?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -834,7 +889,10 @@ function AssistantHoverBar({
   }, [text]);
 
   return (
-    <div className="flex w-full select-none items-center justify-between px-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+    <div className={cn(
+      'flex w-full select-none items-center justify-between px-1',
+      bodyHover ? BODY_HOVER_REVEAL_CLASS : HOVER_REVEAL_CLASS,
+    )}>
       <span className="text-xs text-muted-foreground">
         {timestamp ? formatTimestamp(timestamp) : ''}
       </span>
@@ -855,9 +913,10 @@ function AssistantHoverBar({
   );
 }
 
-/** Allow custom preview:// links — react-markdown strips unknown URL schemes by default. */
+/** ReactMarkdown urlTransform — local hrefs → preview://; external schemes pass through. */
 function previewUrlTransform(url: string): string {
-  if (url.startsWith('preview://')) return url;
+  const coerced = coerceHrefForMarkdownTransform(url);
+  if (coerced !== null) return coerced;
   return defaultUrlTransform(url);
 }
 
@@ -1001,19 +1060,36 @@ function MessageBubble({
                   return <span className="text-link break-words break-all">{children}</span>;
                 }
 
-                const target = resolvePreviewLinkTarget(rawHref, workflowCardStates);
+                const action = resolvePreviewHrefAction(
+                  rawHref.startsWith('preview://') ? rawHref : rawHref,
+                );
 
-                if (onPreviewFile && isHttpUrl(target) && isPreviewableRemoteUrl(target)) {
+                if (action.action === 'open-external') {
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        logFilePreview('link-click', { branch: 'external', target: action.url });
+                        openExternalUrl(action.url);
+                      }}
+                      className="inline cursor-pointer break-all break-words border-0 bg-transparent p-0 font-inherit text-link underline-offset-2 hover:underline"
+                    >
+                      {children}
+                    </button>
+                  );
+                }
+
+                if (action.action === 'preview-remote' && onPreviewFile) {
                   const previewFile = artifactToPreviewFile({
-                    name: previewHttpUrlLabel(target),
-                    type: inferMimeTypeFromUrl(target),
-                    url: target,
+                    name: previewHttpUrlLabel(action.url),
+                    type: inferMimeTypeFromUrl(action.url),
+                    url: action.url,
                   });
                   return (
                     <button
                       type="button"
                       onClick={() => {
-                        logFilePreview('link-click', { branch: 'remote-preview', target });
+                        logFilePreview('link-click', { branch: 'remote-preview', target: action.url });
                         onPreviewFile(previewFile);
                       }}
                       className="inline cursor-pointer break-all break-words border-0 bg-transparent p-0 font-inherit text-link underline-offset-2 hover:underline"
@@ -1023,37 +1099,34 @@ function MessageBubble({
                   );
                 }
 
-                if (isHttpUrl(target)) {
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        logFilePreview('link-click', { branch: 'external-http', target });
-                        openExternalUrl(target);
-                      }}
-                      className="inline cursor-pointer break-all break-words border-0 bg-transparent p-0 font-inherit text-link underline-offset-2 hover:underline"
-                    >
-                      {children}
-                    </button>
+                if (action.action === 'preview-local' && onPreviewFile) {
+                  const hintPath = action.path;
+                  const workflowTarget = resolvePreviewLinkTarget(
+                    rawHref.startsWith('preview://') ? rawHref : `preview://${hintPath}`,
+                    workflowCardStates,
                   );
-                }
-
-                if (onPreviewFile && target) {
-                  const fileName = target.split('/').pop() || 'preview';
-                  const mimeType = inferMimeTypeFromUrl(target);
+                  const openLocal = async () => {
+                    let filePath = workflowTarget && isHttpUrl(workflowTarget)
+                      ? workflowTarget
+                      : hintPath;
+                    if (!isHttpUrl(filePath)) {
+                      const resolved = await resolvePreviewPathOnHost(filePath);
+                      if (resolved.exists) filePath = resolved.path;
+                    }
+                    const fileName = filePath.split('/').pop()?.split('\\').pop() || 'preview';
+                    logFilePreview('link-click', { branch: 'local-preview', target: filePath, fileName });
+                    onPreviewFile({
+                      filePath,
+                      fileName,
+                      mimeType: inferMimeTypeFromUrl(filePath),
+                      fileSize: 0,
+                      preview: null,
+                    });
+                  };
                   return (
                     <button
                       type="button"
-                      onClick={() => {
-                        logFilePreview('link-click', { branch: 'local-preview', target, fileName, mimeType });
-                        onPreviewFile({
-                          filePath: target,
-                          fileName,
-                          mimeType,
-                          fileSize: 0,
-                          preview: null,
-                        });
-                      }}
+                      onClick={() => { void openLocal(); }}
                       className="inline cursor-pointer break-all break-words border-0 bg-transparent p-0 font-inherit text-link underline-offset-2 hover:underline"
                     >
                       {children}

@@ -5,6 +5,8 @@
  * using electron-store. Supports offline compensation and duplicate prevention.
  */
 
+import { filterSuppressedExecutionRecords } from '../../shared/deleted-session-suppress';
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let pollerStoreInstance: any = null;
 
@@ -74,27 +76,27 @@ export async function markRunProcessed(runId: number | string): Promise<void> {
 
 /**
  * Check whether a session key has been explicitly deleted by the user.
- * Used to suppress virtual sessions (e.g. cron dated sessions generated from
- * run logs) from being re-created on next sessions list refresh.
- *
- * If `updatedAt` is provided and greater than the recorded deletion time,
- * the session is considered "revived" by newer activity — returns false.
- * This handles the case where a cron task is triggered on the same date
- * a previously-deleted dated session had: the new run has a newer timestamp,
- * so the dated session correctly reappears in the sidebar.
+ * Deletion is strict: once marked, the execution record stays hidden even if
+ * the same task runs again on the same calendar day (no "revival" by updatedAt).
  */
-export async function isSessionDeleted(sessionKey: string, updatedAt?: number): Promise<boolean> {
+export async function isSessionDeleted(sessionKey: string): Promise<boolean> {
   const store = await getPollerStore();
   const keys = store.get('deletedSessions') as string[];
-  if (!keys.includes(sessionKey)) return false;
-  if (typeof updatedAt === 'number' && Number.isFinite(updatedAt) && updatedAt > 0) {
-    const timestamps = store.get('deletedSessionTimestamps') as Record<string, number>;
-    const deletedAt = timestamps[sessionKey];
-    // No timestamp recorded for legacy entries: treat deletedAt as 0 (session stays hidden)
-    if (typeof deletedAt !== 'number') return true;
-    return deletedAt >= updatedAt;
-  }
-  return true;
+  return keys.includes(sessionKey);
+}
+
+export async function listDeletedSessionKeys(): Promise<string[]> {
+  const store = await getPollerStore();
+  return store.get('deletedSessions') as string[];
+}
+
+export async function filterDeletedSessions<T extends { key: string; updatedAt?: number }>(
+  sessions: T[],
+): Promise<T[]> {
+  if (sessions.length === 0) return sessions;
+  const deleted = new Set(await listDeletedSessionKeys());
+  if (deleted.size === 0) return sessions;
+  return filterSuppressedExecutionRecords(sessions, deleted);
 }
 
 /**

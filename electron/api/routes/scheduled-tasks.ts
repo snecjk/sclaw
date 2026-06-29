@@ -7,6 +7,8 @@ import {
   readScheduledTaskSessionHistory,
   listAllScheduledTaskSessions,
 } from '../../services/scheduled-task-session-writer';
+import { ensureTaskGroupFirstTriggeredOnRun } from '../../utils/task-group-first-trigger-store';
+import { stoCloudTaskGroupKey } from '../../../shared/task-group-key';
 
 export async function handleScheduledTaskRoutes(
   req: IncomingMessage,
@@ -205,6 +207,7 @@ export async function handleScheduledTaskRoutes(
       const result = await service.triggerTask(id, extraInfo);
 
 			console.log('[ScheduledTasks] Trigger result: =====>', result, id, extraInfo);
+      await ensureTaskGroupFirstTriggeredOnRun(stoCloudTaskGroupKey(id));
       // Start high-frequency poll for this task to catch async completion
       try {
         const { getScheduledTaskResultPoller } = await import('../../services/scheduled-task-result-poller');
