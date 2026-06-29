@@ -34,10 +34,13 @@ import { getDwsLoginManager } from './dws-login';
 import { getOpenClawSkillsDir } from './paths';
 import {
   SKILLS_ZIP_ASSET_NAME,
+  buildGithubDirectAssetUrl,
+  getGithubRepo,
   inferAssetName,
   resolveActiveGiteeRepo,
   resolveAssetDownloadUrlWithFallback,
-  resolveGiteeAssetUrl,
+  resolveSha256ForDownloadUrl,
+  type DwsAssetChecksumSpec,
   type DwsPlatformAssetSpec,
   type DwsReleaseSources,
 } from '../../shared/dws-release-resolver';
@@ -62,6 +65,7 @@ export interface DwsBundledManifest {
     assetName?: string;
     url?: string | null;
     sha256?: string | null;
+    githubSha256?: string | null;
   } | null;
   platforms: Record<string, DwsPlatformAssetSpec & { url?: string }>;
 }
@@ -242,7 +246,7 @@ async function downloadDwsReleaseAsset(
   assetName: string,
   platformSpec: DwsPlatformAssetSpec | null,
   targetPath: string,
-  expectedSha256?: string | null,
+  checksumSpec?: DwsAssetChecksumSpec | null,
 ): Promise<void> {
   const resolved = await resolveAssetDownloadUrlWithFallback({
     manifest: bundled,
@@ -252,26 +256,30 @@ async function downloadDwsReleaseAsset(
     fetchFn: proxyAwareFetch,
   });
 
-  if (resolved.fallbackFrom === 'github') {
-    logger.warn(`GitHub dws unreachable, switched to Gitee mirror: ${resolved.giteeRepo}`);
+  if (resolved.fallbackFrom === 'gitee') {
+    logger.warn(`Gitee dws unavailable, switched to GitHub: ${resolved.githubRepo}`);
   } else if (resolved.source === 'gitee') {
     logger.info(`Using Gitee dws mirror: ${resolved.giteeRepo ?? resolveActiveGiteeRepo(bundled)}`);
   }
 
+  const githubRepo = getGithubRepo(bundled);
+  const githubUrl = buildGithubDirectAssetUrl(githubRepo, bundled.dwsVersion, assetName);
+
   try {
-    await downloadFile(resolved.url, targetPath, expectedSha256);
+    await downloadFile(
+      resolved.url,
+      targetPath,
+      resolveSha256ForDownloadUrl(resolved.url, checksumSpec),
+    );
     return;
   } catch (primaryError) {
-    if (resolved.source !== 'github' || resolved.fallbackFrom) throw primaryError;
-    const giteeRepo = resolveActiveGiteeRepo(bundled);
-    const giteeUrl = await resolveGiteeAssetUrl(
-      giteeRepo,
-      bundled.dwsVersion,
-      assetName,
-      proxyAwareFetch,
+    if (resolved.source !== 'gitee' || resolved.fallbackFrom) throw primaryError;
+    logger.warn('Gitee dws asset download failed, retrying via GitHub:', primaryError);
+    await downloadFile(
+      githubUrl,
+      targetPath,
+      resolveSha256ForDownloadUrl(githubUrl, checksumSpec),
     );
-    logger.warn('GitHub dws asset download failed, retrying via Gitee:', primaryError);
-    await downloadFile(giteeUrl, targetPath, expectedSha256);
   }
 }
 
@@ -378,7 +386,7 @@ async function installMonoDwsSkillFromReleaseZip(bundled: DwsBundledManifest): P
       skillsAssetName,
       bundled.skillsZip?.url ? { url: bundled.skillsZip.url, assetName: skillsAssetName } : null,
       zipPath,
-      bundled.skillsZip?.sha256,
+      bundled.skillsZip,
     );
     mkdirSync(extractDir, { recursive: true });
     await extractArchive(zipPath, extractDir, 'zip');
@@ -446,7 +454,7 @@ async function installBinaryFromManifest(
   const archivePath = join(tmpDir, assetName);
 
   try {
-    await downloadDwsReleaseAsset(bundled, assetName, platformSpec, archivePath, platformSpec.sha256);
+    await downloadDwsReleaseAsset(bundled, assetName, platformSpec, archivePath, platformSpec);
     const extractDir = join(tmpDir, 'extract');
     mkdirSync(extractDir, { recursive: true });
     await extractArchive(archivePath, extractDir, archiveType);

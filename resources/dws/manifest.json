@@ -10,55 +10,56 @@
       "repo": "DingTalk-Real-AI/dingtalk-workspace-cli"
     }
   },
-  "releaseUrl": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/tag/v1.0.44",
-  "resolvedFrom": "github",
+  "releaseUrl": null,
+  "resolvedFrom": "gitee",
   "platforms": {
     "darwin-arm64": {
       "assetName": "dws-darwin-arm64.tar.gz",
-      "url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.44/dws-darwin-arm64.tar.gz",
-      "sha256": "4363371952968717ad9c42c486fa9707134cd82f9794e4a326323e5c53f73903",
+      "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.44/dws-darwin-arm64.tar.gz",
+      "sha256": null,
       "archive": "tar.gz",
-      "size": 6328645
+      "githubSha256": "4363371952968717ad9c42c486fa9707134cd82f9794e4a326323e5c53f73903"
     },
     "darwin-x64": {
       "assetName": "dws-darwin-amd64.tar.gz",
-      "url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.44/dws-darwin-amd64.tar.gz",
-      "sha256": "f22e4743252531ca3024f9251077b0529f9b9a398f5342a720d36fb8707909fe",
+      "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.44/dws-darwin-amd64.tar.gz",
+      "sha256": null,
       "archive": "tar.gz",
-      "size": 6791260
+      "githubSha256": "f22e4743252531ca3024f9251077b0529f9b9a398f5342a720d36fb8707909fe"
     },
     "win32-x64": {
       "assetName": "dws-windows-amd64.zip",
-      "url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.44/dws-windows-amd64.zip",
-      "sha256": "2446e6818e1cfe4879d780291400d6cfa57e445612b0e602faf3cc8c37594642",
+      "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.44/dws-windows-amd64.zip",
+      "sha256": null,
       "archive": "zip",
-      "size": 6891983
+      "githubSha256": "2446e6818e1cfe4879d780291400d6cfa57e445612b0e602faf3cc8c37594642"
     },
     "win32-arm64": {
       "assetName": "dws-windows-arm64.zip",
-      "url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.44/dws-windows-arm64.zip",
-      "sha256": "710b93b10ea6d8c5178e9dac7f20cd0a853b0f8c06221a2540d1390eeb00315f",
+      "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.44/dws-windows-arm64.zip",
+      "sha256": null,
       "archive": "zip",
-      "size": 6214349
+      "githubSha256": "710b93b10ea6d8c5178e9dac7f20cd0a853b0f8c06221a2540d1390eeb00315f"
     },
     "linux-x64": {
       "assetName": "dws-linux-amd64.tar.gz",
-      "url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.44/dws-linux-amd64.tar.gz",
-      "sha256": "3d28dae8f55d67e55ab2f7f03a0f225dc3cf318c7dae3d48f5715913b2331944",
+      "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.44/dws-linux-amd64.tar.gz",
+      "sha256": null,
       "archive": "tar.gz",
-      "size": 6950631
+      "githubSha256": "3d28dae8f55d67e55ab2f7f03a0f225dc3cf318c7dae3d48f5715913b2331944"
     },
     "linux-arm64": {
       "assetName": "dws-linux-arm64.tar.gz",
-      "url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.44/dws-linux-arm64.tar.gz",
-      "sha256": "db012770b2bd93b47f8bde432626f501bb30f559f27856320e69b4edb792f1b5",
+      "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.44/dws-linux-arm64.tar.gz",
+      "sha256": null,
       "archive": "tar.gz",
-      "size": 6354521
+      "githubSha256": "db012770b2bd93b47f8bde432626f501bb30f559f27856320e69b4edb792f1b5"
     }
   },
   "skillsZip": {
     "assetName": "dws-skills.zip",
-    "url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.44/dws-skills.zip",
-    "sha256": "82b75f16e15c8432105202ef90489b684c124b61d6ff363f8a548eb34c0dead5"
+    "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.44/dws-skills.zip",
+    "sha256": null,
+    "githubSha256": "82b75f16e15c8432105202ef90489b684c124b61d6ff363f8a548eb34c0dead5"
   }
 }
