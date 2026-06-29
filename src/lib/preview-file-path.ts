@@ -1,5 +1,6 @@
 import { isHttpUrl, normalizeLocalFilePath } from '@/lib/preview-url';
 import { isTruncatedLocalPathPrefix } from '../../shared/preview-raw-path';
+import { preferDisplayFileName, stableFileSuffix } from '../../shared/file-display-name';
 
 /** Canonical key for comparing local/remote preview file references (Windows-safe). */
 export function normalizePreviewFileKey(filePath?: string, fileName?: string): string {
@@ -19,7 +20,13 @@ export function previewFileRefsMatch(
 
   const nameA = (a.fileName || a.filePath?.split(/[\\/]/).pop() || '').toLowerCase();
   const nameB = (b.fileName || b.filePath?.split(/[\\/]/).pop() || '').toLowerCase();
-  return Boolean(nameA && nameB && nameA === nameB);
+  if (nameA && nameB && nameA === nameB) return true;
+
+  const suffixA = stableFileSuffix(nameA);
+  const suffixB = stableFileSuffix(nameB);
+  if (suffixA && suffixB && suffixA === suffixB) return true;
+
+  return false;
 }
 
 export function dedupeAttachedFiles<T extends {
@@ -63,6 +70,7 @@ export function dedupeAttachedFiles<T extends {
     result[dupIdx] = {
       ...drop,
       ...keep,
+      fileName: preferDisplayFileName(keep.fileName, drop.fileName),
       fileSize: keep.fileSize ?? drop.fileSize,
       preview: keep.preview ?? drop.preview,
     };
@@ -79,4 +87,22 @@ export function mergePreviewFileLists<T extends {
   mimeType: string;
 }>(primary: T[], secondary: T[]): T[] {
   return dedupeAttachedFiles([...primary, ...secondary]);
+}
+
+/** Patch garbled attachment names using labels found in assistant message text. */
+export function applyDisplayNameHints<T extends { filePath?: string; fileName: string }>(
+  files: T[],
+  hints: Array<{ fileName: string }>,
+): T[] {
+  if (hints.length === 0) return files;
+  return files.map((file) => {
+    const suffix = stableFileSuffix(file.fileName);
+    if (!suffix) return file;
+    const hint = hints.find((candidate) => stableFileSuffix(candidate.fileName) === suffix);
+    if (!hint) return file;
+    return {
+      ...file,
+      fileName: preferDisplayFileName(hint.fileName, file.fileName),
+    };
+  });
 }
