@@ -96,6 +96,9 @@ interface ChatMessageProps {
   hideThinkingPanel?: boolean;
 }
 
+const HOVER_REVEAL_CLASS = 'opacity-0 transition-opacity duration-200 group-hover:opacity-100';
+const BODY_HOVER_REVEAL_CLASS = 'opacity-0 transition-opacity duration-200 group-hover/body:opacity-100';
+
 interface ExtractedImage { url?: string; data?: string; mimeType: string; }
 
 /** Resolve an ExtractedImage to a displayable src string, or null if not possible. */
@@ -469,7 +472,13 @@ export const ChatMessage = memo(function ChatMessage({
         'rounded-[1.6rem] transition-all duration-200',
         isSearchMatch && 'ring-1 ring-primary/25 ring-offset-2 ring-offset-background',
         isSearchActive && 'ring-2 ring-primary/55 bg-primary/[0.04] shadow-[0_0_0_4px_rgba(255,111,0,0.08)]',
-        thinkingOutsideAvatar ? 'flex w-full flex-col gap-2' : isUser && showUserParamsFold ? 'group w-full' : isUser ? 'group flex flex-row-reverse gap-3' : 'group w-full',
+        thinkingOutsideAvatar
+          ? 'flex w-full flex-col gap-2'
+          : isUser && showUserParamsFold
+            ? 'group w-full'
+            : isUser
+              ? 'group flex flex-row-reverse gap-3'
+              : 'w-full',
       )}
     >
       {thinkingOutsideAvatar ? (
@@ -565,31 +574,66 @@ export const ChatMessage = memo(function ChatMessage({
           </div>
         )}
 
-        {/* B4：分组参数（助手 A / 旧数据 fallback，无标题无白底） */}
-        {showAssistantParamsPanel ? (
-          <ParamsConfirmedParamsOnlyPanel
-            text={assistantParamsPanelText}
-            isStreaming={isWorkflowIntroStreaming}
-          />
-        ) : null}
-
         {/* B4：用户参数摘要 fallback（无 intro 时可见，无标题） */}
         {showUserParamsFold ? (
           <ParamsConfirmedParamsOnlyPanel text={text} />
         ) : null}
 
-        {/* Main text bubble */}
+        {/* Main text bubble — assistant hover (timestamp/copy) only triggers on body, not thinking panel */}
         {!showUserParamsFold && !showAssistantParamsPanel && (isUser ? hasText : showAssistantTextBubble) ? (
-          <MessageBubble
-            text={isUser ? text : assistantBubbleText}
-            isUser={isUser}
-            isStreaming={isStreaming}
-            streamingLabel={t('streaming.respondingBadge')}
-            completedLabel={t('streaming.completedLabel')}
-            completedBadge={t('streaming.completedBadge')}
-            onPreviewFile={onPreviewFile}
-            workflowGuidanceShell={workflowGuidanceStreamingShell}
-          />
+          isUser ? (
+            <MessageBubble
+              text={text}
+              isUser={isUser}
+              isStreaming={isStreaming}
+              streamingLabel={t('streaming.respondingBadge')}
+              completedLabel={t('streaming.completedLabel')}
+              completedBadge={t('streaming.completedBadge')}
+              onPreviewFile={onPreviewFile}
+              workflowGuidanceShell={workflowGuidanceStreamingShell}
+            />
+          ) : (
+            <div className="group/body w-full">
+              <MessageBubble
+                text={assistantBubbleText}
+                isUser={isUser}
+                isStreaming={isStreaming}
+                streamingLabel={t('streaming.respondingBadge')}
+                completedLabel={t('streaming.completedLabel')}
+                completedBadge={t('streaming.completedBadge')}
+                onPreviewFile={onPreviewFile}
+                workflowGuidanceShell={workflowGuidanceStreamingShell}
+              />
+              {hasText ? (
+                <AssistantHoverBar
+                  text={text}
+                  timestamp={message.timestamp}
+                  onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
+                  bodyHover
+                />
+              ) : null}
+            </div>
+          )
+        ) : null}
+
+        {/* B4：分组参数（助手 A / 旧数据 fallback，无标题无白底） */}
+        {showAssistantParamsPanel ? (
+          !isUser ? (
+            <div className="group/body w-full">
+              <ParamsConfirmedParamsOnlyPanel
+                text={assistantParamsPanelText}
+                isStreaming={isWorkflowIntroStreaming}
+              />
+              {hasText ? (
+                <AssistantHoverBar
+                  text={text}
+                  timestamp={message.timestamp}
+                  onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
+                  bodyHover
+                />
+              ) : null}
+            </div>
+          ) : null
         ) : null}
 
         {/* B4：助手侧「参数已确认」折叠块（图一：标题 + 左竖线文案 + 工作流卡） */}
@@ -695,15 +739,6 @@ export const ChatMessage = memo(function ChatMessage({
             onEditMessage={onEditMessage}
           />
         )}
-
-        {/* Hover row for assistant messages — only when there is real text content */}
-        {!isUser && hasText && (
-          <AssistantHoverBar
-            text={text}
-            timestamp={message.timestamp}
-            onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
-          />
-        )}
       </div>
 
       {/* Image lightbox portal */}
@@ -803,7 +838,7 @@ function UserHoverBar({
   }, [onEditMessage, text]);
 
   return (
-    <div className="flex select-none items-center gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+    <div className={cn('flex select-none items-center gap-1.5', HOVER_REVEAL_CLASS)}>
       {timestamp ? (
         <span className="mr-1 text-xs text-muted-foreground">
           {formatTimestamp(timestamp)}
@@ -837,10 +872,13 @@ function AssistantHoverBar({
   text,
   timestamp,
   onCopyDebugSnapshot,
+  bodyHover = false,
 }: {
   text: string;
   timestamp?: number;
   onCopyDebugSnapshot?: () => Promise<void> | void;
+  /** When true, reveal on `group-hover/body` (正文区域), not the whole message shell. */
+  bodyHover?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -851,7 +889,10 @@ function AssistantHoverBar({
   }, [text]);
 
   return (
-    <div className="flex w-full select-none items-center justify-between px-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+    <div className={cn(
+      'flex w-full select-none items-center justify-between px-1',
+      bodyHover ? BODY_HOVER_REVEAL_CLASS : HOVER_REVEAL_CLASS,
+    )}>
       <span className="text-xs text-muted-foreground">
         {timestamp ? formatTimestamp(timestamp) : ''}
       </span>

@@ -1273,16 +1273,28 @@ export function usePreviewableFiles(
   }, [candidates, existence, workflowCardStates]);
 }
 
+function timestampToMs(timestamp: unknown): number {
+  if (timestamp == null || timestamp === '') return 0;
+  if (typeof timestamp === 'string') {
+    const numeric = Number(timestamp);
+    if (Number.isFinite(numeric)) {
+      return numeric < 1e12 ? numeric * 1000 : numeric;
+    }
+    const parsed = Date.parse(timestamp);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return 0;
+  // OpenClaw timestamps can be in seconds or milliseconds
+  return timestamp < 1e12 ? timestamp * 1000 : timestamp;
+}
+
 /**
  * Format a Unix timestamp (seconds) to relative time string.
  */
 export function formatTimestamp(timestamp: unknown): string {
-  if (!timestamp) return '';
-  const ts = typeof timestamp === 'number' ? timestamp : Number(timestamp);
-  if (!ts || isNaN(ts)) return '';
+  const ms = timestampToMs(timestamp);
+  if (ms <= 0) return '';
 
-  // OpenClaw timestamps can be in seconds or milliseconds
-  const ms = ts > 1e12 ? ts : ts * 1000;
   const date = new Date(ms);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
