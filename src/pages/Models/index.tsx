@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { glassNestedCard, glassSectionSurface, glassSegmentTrack, stoMainInnerShell } from '@/lib/surfaces';
 import { useGatewayStore } from '@/stores/gateway';
+import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { useSettingsStore } from '@/stores/settings';
 import { hostApiFetch } from '@/lib/host-api';
 import { trackUiEvent } from '@/lib/telemetry';
@@ -31,6 +32,8 @@ const USAGE_FETCH_RETRY_DELAY_MS = 1500;
 
 export function Models() {
   const { t } = useTranslation(['dashboard', 'settings']);
+  const user = useAuthStore((s) => s.user);
+  const isSite = isSiteUser(user?.categoryCode);
   const gatewayStatus = useGatewayStore((state) => state.status);
   const devModeUnlocked = useSettingsStore((state) => state.devModeUnlocked);
   const isGatewayRunning = gatewayStatus.state === 'running';
@@ -88,6 +91,12 @@ export function Models() {
   useEffect(() => {
     trackUiEvent('models.page_viewed');
   }, []);
+
+  useEffect(() => {
+    if (isSite) {
+      setShowQuotaDialog(false);
+    }
+  }, [isSite]);
 
   useEffect(() => {
     let cancelled = false;
@@ -289,17 +298,19 @@ export function Models() {
             <h2 className="text-lg font-semibold tracking-tight text-foreground">
               {t('dashboard:tokenBalance.title', 'Token 余额')}
             </h2>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 rounded-md border-border bg-transparent px-3 text-[13px] hover:bg-primary/[0.06]"
-              onClick={() => {
-                trackUiEvent('models.token_balance_apply_clicked');
-                setShowQuotaDialog(true);
-              }}
-            >
-              {t('dashboard:tokenBalance.apply', '余额申请')}
-            </Button>
+            {!isSite ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-md border-border bg-transparent px-3 text-[13px] hover:bg-primary/[0.06]"
+                onClick={() => {
+                  trackUiEvent('models.token_balance_apply_clicked');
+                  setShowQuotaDialog(true);
+                }}
+              >
+                {t('dashboard:tokenBalance.apply', '余额申请')}
+              </Button>
+            ) : null}
           </div>
           {tokenBalance.status === 'loading' ? (
             <div className="flex items-center justify-center rounded-md border border-dashed border-border bg-white/50 py-12 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">
@@ -564,14 +575,16 @@ export function Models() {
           unknownModelLabel={t('dashboard:recentTokenHistory.unknownModel')}
         />
       )}
-      <TokenQuotaDialog
-        open={showQuotaDialog}
-        onClose={() => setShowQuotaDialog(false)}
-        tokenId={tokenBalance.tokenId}
-        spend={tokenBalance.spend}
-        maxBudget={tokenBalance.maxBudget}
-        onQuotaChanged={() => void refreshTokenBalance()}
-      />
+      {!isSite ? (
+        <TokenQuotaDialog
+          open={showQuotaDialog}
+          onClose={() => setShowQuotaDialog(false)}
+          tokenId={tokenBalance.tokenId}
+          spend={tokenBalance.spend}
+          maxBudget={tokenBalance.maxBudget}
+          onQuotaChanged={() => void refreshTokenBalance()}
+        />
+      ) : null}
     </div>
   );
 }
