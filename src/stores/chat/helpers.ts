@@ -1,5 +1,6 @@
 import { invokeIpc } from '@/lib/api-client';
 import { normalizePreviewFileKey } from '@/lib/preview-file-path';
+import { resolveAttachedFileName, preferDisplayFileName } from '../../../shared/file-display-name';
 import {
   tracePreviewExtract,
   traceRawFilePathScanDone,
@@ -130,22 +131,24 @@ function getMessageText(content: unknown): string {
   return '';
 }
 
-/** Extract media file refs from [media attached: <path> (<mime>) | ...] patterns */
+/** Extract media file refs from [media attached: <path> (<mime>) | <display>] patterns */
 function extractMediaRefs(
   text: string,
   trace?: PreviewExtractTraceContext,
-): Array<{ filePath: string; mimeType: string }> {
-  const refs: Array<{ filePath: string; mimeType: string }> = [];
-  const regex = /\[media attached:\s*([^(]+?)\s*\(([^)]+)\)\s*\|[^\]]*\]/g;
+): Array<{ filePath: string; mimeType: string; fileName?: string }> {
+  const refs: Array<{ filePath: string; mimeType: string; fileName?: string }> = [];
+  const regex = /\[media attached:\s*([^(]+?)\s*\(([^)]+)\)\s*\|\s*([^\]]*)\]/g;
   let match;
   while ((match = regex.exec(text)) !== null) {
     const filePath = match[1].trim();
     const mimeType = match[2].trim();
+    const displayName = match[3]?.trim();
+    const fileName = resolveAttachedFileName(filePath, displayName);
     if (trace) {
       tracePreviewExtract({
         source: trace.source,
         reason: 'matched [media attached: path (mime) | ...] in tool/message text',
-        extracted: { filePath, mimeType, fileName: filePath.split(/[\\/]/).pop() },
+        extracted: { filePath, mimeType, fileName },
         excerpt: truncatePreviewExtractExcerpt(match[0]),
         context: {
           messageId: trace.messageId,
@@ -155,7 +158,7 @@ function extractMediaRefs(
         },
       });
     }
-    refs.push({ filePath, mimeType });
+    refs.push({ filePath, mimeType, fileName });
   }
   return refs;
 }
@@ -381,10 +384,16 @@ function extractImagesAsAttachedFiles(content: unknown): AttachedFileMeta[] {
 /**
  * Build an AttachedFileMeta entry for a file ref, using cache if available.
  */
-function makeAttachedFile(ref: { filePath: string; mimeType: string }): AttachedFileMeta {
+function makeAttachedFile(ref: { filePath: string; mimeType: string; fileName?: string }): AttachedFileMeta {
   const cached = _imageCache.get(ref.filePath);
-  if (cached) return { ...cached, filePath: ref.filePath };
-  const fileName = ref.filePath.split(/[\\/]/).pop() || 'file';
+  const fileName = resolveAttachedFileName(ref.filePath, ref.fileName);
+  if (cached) {
+    return {
+      ...cached,
+      filePath: ref.filePath,
+      fileName: preferDisplayFileName(fileName, cached.fileName),
+    };
+  }
   return { fileName, mimeType: ref.mimeType, fileSize: 0, preview: null, filePath: ref.filePath };
 }
 
@@ -574,12 +583,7 @@ function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
     const allRefs = [...mediaRefs, ...rawRefs];
     if (allRefs.length === 0) return msg;
 
-    const files: AttachedFileMeta[] = allRefs.map(ref => {
-      const cached = _imageCache.get(ref.filePath);
-      if (cached) return { ...cached, filePath: ref.filePath };
-      const fileName = ref.filePath.split(/[\\/]/).pop() || 'file';
-      return { fileName, mimeType: ref.mimeType, fileSize: 0, preview: null, filePath: ref.filePath };
-    });
+    const files: AttachedFileMeta[] = allRefs.map((ref) => makeAttachedFile(ref));
     return { ...msg, _attachedFiles: files };
   });
 }

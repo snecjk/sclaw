@@ -5,8 +5,10 @@
  * 省区 Win / 完整 layout：单行（Win 在版本号后展示 DEV）。
  */
 import sidebarLogoSvg from '@/assets/sidebar-logo.svg';
+import sidebarLogoDarkSvg from '@/assets/sidebar-logo-dark.svg';
 import { cn } from '@/lib/utils';
-import { sidebarBrandVersionClass } from '@/lib/surfaces';
+import { sidebarBrandLogoClass, sidebarBrandVersionClass } from '@/lib/surfaces';
+import { useResolvedAppearance } from '@/hooks/use-resolved-appearance';
 import { formatAppDisplayVersion } from '@/lib/format-app-display-version';
 import { ChromeEnvBadge } from '@/components/layout/chrome-env-badge';
 import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
@@ -35,14 +37,16 @@ function SidebarBrandTitle({
   displayVersion: string;
   showEnvBadgeAfterVersion: boolean;
 }) {
+  const appearance = useResolvedAppearance();
+
   return (
     <div className="flex min-w-0 items-center gap-2">
       <img
-        src={sidebarLogoSvg}
+        src={appearance === 'dark' ? sidebarLogoDarkSvg : sidebarLogoSvg}
         alt="SClaw"
         width={85}
         height={28}
-        className="h-7 w-auto max-w-full shrink-0 object-contain object-left"
+        className={sidebarBrandLogoClass}
       />
       <span className={cn('shrink-0', sidebarBrandVersionClass)}>{displayVersion}</span>
       {showEnvBadgeAfterVersion ? (

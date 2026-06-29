@@ -36,12 +36,14 @@ import {
   DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { SidebarUpdateNotice } from '@/components/layout/sidebar-update-notice';
 import { useSettingsStore } from '@/stores/settings';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAuthStore } from '@/stores/auth';
+import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
@@ -443,12 +445,15 @@ function SidebarScheduledTaskGroup({
   const navigate = useNavigate();
   const location = useLocation();
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
-  const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
-  const isSending = useChatStore((s) => s.sending);
+  const unreadKeys = useSessionUnreadStore((s) => s.unreadKeys);
 
   if (sessions.length === 0) return null;
 
   const visibleSessions = maxVisibleSessions === undefined ? sessions : sessions.slice(0, maxVisibleSessions);
+  const hasCollapsedGroupUnread = !isOpen && sessions.some(
+    (session) => session.key !== currentSessionKey
+      && readSessionUnread(unreadKeys, session.key),
+  );
 
   // Strip common prefixes from group name for cleaner display
   const displayName = name.replace(/^Cron:\s*/i, '').replace(/^定时任务\s*/i, '');
@@ -475,6 +480,9 @@ function SidebarScheduledTaskGroup({
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <ClipboardList className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)} aria-hidden />
           <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>{displayName}</span>
+          {hasCollapsedGroupUnread ? (
+            <span className={sidebarUnreadDotClass} aria-hidden />
+          ) : null}
         </span>
         {SIDEBAR_SHOW_TASK_GROUP_CHEVRON ? (
           <ChevronDown
@@ -529,13 +537,7 @@ function SidebarScheduledTaskGroup({
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
                     <span className="min-w-0 flex-1 truncate">{label}</span>
-                    {(() => {
-                      const isSessionSending = runtimeBySessionKey[s.key]?.sending
-                        || (s.key === currentSessionKey && isSending);
-                      return isSessionSending ? (
-                        <SidebarRunningIcon />
-                      ) : null;
-                    })()}
+                    <SidebarRecentSessionStatus sessionKey={s.key} />
                   </span>
                 </button>
                 <SidebarTaskSubitemDeleteTrailing
@@ -1828,6 +1830,8 @@ export function Sidebar() {
             ) : null)}
         </div>
       </div>
+
+      <SidebarUpdateNotice collapsed={sidebarCollapsed} />
 
       {authUser ? (
         <div className="shrink-0 bg-[var(--sto-sidebar-bg)] p-2">

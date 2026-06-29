@@ -1,9 +1,10 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { basename, dirname, extname, isAbsolute, join, normalize } from 'node:path';
+import { basename, extname, isAbsolute, join, normalize } from 'node:path';
 import { homedir } from 'node:os';
 import { expandPath, getLegacyOpenClawWorkspaceRoot, getOpenClawConfigDir } from './paths';
 import {
   isWindowsDrivePath,
+  migrateLegacyOpenClawWorkspacePath,
   normalizeArtifactPathPrefix,
 } from '../../shared/artifact-path';
 
@@ -13,7 +14,7 @@ const EXT_FUZZY_ALTERNATES: Record<string, string[]> = {
 };
 
 /** Known agent output subdirs under each workspace root (canonical first). */
-const WORKSPACE_OUTPUT_SUBDIRS = ['.claw-output', 'outputs'] as const;
+const WORKSPACE_OUTPUT_SUBDIRS = ['.claw-output', 'output', 'outputs'] as const;
 const MAX_OUTPUT_TREE_DEPTH = 5;
 
 function decodePathSegments(filePath: string): string {
@@ -37,6 +38,20 @@ function decodePathSegments(filePath: string): string {
 function normalizeInputPath(filePath: string): string {
   const decoded = decodePathSegments(filePath);
   return normalizeArtifactPathPrefix(decoded, homedir());
+}
+
+function absolutePathCandidates(normalized: string): string[] {
+  const migrated = migrateLegacyOpenClawWorkspacePath(normalized);
+  if (migrated === normalized) return [normalized];
+  return [normalized, migrated];
+}
+
+function firstExistingAbsolutePath(normalized: string): string | null {
+  for (const candidate of absolutePathCandidates(normalized)) {
+    const found = fuzzyExistingPath(candidate);
+    if (found) return found;
+  }
+  return null;
 }
 
 function listWorkspaceRoots(): string[] {
@@ -235,19 +250,14 @@ export function resolveWorkspaceFilePath(filePath: string): string {
   }
 
   if (isAbsolute(normalized) || isWindowsDrivePath(normalized)) {
-    const found = fuzzyExistingPath(normalized);
+    const found = firstExistingAbsolutePath(normalized);
     if (found) return found;
 
     const fileName = basename(normalized);
     const exact = findExactInDirs(fileName, roots);
     if (exact) return exact;
 
-    const fuzzySameDir = fuzzyBasenameInDir(dirname(normalized), fileName);
-    if (fuzzySameDir) return fuzzySameDir;
-
-    const fuzzy = findFuzzyInDirs(fileName, roots);
-    if (fuzzy) return fuzzy;
-
+    // Explicit absolute paths: skip fuzzy basename matching to avoid opening the wrong artifact.
     const deep = findDeepInOutputSubdirs(fileName, roots);
     if (deep) return deep;
 

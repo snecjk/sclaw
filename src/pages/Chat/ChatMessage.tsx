@@ -17,7 +17,7 @@ import { assistantChatCardBg, userChatBubbleSurfaceClass, workflowParamsSummaryC
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
-import { extractText, extractPlainTextFromContent, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm, useLocalPathExistence, resolvePreviewCandidate, unwrapPreviewablePathMarkdown, findWorkflowParamsSummaryAfterIntro } from './message-utils';
+import { extractText, extractPlainTextFromContent, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, extractDisplayFileNameHints, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm, useLocalPathExistence, resolvePreviewCandidate, unwrapPreviewablePathMarkdown, findWorkflowParamsSummaryAfterIntro } from './message-utils';
 import {
   ensureWorkflowParameterFormHandler,
   ensureWorkflowParameterFormInjected,
@@ -42,7 +42,7 @@ import {
   resolvePreviewHrefAction,
   resolvePreviewPathOnHost,
 } from '@/lib/preview-href';
-import { dedupeAttachedFiles, mergePreviewFileLists, normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
+import { applyDisplayNameHints, dedupeAttachedFiles, mergePreviewFileLists, normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 import { isFilePreviewDebugEnabled, logFilePreview } from '@/lib/file-preview-debug';
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
@@ -265,12 +265,17 @@ export const ChatMessage = memo(function ChatMessage({
     return result;
   }, [candidateRefs, refExistence, workflowCardStatesForRefs, workflowArtifactUrls]);
 
+  const displayNameHints = useMemo(() => extractDisplayFileNameHints(text), [text]);
+
   const previewFiles = useMemo(
-    () => mergePreviewFileLists(
-      attachedFiles,
-      extractedRefs.map((ref) => ({ ...ref, fileSize: 0, preview: null })),
+    () => applyDisplayNameHints(
+      mergePreviewFileLists(
+        attachedFiles,
+        extractedRefs.map((ref) => ({ ...ref, fileSize: 0, preview: null })),
+      ),
+      displayNameHints,
     ),
-    [attachedFiles, extractedRefs],
+    [attachedFiles, extractedRefs, displayNameHints],
   );
 
   useEffect(() => {
