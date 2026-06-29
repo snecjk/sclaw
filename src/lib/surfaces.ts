@@ -1139,6 +1139,9 @@ export const sidebarBrandVersionClass = cn(
   sidebarTextSectionClass,
 );
 
+/** 侧栏字 logo 尺寸 — 暗色用 sidebar-logo-dark.svg（sidebar-brand-header.tsx 按 theme 切换） */
+export const sidebarBrandLogoClass = 'sto-sidebar-brand-logo';
+
 /** 分区标题（任务 / 最近 / 工作台）默认 Grey-8 Regular；hover/focus → Grey-10 Regular（字重不变） */
 export const sidebarSectionLabelClass = cn(
   sidebarBodyTextClass,
@@ -1210,7 +1213,7 @@ export const sidebarSubitemTextActiveClass = cn(
 export const sidebarMetaLinkClass = cn(
   'text-xs font-normal',
   sidebarTextSectionClass,
-  'transition-colors hover:bg-[rgba(229,230,235,0.7)] hover:text-[var(--sto-sidebar-text-default)]',
+  'transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] hover:text-[var(--sto-sidebar-text-default)]',
 );
 
 /** 侧栏底部账号名 — MCP 8:46481 / 14px Regular（视觉与列表项一致） */

@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import { SidebarRunningIcon } from '@/components/layout/sidebar-running-icon';
 import { sidebarUnreadDotClass } from '@/lib/surfaces';
 import { useChatStore } from '@/stores/chat';
-import { useSessionUnreadStore } from '@/stores/session-unread';
+import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 
 export interface SidebarRecentSessionStatusProps {
   /** OpenClaw session key */
@@ -30,7 +30,7 @@ export function SidebarRecentSessionStatus({
   const currentSessionSending = useChatStore((s) => s.sending);
   const currentSessionActiveRunId = useChatStore((s) => s.activeRunId);
   const currentSessionError = useChatStore((s) => s.error);
-  const isSessionUnread = useSessionUnreadStore((s) => s.isSessionUnread);
+  const unreadKeys = useSessionUnreadStore((s) => s.unreadKeys);
 
   const isCurrentSession = currentSessionKey === sessionKey;
   const isRunning = Boolean(
@@ -42,7 +42,7 @@ export function SidebarRecentSessionStatus({
     (runtime?.error != null && runtime.error !== '')
     || (isCurrentSession && currentSessionError != null && currentSessionError !== ''),
   );
-  const isUnread = !isCurrentSession && isSessionUnread(sessionKey);
+  const isUnread = !isCurrentSession && readSessionUnread(unreadKeys, sessionKey);
 
   if (isRunning) {
     return (
