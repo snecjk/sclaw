@@ -168,7 +168,6 @@ export function Chat() {
     streamMsg,
     streamText,
     streamingTools,
-    lastUserMessageAt,
   });
 
   const streamContentKey = useMemo(
