@@ -37,6 +37,7 @@ export interface CategoryDef {
 
 export interface PlazaSkillMeta {
   title: string;
+  description?: string;
   category: string | null;
   categoryCode: string | null;
   installCount?: number;

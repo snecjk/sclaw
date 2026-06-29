@@ -496,6 +496,8 @@ interface RuntimeProviderConfigOverride {
   authHeader?: boolean;
   /** Default input capabilities for new model entries (e.g. ['text', 'image']) */
   defaultModelInput?: string[];
+  /** When set, replaces single-model upsert with the full provider catalog. */
+  providerModelIds?: string[];
 }
 
 type ProviderEntryBuildOptions = {
@@ -663,12 +665,15 @@ export async function syncProviderConfigToOpenClaw(
     ensureMoonshotKimiWebSearchCnBaseUrl(config, provider);
 
     if (override.baseUrl && override.api) {
+      const modelIds = override.providerModelIds?.length
+        ? override.providerModelIds
+        : (modelId ? [modelId] : []);
       upsertOpenClawProviderEntry(config, provider, {
         baseUrl: override.baseUrl,
         api: override.api,
         apiKeyEnv: override.apiKeyEnv,
         headers: override.headers,
-        modelIds: modelId ? [modelId] : [],
+        modelIds,
         defaultModelInput: override.defaultModelInput,
       });
     }
@@ -725,13 +730,16 @@ export async function setOpenClawDefaultModelWithOverride(
     syncMainAgentListModelIfBare(config, model);
 
     if (override.baseUrl && override.api) {
+      const modelIds = override.providerModelIds?.length
+        ? override.providerModelIds
+        : [modelId, ...fallbackModelIds];
       upsertOpenClawProviderEntry(config, provider, {
         baseUrl: override.baseUrl,
         api: override.api,
         apiKeyEnv: override.apiKeyEnv,
         headers: override.headers,
         authHeader: override.authHeader,
-        modelIds: [modelId, ...fallbackModelIds],
+        modelIds,
         defaultModelInput: override.defaultModelInput,
       });
     }
@@ -1351,6 +1359,7 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
       'sto-skill-call-monitor',
       'sto-media-understanding',
       DINGTALK_SEND_GUARD_PLUGIN_ID,
+      'sto-distinctive-design-guard',
     ]) {
       if (!allow.includes(pluginId)) {
         allow.push(pluginId);
@@ -1384,10 +1393,7 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
         },
       },
     };
-    // sto-scheduled-task-tool disabled: cloud scheduled tasks not live this release
-    if (entries['sto-scheduled-task-tool']) {
-      delete entries['sto-scheduled-task-tool'];
-    }
+    entries['sto-scheduled-task-tool'] = { enabled: true, config: {} };
     entries['sto-workflow-tool'] = {
       enabled: true,
       config: {
@@ -1411,6 +1417,14 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
     entries[DINGTALK_SEND_GUARD_PLUGIN_ID] = {
       enabled: true,
       config: {},
+    };
+    entries['sto-distinctive-design-guard'] = {
+      enabled: true,
+      config: {
+        enabled: true,
+        enforceRead: true,
+        lintEnabled: true,
+      },
     };
     plugins.entries = entries;
     config.plugins = plugins;

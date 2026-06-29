@@ -3,12 +3,19 @@
  * Manage scheduled tasks (legacy local Gateway tasks)
  */
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import { AlertCircle } from 'lucide-react';
 import { useCronStore } from '@/stores/cron';
 import { useGatewayStore } from '@/stores/gateway';
 import { useChatStore } from '@/stores/chat';
 import { useAgentsStore } from '@/stores/agents';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
+import {
+  ensureTaskGroupFirstTriggeredOnRun,
+  getCachedTaskGroupFirstTriggeredMap,
+  rememberOptimisticTaskGroupFirstTriggered,
+} from '@/lib/task-group-first-trigger';
+import { resolveTaskGroupKeyFromSessionKey } from '../../../shared/task-group-key';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -174,29 +181,48 @@ export function Cron() {
 
   const handleTrigger = useCallback(
     async (job: ManagedLocalTask) => {
+      const today = new Date();
+      const y = today.getFullYear();
+      const m = String(today.getMonth() + 1).padStart(2, '0');
+      const d = String(today.getDate()).padStart(2, '0');
+      const openClawSessionKey = `agent:${job.agentId ?? 'main'}:cron:${job.id}:${y}-${m}-${d}`;
+      const chat = useChatStore.getState();
+      let activeSessionKey = openClawSessionKey;
+      const groupKey = resolveTaskGroupKeyFromSessionKey(openClawSessionKey);
+      const triggeredAt = Date.now();
+      flushSync(() => {
+        chat.markScheduledSessionActivating(openClawSessionKey);
+        if (groupKey && !getCachedTaskGroupFirstTriggeredMap()[groupKey]) {
+          rememberOptimisticTaskGroupFirstTriggered(groupKey, triggeredAt);
+        }
+      });
       try {
         const result = await triggerJob(job.id, job.engineType);
-        if (job.engineType === 'claude' && result && 'sessionKey' in result) {
-          navigateToMainChatHome(navigate, location.pathname, () => {
-            useChatStore.getState().switchSession(result.sessionKey);
-          });
-          void useChatStore.getState().loadSessions();
-        } else {
-          // Build dated session key instead of base key to avoid adding base session back
-          const today = new Date();
-          const y = today.getFullYear();
-          const m = String(today.getMonth() + 1).padStart(2, '0');
-          const d = String(today.getDate()).padStart(2, '0');
-          const sessionKey = `agent:${job.agentId ?? 'main'}:cron:${job.id}:${y}-${m}-${d}`;
-          navigateToMainChatHome(navigate, location.pathname, () => {
-            useChatStore.getState().switchSession(sessionKey);
-          });
-          void useChatStore.getState().loadSessions();
+        if (groupKey) {
+          void ensureTaskGroupFirstTriggeredOnRun(groupKey, triggeredAt);
         }
+        if (job.engineType === 'claude' && result && 'sessionKey' in result) {
+          activeSessionKey = result.sessionKey;
+          chat.clearScheduledSessionActivating(openClawSessionKey);
+          flushSync(() => {
+            chat.markScheduledSessionActivating(activeSessionKey);
+          });
+          navigateToMainChatHome(navigate, location.pathname, () => {
+            useChatStore.getState().switchSession(activeSessionKey);
+          });
+        } else {
+          navigateToMainChatHome(navigate, location.pathname, () => {
+            useChatStore.getState().switchSession(openClawSessionKey);
+          });
+        }
+        await useChatStore.getState().loadSessions();
         toast.success(t('toast.triggered'));
       } catch (error) {
+        chat.clearScheduledSessionActivating(activeSessionKey);
         console.error('Failed to trigger cron job:', error);
         toast.error(toTriggerErrorMessage(error, t));
+      } finally {
+        chat.releaseScheduledSessionActivating(activeSessionKey);
       }
     },
     [triggerJob, t, navigate, location.pathname]

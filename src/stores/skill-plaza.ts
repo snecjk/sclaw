@@ -139,7 +139,11 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     if (tab === 'all') {
       get().fetchPlazaSkills({ reset: true });
     } else if (tab === 'mine') {
-      get().fetchLocalSkills({ reset: true });
+      if (get().plazaSkills.length === 0) {
+        void get().fetchPlazaSkills({ reset: true }).then(() => get().fetchLocalSkills({ reset: true }));
+      } else {
+        get().fetchLocalSkills({ reset: true });
+      }
     }
   },
   setActiveCategory: (category) => {
@@ -194,15 +198,14 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
       });
       const metaMap = { ...get().plazaSkillMetaMap };
       for (const skill of result.skills) {
-        if (skill.category || skill.categoryCode || skill.installCount != null || skill.useCount != null) {
-          metaMap[skill.slug] = {
-            title: skill.title,
-            category: skill.category,
-            categoryCode: skill.categoryCode,
-            installCount: skill.installCount,
-            useCount: skill.useCount,
-          };
-        }
+        metaMap[skill.slug] = {
+          title: skill.title,
+          description: skill.description,
+          category: skill.category,
+          categoryCode: skill.categoryCode,
+          installCount: skill.installCount,
+          useCount: skill.useCount,
+        };
       }
       savePlazaMetaCache(metaMap);
 
@@ -231,32 +234,53 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const result = await fetchLocalSkills();
-      // Enrich mySkills from plaza cache (category/installCount/useCount may be missing from backend)
-      const { plazaSkillMetaMap, categories } = get();
+      // Enrich mySkills from plaza list / cache so display matches the plaza tab
+      const { plazaSkillMetaMap, categories, plazaSkills } = get();
       const enrichedSkills = result.skills.map((skill) => {
+        const plazaSkill = plazaSkills.find((s) => s.slug === skill.slug);
         const meta = plazaSkillMetaMap[skill.slug];
-        if (!meta) return skill;
+        if (!plazaSkill && !meta) return skill;
 
-        let code = skill.categoryCode || meta.categoryCode || null;
-        if (!code && meta.category) {
-          const cat = categories.find((c) => c.label === meta.category);
+        let code = skill.categoryCode || plazaSkill?.categoryCode || meta?.categoryCode || null;
+        if (!code && (plazaSkill?.category || meta?.category)) {
+          const label = plazaSkill?.category || meta?.category;
+          const cat = categories.find((c) => c.label === label);
           if (cat) code = cat.slug;
         }
 
         const merged: SkillSummary = { ...skill };
+
+        // title/description: plaza list > meta cache > local (from API)
+        if (plazaSkill?.title) {
+          merged.title = plazaSkill.title;
+        } else if (meta?.title) {
+          merged.title = meta.title;
+        }
+        if (plazaSkill?.description) {
+          merged.description = plazaSkill.description;
+        } else if (meta?.description) {
+          merged.description = meta.description;
+        }
+
         if (code) {
-          merged.category = meta.category || skill.category;
+          merged.category = plazaSkill?.category || meta?.category || skill.category;
           merged.categoryCode = code;
         }
-        if (meta.installCount != null) {
+        if (plazaSkill?.installCount != null) {
+          merged.installCount = plazaSkill.installCount;
+        } else if (meta?.installCount != null) {
           merged.installCount = meta.installCount;
         }
-        if (meta.useCount != null) {
+        if (plazaSkill?.useCount != null) {
+          merged.useCount = plazaSkill.useCount;
+        } else if (meta?.useCount != null) {
           merged.useCount = meta.useCount;
         }
 
         // Return original object if nothing changed
         if (
+          merged.title === skill.title &&
+          merged.description === skill.description &&
           merged.category === skill.category &&
           merged.categoryCode === skill.categoryCode &&
           merged.installCount === skill.installCount &&
@@ -288,11 +312,10 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
   syncUserSkills: async () => {
     set({ syncingUserSkills: true, error: null });
     try {
-      await Promise.all([
-        get().fetchCategories(),
-        get().fetchPlazaSkills({ reset: true }),
-        get().fetchLocalSkills(),
-      ]);
+      await get().fetchCategories();
+      // Plaza list must load before local skills so title/description enrichment can apply
+      await get().fetchPlazaSkills({ reset: true });
+      await get().fetchLocalSkills();
     } catch (err) {
       console.error('Failed to sync user skills:', err);
       set({ error: String(err) });

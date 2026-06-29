@@ -70,6 +70,7 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
+  const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
   const clearError = useChatStore((s) => s.clearError);
 
   useWorkflowCompletion(currentSessionKey);
@@ -124,6 +125,7 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
     sending,
     pendingFinal,
     showThinking,
+    lastChatEventAt,
     streamMsg,
     streamText,
     streamingTools,

@@ -20,6 +20,12 @@ import {
 } from '@/lib/sto-task-compose-storage';
 import { useStoTaskSubitemsStore, stoTaskSubitemKey } from '@/stores/sto-task-subitems';
 import { useChatStore } from '@/stores/chat';
+import {
+  ensureTaskGroupFirstTriggeredOnRun,
+  getCachedTaskGroupFirstTriggeredMap,
+  rememberOptimisticTaskGroupFirstTriggered,
+} from '@/lib/task-group-first-trigger';
+import { stoBuiltinTaskGroupKey } from '../../../shared/task-group-key';
 import avatar01 from '@/assets/avatars/avatar-01.png.png';
 import avatar02 from '@/assets/avatars/avatar-02.png.png';
 import avatar03 from '@/assets/avatars/avatar-03.png.png';
@@ -130,7 +136,14 @@ function SummaryCard(props: SummaryCardProps) {
     if (!stoTaskTarget) return;
     const entryIdToday = formatLocalYmd(new Date());
     const hadToday = useStoTaskSubitemsStore.getState().listEntries(stoTaskTarget).includes(entryIdToday);
+    const groupKey = stoBuiltinTaskGroupKey(stoTaskTarget);
+    const hadAnyEntry = useStoTaskSubitemsStore.getState().listEntries(stoTaskTarget).length > 0;
     ensureSubitem(stoTaskTarget, entryIdToday);
+    if (!hadAnyEntry && !getCachedTaskGroupFirstTriggeredMap()[groupKey]) {
+      const triggeredAt = Date.now();
+      rememberOptimisticTaskGroupFirstTriggered(groupKey, triggeredAt);
+      void ensureTaskGroupFirstTriggeredOnRun(groupKey, triggeredAt);
+    }
 
     const subitemKey = stoTaskSubitemKey(stoTaskTarget, entryIdToday);
     const sessionKey = useStoTaskSubitemsStore.getState().sessionKeyBySubitem[subitemKey];

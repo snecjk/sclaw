@@ -1,9 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const invokeIpcMock = vi.fn();
+const toastErrorMock = vi.fn();
 
 vi.mock('@/lib/api-client', () => ({
   invokeIpc: (...args: unknown[]) => invokeIpcMock(...args),
+}));
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: (...args: unknown[]) => toastErrorMock(...args),
+  },
+}));
+
+vi.mock('@/i18n', () => ({
+  default: {
+    t: (key: string) => key,
+  },
 }));
 
 type ChatLikeState = {
@@ -21,6 +34,7 @@ type ChatLikeState = {
   lastUserMessageAt: number | null;
   pendingToolImages: unknown[];
   loadHistory: ReturnType<typeof vi.fn>;
+  loadSessions?: ReturnType<typeof vi.fn>;
 };
 
 function makeHarness(initial?: Partial<ChatLikeState>) {
@@ -39,6 +53,7 @@ function makeHarness(initial?: Partial<ChatLikeState>) {
     lastUserMessageAt: null,
     pendingToolImages: [],
     loadHistory: vi.fn(),
+    loadSessions: vi.fn().mockResolvedValue(undefined),
     ...initial,
   };
   const set = (partial: Partial<ChatLikeState> | ((s: ChatLikeState) => Partial<ChatLikeState>)) => {
@@ -115,7 +130,7 @@ describe('chat session actions', () => {
       headers: {},
       body: JSON.stringify({
         sessionKey: 'agent:foo:session-a',
-        engineType: undefined,
+        engineType: 'openclaw',
       }),
     });
     expect(next.currentSessionKey).toBe('agent:foo:main');
@@ -123,6 +138,35 @@ describe('chat session actions', () => {
     expect(next.sessionLabels['agent:foo:session-a']).toBeUndefined();
     expect(next.sessionLastActivity['agent:foo:session-a']).toBeUndefined();
     expect(h.read().loadHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('deleteSession keeps sidebar state and shows toast when API fails', async () => {
+    invokeIpcMock.mockResolvedValueOnce({
+      success: true,
+      ok: true,
+      status: 200,
+      json: { success: false, error: 'disk busy' },
+    });
+    const { createSessionActions } = await import('@/stores/chat/session-actions');
+    const h = makeHarness({
+      currentSessionKey: 'agent:foo:session-a',
+      sessions: [{ key: 'agent:foo:session-a' }, { key: 'agent:foo:main' }],
+      sessionLabels: { 'agent:foo:session-a': 'A' },
+      sessionLastActivity: { 'agent:foo:session-a': 1 },
+      messages: [{ role: 'user' }],
+    });
+    const actions = createSessionActions(h.set as never, h.get as never);
+
+    const deleted = await actions.deleteSession('agent:foo:session-a');
+    const next = h.read();
+    expect(deleted).toBe(false);
+    expect(next.currentSessionKey).toBe('agent:foo:session-a');
+    expect(next.sessions.map((s) => s.key)).toEqual(['agent:foo:session-a', 'agent:foo:main']);
+    expect(next.sessionLabels['agent:foo:session-a']).toBe('A');
+    expect(toastErrorMock).toHaveBeenCalledWith('common:sidebar.deleteSessionFailed', {
+      description: 'disk busy',
+    });
+    expect(h.read().loadHistory).not.toHaveBeenCalled();
   });
 
   it('newSession creates a canonical session key and clears transient state', async () => {

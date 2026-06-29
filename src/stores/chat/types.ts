@@ -135,6 +135,8 @@ export interface SessionRuntimeState {
   streamingTools: ToolStatus[];
   pendingFinal: boolean;
   lastUserMessageAt: number | null;
+  /** Optimistic user message kept across session switches while Gateway has not echoed it. */
+  optimisticUserMessage: RawMessage | null;
   pendingToolImages: AttachedFileMeta[];
   error: string | null;
   updatedAt: number;
@@ -156,7 +158,10 @@ export interface ChatState {
   streamingMessage: unknown | null;
   streamingTools: ToolStatus[];
   pendingFinal: boolean;
+  /** Timestamp (ms) of the last gateway chat event; used for stale-run UI hints. */
+  lastChatEventAt: number;
   lastUserMessageAt: number | null;
+  optimisticUserMessage: RawMessage | null;
   /** Images collected from tool results, attached to the next assistant message */
   pendingToolImages: AttachedFileMeta[];
   /** Last successful daily token quota check result. */
@@ -172,6 +177,10 @@ export interface ChatState {
   sessionLabels: Record<string, string>;
   /** Last message timestamp (ms) per session key, used for sorting */
   sessionLastActivity: Record<string, number>;
+  /** Frozen sidebar "Recent" order captured on first load; stable until app restart. */
+  sidebarRecentOrder: string[];
+  /** Task session keys being triggered; stabilizes sidebar order before switchSession/runtime. */
+  activatingScheduledSessionAt: Record<string, number>;
 
   // Thinking
   showThinking: boolean;
@@ -208,9 +217,9 @@ export interface ChatState {
   /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
   switchToAgentMainSession: (agentId: string) => void;
   newSession: () => Promise<void>;
-  deleteSession: (key: string) => Promise<void>;
+  deleteSession: (key: string) => Promise<boolean>;
   cleanupEmptySession: () => void;
-  loadHistory: (quiet?: boolean) => Promise<void>;
+  loadHistory: (quiet?: boolean, force?: boolean) => Promise<void>;
   sendMessage: (options: SendMessageOptions) => Promise<void>;
   abortRun: () => Promise<void>;
   handleChatEvent: (event: Record<string, unknown>) => void;
@@ -218,6 +227,10 @@ export interface ChatState {
   refresh: () => Promise<void>;
   clearError: () => void;
   renameSession: (key: string, newName: string) => void;
+  markScheduledSessionActivating: (sessionKey: string) => void;
+  clearScheduledSessionActivating: (sessionKey: string) => void;
+  /** Clear activating hint only after runtime/activity has taken over sort ordering. */
+  releaseScheduledSessionActivating: (sessionKey: string) => void;
 }
 
 export const DEFAULT_CANONICAL_PREFIX = 'agent:main';

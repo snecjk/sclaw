@@ -40,7 +40,7 @@ export function dispatchJsonRpcNotification(
       emitter.emit('channel:status', notification.params as { channelId: string; status: string });
       break;
     case GatewayEventType.MESSAGE_RECEIVED:
-      emitter.emit('chat:message', notification.params as { message: unknown });
+      emitter.emit('chat:message', { message: notification.params as unknown });
       break;
     case GatewayEventType.ERROR: {
       const errorData = notification.params as { message?: string };

@@ -1,9 +1,17 @@
 ---
 name: cli-report-generator
-description: Generate HTML report pages from CLI data sources with customizable templates and scheduled automation. Use when: (1) Creating daily/periodic reports from command-line data, (2) Need HTML visualization of CLI output, (3) Setting up cron jobs for automated report generation, (4) Building reusable report templates for recurring data snapshots.
+description: >-
+  Unattended CLI → template → HTML pipeline only (generate_report.py + config.json + cron).
+  Do NOT use for chat deliverables (周报/看板/分析报告/页面) — use sto-distinctive-design instead.
+  Invoke ONLY when the user explicitly asks for CLI + cron/scheduled automation, names
+  generate_report.py or cli-report-generator, or needs a recurring script-driven snapshot
+  without agent-authored HTML.
 ---
 
 # CLI Report Generator
+
+> **路由**：对话里生成 HTML 报告/看板 → **`sto-distinctive-design`**（STO 设计规范）。
+> 本技能仅用于 **无人值守**：CLI 拉数 → `{{placeholder}}` 模板 → `generate_report.py` → cron 定时。
 
 Automated HTML report generation from CLI data sources with template support and scheduled execution.
 

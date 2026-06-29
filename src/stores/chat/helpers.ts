@@ -1,5 +1,19 @@
 import { invokeIpc } from '@/lib/api-client';
 import { normalizePreviewFileKey } from '@/lib/preview-file-path';
+import {
+  tracePreviewExtract,
+  traceRawFilePathScanDone,
+  traceRawFilePathScanStart,
+  type PreviewExtractTraceContext,
+} from '@/lib/preview-extract-trace';
+import { truncatePreviewExtractExcerpt } from '../../../shared/preview-extract-trace';
+import {
+  buildRawAbsolutePathRegex,
+  createFileUrlInTextRegex,
+  isAttachableRawLocalPath,
+  localPathFromFileUrlCapture,
+  shouldSkipRawPathToolText,
+} from '../../../shared/preview-raw-path';
 import type { AttachedFileMeta, ChatSession, ContentBlock, RawMessage, ToolStatus } from './types';
 
 // Module-level timestamp tracking the last chat event received.
@@ -117,12 +131,31 @@ function getMessageText(content: unknown): string {
 }
 
 /** Extract media file refs from [media attached: <path> (<mime>) | ...] patterns */
-function extractMediaRefs(text: string): Array<{ filePath: string; mimeType: string }> {
+function extractMediaRefs(
+  text: string,
+  trace?: PreviewExtractTraceContext,
+): Array<{ filePath: string; mimeType: string }> {
   const refs: Array<{ filePath: string; mimeType: string }> = [];
-  const regex = /\[media attached:\s*([^\s(]+)\s*\(([^)]+)\)\s*\|[^\]]*\]/g;
+  const regex = /\[media attached:\s*([^(]+?)\s*\(([^)]+)\)\s*\|[^\]]*\]/g;
   let match;
   while ((match = regex.exec(text)) !== null) {
-    refs.push({ filePath: match[1], mimeType: match[2] });
+    const filePath = match[1].trim();
+    const mimeType = match[2].trim();
+    if (trace) {
+      tracePreviewExtract({
+        source: trace.source,
+        reason: 'matched [media attached: path (mime) | ...] in tool/message text',
+        extracted: { filePath, mimeType, fileName: filePath.split(/[\\/]/).pop() },
+        excerpt: truncatePreviewExtractExcerpt(match[0]),
+        context: {
+          messageId: trace.messageId,
+          toolCallId: trace.toolCallId,
+          sessionKey: trace.sessionKey,
+          mimeType,
+        },
+      });
+    }
+    refs.push({ filePath, mimeType });
   }
   return refs;
 }
@@ -193,48 +226,104 @@ function stripCodeBlocks(text: string): string {
  * Handles both image and non-image files, consistent with channel push message behavior.
  * Code blocks are stripped before matching to avoid false positives.
  */
-function extractRawFilePaths(text: string): Array<{ filePath: string; mimeType: string }> {
+function extractRawFilePaths(
+  text: string,
+  trace?: PreviewExtractTraceContext,
+): Array<{ filePath: string; mimeType: string }> {
   const cleanText = stripCodeBlocks(text);
+  if (trace?.scanTarget === 'tool-result' && shouldSkipRawPathToolText(text)) {
+    if (trace) {
+      traceRawFilePathScanStart(trace, { rawText: text, cleanText });
+      traceRawFilePathScanDone(trace, {
+        rawTextLength: text.length,
+        cleanTextLength: cleanText.length,
+        refs: [],
+      });
+    }
+    return [];
+  }
+  if (trace) {
+    traceRawFilePathScanStart(trace, { rawText: text, cleanText });
+  }
   const refs: Array<{ filePath: string; mimeType: string }> = [];
   const seen = new Set<string>();
 
-  function rememberPath(p: string): boolean {
+  function rememberPath(p: string, reason: string, excerpt: string): boolean {
+    if (!isAttachableRawLocalPath(p)) {
+      if (trace) {
+        tracePreviewExtract({
+          source: trace.source,
+          reason: `rejected: local path lacks attachable file extension (${reason})`,
+          extracted: {
+            filePath: p,
+            mimeType: mimeFromExtension(p),
+            fileName: p.split(/[\\/]/).pop(),
+          },
+          excerpt: truncatePreviewExtractExcerpt(excerpt),
+          context: {
+            messageId: trace.messageId,
+            toolCallId: trace.toolCallId,
+            sessionKey: trace.sessionKey,
+            scanTarget: trace.scanTarget,
+          },
+        });
+      }
+      return false;
+    }
     const key = normalizePreviewFileKey(p);
     if (!key || seen.has(key)) return false;
     seen.add(key);
+    if (trace) {
+      tracePreviewExtract({
+        source: trace.source,
+        reason,
+        extracted: {
+          filePath: p,
+          mimeType: mimeFromExtension(p),
+          fileName: p.split(/[\\/]/).pop(),
+        },
+        excerpt: truncatePreviewExtractExcerpt(excerpt),
+        context: {
+          messageId: trace.messageId,
+          toolCallId: trace.toolCallId,
+          sessionKey: trace.sessionKey,
+          scanTarget: trace.scanTarget,
+        },
+      });
+    }
     return true;
   }
 
   // file:// URLs — strip the scheme and use the underlying local path
-  // Regex consumes file:// (2 slashes), capture group gets the 3rd slash + path.
-  // For Windows: /C:/Users/... → strip leading / → C:/Users/...
-  // For Unix: /Users/... → keep as-is → /Users/...
-  const fileUrlRegex = /file:\/\/(\/[A-Za-z]:[\\/][^\s)\]"',;<>]+|\/[^\s)\]"',;<>]+)/g;
+  const fileUrlRegex = createFileUrlInTextRegex();
   let match;
   while ((match = fileUrlRegex.exec(cleanText)) !== null) {
-    const captured = match[1];
-    // Strip leading / for Windows paths (/C:/ → C:/), keep for Unix (/Users/ → /Users/)
-    const p = captured.match(/^\/[A-Za-z]:/) ? captured.slice(1) : captured;
-    if (p && rememberPath(p)) {
+    const p = localPathFromFileUrlCapture(match[1]);
+    if (p && rememberPath(p, 'matched file:// URL in tool/message text', match[0])) {
       refs.push({ filePath: p, mimeType: mimeFromExtension(p) });
     }
   }
 
-  const exts = 'png|jpe?g|gif|webp|bmp|avif|svg|pdf|docx?|xlsx?|pptx?|txt|csv|md|html?|rtf|epub|zip|tar|gz|rar|7z|mp3|wav|ogg|aac|flac|m4a|mp4|mov|avi|mkv|webm|m4v';
-  // Unix absolute paths (/... or ~/...) — lookbehind rejects mid-token slashes
-  // (e.g. "path/to/file.mp4", "https://example.com/file.mp4")
-  const unixRegex = new RegExp(`(?<![\\w./:])((?:\\/|~\\/)[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
-  // Windows absolute paths with backslash (C:\... D:\...) — lookbehind rejects drive letter glued to a word
-  const winBackslashRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\\\[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
-  // Windows absolute paths with forward slash (C:/... D:/...) — lookbehind rejects drive letter glued to a word
-  const winForwardRegex = new RegExp(`(?<![\\w])([A-Za-z]:\\/[^\\s\\n"'()\\[\\],<>]*?\\.(?:${exts}))`, 'gi');
-  for (const regex of [unixRegex, winBackslashRegex, winForwardRegex]) {
+  const absolutePathRegex = buildRawAbsolutePathRegex();
+  const pathMatchers: Array<{ regex: RegExp; reason: string }> = [
+    { regex: absolutePathRegex.unix, reason: 'matched Unix absolute path (/ or ~/) with file extension' },
+    { regex: absolutePathRegex.winBackslash, reason: 'matched Windows absolute path (backslash) with file extension' },
+    { regex: absolutePathRegex.winForward, reason: 'matched Windows absolute path (forward slash) with file extension' },
+  ];
+  for (const { regex, reason } of pathMatchers) {
     while ((match = regex.exec(cleanText)) !== null) {
       const p = match[1];
-      if (p && rememberPath(p)) {
+      if (p && rememberPath(p, reason, match[0])) {
         refs.push({ filePath: p, mimeType: mimeFromExtension(p) });
       }
     }
+  }
+  if (trace) {
+    traceRawFilePathScanDone(trace, {
+      rawTextLength: text.length,
+      cleanTextLength: cleanText.length,
+      refs,
+    });
   }
   return refs;
 }
@@ -383,7 +472,7 @@ function collectToolCallPaths(msg: RawMessage, paths: Map<string, string>): void
  * Handles:
  *   - Image content blocks (base64 / url)
  *   - [media attached: path (mime) | path] text patterns in tool result output
- *   - Raw file paths in tool result text
+ * Raw file paths are NOT scanned from tool text — preview refs come from assistant body only.
  */
 function enrichWithToolResultFiles(messages: RawMessage[]): RawMessage[] {
   const pending: AttachedFileMeta[] = [];
@@ -414,16 +503,14 @@ function enrichWithToolResultFiles(messages: RawMessage[]): RawMessage[] {
       // 2. [media attached: ...] patterns in tool result text output
       const text = getMessageText(msg.content);
       if (text) {
-        const mediaRefs = extractMediaRefs(text);
-        const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
+        const traceCtx: PreviewExtractTraceContext = {
+          source: 'tool-result:media-attached',
+          messageId: msg.id,
+          toolCallId: msg.toolCallId,
+        };
+        const mediaRefs = extractMediaRefs(text, traceCtx);
         for (const ref of mediaRefs) {
           pending.push(makeAttachedFile(ref));
-        }
-        // 3. Raw file paths in tool result text (documents, audio, video, etc.)
-        for (const ref of extractRawFilePaths(text)) {
-          if (!mediaRefPaths.has(ref.filePath)) {
-            pending.push(makeAttachedFile(ref));
-          }
         }
       }
 
@@ -466,36 +553,22 @@ function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
     const text = getMessageText(msg.content);
 
     // Path 1: [media attached: path (mime) | path] — guaranteed format from attachment button
-    const mediaRefs = extractMediaRefs(text);
+    const historyTrace = {
+      source: 'history:media-attached' as const,
+      messageId: msg.id,
+    };
+    const mediaRefs = extractMediaRefs(text, historyTrace);
     const mediaRefPaths = new Set(mediaRefs.map(r => r.filePath));
 
-    // Path 2: Raw file paths.
-    // For assistant messages: scan own text AND the nearest preceding user message text,
-    // but only for non-tool-only assistant messages (i.e. the final answer turn).
-    // Tool-only messages (thinking + tool calls) should not show file previews — those
-    // belong to the final answer message that comes after the tool results.
-    // User messages never get raw-path previews so the image is not shown twice.
+    // Path 2: Raw file paths in assistant message text only (same scope as extractPreviewableRefs).
     let rawRefs: Array<{ filePath: string; mimeType: string }> = [];
     if (msg.role === 'assistant' && !isToolOnlyMessage(msg)) {
-      // Own text
-      rawRefs = extractRawFilePaths(text).filter(r => !mediaRefPaths.has(r.filePath));
-
-      // Nearest preceding user message text (look back up to 5 messages)
-      const seenPaths = new Set(rawRefs.map(r => r.filePath));
-      for (let i = idx - 1; i >= Math.max(0, idx - 5); i--) {
-        const prev = messages[i];
-        if (!prev) break;
-        if (prev.role === 'user') {
-          const prevText = getMessageText(prev.content);
-          for (const ref of extractRawFilePaths(prevText)) {
-            if (!mediaRefPaths.has(ref.filePath) && !seenPaths.has(ref.filePath)) {
-              seenPaths.add(ref.filePath);
-              rawRefs.push(ref);
-            }
-          }
-          break; // only use the nearest user message
-        }
-      }
+      const rawTrace = {
+        source: 'history:raw-path' as const,
+        messageId: msg.id,
+        scanTarget: 'assistant-self' as const,
+      };
+      rawRefs = extractRawFilePaths(text, rawTrace).filter(r => !mediaRefPaths.has(r.filePath));
     }
 
     const allRefs = [...mediaRefs, ...rawRefs];

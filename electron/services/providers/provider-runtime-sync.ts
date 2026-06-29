@@ -291,6 +291,17 @@ async function resolveRuntimeSyncContext(config: ProviderConfig): Promise<Runtim
   };
 }
 
+async function resolveStoCatalogModelIds(
+  config: Pick<ProviderConfig, 'id' | 'type'>,
+): Promise<string[] | undefined> {
+  const account = await getProviderAccount(config.id);
+  const customModels = account?.metadata?.customModels ?? [];
+  const useStoModelCatalog =
+    config.type === 'sto'
+    || (config.id === STO_CANONICAL_ACCOUNT_ID && customModels.length > 0);
+  return useStoModelCatalog && customModels.length > 0 ? customModels : undefined;
+}
+
 async function syncRuntimeProviderConfig(
   config: ProviderConfig,
   context: RuntimeProviderSyncContext,
@@ -299,12 +310,14 @@ async function syncRuntimeProviderConfig(
   const defaultModelInput = (config.type === 'custom' || config.type === 'sto')
     ? ['text', 'image']
     : undefined;
+  const providerModelIds = await resolveStoCatalogModelIds(config);
   await syncProviderConfigToOpenClaw(context.runtimeProviderKey, config.model, {
     baseUrl: normalizeProviderBaseUrl(config, config.baseUrl || context.meta?.baseUrl, context.api),
     api: context.api,
     apiKeyEnv: context.meta?.apiKeyEnv,
     headers: config.headers ?? context.meta?.headers,
     defaultModelInput,
+    providerModelIds,
   });
 }
 
@@ -492,14 +505,19 @@ export async function syncDefaultProviderToRuntime(
     const modelOverride = provider.model
       ? (provider.model.startsWith(`${ock}/`) ? provider.model : `${ock}/${provider.model}`)
       : undefined;
+    const providerModelIds = await resolveStoCatalogModelIds(provider);
+    const stoCatalogOverride = providerModelIds
+      ? { providerModelIds, defaultModelInput: ['text', 'image'] as string[] }
+      : {};
 
     if (provider.type === 'custom') {
       await setOpenClawDefaultModelWithOverride(ock, modelOverride, {
         baseUrl: normalizeProviderBaseUrl(provider, provider.baseUrl, provider.apiProtocol || 'openai-completions'),
         api: provider.apiProtocol || 'openai-completions',
         headers: provider.headers,
+        ...stoCatalogOverride,
       }, fallbackModels);
-    } else if (shouldUseExplicitDefaultOverride(provider, ock)) {
+    } else if (shouldUseExplicitDefaultOverride(provider, ock) || providerModelIds) {
       await setOpenClawDefaultModelWithOverride(ock, modelOverride, {
         baseUrl: normalizeProviderBaseUrl(
           provider,
@@ -509,6 +527,7 @@ export async function syncDefaultProviderToRuntime(
         api: provider.apiProtocol || getProviderConfig(provider.type)?.api,
         apiKeyEnv: getProviderConfig(provider.type)?.apiKeyEnv,
         headers: provider.headers ?? getProviderConfig(provider.type)?.headers,
+        ...stoCatalogOverride,
       }, fallbackModels);
     } else {
       await setOpenClawDefaultModel(ock, modelOverride, fallbackModels);

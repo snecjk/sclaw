@@ -8,7 +8,14 @@ import type { DingTalkMention } from '../../../shared/dingtalk-mention';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { getOpenClawConfigDir } from '../../utils/paths';
-import { isSessionDeleted } from '../../utils/scheduled-task-poller-store';
+import { filterDeletedSessions } from '../../utils/scheduled-task-poller-store';
+import { reviveCronDatedExecutionSession } from '../../utils/revive-deleted-execution-session';
+import {
+  buildFirstTriggeredCronSessionPlaceholders,
+  ensureCronDatedExecutionSessionPlaceholder,
+} from '../../utils/ensure-dated-execution-session';
+import { ensureTaskGroupFirstTriggeredOnRun, listTaskGroupFirstTriggeredAt } from '../../utils/task-group-first-trigger-store';
+import { cronTaskGroupKey } from '../../../shared/task-group-key';
 
 interface GatewayCronJob {
   id: string;
@@ -270,12 +277,25 @@ async function readSessionStoreEntry(
 interface CronSessionListItem {
   key: string;
   label: string;
+  displayName?: string;
   updatedAt?: number;
 }
 
 async function listAllCronSessions(): Promise<CronSessionListItem[]> {
   const sessions: CronSessionListItem[] = [];
   const { stat, readdir, readFile: fsReadFile } = await import('node:fs/promises');
+
+  const jobNamesById = new Map<string, string>();
+  try {
+    const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
+    const jobsRaw = await readFile(jobsFile, 'utf8');
+    const jobsData = JSON.parse(jobsRaw) as { jobs?: Array<{ id: string; name?: string }> };
+    for (const job of jobsData.jobs ?? []) {
+      if (job.id && job.name?.trim()) jobNamesById.set(job.id, job.name.trim());
+    }
+  } catch {
+    // ignore
+  }
 
   // 1) Scan agents/*/sessions/sessions.json for physical dated sessions
   const agentsDir = join(getOpenClawConfigDir(), 'agents');
@@ -325,9 +345,12 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
           // ignore
         }
 
+        const rawLabel = typeof record.label === 'string' ? record.label : undefined;
+        const jobId = parsed.jobId;
         sessions.push({
           key,
-          label: typeof record.label === 'string' ? record.label : key,
+          label: rawLabel ?? key,
+          displayName: jobNamesById.get(jobId),
           updatedAt,
         });
       }
@@ -337,20 +360,7 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
   }
 
   // 2) Generate virtual dated sessions from cron run logs for local cron jobs
-  // Read job names from local cron/jobs.json and base session labels from sessions.json
-  const jobNamesById = new Map<string, string>();
-  try {
-    const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
-    const jobsRaw = await readFile(jobsFile, 'utf8');
-    const jobsData = JSON.parse(jobsRaw) as { jobs?: Array<{ id: string; name?: string }> };
-    for (const job of jobsData.jobs ?? []) {
-      if (job.name) jobNamesById.set(job.id, job.name);
-    }
-  } catch {
-    // ignore
-  }
-
-  // Also read base session labels from agents/main/sessions/sessions.json as fallback
+  // Read base session labels from sessions.json
   const baseSessionLabels = new Map<string, string>();
   try {
     const sessionsFile = join(getOpenClawConfigDir(), 'agents', 'main', 'sessions', 'sessions.json');
@@ -417,26 +427,14 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
 
   sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 
-  // Drop sessions the user explicitly deleted (persisted in deletedSessions store).
-  // This prevents virtual dated cron sessions — regenerated from cron/runs/*.jsonl on
-  // each refresh — from re-appearing in the sidebar after deletion.
-  // Passes the session's updatedAt so that if a newer run exists (e.g. the user
-  // triggered a cron task on a date whose dated session was previously deleted),
-  // the session "revives" and is shown again.
-  if (sessions.length > 0) {
-    const deletionChecks = await Promise.all(
-      sessions.map(async (s) => ({
-        keep: !(await isSessionDeleted(s.key, s.updatedAt)),
-        session: s,
-      })),
-    );
-    const filtered = deletionChecks
-      .filter(({ keep }) => keep)
-      .map(({ session }) => session);
-    return filtered;
-  }
+  const firstTriggered = await listTaskGroupFirstTriggeredAt();
+  const existingKeys = new Set(sessions.map((session) => session.key));
+  sessions.push(
+    ...buildFirstTriggeredCronSessionPlaceholders(firstTriggered, existingKeys, jobNamesById),
+  );
+  sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 
-  return sessions;
+  return filterDeletedSessions(sessions);
 }
 
 export async function buildCronSessionFallbackMessages(params: {
@@ -488,17 +486,19 @@ export async function buildCronSessionFallbackMessages(params: {
     });
   }
 
-  // For each run, load full transcript from the run session jsonl file
+  // For each run, prefer the full run-session transcript. The cron run log summary
+  // duplicates the assistant reply when a jsonl transcript is available.
   for (const entry of matchingRuns) {
-    // First add the summary message from the run log
+    const runMessages = entry.sessionKey
+      ? await readRunSessionMessages(entry.sessionKey)
+      : [];
+    if (runMessages.length > 0) {
+      messages.push(...runMessages);
+      continue;
+    }
+
     const message = buildCronRunMessage(entry, matchingRuns.indexOf(entry));
     if (message) messages.push(message);
-
-    // Then load full conversation from the run session file
-    if (entry.sessionKey) {
-      const runMessages = await readRunSessionMessages(entry.sessionKey);
-      messages.push(...runMessages);
-    }
   }
 
   if (matchingRuns.length === 0) {
@@ -609,6 +609,24 @@ export async function handleCronRoutes(
   url: URL,
   ctx: HostApiContext,
 ): Promise<boolean> {
+  if (url.pathname === '/api/cron/beautify-instruction' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{
+        instruction: string;
+        workflowId?: string;
+        workflowName?: string;
+      }>(req);
+      const { beautifyScheduledTaskInstruction } = await import(
+        '../../services/scheduled-task-instruction-beautifier'
+      );
+      const result = await beautifyScheduledTaskInstruction(body);
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, 400, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/cron/session-history' && req.method === 'GET') {
     const sessionKey = url.searchParams.get('sessionKey')?.trim() || '';
     const parsedSession = parseCronSessionKey(sessionKey);
@@ -818,7 +836,21 @@ export async function handleCronRoutes(
   if (url.pathname === '/api/cron/trigger' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ id: string }>(req);
-      sendJson(res, 200, await ctx.gatewayManager.rpc('cron.run', { id: body.id, mode: 'force' }));
+      const result = await ctx.gatewayManager.rpc('cron.run', { id: body.id, mode: 'force' });
+      await reviveCronDatedExecutionSession(body.id, 'main');
+      let jobLabel: string | undefined;
+      try {
+        const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
+        const jobsRaw = await readFile(jobsFile, 'utf8');
+        const jobsData = JSON.parse(jobsRaw) as { jobs?: Array<{ id: string; name?: string }> };
+        const name = jobsData.jobs?.find((job) => job.id === body.id)?.name?.trim();
+        if (name) jobLabel = `Cron: ${name}`;
+      } catch {
+        // ignore
+      }
+      await ensureCronDatedExecutionSessionPlaceholder(body.id, 'main', { label: jobLabel });
+      await ensureTaskGroupFirstTriggeredOnRun(cronTaskGroupKey(body.id));
+      sendJson(res, 200, result);
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

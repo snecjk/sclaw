@@ -91,6 +91,23 @@
     --sto-main-pad-y-total: 2.5rem;
     /* Grey-9 次要文字（快捷 chip / 手动创建等） */
     --sto-grey-9: #4e5969;
+    /* Grey-8 三级文字（侧栏分区标题 / 版本号 — MasterGo paint_4:0520） */
+    --sto-grey-8: #86909c;
+    /* Grey-10 侧栏一级正文（MasterGo paint_4:0441「文字/文本-默认」） */
+    --sto-grey-10: #1d2129;
+
+    /* 侧栏文字色（MasterGo 8:46454 调整标题颜色+任务icon，MCP 2026-06） */
+    --sto-sidebar-text-default: var(--sto-grey-10);
+    --sto-sidebar-text-icon: var(--sto-grey-9);
+    --sto-sidebar-text-section: var(--sto-grey-8);
+    --sto-sidebar-row-hover-bg: #eaeaed;
+    --sto-sidebar-nav-active-bg: var(--sto-sidebar-row-hover-bg);
+    /** 分区标题 sticky 行高（任务 top-0，最近叠在其下） */
+    --sto-sidebar-section-sticky-h: 30px;
+    --sto-sidebar-running-spinner: #5f9274;
+    --sto-sidebar-subitem-active-bg: #e5e6eb;
+    --sto-sidebar-footer-name: #1a1a1a;
+    --sto-sidebar-footer-meta: #8b9099;
     /* MainLayout main `[scrollbar-gutter:stable]` 预留宽度，底纹右出血需一并抵消 */
     --sto-main-scrollbar-gutter: 15px;
 
@@ -197,6 +214,18 @@
     --sto-sidebar-collapsed-nav-py: 5px;
     --sto-sidebar-collapsed-nav-px: 10px;
     --sto-sidebar-collapsed-nav-icon-idle: #9aa5b8;
+    /* 侧栏文字/交互 token — 与 :root 层级对应，暗色底上保持可读 + 选中/hover 不用浅色块 */
+    --sto-grey-10: #e5e6eb;
+    --sto-grey-9: #a4aab3;
+    --sto-grey-8: #9aa5b8;
+    --sto-sidebar-text-default: var(--sto-grey-10);
+    --sto-sidebar-text-icon: var(--sto-grey-9);
+    --sto-sidebar-text-section: var(--sto-grey-8);
+    --sto-sidebar-row-hover-bg: hsl(204 24% 16%);
+    --sto-sidebar-nav-active-bg: hsl(204 22% 18%);
+    --sto-sidebar-subitem-active-bg: hsl(220 14% 22%);
+    --sto-sidebar-footer-name: #e5e6eb;
+    --sto-sidebar-footer-meta: #9aa5b8;
     --sto-content-pad-x: 20px;
     --sto-chat-max-w-home: 780px;
     --sto-chat-max-w-page: 862px;
@@ -206,8 +235,6 @@
     --sto-split-max-preview: 70%;
     --sto-split-default-preview: 50%;
     --sto-main-pad-y-total: 2.5rem;
-
-    --sto-grey-9: #a4aab3;
 
     --sto-wf-hero-input-bg: hsl(220 22% 11%);
     --sto-wf-hero-input-border: hsl(var(--primary) / 0.35);
@@ -394,6 +421,11 @@
   .sto-tool-btn {
     @apply inline-flex items-center gap-1.5 rounded-lg border border-[var(--sto-sidebar-border)] bg-white px-2.5 py-2 text-[13px] font-medium text-muted-foreground transition-colors;
     @apply hover:border-[rgba(255,140,0,0.45)] hover:text-[var(--sto-accent)] dark:border-border dark:bg-transparent;
+  }
+
+  /** 侧栏字 logo 尺寸 — 暗色资源见 sidebar-logo-dark.svg + useResolvedAppearance */
+  .sto-sidebar-brand-logo {
+    @apply h-7 w-auto max-w-full shrink-0 object-contain object-left;
   }
 }
 

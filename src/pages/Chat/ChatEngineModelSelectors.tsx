@@ -407,9 +407,10 @@ export function ChatModelSelector({
   );
   const claudeModelConfigured = isConcreteModelId(currentAgent?.modelDisplay);
   const modelDisplayText = selectedModel?.displayName
-    ?? (currentEngineType === 'claude' && !claudeModelConfigured
+    || selectedModelId
+    || (currentEngineType === 'claude' && !claudeModelConfigured
       ? (workspaceDefaultModelId || t('toolbar.modelNotConfigured'))
-      : t('toolbar.currentModel'));
+      : (workspaceDefaultModelId || t('toolbar.currentModel')));
 
   const handleModelSwitch = async (normalizedId: string) => {
     if (!currentSessionKey || normalizedId === selectedModelId) return;

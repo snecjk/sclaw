@@ -2,16 +2,17 @@ import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-
 import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { hostApiFetch } from '@/lib/host-api';
-import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
+import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
+import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
+import { useSessionUnreadStore } from '@/stores/session-unread';
 import { useAgentsStore } from '@/stores/agents';
 import {
   getCanonicalPrefixFromSessions,
-  getMessageText,
   mergeSessionLastActivity,
   sanitizeSessionDisplayField,
   toMs,
 } from './helpers';
-import { DEFAULT_CANONICAL_PREFIX, DEFAULT_SESSION_KEY, type ChatSession, type RawMessage } from './types';
+import { DEFAULT_CANONICAL_PREFIX, DEFAULT_SESSION_KEY, type ChatSession } from './types';
 import {
   parseClaudeScheduledTaskRunSessionKey,
   parseClaudeScheduledTaskSessionKey,
@@ -19,23 +20,23 @@ import {
   parseScheduledTaskAgentSessionKey,
   parseScheduledTaskSessionKey,
 } from './cron-session-utils';
-import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSessionLabel } from '@/lib/workflow-session-hint';
-import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, hasUsableSessionTitle, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
+import { applyStoredSessionLabels, scrubCorruptedSessionLabels } from '@/lib/session-label';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
+import { appendPendingLocalVirtualTaskSessions } from './session-list-merge';
+import {
+  scheduleSessionLabelHydrationForStore,
+} from './session-metadata-hydrate';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
-const SESSION_METADATA_HISTORY_LIMIT = 2;
-const SESSION_METADATA_HYDRATE_LIMIT = 40;
-const SESSION_METADATA_HYDRATE_CONCURRENCY = 4;
+
+function scheduleSessionLabelHydrationFromStore(set: ChatSet, get: ChatGet): void {
+  scheduleSessionLabelHydrationForStore(get, set);
+}
 
 function getAgentIdFromSessionKey(sessionKey: string): string {
   if (!sessionKey.startsWith('agent:')) return 'main';
   const [, agentId] = sessionKey.split(':');
   return agentId || 'main';
-}
-
-function getSessionEngineType(session: ChatSession | undefined): ChatSession['engineType'] | undefined {
-  return session?.engineType;
 }
 
 function isTemporaryAgentSessionKey(key: string): boolean {
@@ -53,18 +54,6 @@ function parseSessionUpdatedAtMs(value: unknown): number | undefined {
     }
   }
   return undefined;
-}
-
-async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
-  let nextIndex = 0;
-  const workerCount = Math.min(Math.max(limit, 1), items.length);
-  await Promise.all(Array.from({ length: workerCount }, async () => {
-    while (nextIndex < items.length) {
-      const item = items[nextIndex];
-      nextIndex += 1;
-      await task(item);
-    }
-  }));
 }
 
 export function createSessionActions(
@@ -178,7 +167,15 @@ export function createSessionActions(
           return true;
         });
 
+        const deletedKeys = await fetchDeletedSessionKeys();
+        const visibleDedupedSessions = omitDeletedSessionKeys(dedupedSessions, deletedKeys);
+
         const { currentSessionKey, sessions: localSessions, sessionLastActivity, sessionLabels } = get();
+        const mergedSessions = appendPendingLocalVirtualTaskSessions(
+          visibleDedupedSessions,
+          localSessions,
+          deletedKeys,
+        );
         let nextSessionKey = currentSessionKey || DEFAULT_SESSION_KEY;
         if (!nextSessionKey.startsWith('agent:')) {
           const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
@@ -186,14 +183,14 @@ export function createSessionActions(
             nextSessionKey = canonicalMatch;
           }
         }
-        if (!dedupedSessions.find((s) => s.key === nextSessionKey) && dedupedSessions.length > 0) {
+        if (!mergedSessions.find((s) => s.key === nextSessionKey) && mergedSessions.length > 0) {
           // Keep locally-created pending sessions even after the first optimistic send.
           const hasLocalPendingSession =
             isTemporaryAgentSessionKey(nextSessionKey)
             || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
             || localSessions.some((session) => session.key === nextSessionKey);
           if (!hasLocalPendingSession) {
-            nextSessionKey = dedupedSessions[0].key;
+            nextSessionKey = mergedSessions[0].key;
           }
         }
 
@@ -201,18 +198,18 @@ export function createSessionActions(
         const hasLocalSessionActivity = Boolean(sessionLastActivity[nextSessionKey] || sessionLabels[nextSessionKey]);
         const shouldAppendCurrentSession = Boolean(
           nextSessionKey
-          && !dedupedSessions.find((s) => s.key === nextSessionKey)
+          && !mergedSessions.find((s) => s.key === nextSessionKey)
           && (hasLocalPendingSession || hasLocalSessionActivity),
         );
         const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
         const sessionsWithCurrent = shouldAppendCurrentSession
-          ? [...dedupedSessions, {
+          ? [...mergedSessions, {
             key: nextSessionKey,
             label: localCurrentSession?.label ?? NEW_SESSION_TEMP_LABEL,
             engineType: localCurrentSession?.engineType,
             model: localCurrentSession?.model,
           }]
-          : dedupedSessions;
+          : mergedSessions;
 
         const scrubbedSessionLabels = scrubCorruptedSessionLabels(get().sessionLabels);
         const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels);
@@ -374,60 +371,8 @@ export function createSessionActions(
           await get().loadHistory();
         }
 
-        // Background: hydrate only the first screen of missing metadata.
-        // Avoid N * full-history fan-out when many sessions exist.
-        const sessionsToHydrate = labeledSessions
-          .filter((session) => {
-            if (session.key.endsWith(':main')) return false;
-            const hasActivity = Boolean(session.updatedAt || get().sessionLastActivity[session.key]);
-            return !hasUsableSessionTitle(session, scrubbedSessionLabels) || !hasActivity;
-          })
-          .sort((left, right) => {
-            const leftAt = left.updatedAt ?? get().sessionLastActivity[left.key] ?? 0;
-            const rightAt = right.updatedAt ?? get().sessionLastActivity[right.key] ?? 0;
-            return rightAt - leftAt;
-          })
-          .slice(0, SESSION_METADATA_HYDRATE_LIMIT);
-        if (sessionsToHydrate.length > 0) {
-          void runLimited(sessionsToHydrate, SESSION_METADATA_HYDRATE_CONCURRENCY, async (session) => {
-              try {
-                const history = await hostApiFetch<{ success?: boolean; result?: { messages?: RawMessage[] } }>(
-                  `/api/chat/history?sessionKey=${encodeURIComponent(session.key)}&limit=${SESSION_METADATA_HISTORY_LIMIT}`
-                  + (getSessionEngineType(session) ? `&engineType=${encodeURIComponent(getSessionEngineType(session)!)}`
-                    : ''),
-                );
-                const msgs = Array.isArray(history.result?.messages) ? history.result.messages : [];
-                const lastMsg = msgs[msgs.length - 1];
-                set((s) => {
-                  const next: Partial<typeof s> = {};
-                  if (shouldAutoDeriveSessionLabel(session.key, s.sessionLabels, isCorruptedSessionLabel)) {
-                    const labelText = deriveSessionLabelFromHistory(
-                      msgs,
-                      getMessageText,
-                      buildSessionLabelDerivationOptions(session.key, s.sessions, s.sessionLabels),
-                    );
-                    if (labelText) {
-                      next.sessionLabels = {
-                        ...s.sessionLabels,
-                        [session.key]: truncateSessionLabel(labelText),
-                      };
-                    }
-                  }
-                  if (lastMsg?.timestamp) {
-                    const lastAt = toMs(lastMsg.timestamp);
-                    if (lastAt > 0) {
-                      const currentAt = s.sessionLastActivity[session.key] ?? 0;
-                      const nextAt = Math.max(currentAt, lastAt);
-                      if (nextAt !== currentAt) {
-                        next.sessionLastActivity = { ...s.sessionLastActivity, [session.key]: nextAt };
-                      }
-                    }
-                  }
-                  return next;
-                });
-              } catch { /* ignore per-session errors */ }
-            });
-        }
+        // Background: hydrate sidebar titles from history (retries until Gateway is ready).
+        scheduleSessionLabelHydrationFromStore(set, get);
       } catch (err) {
         console.warn('Failed to load sessions:', err);
       }
@@ -436,6 +381,7 @@ export function createSessionActions(
     // ── Switch session ──
 
     switchSession: (key: string) => {
+      useSessionUnreadStore.getState().markSessionRead(key);
       const { currentSessionKey, messages, sessionLastActivity, sessionLabels } = get();
       // 仅将没有任何历史记录且无活动时间的会话视为空会话。
       // 单纯依赖 messages.length 是不可靠的，因为 switchSession 会在真正调用 loadHistory 前抢先清空当前 messages，
@@ -481,29 +427,19 @@ export function createSessionActions(
     // newSession() design that avoids sessions.reset to preserve history.
 
     deleteSession: async (key: string) => {
-      // Soft-delete the session's JSONL transcript on disk.
-      // The main process renames <suffix>.jsonl → <suffix>.deleted.jsonl so that
-      // sessions.list skips it automatically.
-      try {
-        const session = get().sessions.find((item) => item.key === key);
-        const agent = useAgentsStore.getState().agents.find((item) => item.id === get().currentAgentId);
-        const result = await hostApiFetch<{ success: boolean; error?: string }>('/api/sessions/delete', {
-          method: 'POST',
-          body: JSON.stringify({
-            sessionKey: key,
-            engineType: resolveChatSessionEngineType(session, agent?.engineType, key),
-          }),
-        });
-        const typedResult = result as {
-          success: boolean;
-          error?: string;
-        };
-        if (!typedResult.success) {
-          console.warn(`[deleteSession] API reported failure for ${key}:`, typedResult.error);
-        }
-      } catch (err) {
-        console.warn(`[deleteSession] API call failed for ${key}:`, err);
+      const session = get().sessions.find((item) => item.key === key);
+      const agent = useAgentsStore.getState().agents.find((item) => item.id === get().currentAgentId);
+      const deleteResult = await requestSessionDelete(
+        key,
+        resolveSessionDeleteEngineType(key, session, agent?.engineType),
+      );
+      if (!deleteResult.success) {
+        console.warn(`[deleteSession] API reported failure for ${key}:`, deleteResult.error);
+        notifySessionDeleteFailed(deleteResult.error);
+        return false;
       }
+
+      rememberOptimisticDeletedSessionKey(key);
 
       const { currentSessionKey, sessions } = get();
       const remaining = sessions.filter((s) => s.key !== key);
@@ -537,6 +473,8 @@ export function createSessionActions(
           sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
         }));
       }
+      await get().loadSessions?.();
+      return true;
     },
 
     // ── New session ──

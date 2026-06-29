@@ -26,6 +26,8 @@ title: STO产物可视化（html）
 
 下面三步是主线:第 0 步定整页结构与可视化,第 1 步定这一份的有意图决定,第 2 步取手法落地。文末是出门前自检 + linter(两道交付闸)和地板下限。
 
+> **运行时强制**：桌面端 `sto-distinctive-design-guard` 插件会在未 read 本技能前 block 对 `.html` 的 write，并在写入后跑 `lint.py`。验证是否加载见 `docs/sto-distinctive-design-guard.md`。
+
 ---
 
 ## 产物落盘(硬性)

@@ -4,6 +4,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search, ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -33,6 +34,7 @@ export function TaskToolbar({
   sortValue,
   onSortChange,
 }: TaskToolbarProps) {
+  const { t } = useTranslation('tasks');
   const [sortOpen, setSortOpen] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
 
@@ -48,13 +50,13 @@ export function TaskToolbar({
     }
   }, [sortOpen]);
 
-  const currentSortLabel =
-    SORT_OPTIONS.find((o) => o.value === sortValue)?.label || SORT_OPTIONS[0].label;
+  const currentSortOption =
+    SORT_OPTIONS.find((o) => o.value === sortValue) ?? SORT_OPTIONS[0];
 
   return (
     <div className="ml-auto flex shrink-0 items-center gap-3">
       <label className={workflowListSearchLabelClass}>
-        <span className="sr-only">搜索定时任务名称</span>
+        <span className="sr-only">{t('myTask.toolbar.searchSrOnly')}</span>
         <span className={workflowListSearchIconWrapClass} aria-hidden="true">
           <Search className="h-3.5 w-3.5" />
         </span>
@@ -63,7 +65,7 @@ export function TaskToolbar({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           className={workflowListSearchInputClass}
-          placeholder="搜索任务名称"
+          placeholder={t('myTask.toolbar.searchPlaceholder')}
           autoComplete="off"
         />
       </label>
@@ -73,7 +75,7 @@ export function TaskToolbar({
           type="button"
           onClick={() => setSortOpen(!sortOpen)}
           className={myTaskSortTriggerClass}
-          aria-label="排序方式"
+          aria-label={t('myTask.toolbar.sortAria')}
           aria-haspopup="listbox"
           aria-expanded={sortOpen}
         >
@@ -88,7 +90,7 @@ export function TaskToolbar({
           >
             <path d="M4 6h16M8 12h8M11 18h2" strokeLinecap="round" />
           </svg>
-          <span className="hidden whitespace-nowrap sm:inline">{currentSortLabel}</span>
+          <span className="hidden whitespace-nowrap sm:inline">{t(currentSortOption.i18nKey)}</span>
           <ChevronDown
             className={cn('h-3 w-3 shrink-0 text-muted-foreground transition-transform', sortOpen && 'rotate-180')}
           />
@@ -113,7 +115,7 @@ export function TaskToolbar({
                       dropdownOptionClass(isSelected),
                     )}
                   >
-                    <span className="min-w-0 flex-1 text-left">{opt.label}</span>
+                      <span className="min-w-0 flex-1 text-left">{t(opt.i18nKey)}</span>
                     <Check className={cn('h-4 w-4 shrink-0 text-primary', isSelected ? 'opacity-100' : 'opacity-0')} />
                   </button>
                 );

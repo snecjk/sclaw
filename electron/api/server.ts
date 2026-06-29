@@ -15,6 +15,7 @@ import { handleSkillRoutes } from './routes/skills';
 import { handleSkillPlazaRoutes } from './routes/skill-plaza';
 import { handleFileRoutes } from './routes/files';
 import { handleSessionRoutes } from './routes/sessions';
+import { handleTaskGroupRoutes } from './routes/task-groups';
 import { handleCronRoutes } from './routes/cron';
 import { handleScheduledTaskRoutes } from './routes/scheduled-tasks';
 import { handleClaudeScheduledTaskRoutes } from './routes/claude-scheduled-tasks';
@@ -50,6 +51,7 @@ const routeHandlers: RouteHandler[] = [
   handleSkillPlazaRoutes,
   handleFileRoutes,
   handleSessionRoutes,
+  handleTaskGroupRoutes,
   handleCronRoutes,
   handleScheduledTaskRoutes,
   handleDictionaryRoutes,

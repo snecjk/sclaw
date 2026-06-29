@@ -1,7 +1,7 @@
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
 import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSessionLabel } from '@/lib/workflow-session-hint';
-import { buildSessionLabelDerivationOptions } from '@/lib/session-label';
+import { buildSessionLabelDerivationOptions, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { mergeLocalWorkflowTurnsFromCurrent } from '@/lib/workflow-local-turn';
 import {
   mergeParameterFormBlocksFromCurrent,
@@ -32,6 +32,7 @@ import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 import {
   dedupeRedundantUserMessages,
   mergeOptimisticUserIntoHistory,
+  traceLoadHistoryUserReconciliation,
 } from './user-message-merge';
 
 async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
@@ -96,10 +97,13 @@ export function createHistoryActions(
         // until the run completes, causing it to flash out of the UI.
         let finalMessages = enrichedMessages;
         const userMsgAt = get().lastUserMessageAt;
+        const historyUserCountBefore = enrichedMessages.filter((m) => m.role === 'user').length;
+        const historyMessageCountBefore = enrichedMessages.length;
         if (userMsgAt) {
           finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
             userMessageAt: userMsgAt,
             sending: get().sending,
+            sessionKey: currentSessionKey,
           });
         }
 
@@ -109,7 +113,18 @@ export function createHistoryActions(
           getMessageText,
         );
         finalMessages = mergeLocalWorkflowTurnsFromCurrent(finalMessages, get().messages);
-        finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null);
+        finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null, {
+          sessionKey: currentSessionKey,
+        });
+        traceLoadHistoryUserReconciliation({
+          sessionKey: currentSessionKey,
+          userMessageAt: userMsgAt,
+          sending: get().sending,
+          beforeCount: historyMessageCountBefore,
+          afterCount: finalMessages.length,
+          userCountBefore: historyUserCountBefore,
+          userCountAfter: finalMessages.filter((m) => m.role === 'user').length,
+        });
         const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
           sessionKey: currentSessionKey,
           get,
@@ -127,8 +142,7 @@ export function createHistoryActions(
         // displayName (e.g. the configured agent name "StoClaw") instead.
         const isMainSession = currentSessionKey.endsWith(':main');
         if (!isMainSession) {
-          const existingLabel = get().sessionLabels[currentSessionKey];
-          if (!existingLabel || isCorruptedSessionLabel(existingLabel)) {
+          if (shouldAutoDeriveSessionLabel(currentSessionKey, get().sessionLabels, isCorruptedSessionLabel)) {
             const labelText = deriveSessionLabelFromHistory(
               finalMessages,
               getMessageText,
@@ -155,7 +169,10 @@ export function createHistoryActions(
           const lastAt = toMs(lastMsg.timestamp);
           if (lastAt > 0) {
             set((s) => {
-              const listedAt = s.sessions.find((session) => session.key === currentSessionKey)?.updatedAt ?? 0;
+              const targetSession = s.sessions.find((session) => session.key === currentSessionKey);
+              const listedAt = targetSession?.engineType === 'claude'
+                ? 0
+                : targetSession?.updatedAt ?? 0;
               const currentAt = s.sessionLastActivity[currentSessionKey] ?? 0;
               const nextAt = Math.max(currentAt, listedAt, lastAt);
               if (nextAt === currentAt) return {};
