@@ -134,7 +134,12 @@ export function TaskCreateModal({
 
 function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreateModalInnerProps) {
   const { t } = useTranslation('tasks');
+  const fetchWorkflows = useMyTaskStore((s) => s.fetchWorkflows);
   const workflowOptions = useMyTaskStore((s) => s.workflowOptions);
+
+  useEffect(() => {
+    fetchWorkflows().catch(() => {});
+  }, [fetchWorkflows]);
 
   const init = computeInitialValues(job, initialValues);
 
