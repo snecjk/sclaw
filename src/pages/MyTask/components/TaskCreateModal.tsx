@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Loader2, ChevronDown, Check, Sparkles } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
 import {
@@ -120,15 +121,18 @@ export function TaskCreateModal({
   onSave,
   initialValues,
 }: TaskCreateModalProps) {
-  if (!open) return null;
   return (
-    <TaskCreateModalInner
-      key={job?.id ?? `workflow:${initialValues?.workflowCode ?? '__create__'}`}
-      job={job}
-      onClose={onClose}
-      onSave={onSave}
-      initialValues={initialValues}
-    />
+    <AnimatePresence>
+      {open && (
+        <TaskCreateModalInner
+          key={job?.id ?? `workflow:${initialValues?.workflowCode ?? '__create__'}`}
+          job={job}
+          onClose={onClose}
+          onSave={onSave}
+          initialValues={initialValues}
+        />
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -266,13 +270,21 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center px-4"
+    <motion.div
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4"
       onClick={onClose}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2, ease: 'easeInOut' }}
     >
-      <div
-        className="w-full max-w-[min(820px,100%)] bg-background rounded-[22px] border border-border shadow-2xl my-8 flex flex-col max-h-[calc(100vh-4rem)]"
+      <motion.div
+        className="w-full max-w-[min(820px,100%)] bg-background rounded-[22px] border border-border shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
         onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, scale: 0.96, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
       >
         <div className="flex items-start justify-between gap-4 mb-6 px-[18px] pt-[18px] flex-shrink-0">
           <div className="min-w-0">
@@ -493,7 +505,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
             )}
           </Button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

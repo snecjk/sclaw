@@ -30,7 +30,6 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { cn } from '@/lib/utils';
 import {
-  myTaskCreateButtonClass,
   myTaskPageHeaderRowClass,
   stoMainInnerShell,
   stoPageTitleClass,
@@ -38,6 +37,8 @@ import {
 } from '@/lib/surfaces';
 import { toast } from 'sonner';
 import { TaskCreateModal, type TaskCreateInputWithRun } from './components/TaskCreateModal';
+import { NewTaskDropdownButton } from './components/NewTaskDropdownButton';
+import { TemplateSelectModal } from './components/TemplateSelectModal';
 
 import { useMyTaskStore, selectRecordCounts, selectCurrentRecords } from './store';
 import type { TaskView, TaskViewModel, ExecutionRecord } from './types';
@@ -162,10 +163,11 @@ export default function MyTask() {
     recordsLoading,
     recordStatus,
     recordSearch,
-    fetchRecords,
     setRecordStatus,
     setRecordSearch,
   } = useMyTaskStore();
+
+  const fetchRecords = useMyTaskStore((s) => s.fetchRecords);
 
   const recordCounts = useMyTaskStore(useShallow(selectRecordCounts));
   const currentRecords = useMyTaskStore(useShallow(selectCurrentRecords));
@@ -179,6 +181,9 @@ export default function MyTask() {
   const [deleteTarget, setDeleteTarget] = useState<ManagedLocalTask | null>(null);
   const [detailRecord, setDetailRecord] = useState<ExecutionRecord | null>(null);
   const [officialCards, setOfficialCards] = useState<OfficialWorkflowCard[]>([]);
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [selectedWorkflowCode, setSelectedWorkflowCode] = useState<string | null>(null);
+  const [selectedTemplateName, setSelectedTemplateName] = useState<string | null>(null);
 
   // ── 初始化加载 ──
   useEffect(() => {
@@ -207,12 +212,14 @@ export default function MyTask() {
       });
   }, [fetchJobs, fetchWorkflowOptions]);
 
-  // ── 切换到执行记录 Tab 时加载 ──
+  // ── 切换到执行记录 Tab / 切换状态子 Tab 时刷新 ──
   useEffect(() => {
     if (activeView === 'records') {
       fetchRecords();
     }
-  }, [activeView, fetchRecords]);
+    // fetchRecords 是 Zustand 稳定引用，仅在视图或状态切换时触发
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView, recordStatus]);
 
   // ── 工作流 code → name 映射 ──
   const workflowMap = useMemo(
@@ -417,42 +424,36 @@ export default function MyTask() {
     }
   }, [deleteTarget, deleteJob, fetchJobs]);
 
-  const handleTemplateInstall = useCallback(
-    (card: OfficialWorkflowCard) => {
-      const q = encodeURIComponent(`/${card.name}`);
-      const wid = encodeURIComponent(card.id);
-      navigate(`/?q=${q}&workflowId=${wid}`);
-    },
-    [navigate]
-  );
+  const handleTemplateSelect = useCallback((card: OfficialWorkflowCard) => {
+    setTemplateOpen(false);
+    setEditingJob(null);
+    setSelectedWorkflowCode(card.id);
+    setSelectedTemplateName(card.name);
+    setCreateOpen(true);
+  }, []);
 
   // ── 渲染 ──
   const isTasksView = activeView === 'tasks';
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col">
+      <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col [scrollbar-gutter:stable]">
         <div className={cn(stoMainInnerShell, 'flex flex-1 flex-col')}>
           {/* 页面标题 + 新建按钮 */}
           <header className="mb-6">
             <div className={myTaskPageHeaderRowClass}>
-              <h1 className={stoPageTitleClass}>{t('myTask.pageTitle')}</h1>
-              {isTasksView ? (
-                <button
-                  type="button"
-                  className={myTaskCreateButtonClass}
-                  onClick={() => {
+              <h1 className={cn(stoPageTitleClass, 'h-[34px]')}>{t('myTask.pageTitle')}</h1>
+              {isTasksView && (
+                <NewTaskDropdownButton
+                  onSelfCreate={() => {
                     setEditingJob(null);
                     setCreateOpen(true);
                   }}
-                >
-                  {t('myTask.newTask')}
-                </button>
-              ) : null}
+                  onTemplateCreate={() => setTemplateOpen(true)}
+                />
+              )}
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t('myTask.subtitle')}
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{t('myTask.subtitle')}</p>
           </header>
 
           {/* Tab 行：左侧视图 Tab + 右侧搜索/排序 */}
@@ -490,12 +491,11 @@ export default function MyTask() {
               ) : filteredTasks.length === 0 ? (
                 <TaskEmptyState
                   searchQuery={searchQuery}
-                  onCreate={() => {
+                  onSelfCreate={() => {
                     setEditingJob(null);
                     setCreateOpen(true);
                   }}
-                  officialCards={officialCards}
-                  onTemplateInstall={handleTemplateInstall}
+                  onTemplateCreate={() => setTemplateOpen(true)}
                 />
               ) : (
                 <div className="grid grid-cols-1 items-stretch sm:grid-cols-2 lg:grid-cols-3 gap-[clamp(12px,1.4vw,16px)]">
@@ -550,8 +550,25 @@ export default function MyTask() {
       <TaskCreateModal
         job={editingJob}
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateOpen(false);
+          setSelectedWorkflowCode(null);
+          setSelectedTemplateName(null);
+        }}
         onSave={(input) => handleSave(input)}
+        initialValues={
+          selectedWorkflowCode
+            ? { workflowCode: selectedWorkflowCode, name: selectedTemplateName ?? '' }
+            : undefined
+        }
+      />
+
+      {/* 模版选择弹窗 */}
+      <TemplateSelectModal
+        open={templateOpen}
+        onClose={() => setTemplateOpen(false)}
+        officialCards={officialCards}
+        onSelect={handleTemplateSelect}
       />
 
       {/* 删除确认弹窗 */}
