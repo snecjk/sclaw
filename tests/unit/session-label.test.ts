@@ -93,6 +93,15 @@ describe('resolveSessionLabel', () => {
       t,
     })).toBe('新对话');
   });
+
+  it('ignores corrupted DingTalk marker in sessionLabels', () => {
+    expect(resolveSessionLabel({
+      key: 'agent:main:session-1',
+      sessionLabels: { 'agent:main:session-1': '[STOCLAW:DINGTALK_RECIPIENTS:v1]' },
+      label: '@赵志坚 今晚记得学习哦',
+      t,
+    })).toBe('@赵志坚 今晚记得学习哦');
+  });
 });
 
 describe('session label corruption cleanup', () => {
@@ -102,6 +111,14 @@ describe('session label corruption cleanup', () => {
       bad: '[Subagent Context] You are running as a…',
     };
     expect(scrubCorruptedSessionLabels(input)).toEqual({ good: '全国排污水量是多少' });
+  });
+
+  it('scrubCorruptedSessionLabels removes DingTalk recipient marker titles', () => {
+    const input = {
+      good: '@赵志坚 今晚记得学习哦',
+      bad: '[STOCLAW:DINGTALK_RECIPIENTS:v1]',
+    };
+    expect(scrubCorruptedSessionLabels(input)).toEqual({ good: '@赵志坚 今晚记得学习哦' });
   });
 
   it('applyStoredSessionLabels does not overwrite with corrupted stored labels', () => {
@@ -125,6 +142,12 @@ describe('session label corruption cleanup', () => {
       { key: 'agent:main:session-1', label: '帮我查天气' },
       {},
     )).toBe(true);
+  });
+
+  it('hasUsableSessionTitle treats DingTalk marker labels as missing', () => {
+    const session = { key: 'agent:main:session-1', label: undefined, displayName: undefined };
+    const labels = { 'agent:main:session-1': '[STOCLAW:DINGTALK_RECIPIENTS:v1]' };
+    expect(hasUsableSessionTitle(session, labels)).toBe(false);
   });
 });
 

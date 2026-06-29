@@ -2,6 +2,10 @@
  * Inject current session workflow memory into user messages so the model
  * can call execute_workflow with the correct workflowId.
  */
+import {
+  messageHasDingTalkRecipientContext,
+  stripDingTalkMentionContextForDisplay,
+} from '@/lib/dingtalk-mention-context';
 import { resolveSessionWorkflowId } from '@/lib/session-workflow-context';
 import { stripWorkflowContextForDisplay } from '@/lib/workflow-context';
 import { getLatestWorkflow, getSessionWorkflows } from '@/stores/workflow-memory';
@@ -122,7 +126,9 @@ export function stripWorkflowSessionHintForDisplay(message: string): string {
 export function deriveSessionLabelFromUserText(rawText: string): string {
   const subagentTask = extractSubagentTaskLabel(rawText);
   if (subagentTask) return subagentTask;
-  const stripped = stripWorkflowContextForDisplay(stripWorkflowSessionHintForDisplay(rawText)).trim();
+  const stripped = stripDingTalkMentionContextForDisplay(
+    stripWorkflowContextForDisplay(stripWorkflowSessionHintForDisplay(rawText)),
+  ).trim();
   if (isSubagentInjectedUserText(stripped)) return '';
   return stripped;
 }
@@ -224,9 +230,20 @@ export function truncateSessionLabel(label: string, maxLength = 50): string {
   return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength)}…` : trimmed;
 }
 
+/** Drop injected/system titles before persisting to sessionLabels. */
+export function normalizeDerivedSessionLabel(label: string | undefined): string | undefined {
+  const trimmed = label?.trim();
+  if (!trimmed || isCorruptedSessionLabel(trimmed) || isPlaceholderSessionLabel(trimmed)) {
+    return undefined;
+  }
+  const truncated = truncateSessionLabel(trimmed);
+  return truncated || undefined;
+}
+
 export function isCorruptedSessionLabel(label: string): boolean {
   return label.includes('<!-- StoClaw-Workflow')
     || label.includes('## 工作流')
+    || messageHasDingTalkRecipientContext(label)
     || isSubagentContextOnlyLabel(label);
 }
 

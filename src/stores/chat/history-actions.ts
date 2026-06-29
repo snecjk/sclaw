@@ -1,6 +1,6 @@
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
-import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSessionLabel } from '@/lib/workflow-session-hint';
+import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, normalizeDerivedSessionLabel } from '@/lib/workflow-session-hint';
 import { buildSessionLabelDerivationOptions, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { mergeLocalWorkflowTurnsFromCurrent } from '@/lib/workflow-local-turn';
 import {
@@ -152,11 +152,12 @@ export function createHistoryActions(
                 get().sessionLabels,
               ),
             );
-            if (labelText) {
+            const normalized = normalizeDerivedSessionLabel(labelText);
+            if (normalized) {
               set((s) => ({
                 sessionLabels: {
                   ...s.sessionLabels,
-                  [currentSessionKey]: truncateSessionLabel(labelText),
+                  [currentSessionKey]: normalized,
                 },
               }));
             }

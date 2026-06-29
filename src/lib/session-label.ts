@@ -84,6 +84,19 @@ export function scrubCorruptedSessionLabels(
   return changed ? next : sessionLabels;
 }
 
+/** Clear gateway `label` fields that contain injected DingTalk/workflow markers. */
+export function sanitizeGatewaySessionLabels<T extends ChatSession>(
+  sessions: T[],
+): T[] {
+  return sessions.map((session) => {
+    const label = session.label?.trim();
+    if (label && isCorruptedSessionLabel(label)) {
+      return { ...session, label: undefined };
+    }
+    return session;
+  });
+}
+
 /** 与 Sidebar.getSessionLabel 保持同一解析顺序与 fallback 规则 */
 export function resolveSessionLabel(input: ResolveSessionLabelInput): string {
   const { key, displayName, label, sessionLabels, t } = input;

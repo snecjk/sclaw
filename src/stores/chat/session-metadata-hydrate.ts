@@ -10,7 +10,7 @@ import {
   deriveSessionLabelFromHistory,
   isCorruptedSessionLabel,
   isPlaceholderSessionLabel,
-  truncateSessionLabel,
+  normalizeDerivedSessionLabel,
 } from '@/lib/workflow-session-hint';
 import { getMessageText, toMs } from './helpers';
 import type { ChatSet } from './store-api';
@@ -109,7 +109,7 @@ export function deriveStoredSessionLabelFromMessages(
     getMessageText,
     buildSessionLabelDerivationOptions(sessionKey, sessions, sessionLabels),
   );
-  return labelText ? truncateSessionLabel(labelText) : undefined;
+  return normalizeDerivedSessionLabel(labelText);
 }
 
 export function lastMessageActivityMs(messages: RawMessage[]): number {
