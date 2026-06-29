@@ -279,8 +279,6 @@ importers:
 
   sto-plugin/openclaw/sto-workflow-tool: {}
 
-  sto-plugin/openclaw/sto-workflow-tool/sto-toolkit: {}
-
   sto-plugin/sto-toolkit: {}
 
 packages:

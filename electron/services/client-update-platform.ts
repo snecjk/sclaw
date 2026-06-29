@@ -47,10 +47,6 @@ export type ClientUpdatePolicyData = {
   check_interval_seconds?: number;
   current_version?: string | null;
   platform?: string | null;
-  /** Release ticket title from memory-center publish pipeline */
-  title?: string | null;
-  /** Release ticket changelog (变更说明) from memory-center publish pipeline */
-  changelog?: string | null;
 };
 
 /** 解析失败的详细原因，供 UI 展示具体错误 */
