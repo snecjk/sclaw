@@ -23,7 +23,7 @@ import {
 } from 'node:fs';
 import { readFile, unlink, mkdtemp, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
-import { join, dirname, basename } from 'node:path';
+import { join, dirname } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { app, type BrowserWindow } from 'electron';
@@ -32,6 +32,15 @@ import { proxyAwareFetch } from './proxy-fetch';
 import { getSetting } from './store';
 import { getDwsLoginManager } from './dws-login';
 import { getOpenClawSkillsDir } from './paths';
+import {
+  SKILLS_ZIP_ASSET_NAME,
+  inferAssetName,
+  resolveActiveGiteeRepo,
+  resolveAssetDownloadUrlWithFallback,
+  resolveGiteeAssetUrl,
+  type DwsPlatformAssetSpec,
+  type DwsReleaseSources,
+} from '../../shared/dws-release-resolver';
 
 export interface DwsCliResult {
   ok: boolean;
@@ -44,18 +53,17 @@ export interface DwsBundledManifest {
   dwsVersion: string;
   skillMode: 'mono' | 'multi';
   skillsRevision: string;
+  /** @deprecated 简单换 host 对 Gitee 无效，保留仅兼容旧 manifest */
   mirrorBaseUrl?: string | null;
+  sources?: DwsReleaseSources;
+  resolvedFrom?: 'github' | 'gitee';
   releaseUrl?: string | null;
   skillsZip?: {
+    assetName?: string;
     url?: string | null;
     sha256?: string | null;
   } | null;
-  platforms: Record<string, {
-    url: string;
-    sha256?: string | null;
-    archive?: 'tar.gz' | 'zip';
-    size?: number;
-  }>;
+  platforms: Record<string, DwsPlatformAssetSpec & { url?: string }>;
 }
 
 export interface DwsLocalManifest {
@@ -229,6 +237,44 @@ function writeLocalManifest(manifest: DwsLocalManifest): void {
   writeFileSync(LOCAL_MANIFEST_PATH, JSON.stringify(manifest, null, 2), 'utf-8');
 }
 
+async function downloadDwsReleaseAsset(
+  bundled: DwsBundledManifest,
+  assetName: string,
+  platformSpec: DwsPlatformAssetSpec | null,
+  targetPath: string,
+  expectedSha256?: string | null,
+): Promise<void> {
+  const resolved = await resolveAssetDownloadUrlWithFallback({
+    manifest: bundled,
+    version: bundled.dwsVersion,
+    assetName,
+    platformSpec,
+    fetchFn: proxyAwareFetch,
+  });
+
+  if (resolved.fallbackFrom === 'github') {
+    logger.warn(`GitHub dws unreachable, switched to Gitee mirror: ${resolved.giteeRepo}`);
+  } else if (resolved.source === 'gitee') {
+    logger.info(`Using Gitee dws mirror: ${resolved.giteeRepo ?? resolveActiveGiteeRepo(bundled)}`);
+  }
+
+  try {
+    await downloadFile(resolved.url, targetPath, expectedSha256);
+    return;
+  } catch (primaryError) {
+    if (resolved.source !== 'github' || resolved.fallbackFrom) throw primaryError;
+    const giteeRepo = resolveActiveGiteeRepo(bundled);
+    const giteeUrl = await resolveGiteeAssetUrl(
+      giteeRepo,
+      bundled.dwsVersion,
+      assetName,
+      proxyAwareFetch,
+    );
+    logger.warn('GitHub dws asset download failed, retrying via Gitee:', primaryError);
+    await downloadFile(giteeUrl, targetPath, expectedSha256);
+  }
+}
+
 async function downloadFile(url: string, targetPath: string, expectedSha256?: string | null): Promise<void> {
   const response = await proxyAwareFetch(url, { timeoutMs: 180_000 });
   if (!response.ok) {
@@ -315,41 +361,25 @@ function clearMacQuarantine(binaryPath: string): void {
   }
 }
 
-function resolveDwsSkillsZipUrl(bundled: DwsBundledManifest): string {
-  if (bundled.skillsZip?.url) return bundled.skillsZip.url;
-
-  const platformSpec = bundled.platforms[getPlatformKey()];
-  if (platformSpec?.url) {
-    return platformSpec.url.replace(/\/[^/]+$/, '/dws-skills.zip');
-  }
-
-  if (bundled.releaseUrl) {
-    const version = normalizeDwsVersion(bundled.dwsVersion);
-    const repoBase = bundled.releaseUrl.replace(/\/releases\/tag\/v?[\d.]+.*$/i, '');
-    return `${repoBase}/releases/download/v${version}/dws-skills.zip`;
-  }
-
-  throw new Error('Cannot resolve dws-skills.zip URL from manifest');
-}
-
-function applyMirrorBaseUrl(url: string, mirrorBaseUrl?: string | null): string {
-  if (!mirrorBaseUrl) return url;
-  return url.replace(/^https?:\/\/[^/]+/, mirrorBaseUrl.replace(/\/$/, ''));
-}
-
 function getDwsOpenClawSkillDir(): string {
   return join(getOpenClawSkillsDir(), 'dws');
 }
 
 async function installMonoDwsSkillFromReleaseZip(bundled: DwsBundledManifest): Promise<void> {
-  const skillsZipUrl = applyMirrorBaseUrl(resolveDwsSkillsZipUrl(bundled), bundled.mirrorBaseUrl);
+  const skillsAssetName = bundled.skillsZip?.assetName || SKILLS_ZIP_ASSET_NAME;
   const skillDir = getDwsOpenClawSkillDir();
   const tmpDir = await mkdtemp(join(tmpdir(), 'stoclaw-dws-skill-'));
   const zipPath = join(tmpDir, 'dws-skills.zip');
   const extractDir = join(tmpDir, 'extract');
 
   try {
-    await downloadFile(skillsZipUrl, zipPath, bundled.skillsZip?.sha256);
+    await downloadDwsReleaseAsset(
+      bundled,
+      skillsAssetName,
+      bundled.skillsZip?.url ? { url: bundled.skillsZip.url, assetName: skillsAssetName } : null,
+      zipPath,
+      bundled.skillsZip?.sha256,
+    );
     mkdirSync(extractDir, { recursive: true });
     await extractArchive(zipPath, extractDir, 'zip');
 
@@ -403,22 +433,20 @@ async function installBinaryFromManifest(
 ): Promise<{ success: boolean; path?: string; version?: string; error?: string }> {
   const platformKey = getPlatformKey();
   const platformSpec = bundled.platforms[platformKey];
-  if (!platformSpec?.url) {
+  const assetName = inferAssetName(platformSpec);
+  if (!platformSpec || !assetName) {
     return { success: false, error: `No dws release for platform ${platformKey}` };
   }
 
   const target = getInstallTarget();
-  const archiveType = platformSpec.archive ?? (platformSpec.url.endsWith('.zip') ? 'zip' : 'tar.gz');
-  const downloadUrl = bundled.mirrorBaseUrl
-    ? platformSpec.url.replace(/^https?:\/\/[^/]+/, bundled.mirrorBaseUrl.replace(/\/$/, ''))
-    : platformSpec.url;
+  const archiveType = platformSpec.archive
+    ?? (assetName.endsWith('.zip') ? 'zip' : 'tar.gz');
 
   const tmpDir = await mkdtemp(join(tmpdir(), 'stoclaw-dws-'));
-  const archiveName = basename(new URL(platformSpec.url).pathname);
-  const archivePath = join(tmpDir, archiveName);
+  const archivePath = join(tmpDir, assetName);
 
   try {
-    await downloadFile(downloadUrl, archivePath, platformSpec.sha256);
+    await downloadDwsReleaseAsset(bundled, assetName, platformSpec, archivePath, platformSpec.sha256);
     const extractDir = join(tmpDir, 'extract');
     mkdirSync(extractDir, { recursive: true });
     await extractArchive(archivePath, extractDir, archiveType);
