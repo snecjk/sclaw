@@ -26,6 +26,8 @@ export interface DwsPlatformAssetSpec {
   assetName?: string;
   url?: string;
   sha256?: string | null;
+  /** GitHub 回退下载时的校验值；Gitee URL 不应使用 sha256 字段校验。 */
+  githubSha256?: string | null;
   archive?: 'tar.gz' | 'zip';
   size?: number;
 }
@@ -38,6 +40,7 @@ export interface DwsManifestLike {
     assetName?: string;
     url?: string | null;
     sha256?: string | null;
+    githubSha256?: string | null;
   } | null;
   releaseUrl?: string | null;
 }
@@ -116,11 +119,12 @@ export async function pickDownloadSource(options: {
   fetchFn: FetchFn;
   githubRepo?: string;
 }): Promise<DwsDownloadSource> {
+  void options.fetchFn;
+  void options.githubRepo;
+  void options.manifest;
   if (getConfiguredGiteeRepo()) return 'gitee';
-  if (process.env.DWS_NO_FALLBACK === '1') return 'github';
-  const githubRepo = options.githubRepo || getGithubRepo(options.manifest);
-  const reachable = await probeGithubReachable(options.fetchFn, githubRepo);
-  return reachable ? 'github' : 'gitee';
+  if (process.env.DWS_NO_FALLBACK === '1') return 'gitee';
+  return 'gitee';
 }
 
 export function resolveActiveGiteeRepo(manifest?: DwsManifestLike | null): string {
@@ -189,6 +193,28 @@ export async function resolveAssetDownloadUrl(options: {
   return { url, source: 'github', githubRepo };
 }
 
+export function isGiteeAssetUrl(url: string): boolean {
+  try {
+    return new URL(url).hostname.toLowerCase().includes('gitee.com');
+  } catch {
+    return false;
+  }
+}
+
+export interface DwsAssetChecksumSpec {
+  sha256?: string | null;
+  githubSha256?: string | null;
+}
+
+/** Gitee 镜像包体与 GitHub 可能不一致，仅对 GitHub URL 做 sha256 校验。 */
+export function resolveSha256ForDownloadUrl(
+  url: string,
+  assetSpec?: DwsAssetChecksumSpec | null,
+): string | null {
+  if (!assetSpec || isGiteeAssetUrl(url)) return null;
+  return assetSpec.githubSha256 ?? assetSpec.sha256 ?? null;
+}
+
 export async function resolveAssetDownloadUrlWithFallback(options: {
   manifest?: DwsManifestLike | null;
   version: string;
@@ -218,9 +244,10 @@ export async function resolveAssetDownloadUrlWithFallback(options: {
       fetchFn: options.fetchFn,
     });
   } catch (primaryError) {
-    if (source !== 'github') throw primaryError;
-    const giteeRepo = resolveActiveGiteeRepo(options.manifest);
-    const url = await resolveGiteeAssetUrl(giteeRepo, options.version, options.assetName, options.fetchFn);
-    return { url, source: 'gitee', giteeRepo, fallbackFrom: 'github' };
+    if (source !== 'gitee' || process.env.DWS_NO_FALLBACK === '1') throw primaryError;
+    const githubRepo = getGithubRepo(options.manifest);
+    const url = options.platformSpec?.url
+      || buildGithubDirectAssetUrl(githubRepo, options.version, options.assetName);
+    return { url, source: 'github', githubRepo, fallbackFrom: 'gitee' };
   }
 }

@@ -69,8 +69,6 @@ export interface UpdateStatus {
   resolveFailure?: ResolveFailureReason | null;
 }
 
-type StoUpdateInfo = UpdateInfo & { title?: string | null };
-
 export interface UpdaterEvents {
   'status-changed': (status: UpdateStatus) => void;
   'checking-for-update': () => void;
@@ -148,10 +146,6 @@ export class AppUpdater extends EventEmitter {
   private _currentChannel = '';
   /** 最近一次 resolve API 的 URL（用于诊断日志）。 */
   private _lastResolveUrl = '';
-
-  /** memory-center resolve 返回的发版单标题 / 变更说明 */
-  private _policyReleaseTitle: string | null = null;
-  private _policyReleaseChangelog: string | null = null;
 
   /** Delay (in seconds) before auto-installing a downloaded update. */
   private static readonly AUTO_INSTALL_DELAY_SECONDS = 5;
@@ -292,11 +286,6 @@ export class AppUpdater extends EventEmitter {
     }
 
     const data = result.data;
-    this.setPolicyReleaseNotes(
-      data.update_offered
-        ? { title: data.title ?? null, changelog: data.changelog ?? null }
-        : undefined,
-    );
     const checkIntervalSec = clampCheckIntervalSec(data.check_interval_seconds);
     this.nextCheckIntervalMs = checkIntervalSec * 1000;
 
@@ -541,43 +530,10 @@ export class AppUpdater extends EventEmitter {
     });
   }
 
-  private setPolicyReleaseNotes(
-    data?: { title?: string | null; changelog?: string | null },
-  ): void {
-    if (!data) {
-      this._policyReleaseTitle = null;
-      this._policyReleaseChangelog = null;
-      return;
-    }
-    this._policyReleaseTitle = data.title?.trim() || null;
-    this._policyReleaseChangelog = data.changelog?.trim() || null;
-  }
-
-  private enrichUpdateInfo(info?: UpdateInfo | null): StoUpdateInfo | undefined {
-    if (!info) return undefined;
-    const releaseNotes =
-      (typeof info.releaseNotes === 'string' && info.releaseNotes.trim()) ||
-      this._policyReleaseChangelog ||
-      undefined;
-    const title = this._policyReleaseTitle || undefined;
-    return {
-      ...info,
-      releaseNotes: releaseNotes ?? info.releaseNotes ?? null,
-      ...(title ? { title } : {}),
-    };
-  }
-
   private updateStatus(newStatus: Partial<UpdateStatus>): void {
-    const nextInfo =
-      newStatus.info !== undefined
-        ? newStatus.info
-          ? this.enrichUpdateInfo(newStatus.info as UpdateInfo)
-          : newStatus.info
-        : this.status.info;
-
     this.status = {
       status: newStatus.status ?? this.status.status,
-      info: nextInfo,
+      info: newStatus.info !== undefined ? newStatus.info : this.status.info,
       progress: newStatus.progress !== undefined ? newStatus.progress : this.status.progress,
       error: newStatus.error !== undefined ? newStatus.error : this.status.error,
       policyBlocked:

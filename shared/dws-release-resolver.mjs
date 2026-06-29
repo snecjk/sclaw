@@ -114,17 +114,16 @@ export async function probeGithubReachable(fetchFn, githubRepo = DEFAULT_GITHUB_
 }
 
 /**
+ * StoClaw 默认 Gitee 优先；DWS_GITEE_REPO 显式指定时同样走 Gitee。
+ * DWS_NO_FALLBACK=1 时仅用 Gitee，不回退 GitHub。
  * @returns {'github' | 'gitee'}
  */
 export async function pickDownloadSource({ manifest, fetchFn, githubRepo = DEFAULT_GITHUB_REPO } = {}) {
-  const forcedGitee = getConfiguredGiteeRepo();
-  if (forcedGitee) return 'gitee';
-
-  if (process.env.DWS_NO_FALLBACK === '1') return 'github';
-
-  const reachable = await probeGithubReachable(fetchFn, githubRepo);
-  if (reachable) return 'github';
-
+  void fetchFn;
+  void githubRepo;
+  void manifest;
+  if (getConfiguredGiteeRepo()) return 'gitee';
+  if (process.env.DWS_NO_FALLBACK === '1') return 'gitee';
   return 'gitee';
 }
 
@@ -229,11 +228,65 @@ export async function resolveAssetDownloadUrlWithFallback({
       fetchFn,
     });
   } catch (primaryError) {
-    if (source !== 'github') throw primaryError;
-    const giteeRepo = resolveActiveGiteeRepo(manifest);
-    const url = await resolveGiteeAssetUrl(giteeRepo, version, assetName, fetchFn);
-    return { url, source: 'gitee', giteeRepo, fallbackFrom: 'github' };
+    if (source !== 'gitee' || process.env.DWS_NO_FALLBACK === '1') throw primaryError;
+    const githubRepo = getGithubRepo(manifest);
+    const url = platformSpec?.url || buildGithubDirectAssetUrl(githubRepo, version, assetName);
+    return { url, source: 'github', githubRepo, fallbackFrom: 'gitee' };
   }
+}
+
+export function isGiteeAssetUrl(url) {
+  try {
+    return new URL(url).hostname.toLowerCase().includes('gitee.com');
+  } catch {
+    return false;
+  }
+}
+
+/** Gitee 镜像包体与 GitHub 可能不一致，仅对 GitHub URL 做 sha256 校验。 */
+export function resolveSha256ForDownloadUrl(url, assetSpec) {
+  if (!assetSpec || isGiteeAssetUrl(url)) return null;
+  return assetSpec.githubSha256 ?? assetSpec.sha256 ?? null;
+}
+
+export async function enrichManifestGithubFallbackChecksums(manifest, githubRepo, version, fetchFn) {
+  try {
+    const release = await fetchGithubRelease(githubRepo, version, fetchFn);
+    const assets = release.assets || [];
+    for (const spec of Object.values(manifest.platforms)) {
+      try {
+        const picked = pickAssetFromGithubRelease(assets, spec.assetName);
+        if (picked.sha256) {
+          spec.githubSha256 = picked.sha256;
+        }
+        if (isGiteeAssetUrl(spec.url)) {
+          spec.sha256 = null;
+        }
+      } catch {
+        // ignore per-platform
+      }
+    }
+    if (manifest.skillsZip?.assetName) {
+      try {
+        const picked = pickAssetFromGithubRelease(assets, manifest.skillsZip.assetName);
+        if (picked.sha256) {
+          manifest.skillsZip.githubSha256 = picked.sha256;
+        }
+        if (manifest.skillsZip.url && isGiteeAssetUrl(manifest.skillsZip.url)) {
+          manifest.skillsZip.sha256 = null;
+        }
+      } catch {
+        // ignore
+      }
+    }
+  } catch {
+    // GitHub API 不可用时 Gitee 安装跳过 sha256
+  }
+}
+
+/** @deprecated 使用 enrichManifestGithubFallbackChecksums */
+export async function enrichManifestSha256FromGithub(manifest, githubRepo, version, fetchFn) {
+  return enrichManifestGithubFallbackChecksums(manifest, githubRepo, version, fetchFn);
 }
 
 export function buildManifestFromRelease({
