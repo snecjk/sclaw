@@ -3155,7 +3155,11 @@ export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null
   const state = useChatStore.getState();
   const targetKey = sessionKey ?? state.currentSessionKey;
   const engineType = resolveEngineTypeForSession(state.sessions, targetKey, state.currentAgentId);
-  if (engineType !== 'openclaw') return;
+  // Finalize on agent.completed for both agentic engines. Claude runs whose
+  // terminal 'final' event lacks phase=completed are treated as non-terminal
+  // fragments (see resolveAssistantFinalTerminalState), so they rely on this
+  // path to clear sending. Without it the spinner stays stuck after the run.
+  if (engineType !== 'openclaw' && engineType !== 'claude') return;
 
   clearHistoryPoll();
   useChatStore.setState((prev) => patchSessionRuntimeState(prev, targetKey, {
