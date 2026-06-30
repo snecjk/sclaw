@@ -454,8 +454,8 @@ function SidebarScheduledTaskGroup({
       && readSessionUnread(unreadKeys, session.key),
   );
 
-  // Strip common prefixes from group name for cleaner display
-  const displayName = name.replace(/^Cron:\s*/i, '').replace(/^定时任务\s*/i, '');
+  // Strip Gateway technical prefix only; keep user-defined names like「定时任务测试」intact.
+  const displayName = name.replace(/^Cron:\s*/i, '');
 
   // 按日期统计当天会话数量，用于决定用哪种日期格式
   const dayCounts = new Map<string, number>();
