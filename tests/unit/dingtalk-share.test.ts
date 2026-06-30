@@ -6,7 +6,11 @@ import {
   DINGTALK_SHARE_APPLINK_PATH,
   DINGTALK_SHARE_DEEPLINK_ORIGIN,
 } from '../../shared/dingtalk-share';
-import { buildArtifactShareDraft } from '../../src/lib/dingtalk-share';
+import {
+  buildArtifactShareDialogDraft,
+  buildArtifactShareDraft,
+  truncateConversationPreview,
+} from '../../src/lib/dingtalk-share';
 
 describe('buildDingTalkShareDefaultMsg', () => {
   it('builds text only', () => {
@@ -73,6 +77,28 @@ describe('buildDingTalkShareAppLinkUrl', () => {
   });
 });
 
+describe('truncateConversationPreview', () => {
+  it('keeps up to two lines and appends ellipsis', () => {
+    const preview = truncateConversationPreview('第一行\n第二行\n第三行');
+    expect(preview).toBe('第一行\n第二行...');
+  });
+
+  it('wraps a long single paragraph into two lines', () => {
+    const preview = truncateConversationPreview(
+      '申通快递（002468.SZ）深度分析摘要：公司基本面稳健增长，盈利能力持续改善，估值处于合理区间。报告已生成并通过质量检查。更多详细内容请查看附件产物。',
+    );
+    expect(preview.split('\n').length).toBe(2);
+    expect(preview.length).toBeGreaterThan(52);
+  });
+
+  it('truncates very long single line', () => {
+    const preview = truncateConversationPreview('a'.repeat(200));
+    expect(preview.endsWith('...')).toBe(true);
+    expect(preview.split('\n').length).toBe(2);
+    expect(preview.length).toBeLessThan(120);
+  });
+});
+
 describe('buildArtifactShareDraft', () => {
   it('uses public url as-is', () => {
     const draft = buildArtifactShareDraft({
@@ -85,12 +111,27 @@ describe('buildArtifactShareDraft', () => {
     expect(draft.isLocalServeUrl).toBe(false);
   });
 
-  it('builds local serve url for workspace files', () => {
+  it('marks local files without serve url', () => {
     const draft = buildArtifactShareDraft({
       fileName: 'demo-dashboard.html',
       filePath: '/tmp/demo-dashboard.html',
     });
-    expect(draft.url).toContain('/api/files/serve?path=');
+    expect(draft.url).toBe('');
     expect(draft.isLocalServeUrl).toBe(true);
+  });
+});
+
+describe('buildArtifactShareDialogDraft', () => {
+  it('builds artifact card draft', () => {
+    const draft = buildArtifactShareDialogDraft({
+      fileName: '每周总部对账单.html',
+      filePath: 'https://cdn.example.com/report.html',
+      mimeType: 'text/html',
+    }, (key) => key);
+    expect(draft.kind).toBe('artifact');
+    if (draft.kind === 'artifact') {
+      expect(draft.title).toBe('每周总部对账单');
+      expect(draft.filePath).toBe('https://cdn.example.com/report.html');
+    }
   });
 });

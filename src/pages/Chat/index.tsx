@@ -33,8 +33,10 @@ import { cn } from '@/lib/utils';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
 import {
   stoParameterFormDockLayout,
-  stoSplitChatScrollClass,
+  stoChatColumnContentTrackClass,
   stoChatScrollContentClass,
+  stoChatScrollPaneClass,
+  stoChatScrollPaneSplitClass,
   stoSplitGridBodyChatClass,
   stoSplitGridBodyPreviewClass,
   stoSplitGridBodyResizerClass,
@@ -43,7 +45,6 @@ import {
 } from '@/lib/surfaces';
 import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
 import { useSettingsStore } from '@/stores/settings';
-import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { useBuiltinToolListener } from '@/hooks/use-builtin-tool-listener';
@@ -73,7 +74,6 @@ export function Chat() {
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
-  const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
   const agents = useAgentsStore((s) => s.agents);
@@ -159,7 +159,7 @@ export function Chat() {
     : null;
   const streamText = streamMsg ? extractText(streamMsg) : (typeof streamingMessage === 'string' ? streamingMessage : '');
 
-  const { staticItems, activeTurn, shouldRenderStreaming, hasAnyStreamContent } = useChatDisplay({
+  const { staticItems, activeTurn, shouldRenderStreaming } = useChatDisplay({
     messages,
     sending,
     pendingFinal,
@@ -192,16 +192,13 @@ export function Chat() {
     ],
   );
 
-  const { beginSendScroll, scrollToLatest } = useChatScrollFollow({
-    scrollRef,
-    contentRef,
-    scrollToBottom,
-    stopScroll,
-    sending,
-    lastUserMessageAt,
-    hasStreamContent: hasAnyStreamContent || !!activeTurn,
-    streamContentKey,
-  });
+  const scrollToLatest = useCallback(
+    (behavior: ScrollBehavior | 'auto' = 'smooth') => {
+      scrollToBottom(behavior);
+      setShowJumpToLatest(false);
+    },
+    [scrollToBottom],
+  );
 
   const isEmpty = messages.length === 0 && !sending;
 
@@ -326,7 +323,6 @@ export function Chat() {
     dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[],
     workflowId?: string | null,
   ) => {
-    beginSendScroll();
     const { dispatchChatSend } = await import('@/hooks/dispatch-chat-send');
     await dispatchChatSend({
       text,
@@ -337,7 +333,7 @@ export function Chat() {
       skipQuestionSplit: !!(dingTalkMentions && dingTalkMentions.length > 0),
       onSplittingChange: setSplitting,
     });
-  }, [beginSendScroll]);
+  }, []);
 
   const handleQueue = useCallback((
     text: string,
@@ -488,9 +484,9 @@ export function Chat() {
 
   // Auto-send watcher: sends queued messages one-by-one when AI finishes responding
   useEffect(() => {
-    const unsub = createAutoSendWatcher(() => scrollToLatest('auto'));
+    const unsub = createAutoSendWatcher(() => scrollToBottom('auto'));
     return unsub;
-  }, [scrollToLatest]);
+  }, [scrollToBottom]);
 
   return (
     <>
@@ -517,14 +513,15 @@ export function Chat() {
       {/* Messages Area */}
       <div
         ref={scrollRef}
-        className={cn(
-          'relative z-10 min-h-0 flex-1 py-4',
-          isSplitChatLayout
-            ? stoSplitChatScrollClass
-            : 'overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
-        )}
+        className={isSplitChatLayout ? stoChatScrollPaneSplitClass : stoChatScrollPaneClass}
       >
-        <div ref={contentRef} className={stoChatScrollContentClass}>
+        <div
+          ref={contentRef}
+          className={cn(
+            stoChatScrollContentClass,
+            stoChatColumnContentTrackClass('page', isSplitChatLayout),
+          )}
+        >
           {isEmpty ? (
             <WelcomeScreen />
           ) : (
@@ -580,6 +577,8 @@ export function Chat() {
         </div>
       </div>
 
+      <div className="relative z-10 w-full shrink-0">
+        <div className={stoChatColumnContentTrackClass('page', isSplitChatLayout)}>
       {/* Error bar */}
       {error && (
         <div className="bg-destructive/10 border-t border-destructive/20 py-2">
@@ -652,9 +651,7 @@ export function Chat() {
       />
 
       {/* Parameter form dock — 任务二：吸附输入框上方固定浮层 */}
-      <div className="relative z-10 w-full shrink-0">
-        <ParameterFormDock layout={stoParameterFormDockLayout('page')} />
-      </div>
+      <ParameterFormDock layout={stoParameterFormDockLayout('page')} />
 
       {/* Input Area */}
       <ChatInput
@@ -677,6 +674,9 @@ export function Chat() {
           </div>
         )}
       />
+
+        </div>
+      </div>
 
       {/* Transparent loading overlay */}
       {minLoading && !sending && (

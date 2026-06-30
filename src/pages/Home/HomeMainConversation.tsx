@@ -19,8 +19,10 @@ import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
 import {
-  stoSplitChatScrollClass,
+  stoChatColumnContentTrackClass,
   stoChatScrollContentClass,
+  stoChatScrollPaneClass,
+  stoChatScrollPaneSplitClass,
   stoSplitGridBodyChatClass,
   stoSplitGridBodyPreviewClass,
   stoSplitGridBodyResizerClass,
@@ -398,14 +400,15 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
       >
       <div
         ref={scrollRef}
-        className={cn(
-          'relative z-10 min-h-0 flex-1 py-4',
-          isSplitChatLayout
-            ? stoSplitChatScrollClass
-            : 'overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
-        )}
+        className={isSplitChatLayout ? stoChatScrollPaneSplitClass : stoChatScrollPaneClass}
       >
-        <div ref={contentRef} className={stoChatScrollContentClass}>
+        <div
+          ref={contentRef}
+          className={cn(
+            stoChatScrollContentClass,
+            stoChatColumnContentTrackClass('home', isSplitChatLayout),
+          )}
+        >
           {showLoadingPlaceholder ? (
             <div className="flex justify-center py-12 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
@@ -459,6 +462,8 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
         </div>
       </div>
 
+      <div className="relative z-10 w-full shrink-0">
+        <div className={stoChatColumnContentTrackClass('home', isSplitChatLayout)}>
       {error ? (
         <div className="shrink-0 border-t border-destructive/20 bg-destructive/10 py-2">
           <div className="flex items-center justify-between">
@@ -503,11 +508,11 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
         </div>
       </div>
 
-      <div className="relative z-10 w-full shrink-0">
-        <HomeComposer
-          seedText={effectiveComposerSeed}
-          onSend={onSend}
-        />
+      <HomeComposer
+        seedText={effectiveComposerSeed}
+        onSend={onSend}
+      />
+        </div>
       </div>
 
       {minLoading && !sending ? (

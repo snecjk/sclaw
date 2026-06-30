@@ -88,7 +88,8 @@
         "thinkingProcessTitle": "思考过程",
         "deepThinkingLabel": "深度思考",
         "collapsedSummary": "思考 {{thoughtCount}} 次，使用 {{toolCount}} 个工具",
-        "invokeToolLabel": "调用工具 – {{toolName}}",
+        "invokeToolLabel": "调用工具-{{toolName}}",
+        "toolNoParams": "无参数",
         "paramsConfirmedLabel": "参数已确认",
         "toolCallLabel": "工具调用 {{index}}",
         "processMessageLabel": "过程消息 {{count}}",
@@ -114,6 +115,7 @@
     "messageActions": {
         "copy": "复制",
         "copyFailed": "复制失败",
+        "share": "分享到钉钉",
         "editAndResend": "编辑再次发送",
         "editUnavailable": "当前页面暂不支持编辑再次发送"
     },
@@ -184,14 +186,15 @@
         "emptyHintSub": "或从上方选择产物",
         "dismissTab": "关闭此产物",
         "shareDialog": {
+            "artifactTitle": "分享产物",
+            "artifactDescription": "分享至钉钉联系人或钉钉群",
+            "conversationTitle": "分享对话",
+            "conversationDescription": "确认分享内容后，将唤起钉钉选人窗口。",
             "title": "分享到钉钉",
             "description": "确认分享内容后，将唤起钉钉选人窗口。",
-            "fieldTitle": "标题",
-            "fieldBody": "正文",
-            "fieldLink": "链接",
-            "localUrlHint": "当前链接为本机预览地址，仅在同一网络内可访问的同事可能无法打开。",
             "cancel": "取消",
             "confirm": "确认分享",
+            "uploading": "正在上传…",
             "success": "已唤起钉钉选人窗口",
             "failed": "分享失败，请稍后重试"
         }

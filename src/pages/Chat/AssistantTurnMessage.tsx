@@ -274,13 +274,14 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       isProcessing={isProcessing}
       isStillExecuting={isStillExecuting}
       streamingTools={streamingTools}
+      hasReplyBody={replyDisplayHasText}
       connectingLabelKey={connectingLabelKey}
     />
   ) : null;
 
   if (((replyDisplayHasText || chatDisplayHasWorkflowCard) && chatDisplayMessageWithTimestamp) || hasPreambleMessages) {
     return (
-      <div className="flex w-full flex-col gap-2" data-chat-message-role="assistant">
+      <div className="flex w-full flex-col gap-4" data-chat-message-role="assistant">
         {thinkingPanelEl}
         {hasDingTalkSentPreview ? (
           <DingTalkSentPreview previews={dingTalkSentPreviews} />
@@ -296,6 +297,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
             onEditMessage={onEditMessage}
             hideAvatar
             hideThinkingPanel
+            suppressToolCards={showThinking}
           />
         ))}
         {replyDisplayHasText || chatDisplayHasWorkflowCard ? (
@@ -312,6 +314,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
             onEditMessage={onEditMessage}
             hideAvatar
             hideThinkingPanel
+            suppressToolCards={showThinking}
           />
           ) : null
         ) : null}
@@ -323,7 +326,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
   if (hasDingTalkSentPreview) {
     return (
-      <div className="flex w-full flex-col gap-2" data-chat-message-role="assistant">
+      <div className="flex w-full flex-col gap-4" data-chat-message-role="assistant">
         {thinkingPanelEl}
         <DingTalkSentPreview previews={dingTalkSentPreviews} />
       </div>
