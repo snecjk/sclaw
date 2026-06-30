@@ -1222,14 +1222,17 @@ export const useChatStore = create<ChatState>()(
 
   // ── Load sessions via sessions.list ──
 
-  loadSessions: async () => {
+  loadSessions: async (options?: { force?: boolean }) => {
+    const force = options?.force === true;
     const now = Date.now();
     if (_loadSessionsInFlight) {
       await _loadSessionsInFlight;
-      scheduleSessionLabelHydrationFromStore(set, get);
-      return;
+      if (!force) {
+        scheduleSessionLabelHydrationFromStore(set, get);
+        return;
+      }
     }
-    if (now - _lastLoadSessionsAt < SESSION_LOAD_MIN_INTERVAL_MS) {
+    if (!force && now - _lastLoadSessionsAt < SESSION_LOAD_MIN_INTERVAL_MS) {
       scheduleSessionLabelHydrationFromStore(set, get);
       return;
     }
@@ -1670,7 +1673,7 @@ export const useChatStore = create<ChatState>()(
         sidebarRecentOrder: removeSidebarRecentOrderKey(s.sidebarRecentOrder, key),
       }));
     }
-    void get().loadSessions();
+    await get().loadSessions({ force: true });
     return true;
   },
 

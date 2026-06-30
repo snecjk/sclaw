@@ -206,7 +206,7 @@ export interface ChatState {
   clearPendingWorkflow: () => void;
 
   // Actions
-  loadSessions: () => Promise<void>;
+  loadSessions: (options?: { force?: boolean }) => Promise<void>;
   switchSession: (key: string) => void;
   /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
   switchToAgentMainSession: (agentId: string) => void;
