@@ -198,7 +198,7 @@
     "autoDownloadDesc": "自动下载并安装更新",
     "status": {
       "checking": "正在检查更新...",
-      "downloading": "正在下载更新...",
+      "downloading": "正在下载更新 v{{version}} 版本",
       "available": "可用更新：v{{version}}",
       "downloaded": "准备安装：v{{version}}",
       "autoInstalling": "将在 {{seconds}} 秒后自动开始安装...",
