@@ -1288,19 +1288,38 @@ export const useChatStore = create<ChatState>()(
           const cronDated = new Set<string>();
           const scheduledTaskDated = new Set<string>();
           const claudeTaskDated = new Set<string>();
+          // Most-recent dated aggregate key per task/job. Key order is lexicographic
+          // == chronological for `...:{YYYY-MM-DD}` suffixes, so the greatest key is
+          // today's. Used to redirect an active base/run key to its dated aggregate
+          // below, so the dated-supersedes-base rule also governs the active session.
+          const claudeTaskDatedKeyByTask = new Map<string, string>();
+          const cronDatedKeyByJob = new Map<string, string>();
+          const scheduledTaskDatedKeyByTask = new Map<number, string>();
           for (const session of sessions) {
             const cronParts = parseCronSessionKey(session.key);
             if (cronParts && cronParts.date) {
               cronDated.add(`agent:main:cron:${cronParts.jobId}`);
+              const prev = cronDatedKeyByJob.get(cronParts.jobId);
+              if (!prev || session.key > prev) {
+                cronDatedKeyByJob.set(cronParts.jobId, session.key);
+              }
             }
             const stParts = parseScheduledTaskAgentSessionKey(session.key);
             if (stParts && stParts.date) {
               scheduledTaskDated.add(`agent:main:scheduled-task:${stParts.taskId}`);
+              const prev = scheduledTaskDatedKeyByTask.get(stParts.taskId);
+              if (!prev || session.key > prev) {
+                scheduledTaskDatedKeyByTask.set(stParts.taskId, session.key);
+              }
             }
             // Claude dated aggregate: claude-task:{taskId}:{YYYY-MM-DD}
             const claudeParts = parseClaudeScheduledTaskSessionKey(session.key);
             if (claudeParts && claudeParts.date) {
               claudeTaskDated.add(`claude-task:${claudeParts.taskId}`);
+              const prev = claudeTaskDatedKeyByTask.get(claudeParts.taskId);
+              if (!prev || session.key > prev) {
+                claudeTaskDatedKeyByTask.set(claudeParts.taskId, session.key);
+              }
             }
           }
 
@@ -1394,6 +1413,43 @@ export const useChatStore = create<ChatState>()(
             const canonicalMatch = canonicalBySuffix.get(nextSessionKey);
             if (canonicalMatch) {
               nextSessionKey = canonicalMatch;
+            }
+          }
+          // If the active session is a claude-task / cron / scheduled-task base or
+          // run key that has been superseded by a dated aggregate, redirect to that
+          // dated key. Without this, sessionsWithCurrent below re-appends the
+          // filtered-out base key and the sidebar shows two same-named entries
+          // (dated + base). The loadHistory() call at the tail of loadSessions
+          // reloads the dated aggregate's history, mirroring the canonical redirect
+          // above.
+          {
+            const claudeBase = parseClaudeScheduledTaskSessionKey(nextSessionKey);
+            const claudeRun = parseClaudeScheduledTaskRunSessionKey(nextSessionKey);
+            const claudeTaskId = claudeBase?.taskId ?? claudeRun?.taskId;
+            if ((Boolean(claudeRun) || Boolean(claudeBase && !claudeBase.date)) && claudeTaskId) {
+              const datedKey = claudeTaskDatedKeyByTask.get(claudeTaskId);
+              if (datedKey && mergedSessions.some((s) => s.key === datedKey)) {
+                nextSessionKey = datedKey;
+              }
+            }
+            const cronParts = parseCronSessionKey(nextSessionKey);
+            if (cronParts && (cronParts.runSessionId || !cronParts.date)) {
+              const datedKey = cronDatedKeyByJob.get(cronParts.jobId);
+              if (datedKey && mergedSessions.some((s) => s.key === datedKey)) {
+                nextSessionKey = datedKey;
+              }
+            }
+            if (nextSessionKey.startsWith('agent:')) {
+              const stParts = nextSessionKey.split(':');
+              if (stParts.length === 4 && stParts[2] === 'scheduled-task') {
+                const stTaskId = Number(stParts[3]);
+                if (!Number.isNaN(stTaskId)) {
+                  const datedKey = scheduledTaskDatedKeyByTask.get(stTaskId);
+                  if (datedKey && mergedSessions.some((s) => s.key === datedKey)) {
+                    nextSessionKey = datedKey;
+                  }
+                }
+              }
             }
           }
           if (!mergedSessions.find((s) => s.key === nextSessionKey) && mergedSessions.length > 0) {
