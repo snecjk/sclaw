@@ -170,7 +170,9 @@ export class ClaudeScheduledTaskService {
   constructor(private readonly scheduler = new ClaudeTaskScheduler()) {}
 
   startScheduler(): void {
-    this.scheduler.start();
+    // 先丢弃关机期间错过/崩溃中断的任务（推进 nextRunAt + 清 stale lease），
+    // 再启动 tick。finally 保证即使清扫抛异常调度器仍会启动。
+    void this.scheduler.discardMissedOnStartup().finally(() => this.scheduler.start());
   }
 
   stopScheduler(): void {
