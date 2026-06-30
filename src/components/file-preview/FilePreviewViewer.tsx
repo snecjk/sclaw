@@ -10,8 +10,14 @@ import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { hostApiFetch, getHostApiBase } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
+import { previewBridgeHttpFetch } from '@/lib/preview-bridge-fetch';
 import { isExtensionlessWebUrl, isHttpUrl, isRemoteFileHtmlUrl, normalizeLocalFilePath } from '@/lib/preview-url';
 import { resolvePreviewPathOnHost } from '@/lib/preview-href';
+import {
+  HTML_PREVIEW_IFRAME_SANDBOX,
+  isPreviewHttpFetchMessage,
+  preparePreviewSrcDoc,
+} from '@/lib/preview-srcdoc';
 // @ts-ignore — highlight.js v10 ships without bundled .d.ts
 import hljs from 'highlight.js';
 import 'highlight.js/styles/atom-one-dark.css';
@@ -465,12 +471,12 @@ export function FilePreviewViewer({
           }
           if (htmlContent) {
             return (
-              <iframe
+              <RemoteSrcDocPreview
                 key={filePath}
-                srcDoc={htmlContent}
-                title={fileName}
-                className={cn('h-full min-h-0 w-full border-0', className)}
-                sandbox="allow-scripts allow-same-origin allow-popups"
+                html={htmlContent}
+                sourceUrl={filePath}
+                fileName={fileName}
+                className={className}
               />
             );
           }
@@ -902,6 +908,104 @@ function MarkdownPreviewPane({ content, className }: { content: string; classNam
   );
 }
 
+function RemoteSrcDocPreview({
+  html,
+  sourceUrl,
+  fileName,
+  className,
+}: {
+  html: string;
+  sourceUrl: string;
+  fileName: string;
+  className?: string;
+}) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const srcDoc = useMemo(() => preparePreviewSrcDoc(html, sourceUrl), [html, sourceUrl]);
+
+  useEffect(() => {
+    let artifactOrigin = '';
+    try {
+      artifactOrigin = new URL(sourceUrl).origin;
+    } catch {
+      return;
+    }
+
+    const onMessage = (event: MessageEvent) => {
+      if (iframeRef.current?.contentWindow !== event.source) return;
+      if (!isPreviewHttpFetchMessage(event.data)) return;
+
+      let targetOrigin = '';
+      try {
+        targetOrigin = new URL(event.data.url).origin;
+      } catch {
+        event.source?.postMessage({
+          type: 'preview-http-fetch-response',
+          requestId: event.data.requestId,
+          error: 'Invalid fetch URL',
+        }, { targetOrigin: '*' });
+        return;
+      }
+
+      if (!artifactOrigin || artifactOrigin !== targetOrigin) {
+        event.source?.postMessage({
+          type: 'preview-http-fetch-response',
+          requestId: event.data.requestId,
+          error: 'Preview fetch blocked: origin mismatch',
+        }, { targetOrigin: '*' });
+        return;
+      }
+
+      void (async () => {
+        try {
+          const result = await previewBridgeHttpFetch({
+            url: event.data.url,
+            allowedOrigin: artifactOrigin,
+            method: event.data.method,
+            headers: event.data.headers,
+            body: event.data.body,
+          });
+
+          if (!result?.ok) {
+            event.source?.postMessage({
+              type: 'preview-http-fetch-response',
+              requestId: event.data.requestId,
+              error: result?.error || 'Preview fetch failed',
+            }, { targetOrigin: '*' });
+            return;
+          }
+
+          event.source?.postMessage({
+            type: 'preview-http-fetch-response',
+            requestId: event.data.requestId,
+            status: result.status,
+            headers: result.headers,
+            bodyBase64: result.bodyBase64,
+          }, { targetOrigin: '*' });
+        } catch (error) {
+          event.source?.postMessage({
+            type: 'preview-http-fetch-response',
+            requestId: event.data.requestId,
+            error: error instanceof Error ? error.message : 'Preview fetch failed',
+          }, { targetOrigin: '*' });
+        }
+      })();
+    };
+
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [sourceUrl]);
+
+  return (
+    <iframe
+      ref={iframeRef}
+      srcDoc={srcDoc}
+      title={fileName}
+      className={cn('h-full min-h-0 w-full border-0', className)}
+      sandbox={HTML_PREVIEW_IFRAME_SANDBOX}
+    />
+  );
+}
+
 function HtmlIframeView({
   src,
   fileName,
@@ -917,7 +1021,7 @@ function HtmlIframeView({
       src={src}
       title={fileName}
       className={cn('h-full min-h-0 w-full border-0', className)}
-      sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+      sandbox={HTML_PREVIEW_IFRAME_SANDBOX}
     />
   );
 }
