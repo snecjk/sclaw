@@ -309,8 +309,9 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
         let resolvedSessionKey = String(sessionKey);
         // Map cron run session to its daily aggregate key so the sidebar shows
         // loading on the aggregate session instead of the temporary run session.
-        import('./chat/cron-session-utils').then(({ getCronRunSessionAggregateKey, parseCronSessionKey }) => {
-          const aggregateKey = getCronRunSessionAggregateKey(resolvedSessionKey);
+        import('./chat/cron-session-utils').then(({ getCronRunSessionAggregateKey, getClaudeTaskRunSessionAggregateKey, parseCronSessionKey }) => {
+          const aggregateKey = getCronRunSessionAggregateKey(resolvedSessionKey)
+            ?? getClaudeTaskRunSessionAggregateKey(resolvedSessionKey);
           if (aggregateKey) {
             resolvedSessionKey = aggregateKey;
           } else {
@@ -345,8 +346,10 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
       .then(({ useChatStore }) => {
         const state = useChatStore.getState();
         let resolvedSessionKey = sessionKey != null ? String(sessionKey) : null;
-        import('./chat/cron-session-utils').then(({ getCronRunSessionAggregateKey, parseCronSessionKey }) => {
-          const aggregateKey = resolvedSessionKey ? getCronRunSessionAggregateKey(resolvedSessionKey) : null;
+        import('./chat/cron-session-utils').then(({ getCronRunSessionAggregateKey, getClaudeTaskRunSessionAggregateKey, parseCronSessionKey }) => {
+          const aggregateKey = resolvedSessionKey
+            ? (getCronRunSessionAggregateKey(resolvedSessionKey) ?? getClaudeTaskRunSessionAggregateKey(resolvedSessionKey))
+            : null;
           if (aggregateKey) {
             resolvedSessionKey = aggregateKey;
           } else if (resolvedSessionKey) {
