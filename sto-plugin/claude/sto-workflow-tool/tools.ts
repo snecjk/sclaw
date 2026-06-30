@@ -269,9 +269,15 @@ export function createWorkflowTools(config: WorkflowConfig) {
     },
     async ({ templateId, query }) => runWorkflowTool("workflow_schema_ready", async () => {
       const resolved = await resolveTemplate(client, { templateId, query });
+      console.warn(
+        `[sto-workflow-tool] get_workflow_schema fetching startup-schema templateId=${resolved.templateId}${resolved.resolvedViaSearch ? ` query-match=${resolved.matchedLabel ?? ""}` : ""}`,
+      );
       const data = await client.fetchJson<StartupSchemaResponse>(
         `/agent/v1/workflow-templates/${encodeURIComponent(resolved.templateId)}/startup-schema`,
         { method: "GET" },
+      );
+      console.warn(
+        `[sto-workflow-tool] get_workflow_schema ok templateId=${data.templateId} schemaHash=${data.schemaHash} fields=${data.schema?.fields?.length ?? 0} steps=${data.schema?.steps?.length ?? 0}`,
       );
 
       return {

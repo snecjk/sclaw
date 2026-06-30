@@ -112,6 +112,7 @@
     "messageActions": {
         "copy": "コピー",
         "copyFailed": "コピーに失敗しました",
+        "share": "DingTalkで共有",
         "editAndResend": "編集して再送信",
         "editUnavailable": "このページでは編集して再送信を利用できません"
     },
@@ -177,14 +178,15 @@
         "emptyHintSub": "または上から成果物を選択",
         "dismissTab": "この成果物を閉じる",
         "shareDialog": {
+            "artifactTitle": "成果物を共有",
+            "artifactDescription": "DingTalkの連絡先またはグループに共有",
+            "conversationTitle": "会話を共有",
+            "conversationDescription": "内容を確認後、DingTalkの宛先選択画面を開きます。",
             "title": "DingTalkで共有",
             "description": "内容を確認後、DingTalkの宛先選択画面を開きます。",
-            "fieldTitle": "タイトル",
-            "fieldBody": "本文",
-            "fieldLink": "リンク",
-            "localUrlHint": "このリンクはローカルプレビュー用です。社外の同僚は開けない場合があります。",
             "cancel": "キャンセル",
             "confirm": "共有する",
+            "uploading": "アップロード中…",
             "success": "DingTalkの宛先選択を開きました",
             "failed": "共有に失敗しました。しばらくしてから再試行してください"
         }
