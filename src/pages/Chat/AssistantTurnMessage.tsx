@@ -3,7 +3,7 @@ import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
 import { ChatMessage } from './ChatMessage';
 import { appendWorkflowCardBlockToMessage, sessionHasParamsConfirmedWorkflowForRun } from '@/lib/workflow-card-injection';
-import { mergeThinkingTimelines, pickAssistantReplyMessage } from './chat-display';
+import { mergeThinkingTimelines, pickAssistantReplyMessage, findLastUserMessage } from './chat-display';
 import {
   extractDingTalkSentPreviews,
   stripEchoedDingTalkSentBodiesFromAssistantReply,
@@ -51,6 +51,57 @@ interface AssistantTurnMessageProps {
   onEditMessage?: (text: string) => void;
 }
 
+function normalizeMessageRole(role: unknown): string {
+  return String(role ?? '').toLowerCase();
+}
+
+/** Skip tool_result rows; they are merged into the turn via turnToolResults for display. */
+function isToolResultMessage(role: unknown): boolean {
+  const normalized = normalizeMessageRole(role);
+  return normalized === 'toolresult' || normalized === 'tool_result';
+}
+
+/**
+ * During an active run, build the thinking/tool timeline from live session messages
+ * (plus the in-flight stream buffer). Promoted turnMessages are tool_result snapshots
+ * and lag behind; pickTimelineSourceMessages can also fold away stream-only updates.
+ */
+function collectActiveTurnStreamSources(
+  sessionMessages: RawMessage[],
+  turnMessages: RawMessage[],
+  precedingUserMessage: RawMessage | null,
+  activeStream: ActiveTurnStream,
+): RawMessage[] {
+  const anchorUser = precedingUserMessage ?? findLastUserMessage(sessionMessages);
+  let startIndex = 0;
+  if (anchorUser) {
+    const byId = anchorUser.id
+      ? sessionMessages.findIndex((message) => message.id === anchorUser.id)
+      : -1;
+    startIndex = byId >= 0 ? byId + 1 : sessionMessages.indexOf(anchorUser) + 1;
+  }
+
+  const sources: RawMessage[] = [];
+  if (startIndex > 0) {
+    for (let i = startIndex; i < sessionMessages.length; i += 1) {
+      const message = sessionMessages[i];
+      if (normalizeMessageRole(message.role) === 'user') break;
+      if (isToolResultMessage(message.role)) continue;
+      sources.push(message);
+    }
+  }
+
+  if (sources.length === 0) {
+    sources.push(...turnMessages);
+  }
+
+  if (activeStream.streamMessage) {
+    sources.push(activeStream.streamMessage);
+  }
+
+  return sources;
+}
+
 export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   turnMessages,
   turnToolResults = [],
@@ -63,13 +114,17 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   onCreateScheduledTask,
   onEditMessage,
 }: AssistantTurnMessageProps) {
+  const sessionMessages = useChatStore((s) => s.messages);
+
   const streamSources = useMemo(() => {
-    const sources = [...turnMessages];
-    if (activeStream?.streamMessage) {
-      sources.push(activeStream.streamMessage);
-    }
-    return sources;
-  }, [turnMessages, activeStream]);
+    if (!activeStream) return turnMessages;
+    return collectActiveTurnStreamSources(
+      sessionMessages,
+      turnMessages,
+      precedingUserMessage,
+      activeStream,
+    );
+  }, [sessionMessages, turnMessages, precedingUserMessage, activeStream]);
 
   const mergedTimeline = useMemo(
     () => (showThinking ? mergeThinkingTimelines(streamSources) : []),
@@ -170,8 +225,6 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   const replyDisplayHasText = replyDisplayMessage
     ? extractText(replyDisplayMessage).trim().length > 0
     : false;
-
-  const sessionMessages = useChatStore((s) => s.messages);
 
   const chatDisplayMessage = useMemo(() => {
     if (!replyDisplayMessage) return null;

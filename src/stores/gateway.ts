@@ -246,13 +246,27 @@ function scheduleCompletedRunHistoryReload(runId: unknown, sessionKey: unknown):
   }
 }
 
-async function completeRunAfterAgentCompleted(sessionKey: string | null): Promise<void> {
+async function completeRunAfterAgentCompleted(
+  runId: unknown,
+  sessionKey: string | null,
+): Promise<void> {
+  const completionRunId = runId != null ? String(runId) : null;
   const { useChatStore, finalizeOpenClawRunAfterAgentCompleted } = await import('./chat');
-  const state = useChatStore.getState();
-  const matchesCurrentSession = sessionKey == null || sessionKey === state.currentSessionKey;
-  if (matchesCurrentSession) {
-    await state.loadHistory(true, true);
+  const before = useChatStore.getState();
+  const matchesCurrentSession = sessionKey == null || sessionKey === before.currentSessionKey;
+  const matchesActiveRun = completionRunId != null
+    && before.activeRunId != null
+    && completionRunId === before.activeRunId;
+
+  if (matchesCurrentSession || matchesActiveRun) {
+    await before.loadHistory(true, true);
   }
+
+  const after = useChatStore.getState();
+  if (completionRunId != null && after.activeRunId != null && completionRunId !== after.activeRunId) {
+    return;
+  }
+
   finalizeOpenClawRunAfterAgentCompleted(sessionKey);
 }
 
@@ -362,10 +376,10 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
             maybeLoadHistory(state, true);
           }
           if ((matchesCurrentSession || matchesActiveRun) && state.sending) {
-            void completeRunAfterAgentCompleted(resolvedSessionKey).catch(() => {});
+            void completeRunAfterAgentCompleted(runId, resolvedSessionKey).catch(() => {});
             scheduleCompletedRunHistoryReload(runId, resolvedSessionKey);
           } else if (resolvedSessionKey && hasBackgroundActiveRuntime) {
-            void completeRunAfterAgentCompleted(resolvedSessionKey).catch(() => {});
+            void completeRunAfterAgentCompleted(runId, resolvedSessionKey).catch(() => {});
             scheduleCompletedRunHistoryReload(runId, resolvedSessionKey);
           }
         }).catch(() => {});

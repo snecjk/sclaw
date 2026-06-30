@@ -113,9 +113,14 @@ function streamingToolKey(tool: StreamingTool): string {
 
 function buildCollapsedSummary(
   timeline: ThinkingTimelineItem[],
+  streamingTools: StreamingTool[],
+  isLive: boolean,
   t: (key: string, opts?: Record<string, unknown>) => string,
 ): string | null {
-  const toolCount = timeline.filter((item) => item.type === 'tool').length;
+  let toolCount = timeline.filter((item) => item.type === 'tool').length;
+  if (isLive && streamingTools.length > toolCount) {
+    toolCount = streamingTools.length;
+  }
   const thoughtCount = timeline.filter((item) => item.type === 'thinking').length;
   if (toolCount === 0 && thoughtCount === 0) return null;
   return t('streaming.collapsedSummary', { thoughtCount, toolCount });
@@ -225,8 +230,8 @@ export function ThinkingProcessPanel({
 
   const runningTool = streamingTools.find((tool) => tool.status === 'running');
   const collapsedSummary = useMemo(
-    () => buildCollapsedSummary(mergedTimeline, t),
-    [mergedTimeline, t],
+    () => buildCollapsedSummary(mergedTimeline, streamingTools, isStreaming, t),
+    [mergedTimeline, streamingTools, isStreaming, t],
   );
 
   const hasPanelBody =
