@@ -777,11 +777,18 @@ export function Sidebar() {
     }
   }, [workflowEditorActive, setSidebarCollapsed]);
 
-  useEffect(() => {
-    if (!taskListSectionOpen) {
-      setTaskListShowAll(false);
+  const closeTaskListSection = useCallback(() => {
+    setTaskListSectionOpen(false);
+    setTaskListShowAll(false);
+  }, []);
+
+  const toggleTaskListSection = useCallback(() => {
+    if (taskListSectionOpen) {
+      closeTaskListSection();
+    } else {
+      setTaskListSectionOpen(true);
     }
-  }, [taskListSectionOpen]);
+  }, [taskListSectionOpen, closeTaskListSection]);
 
   useEffect(() => {
     if (sidebarCollapsed) return;
@@ -789,8 +796,8 @@ export function Sidebar() {
   }, [sidebarCollapsed, sessions, stoEntriesByTask]);
 
   const handleCollapseTaskSectionFromScroll = useCallback(() => {
-    setTaskListSectionOpen(false);
-  }, []);
+    closeTaskListSection();
+  }, [closeTaskListSection]);
 
   const {
     scrollContainerRef,
@@ -1524,7 +1531,7 @@ export function Sidebar() {
             shellRef={taskSectionHeaderRef}
             stickyTopClass={sidebarSectionStickyTopTaskClass}
             open={taskListSectionOpen}
-            onToggle={() => setTaskListSectionOpen((o) => !o)}
+            onToggle={toggleTaskListSection}
             label={t('common:sidebar.taskList')}
             toggleAriaLabel={t('common:sidebar.toggleTaskListSection')}
           />
