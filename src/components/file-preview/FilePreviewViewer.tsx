@@ -11,7 +11,8 @@ import { cn } from '@/lib/utils';
 import { hostApiFetch, getHostApiBase } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { previewBridgeHttpFetch } from '@/lib/preview-bridge-fetch';
-import { isExtensionlessWebUrl, isHttpUrl, isRemoteFileHtmlUrl, normalizeLocalFilePath } from '@/lib/preview-url';
+import { isExtensionlessWebUrl, isHttpUrl, isRemoteFileHtmlUrl, normalizeLocalFilePath, resolvePreviewMimeType } from '@/lib/preview-url';
+import { loadPreviewBinary, uint8ArrayToArrayBuffer } from '@/lib/preview-binary-load';
 import { resolvePreviewPathOnHost } from '@/lib/preview-href';
 import {
   HTML_PREVIEW_IFRAME_SANDBOX,
@@ -106,6 +107,10 @@ export function FilePreviewViewer({
 }: FilePreviewViewerProps) {
   const [resolvedPath, setResolvedPath] = useState(() => normalizeLocalFilePath(rawFilePath));
   const filePath = useMemo(() => resolvedPath, [resolvedPath]);
+  const effectiveMime = useMemo(
+    () => resolvePreviewMimeType(mimeType, filePath, fileName),
+    [mimeType, filePath, fileName],
+  );
   const resolveAttemptedRef = useRef(false);
 
   useEffect(() => {
@@ -180,7 +185,7 @@ export function FilePreviewViewer({
   }, []);
 
   useEffect(() => {
-    if (mimeType !== 'text/markdown' || isHttpUrl(filePath)) {
+    if (effectiveMime !== 'text/markdown' || isHttpUrl(filePath)) {
       if (!isHttpUrl(filePath)) {
         setMdContent('');
         setMdError('');
@@ -220,16 +225,17 @@ export function FilePreviewViewer({
     return () => {
       cancelled = true;
     };
-  }, [filePath, mimeType, retryResolvePath]);
+  }, [filePath, effectiveMime, retryResolvePath]);
 
   // Load local plain text / code / json / csv / tsv files
   useEffect(() => {
-    const isText = !isHttpUrl(filePath) && (
-      mimeType === 'text/plain' ||
-      mimeType === 'application/json' ||
-      mimeType === 'text/csv' ||
-      mimeType === 'text/tab-separated-values' ||
-      isCodeFile(filePath, mimeType)
+    const office = isOfficeFile(effectiveMime, filePath);
+    const isText = !isHttpUrl(filePath) && !office.type && (
+      effectiveMime === 'text/plain' ||
+      effectiveMime === 'application/json' ||
+      effectiveMime === 'text/csv' ||
+      effectiveMime === 'text/tab-separated-values' ||
+      isCodeFile(filePath, effectiveMime)
     );
 
     if (!isText) {
@@ -270,12 +276,12 @@ export function FilePreviewViewer({
     return () => {
       cancelled = true;
     };
-  }, [filePath, mimeType, retryResolvePath]);
+  }, [filePath, effectiveMime, retryResolvePath]);
 
   // Fetch remote .html/.htm on OSS/CDN
   useEffect(() => {
     const shouldFetch = isHttpUrl(filePath)
-      && isHtmlFileType(mimeType, fileName, filePath)
+      && isHtmlFileType(effectiveMime, fileName, filePath)
       && isRemoteFileHtmlUrl(filePath);
     if (!shouldFetch) {
       setHtmlContent('');
@@ -304,12 +310,14 @@ export function FilePreviewViewer({
     return () => {
       cancelled = true;
     };
-  }, [filePath, mimeType, fileName]);
+  }, [filePath, effectiveMime, fileName]);
 
   // Load remote text/json/markdown from http(s) URLs (OSS/CDN)
   useEffect(() => {
-    const isRemoteTextFile = isHttpUrl(filePath)
-      && (mimeType === 'text/plain' || mimeType === 'application/json' || mimeType === 'text/csv' || mimeType === 'text/markdown');
+    const office = isOfficeFile(effectiveMime, filePath);
+    const isRemoteTextFile = isHttpUrl(filePath) && !office.type
+      && (effectiveMime === 'text/plain' || effectiveMime === 'application/json'
+        || effectiveMime === 'text/csv' || effectiveMime === 'text/markdown');
     if (!isRemoteTextFile) {
       if (isHttpUrl(filePath)) return;
       setTextContent('');
@@ -342,18 +350,11 @@ export function FilePreviewViewer({
     return () => {
       cancelled = true;
     };
-  }, [filePath, mimeType]);
+  }, [filePath, effectiveMime]);
 
-  // Load local Office files (Excel / Word / PPT)
+  // Load Office files (Excel / Word / PPT) — local paths and remote OSS URLs
   useEffect(() => {
-    if (isHttpUrl(filePath)) {
-      setOfficeData(null);
-      setOfficeLoading(false);
-      setOfficeError('');
-      return;
-    }
-
-    const office = isOfficeFile(mimeType, filePath);
+    const office = isOfficeFile(effectiveMime, filePath);
     if (!office.type) {
       setOfficeData(null);
       setOfficeLoading(false);
@@ -368,16 +369,7 @@ export function FilePreviewViewer({
 
     void (async () => {
       try {
-        const readRes = await hostApiFetch<{ content: string; encoding: string }>('/api/files/read', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filePath, encoding: 'base64' }),
-        });
-        const base64 = readRes?.content;
-        if (!base64) throw new Error('无法读取文件内容');
-        const binary = atob(base64);
-        const buffer = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) buffer[i] = binary.charCodeAt(i);
+        const buffer = await loadPreviewBinary(filePath);
 
         if (office.type === 'excel') {
           try {
@@ -394,7 +386,9 @@ export function FilePreviewViewer({
           try {
             // @ts-ignore
             const mammoth = await import(/* @vite-ignore */ 'mammoth');
-            const result = await mammoth.convertToHtml({ arrayBuffer: buffer.buffer });
+            const result = await mammoth.convertToHtml({
+              arrayBuffer: uint8ArrayToArrayBuffer(buffer),
+            });
             if (!cancelled) setOfficeData({ type: 'word', html: result.value });
           } catch {
             throw new Error('Word 预览库未安装（pnpm add mammoth）');
@@ -419,22 +413,23 @@ export function FilePreviewViewer({
     return () => {
       cancelled = true;
     };
-  }, [filePath, mimeType, retryResolvePath]);
+  }, [filePath, effectiveMime, retryResolvePath]);
 
   const tableData = useMemo(() => {
-    if (!textContent || (mimeType !== 'text/csv' && mimeType !== 'text/tab-separated-values')) return null;
-    const delimiter = mimeType === 'text/tab-separated-values' ? '\t' : ',';
+    if (isOfficeFile(effectiveMime, filePath).type) return null;
+    if (!textContent || (effectiveMime !== 'text/csv' && effectiveMime !== 'text/tab-separated-values')) return null;
+    const delimiter = effectiveMime === 'text/tab-separated-values' ? '\t' : ',';
     return textContent.split('\n').map((row) => row.split(delimiter));
-  }, [textContent, mimeType]);
+  }, [textContent, effectiveMime, filePath]);
 
   const highlightedHtml = useMemo(() => {
     if (!textContent) return '';
-    if (mimeType === 'text/csv' || mimeType === 'text/tab-separated-values') return '';
+    if (effectiveMime === 'text/csv' || effectiveMime === 'text/tab-separated-values') return '';
 
     const ext = filePath.split('.').pop()?.toLowerCase() || '';
     const lang = extToHljsLang(ext);
 
-    if (mimeType === 'application/json') {
+    if (effectiveMime === 'application/json') {
       try {
         const formatted = JSON.stringify(JSON.parse(textContent), null, 2);
         return hljs.highlight(formatted, { language: 'json' }).value;
@@ -447,17 +442,130 @@ export function FilePreviewViewer({
       return hljs.highlight(textContent, { language: lang }).value;
     }
 
-    if (isCodeFile(filePath, mimeType)) {
+    if (isCodeFile(filePath, effectiveMime)) {
       const auto = hljs.highlightAuto(textContent);
       return auto.value;
     }
 
     return '';
-  }, [textContent, filePath, mimeType]);
+  }, [textContent, filePath, effectiveMime]);
+
+  const renderOfficePreview = () => {
+    const office = isOfficeFile(effectiveMime, filePath);
+    if (!office.type) return null;
+
+    const Icon = office.type === 'excel' ? FileSpreadsheet : office.type === 'ppt' ? Presentation : FileText;
+    const label = office.type === 'excel' ? 'Excel' : office.type === 'ppt' ? 'PowerPoint' : 'Word';
+
+    if (officeLoading) {
+      return (
+        <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
+          <RefreshCw className="h-5 w-5 animate-spin" />
+          正在解析 {label} 文件…
+        </div>
+      );
+    }
+
+    if (officeError) {
+      const isMissingLib = officeError.includes('未安装');
+      let friendlyError = officeError;
+      if (officeError.includes('EPERM') || officeError.includes('EACCES')) {
+        friendlyError = '文件被系统锁定，暂时无法预览';
+      } else if (officeError.includes('ENOENT')) {
+        friendlyError = '文件不存在或路径有误';
+      }
+      return (
+        <div className={cn('flex h-full flex-col items-center justify-center gap-4 px-6 text-sm text-muted-foreground', className)}>
+          <Icon className="h-12 w-12 opacity-40" />
+          <div className="text-center">
+            <p className="font-medium text-foreground">{fileName}</p>
+            <p className="mt-1 text-xs text-destructive">{friendlyError}</p>
+            {isMissingLib && (
+              <p className="mt-1 text-xs">安装依赖后可预览：{office.type === 'excel' ? 'pnpm add xlsx' : 'pnpm add mammoth'}</p>
+            )}
+          </div>
+          <OpenExternalButton filePath={filePath} />
+        </div>
+      );
+    }
+
+    if (officeData?.type === 'excel' && officeData.data.length > 0) {
+      const data = officeData.data;
+      return (
+        <div className={cn('h-full overflow-auto bg-white dark:bg-[#0d1117] p-4', className)}>
+          <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+            <FileSpreadsheet className="h-4 w-4" />
+            <span>{data.length} 行 · {data[0]?.length ?? 0} 列</span>
+          </div>
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="bg-muted/60">
+                {Array.isArray(data[0]) && data[0].map((cell, i) => (
+                  <th key={i} className="border border-border px-3 py-2 text-left font-medium text-foreground">
+                    {String(cell ?? '')}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.slice(1).map((row, ri) => (
+                <tr key={ri} className={ri % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
+                  {Array.isArray(row) && row.map((cell, ci) => (
+                    <td key={ci} className="border border-border px-3 py-2 text-foreground">
+                      {String(cell ?? '')}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    if (officeData?.type === 'word') {
+      const srcDoc = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;max-width:800px;margin:40px auto;padding:0 20px;color:#333;background:#fff}
+h1,h2,h3,h4,h5,h6{margin-top:1.5em;margin-bottom:0.5em}
+code{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:0.9em}
+pre{background:#f4f4f4;padding:16px;border-radius:6px;overflow-x:auto}
+blockquote{border-left:4px solid #ddd;margin:0;padding-left:16px;color:#666}
+table{border-collapse:collapse;width:100%;margin:1em 0}
+th,td{border:1px solid #ddd;padding:8px;text-align:left}
+th{background:#f8f8f8}
+img{max-width:100%}
+</style>
+</head>
+<body>${officeData.html}</body>
+</html>`;
+      return (
+        <iframe
+          key={filePath}
+          srcDoc={srcDoc}
+          title={fileName}
+          className={cn('h-full min-w-0 w-full border-0', className)}
+          sandbox="allow-scripts"
+        />
+      );
+    }
+
+    if (officeData?.type === 'ppt') {
+      return <PptxPreviewPanel buffer={officeData.buffer} className={className} />;
+    }
+
+    return null;
+  };
 
   const content = (() => {
+    const officePreview = renderOfficePreview();
+    if (officePreview) return officePreview;
+
     if (isHttpUrl(filePath)) {
-      const isHtmlFile = isHtmlFileType(mimeType, fileName, filePath);
+      const isHtmlFile = isHtmlFileType(effectiveMime, fileName, filePath);
 
       if (isHtmlFile) {
         if (isRemoteFileHtmlUrl(filePath)) {
@@ -490,7 +598,7 @@ export function FilePreviewViewer({
         );
       }
 
-      if (mimeType === 'application/pdf') {
+      if (effectiveMime === 'application/pdf') {
         return (
           <iframe
             key={filePath}
@@ -502,7 +610,7 @@ export function FilePreviewViewer({
         );
       }
 
-      if (mimeType === 'text/markdown') {
+      if (effectiveMime === 'text/markdown') {
         if (textLoading) {
           return (
             <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
@@ -524,7 +632,7 @@ export function FilePreviewViewer({
         }
       }
 
-      if (mimeType === 'text/plain' || mimeType === 'application/json' || mimeType === 'text/csv') {
+      if (effectiveMime === 'text/plain' || effectiveMime === 'application/json' || effectiveMime === 'text/csv') {
         if (textLoading) {
           return (
             <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
@@ -559,7 +667,7 @@ export function FilePreviewViewer({
       );
     }
 
-    if (mimeType === 'application/pdf') {
+    if (effectiveMime === 'application/pdf') {
       return (
         <iframe
           key={filePath}
@@ -570,7 +678,7 @@ export function FilePreviewViewer({
       );
     }
 
-    const isHtmlFile = isHtmlFileType(mimeType, fileName, filePath);
+    const isHtmlFile = isHtmlFileType(effectiveMime, fileName, filePath);
     if (isHtmlFile) {
       return (
         <HtmlIframeView
@@ -581,7 +689,7 @@ export function FilePreviewViewer({
       );
     }
 
-    if (mimeType === 'text/markdown') {
+    if (effectiveMime === 'text/markdown') {
       if (mdLoading) {
         return (
           <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
@@ -651,9 +759,9 @@ export function FilePreviewViewer({
     }
 
     const isText =
-      mimeType === 'text/plain' ||
-      mimeType === 'application/json' ||
-      isCodeFile(filePath, mimeType);
+      effectiveMime === 'text/plain' ||
+      effectiveMime === 'application/json' ||
+      isCodeFile(filePath, effectiveMime);
 
     if (isText) {
       if (textLoading) {
@@ -692,112 +800,6 @@ export function FilePreviewViewer({
           <pre className="text-sm font-mono whitespace-pre text-[#d4d4d4]">{textContent}</pre>
         </div>
       );
-    }
-
-    const office = isOfficeFile(mimeType, filePath);
-    if (office.type) {
-      const Icon = office.type === 'excel' ? FileSpreadsheet : office.type === 'ppt' ? Presentation : FileText;
-      const label = office.type === 'excel' ? 'Excel' : office.type === 'ppt' ? 'PowerPoint' : 'Word';
-
-      if (officeLoading) {
-        return (
-          <div className={cn('flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground', className)}>
-            <RefreshCw className="h-5 w-5 animate-spin" />
-            正在解析 {label} 文件…
-          </div>
-        );
-      }
-
-      if (officeError) {
-        const isMissingLib = officeError.includes('未安装');
-        let friendlyError = officeError;
-        if (officeError.includes('EPERM') || officeError.includes('EACCES')) {
-          friendlyError = '文件被系统锁定，暂时无法预览';
-        } else if (officeError.includes('ENOENT')) {
-          friendlyError = '文件不存在或路径有误';
-        }
-        return (
-          <div className={cn('flex h-full flex-col items-center justify-center gap-4 px-6 text-sm text-muted-foreground', className)}>
-            <Icon className="h-12 w-12 opacity-40" />
-            <div className="text-center">
-              <p className="font-medium text-foreground">{fileName}</p>
-              <p className="mt-1 text-xs text-destructive">{friendlyError}</p>
-              {isMissingLib && (
-                <p className="mt-1 text-xs">安装依赖后可预览：{office.type === 'excel' ? 'pnpm add xlsx' : 'pnpm add mammoth'}</p>
-              )}
-            </div>
-            <OpenExternalButton filePath={filePath} />
-          </div>
-        );
-      }
-
-      if (officeData?.type === 'excel' && officeData.data.length > 0) {
-        const data = officeData.data;
-        return (
-          <div className={cn('h-full overflow-auto bg-white dark:bg-[#0d1117] p-4', className)}>
-            <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-              <FileSpreadsheet className="h-4 w-4" />
-              <span>{data.length} 行 · {data[0]?.length ?? 0} 列</span>
-            </div>
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="bg-muted/60">
-                  {Array.isArray(data[0]) && data[0].map((cell, i) => (
-                    <th key={i} className="border border-border px-3 py-2 text-left font-medium text-foreground">
-                      {String(cell ?? '')}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.slice(1).map((row, ri) => (
-                  <tr key={ri} className={ri % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
-                    {Array.isArray(row) && row.map((cell, ci) => (
-                      <td key={ci} className="border border-border px-3 py-2 text-foreground">
-                        {String(cell ?? '')}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        );
-      }
-
-      if (officeData?.type === 'word') {
-        const srcDoc = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;max-width:800px;margin:40px auto;padding:0 20px;color:#333;background:#fff}
-h1,h2,h3,h4,h5,h6{margin-top:1.5em;margin-bottom:0.5em}
-code{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:0.9em}
-pre{background:#f4f4f4;padding:16px;border-radius:6px;overflow-x:auto}
-blockquote{border-left:4px solid #ddd;margin:0;padding-left:16px;color:#666}
-table{border-collapse:collapse;width:100%;margin:1em 0}
-th,td{border:1px solid #ddd;padding:8px;text-align:left}
-th{background:#f8f8f8}
-img{max-width:100%}
-</style>
-</head>
-<body>${officeData.html}</body>
-</html>`;
-        return (
-          <iframe
-            key={filePath}
-            srcDoc={srcDoc}
-            title={fileName}
-            className={cn('h-full min-w-0 w-full border-0', className)}
-            sandbox="allow-scripts"
-          />
-        );
-      }
-
-      if (officeData?.type === 'ppt') {
-        return <PptxPreviewPanel buffer={officeData.buffer} className={className} />;
-      }
     }
 
     return (

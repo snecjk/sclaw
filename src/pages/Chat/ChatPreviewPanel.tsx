@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { OnEditWorkflowNavigate } from '@/lib/preview-workflow-navigation';
-import { isHttpUrl, inferMimeTypeFromUrl } from '@/lib/preview-url';
+import { isHttpUrl, inferMimeTypeFromUrl, resolvePreviewMimeType } from '@/lib/preview-url';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { FilePreviewViewer } from '@/components/file-preview/FilePreviewViewer';
@@ -57,10 +57,11 @@ export function ChatPreviewPanel({
     const found = files.find((f) => f.filePath === activeFilePath);
     if (found) return found;
     if (isHttpUrl(activeFilePath)) {
+      const inferredMime = inferMimeTypeFromUrl(activeFilePath);
       return {
         filePath: activeFilePath,
         fileName: activeFilePath.replace(/^https?:\/\//, ''),
-        mimeType: inferMimeTypeFromUrl(activeFilePath),
+        mimeType: resolvePreviewMimeType(inferredMime, activeFilePath),
         fileSize: 0,
         preview: null,
       } satisfies AttachedFileMeta;
