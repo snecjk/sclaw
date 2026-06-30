@@ -7,6 +7,7 @@ import { copyFile, mkdtemp, readFile, unlink } from 'node:fs/promises';
 import { getOpenClawConfigDir } from '../../utils/paths';
 import { resolveWorkspaceFilePath } from '../../utils/artifact-path';
 import { existsSync } from 'node:fs';
+import { uploadFileToTempOSS } from '../../utils/oss-temp-upload';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -216,6 +217,24 @@ export async function handleFileRoutes(
         }
       }
       sendJson(res, 200, { exists });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/files/upload-temp' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ filePath: string; fileName?: string }>(req);
+      const rawPath = body.filePath?.trim() || '';
+      if (!rawPath) {
+        sendJson(res, 400, { success: false, error: 'Missing filePath' });
+        return true;
+      }
+      const filePath = resolveWorkspaceFilePath(rawPath);
+      const fileName = body.fileName?.trim() || filePath.split(/[\\/]/).pop() || 'file';
+      const uploadedUrl = await uploadFileToTempOSS(filePath, fileName);
+      sendJson(res, 200, { url: uploadedUrl });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

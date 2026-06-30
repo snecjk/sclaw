@@ -1,17 +1,18 @@
 /**
- * ArtifactShareDialog — confirm title, body, and link before sharing to DingTalk.
+ * DingTalkShareDialog — confirm artifact or conversation content before sharing to DingTalk.
  */
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import type { ArtifactShareDraft } from '@/lib/dingtalk-share';
+import { ArtifactProductCard } from '@/components/chat/artifact-product-card';
+import type { DingTalkShareDialogDraft } from '@/lib/dingtalk-share';
 
 export interface ArtifactShareDialogProps {
   open: boolean;
-  draft: ArtifactShareDraft | null;
-  onConfirm: (values: { title: string; text: string; url: string }) => void | Promise<void>;
+  draft: DingTalkShareDialogDraft | null;
+  onConfirm: (draft: DingTalkShareDialogDraft) => void | Promise<void>;
   onCancel: () => void;
   onError?: (error: unknown) => void;
 }
@@ -25,16 +26,10 @@ export function ArtifactShareDialog({
 }: ArtifactShareDialogProps) {
   const { t } = useTranslation('chat');
   const cancelRef = useRef<HTMLButtonElement>(null);
-  const [title, setTitle] = useState('');
-  const [text, setText] = useState('');
-  const [url, setUrl] = useState('');
   const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     if (!open || !draft) return;
-    setTitle(draft.title);
-    setText(draft.text);
-    setUrl(draft.url);
     setConfirming(false);
   }, [open, draft]);
 
@@ -55,19 +50,24 @@ export function ArtifactShareDialog({
 
   const handleConfirm = () => {
     if (confirming) return;
-    const trimmedUrl = url.trim();
-    const trimmedText = text.trim();
-    if (!trimmedUrl) return;
-    const result = onConfirm({
-      title: title.trim() || draft.title,
-      text: trimmedText || draft.text,
-      url: trimmedUrl,
-    });
+    const result = onConfirm(draft);
     if (result instanceof Promise) {
       setConfirming(true);
       result.catch((error) => onError?.(error)).finally(() => setConfirming(false));
     }
   };
+
+  const isArtifact = draft.kind === 'artifact';
+  const title = isArtifact
+    ? t('preview.shareDialog.artifactTitle')
+    : t('preview.shareDialog.conversationTitle');
+  const description = isArtifact
+    ? t('preview.shareDialog.artifactDescription')
+    : t('preview.shareDialog.conversationDescription');
+
+  const artifactCard = isArtifact
+    ? draft
+    : draft.artifact;
 
   return createPortal(
     <div
@@ -85,53 +85,28 @@ export function ArtifactShareDialog({
         tabIndex={-1}
       >
         <h2 id="artifact-share-dialog-title" className="text-lg font-semibold">
-          {t('preview.shareDialog.title')}
+          {title}
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          {t('preview.shareDialog.description')}
+          {description}
         </p>
 
         <div className="mt-4 space-y-3">
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
-              {t('preview.shareDialog.fieldTitle')}
-            </span>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-            />
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
-              {t('preview.shareDialog.fieldBody')}
-            </span>
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={3}
-              className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-            />
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
-              {t('preview.shareDialog.fieldLink')}
-            </span>
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-            />
-          </label>
-        </div>
+          {!isArtifact && draft.textPreview ? (
+            <p className="whitespace-pre-line text-sm leading-6 text-foreground">
+              {draft.textPreview}
+            </p>
+          ) : null}
 
-        {draft.isLocalServeUrl ? (
-          <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
-            {t('preview.shareDialog.localUrlHint')}
-          </p>
-        ) : null}
+          {artifactCard ? (
+            <ArtifactProductCard
+              title={artifactCard.title}
+              metaLine={artifactCard.metaLine}
+              onAction={() => {}}
+              className="pointer-events-none"
+            />
+          ) : null}
+        </div>
 
         <div className="mt-6 flex justify-end gap-2">
           <Button
@@ -145,10 +120,10 @@ export function ArtifactShareDialog({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={confirming || !url.trim()}
+            disabled={confirming || (!isArtifact && !draft.textPreview && !draft.artifact)}
             className="rounded-full px-5"
           >
-            {t('preview.shareDialog.confirm')}
+            {confirming ? t('preview.shareDialog.uploading') : t('preview.shareDialog.confirm')}
           </Button>
         </div>
       </div>

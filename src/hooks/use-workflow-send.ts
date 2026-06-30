@@ -48,6 +48,10 @@ export async function sendWithWorkflow(
   }
 
   try {
+    console.log(
+      '[sto-workflow-tool] get_workflow_schema via client (workflow picker) templateId=%s',
+      templateId,
+    );
     const startup = await getStartupSchema(templateId);
     const { schema, schemaHash } = startup;
     // 2. Get template name from store

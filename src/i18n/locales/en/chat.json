@@ -113,6 +113,7 @@
     "messageActions": {
         "copy": "Copy",
         "copyFailed": "Copy failed",
+        "share": "Share to DingTalk",
         "editAndResend": "Edit and send again",
         "editUnavailable": "Edit and resend is not available on this page"
     },
@@ -183,14 +184,15 @@
         "emptyHintSub": "Or select an artifact above",
         "dismissTab": "Close this artifact",
         "shareDialog": {
+            "artifactTitle": "Share artifact",
+            "artifactDescription": "Share to DingTalk contacts or groups",
+            "conversationTitle": "Share conversation",
+            "conversationDescription": "Confirm the content, then DingTalk will open the recipient picker.",
             "title": "Share to DingTalk",
             "description": "Confirm the content, then DingTalk will open the recipient picker.",
-            "fieldTitle": "Title",
-            "fieldBody": "Body",
-            "fieldLink": "Link",
-            "localUrlHint": "This link is a local preview URL. Colleagues outside your network may not be able to open it.",
             "cancel": "Cancel",
             "confirm": "Share",
+            "uploading": "Uploading…",
             "success": "DingTalk recipient picker opened",
             "failed": "Share failed. Please try again."
         }

@@ -4,7 +4,7 @@
  * with markdown, thinking sections, images, and tool cards.
  */
 import { useState, useCallback, useEffect, useMemo, memo } from 'react';
-import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, CircleCheck } from 'lucide-react';
+import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, CircleCheck, Share2 } from 'lucide-react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { createPortal } from 'react-dom';
@@ -66,6 +66,12 @@ import {
 import { highlightAtMentionsInChildren } from '@/lib/at-mention-highlight';
 import { renderUserMessageMentionNodes } from '@/components/dingtalk/DingTalkMentionTag';
 import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessPanel';
+import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
+import {
+  buildConversationShareDialogDraft,
+  confirmDingTalkShare,
+  type DingTalkShareDialogDraft,
+} from '@/lib/dingtalk-share';
 
 const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
 
@@ -155,6 +161,8 @@ export const ChatMessage = memo(function ChatMessage({
     return findWorkflowParamsSummaryAfterIntro(sessionMessages, messageIndex);
   }, [isUser, text, messageIndex, sessionMessages]);
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
   const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
   const sessionKey = useChatStore((s) => s.currentSessionKey);
   const workflowCardStates = useChatStore((s) => s.workflowCardStates);
@@ -411,6 +419,18 @@ export const ChatMessage = memo(function ChatMessage({
     }
   }, [debugLinks, debugMarkdownSource, text]);
 
+  const openConversationShare = useCallback(() => {
+    setShareDraft(buildConversationShareDialogDraft(text, previewFiles, t));
+    setShareDialogOpen(true);
+  }, [text, previewFiles, t]);
+
+  const handleConfirmShare = useCallback(async (draft: DingTalkShareDialogDraft) => {
+    await confirmDingTalkShare(draft);
+    toast.success(t('preview.shareDialog.success'));
+    setShareDialogOpen(false);
+    setShareDraft(null);
+  }, [t]);
+
   if (isSystem) {
     const compactText = text.replace(/\s+/g, ' ').trim();
     const firstLine = text.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || compactText;
@@ -614,6 +634,7 @@ export const ChatMessage = memo(function ChatMessage({
                   text={text}
                   timestamp={message.timestamp}
                   onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
+                  onShare={openConversationShare}
                   bodyHover
                 />
               ) : null}
@@ -634,6 +655,7 @@ export const ChatMessage = memo(function ChatMessage({
                   text={text}
                   timestamp={message.timestamp}
                   onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
+                  onShare={openConversationShare}
                   bodyHover
                 />
               ) : null}
@@ -744,8 +766,10 @@ export const ChatMessage = memo(function ChatMessage({
             text={text}
             timestamp={message.timestamp}
             onEditMessage={onEditMessage}
+            onShare={openConversationShare}
           />
         )}
+
       </div>
 
       {/* Image lightbox portal */}
@@ -759,6 +783,19 @@ export const ChatMessage = memo(function ChatMessage({
           onClose={() => setLightboxImg(null)}
         />
       )}
+
+      <ArtifactShareDialog
+        open={shareDialogOpen}
+        draft={shareDraft}
+        onConfirm={handleConfirmShare}
+        onCancel={() => {
+          setShareDialogOpen(false);
+          setShareDraft(null);
+        }}
+        onError={(error) => {
+          toast.error(error instanceof Error ? error.message : t('preview.shareDialog.failed'));
+        }}
+      />
     </div>
   );
 });
@@ -817,10 +854,12 @@ function UserHoverBar({
   text,
   timestamp,
   onEditMessage,
+  onShare,
 }: {
   text: string;
   timestamp?: number;
   onEditMessage?: (text: string) => void;
+  onShare?: () => void;
 }) {
   const { t } = useTranslation('chat');
   const [copied, setCopied] = useState(false);
@@ -860,6 +899,17 @@ function UserHoverBar({
       >
         {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
       </Button>
+      {onShare ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 rounded-full border border-border bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-foreground dark:bg-background/70 dark:hover:bg-background"
+          onClick={onShare}
+          title={t('messageActions.share')}
+        >
+          <Share2 className="h-3 w-3" />
+        </Button>
+      ) : null}
       <Button
         variant="ghost"
         size="icon"
@@ -880,13 +930,16 @@ function AssistantHoverBar({
   timestamp,
   onCopyDebugSnapshot,
   bodyHover = false,
+  onShare,
 }: {
   text: string;
   timestamp?: number;
   onCopyDebugSnapshot?: () => Promise<void> | void;
   /** When true, reveal on `group-hover/body` (正文区域), not the whole message shell. */
   bodyHover?: boolean;
+  onShare?: () => void;
 }) {
+  const { t } = useTranslation('chat');
   const [copied, setCopied] = useState(false);
 
   const copyContent = useCallback(() => {
@@ -903,19 +956,32 @@ function AssistantHoverBar({
       <span className="text-xs text-muted-foreground">
         {timestamp ? formatTimestamp(timestamp) : ''}
       </span>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]"
-        onClick={copyContent}
-        onDoubleClick={() => {
-          if (!onCopyDebugSnapshot) return;
-          void onCopyDebugSnapshot();
-        }}
-        title={onCopyDebugSnapshot ? '单击复制内容，双击复制调试快照' : undefined}
-      >
-        {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-      </Button>
+      <div className="flex items-center gap-1.5">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]"
+          onClick={copyContent}
+          onDoubleClick={() => {
+            if (!onCopyDebugSnapshot) return;
+            void onCopyDebugSnapshot();
+          }}
+          title={onCopyDebugSnapshot ? '单击复制内容，双击复制调试快照' : t('messageActions.copy')}
+        >
+          {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+        </Button>
+        {onShare ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]"
+            onClick={onShare}
+            title={t('messageActions.share')}
+          >
+            <Share2 className="h-3 w-3" />
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }

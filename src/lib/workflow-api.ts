@@ -133,10 +133,34 @@ export function clearStartupSchemaCache(templateId?: string): void {
 
 export async function getStartupSchema(templateId: string): Promise<StartupSchemaResponse> {
   const cached = startupSchemaCache.get(templateId);
-  if (cached) return cached;
+  if (cached) {
+    console.log(
+      '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema cache=hit schemaHash=%s fields=%d steps=%d',
+      templateId,
+      cached.schemaHash,
+      cached.schema?.fields?.length ?? 0,
+      cached.schema?.steps?.length ?? 0,
+    );
+    return cached;
+  }
 
   const inflight = startupSchemaInflight.get(templateId);
-  if (inflight) return inflight;
+  if (inflight) {
+    console.log(
+      '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema inflight=reuse',
+      templateId,
+    );
+    return inflight;
+  }
+
+  console.log(
+    '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema',
+    templateId,
+  );
+  console.log(
+    '[sto-workflow-tool] get_workflow_schema fetching startup-schema templateId=%s',
+    templateId,
+  );
 
   const promise = unwrap(
     hostApiFetch<ApiResponse<StartupSchemaResponse>>(`/agent/v1/workflow-templates/${templateId}/startup-schema`, {
@@ -145,9 +169,27 @@ export async function getStartupSchema(templateId: string): Promise<StartupSchem
   ).then((data) => {
     startupSchemaCache.set(templateId, data);
     startupSchemaInflight.delete(templateId);
+    console.log(
+      '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema ok schemaHash=%s fields=%d steps=%d enabled=%s',
+      templateId,
+      data.schemaHash,
+      data.schema?.fields?.length ?? 0,
+      data.schema?.steps?.length ?? 0,
+      String(data.schema?.enabled ?? false),
+    );
+    console.log(
+      '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema response=%s',
+      templateId,
+      JSON.stringify(data),
+    );
     return data;
   }).catch((err) => {
     startupSchemaInflight.delete(templateId);
+    console.error(
+      '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema failed error=%s',
+      templateId,
+      err instanceof Error ? err.message : String(err),
+    );
     throw err;
   });
 
