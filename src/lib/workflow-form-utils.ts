@@ -32,10 +32,17 @@ function mapField(schemaField: WorkflowSchemaField): FormField {
   const name = schemaField.key;
   const label = schemaField.label;
   const description = schemaField.description;
-  // Serialize object defaultValues to string for display
+  // Extract defaultValue: if defaultValue is an object keyed by field.key, extract the value
   let defaultValue = schemaField.defaultValue;
-  if (defaultValue !== undefined && defaultValue !== null && typeof defaultValue === 'object') {
-    defaultValue = JSON.stringify(defaultValue);
+  if (defaultValue !== undefined && defaultValue !== null && typeof defaultValue === 'object' && !Array.isArray(defaultValue)) {
+    const obj = defaultValue as Record<string, unknown>;
+    // If the object has a key matching the field.key, use that value as defaultValue
+    if (name in obj) {
+      defaultValue = obj[name];
+    } else {
+      // No matching key, serialize the whole object for display
+      defaultValue = JSON.stringify(obj);
+    }
   }
   const validation = schemaField.required ? { required: true } : undefined;
 

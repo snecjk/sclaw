@@ -311,3 +311,16 @@ export async function installDwsCli(): Promise<DwsInstallResponse> {
     body: JSON.stringify({}),
   });
 }
+
+/** Upload a local workspace file to temp OSS; returns public HTTP URL. */
+export async function uploadFileToTempOSS(filePath: string, fileName: string): Promise<string> {
+  const payload = await hostApiFetch<{ url?: string; error?: string }>('/api/files/upload-temp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filePath, fileName }),
+  });
+  if (!payload.url) {
+    throw new Error(payload.error || 'OSS upload response missing url');
+  }
+  return payload.url;
+}

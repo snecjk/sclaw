@@ -97,7 +97,7 @@ export function createStoApiClient(config: StoToolkitConfig): StoApiClient {
 		};
 		const requestBody =
 			typeof init.body === "string" ? init.body : init.body ? String(init.body) : "";
-		log?.warn?.(
+		log?.info?.(
 			`[workflow-api] >>> ${method} ${path} url=${url} body=${truncateForLog(requestBody || "(none)")}`,
 		);
 
@@ -135,7 +135,7 @@ export function createStoApiClient(config: StoToolkitConfig): StoApiClient {
 			throw new Error(msg);
 		}
 
-		log?.warn?.(
+		log?.info?.(
 			`[workflow-api] <<< ${method} ${path} status=${resp.status} traceId=${body.traceId ?? "(none)"} response=${truncateForLog(rawText)}`,
 		);
 		return body.data;

@@ -1,6 +1,8 @@
 import { logger } from '../utils/logger';
 import {
+  deleteClaudeScheduledTaskLease,
   listClaudeScheduledTaskDefinitions,
+  listClaudeScheduledTaskLeases,
   readClaudeScheduledTaskSchedulerState,
   writeClaudeScheduledTaskSchedulerState,
 } from './claude-scheduled-task-store';
@@ -173,6 +175,64 @@ export class ClaudeTaskScheduler {
       tasks: nextTasks,
     });
     return snapshots;
+  }
+
+  /**
+   * 启动期清扫：把关机期间错过（含崩溃时正在跑）的任务的 nextRunAt 推进到未来，
+   * 并清掉崩溃任务残留的 stale lease。必须在 start() 之前调用，否则第一个 tick
+   * 仍会按旧逻辑补跑。返回是否有状态变更。
+   *
+   * 产品要求：关机期间到达执行时间的任务在开机时丢弃，不补跑；
+   * 只有 app 运行中到达执行时间的任务才正常执行。
+   */
+  async discardMissedOnStartup(now = new Date()): Promise<boolean> {
+    const definitions = await listClaudeScheduledTaskDefinitions();
+    const state = await readClaudeScheduledTaskSchedulerState();
+    const defById = new Map(definitions.map((definition) => [definition.id, definition]));
+    const nextTasks = { ...(state.tasks ?? {}) };
+    let changed = false;
+    const advancedTaskIds: string[] = [];
+    const clearedLeaseTaskIds: string[] = [];
+
+    for (const [id, taskState] of Object.entries(nextTasks)) {
+      const def = defById.get(id);
+      if (!def?.enabled) continue;
+      const nextRunAt = taskState.nextRunAt;
+      // nextRunAt 落在过去 = 关机期间错过，或崩溃时正在跑（崩溃时 post-run 的
+      // nextRunAt 推进从未落盘，故仍停在过去的触发时刻）。两种情况都丢弃、重算到未来。
+      if (nextRunAt && new Date(nextRunAt).getTime() <= now.getTime()) {
+        nextTasks[id] = {
+          ...taskState,
+          nextRunAt: computeNextRunAt(def.cronExpr, now),
+        };
+        advancedTaskIds.push(id);
+        changed = true;
+      }
+    }
+
+    // 清 stale lease（崩溃任务残留）：开机时主进程刚起、无任务真在跑，全清安全。
+    // 不清的话崩溃任务的下次 runTask 会被 prepareRun 的 leaseUntil > now 判断挡住、
+    // 抛 "already running" → tick 崩。
+    const leases = await listClaudeScheduledTaskLeases();
+    for (const lease of leases) {
+      if (new Date(lease.leaseUntil).getTime() > now.getTime()) {
+        await deleteClaudeScheduledTaskLease(lease.taskId);
+        clearedLeaseTaskIds.push(lease.taskId);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await writeClaudeScheduledTaskSchedulerState({
+        lastTickAt: now.toISOString(),
+        tasks: nextTasks,
+      });
+      logger.info('[claude-task] discarded missed runs on startup', {
+        advancedTaskIds,
+        clearedLeaseTaskIds,
+      });
+    }
+    return changed;
   }
 
   async tick(now = new Date()): Promise<void> {

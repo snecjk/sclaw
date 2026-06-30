@@ -60,6 +60,20 @@ export function previewBasename(pathOrUrl: string): string {
   return safeDecodeURIComponent(pathOrUrl.split(/[\\/]/).pop()?.split('?')[0] || pathOrUrl);
 }
 
+const OFFICE_MIME_TYPES = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-powerpoint',
+]);
+
+const BINARY_PREVIEW_MIME_TYPES = new Set([
+  ...OFFICE_MIME_TYPES,
+  'application/pdf',
+]);
+
 function extToMimeType(ext: string): string {
   const map: Record<string, string> = {
     html: 'text/html',
@@ -71,6 +85,12 @@ function extToMimeType(ext: string): string {
     csv: 'text/csv',
     tsv: 'text/tab-separated-values',
     xml: 'application/xml',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     yaml: 'text/plain',
     yml: 'text/plain',
     sql: 'text/plain',
@@ -87,6 +107,48 @@ function extToMimeType(ext: string): string {
     css: 'text/plain',
   };
   return map[ext] || 'application/octet-stream';
+}
+
+export function isBinaryPreviewMime(mimeType: string): boolean {
+  return BINARY_PREVIEW_MIME_TYPES.has(mimeType);
+}
+
+export function isOfficePreviewMime(mimeType: string): boolean {
+  return OFFICE_MIME_TYPES.has(mimeType);
+}
+
+/**
+ * Reconcile declared MIME with file extension. Prevents binary Office/PDF files from
+ * being read as UTF-8 text when upstream metadata is wrong (e.g. text/csv for .xlsx).
+ */
+export function resolvePreviewMimeType(
+  mimeType: string,
+  filePath: string,
+  fileName = '',
+): string {
+  const pathMime = inferMimeTypeFromPath(filePath);
+  const nameMime = fileName && fileName !== filePath ? inferMimeTypeFromPath(fileName) : '';
+  const extMime = pathMime !== 'application/octet-stream' ? pathMime : nameMime;
+
+  if (extMime === 'application/octet-stream') {
+    return mimeType || extMime;
+  }
+
+  const declared = mimeType?.trim() || '';
+  if (!declared || declared === 'application/octet-stream') {
+    return extMime;
+  }
+
+  if (isBinaryPreviewMime(extMime) && !isBinaryPreviewMime(declared)) {
+    return extMime;
+  }
+
+  if (extMime === declared) return declared;
+
+  // e.g. text/csv declared but .xlsx extension — trust extension for known binary types
+  if (isBinaryPreviewMime(extMime)) return extMime;
+
+  return declared;
 }
 
 /** True when the last path segment looks like a file name with extension (e.g. report.pdf). */
@@ -145,6 +207,20 @@ export function inferMimeTypeFromUrl(url: string, typeHint?: string | null): str
   if (hint === 'json' || hint === 'application/json') return 'application/json';
   if (hint === 'markdown' || hint === 'text/markdown') return 'text/markdown';
   if (hint === 'csv' || hint === 'text/csv') return 'text/csv';
+  if (hint === 'xlsx' || hint === 'excel'
+    || hint === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  }
+  if (hint === 'xls' || hint === 'application/vnd.ms-excel') return 'application/vnd.ms-excel';
+  if (hint === 'docx' || hint === 'word'
+    || hint === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  }
+  if (hint === 'doc' || hint === 'application/msword') return 'application/msword';
+  if (hint === 'pptx' || hint === 'ppt'
+    || hint === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+    return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  }
   if (hint === 'output') {
     if (/\.html?(?:\?|$)/i.test(url)) return 'text/html';
     return 'text/html';
@@ -160,6 +236,8 @@ const PREVIEWABLE_REMOTE_MIMES = new Set([
   'application/json',
   'text/plain',
   'text/csv',
+  'text/tab-separated-values',
+  ...OFFICE_MIME_TYPES,
 ]);
 
 /** Remote http(s) URLs we can render in the side preview panel. */
@@ -250,7 +328,11 @@ export function artifactToPreviewFile(artifact: {
   type: string;
   url: string;
 }): AttachedFileMeta {
-  const mimeType = inferMimeTypeFromUrl(artifact.url, artifact.type);
+  const mimeType = resolvePreviewMimeType(
+    inferMimeTypeFromUrl(artifact.url, artifact.type),
+    artifact.url,
+    artifact.name,
+  );
   const fileName = artifact.name && artifact.name !== 'preview' && !artifact.name.startsWith('http')
     ? (artifact.name.includes('.') ? artifact.name : previewFileNameFromUrl(artifact.url, mimeType))
     : previewFileNameFromUrl(artifact.url, mimeType);

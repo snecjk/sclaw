@@ -446,6 +446,14 @@ export function sessionHasWorkflowParameterForm(
 export function applyWorkflowSchemaReady(data: WorkflowSchemaReadyData): boolean {
   if (!data.templateId || !data.schema) return false;
   const templateName = data.templateName ?? data.matchedLabel ?? data.templateId;
+  console.log(
+    '[sto-workflow-tool] get_workflow_schema ok templateId=%s templateName=%s schemaHash=%s fields=%d steps=%d',
+    data.templateId,
+    templateName,
+    data.schemaHash ?? '(none)',
+    data.schema?.fields?.length ?? 0,
+    data.schema?.steps?.length ?? 0,
+  );
   useChatStore.getState().setPendingWorkflow({
     templateId: data.templateId,
     templateName,
