@@ -26,7 +26,10 @@ import type { TaskCreateInputWithRun } from '@/pages/ScheduledTasks/components/T
  */
 export function Home() {
   const user = useAuthStore((s) => s.user);
-  const isSite = isSiteUser(user?.categoryCode);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
+  const isSite =
+    siteDepartmentTypes !== null && isSiteUser(user?.categoryCode);
   const crmWeekReportSurfaceAllowed = useAuthStore((s) => s.crmWeekReportSurfaceAllowed);
   const showConversation = useHomeConversationActive();
   const { isSplitGridPassthrough, splitGridPassthroughClass } =
@@ -104,6 +107,11 @@ export function Home() {
     setSearchParams({}, { replace: true });
     handleHubSend(seedText, undefined, undefined, undefined, seedWorkflowId);
   }, [seedText, seedWorkflowId, gatewayStatus.state, handleHubSend, setSearchParams]);
+
+  // Wait for site-department-types before choosing HQ vs site homepage.
+  if (isAuthenticated && siteDepartmentTypes === null) {
+    return null;
+  }
 
   // 网点用户看到 首页 UI
   if (isSite) {
