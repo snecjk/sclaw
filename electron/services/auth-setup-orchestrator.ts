@@ -10,7 +10,8 @@
 
 import type { GatewayManager } from '../gateway/manager';
 import type { SsoUserInfo } from '../utils/auth-store';
-import { getAuthState, syncSsoAuthToOpenClaw } from '../utils/auth-store';
+import { getAuthState, getImpersonationOrigin, syncSsoAuthToOpenClaw } from '../utils/auth-store';
+import { resolveAuthMode } from './sto-auth-mode';
 import { syncStoPluginsToOpenClaw } from '../utils/openclaw-auth';
 import { logger } from '../utils/logger';
 import { getStoModelSyncService, type StoSyncResult } from './providers/sto-model-sync';
@@ -220,8 +221,17 @@ async function runSetup(
   try {
     const { getUserSk, clearUserSk } = await import('./user-sk-service');
     if (source === 'login' && userToSync) {
-      await clearUserSk(userToSync);
-      await getUserSk(true);
+      const mode = await resolveAuthMode();
+      if (mode === 'hq-demo-as-site') {
+        const origin = await getImpersonationOrigin();
+        if (origin) {
+          await clearUserSk(origin);
+        }
+        await getUserSk(true);
+      } else {
+        await clearUserSk(userToSync);
+        await getUserSk(true);
+      }
     } else {
       await getUserSk();
     }

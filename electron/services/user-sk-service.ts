@@ -1,9 +1,7 @@
 /**
  * 用户个人 SK 管理服务（策略委托入口）
  *
- * 根据用户类型（网点/非网点）委托给对应的策略实现：
- * - HqSkStrategy: 非网点用户
- * - SiteSkStrategy: 网点用户
+ * 根据 AuthMode 委托策略：HqSkStrategy / SiteSkStrategy / DemoSkStrategy（总部演示切网点）
  */
 
 import { getAuthState, type SsoUserInfo } from '../utils/auth-store';

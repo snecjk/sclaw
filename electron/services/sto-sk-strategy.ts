@@ -7,8 +7,10 @@
 import type { SsoUserInfo } from '../utils/auth-store';
 import type { TokenQuotaTierQueryResult } from '../../shared/sto-token-quota-tier';
 import { isSiteUser, getSiteDepartmentTypes, setSiteDepartmentTypes } from '../../shared/site-user-utils';
+import { resolveAuthMode } from './sto-auth-mode';
 import { getHqSkStrategy } from './sto-hq-sk-strategy';
 import { getSiteSkStrategy } from './sto-site-sk-strategy';
+import { getDemoSkStrategy } from './sto-demo-sk-strategy';
 import { logger } from '../utils/logger';
 
 /**
@@ -88,23 +90,12 @@ async function ensureSiteDepartmentTypesLoaded(): Promise<void> {
   await siteTypesLoadPromise;
 }
 
-/**
- * 策略工厂：根据用户类型返回策略实例
- * Apollo 未加载时主动加载配置，确保正确判断用户类型
- */
-export async function resolveStrategy(user: SsoUserInfo | null): Promise<StoSkStrategy | null> {
-  if (!user?.categoryCode) {
-    logger.info('[strategy] resolveStrategy: user or categoryCode is null');
-    return null;
-  }
-
-  // 确保 siteDepartmentTypes 已加载
+async function resolveNativeStrategy(user: SsoUserInfo): Promise<StoSkStrategy | null> {
   await ensureSiteDepartmentTypesLoaded();
 
   const siteTypes = getSiteDepartmentTypes();
   const isSiteFromConfig = isSiteUser(user.categoryCode);
 
-  // 兜底逻辑：Apollo 配置为空时，检查 categoryCode 是否包含网点关键字
   let isSite = isSiteFromConfig;
   if (!isSite && (!siteTypes || siteTypes.size === 0)) {
     const categoryLower = user.categoryCode.trim();
@@ -114,20 +105,40 @@ export async function resolveStrategy(user: SsoUserInfo | null): Promise<StoSkSt
     }
   }
 
-  logger.info(`[strategy] resolveStrategy: userCode=${user.code}, categoryCode="${user.categoryCode}", siteTypes=${siteTypes ? `[${Array.from(siteTypes).join(', ')}]` : 'null (empty)'}, isSiteFromConfig=${isSiteFromConfig}, isSite=${isSite}`);
+  logger.info(`[strategy] resolveNativeStrategy: userCode=${user.code}, categoryCode="${user.categoryCode}", isSite=${isSite}`);
 
   if (isSite) {
-    logger.info('[strategy] resolveStrategy: Using SiteSkStrategy');
+    logger.info('[strategy] resolveNativeStrategy: Using SiteSkStrategy');
     return getSiteSkStrategy();
-  } else {
-    logger.info('[strategy] resolveStrategy: Using HqSkStrategy');
-    return getHqSkStrategy();
   }
+  logger.info('[strategy] resolveNativeStrategy: Using HqSkStrategy');
+  return getHqSkStrategy();
 }
 
-/** 解析用户类型（网点 / 非网点） */
+/**
+ * 策略工厂：演示态优先，否则按 categoryCode 选 HQ/Site
+ */
+export async function resolveStrategy(user: SsoUserInfo | null): Promise<StoSkStrategy | null> {
+  const mode = await resolveAuthMode();
+  if (mode === 'hq-demo-as-site') {
+    logger.info('[strategy] resolveStrategy: Using DemoSkStrategy (hq-demo-as-site)');
+    return getDemoSkStrategy();
+  }
+
+  if (!user?.categoryCode) {
+    logger.info('[strategy] resolveStrategy: user or categoryCode is null');
+    return null;
+  }
+
+  return resolveNativeStrategy(user);
+}
+
+/** 解析用户类型（网点 / 非网点）— AI 资源视角，Demo 映射为 hq */
 export async function resolveUserType(user: SsoUserInfo | null): Promise<'hq' | 'site' | null> {
   const strategy = await resolveStrategy(user);
   if (!strategy) return null;
-  return strategy === getSiteSkStrategy() ? 'site' : 'hq';
+  if (strategy === getSiteSkStrategy()) return 'site';
+  return 'hq';
 }
+
+export { getDemoSkStrategy };

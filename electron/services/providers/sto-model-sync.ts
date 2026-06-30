@@ -150,15 +150,18 @@ export class StoModelSyncService {
       return result;
     }
 
-    // Step 2 — Get user code for secret header
-    const { getAuthState } = await import('../../utils/auth-store');
-    const authState = await getAuthState();
-    const userCode = authState.user?.code || '';
+    // Step 2 — AI resource user code for secret header (HQ origin when demo-as-site)
+    const { resolveAiResourceContext } = await import('../sto-auth-mode');
+    const aiCtx = await resolveAiResourceContext();
+    const userCode = aiCtx?.aiUser.code ?? '';
     if (!userCode) {
       result.error = 'no-user-code';
       return result;
     }
     const secretHeader = crypto.createHash('md5').update(userCode).digest('hex');
+
+    const { getAuthState } = await import('../../utils/auth-store');
+    const authState = await getAuthState();
 
     const legacyState = await detectStoCatalogLegacyState();
     if (legacyState.needsMigration) {

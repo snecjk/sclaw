@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { glassNestedCard, glassSectionSurface, glassSegmentTrack, stoMainInnerShell } from '@/lib/surfaces';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAuthStore, isSiteUser } from '@/stores/auth';
+import { useAuthStore, resolveAiResourceIsSite } from '@/stores/auth';
 import { useSettingsStore } from '@/stores/settings';
 import { hostApiFetch } from '@/lib/host-api';
 import { trackUiEvent } from '@/lib/telemetry';
@@ -33,7 +33,8 @@ const USAGE_FETCH_RETRY_DELAY_MS = 1500;
 export function Models() {
   const { t } = useTranslation(['dashboard', 'settings']);
   const user = useAuthStore((s) => s.user);
-  const isSite = isSiteUser(user?.categoryCode);
+  const impersonationOrigin = useAuthStore((s) => s.impersonationOrigin);
+  const isSiteForAi = resolveAiResourceIsSite(user?.categoryCode, impersonationOrigin);
   const gatewayStatus = useGatewayStore((state) => state.status);
   const devModeUnlocked = useSettingsStore((state) => state.devModeUnlocked);
   const isGatewayRunning = gatewayStatus.state === 'running';
@@ -93,10 +94,10 @@ export function Models() {
   }, []);
 
   useEffect(() => {
-    if (isSite) {
+    if (isSiteForAi) {
       setShowQuotaDialog(false);
     }
-  }, [isSite]);
+  }, [isSiteForAi]);
 
   useEffect(() => {
     let cancelled = false;
@@ -298,7 +299,7 @@ export function Models() {
             <h2 className="text-lg font-semibold tracking-tight text-foreground">
               {t('dashboard:tokenBalance.title', 'Token 余额')}
             </h2>
-            {!isSite ? (
+            {!isSiteForAi ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -575,7 +576,7 @@ export function Models() {
           unknownModelLabel={t('dashboard:recentTokenHistory.unknownModel')}
         />
       )}
-      {!isSite ? (
+      {!isSiteForAi ? (
         <TokenQuotaDialog
           open={showQuotaDialog}
           onClose={() => setShowQuotaDialog(false)}

@@ -28,6 +28,7 @@ import {
   fetchAccountSwitchOptions,
   switchAccountViaMemoryCenter,
 } from '../../services/account-switch-service';
+import { resolveAuthMode } from '../../services/sto-auth-mode';
 
 const ssoLoginManager = new SsoLoginManager();
 
@@ -146,6 +147,7 @@ export async function handleAuthRoutes(
         user: state.user,
         ssoEnvironment: state.ssoEnvironment,
         impersonationOrigin: await getImpersonationOrigin(),
+        authMode: await resolveAuthMode(),
       });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

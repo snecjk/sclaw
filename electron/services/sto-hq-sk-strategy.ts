@@ -8,7 +8,8 @@
 import type { StoSkStrategy } from './sto-sk-strategy';
 import type { SsoUserInfo } from '../utils/auth-store';
 import type { TokenQuotaTierQueryResult } from '../../shared/sto-token-quota-tier';
-import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
+import { getSsoEnvironment } from '../utils/auth-store';
+import { getAiResourceStoToken } from './sto-auth-mode';
 import { storeApiKey, getApiKey, deleteApiKey } from '../utils/secure-storage';
 import { logger } from '../utils/logger';
 import {
@@ -49,9 +50,9 @@ export class HqSkStrategy implements StoSkStrategy {
       }
     }
 
-    const token = await getStoToken();
+    const token = await getAiResourceStoToken();
     if (!token) {
-      logger.warn('[hq-sk] No stoToken available');
+      logger.warn('[hq-sk] No AI resource stoToken available');
       return null;
     }
 

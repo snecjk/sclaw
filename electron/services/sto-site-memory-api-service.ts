@@ -5,88 +5,21 @@
  * 不经 memory-center 下发或管理。
  */
 
-import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
-import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
-import { resolveStoBaseUrl } from '../utils/sto-domain';
 import { logger } from '../utils/logger';
+import {
+  memoryCenterFetchForAi,
+  memoryCenterFetchForSession,
+  StoMemoryApiError,
+} from './sto-memory-api-fetch';
 
 const SITE_KEY_ENSURE_PATH = '/agent/v1/site-keys/ensure';
 const TOKEN_QUOTA_EXPANSION_PATH = '/agent/v1/token-quota/expansion';
 
-export class StoSiteMemoryApiError extends Error {
-  statusCode: number;
-
+export class StoSiteMemoryApiError extends StoMemoryApiError {
   constructor(message: string, statusCode: number) {
-    super(message);
+    super(message, statusCode);
     this.name = 'StoSiteMemoryApiError';
-    this.statusCode = statusCode;
   }
-}
-
-function parseErrorMessage(payload: unknown, fallback: string): string {
-  if (typeof payload === 'object' && payload !== null) {
-    const record = payload as Record<string, unknown>;
-    if (typeof record.errMessage === 'string' && record.errMessage.trim()) {
-      return record.errMessage.trim();
-    }
-    if (typeof record.detail === 'string' && record.detail.trim()) {
-      return record.detail.trim();
-    }
-    if (typeof record.error === 'string' && record.error.trim()) {
-      return record.error.trim();
-    }
-  }
-  return fallback;
-}
-
-async function memoryCenterFetch(
-  path: string,
-  init: RequestInit,
-): Promise<unknown> {
-  const token = await getStoToken();
-  if (!token) {
-    throw new StoSiteMemoryApiError('未登录或 stoToken 已过期，请重新登录', 401);
-  }
-
-  const baseUrl = await resolveStoBaseUrl();
-  const url = `${baseUrl}${path}`;
-  const ssoEnv = await getSsoEnvironment();
-
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      ...buildStoMemoryCenterAuthHeaders(token),
-      'X-Sto-Sso-Env': ssoEnv,
-      ...(init.headers as Record<string, string> | undefined),
-    },
-  });
-
-  const text = await response.text().catch(() => '');
-  let json: unknown = null;
-  if (text) {
-    try {
-      json = JSON.parse(text) as unknown;
-    } catch {
-      json = null;
-    }
-  }
-
-  if (!response.ok) {
-    throw new StoSiteMemoryApiError(
-      parseErrorMessage(json, text || `请求失败 (${response.status})`),
-      response.status,
-    );
-  }
-
-  if (
-    typeof json === 'object' &&
-    json !== null &&
-    (json as { success?: boolean }).success === false
-  ) {
-    throw new StoSiteMemoryApiError(parseErrorMessage(json, '请求失败'), 400);
-  }
-
-  return json;
 }
 
 export interface SiteKeyEnsureResult {
@@ -105,11 +38,15 @@ export async function ensureSiteKeyViaMemoryCenter(
 ): Promise<SiteKeyEnsureResult | null> {
   logger.info(`[SiteMemory] ensure site key via memory-center, forceRefresh=${forceRefresh}`);
 
-  const json = await memoryCenterFetch(SITE_KEY_ENSURE_PATH, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ force_refresh: forceRefresh }),
-  });
+  const json = await memoryCenterFetchForAi(
+    SITE_KEY_ENSURE_PATH,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force_refresh: forceRefresh }),
+    },
+    StoSiteMemoryApiError,
+  );
 
   if (typeof json !== 'object' || json === null) {
     return null;
@@ -170,18 +107,22 @@ export async function applySiteTokenQuotaExpansionViaMemoryCenter(
 ): Promise<void> {
   logger.info(`[SiteMemory] apply site expansion tokenId=${body.tokenId}, amount=${body.quotaAmount}`);
 
-  await memoryCenterFetch(TOKEN_QUOTA_EXPANSION_PATH, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      token_id: body.tokenId.trim(),
-      quota_amount: body.quotaAmount,
-      client_event_id: body.clientEventId?.trim() || undefined,
-      client: {
-        app: 'sto-claw',
-        version: resolveClientVersion(),
-        platform: resolveClientPlatform(),
-      },
-    }),
-  });
+  await memoryCenterFetchForSession(
+    TOKEN_QUOTA_EXPANSION_PATH,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token_id: body.tokenId.trim(),
+        quota_amount: body.quotaAmount,
+        client_event_id: body.clientEventId?.trim() || undefined,
+        client: {
+          app: 'sto-claw',
+          version: resolveClientVersion(),
+          platform: resolveClientPlatform(),
+        },
+      }),
+    },
+    StoSiteMemoryApiError,
+  );
 }

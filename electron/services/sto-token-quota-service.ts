@@ -5,7 +5,7 @@
  * using the stored stoToken and the shared auth header helper.
  */
 
-import { getStoToken } from '../utils/auth-store';
+import { getAiResourceStoToken } from './sto-auth-mode';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
 import { logger } from '../utils/logger';
@@ -68,7 +68,7 @@ export class StoTokenQuotaService {
   }
 
   async checkTokenQuota(): Promise<StoTokenQuotaCheckResponse> {
-    const token = await getStoToken();
+    const token = await getAiResourceStoToken();
     if (!token) {
       throw new StoTokenQuotaServiceError(
         '未登录或 stoToken 已过期，请重新登录',

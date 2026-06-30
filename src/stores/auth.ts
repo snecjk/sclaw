@@ -58,8 +58,14 @@ export interface AccountSwitchOption {
 
 export type AccountSwitchOptionsStatus = 'idle' | 'loading' | 'loaded' | 'error';
 
-// Re-export shared site-user utilities.
+// Re-export shared site-user and auth-mode utilities.
 export { isSiteUser, setSiteDepartmentTypes, getSiteDepartmentTypes } from '../../shared/site-user-utils';
+export {
+  resolveAiResourceIsSite,
+  resolveSessionIsSite,
+  isHqDemoAsSite,
+  type AuthMode,
+} from '../../shared/auth-mode-utils';
 
 export type CrmWeekReportPolicyStatus = 'idle' | 'loading' | 'ok' | 'error';
 
