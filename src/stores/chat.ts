@@ -84,8 +84,8 @@ import {
   absorbWorkflowExecutionStartedFromToolResults,
   dispatchBuiltinToolResult,
 } from '@/lib/builtin-tool-dispatch';
-import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSessionLabel } from '@/lib/workflow-session-hint';
-import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
+import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, normalizeDerivedSessionLabel } from '@/lib/workflow-session-hint';
+import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, sanitizeGatewaySessionLabels, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { traceChatSession } from '../../shared/chat-session-trace';
@@ -1428,7 +1428,9 @@ export const useChatStore = create<ChatState>()(
             : mergedSessions;
 
           const scrubbedSessionLabels = scrubCorruptedSessionLabels(get().sessionLabels);
-          const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels);
+          const labeledSessions = sanitizeGatewaySessionLabels(
+            applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels),
+          );
 
           // ── 定时任务会话名称富化：从任务定义 API 获取 displayName ──
           // loadSessions 定义在本 store 内（非独立 session-actions 模块）。
@@ -2015,12 +2017,15 @@ export const useChatStore = create<ChatState>()(
             ),
           );
           if (labelText) {
-            set((s) => ({
-              sessionLabels: {
-                ...s.sessionLabels,
-                [targetSessionKey]: truncateSessionLabel(labelText),
-              },
-            }));
+            const normalized = normalizeDerivedSessionLabel(labelText);
+            if (normalized) {
+              set((s) => ({
+                sessionLabels: {
+                  ...s.sessionLabels,
+                  [targetSessionKey]: normalized,
+                },
+              }));
+            }
           }
         }
       }
@@ -2374,12 +2379,15 @@ export const useChatStore = create<ChatState>()(
     if (!currentSessionKey.endsWith(':main') && isFirstMessage
       && shouldAutoDeriveSessionLabel(currentSessionKey, sessionLabels, isCorruptedSessionLabel)
       && displayText) {
-      set((s) => ({
-        sessionLabels: {
-          ...s.sessionLabels,
-          [currentSessionKey]: truncateSessionLabel(displayText),
-        },
-      }));
+      const normalized = normalizeDerivedSessionLabel(displayText);
+      if (normalized) {
+        set((s) => ({
+          sessionLabels: {
+            ...s.sessionLabels,
+            [currentSessionKey]: normalized,
+          },
+        }));
+      }
     }
 
     // Mark this session as most recently active
@@ -3144,6 +3152,14 @@ export const useChatStore = create<ChatState>()(
     sessionLabels: state.sessionLabels,
     sessionLastActivity: state.sessionLastActivity,
   }),
+  merge: (persisted, current) => {
+    const stored = persisted as Partial<Pick<typeof current, 'sessionLabels' | 'sessionLastActivity'>>;
+    return {
+      ...current,
+      sessionLabels: scrubCorruptedSessionLabels(stored.sessionLabels ?? {}),
+      sessionLastActivity: stored.sessionLastActivity ?? current.sessionLastActivity,
+    };
+  },
 }));
 
 /** OpenClaw has no Claude-style runtimeResult; agent.completed is the terminal signal. */

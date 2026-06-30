@@ -20,7 +20,7 @@ import {
   parseScheduledTaskAgentSessionKey,
   parseScheduledTaskSessionKey,
 } from './cron-session-utils';
-import { applyStoredSessionLabels, scrubCorruptedSessionLabels } from '@/lib/session-label';
+import { applyStoredSessionLabels, sanitizeGatewaySessionLabels, scrubCorruptedSessionLabels } from '@/lib/session-label';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 import { appendPendingLocalVirtualTaskSessions } from './session-list-merge';
 import {
@@ -212,7 +212,9 @@ export function createSessionActions(
           : mergedSessions;
 
         const scrubbedSessionLabels = scrubCorruptedSessionLabels(get().sessionLabels);
-        const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels);
+        const labeledSessions = sanitizeGatewaySessionLabels(
+          applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels),
+        );
 
         const discoveredActivity = Object.fromEntries(
           labeledSessions

@@ -10,14 +10,15 @@ import {
   deriveSessionLabelFromHistory,
   isCorruptedSessionLabel,
   isPlaceholderSessionLabel,
-  truncateSessionLabel,
+  normalizeDerivedSessionLabel,
 } from '@/lib/workflow-session-hint';
-import { getMessageText, toMs } from './helpers';
+import { CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
+import { getMessageText, isToolResultRole, toMs } from './helpers';
 import type { ChatSet } from './store-api';
 import type { ChatSession, RawMessage } from './types';
 
-/** Enough messages to skip injected system/workflow preamble and reach the first user turn. */
-export const SESSION_METADATA_HISTORY_LIMIT = 64;
+/** Match loadHistory cap so long tool-heavy sessions still reach the first user turn. */
+export const SESSION_METADATA_HISTORY_LIMIT = CHAT_HISTORY_LENGTH_MAX_LIMIT;
 export const SESSION_METADATA_HYDRATE_LIMIT = 80;
 export const SESSION_METADATA_HYDRATE_CONCURRENCY = 4;
 const LABEL_HYDRATE_RETRY_DELAYS_MS = [2_000, 5_000, 10_000, 20_000, 40_000];
@@ -26,6 +27,7 @@ export type SessionLabelHydrateSnapshot = {
   sessions: ChatSession[];
   sessionLabels: Record<string, string>;
   sessionLastActivity: Record<string, number>;
+  sidebarRecentOrder?: string[];
 };
 
 export type SessionLabelHydrateCommit = (
@@ -55,17 +57,31 @@ async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promi
   }));
 }
 
+/** Align with loadHistory: tool_result rows are not used for title derivation. */
+export function prepareMessagesForSessionLabelDerivation(messages: RawMessage[]): RawMessage[] {
+  return messages.filter((message) => !isToolResultRole(message.role));
+}
+
 export function collectSessionsNeedingLabelHydrate(
   sessions: ChatSession[],
   sessionLabels: Record<string, string>,
   sessionLastActivity: Record<string, number>,
+  sidebarRecentOrder: readonly string[] = [],
 ): ChatSession[] {
+  const recentRank = new Map(sidebarRecentOrder.map((key, index) => [key, index]));
+
   return sessions
     .filter((session) => {
       if (session.key.endsWith(':main')) return false;
       return !hasUsableSessionTitle(session, sessionLabels);
     })
     .sort((left, right) => {
+      const leftRecent = recentRank.get(left.key);
+      const rightRecent = recentRank.get(right.key);
+      const leftRecentRank = leftRecent ?? Number.MAX_SAFE_INTEGER;
+      const rightRecentRank = rightRecent ?? Number.MAX_SAFE_INTEGER;
+      if (leftRecentRank !== rightRecentRank) return leftRecentRank - rightRecentRank;
+
       const leftPlaceholder = isPlaceholderSessionLabel(left.label ?? '') ? 1 : 0;
       const rightPlaceholder = isPlaceholderSessionLabel(right.label ?? '') ? 1 : 0;
       if (leftPlaceholder !== rightPlaceholder) return rightPlaceholder - leftPlaceholder;
@@ -105,11 +121,11 @@ export function deriveStoredSessionLabelFromMessages(
     return undefined;
   }
   const labelText = deriveSessionLabelFromHistory(
-    messages,
+    prepareMessagesForSessionLabelDerivation(messages),
     getMessageText,
     buildSessionLabelDerivationOptions(sessionKey, sessions, sessionLabels),
   );
-  return labelText ? truncateSessionLabel(labelText) : undefined;
+  return normalizeDerivedSessionLabel(labelText);
 }
 
 export function lastMessageActivityMs(messages: RawMessage[]): number {
@@ -147,6 +163,7 @@ async function runSessionLabelHydration(
     snapshot.sessions,
     snapshot.sessionLabels,
     snapshot.sessionLastActivity,
+    snapshot.sidebarRecentOrder,
   );
   if (sessionsToHydrate.length === 0) {
     labelHydrateRetryAttempt = 0;
@@ -167,6 +184,7 @@ async function runSessionLabelHydration(
     after.sessions,
     after.sessionLabels,
     after.sessionLastActivity,
+    after.sidebarRecentOrder,
   );
   if (stillPending.length === 0) {
     labelHydrateRetryAttempt = 0;
@@ -212,6 +230,7 @@ export function scheduleSessionLabelHydrationForStore(
         sessions: state.sessions,
         sessionLabels: state.sessionLabels,
         sessionLastActivity: state.sessionLastActivity,
+        sidebarRecentOrder: state.sidebarRecentOrder,
       }));
     },
   );

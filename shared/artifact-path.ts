@@ -19,8 +19,24 @@ export function stripFileUrlScheme(path: string): string {
   return stripped;
 }
 
+/** Legacy standalone OpenClaw workspace segment (`/.openclaw/workspace`). */
+const LEGACY_OPENCLAW_WORKSPACE_RE = /([/\\])\.openclaw([/\\])workspace/g;
+
 /**
- * Expand ~/.stoclaw, /.stoclaw, and legacy ~/.openclaw/workspace aliases.
+ * Map legacy `~/.openclaw/workspace` paths to StoClaw layout (`~/.stoclaw/openclaw/workspace`).
+ * Callers should try the original path on disk first; use this only as a fallback candidate.
+ */
+export function migrateLegacyOpenClawWorkspacePath(filePath: string): string {
+  if (!filePath) return filePath;
+  return filePath.replace(
+    LEGACY_OPENCLAW_WORKSPACE_RE,
+    '$1.stoclaw$2openclaw$2workspace',
+  );
+}
+
+/**
+ * Expand ~/.stoclaw and /.stoclaw prefixes; normalize Windows separators.
+ * Does not rewrite legacy `.openclaw/workspace` — resolution checks both layouts on disk.
  * Requires `homeDir` (e.g. os.homedir() or process.env.HOME).
  */
 export function normalizeArtifactPathPrefix(filePath: string, homeDir: string): string {
@@ -35,12 +51,6 @@ export function normalizeArtifactPathPrefix(filePath: string, homeDir: string): 
     } else if (path.startsWith('/.stoclaw')) {
       path = `${homeDir}${path}`;
     }
-
-    // Legacy standalone OpenClaw workspace → StoClaw layout
-    path = path.replace(
-      /([/\\])\.openclaw([/\\])workspace/g,
-      '$1.stoclaw$2openclaw$2workspace',
-    );
   }
 
   if (isWindowsDrivePath(path)) {

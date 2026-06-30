@@ -6,6 +6,10 @@ import {
 import { WORKFLOW_CONTEXT_MARKER } from '@/lib/workflow-context';
 import type { RawMessage } from '@/stores/chat';
 
+const mockState = vi.hoisted(() => ({
+  hasWorkflowExecution: false,
+}));
+
 const getMessageText = (content: unknown): string => {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
@@ -38,12 +42,13 @@ vi.mock('@/stores/chat', async (importOriginal) => {
 });
 
 vi.mock('@/stores/workflow-memory', () => ({
-  sessionHasWorkflowExecution: () => false,
+  sessionHasWorkflowExecution: () => mockState.hasWorkflowExecution,
 }));
 
 describe('workflow form injection guard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockState.hasWorkflowExecution = false;
   });
 
   it('allows slash picker turn with pending schema', () => {
@@ -63,6 +68,20 @@ describe('workflow form injection guard', () => {
       { role: 'user', content: '客户异常监控' },
       { role: 'assistant', content: '请在下方表单中确认参数' },
     ];
+    expect(
+      isWorkflowFormInjectionAllowed('tpl-1', uiMessages, getMessageText, 'agent:main:main', {
+        allowLivePending: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('allows a new pending form even when the same template has prior execution in session', () => {
+    mockState.hasWorkflowExecution = true;
+    const uiMessages: RawMessage[] = [
+      { role: 'user', content: '客户异常监控' },
+      { role: 'assistant', content: '请在下方表单中确认参数' },
+    ];
+
     expect(
       isWorkflowFormInjectionAllowed('tpl-1', uiMessages, getMessageText, 'agent:main:main', {
         allowLivePending: true,

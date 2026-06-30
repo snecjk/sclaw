@@ -58,7 +58,6 @@ import { RecordDetailModal } from './components/RecordDetailModal';
 /** 将 ManagedLocalTask 转换为页面 TaskViewModel */
 function managedTaskToViewModel(
   task: ManagedLocalTask,
-  workflowMap: Map<string, string>
 ): TaskViewModel {
   if (task.engineType === 'claude') {
     return {
@@ -69,7 +68,6 @@ function managedTaskToViewModel(
       enabled: task.enabled,
       nextRunAt: task.nextRunAt ?? null,
       workflowCode: task.workflowCode || undefined,
-      workflowName: task.workflowCode ? workflowMap.get(task.workflowCode) : undefined,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
       agentId: task.agentId,
@@ -93,7 +91,6 @@ function managedTaskToViewModel(
     enabled: task.enabled,
     nextRunAt: task.nextRun ?? null,
     workflowCode: task.workflowCode || undefined,
-    workflowName: task.workflowCode ? workflowMap.get(task.workflowCode) : undefined,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     agentId: task.agentId,
@@ -155,10 +152,8 @@ export default function MyTask() {
   const agents = useAgentsStore((state) => state.agents);
   const defaultAgentId = useAgentsStore((state) => state.defaultAgentId);
 
-  // ── 执行记录 + 工作流 Store ──
+  // ── 执行记录 Store ──
   const {
-    workflowOptions,
-    fetchWorkflows: fetchWorkflowOptions,
     recordsLoading,
     recordStatus,
     recordSearch,
@@ -183,7 +178,6 @@ export default function MyTask() {
   // ── 初始化加载 ──
   useEffect(() => {
     fetchJobs().catch(() => {});
-    fetchWorkflowOptions().catch(() => {});
     // 拉取官方推荐工作流模版（与 Workflow 页面逻辑一致）
     listWorkflowTemplates({ page: 1, pageSize: 100 })
       .then((result) => {
@@ -205,7 +199,7 @@ export default function MyTask() {
       .catch(() => {
         setOfficialCards([]);
       });
-  }, [fetchJobs, fetchWorkflowOptions]);
+  }, [fetchJobs]);
 
   // ── 切换到执行记录 Tab 时加载 ──
   useEffect(() => {
@@ -214,18 +208,12 @@ export default function MyTask() {
     }
   }, [activeView, fetchRecords]);
 
-  // ── 工作流 code → name 映射 ──
-  const workflowMap = useMemo(
-    () => new Map(workflowOptions.map((o) => [o.value, o.label])),
-    [workflowOptions]
-  );
-
   // ── 任务视图模型列表 ──
   const safeJobs = useMemo(() => (Array.isArray(jobs) ? jobs : []), [jobs]);
 
   const allTasks = useMemo(
-    () => safeJobs.map((j) => managedTaskToViewModel(j, workflowMap)),
-    [safeJobs, workflowMap]
+    () => safeJobs.map((j) => managedTaskToViewModel(j)),
+    [safeJobs]
   );
 
   const filteredTasks = useMemo(() => {

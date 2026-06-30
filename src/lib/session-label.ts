@@ -68,20 +68,33 @@ export function hasUsableSessionTitle(
   return Boolean(resolveVisibleSessionTitle(session, sessionLabels));
 }
 
-/** Drop persisted titles that were saved from subagent boilerplate or workflow hints. */
+/** Drop persisted titles that are corrupted, placeholder, or otherwise not human-readable. */
 export function scrubCorruptedSessionLabels(
   sessionLabels: Record<string, string>,
 ): Record<string, string> {
   let changed = false;
   const next: Record<string, string> = {};
   for (const [key, value] of Object.entries(sessionLabels)) {
-    if (isCorruptedSessionLabel(value)) {
+    if (isCorruptedSessionLabel(value) || isPlaceholderSessionLabel(value)) {
       changed = true;
     } else {
       next[key] = value;
     }
   }
   return changed ? next : sessionLabels;
+}
+
+/** Clear gateway `label` fields that contain injected DingTalk/workflow markers. */
+export function sanitizeGatewaySessionLabels<T extends ChatSession>(
+  sessions: T[],
+): T[] {
+  return sessions.map((session) => {
+    const label = session.label?.trim();
+    if (label && (isCorruptedSessionLabel(label) || isPlaceholderSessionLabel(label))) {
+      return { ...session, label: undefined };
+    }
+    return session;
+  });
 }
 
 /** 与 Sidebar.getSessionLabel 保持同一解析顺序与 fallback 规则 */

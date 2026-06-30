@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { RawMessage } from '@/stores/chat';
+import { useChatStore, type RawMessage } from '@/stores/chat';
 import { buildChatDisplayItems, findLastUserMessage, isAssistantRole, type ChatDisplayItem } from './chat-display';
 import type { ActiveTurnStream } from './AssistantTurnMessage';
 import { extractImages, extractThinking, extractToolUse } from './message-utils';
@@ -34,9 +34,9 @@ export function useChatDisplay(params: {
   streamMsg: { role?: string; content?: unknown; timestamp?: number; id?: string } | null;
   streamText: string;
   streamingTools: StreamingTool[];
-  lastUserMessageAt: number | null;
 }) {
-  const { messages, sending, pendingFinal, showThinking, lastChatEventAt, streamMsg, streamText, streamingTools, lastUserMessageAt } = params;
+  const { messages, sending, pendingFinal, showThinking, lastChatEventAt, streamMsg, streamText, streamingTools } = params;
+  const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
 
   const [, staleTick] = useState(0);
   useEffect(() => {

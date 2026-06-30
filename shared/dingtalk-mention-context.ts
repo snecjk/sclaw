@@ -119,7 +119,8 @@ export function stripDingTalkMentionContextForDisplay(message: string): string {
     return legacySplit[legacySplit.length - 1].replace(/^用户消息：\n?/, '').trim();
   }
 
-  return message;
+  // System-context injection only (no `用户消息：` body) — not human-visible text.
+  return '';
 }
 
 export interface DingTalkMentionContextOptions {

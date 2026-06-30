@@ -1,45 +1,65 @@
 {
-  "dwsVersion": "1.0.32",
+  "dwsVersion": "1.0.44",
   "skillMode": "mono",
-  "skillsRevision": "1.0.32",
-  "mirrorBaseUrl": null,
-  "releaseUrl": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/tag/v1.0.32",
+  "skillsRevision": "1.0.44",
+  "sources": {
+    "github": {
+      "repo": "DingTalk-Real-AI/dingtalk-workspace-cli"
+    },
+    "gitee": {
+      "repo": "DingTalk-Real-AI/dingtalk-workspace-cli"
+    }
+  },
+  "releaseUrl": null,
+  "resolvedFrom": "gitee",
   "platforms": {
     "darwin-arm64": {
-      "url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.32/dws-darwin-arm64.tar.gz",
-      "sha256": "0abad4f46c546897f4335dac4a84ed0f50615706fa4d07bb0dce03edbff3e9c8",
+      "assetName": "dws-darwin-arm64.tar.gz",
+      "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.44/dws-darwin-arm64.tar.gz",
+      "sha256": null,
       "archive": "tar.gz",
-      "size": 4358729
+      "githubSha256": "4363371952968717ad9c42c486fa9707134cd82f9794e4a326323e5c53f73903"
     },
     "darwin-x64": {
-      "url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.32/dws-darwin-amd64.tar.gz",
-      "sha256": "e28ccb0fe807166fe282727b3eab52dad0fb23c375f2c7fcb67bd8ad89156e4a",
+      "assetName": "dws-darwin-amd64.tar.gz",
+      "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.44/dws-darwin-amd64.tar.gz",
+      "sha256": null,
       "archive": "tar.gz",
-      "size": 4728328
+      "githubSha256": "f22e4743252531ca3024f9251077b0529f9b9a398f5342a720d36fb8707909fe"
     },
     "win32-x64": {
-      "url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.32/dws-windows-amd64.zip",
-      "sha256": "ac2fe016dd7bd284dc8180b59ad8f3371ef8f4a065fef567f4210ba69d4a49f0",
+      "assetName": "dws-windows-amd64.zip",
+      "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.44/dws-windows-amd64.zip",
+      "sha256": null,
       "archive": "zip",
-      "size": 4819404
+      "githubSha256": "2446e6818e1cfe4879d780291400d6cfa57e445612b0e602faf3cc8c37594642"
     },
     "win32-arm64": {
-      "url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.32/dws-windows-arm64.zip",
-      "sha256": "3c4f617a61d55d411c896e5a7bccc0a8335ed5ed3a707bec728fa62604db19fd",
+      "assetName": "dws-windows-arm64.zip",
+      "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.44/dws-windows-arm64.zip",
+      "sha256": null,
       "archive": "zip",
-      "size": 4301786
+      "githubSha256": "710b93b10ea6d8c5178e9dac7f20cd0a853b0f8c06221a2540d1390eeb00315f"
     },
     "linux-x64": {
-      "url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.32/dws-linux-amd64.tar.gz",
-      "sha256": "1d2d474e091e0ad1155d48a949c65c4d418cd35380f03250c4bcb8f1308e37e7",
+      "assetName": "dws-linux-amd64.tar.gz",
+      "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.44/dws-linux-amd64.tar.gz",
+      "sha256": null,
       "archive": "tar.gz",
-      "size": 4856595
+      "githubSha256": "3d28dae8f55d67e55ab2f7f03a0f225dc3cf318c7dae3d48f5715913b2331944"
     },
     "linux-arm64": {
-      "url": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.32/dws-linux-arm64.tar.gz",
-      "sha256": "59233c807af9952cf4a3da976d08e66501852b29d8749f4daf344dc551394e7d",
+      "assetName": "dws-linux-arm64.tar.gz",
+      "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.44/dws-linux-arm64.tar.gz",
+      "sha256": null,
       "archive": "tar.gz",
-      "size": 4402393
+      "githubSha256": "db012770b2bd93b47f8bde432626f501bb30f559f27856320e69b4edb792f1b5"
     }
+  },
+  "skillsZip": {
+    "assetName": "dws-skills.zip",
+    "url": "https://gitee.com/dingtalk-real-ai/dingtalk-workspace-cli/releases/download/v1.0.44/dws-skills.zip",
+    "sha256": null,
+    "githubSha256": "82b75f16e15c8432105202ef90489b684c124b61d6ff363f8a548eb34c0dead5"
   }
 }
