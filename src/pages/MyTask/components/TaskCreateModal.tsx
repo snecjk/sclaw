@@ -304,6 +304,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
             <input
               type="text"
               value={name}
+							maxLength={40}
               onChange={(e) => {
                 setName(e.target.value);
                 if (errors.name) setErrors((p) => ({ ...p, name: undefined }));

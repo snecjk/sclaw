@@ -47,7 +47,6 @@ import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unrea
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
-import { SidebarRunningIcon } from '@/components/layout/sidebar-running-icon';
 import { SidebarRecentSessionRowTrailing } from '@/components/layout/sidebar-recent-session-row-trailing';
 import {
   SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
@@ -56,7 +55,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { resolveSessionLabel } from '@/lib/session-label';
 import { sortSessionsByRecentActivity } from '@/lib/sidebar-recent-order';
-import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
+import { type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { scheduleSessionLabelHydrationForStore } from '@/stores/chat/session-metadata-hydrate';
@@ -233,40 +232,58 @@ function SidebarTaskDateLinks({
     sessionKey: string;
   }) => void;
 }) {
-  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { t, i18n } = useTranslation(['tasks', 'common']);
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const switchSession = useChatStore((s) => s.switchSession);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const sessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
   const isSubitemUnread = useStoTaskSubitemsStore((s) => s.isSubitemUnread);
   const markSubitemReadFromActivity = useStoTaskSubitemsStore((s) => s.markSubitemReadFromActivity);
 
   useEffect(() => {
-    const activeEntry = entries.find((entryId) => pathname === taskDetailPath(taskId, entryId));
+    const activeEntry = entries.find((entryId) => {
+      const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)] ?? '';
+      return sk === currentSessionKey;
+    });
     if (!activeEntry) return;
     const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, activeEntry)] ?? '';
     if (!sk) return;
     const a = sessionLastActivity[sk] ?? 0;
     if (a > 0) markSubitemReadFromActivity(taskId, activeEntry, a);
-  }, [entries, pathname, taskId, sessionKeyBySubitem, sessionLastActivity, markSubitemReadFromActivity]);
+  }, [entries, taskId, sessionKeyBySubitem, sessionLastActivity, currentSessionKey, markSubitemReadFromActivity]);
+
+  const openSubitemSession = (entryId: string, sk: string, label: string) => {
+    const chat = useChatStore.getState();
+    if (!chat.sessions.some((session) => session.key === sk)) {
+      useChatStore.setState((state) => ({
+        sessions: [...state.sessions, { key: sk, label }],
+      }));
+    }
+    chat.renameSession(sk, label);
+    const a = chat.sessionLastActivity[sk] ?? 0;
+    if (a > 0) markSubitemReadFromActivity(taskId, entryId, a);
+    navigateToMainChatHome(navigate, location.pathname, () => switchSession(sk));
+  };
 
   return (
     <>
       {entries.map((entryId) => {
-        const to = taskDetailPath(taskId, entryId);
-        const active = pathname === to;
         const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)] ?? '';
+        const active = Boolean(sk) && currentSessionKey === sk;
         const activity = sk ? (sessionLastActivity[sk] ?? 0) : 0;
         const unread = !active && isSubitemUnread(taskId, entryId, activity);
         const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
         const label = t('tasks:sidebarMaterialTitle', { date: dateLabel });
         return (
           <div key={entryId} className="group relative flex w-full min-w-0 items-center">
-            <NavLink
-              to={to}
+            <button
+              type="button"
+              disabled={!sk}
               onClick={() => {
                 if (!sk) return;
-                const a = useChatStore.getState().sessionLastActivity[sk] ?? 0;
-                if (a > 0) markSubitemReadFromActivity(taskId, entryId, a);
+                openSubitemSession(entryId, sk, label);
               }}
               className={cn(
                 'relative z-[1] inline-flex h-7 w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
@@ -281,7 +298,7 @@ function SidebarTaskDateLinks({
                   aria-label={t('tasks:unreadBadge', { defaultValue: 'Unread' })}
                 />
               ) : null}
-            </NavLink>
+            </button>
             {sk ? (
               <SidebarTaskSubitemDeleteTrailing
                 isActive={active}
@@ -320,8 +337,8 @@ function SidebarTaskGroup({
   /** 任务列表首次展开行数上限；undefined = 展示全部子项 */
   maxVisibleEntries?: number;
 }) {
-  const { pathname } = useLocation();
   const { t: tTasks } = useTranslation('tasks');
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const rawEntryIds = useStoTaskSubitemsStore((s) => s.entriesByTask[taskId]);
   const sessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
   const isSubitemUnread = useStoTaskSubitemsStore((s) => s.isSubitemUnread);
@@ -334,9 +351,12 @@ function SidebarTaskGroup({
   const visibleEntries = maxVisibleEntries === undefined ? entries : entries.slice(0, maxVisibleEntries);
 
   const activeEntryId = useMemo(() => {
-    const m = matchPath({ path: '/tasks/:taskId/:entryId', end: true }, pathname);
-    return m?.params.taskId === taskId && m.params.entryId ? m.params.entryId : null;
-  }, [pathname, taskId]);
+    for (const entryId of entries) {
+      const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)] ?? '';
+      if (sk === currentSessionKey) return entryId;
+    }
+    return null;
+  }, [entries, taskId, sessionKeyBySubitem, currentSessionKey]);
 
   const hasUnreadSubitem = useMemo(() => {
     if (entries.length === 0) return false;
@@ -357,9 +377,9 @@ function SidebarTaskGroup({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId]); // Only depend on taskId, not entries
-  const underTask = pathname.startsWith(`/tasks/${taskId}`);
+  const underTask = activeEntryId !== null;
 
-  // Expand once when entering this task route; do not re-run on parent re-renders (e.g. chat streaming).
+  // 当前会话属于该任务组时自动展开（与定时任务组一致，不再依赖 /tasks 路由）。
   useEffect(() => {
     if (underTask) onRequestExpand();
     // eslint-disable-next-line react-hooks/exhaustive-deps
