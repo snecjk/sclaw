@@ -120,30 +120,68 @@ describe('workflow form injection guard', () => {
     expect(resolved?.formId).toContain('tpl-1');
   });
 
-  it('blocks casual last user even when schema exists in history', () => {
-    const uiMessages: RawMessage[] = [
-      { role: 'user', content: '随便生成一个和' },
-      { role: 'assistant', content: '好的' },
+  it('resolveParameterFormForAssistantMessage returns null after params confirmed in same turn', async () => {
+    mockState.hasWorkflowExecution = true;
+    const { resolveParameterFormForAssistantMessage } = await import(
+      '@/stores/chat/parameter-form-recovery'
+    );
+    const introAssistant: RawMessage = {
+      role: 'assistant',
+      content: [
+        { type: 'text', text: '请填写参数' },
+        {
+          type: 'parameter_form',
+          formId: 'wf-tpl-1',
+          formConfig: { fields: [] },
+          formContext: { source: 'workflow', sourceId: 'tpl-1', schemaHash: 'hash-1' },
+        },
+      ],
+      id: 'a-intro',
+    };
+    const replyAssistant: RawMessage = {
+      role: 'assistant',
+      content: [
+        { type: 'text', text: '参数已确认，工作流已在后台启动执行（工作流 ID: wf_1）' },
+        { type: 'workflow_card', runId: 'run_1', templateName: '客户异常监控' },
+      ],
+      id: 'a-reply',
+    };
+    const sessionMessages: RawMessage[] = [
+      { role: 'user', content: '客户异常监控 创建工作流', id: 'u1' },
+      introAssistant,
+      replyAssistant,
     ];
-    const rawMessages: RawMessage[] = [
-      ...uiMessages,
-      {
-        role: 'tool_result',
-        content: JSON.stringify({
-          type: 'workflow_schema_ready',
-          success: true,
-          data: { templateId: 'tpl-1', schemaHash: 'hash-1' },
-        }),
+    const resolvedIntro = resolveParameterFormForAssistantMessage(introAssistant, {
+      sessionMessages,
+      sessionKey: 'agent:main:main',
+      pendingWorkflow: {
+        templateId: 'tpl-1',
+        templateName: '客户异常监控',
+        schemaHash: 'hash-1',
+        schema: { fields: [], steps: [] },
+        collectedInputs: {},
+        modelGuidanceSent: true,
       },
-    ];
-    expect(
-      isWorkflowFormInjectionAllowed('tpl-1', uiMessages, getMessageText, 'agent:main:main', {
-        rawMessages,
-      }),
-    ).toBe(false);
+      getMessageText,
+    });
+    const resolvedReply = resolveParameterFormForAssistantMessage(replyAssistant, {
+      sessionMessages,
+      sessionKey: 'agent:main:main',
+      pendingWorkflow: {
+        templateId: 'tpl-1',
+        templateName: '客户异常监控',
+        schemaHash: 'hash-1',
+        schema: { fields: [], steps: [] },
+        collectedInputs: {},
+        modelGuidanceSent: true,
+      },
+      getMessageText,
+    });
+    expect(resolvedIntro).toBeNull();
+    expect(resolvedReply).toBeNull();
   });
 
-  it('allows display when parameter_form block already exists on assistant', () => {
+  it('blocks casual last user even when schema exists in history', () => {
     const uiMessages: RawMessage[] = [
       { role: 'user', content: '客户异常监控 创建工作流' },
       {

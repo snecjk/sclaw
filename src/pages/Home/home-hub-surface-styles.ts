@@ -14,10 +14,10 @@ export const homeHubCardShellClass = cn(
   'dark:bg-secondary dark:shadow-soft',
 );
 
-/** 可点击卡片（工作流 / 经营管理卡）在统一壳层上保留 hover */
+/** 可点击卡片（工作流 / 经营管理卡）在统一壳层上保留 hover；h-full 使 grid 同行等高、底栏对齐 */
 export const homeHubInteractiveCardShellClass = cn(
   homeHubCardShellClass,
-  'relative min-h-0 min-w-0 w-full overflow-hidden text-left transition-shadow duration-base hover:shadow-soft',
+  'relative h-full min-h-0 min-w-0 w-full overflow-hidden text-left transition-shadow duration-base hover:shadow-soft',
 );
 
 /** MasterGo Overlay「功能」标签 */
@@ -28,7 +28,14 @@ export const homeHubCardTitleClass = cn('text-sm font-medium leading-[18px]', ho
 
 export const homeHubCardDescClass = cn('text-xs leading-[18px]', homeHubTextSecondary);
 
-export const homeHubCardGridClass = 'grid w-full gap-4 sm:grid-cols-3';
+export const homeHubCardGridClass = 'grid w-full items-stretch gap-4 sm:grid-cols-3';
+
+/** 卡片中间区：占据剩余高度，把底栏顶到底部 */
+export const homeHubCardBodyRegionClass = 'mt-5 min-h-[4.5rem] flex-1';
+
+/** 卡片底栏（头像 + 团队名 + CTA），同行卡片底部对齐 */
+export const homeHubCardFooterRegionClass =
+  'mt-5 flex min-h-[40px] shrink-0 items-center gap-3 border-t border-[#E5E6EB] pt-4 dark:border-border';
 
 /** 首页 Hero / 卡片 / 输入区共用最大宽（与 --sto-hero-input-max-w 同源，当前 780px） */
 export const homeHubContentMaxWidthClass =

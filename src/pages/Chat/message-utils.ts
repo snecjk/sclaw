@@ -14,6 +14,7 @@ import {
   parseParameterFormMarker,
 } from '@/lib/parameter-form-marker';
 import { resolveParameterFormId } from '@/components/parameter-form/form-handlers';
+import { currentUserTurnHasWorkflowSubmission } from '@/lib/workflow-card-injection';
 import type { RawMessage, ContentBlock } from '@/stores/chat';
 import { truncatePreviewExtractExcerpt } from '../../../shared/preview-extract-trace';
 import {
@@ -404,6 +405,10 @@ export function extractParameterForm(
         sourceId: string;
         schemaHash?: string;
       };
+      const sessionMessages = useChatStore.getState().messages;
+      if (currentUserTurnHasWorkflowSubmission(sessionMessages)) {
+        return null;
+      }
       if (
         formContext.source === 'workflow'
         && formContext.sourceId
@@ -411,7 +416,7 @@ export function extractParameterForm(
       ) {
         return null;
       }
-      
+
       return {
         formId,
         formConfig: (block as any).formConfig as import('@/types/user-form').UserFormConfig,
@@ -425,6 +430,10 @@ export function extractParameterForm(
       if (parsed) {
         const { templateId, schemaHash } = parsed;
         const sessionKey = useChatStore.getState().currentSessionKey;
+        const sessionMessages = useChatStore.getState().messages;
+        if (currentUserTurnHasWorkflowSubmission(sessionMessages)) {
+          return null;
+        }
         if (sessionHasWorkflowExecution(sessionKey, templateId)) {
           return null;
         }

@@ -662,8 +662,10 @@ export const ChatMessage = memo(function ChatMessage({
           />
         ) : null}
 
-        {/* B3：表单待提交等待指示（选项卡本体样式属任务二） */}
-        {parameterForm ? <AwaitingReplyIndicator className="px-0.5" /> : null}
+        {/* B3：表单待提交等待指示；工作流已提交/执行后不再展示 */}
+        {parameterForm && workflowCard === null && !showAssistantParamsFold ? (
+          <AwaitingReplyIndicator className="px-0.5" />
+        ) : null}
 
         {/* Parameter form card — 任务二：浮层开启时内联挂载隐藏（恢复：设 PARAMETER_FORM_USE_FLOAT_DOCK=false） */}
         {parameterForm && !PARAMETER_FORM_USE_FLOAT_DOCK ? (

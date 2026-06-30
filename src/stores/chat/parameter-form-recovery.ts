@@ -10,6 +10,7 @@ import type { WorkflowSchemaReadyData } from '@/lib/builtin-tool-envelope';
 import { parseStoToolEnvelope } from '@/lib/builtin-tool-envelope';
 import { isWorkflowFormUserTurn } from '@/hooks/use-workflow-intent';
 import { PARAM_FORM_MARKER_REGEX, parseParameterFormMarker } from '@/lib/parameter-form-marker';
+import { currentUserTurnHasWorkflowSubmission } from '@/lib/workflow-card-injection';
 import { messageHasWorkflowContext } from '@/lib/workflow-context';
 import { deriveSessionLabelFromUserText } from '@/lib/workflow-session-hint';
 import { saveWorkflowRecord, sessionHasWorkflowExecution } from '@/stores/workflow-memory';
@@ -229,6 +230,11 @@ export function reconcilePendingWorkflowForSession(
 ): void {
   const pending = useChatStore.getState().pendingWorkflow;
   if (!pending?.templateId) return;
+  // 本轮已提交并启动工作流时，pending 属于 stale 状态，避免 B3 等待指示残留
+  if (currentUserTurnHasWorkflowSubmission(uiMessages, getMessageText)) {
+    useChatStore.getState().clearPendingWorkflow();
+    return;
+  }
   if (
     isWorkflowFormInjectionAllowed(
       pending.templateId,
@@ -674,6 +680,10 @@ export function resolveParameterFormForAssistantMessage(
   },
 ): ReturnType<typeof buildWorkflowParameterFormFromPending> {
   const { sessionMessages, sessionKey, pendingWorkflow, getMessageText } = options;
+
+  if (currentUserTurnHasWorkflowSubmission(sessionMessages, getMessageText)) {
+    return null;
+  }
 
   const contentBlocks = Array.isArray(message.content)
     ? (message.content as ContentBlock[])
