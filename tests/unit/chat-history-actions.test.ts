@@ -313,6 +313,88 @@ describe('chat history actions', () => {
     ]);
   });
 
+  it('merges cron fallback with partial gateway history for dated task sessions', async () => {
+    const { createHistoryActions } = await import('@/stores/chat/history-actions');
+    const sessionKey = 'agent:main:cron:job-1:2026-06-30';
+    const h = makeHarness({
+      currentSessionKey: sessionKey,
+      sessions: [{ key: sessionKey, engineType: 'openclaw' }],
+      messages: [
+        {
+          id: 'cron-meta-job-1',
+          role: 'system',
+          content: 'Scheduled task: Finance workflow',
+          timestamp: 1,
+        },
+        {
+          id: 'user-1',
+          role: 'user',
+          content: 'run workflow',
+          timestamp: 2,
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: 'workflow started',
+          timestamp: 3,
+        },
+      ] as never,
+    });
+    const actions = createHistoryActions(h.set as never, h.get as never);
+
+    hostApiFetchMock.mockResolvedValueOnce({
+      success: true,
+      result: {
+        messages: [
+          {
+            id: 'user-2',
+            role: 'user',
+            content: 'still running?',
+            timestamp: 4,
+          },
+          {
+            id: 'assistant-2',
+            role: 'assistant',
+            content: 'yes',
+            timestamp: 5,
+          },
+        ],
+      },
+    });
+    hostApiFetchMock.mockResolvedValueOnce({
+      messages: [
+        {
+          id: 'cron-meta-job-1',
+          role: 'system',
+          content: 'Scheduled task: Finance workflow',
+          timestamp: 1,
+        },
+        {
+          id: 'user-1',
+          role: 'user',
+          content: 'run workflow',
+          timestamp: 2,
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: 'workflow started',
+          timestamp: 3,
+        },
+      ],
+    });
+
+    await actions.loadHistory(true);
+
+    expect(h.read().messages.map((message) => message.id)).toEqual([
+      'cron-meta-job-1',
+      'user-1',
+      'assistant-1',
+      'user-2',
+      'assistant-2',
+    ]);
+  });
+
   it('preserves a repeated identical user message separated by an assistant reply', async () => {
     // Regression for "identical input overwrites previous output": two distinct
     // sends of the same text must both be kept. The assistant reply between them

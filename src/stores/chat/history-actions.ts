@@ -26,6 +26,7 @@ import {
   isCronSessionKey,
   isCronDatedSessionKey,
   isScheduledTaskSessionKey,
+  isVirtualTaskSessionKey,
 } from './cron-session-utils';
 import type { RawMessage } from './types';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
@@ -34,6 +35,10 @@ import {
   mergeOptimisticUserIntoHistory,
   traceLoadHistoryUserReconciliation,
 } from './user-message-merge';
+import {
+  mergeHistoryMessageSources,
+  mergeHistoryWhenShrunk,
+} from './history-merge';
 
 async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
   if (!isCronSessionKey(sessionKey) && !isCronDatedSessionKey(sessionKey)) return [];
@@ -74,6 +79,19 @@ async function loadClaudeScheduledTaskFallbackMessages(sessionKey: string, limit
   }
 }
 
+async function loadVirtualTaskFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
+  if (isCronSessionKey(sessionKey) || isCronDatedSessionKey(sessionKey)) {
+    return loadCronFallbackMessages(sessionKey, limit);
+  }
+  if (isScheduledTaskSessionKey(sessionKey)) {
+    return loadScheduledTaskFallbackMessages(sessionKey, limit);
+  }
+  if (isClaudeScheduledTaskSessionKey(sessionKey)) {
+    return loadClaudeScheduledTaskFallbackMessages(sessionKey, limit);
+  }
+  return [];
+}
+
 export function createHistoryActions(
   set: ChatSet,
   get: ChatGet,
@@ -86,6 +104,7 @@ export function createHistoryActions(
       if (!quiet) set({ loading: true, error: null });
 
       const applyLoadedMessages = (rawMessages: RawMessage[], thinkingLevel: string | null) => {
+        rawMessages = mergeHistoryWhenShrunk(rawMessages, get().messages);
         // Before filtering: attach images/files from tool_result messages to the next assistant message
         const messagesWithToolImages = enrichWithToolResultFiles(rawMessages);
         const filteredMessages = messagesWithToolImages.filter((msg) => !isToolResultRole(msg.role));
@@ -272,7 +291,12 @@ export function createHistoryActions(
         }
 
         let rawMessages = allMessages;
-        if (rawMessages.length === 0 && (isCronSessionKey(currentSessionKey) || isCronDatedSessionKey(currentSessionKey))) {
+        if (isVirtualTaskSessionKey(currentSessionKey)) {
+          const fallbackMessages = await loadVirtualTaskFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
+          rawMessages = fallbackMessages.length > 0
+            ? mergeHistoryMessageSources([fallbackMessages, allMessages])
+            : allMessages;
+        } else if (rawMessages.length === 0 && (isCronSessionKey(currentSessionKey) || isCronDatedSessionKey(currentSessionKey))) {
           rawMessages = await loadCronFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
         }
         if (rawMessages.length === 0 && isScheduledTaskSessionKey(currentSessionKey)) {
