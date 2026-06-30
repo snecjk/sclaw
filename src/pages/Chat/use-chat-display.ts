@@ -25,6 +25,22 @@ function hasStreamPayload(
   return hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasStreamToolStatus;
 }
 
+/** 仍在增量输出的流式内容（不含仅 completed 的 streamingTools） */
+function hasActiveStreamContent(
+  streamMsg: { content?: unknown } | null,
+  streamText: string,
+  streamingTools: StreamingTool[],
+  showThinking: boolean,
+): boolean {
+  const hasStreamText = streamText.trim().length > 0;
+  const streamThinking = streamMsg ? extractThinking(streamMsg) : null;
+  const hasStreamThinking = showThinking && !!streamThinking && streamThinking.trim().length > 0;
+  const hasStreamTools = streamMsg ? extractToolUse(streamMsg).length > 0 : false;
+  const hasStreamImages = streamMsg ? extractImages(streamMsg).length > 0 : false;
+  const hasRunningStreamTool = streamingTools.some((tool) => tool.status === 'running');
+  return hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasRunningStreamTool;
+}
+
 export function useChatDisplay(params: {
   messages: RawMessage[];
   sending: boolean;
@@ -48,6 +64,7 @@ export function useChatDisplay(params: {
   const displayItems = useMemo(() => buildChatDisplayItems(messages), [messages]);
 
   const hasAnyStreamContent = hasStreamPayload(streamMsg, streamText, streamingTools, showThinking);
+  const hasLiveStreamContent = hasActiveStreamContent(streamMsg, streamText, streamingTools, showThinking);
   const shouldRenderStreaming = sending && hasAnyStreamContent;
 
   const isStillExecuting = useMemo(() => {
@@ -84,7 +101,7 @@ export function useChatDisplay(params: {
       streamText,
       streamingTools,
       isConnecting: !pendingFinal && !hasAnyStreamContent && !isStillExecuting,
-      isProcessing: pendingFinal && !shouldRenderStreaming,
+      isProcessing: pendingFinal && sending && !hasLiveStreamContent,
       isStillExecuting,
     };
 

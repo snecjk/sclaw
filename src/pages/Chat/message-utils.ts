@@ -586,8 +586,13 @@ export type ThinkingTimelineItem =
   | { type: 'thinking'; content: string }
   | { type: 'tool'; index: number; id: string; name: string; input: unknown };
 
+function thinkingTimelineToolKey(tool: { id: string; name: string; input: unknown }): string {
+  return tool.id || `${tool.name}::${JSON.stringify(tool.input ?? null)}`;
+}
+
 /**
  * Ordered thinking + tool_use segments from message content (preserves block order).
+ * Also picks up OpenAI `tool_calls` on the message when they are not in the content array.
  */
 export function extractThinkingTimeline(message: RawMessage | unknown): ThinkingTimelineItem[] {
   if (!message || typeof message !== 'object') return [];
@@ -622,17 +627,26 @@ export function extractThinkingTimeline(message: RawMessage | unknown): Thinking
     if (thinking) {
       items.push({ type: 'thinking', content: thinking });
     }
-    const tools = extractToolUse(message);
-    for (const tool of tools) {
-      toolIndex += 1;
-      items.push({
-        type: 'tool',
-        index: toolIndex,
-        id: tool.id || `tool-${toolIndex}`,
-        name: tool.name,
-        input: tool.input,
-      });
-    }
+  }
+
+  const capturedToolKeys = new Set(
+    items
+      .filter((item): item is Extract<ThinkingTimelineItem, { type: 'tool' }> => item.type === 'tool')
+      .map((item) => thinkingTimelineToolKey({ id: item.id, name: item.name, input: item.input })),
+  );
+
+  for (const tool of extractToolUse(message)) {
+    const key = thinkingTimelineToolKey(tool);
+    if (capturedToolKeys.has(key)) continue;
+    toolIndex += 1;
+    items.push({
+      type: 'tool',
+      index: toolIndex,
+      id: tool.id || `tool-${toolIndex}`,
+      name: tool.name,
+      input: tool.input,
+    });
+    capturedToolKeys.add(key);
   }
 
   return items;

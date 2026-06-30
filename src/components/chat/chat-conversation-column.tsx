@@ -8,7 +8,6 @@
  */
 import { cn } from '@/lib/utils';
 import {
-  stoChatColumnClass,
   stoSplitChatPaneClass,
   stoSplitChatPaneContentWrapClass,
   type StoChatColumnVariant,
@@ -27,18 +26,16 @@ export interface ChatConversationColumnProps {
 }
 
 export function ChatConversationColumn({
-  variant,
+  variant: _variant,
   isSplitLayout,
   splitGridChatClass,
   className,
   children,
 }: ChatConversationColumnProps) {
   return (
-    <div className={cn(stoSplitChatPaneClass, splitGridChatClass)}>
+    <div className={cn(stoSplitChatPaneClass, splitGridChatClass, className)}>
       <div className={stoSplitChatPaneContentWrapClass(isSplitLayout)}>
-        <div className={cn(stoChatColumnClass(variant, isSplitLayout), className)}>
-          {children}
-        </div>
+        {children}
       </div>
     </div>
   );

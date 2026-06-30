@@ -1,19 +1,50 @@
-import { useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
-import { ChevronDown, ChevronRight, Loader2, MessageCircle } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { resolveChatThinkingIcon } from '@/lib/chat-process-icons';
+import { resolveChatToolDisplayName } from '@/lib/chat-tool-display-name';
+import {
+  chatProcessBlockBodyClass,
+  ChatProcessBlock,
+} from '@/components/chat/chat-process-block';
+import { useTypewriterReveal } from '@/hooks/use-typewriter-reveal';
+import { useSequentialTypewriterQueue } from '@/hooks/use-sequential-typewriter-queue';
+import { ChatProcessLoadingEllipsis } from '@/components/chat/chat-process-loading-ellipsis';
+import {
+  ChatProcessLoadingIndicator,
+  ChatProcessLoadingInlineIndicator,
+} from '@/components/chat/chat-process-loading-indicator';
 import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
+import { chatThinkingSummaryHeaderClass } from '@/lib/surfaces';
+import {
+  timelineBlockResetKey,
+  toolRowKey,
+  streamingToolKey,
+} from '@/lib/thinking-timeline-active';
 import { useSkillsStore } from '@/stores/skills';
 import { type ThinkingTimelineItem } from './message-utils';
 
-/** 思考条目正文区最大高度 ≈ 4 行（02-styles 代码块折叠规范，text-sm leading-5） */
-const THINKING_ENTRY_MAX_HEIGHT_CLASS = 'max-h-20';
+/** 无外层卡片：思考过程直接铺在对话区底色上 */
+const thinkingPanelRootClass = 'w-full';
 
-/** 无外层卡片：思考过程直接铺在对话区底色上（设计稿 flat 布局） */
-const thinkingPanelRootClass = 'w-full text-[13px] leading-[18px]';
+/** chat-interaction-style-spec §5.6：高度 0↔auto，300ms ease */
+const thinkingPanelBodyGridClass = (expanded: boolean, animate: boolean) =>
+  cn(
+    'grid transition-[grid-template-rows]',
+    animate ? 'duration-300 ease-[ease]' : 'transition-none',
+    expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+  );
+
+/** §5.6 / §6.2：箭头 200ms ease；收起 -90°（→），展开 180°（↑） */
+const thinkingPanelChevronClass = (expanded: boolean, animate: boolean) =>
+  cn(
+    'h-3.5 w-3.5 shrink-0 opacity-70 transition-transform',
+    animate ? 'duration-200 ease-[ease]' : 'transition-none',
+    expanded ? 'rotate-180' : '-rotate-90',
+  );
 
 type StreamingTool = {
   id?: string;
@@ -22,27 +53,6 @@ type StreamingTool = {
   status: 'running' | 'completed' | 'error';
   summary?: string;
 };
-
-/**
- * 流式脉冲点（与 ChatMessage.StreamingPulse 参数一致，02-styles §流式脉冲）
- * 独立副本：避免 ThinkingProcessPanel ↔ ChatMessage 循环依赖。
- */
-function StreamingPulse() {
-  return (
-    <div className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
-      <motion.span
-        className="absolute h-2.5 w-2.5 rounded-full bg-primary/25"
-        animate={{ scale: [0.8, 1.8], opacity: [0.45, 0] }}
-        transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut' }}
-      />
-      <motion.span
-        className="relative h-1.5 w-1.5 rounded-full bg-primary"
-        animate={{ scale: [0.92, 1.15, 0.92] }}
-        transition={{ duration: 0.8, repeat: Infinity, ease: 'easeInOut' }}
-      />
-    </div>
-  );
-}
 
 export type ConnectingLabelKey = 'connectingModel' | 'understandingQuestion' | 'stillExecuting';
 
@@ -53,7 +63,7 @@ export interface ConnectingModelIndicatorProps {
 }
 
 /**
- * 连接/理解等待指示：脉冲点 + 灰字（A1/B1，MasterGo → 02-styles text-muted-foreground text-sm）
+ * 连接/理解等待指示：chat-interaction-style-spec §4.6（loading.gif + 文案 shimmer）
  */
 export function ConnectingModelIndicator({
   className,
@@ -62,32 +72,24 @@ export function ConnectingModelIndicator({
   const { t } = useTranslation('chat');
 
   return (
-    <div
-      className={cn('flex items-center gap-2 text-sm text-muted-foreground', className)}
-      role="status"
-      aria-live="polite"
-    >
-      <StreamingPulse />
-      <span>{t(`streaming.${labelKey}`)}</span>
-    </div>
+    <ChatProcessLoadingInlineIndicator
+      className={className}
+      label={t(`streaming.${labelKey}`)}
+    />
   );
 }
 
 /**
- * B3 等待用户填写/提交参数表单：脉冲点 + awaitingReply 文案（持续到提交，仅视觉）
+ * B3 等待用户填写/提交参数表单：脉冲 + awaitingReply 文案（持续到提交，仅视觉）
  */
 export function AwaitingReplyIndicator({ className }: { className?: string }) {
   const { t } = useTranslation('chat');
 
   return (
-    <div
-      className={cn('flex items-center gap-2 text-sm text-muted-foreground', className)}
-      role="status"
-      aria-live="polite"
-    >
-      <StreamingPulse />
-      <span>{t('streaming.awaitingReply')}</span>
-    </div>
+    <ChatProcessLoadingInlineIndicator
+      className={className}
+      label={t('streaming.awaitingReply')}
+    />
   );
 }
 
@@ -98,17 +100,57 @@ interface ThinkingProcessPanelProps {
   isProcessing?: boolean;
   isStillExecuting?: boolean;
   streamingTools?: StreamingTool[];
+  /** 正文已有内容（与 isStreaming 等配合：全部输出且思考结束后再自动收起） */
+  hasReplyBody?: boolean;
   /** @see ConnectingModelIndicatorProps.labelKey */
   connectingLabelKey?: ConnectingLabelKey;
   className?: string;
 }
 
-function toolRowKey(tool: Extract<ThinkingTimelineItem, { type: 'tool' }>): string {
-  return tool.id || `tool-${tool.index}`;
-}
+function ThinkingBlockBody({
+  content,
+  isTypewriterActive,
+  resetKey,
+  onRevealComplete,
+}: {
+  content: string;
+  isTypewriterActive: boolean;
+  resetKey: string;
+  /** 当前块打字追平快照后回调，用于顺序队列切到下一块 */
+  onRevealComplete?: () => void;
+}) {
+  const { text: displayed, isAnimating } = useTypewriterReveal(content, isTypewriterActive, {
+    resetKey,
+  });
 
-function streamingToolKey(tool: StreamingTool): string {
-  return tool.toolCallId || tool.id || tool.name;
+  useEffect(() => {
+    if (!isTypewriterActive || isAnimating) return;
+    if (displayed.length < content.length) return;
+    onRevealComplete?.();
+  }, [isTypewriterActive, isAnimating, displayed, content.length, onRevealComplete]);
+
+  if (isTypewriterActive || isAnimating) {
+    return (
+      <p
+        className={cn(chatProcessBlockBodyClass, 'whitespace-pre-wrap')}
+        aria-busy={isTypewriterActive || isAnimating ? true : undefined}
+      >
+        {displayed}
+        {isTypewriterActive ? <ChatProcessLoadingEllipsis /> : null}
+      </p>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        'prose prose-sm max-w-none dark:prose-invert',
+        chatProcessBlockBodyClass,
+      )}
+    >
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+    </div>
+  );
 }
 
 function buildCollapsedSummary(
@@ -131,7 +173,9 @@ function resolveSkillDisplayName(name: string, skills: { id: string; slug?: stri
   const skill = skills.find(
     (s) => s.id === name || s.slug === name || s.id.toLowerCase() === name.toLowerCase() || s.slug?.toLowerCase() === name.toLowerCase(),
   );
-  return skill?.title || skill?.name || name;
+  const skillLabel = skill?.title || skill?.name;
+  if (skillLabel) return skillLabel;
+  return resolveChatToolDisplayName(name);
 }
 
 function resolveSkillNamesInThinking(
@@ -168,23 +212,58 @@ export function ThinkingProcessPanel({
   isProcessing = false,
   isStillExecuting = false,
   streamingTools = [],
+  hasReplyBody = false,
   connectingLabelKey = 'understandingQuestion',
   className,
 }: ThinkingProcessPanelProps) {
   const { t } = useTranslation('chat');
   const [expanded, setExpanded] = useState(isStreaming);
+  /** §5.6 首次渲染不播放折叠动画 */
+  const [collapseAnimationEnabled, setCollapseAnimationEnabled] = useState(false);
+  const prevShouldAutoCollapseRef = useRef(false);
+  const wasLiveStreamRef = useRef(false);
+  /** 仅「从空 timeline 开始的实时流」启用打字机；重进/历史已有内容则 instant */
+  const [enableProcessTypewriter, setEnableProcessTypewriter] = useState(false);
   const skills = useSkillsStore((state) => state.skills);
   const fetchSkills = useSkillsStore((state) => state.fetchSkills);
+  const ThinkingIcon = resolveChatThinkingIcon();
 
   useEffect(() => {
-    if (isStreaming || isConnecting || isProcessing || isStillExecuting) {
+    const frame = requestAnimationFrame(() => setCollapseAnimationEnabled(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const isLiveStream =
+      isStreaming || isConnecting || isProcessing || isStillExecuting;
+
+    if (isLiveStream) {
+      prevShouldAutoCollapseRef.current = false;
       setExpanded(true);
+      return;
+    }
+
+    const shouldAutoCollapse = hasReplyBody;
+    const justBecameReadyToCollapse =
+      shouldAutoCollapse && !prevShouldAutoCollapseRef.current;
+    prevShouldAutoCollapseRef.current = shouldAutoCollapse;
+
+    // 正文已全部输出且思考/流式结束 → 收起「思考 X 次…」；之后用户手动展开不再强制收回
+    if (justBecameReadyToCollapse) {
+      setExpanded(false);
       return;
     }
     if (timeline.length > 0) {
       setExpanded(false);
     }
-  }, [isStreaming, isConnecting, isProcessing, isStillExecuting, timeline.length]);
+  }, [
+    hasReplyBody,
+    isStreaming,
+    isConnecting,
+    isProcessing,
+    isStillExecuting,
+    timeline.length,
+  ]);
 
   useEffect(() => {
     if (skills.length === 0) {
@@ -229,13 +308,49 @@ export function ThinkingProcessPanel({
   }, [streamingTools]);
 
   const runningTool = streamingTools.find((tool) => tool.status === 'running');
+  const isLiveStream =
+    isStreaming || isConnecting || isProcessing || isStillExecuting;
+
+  useEffect(() => {
+    const justWentLive = isLiveStream && !wasLiveStreamRef.current;
+    wasLiveStreamRef.current = isLiveStream;
+
+    if (!isLiveStream) {
+      setEnableProcessTypewriter(false);
+      return;
+    }
+
+    if (justWentLive) {
+      // 重进对话 / 切回会话时 timeline 已落盘 → 视为历史，不再打字
+      setEnableProcessTypewriter(mergedTimeline.length === 0);
+    }
+  }, [isLiveStream, mergedTimeline.length]);
+
+  const { markBlockRevealFinished, getBlockRevealState, sequentialIndex } = useSequentialTypewriterQueue(
+    mergedTimeline,
+    enableProcessTypewriter,
+  );
   const collapsedSummary = useMemo(
     () => buildCollapsedSummary(mergedTimeline, streamingTools, isStreaming, t),
     [mergedTimeline, streamingTools, isStreaming, t],
   );
 
+  const lastTimelineItem = mergedTimeline.at(-1);
+  /** 工具已结束、下一段思考尚未到达：展示「正在整理工具结果」 */
+  const showOrganizingToolResults =
+    !isConnecting &&
+    !runningTool &&
+    (isProcessing ||
+      (isLiveStream &&
+        lastTimelineItem?.type === 'tool' &&
+        (!enableProcessTypewriter || sequentialIndex === null)));
+
   const hasPanelBody =
-    mergedTimeline.length > 0 || isConnecting || isProcessing || isStillExecuting || !!runningTool;
+    mergedTimeline.length > 0 ||
+    isConnecting ||
+    showOrganizingToolResults ||
+    isStillExecuting ||
+    !!runningTool;
 
   const headerLabel = collapsedSummary ?? t('streaming.thinkingProcessTitle');
 
@@ -245,79 +360,78 @@ export function ThinkingProcessPanel({
     <div className={cn(thinkingPanelRootClass, className)}>
       <button
         type="button"
-        className={cn(
-          'flex w-full items-center gap-1.5 py-1 text-muted-foreground transition-colors duration-150 hover:text-foreground',
-        )}
+        className={chatThinkingSummaryHeaderClass}
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
       >
-        <span className="truncate font-normal">{headerLabel}</span>
-        {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-        )}
+        <span className="truncate">{headerLabel}</span>
+        <ChevronDown
+          className={thinkingPanelChevronClass(expanded, collapseAnimationEnabled)}
+          aria-hidden
+        />
       </button>
 
-      {expanded && (
-        <div className="space-y-3 pb-1 pt-1">
-          {mergedTimeline.map((item, i) => {
+      <div className={thinkingPanelBodyGridClass(expanded, collapseAnimationEnabled)}>
+        <div className="min-h-0 overflow-hidden">
+          <div className="space-y-3 pb-1 pt-1">
+            {mergedTimeline.map((item, i) => {
+            const blockResetKey = timelineBlockResetKey(item, i);
+            const reveal = getBlockRevealState(i, blockResetKey);
+            if (!reveal.isVisible) return null;
+
             if (item.type === 'thinking') {
               const thinkingContent = resolveSkillNamesInThinking(item.content, skills);
               return (
-                <div key={`thinking-${i}`} className="border-l-2 border-border pl-3">
-                  <div className="mb-1.5 flex items-center gap-1.5 text-muted-foreground">
-                    <MessageCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    <span className="font-medium">{t('streaming.deepThinkingLabel')}</span>
-                  </div>
-                  <div
-                    className={cn(
-                      THINKING_ENTRY_MAX_HEIGHT_CLASS,
-                      'overflow-y-auto prose prose-sm max-w-none text-sm leading-5 text-foreground dark:prose-invert',
-                    )}
-                  >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinkingContent}</ReactMarkdown>
-                  </div>
-                </div>
+                <ChatProcessBlock
+                  key={blockResetKey}
+                  title={t('streaming.deepThinkingLabel')}
+                  icon={ThinkingIcon}
+                >
+                  <ThinkingBlockBody
+                    content={thinkingContent}
+                    isTypewriterActive={reveal.isTypewriterActive}
+                    resetKey={blockResetKey}
+                    onRevealComplete={() => markBlockRevealFinished(blockResetKey)}
+                  />
+                </ChatProcessBlock>
               );
             }
 
             const key = toolRowKey(item);
+            const toolStatus = streamingStatusByKey.get(key);
             return (
               <ChatToolCallCard
                 key={key}
-                name={resolveSkillDisplayName(item.name, skills)}
+                name={item.name}
+                displayName={resolveSkillDisplayName(item.name, skills)}
                 input={item.input}
-                status={streamingStatusByKey.get(key)}
+                status={toolStatus}
+                variant="readonly"
+                presentation="thinkingProcess"
+                isInputTypewriterActive={reveal.isTypewriterActive && item.input != null}
+                typewriterResetKey={blockResetKey}
+                onInputRevealComplete={() => markBlockRevealFinished(blockResetKey)}
+                isAwaitingToolInput={
+                  reveal.isTypewriterActive && item.input == null && toolStatus === 'running'
+                }
               />
             );
           })}
 
-          {isStillExecuting && !isConnecting && !runningTool ? (
-            <ConnectingModelIndicator labelKey="stillExecuting" />
+          {isConnecting ? (
+            <ChatProcessLoadingIndicator label={t(`streaming.${connectingLabelKey}`)} />
           ) : null}
 
-          {isConnecting ? <ConnectingModelIndicator labelKey={connectingLabelKey} /> : null}
-
-          {isProcessing && !isConnecting ? (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin opacity-70" aria-hidden />
-              <span>{t('streaming.processingTitle')}</span>
-            </div>
+          {showOrganizingToolResults ? (
+            <ChatProcessLoadingIndicator label={t('streaming.processingTitle')} />
           ) : null}
 
-          {runningTool && !isConnecting ? (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin opacity-70" aria-hidden />
-              <span>
-                {t('streaming.generatingWithTool', {
-                  tool: runningTool.summary || resolveSkillDisplayName(runningTool.name, skills),
-                })}
-              </span>
-            </div>
+          {isStillExecuting && !isConnecting && !runningTool && !showOrganizingToolResults ? (
+            <ChatProcessLoadingIndicator label={t('streaming.stillExecuting')} />
           ) : null}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

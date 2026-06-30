@@ -22,11 +22,11 @@ export const assistantChatCardBgStreaming = cn(
 );
 
 /**
- * 用户消息气泡（MasterGo 8:3912）：浅色 Grey-3 #F0F2F5；暗色 muted 层级，与 assistant 白/渐变卡区分。
+ * 用户消息气泡（chat-interaction-style-spec §4.1）：#F0F2F5、圆角 12px 0 12px 12px、内距 8px。
  * 使用位置：ChatMessage MessageBubble、对话列表用户侧。
  */
 export const userChatBubbleSurfaceClass = cn(
-  'rounded-xl bg-[#F0F2F5] p-3 text-foreground shadow-none',
+  'rounded-xl rounded-tr-none bg-[#F0F2F5] p-2 text-foreground shadow-none',
   'dark:bg-muted dark:shadow-none',
 );
 
@@ -319,7 +319,7 @@ export const stoSplitChatCardClass = cn(
 /** 三栏模式：左栏卡片外层（贴满分割面板；内层对话仍用 page/home 限宽壳居中） */
 export const stoSplitChatPaneCardWrapClass = cn(
   stoSplitChatCardClass,
-  'flex min-h-0 min-w-0 flex-1 flex-col items-center',
+  'flex min-h-0 min-w-0 w-full flex-1 flex-col',
 );
 
 export type StoChatColumnVariant = 'page' | 'home';
@@ -345,23 +345,50 @@ export function stoChatColumnClass(variant: StoChatColumnVariant, isSplit = fals
 }
 
 /**
- * 三栏对话区消息列表滚动区。
+ * 对话列内居中阅读轨（消息 / 输入 / 底栏共用）：限宽 + 水平内距，不含滚动。
+ * 滚动条挂在 {@link stoChatScrollPaneClass}，贴内容列右缘而非阅读轨内。
+ */
+export function stoChatColumnContentTrackClass(
+  variant: StoChatColumnVariant,
+  isSplit = false,
+): string {
+  return cn(
+    variant === 'home' ? stoChatShellHomeColumnMaxClass : stoChatShellPageColumnMaxClass,
+    'w-full px-6',
+    isSplit && 'min-w-0',
+  );
+}
+
+/**
+ * 对话消息列表滚动区：铺满内容列宽，滚动条贴列右缘。
+ */
+export const stoChatScrollPaneClass = cn(
+  'relative z-10 min-h-0 flex-1 w-full py-4',
+  'overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
+);
+
+/**
+ * 三栏对话消息滚动区。
  * min-w-0 + overflow-x-hidden：flex 子项默认 min-width:auto 会被 WorkflowCard 等块撑破列宽，
  * 导致右侧描边贴边或被卡片壳 overflow-hidden 裁切；垂直滚动仍保留。
  */
-export const stoSplitChatScrollClass = cn(
-  'min-w-0 w-full overflow-x-hidden overflow-y-auto overscroll-y-contain',
-  '[scrollbar-gutter:stable]',
+export const stoChatScrollPaneSplitClass = cn(
+  stoChatScrollPaneClass,
+  'min-w-0 overflow-x-hidden',
 );
 
+/** @deprecated 使用 {@link stoChatScrollPaneSplitClass} */
+export const stoSplitChatScrollClass = stoChatScrollPaneSplitClass;
+
 /** 三栏对话消息列表内层：与滚动区配合 min-w-0，防止块级子项撑宽 */
-export const stoChatScrollContentClass = 'min-w-0 w-full space-y-4';
+/** 对话消息列表内层间距（规范 §2.3 消息之间 20px） */
+export const stoChatScrollContentClass = 'min-w-0 w-full space-y-5';
 
 /** 三栏左栏内容外包：split 时加卡片壳，否则仅占满 pane 并居中限宽轨 */
 export function stoSplitChatPaneContentWrapClass(isSplit: boolean): string {
   return isSplit
     ? stoSplitChatPaneCardWrapClass
-    : 'flex min-h-0 min-w-0 flex-1 flex-col items-center';
+    : 'flex min-h-0 min-w-0 w-full flex-1 flex-col';
 }
 
 /** 三栏壳层水平 inset（挂在 main，Header + split row 共用同一网格可用宽） */
@@ -1076,24 +1103,56 @@ export const workflowResultSummaryClass =
   'w-full text-left text-sm font-normal leading-6 tracking-normal text-foreground whitespace-pre-wrap break-words';
 
 /**
- * 工具调用块外层（无描边；标题行在外，入参区单独套 {@link chatToolCallContentShellClass}）
+ * 工具调用块外层（规范 §4.4：标题行 + 左竖线内容区）
  */
+/** 工具/思考块内标题↔内容间距 6px（MasterGo 4:2177 gap 6px） */
 export const chatToolCallShellClass = 'flex w-full flex-col gap-1.5';
 
-/** 工具调用标题行（与 ParamsConfirmedHeader / 参数分组标题同级，在描边容器外） */
+/** 工具调用标题行（13px #86909C，图标 16px，标题行 gap 4px） */
 export const chatToolCallHeaderBtnClass = cn(
-  'flex items-center gap-1 text-left',
-  'text-[13px] leading-5 font-normal text-muted-foreground transition-colors duration-150 hover:text-foreground',
-  'disabled:cursor-default disabled:hover:text-muted-foreground',
+  'flex w-full items-center gap-1 text-left',
+  'text-[13px] leading-5 font-normal text-[#86909C] transition-colors duration-150 hover:text-foreground',
 );
 
-/** 工具入参展开区外框（与 {@link workflowParamsSummaryCardClass} / 数据来源一致） */
-export const chatToolCallContentShellClass = workflowParamsSummaryCardClass;
+/** 工具/思考内容区：16px icon 列 + 竖线居中（MasterGo 4:2177 divider @ x≈7） */
+export const chatProcessIconRailClass = 'flex w-4 shrink-0 justify-center self-stretch';
+export const chatProcessIconRailLineClass = 'w-px bg-border';
+/** 竖线列与正文间距 4px（正文起点 16+4=20px，与标题文字对齐） */
+export const chatProcessContentTextWrapClass = 'min-w-0 flex-1 pl-1';
+/** 标题行 chevron/spinner 占位：16px 控件 + gap 4px */
+export const chatProcessContentLeadOffsetClass = 'w-5 shrink-0';
 
-/** 工具入参正文（与 {@link workflowParamsSummaryGroupContentClass} 一致，保留等宽字体便于读 JSON） */
+/** @deprecated 使用 ChatProcessContentRail；保留别名避免外部引用断裂 */
+export const chatProcessContentBorderClass = cn(
+  chatProcessContentTextWrapClass,
+);
+
+/** 工具入参展开区（竖线由 ChatProcessContentRail 渲染） */
+export const chatToolCallContentShellClass = chatProcessContentTextWrapClass;
+
+/** 工具入参正文（规范 §4.4：13px 灰色 pre-wrap） */
 export const chatToolCallInputPreClass = cn(
-  workflowParamsSummaryGroupContentClass,
-  'm-0 max-h-[min(42vh,400px)] overflow-y-auto font-mono text-xs leading-5',
+  'm-0 max-h-[min(42vh,400px)] overflow-y-auto whitespace-pre-wrap break-words',
+  'text-[13px] leading-5 font-normal text-[#86909C]',
+);
+
+/** 思考/工具汇总条标题（MasterGo 4:2177：13/20 #86909C，chevron gap 4px） */
+export const chatThinkingSummaryHeaderClass = cn(
+  'flex w-full items-center gap-1 py-1 text-left',
+  'text-[13px] leading-5 font-normal text-[#86909C]',
+  'transition-colors duration-150 hover:text-foreground',
+);
+
+/** 思考/工具过程次要正文（规范 §4.3 / §4.4 内容区） */
+export const chatProcessSecondaryTextClass = 'text-[13px] leading-5 font-normal text-[#86909C]';
+
+/** Loading 等待文案（chat-interaction-style-spec §2.1 text-muted / §4.6） */
+export const chatProcessLoadingTextClass = 'text-[13px] leading-[18px] font-normal text-[#6B737D]';
+
+/** 过程块标题行（MasterGo 4:2177：icon 16px + 文案，gap 4px） */
+export const chatProcessTitleRowClass = cn(
+  'flex items-center gap-1',
+  chatProcessSecondaryTextClass,
 );
 
 /**
