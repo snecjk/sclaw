@@ -62,10 +62,12 @@ interface CronSessionKeyParts {
 
 interface CronSessionFallbackMessage {
   id: string;
-  role: 'assistant' | 'system';
-  content: string;
+  role: 'assistant' | 'system' | 'user' | 'toolresult' | 'tool_result';
+  content: string | unknown[];
   timestamp: number;
   isError?: boolean;
+  toolCallId?: string;
+  toolName?: string;
 }
 
 function parseCronSessionKey(sessionKey: string): CronSessionKeyParts | null {
@@ -141,7 +143,44 @@ async function readRunSessionMessages(sessionKey: string): Promise<CronSessionFa
 
       const role = msg.role as string | undefined;
       const content = msg.content as string | unknown[] | undefined;
-      if (!role || !content) continue;
+      if (!role || content == null) continue;
+
+      const normalizedRole = role.toLowerCase();
+      const timestamp = normalizeTimestampMs(record.timestamp) ?? Date.now();
+
+      // Preserve tool_result rows so the renderer can absorb workflow_execution_started.
+      if (normalizedRole === 'toolresult' || normalizedRole === 'tool_result') {
+        messages.push({
+          id: `cron-run-msg-${parsed.runSessionId}-${i}`,
+          role: normalizedRole === 'tool_result' ? 'tool_result' : 'toolresult',
+          content,
+          timestamp,
+          toolCallId: typeof msg.toolCallId === 'string' ? msg.toolCallId : undefined,
+          toolName: typeof msg.toolName === 'string' ? msg.toolName : undefined,
+        });
+        continue;
+      }
+
+      if (normalizedRole === 'user') {
+        let textContent = '';
+        if (typeof content === 'string') {
+          textContent = content;
+        } else if (Array.isArray(content)) {
+          textContent = content
+            .filter((c: unknown) => c && typeof c === 'object' && (c as Record<string, unknown>).type === 'text')
+            .map((c: unknown) => (c as Record<string, unknown>).text as string)
+            .filter(Boolean)
+            .join('');
+        }
+        if (!textContent) continue;
+        messages.push({
+          id: `cron-run-msg-${parsed.runSessionId}-${i}`,
+          role: 'user',
+          content: textContent,
+          timestamp,
+        });
+        continue;
+      }
 
       // Handle content format: string or array of text blocks
       let textContent = '';
@@ -156,8 +195,6 @@ async function readRunSessionMessages(sessionKey: string): Promise<CronSessionFa
       }
 
       if (!textContent) continue;
-
-      const timestamp = normalizeTimestampMs(record.timestamp) ?? Date.now();
 
       messages.push({
         id: `cron-run-msg-${parsed.runSessionId}-${i}`,

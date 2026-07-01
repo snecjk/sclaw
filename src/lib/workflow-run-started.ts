@@ -79,17 +79,20 @@ export async function applyWorkflowRunStarted(
         assistantText
         ?? `正在启动工作流「${templateName}」（工作流 ID: ${workflowId}）…`,
     });
-  } else {
-    useChatStore.setState((s) => {
-      let next = patchLastAssistantWithWorkflowCard(
-        s.messages,
-        runId,
-        templateName,
-        getAssistantMessageText,
-      );
-      next = ensureWorkflowCardsInMessages(next, sessionKey, getAssistantMessageText);
-      return next === s.messages ? s : { messages: next };
-    });
+  } else if (presentation === 'patch_assistant') {
+    const chatState = useChatStore.getState();
+    if (chatState.currentSessionKey === sessionKey) {
+      useChatStore.setState((s) => {
+        let next = patchLastAssistantWithWorkflowCard(
+          s.messages,
+          runId,
+          templateName,
+          getAssistantMessageText,
+        );
+        next = ensureWorkflowCardsInMessages(next, sessionKey, getAssistantMessageText);
+        return next === s.messages ? s : { messages: next };
+      });
+    }
   }
 
   updateWorkflowRunMetadata(sessionKey, workflowId, {
