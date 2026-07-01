@@ -5,7 +5,7 @@ import {
   type PreviewHrefResult,
 } from '../../shared/preview-href';
 import { hostApiFetch } from '@/lib/host-api';
-import { isHttpUrl, isPreviewableRemoteUrl, normalizeLocalFilePath, toMarkdownPreviewPath } from '@/lib/preview-url';
+import { isHttpUrl, normalizeLocalFilePath, toMarkdownPreviewPath } from '@/lib/preview-url';
 
 export type PreviewHrefAction =
   | { action: 'preview-local'; path: string }
@@ -83,9 +83,7 @@ export function resolvePreviewHrefAction(href: string): PreviewHrefAction {
   if (result.type === 'blocked') return { action: 'unsupported' };
 
   if (result.type === 'http-preview') {
-    return isPreviewableRemoteUrl(result.target)
-      ? { action: 'preview-remote', url: result.target }
-      : { action: 'open-external', url: result.target };
+    return { action: 'preview-remote', url: result.target };
   }
 
   if (result.type === 'http-external' || result.type === 'external') {
@@ -95,7 +93,7 @@ export function resolvePreviewHrefAction(href: string): PreviewHrefAction {
   if (result.type === 'local') {
     const rawTarget = result.target || extractLocalPathFromHref(trimmed);
     if (isHttpUrl(rawTarget)) {
-      return isPreviewableRemoteUrl(rawTarget)
+      return classifyPreviewHref(rawTarget).type === 'http-preview'
         ? { action: 'preview-remote', url: rawTarget }
         : { action: 'open-external', url: rawTarget };
     }

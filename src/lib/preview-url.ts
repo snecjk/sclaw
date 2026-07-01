@@ -4,6 +4,7 @@ import {
   extensionFromBasename,
   normalizeArtifactPathPrefix,
 } from '../../shared/artifact-path';
+import { isStoCompanyUrl } from '../../shared/preview-href';
 
 export function isHttpUrl(path: string): boolean {
   return path.startsWith('http://') || path.startsWith('https://');
@@ -229,21 +230,10 @@ export function inferMimeTypeFromUrl(url: string, typeHint?: string | null): str
   return inferMimeTypeFromPath(url);
 }
 
-const PREVIEWABLE_REMOTE_MIMES = new Set([
-  'text/html',
-  'application/pdf',
-  'text/markdown',
-  'application/json',
-  'text/plain',
-  'text/csv',
-  'text/tab-separated-values',
-  ...OFFICE_MIME_TYPES,
-]);
-
-/** Remote http(s) URLs we can render in the side preview panel. */
-export function isPreviewableRemoteUrl(url: string, typeHint?: string | null): boolean {
+/** Remote http(s) URLs we can render in the side preview panel (company *.sto* domains only). */
+export function isPreviewableRemoteUrl(url: string, _typeHint?: string | null): boolean {
   if (!isHttpUrl(url)) return false;
-  return PREVIEWABLE_REMOTE_MIMES.has(inferMimeTypeFromUrl(url, typeHint));
+  return isStoCompanyUrl(url);
 }
 
 /** Display label for a http(s) URL used in markdown links / file cards. */
@@ -344,29 +334,4 @@ export function artifactToPreviewFile(artifact: {
     fileSize: 0,
     preview: null,
   };
-}
-
-/** Strip trailing sentence punctuation accidentally captured with a URL. */
-export function normalizeHttpUrlToken(url: string): string {
-  return url.replace(/[.,;:!?)}\]]+$/, '');
-}
-
-/** Match all http(s) URLs in plain text. */
-export function extractPreviewableHttpUrls(text: string): Array<{ filePath: string; fileName: string; mimeType: string }> {
-  const regex = /(https?:\/\/[^\s)\]"',;<>]+)/gi;
-  const results: Array<{ filePath: string; fileName: string; mimeType: string }> = [];
-  const seen = new Set<string>();
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(text)) !== null) {
-    const url = normalizeHttpUrlToken(match[1]);
-    if (!url || seen.has(url) || !isPreviewableRemoteUrl(url)) continue;
-    seen.add(url);
-    const mimeType = inferMimeTypeFromUrl(url);
-    results.push({
-      filePath: url,
-      fileName: previewFileNameFromUrl(url, mimeType),
-      mimeType,
-    });
-  }
-  return results;
 }

@@ -78,4 +78,13 @@ describe('extractPreviewableRefs', () => {
     expect(refs.some((r) => r.filePath.includes(' -20260628.html'))).toBe(true);
     expect(refs.some((r) => r.filePath.endsWith('申通快递分析'))).toBe(false);
   });
+
+  it('does not extract bare http(s) links as file cards', () => {
+    const text = [
+      'See https://github.com/mem0ai/mem0 and https://cdn.example.com/report.html',
+      'Company: https://front.sto.cn/group/memory-center-web/wf_1',
+    ].join('\n');
+    const refs = extractPreviewableRefs(text);
+    expect(refs.every((r) => !r.filePath.startsWith('http'))).toBe(true);
+  });
 });
