@@ -119,7 +119,7 @@ function extractWithPowerShellZipFile(zipPath: string, destDir: string): void {
   const psCommand =
     `Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
     `[System.IO.Compression.ZipFile]::ExtractToDirectory('${cleanZipPath}', '${cleanDestDir}')`;
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-Command', psCommand], {
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psCommand], {
     encoding: 'utf-8',
     windowsHide: true,
   });
@@ -136,6 +136,8 @@ function extractWithPowerShellExpandArchive(zipPath: string, destDir: string): v
     'powershell.exe',
     [
       '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
       '-Command',
       `Expand-Archive -Path '${cleanZipPath}' -DestinationPath '${cleanDestDir}' -Force`,
     ],
