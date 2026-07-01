@@ -192,6 +192,10 @@
             "cancel": "Cancel",
             "confirm": "Share",
             "uploading": "Uploading…",
+            "tooLongTitle": "Message too long",
+            "tooLongDescription": "The content exceeds the share limit and cannot be prefilled. After you confirm, the full conversation will be copied to your clipboard and DingTalk will open. Paste it in the message box (⌘V / Ctrl+V) before sending.",
+            "tooLongConfirm": "Open DingTalk",
+            "tooLongPickerHint": "Paste the copied conversation here (⌘V / Ctrl+V)",
             "success": "DingTalk recipient picker opened",
             "failed": "Share failed. Please try again."
         }

@@ -193,6 +193,10 @@
             "cancel": "取消",
             "confirm": "确认分享",
             "uploading": "正在上传…",
+            "tooLongTitle": "分享内容过长",
+            "tooLongDescription": "字符太长，无法预填分享内容。确认后将完整会话正文复制到剪贴板，并唤起钉钉选人窗口；请在消息输入框粘贴（⌘V / Ctrl+V）后发送。",
+            "tooLongConfirm": "唤起钉钉",
+            "tooLongPickerHint": "请在消息输入框粘贴已复制的会话正文（⌘V / Ctrl+V）",
             "success": "已唤起钉钉选人窗口",
             "failed": "分享失败，请稍后重试"
         }

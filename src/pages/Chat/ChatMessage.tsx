@@ -69,7 +69,6 @@ import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessP
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import {
   buildConversationShareDialogDraft,
-  confirmDingTalkShare,
   type DingTalkShareDialogDraft,
 } from '@/lib/dingtalk-share';
 
@@ -421,8 +420,7 @@ export const ChatMessage = memo(function ChatMessage({
     setShareDialogOpen(true);
   }, [text, previewFiles, t]);
 
-  const handleConfirmShare = useCallback(async (draft: DingTalkShareDialogDraft) => {
-    await confirmDingTalkShare(draft);
+  const handleShareCompleted = useCallback(() => {
     toast.success(t('preview.shareDialog.success'));
     setShareDialogOpen(false);
     setShareDraft(null);
@@ -748,7 +746,7 @@ export const ChatMessage = memo(function ChatMessage({
       <ArtifactShareDialog
         open={shareDialogOpen}
         draft={shareDraft}
-        onConfirm={handleConfirmShare}
+        onShared={handleShareCompleted}
         onCancel={() => {
           setShareDialogOpen(false);
           setShareDraft(null);
