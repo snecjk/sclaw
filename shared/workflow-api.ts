@@ -7,9 +7,6 @@ export function asWorkflowId(value: string): WorkflowId {
 /** @api docs/api-contracts/workflows/page.md */
 export type WorkflowLifecycleStatus = 'draft' | 'active' | 'archived';
 
-/** @api docs/api-contracts/workflows/page.md */
-export type WorkflowVersionStatus = 'draft' | 'published';
-
 /** @api docs/api-contracts/workflows/template-mine.md */
 export type WorkflowTemplateScope = 'system' | 'personal';
 
@@ -20,7 +17,6 @@ export interface WorkflowSummary {
   templateId: string | null;
   version: number;
   lifecycleStatus: WorkflowLifecycleStatus;
-  versionStatus: WorkflowVersionStatus;
   updatedAt: string | null;
   createdBy: string | null;
   createdByName: string | null;

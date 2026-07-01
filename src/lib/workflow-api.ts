@@ -55,13 +55,15 @@ function authHeaders(): Record<string, string> {
 async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
   const res = await promise;
   if (!res.success || res.data === null) {
-    const msg = res.errMessage || (res.errCode ? `Workflow API error: ${res.errCode}` : 'Workflow API error');
+    const msg =
+      res.errMessage || (res.errCode ? `Workflow API error: ${res.errCode}` : 'Workflow API error');
     throw new Error(msg);
   }
   return res.data;
 }
 
 // ── 1. List templates (paginated) ───────────────────────────────
+// FastAPI: POST /agent/v1/workflow-templates → memory-center workflow_client.py:list_templates
 
 export interface ListWorkflowTemplatesParams {
   query?: string;
@@ -70,7 +72,7 @@ export interface ListWorkflowTemplatesParams {
 }
 
 export async function listWorkflowTemplates(
-  params: ListWorkflowTemplatesParams = {},
+  params: ListWorkflowTemplatesParams = {}
 ): Promise<WorkflowTemplateListResult> {
   const page = params.page ?? 1;
   const pageSize = params.pageSize ?? 10;
@@ -85,7 +87,8 @@ export async function listWorkflowTemplates(
     }),
   });
   if (!res.success || !res.data) {
-    const msg = res.errMessage || (res.errCode ? `Workflow API error: ${res.errCode}` : 'Workflow API error');
+    const msg =
+      res.errMessage || (res.errCode ? `Workflow API error: ${res.errCode}` : 'Workflow API error');
     throw new Error(msg);
   }
   return {
@@ -102,7 +105,7 @@ const WORKFLOW_TEMPLATES_NO_ACCESS_MESSAGE =
 /** Query templates by keyword; adapts paginated API to legacy matchedItems shape. */
 export async function searchWorkflowTemplates(
   query: string,
-  pageSize = 3,
+  pageSize = 3
 ): Promise<WorkflowTemplateSearchResponse> {
   const trimmed = query.trim();
   const result = await listWorkflowTemplates({ query: trimmed, page: 1, pageSize });
@@ -116,6 +119,7 @@ export async function searchWorkflowTemplates(
 }
 
 // ── 2. Get startup schema ───────────────────────────────────────
+// FastAPI: GET /agent/v1/workflow-templates/{template_id}/startup-schema → memory-center workflow_client.py:get_template_startup_schema
 
 const startupSchemaCache = new Map<string, StartupSchemaResponse>();
 const startupSchemaInflight = new Map<string, Promise<StartupSchemaResponse>>();
@@ -139,7 +143,7 @@ export async function getStartupSchema(templateId: string): Promise<StartupSchem
       templateId,
       cached.schemaHash,
       cached.schema?.fields?.length ?? 0,
-      cached.schema?.steps?.length ?? 0,
+      cached.schema?.steps?.length ?? 0
     );
     return cached;
   }
@@ -148,125 +152,132 @@ export async function getStartupSchema(templateId: string): Promise<StartupSchem
   if (inflight) {
     console.log(
       '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema inflight=reuse',
-      templateId,
+      templateId
     );
     return inflight;
   }
 
-  console.log(
-    '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema',
-    templateId,
-  );
+  console.log('[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema', templateId);
   console.log(
     '[sto-workflow-tool] get_workflow_schema fetching startup-schema templateId=%s',
-    templateId,
+    templateId
   );
 
   const promise = unwrap(
-    hostApiFetch<ApiResponse<StartupSchemaResponse>>(`/agent/v1/workflow-templates/${templateId}/startup-schema`, {
-      headers: authHeaders(),
-    }),
-  ).then((data) => {
-    startupSchemaCache.set(templateId, data);
-    startupSchemaInflight.delete(templateId);
-    console.log(
-      '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema ok schemaHash=%s fields=%d steps=%d enabled=%s',
-      templateId,
-      data.schemaHash,
-      data.schema?.fields?.length ?? 0,
-      data.schema?.steps?.length ?? 0,
-      String(data.schema?.enabled ?? false),
-    );
-    console.log(
-      '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema response=%s',
-      templateId,
-      JSON.stringify(data),
-    );
-    return data;
-  }).catch((err) => {
-    startupSchemaInflight.delete(templateId);
-    console.error(
-      '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema failed error=%s',
-      templateId,
-      err instanceof Error ? err.message : String(err),
-    );
-    throw err;
-  });
+    hostApiFetch<ApiResponse<StartupSchemaResponse>>(
+      `/agent/v1/workflow-templates/${templateId}/startup-schema`,
+      {
+        headers: authHeaders(),
+      }
+    )
+  )
+    .then((data) => {
+      startupSchemaCache.set(templateId, data);
+      startupSchemaInflight.delete(templateId);
+      console.log(
+        '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema ok schemaHash=%s fields=%d steps=%d enabled=%s',
+        templateId,
+        data.schemaHash,
+        data.schema?.fields?.length ?? 0,
+        data.schema?.steps?.length ?? 0,
+        String(data.schema?.enabled ?? false)
+      );
+      console.log(
+        '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema response=%s',
+        templateId,
+        JSON.stringify(data)
+      );
+      return data;
+    })
+    .catch((err) => {
+      startupSchemaInflight.delete(templateId);
+      console.error(
+        '[workflow-trace] GET /agent/v1/workflow-templates/%s/startup-schema failed error=%s',
+        templateId,
+        err instanceof Error ? err.message : String(err)
+      );
+      throw err;
+    });
 
   startupSchemaInflight.set(templateId, promise);
   return promise;
 }
 
 // ── 3. Create workflow ──────────────────────────────────────────
+// FastAPI: POST /agent/v1/workflows → memory-center workflow_client.py:create_workflow
 
-export async function createWorkflow(params: CreateWorkflowRequest): Promise<CreateWorkflowResponse> {
-  
+export async function createWorkflow(
+  params: CreateWorkflowRequest
+): Promise<CreateWorkflowResponse> {
   const init: RequestInit = {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(params),
   };
   const data = await unwrap(
-    hostApiFetch<ApiResponse<CreateWorkflowResponse>>('/agent/v1/workflows', init),
+    hostApiFetch<ApiResponse<CreateWorkflowResponse>>('/agent/v1/workflows', init)
   );
-  
+
   return data;
 }
 
 // ── 4. Get workflow detail ──────────────────────────────────────
+// FastAPI: GET /agent/v1/workflows/{workflow_id} → memory-center workflow_client.py:get_workflow_detail
 
 export async function getWorkflowDetail(workflowId: string): Promise<WorkflowDetailResponse> {
-  
   try {
     const data = await unwrap(
       hostApiFetch<ApiResponse<WorkflowDetailResponse>>(`/agent/v1/workflows/${workflowId}`, {
         headers: authHeaders(),
-      }),
+      })
     );
-    
-    
+
     return data;
   } catch (err) {
     console.error(
       '[workflow-trace] GET /agent/v1/workflows/%s failed error=%s',
       workflowId,
-      err instanceof Error ? err.message : String(err),
+      err instanceof Error ? err.message : String(err)
     );
     throw err;
   }
 }
 
 // ── 5. Start workflow ───────────────────────────────────────────
+// FastAPI: POST /agent/v1/workflows/{workflow_id}/start → memory-center workflow_client.py:start_workflow
 
 export async function startWorkflow(
   workflowId: string,
-  params: StartWorkflowRequest,
+  params: StartWorkflowRequest
 ): Promise<StartWorkflowResponse> {
-  
   const init: RequestInit = {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(params),
   };
   const data = await unwrap(
-    hostApiFetch<ApiResponse<StartWorkflowResponse>>(`/agent/v1/workflows/${workflowId}/start`, init),
+    hostApiFetch<ApiResponse<StartWorkflowResponse>>(
+      `/agent/v1/workflows/${workflowId}/start`,
+      init
+    )
   );
   if (!data.runId) {
     throw new Error('Start workflow response missing runId');
   }
-  
+
   return data;
 }
 
 // ── 6. Get run status ───────────────────────────────────────────
+// FastAPI: GET /agent/v1/runs/{run_id} → memory-center workflow_client.py:get_workflow_run
 
 export async function getWorkflowRun(runId: string): Promise<WorkflowRunResponse> {
   const data = await unwrap(
     hostApiFetch<ApiResponse<WorkflowRunResponse>>(`/agent/v1/runs/${runId}`, {
       headers: authHeaders(),
-    }),
+    })
   );
-  
+
   return data;
 }
 
@@ -287,11 +298,11 @@ function parseRunUpdateEvent(
   currentData: string,
   _eventCount: number,
   onEvent: (data: WorkflowRunResponse) => void,
-  onError?: (error: Error) => void,
+  onError?: (error: Error) => void
 ): void {
   try {
     const payload = JSON.parse(currentData) as WorkflowRunResponse;
-    
+
     onEvent(payload);
   } catch (e) {
     const parseError = new Error(`SSE parse error: ${String(e)}`);
@@ -303,14 +314,17 @@ function parseRunUpdateEvent(
 function subscribeWorkflowRunViaIpc(
   runId: string,
   onEvent: (data: WorkflowRunResponse) => void,
-  onError?: (error: Error) => void,
+  onError?: (error: Error) => void
 ): () => void {
   let eventCount = 0;
-  
 
   void invokeIpc('workflow:stream:subscribe', runId).catch((err) => {
     const error = err instanceof Error ? err : new Error(String(err));
-    console.error('[workflow-trace] IPC workflow:stream:subscribe failed runId=%s: %s', runId, error.message);
+    console.error(
+      '[workflow-trace] IPC workflow:stream:subscribe failed runId=%s: %s',
+      runId,
+      error.message
+    );
     onError?.(error);
   });
 
@@ -318,7 +332,6 @@ function subscribeWorkflowRunViaIpc(
     const data = payload as { runId: string; event: string; data: string };
     if (data.runId !== runId) return;
     if (data.event !== 'run.update') {
-      
       return;
     }
     eventCount += 1;
@@ -330,7 +343,12 @@ function subscribeWorkflowRunViaIpc(
     if (data.runId !== runId) return;
     const detail = data.url ? `${data.error} (url=${data.url})` : data.error;
     const error = new Error(detail);
-    console.error('[workflow-trace] IPC SSE error runId=%s url=%s: %s', runId, data.url ?? '', data.error);
+    console.error(
+      '[workflow-trace] IPC SSE error runId=%s url=%s: %s',
+      runId,
+      data.url ?? '',
+      data.error
+    );
     onError?.(error);
   };
 
@@ -338,7 +356,6 @@ function subscribeWorkflowRunViaIpc(
   const unsubError = window.electron!.ipcRenderer.on('workflow:stream:error', errorHandler);
 
   return () => {
-    
     unsubEvent?.();
     unsubError?.();
     void invokeIpc('workflow:stream:unsubscribe', runId).catch(() => {});
@@ -353,7 +370,7 @@ function subscribeWorkflowRunViaIpc(
 export function subscribeWorkflowRun(
   runId: string,
   onEvent: (data: WorkflowRunResponse) => void,
-  onError?: (error: Error) => void,
+  onError?: (error: Error) => void
 ): () => void {
   if (isElectronRenderer()) {
     return subscribeWorkflowRunViaIpc(runId, onEvent, onError);
@@ -365,7 +382,7 @@ export function subscribeWorkflowRun(
 
   const connect = async () => {
     const streamPath = `/agent/v1/runs/${runId}/stream`;
-    
+
     try {
       const response = await hostApiFetchStream(streamPath, {
         headers: authHeaders(),
@@ -375,8 +392,6 @@ export function subscribeWorkflowRun(
       if (!response.ok || !response.body) {
         throw new Error(`HTTP ${response.status}`);
       }
-
-      
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -403,22 +418,23 @@ export function subscribeWorkflowRun(
               eventCount += 1;
               parseRunUpdateEvent(runId, currentData, eventCount, onEvent, onError);
             } else {
-              
+              /* empty */
             }
             currentEvent = '';
             currentData = '';
           }
         }
       }
-
-      
     } catch (err) {
       if (closed || abort.signal.aborted) {
-        
         return;
       }
       const error = err instanceof Error ? err : new Error(String(err));
-      console.error('[workflow-trace] GET /agent/v1/runs/%s/stream error: %s', runId, error.message);
+      console.error(
+        '[workflow-trace] GET /agent/v1/runs/%s/stream error: %s',
+        runId,
+        error.message
+      );
       onError?.(error);
     }
   };
@@ -426,7 +442,6 @@ export function subscribeWorkflowRun(
   void connect();
 
   return () => {
-    
     closed = true;
     abort.abort();
   };
@@ -436,18 +451,22 @@ export function subscribeWorkflowRun(
 export function beginWorkflowRunSseTrace(runId: string): void {
   subscribeWorkflowRun(
     runId,
-    () => { /* trace-only; IPC polling drives UI updates */ },
+    () => {
+      /* trace-only; IPC polling drives UI updates */
+    },
     (error) => {
       console.warn('[workflow-trace] SSE trace stopped runId=%s: %s', runId, error.message);
-    },
+    }
   );
 }
 
 // ── 8. Save / publish workflow definition (designer) ─────────────
+// FastAPI: PUT  /agent/v1/workflows/{workflow_id}       → memory-center workflow_client.py:save_workflow
+// FastAPI: POST /agent/v1/workflows/{workflow_id}/publish → memory-center workflow_client.py:publish_workflow
 
 export async function saveWorkflowDefinition(
   workflowId: string,
-  workflow: Record<string, unknown>,
+  workflow: Record<string, unknown>
 ): Promise<import('@/pages/WorkflowDesigner/types').WorkflowDefinition> {
   const { definitionFromDetail } = await import('@/lib/workflow-designer-adapter');
   const data = await unwrap(
@@ -455,13 +474,13 @@ export async function saveWorkflowDefinition(
       method: 'PUT',
       headers: authHeaders(),
       body: JSON.stringify(workflow),
-    }),
+    })
   );
   return definitionFromDetail(data);
 }
 
 export async function publishWorkflowDefinition(
-  workflowId: string,
+  workflowId: string
 ): Promise<import('@/pages/WorkflowDesigner/types').WorkflowDefinition> {
   const { definitionFromDetail } = await import('@/lib/workflow-designer-adapter');
   const data = await unwrap(
@@ -469,52 +488,41 @@ export async function publishWorkflowDefinition(
       method: 'POST',
       headers: authHeaders(),
       body: '{}',
-    }),
+    })
   );
   return definitionFromDetail(data);
 }
 
 // ── 9. Rename workflow ──────────────────────────────────────────
+// FastAPI: PUT /agent/v1/workflows/{workflow_id}/name → memory-center workflow_client.py:rename_workflow
 
 export async function renameWorkflow(workflowId: string, name: string): Promise<void> {
-  console.log(
-    '[workflow-trace] PUT /agent/v1/workflows/%s/name name=%s',
-    workflowId,
-    name,
-  );
+  console.log('[workflow-trace] PUT /agent/v1/workflows/%s/name name=%s', workflowId, name);
   const init: RequestInit = {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify({ name }),
   };
   await unwrap(
-    hostApiFetch<ApiResponse<{ workflowId: string; name: string }>>(`/agent/v1/workflows/${workflowId}/name`, init),
+    hostApiFetch<ApiResponse<{ workflowId: string; name: string }>>(
+      `/agent/v1/workflows/${workflowId}/name`,
+      init
+    )
   );
-  console.log(
-    '[workflow-trace] PUT /agent/v1/workflows/%s/name ok name=%s',
-    workflowId,
-    name,
-  );
+  console.log('[workflow-trace] PUT /agent/v1/workflows/%s/name ok name=%s', workflowId, name);
 }
 
 // ── 10. Delete workflow ──────────────────────────────────────────
+// FastAPI: DELETE /agent/v1/workflows/{workflow_id} → memory-center workflow_client.py:delete_workflow
 
 export async function deleteWorkflow(workflowId: string): Promise<void> {
-  console.log(
-    '[workflow-trace] DELETE /agent/v1/workflows/%s',
-    workflowId,
-  );
+  console.log('[workflow-trace] DELETE /agent/v1/workflows/%s', workflowId);
   const init: RequestInit = {
     method: 'DELETE',
     headers: authHeaders(),
   };
-  await unwrap(
-    hostApiFetch<ApiResponse<null>>(`/agent/v1/workflows/${workflowId}`, init),
-  );
-  console.log(
-    '[workflow-trace] DELETE /agent/v1/workflows/%s ok',
-    workflowId,
-  );
+  await unwrap(hostApiFetch<ApiResponse<null>>(`/agent/v1/workflows/${workflowId}`, init));
+  console.log('[workflow-trace] DELETE /agent/v1/workflows/%s ok', workflowId);
 }
 
 // ── Legacy compatibility: query execution status (fallback) ─────
@@ -524,7 +532,11 @@ export async function fetchWorkflowStatus(runId: string): Promise<WorkflowExecut
     const run = await getWorkflowRun(runId);
     return runToExecutionState(run);
   } catch (err) {
-    console.warn('[workflow-trace] fetchWorkflowStatus failed runId=%s error=%s', runId, String(err));
+    console.warn(
+      '[workflow-trace] fetchWorkflowStatus failed runId=%s error=%s',
+      runId,
+      String(err)
+    );
     return null;
   }
 }
