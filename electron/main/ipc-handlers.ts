@@ -49,6 +49,7 @@ import { deviceOAuthManager, OAuthProviderType } from '../utils/device-oauth';
 import { browserOAuthManager, type BrowserOAuthProviderType } from '../utils/browser-oauth';
 import { applyProxySettings } from './proxy';
 import { syncLaunchAtStartupSettingFromStore } from './launch-at-startup';
+import { syncPreventSystemSleepSettingFromStore } from './prevent-sleep';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { getStoToken } from '../utils/auth-store';
 import { preprocessChatSendParams } from '../utils/dingtalk-mention-send';
@@ -75,6 +76,7 @@ import { getWorkflowExecutionTracker } from './services/workflow-execution-track
 import { syncClaudeDefaultContext } from '../services/claude-context-sync';
 import {
   isLaunchAtStartupKey,
+  isPreventSystemSleepKey,
   isProxyKey,
   mapAppErrorCode,
   type AppRequest,
@@ -652,6 +654,9 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             if (isLaunchAtStartupKey(key)) {
               await syncLaunchAtStartupSettingFromStore();
             }
+            if (isPreventSystemSleepKey(key)) {
+              await syncPreventSystemSleepSettingFromStore();
+            }
             if (key === 'autoCheckUpdate') {
               await appUpdater.syncPeriodicCheckFromSettings(value === true);
             }
@@ -670,6 +675,9 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             if (entries.some(([key]) => isLaunchAtStartupKey(key))) {
               await syncLaunchAtStartupSettingFromStore();
             }
+            if (entries.some(([key]) => isPreventSystemSleepKey(key))) {
+              await syncPreventSystemSleepSettingFromStore();
+            }
             if (Object.prototype.hasOwnProperty.call(patch, 'autoCheckUpdate')) {
               await appUpdater.syncPeriodicCheckFromSettings(patch.autoCheckUpdate === true);
             }
@@ -681,6 +689,7 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             const settings = await getAllSettings();
             await handleProxySettingsChange();
             await syncLaunchAtStartupSettingFromStore();
+            await syncPreventSystemSleepSettingFromStore();
             await appUpdater.syncPeriodicCheckFromSettings(settings.autoCheckUpdate === true);
             data = { success: true, settings };
             break;
@@ -2424,6 +2433,9 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
     if (key === 'launchAtStartup') {
       await syncLaunchAtStartupSettingFromStore();
     }
+    if (key === 'preventSystemSleep') {
+      await syncPreventSystemSleepSettingFromStore();
+    }
     if (key === 'autoCheckUpdate') {
       await appUpdater.syncPeriodicCheckFromSettings(value === true);
     }
@@ -2450,6 +2462,9 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
     if (entries.some(([key]) => key === 'launchAtStartup')) {
       await syncLaunchAtStartupSettingFromStore();
     }
+    if (entries.some(([key]) => key === 'preventSystemSleep')) {
+      await syncPreventSystemSleepSettingFromStore();
+    }
     if (Object.prototype.hasOwnProperty.call(patch, 'autoCheckUpdate')) {
       await appUpdater.syncPeriodicCheckFromSettings(patch.autoCheckUpdate === true);
     }
@@ -2462,6 +2477,7 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
     const settings = await getAllSettings();
     await handleProxySettingsChange();
     await syncLaunchAtStartupSettingFromStore();
+    await syncPreventSystemSleepSettingFromStore();
     await appUpdater.syncPeriodicCheckFromSettings(settings.autoCheckUpdate === true);
     return { success: true, settings };
   });
