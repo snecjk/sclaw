@@ -397,13 +397,12 @@ export default function MyTask() {
     try {
       await deleteJob(deleteTarget.id, deleteTarget.engineType);
       toast.success(t('myTask.toast.deleted'));
-      await fetchJobs().catch(() => {});
     } catch (err) {
       toast.error(String(err));
     } finally {
       setDeleteTarget(null);
     }
-  }, [deleteTarget, deleteJob, fetchJobs]);
+  }, [deleteTarget, deleteJob, t]);
 
   const handleTemplateInstall = useCallback(
     (card: OfficialWorkflowCard) => {
