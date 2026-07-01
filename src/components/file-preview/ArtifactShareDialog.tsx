@@ -8,11 +8,23 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ArtifactProductCard } from '@/components/chat/artifact-product-card';
 import type { DingTalkShareDialogDraft } from '@/lib/dingtalk-share';
+import {
+  openDingTalkShareAfterClipboardCopy,
+  prepareDingTalkShareFromDraft,
+  shareToDingTalk,
+} from '@/lib/dingtalk-share';
+
+type DialogStep = 'preview' | 'too_long';
+
+type TooLongPayload = {
+  defaultMsg: string;
+  title: string;
+};
 
 export interface ArtifactShareDialogProps {
   open: boolean;
   draft: DingTalkShareDialogDraft | null;
-  onConfirm: (draft: DingTalkShareDialogDraft) => void | Promise<void>;
+  onShared: () => void;
   onCancel: () => void;
   onError?: (error: unknown) => void;
 }
@@ -20,24 +32,28 @@ export interface ArtifactShareDialogProps {
 export function ArtifactShareDialog({
   open,
   draft,
-  onConfirm,
+  onShared,
   onCancel,
   onError,
 }: ArtifactShareDialogProps) {
   const { t } = useTranslation('chat');
   const cancelRef = useRef<HTMLButtonElement>(null);
   const [confirming, setConfirming] = useState(false);
+  const [step, setStep] = useState<DialogStep>('preview');
+  const [tooLongPayload, setTooLongPayload] = useState<TooLongPayload | null>(null);
 
   useEffect(() => {
     if (!open || !draft) return;
     setConfirming(false);
+    setStep('preview');
+    setTooLongPayload(null);
   }, [open, draft]);
 
   useEffect(() => {
     if (open && cancelRef.current) {
       cancelRef.current.focus();
     }
-  }, [open]);
+  }, [open, step]);
 
   if (!open || !draft) return null;
 
@@ -48,14 +64,90 @@ export function ArtifactShareDialog({
     }
   };
 
-  const handleConfirm = () => {
+  const handlePreviewConfirm = async () => {
     if (confirming) return;
-    const result = onConfirm(draft);
-    if (result instanceof Promise) {
-      setConfirming(true);
-      result.catch((error) => onError?.(error)).finally(() => setConfirming(false));
+    setConfirming(true);
+    try {
+      const prepared = await prepareDingTalkShareFromDraft(draft);
+      if (prepared.status === 'too_long') {
+        setTooLongPayload({
+          defaultMsg: prepared.defaultMsg,
+          title: prepared.title,
+        });
+        setStep('too_long');
+        return;
+      }
+      await shareToDingTalk(prepared.content);
+      onShared();
+    } catch (error) {
+      onError?.(error);
+    } finally {
+      setConfirming(false);
     }
   };
+
+  const handleTooLongConfirm = async () => {
+    if (confirming || !tooLongPayload) return;
+    setConfirming(true);
+    try {
+      await openDingTalkShareAfterClipboardCopy(
+        tooLongPayload.title,
+        tooLongPayload.defaultMsg,
+        t('preview.shareDialog.tooLongPickerHint'),
+      );
+      onShared();
+    } catch (error) {
+      onError?.(error);
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  if (step === 'too_long') {
+    return createPortal(
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="artifact-share-too-long-title"
+        onKeyDown={handleKeyDown}
+      >
+        <div
+          className={cn(
+            'mx-4 w-full max-w-[480px] rounded-2xl border border-glass-border glass-panel p-6',
+            'shadow-2xl focus:outline-none',
+          )}
+          tabIndex={-1}
+        >
+          <h2 id="artifact-share-too-long-title" className="text-lg font-semibold">
+            {t('preview.shareDialog.tooLongTitle')}
+          </h2>
+          <p className="mt-3 text-sm leading-6 text-foreground">
+            {t('preview.shareDialog.tooLongDescription')}
+          </p>
+          <div className="mt-6 flex justify-end gap-2">
+            <Button
+              ref={cancelRef}
+              variant="outline"
+              onClick={onCancel}
+              disabled={confirming}
+              className="rounded-full px-5"
+            >
+              {t('preview.shareDialog.cancel')}
+            </Button>
+            <Button
+              onClick={handleTooLongConfirm}
+              disabled={confirming}
+              className="rounded-full px-5"
+            >
+              {confirming ? t('preview.shareDialog.uploading') : t('preview.shareDialog.tooLongConfirm')}
+            </Button>
+          </div>
+        </div>
+      </div>,
+      document.body,
+    );
+  }
 
   const isArtifact = draft.kind === 'artifact';
   const title = isArtifact
@@ -119,7 +211,7 @@ export function ArtifactShareDialog({
             {t('preview.shareDialog.cancel')}
           </Button>
           <Button
-            onClick={handleConfirm}
+            onClick={handlePreviewConfirm}
             disabled={confirming || (!isArtifact && !draft.textPreview && !draft.artifact)}
             className="rounded-full px-5"
           >

@@ -189,6 +189,10 @@
             "cancel": "キャンセル",
             "confirm": "共有する",
             "uploading": "アップロード中…",
+            "tooLongTitle": "共有内容が長すぎます",
+            "tooLongDescription": "文字数が上限を超えているため、内容を事前入力できません。確認後、全文をクリップボードにコピーして DingTalk を開きます。メッセージ入力欄に貼り付け（⌘V / Ctrl+V）してから送信してください。",
+            "tooLongConfirm": "DingTalk を開く",
+            "tooLongPickerHint": "コピーした会話本文をここに貼り付けてください（⌘V / Ctrl+V）",
             "success": "DingTalkの宛先選択を開きました",
             "failed": "共有に失敗しました。しばらくしてから再試行してください"
         }
