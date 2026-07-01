@@ -18,7 +18,8 @@ import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
 import {
-  buildCronSessionHistoryPath, getCronRunSessionAggregateKey, getClaudeTaskRunSessionAggregateKey,
+  buildCronSessionHistoryPath, buildScheduledTaskSessionHistoryPath,
+  getCronRunSessionAggregateKey, getClaudeTaskRunSessionAggregateKey,
   isCronSessionKey, isCronDatedSessionKey,
   isAnyCronSessionKey, isScheduledTaskSessionKey,
   isVirtualTaskSessionKey,
@@ -96,6 +97,10 @@ import {
   normalizeUserMessageText,
   traceLoadHistoryUserReconciliation,
 } from './chat/user-message-merge';
+import {
+  mergeHistoryMessageSources,
+  mergeHistoryWhenShrunk,
+} from './chat/history-merge';
 import {
   resolveAssistantFinalTerminalState,
   shouldAutoCompleteClaudeFromHistory,
@@ -463,6 +468,36 @@ async function loadClaudeScheduledTaskFallbackMessages(sessionKey: string, limit
     console.warn('Failed to load claude scheduled task fallback history:', error);
     return [];
   }
+}
+
+async function loadScheduledTaskFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
+  if (!isScheduledTaskSessionKey(sessionKey)) return [];
+  try {
+    const response = await hostApiFetch<{ messages?: RawMessage[] }>(
+      buildScheduledTaskSessionHistoryPath(sessionKey, limit),
+    );
+    return Array.isArray(response.messages) ? response.messages : [];
+  } catch (error) {
+    console.warn('Failed to load scheduled task fallback history:', error);
+    return [];
+  }
+}
+
+async function loadVirtualTaskFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
+  if (isCronSessionKey(sessionKey) || isCronDatedSessionKey(sessionKey)) {
+    return loadCronFallbackMessages(sessionKey, limit);
+  }
+  if (isScheduledTaskSessionKey(sessionKey)) {
+    return loadScheduledTaskFallbackMessages(sessionKey, limit);
+  }
+  if (
+    isClaudeScheduledTaskSessionKey(sessionKey)
+    || isClaudeScheduledTaskRunSessionKey(sessionKey)
+    || isClaudeScheduledTaskDatedSessionKey(sessionKey)
+  ) {
+    return loadClaudeScheduledTaskFallbackMessages(sessionKey, limit);
+  }
+  return [];
 }
 
 function normalizeAgentId(value: string | undefined | null): string {
@@ -1222,14 +1257,17 @@ export const useChatStore = create<ChatState>()(
 
   // ── Load sessions via sessions.list ──
 
-  loadSessions: async () => {
+  loadSessions: async (options?: { force?: boolean }) => {
+    const force = options?.force === true;
     const now = Date.now();
     if (_loadSessionsInFlight) {
       await _loadSessionsInFlight;
-      scheduleSessionLabelHydrationFromStore(set, get);
-      return;
+      if (!force) {
+        scheduleSessionLabelHydrationFromStore(set, get);
+        return;
+      }
     }
-    if (now - _lastLoadSessionsAt < SESSION_LOAD_MIN_INTERVAL_MS) {
+    if (!force && now - _lastLoadSessionsAt < SESSION_LOAD_MIN_INTERVAL_MS) {
       scheduleSessionLabelHydrationFromStore(set, get);
       return;
     }
@@ -1726,7 +1764,7 @@ export const useChatStore = create<ChatState>()(
         sidebarRecentOrder: removeSidebarRecentOrderKey(s.sidebarRecentOrder, key),
       }));
     }
-    void get().loadSessions();
+    await get().loadSessions({ force: true });
     return true;
   },
 
@@ -1874,6 +1912,8 @@ export const useChatStore = create<ChatState>()(
         runtimeState?: { isRunning?: boolean; runtimeResult?: unknown },
       ) => {
       if (get().currentSessionKey !== targetSessionKey) return;
+
+      rawMessages = mergeHistoryWhenShrunk(rawMessages, get().messages);
 
       absorbWorkflowSchemaFromToolResults(rawMessages);
 
@@ -2206,7 +2246,12 @@ export const useChatStore = create<ChatState>()(
         }
 
         let rawMessages = allMessages;
-        if (rawMessages.length === 0 && (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey))) {
+        if (isVirtualTaskSessionKey(targetSessionKey)) {
+          const fallbackMessages = await loadVirtualTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
+          rawMessages = fallbackMessages.length > 0
+            ? mergeHistoryMessageSources([fallbackMessages, allMessages])
+            : allMessages;
+        } else if (rawMessages.length === 0 && (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey))) {
           rawMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
         } else if (rawMessages.length === 0 && (isClaudeScheduledTaskSessionKey(targetSessionKey) || isClaudeScheduledTaskRunSessionKey(targetSessionKey) || isClaudeScheduledTaskDatedSessionKey(targetSessionKey))) {
           rawMessages = await loadClaudeScheduledTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
@@ -2226,7 +2271,9 @@ export const useChatStore = create<ChatState>()(
         console.warn('Failed to load chat history:', err);
         if (get().currentSessionKey !== targetSessionKey) return;
         let fallbackMessages: RawMessage[] = [];
-        if (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey)) {
+        if (isVirtualTaskSessionKey(targetSessionKey)) {
+          fallbackMessages = await loadVirtualTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
+        } else if (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey)) {
           fallbackMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
         } else if (isClaudeScheduledTaskSessionKey(targetSessionKey) || isClaudeScheduledTaskRunSessionKey(targetSessionKey) || isClaudeScheduledTaskDatedSessionKey(targetSessionKey)) {
           fallbackMessages = await loadClaudeScheduledTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);

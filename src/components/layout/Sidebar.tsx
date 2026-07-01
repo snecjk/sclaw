@@ -474,8 +474,8 @@ function SidebarScheduledTaskGroup({
       && readSessionUnread(unreadKeys, session.key),
   );
 
-  // Strip common prefixes from group name for cleaner display
-  const displayName = name.replace(/^Cron:\s*/i, '').replace(/^定时任务\s*/i, '');
+  // Strip Gateway technical prefix only; keep user-defined names like「定时任务测试」intact.
+  const displayName = name.replace(/^Cron:\s*/i, '');
 
   // 按日期统计当天会话数量，用于决定用哪种日期格式
   const dayCounts = new Map<string, number>();
@@ -777,11 +777,18 @@ export function Sidebar() {
     }
   }, [workflowEditorActive, setSidebarCollapsed]);
 
-  useEffect(() => {
-    if (!taskListSectionOpen) {
-      setTaskListShowAll(false);
+  const closeTaskListSection = useCallback(() => {
+    setTaskListSectionOpen(false);
+    setTaskListShowAll(false);
+  }, []);
+
+  const toggleTaskListSection = useCallback(() => {
+    if (taskListSectionOpen) {
+      closeTaskListSection();
+    } else {
+      setTaskListSectionOpen(true);
     }
-  }, [taskListSectionOpen]);
+  }, [taskListSectionOpen, closeTaskListSection]);
 
   useEffect(() => {
     if (sidebarCollapsed) return;
@@ -789,8 +796,8 @@ export function Sidebar() {
   }, [sidebarCollapsed, sessions, stoEntriesByTask]);
 
   const handleCollapseTaskSectionFromScroll = useCallback(() => {
-    setTaskListSectionOpen(false);
-  }, []);
+    closeTaskListSection();
+  }, [closeTaskListSection]);
 
   const {
     scrollContainerRef,
@@ -1524,7 +1531,7 @@ export function Sidebar() {
             shellRef={taskSectionHeaderRef}
             stickyTopClass={sidebarSectionStickyTopTaskClass}
             open={taskListSectionOpen}
-            onToggle={() => setTaskListSectionOpen((o) => !o)}
+            onToggle={toggleTaskListSection}
             label={t('common:sidebar.taskList')}
             toggleAriaLabel={t('common:sidebar.toggleTaskListSection')}
           />
