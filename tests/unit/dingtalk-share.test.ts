@@ -9,6 +9,7 @@ import {
 import {
   buildArtifactShareDialogDraft,
   buildArtifactShareDraft,
+  isDingTalkShareContentTooLong,
   truncateConversationPreview,
 } from '../../src/lib/dingtalk-share';
 
@@ -67,6 +68,14 @@ describe('buildDingTalkShareAppLinkUrl', () => {
     expect(payload.defaultMsg).toBe('分享测试');
   });
 
+  it('does not truncate share body within 2080 characters', () => {
+    const body = '报告已生成并通过质量检查。\n\n'.repeat(40).trimEnd();
+    expect(body.length).toBeLessThanOrEqual(2080);
+    const built = buildDingTalkShareAppLinkUrl({ text: body, title: '分享对话' });
+    expect(built.truncated).toBe(false);
+    expect(built.defaultMsg).toBe(body);
+  });
+
   it('truncates very long content to fit url length budget', () => {
     const built = buildDingTalkShareAppLinkUrl(
       { text: 'x'.repeat(5000) },
@@ -74,6 +83,24 @@ describe('buildDingTalkShareAppLinkUrl', () => {
     );
     expect(built.url.length).toBeLessThanOrEqual(500);
     expect(built.truncated).toBe(true);
+  });
+
+  it('preserves share url when truncating long text', () => {
+    const shareUrl = 'https://oss.example.com/report.html?sig=abc123';
+    const built = buildDingTalkShareAppLinkUrl(
+      {
+        text: '报告已生成并通过质量检查。\n\n'.repeat(80),
+        url: shareUrl,
+      },
+      { maxUrlLength: 900 },
+    );
+    expect(built.truncated).toBe(true);
+    expect(built.defaultMsg).toContain(`[链接](${shareUrl})`);
+    expect(built.defaultMsg).toContain('…（内容已截断）');
+  });
+  it('detects share content over 2080 characters', () => {
+    expect(isDingTalkShareContentTooLong({ text: 'a'.repeat(2081) })).toBe(true);
+    expect(isDingTalkShareContentTooLong({ text: 'a'.repeat(2080) })).toBe(false);
   });
 });
 

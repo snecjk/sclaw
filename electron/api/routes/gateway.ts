@@ -12,6 +12,7 @@ import type { AgentEngineType } from '../../engines/types';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { preprocessChatSendParams } from '../../utils/dingtalk-mention-send';
+import { uploadFileToTempOSS } from '../../utils/oss-temp-upload';
 
 export async function handleGatewayRoutes(
   req: IncomingMessage,
@@ -22,7 +23,6 @@ export async function handleGatewayRoutes(
   const parseEngineType = (value: string | null | undefined): AgentEngineType | undefined => (
     value === 'claude' || value === 'openclaw' ? value : undefined
   );
-  const BIZ_AGENT_TEMP_UPLOAD_PATH = '/agent/v1/biz-agent/attachments/upload';
   const getAgentIdFromSessionKey = (sessionKey: string): string => {
     if (!sessionKey.startsWith('agent:')) return 'main';
     const [, agentId] = sessionKey.split(':');
@@ -33,33 +33,6 @@ export async function handleGatewayRoutes(
     const agentId = getAgentIdFromSessionKey(sessionKey);
     const agent = snapshot.agents.find((entry) => entry.id.trim().toLowerCase() === agentId);
     return agent?.fileTransformByOSS === true;
-  };
-  const uploadMediaToTempOSS = async (filePath: string, fileName: string): Promise<string> => {
-    const token = await getStoToken();
-    if (!token) {
-      throw new Error('stoToken is missing, cannot upload media to OSS');
-    }
-    const fsP = await import('node:fs/promises');
-    const fileBuffer = await fsP.readFile(filePath);
-    const formData = new (globalThis as { FormData: new () => any }).FormData();
-    const BlobCtor = (globalThis as { Blob: new (parts: Array<Buffer>) => any }).Blob;
-    formData.append('file', new BlobCtor([fileBuffer]), fileName);
-    const baseUrl = await resolveStoBaseUrl();
-    const resp = await proxyAwareFetch(`${baseUrl}${BIZ_AGENT_TEMP_UPLOAD_PATH}`, {
-      method: 'POST',
-      headers: buildStoMemoryCenterAuthHeaders(token),
-      body: formData,
-    });
-    if (!resp.ok) {
-      const bodyText = await resp.text().catch(() => '');
-      throw new Error(`temp OSS upload failed: ${resp.status} ${bodyText}`);
-    }
-    const payload = await resp.json() as { success?: boolean; data?: { url?: string }; url?: string };
-    const url = payload.data?.url || payload.url;
-    if (!url) {
-      throw new Error('temp OSS upload response missing url');
-    }
-    return url;
   };
 
   if (url.pathname === '/api/app/gateway-info' && req.method === 'GET') {
@@ -285,7 +258,7 @@ export async function handleGatewayRoutes(
         const fsP = await import('node:fs/promises');
         for (const m of body.media) {
           if (transformByOSS) {
-            const ossTempUrl = await uploadMediaToTempOSS(m.filePath, m.fileName);
+            const ossTempUrl = await uploadFileToTempOSS(m.filePath, m.fileName, { bizTypeEnum: 'LLM' });
             fileReferences.push(`[media attached: ${ossTempUrl} (${m.mimeType}) | ${ossTempUrl}]`);
             continue;
           }
