@@ -1708,7 +1708,10 @@ export const useChatStore = create<ChatState>()(
   // JSONL history file on disk is intentionally left intact, consistent with the
   // newSession() design that avoids sessions.reset to preserve history.
 
-  deleteSession: async (key: string) => {
+  deleteSession: async (key: string, options?: {
+    skipSessionRefresh?: boolean;
+    additionalSuppressKeys?: string[];
+  }) => {
     const session = get().sessions.find((item) => item.key === key);
     const deleteResult = await requestSessionDelete(
       key,
@@ -1725,6 +1728,30 @@ export const useChatStore = create<ChatState>()(
     }
 
     rememberOptimisticDeletedSessionKey(key);
+    const additionalSuppressKeys = (options?.additionalSuppressKeys ?? [])
+      .map((suppressKey) => suppressKey.trim())
+      .filter((suppressKey) => suppressKey && suppressKey !== key);
+    for (const suppressKey of additionalSuppressKeys) {
+      rememberOptimisticDeletedSessionKey(suppressKey);
+    }
+    if (additionalSuppressKeys.length > 0) {
+      await Promise.all(additionalSuppressKeys.map(async (suppressKey) => {
+        const suppressSession = get().sessions.find((item) => item.key === suppressKey);
+        try {
+          await requestSessionDelete(
+            suppressKey,
+            resolveSessionDeleteEngineType(
+              suppressKey,
+              suppressSession,
+              getAgentEngineType(getAgentIdFromSessionKey(suppressKey)),
+            ),
+          );
+        } catch {
+          // Best-effort tombstone for virtual placeholder keys.
+        }
+      }));
+    }
+
     useSessionUnreadStore.getState().markSessionRead(key);
 
     const { currentSessionKey, sessions } = get();
@@ -1764,7 +1791,9 @@ export const useChatStore = create<ChatState>()(
         sidebarRecentOrder: removeSidebarRecentOrderKey(s.sidebarRecentOrder, key),
       }));
     }
-    await get().loadSessions({ force: true });
+    if (!options?.skipSessionRefresh) {
+      await get().loadSessions({ force: true });
+    }
     return true;
   },
 

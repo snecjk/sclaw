@@ -3,6 +3,9 @@ import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getOpenClawConfigDir } from './paths';
 import { logger } from './logger';
+import { formatLocalYmdFromMs } from '../../shared/first-trigger-placeholder-session-key';
+
+export { formatLocalYmdFromMs } from '../../shared/first-trigger-placeholder-session-key';
 
 const CURRENT_SESSION_VERSION = 1;
 
@@ -19,10 +22,6 @@ export function formatLocalYmd(d = new Date()): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
-}
-
-export function formatLocalYmdFromMs(atMs: number): string {
-  return formatLocalYmd(new Date(atMs));
 }
 
 interface SessionStoreEntry {

@@ -8,7 +8,7 @@ import type { DingTalkMention } from '../../../shared/dingtalk-mention';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { getOpenClawConfigDir } from '../../utils/paths';
-import { filterDeletedSessions } from '../../utils/scheduled-task-poller-store';
+import { filterDeletedSessions, listDeletedSessionKeys } from '../../utils/scheduled-task-poller-store';
 import { reviveCronDatedExecutionSession } from '../../utils/revive-deleted-execution-session';
 import {
   buildFirstTriggeredCronSessionPlaceholders,
@@ -427,10 +427,12 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
 
   sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 
+  const deletedKeys = new Set(await listDeletedSessionKeys());
   const firstTriggered = await listTaskGroupFirstTriggeredAt();
   const existingKeys = new Set(sessions.map((session) => session.key));
   sessions.push(
-    ...buildFirstTriggeredCronSessionPlaceholders(firstTriggered, existingKeys, jobNamesById),
+    ...buildFirstTriggeredCronSessionPlaceholders(firstTriggered, existingKeys, jobNamesById)
+      .filter((placeholder) => !deletedKeys.has(placeholder.key)),
   );
   sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 

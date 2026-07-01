@@ -71,12 +71,17 @@ import {
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { buildScheduledTaskGroupDisplayName, deriveGroupFirstTriggeredFromSessions, getSessionActivityMs, sortScheduledTaskGroupsByFirstTriggerDesc } from '@/lib/scheduled-task-group-name';
 import {
-  clearTaskGroupFirstTriggered,
   fetchTaskGroupFirstTriggeredMap,
+  isTaskGroupFirstTriggerOptimisticallyCleared,
   rememberOptimisticTaskGroupFirstTriggered,
-  rememberOptimisticTaskGroupFirstTriggeredClear,
   seedTaskGroupFirstTriggeredIfAbsent,
 } from '@/lib/task-group-first-trigger';
+import {
+  type LastSessionDeleteFirstTriggerPrep,
+  prepareFirstTriggerClearBeforeLastSessionDelete,
+  rememberSuppressedKeysForLastGroupSessionDelete,
+  revertFirstTriggerClearAfterFailedDelete,
+} from '@/lib/task-group-first-trigger-delete';
 import { resolveTaskGroupKeyFromSessionKey, stoBuiltinTaskGroupKey } from '../../../shared/task-group-key';
 import { useScheduledTaskNameMaps } from '@/hooks/use-scheduled-task-name-maps';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
@@ -1115,17 +1120,38 @@ export function Sidebar() {
     t,
   ]);
 
-  const maybeClearTaskGroupFirstTriggered = useCallback(async (groupKey: string | null) => {
-    if (!groupKey) return;
-    rememberOptimisticTaskGroupFirstTriggeredClear(groupKey);
+  const applyTaskGroupFirstTriggeredReactClear = useCallback((groupKey: string) => {
     setTaskGroupFirstTriggeredAt((prev) => {
       if (!(groupKey in prev)) return prev;
       const next = { ...prev };
       delete next[groupKey];
       return next;
     });
-    await clearTaskGroupFirstTriggered(groupKey);
   }, []);
+
+  const applyTaskGroupFirstTriggeredReactRestore = useCallback((
+    prep: LastSessionDeleteFirstTriggerPrep,
+  ) => {
+    if (prep.restoreAtMs == null || !(prep.restoreAtMs > 0)) return;
+    setTaskGroupFirstTriggeredAt((prev) => ({ ...prev, [prep.groupKey]: prep.restoreAtMs! }));
+  }, []);
+
+  const clearFirstTriggerBeforeLastSessionDelete = useCallback(async (
+    groupKey: string,
+    fallbackAtMs: number,
+  ): Promise<LastSessionDeleteFirstTriggerPrep | null> => {
+    const prep = await prepareFirstTriggerClearBeforeLastSessionDelete(groupKey, { fallbackAtMs });
+    if (!prep) return null;
+    applyTaskGroupFirstTriggeredReactClear(groupKey);
+    return prep;
+  }, [applyTaskGroupFirstTriggeredReactClear]);
+
+  const revertFirstTriggerClearAfterFailedSessionDelete = useCallback(async (
+    prep: LastSessionDeleteFirstTriggerPrep,
+  ) => {
+    await revertFirstTriggerClearAfterFailedDelete(prep);
+    applyTaskGroupFirstTriggeredReactRestore(prep);
+  }, [applyTaskGroupFirstTriggeredReactRestore]);
 
   const countScheduledSessionsInGroup = useCallback((groupKey: string, excludingKey?: string) => {
     let count = 0;
@@ -1167,6 +1193,7 @@ export function Sidebar() {
         if (entryIds.length === 0) continue;
         const groupKey = stoTaskSidebarGroupKey(navItem.id);
         if ((taskGroupFirstTriggeredAt[groupKey] ?? 0) > 0) continue;
+        if (isTaskGroupFirstTriggerOptimisticallyCleared(groupKey)) continue;
         const sessions = buildBuiltinStoGroupSortSessions(navItem.id, entryIds, stoSessionKeyBySubitem);
         const atMs = deriveGroupFirstTriggeredFromSessions(sessions, sessionLastActivity);
         if (atMs > 0) seeds.push({ groupKey, atMs });
@@ -1174,6 +1201,7 @@ export function Sidebar() {
       for (const group of scheduledTaskGroups) {
         if (group.sessions.length === 0) continue;
         if ((taskGroupFirstTriggeredAt[group.key] ?? 0) > 0) continue;
+        if (isTaskGroupFirstTriggerOptimisticallyCleared(group.key)) continue;
         const atMs = deriveGroupFirstTriggeredFromSessions(group.sessions, sessionLastActivity);
         if (atMs > 0) seeds.push({ groupKey: group.key, atMs });
       }
@@ -2040,15 +2068,37 @@ export function Sidebar() {
           const { key } = sessionToDelete;
           const groupKey = resolveTaskGroupKeyFromSessionKey(key);
           const remaining = groupKey != null ? countScheduledSessionsInGroup(groupKey, key) : 0;
+          let firstTriggerPrep: LastSessionDeleteFirstTriggerPrep | null = null;
+          let additionalSuppressKeys: string[] = [];
+          const groupSessions = groupKey ? collectScheduledSessionsForGroup(groupKey) : [];
+          const fallbackAtMs = groupKey
+            ? deriveGroupFirstTriggeredFromSessions(groupSessions, sessionLastActivity)
+            : 0;
           if (groupKey && remaining > 0) {
             await ensureTaskGroupFirstTriggerBeforePartialDelete(
               groupKey,
-              collectScheduledSessionsForGroup(groupKey),
+              groupSessions,
+            );
+          } else if (groupKey && remaining === 0) {
+            firstTriggerPrep = await clearFirstTriggerBeforeLastSessionDelete(groupKey, fallbackAtMs);
+            if (!firstTriggerPrep) return;
+            additionalSuppressKeys = rememberSuppressedKeysForLastGroupSessionDelete(
+              groupKey,
+              groupSessions,
+              key,
+              firstTriggerPrep.restoreAtMs ?? fallbackAtMs,
             );
           }
-          const deleted = await deleteSession(key);
-          if (!deleted) return;
-          if (groupKey != null && remaining === 0) await maybeClearTaskGroupFirstTriggered(groupKey);
+          const deleted = await deleteSession(key, {
+            skipSessionRefresh: groupKey != null && remaining === 0,
+            additionalSuppressKeys,
+          });
+          if (!deleted) {
+            if (firstTriggerPrep) {
+              await revertFirstTriggerClearAfterFailedSessionDelete(firstTriggerPrep);
+            }
+            return;
+          }
           if (currentSessionKey === key) navigateToMainChatHome(navigate, location.pathname);
           setSessionToDelete(null);
         }}
@@ -2068,18 +2118,36 @@ export function Sidebar() {
           const groupKey = stoBuiltinTaskGroupKey(taskId);
           const entryIds = stoEntriesByTask[taskId] ?? [];
           const remainingBefore = entryIds.filter((id) => id !== entryId).length;
+          let firstTriggerPrep: LastSessionDeleteFirstTriggerPrep | null = null;
+          let additionalSuppressKeys: string[] = [];
+          const groupSessions = buildBuiltinStoGroupSortSessions(taskId, entryIds, stoSessionKeyBySubitem);
+          const fallbackAtMs = deriveGroupFirstTriggeredFromSessions(groupSessions, sessionLastActivity);
           if (remainingBefore > 0) {
             await ensureTaskGroupFirstTriggerBeforePartialDelete(
               groupKey,
-              buildBuiltinStoGroupSortSessions(taskId, entryIds, stoSessionKeyBySubitem),
+              groupSessions,
+            );
+          } else {
+            firstTriggerPrep = await clearFirstTriggerBeforeLastSessionDelete(groupKey, fallbackAtMs);
+            if (!firstTriggerPrep) return;
+            additionalSuppressKeys = rememberSuppressedKeysForLastGroupSessionDelete(
+              groupKey,
+              groupSessions,
+              sessionKey,
+              firstTriggerPrep.restoreAtMs ?? fallbackAtMs,
             );
           }
-          const deleted = await deleteSession(sessionKey);
-          if (!deleted) return;
-          removeSubitem(taskId, entryId);
-          if (remainingBefore === 0) {
-            await maybeClearTaskGroupFirstTriggered(groupKey);
+          const deleted = await deleteSession(sessionKey, {
+            skipSessionRefresh: remainingBefore === 0,
+            additionalSuppressKeys,
+          });
+          if (!deleted) {
+            if (firstTriggerPrep) {
+              await revertFirstTriggerClearAfterFailedSessionDelete(firstTriggerPrep);
+            }
+            return;
           }
+          removeSubitem(taskId, entryId);
           if (currentSessionKey === sessionKey) navigateToMainChatHome(navigate, location.pathname);
           setSubitemToDelete(null);
         }}
