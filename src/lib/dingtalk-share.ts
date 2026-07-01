@@ -1,10 +1,17 @@
 import {
   assertDingTalkShareOpenUrl,
   buildDingTalkShareAppLinkUrl,
+  buildDingTalkShareDefaultMsg,
+  DINGTALK_SHARE_MAX_URL_LENGTH,
   type DingTalkShareBuildResult,
   type DingTalkShareContent,
 } from '../../shared/dingtalk-share';
-import { uploadFileToTempOSS } from '@/lib/host-api';
+import {
+  buildSharePathToUrlMap,
+  replaceConversationFileRefsWithShareUrls,
+} from '../../shared/dingtalk-share-text';
+import { markdownToPlainText } from '../../shared/markdown-to-plain-text';
+import { hostApiFetch, uploadFileToTempOSS } from '@/lib/host-api';
 import { isHttpUrl } from '@/lib/preview-url';
 import type { AttachedFileMeta } from '@/stores/chat';
 import {
@@ -13,6 +20,97 @@ import {
 } from '@/components/chat/artifact-product-card';
 
 export type { DingTalkShareBuildResult, DingTalkShareContent };
+export { DINGTALK_SHARE_MAX_URL_LENGTH };
+export { markdownToPlainText } from '../../shared/markdown-to-plain-text';
+
+export type DingTalkSharePrepared =
+  | { status: 'ready'; content: DingTalkShareContent }
+  | { status: 'too_long'; content: DingTalkShareContent; defaultMsg: string; title: string };
+
+export function getDingTalkShareDefaultMsg(content: DingTalkShareContent): string {
+  return buildDingTalkShareDefaultMsg(content).defaultMsg;
+}
+
+export function isDingTalkShareContentTooLong(content: DingTalkShareContent): boolean {
+  return getDingTalkShareDefaultMsg(content).length > DINGTALK_SHARE_MAX_URL_LENGTH;
+}
+
+async function buildShareContentFromDraft(draft: DingTalkShareDialogDraft): Promise<DingTalkShareContent> {
+  if (draft.kind === 'artifact') {
+    const url = await resolveDingTalkShareUrl(draft.filePath, draft.fileName);
+    return {
+      title: draft.title,
+      text: `请查看产物：${draft.fileName}`,
+      url,
+    };
+  }
+
+  const files = [...draft.files];
+  if (draft.artifact && !files.some((file) => file.filePath === draft.artifact!.filePath)) {
+    files.push({
+      fileName: draft.artifact.fileName,
+      filePath: draft.artifact.filePath,
+    });
+  }
+
+  const bodyText = await buildConversationShareText(draft.fullText, files);
+  return {
+    title: draft.artifact?.title ?? '分享对话',
+    text: bodyText,
+  };
+}
+
+export async function prepareDingTalkShareFromDraft(
+  draft: DingTalkShareDialogDraft,
+): Promise<DingTalkSharePrepared> {
+  logDingTalkShare('confirm-start', {
+    kind: draft.kind,
+    title: draft.kind === 'artifact' ? draft.title : draft.artifact?.title,
+    fileName: draft.kind === 'artifact' ? draft.fileName : draft.artifact?.fileName,
+    hasArtifact: draft.kind === 'conversation' ? Boolean(draft.artifact) : true,
+  });
+
+  const content = await buildShareContentFromDraft(draft);
+  const defaultMsg = getDingTalkShareDefaultMsg(content);
+  logDingTalkShare('prepare-share', {
+    defaultMsgLength: defaultMsg.length,
+    maxLength: DINGTALK_SHARE_MAX_URL_LENGTH,
+    tooLong: defaultMsg.length > DINGTALK_SHARE_MAX_URL_LENGTH,
+  });
+
+  if (defaultMsg.length > DINGTALK_SHARE_MAX_URL_LENGTH) {
+    return {
+      status: 'too_long',
+      content,
+      defaultMsg,
+      title: content.title ?? '分享',
+    };
+  }
+  return { status: 'ready', content };
+}
+
+export async function openDingTalkShareAfterClipboardCopy(
+  title: string,
+  clipboardText: string,
+  pickerHint: string,
+): Promise<DingTalkShareBuildResult> {
+  await navigator.clipboard.writeText(clipboardText);
+  logDingTalkShare('clipboard-fallback', {
+    defaultMsgLength: clipboardText.length,
+    title,
+  });
+  return shareToDingTalk({ title, text: pickerHint });
+}
+
+function logDingTalkShare(stage: string, payload: Record<string, unknown>): void {
+  const message = `[dingtalk-share] stage=${stage}`;
+  const data = { stage, ...payload, timestamp: new Date().toISOString() };
+  console.info(message, data);
+  void hostApiFetch('/api/logs/client', {
+    method: 'POST',
+    body: JSON.stringify({ level: 'info', message, data }),
+  }).catch(() => undefined);
+}
 
 export type DingTalkShareDialogDraft =
   | {
@@ -26,6 +124,7 @@ export type DingTalkShareDialogDraft =
       kind: 'conversation';
       textPreview: string;
       fullText: string;
+      files: Array<{ fileName: string; filePath: string }>;
       artifact?: {
         title: string;
         metaLine: string;
@@ -136,14 +235,55 @@ export function buildConversationShareDialogDraft(
   t: (key: string) => string,
 ): DingTalkShareDialogDraft {
   const artifactFile = pickPrimaryShareArtifact(files);
+  const shareFiles = files
+    .filter((file) => file.filePath.trim().length > 0)
+    .map((file) => ({
+      fileName: file.fileName.trim() || 'file',
+      filePath: file.filePath.trim(),
+    }));
   return {
     kind: 'conversation',
     textPreview: truncateConversationPreview(text),
     fullText: text.trim(),
+    files: shareFiles,
     artifact: artifactFile
       ? buildArtifactDraftFields(artifactFile, t)
       : undefined,
   };
+}
+
+async function buildConversationShareText(
+  fullText: string,
+  files: Array<{ fileName: string; filePath: string }>,
+): Promise<string> {
+  const uniqueFiles = new Map<string, { fileName: string; filePath: string }>();
+  for (const file of files) {
+    const filePath = file.filePath.trim();
+    if (!filePath || uniqueFiles.has(filePath)) continue;
+    uniqueFiles.set(filePath, {
+      fileName: file.fileName.trim() || 'file',
+      filePath,
+    });
+  }
+
+  const entries: Array<{ localPath: string; shareUrl: string }> = [];
+  for (const file of uniqueFiles.values()) {
+    const shareUrl = await resolveDingTalkShareUrl(file.filePath, file.fileName);
+    entries.push({ localPath: file.filePath, shareUrl });
+  }
+
+  const pathToUrl = buildSharePathToUrlMap(entries);
+  const replaced = replaceConversationFileRefsWithShareUrls(fullText, pathToUrl);
+  const plainText = markdownToPlainText(replaced);
+  logDingTalkShare('replace-file-refs', {
+    fileCount: entries.length,
+    originalLength: fullText.length,
+    replacedLength: replaced.length,
+    plainTextLength: plainText.length,
+    replacedPreview: plainText.slice(0, 320),
+    replacementCount: entries.length,
+  });
+  return plainText;
 }
 
 /**
@@ -155,33 +295,21 @@ export async function resolveDingTalkShareUrl(filePath: string, fileName: string
     throw new Error('分享文件路径为空');
   }
   if (isHttpUrl(trimmed)) {
+    logDingTalkShare('resolve-url', { filePath: trimmed, fileName, source: 'http-direct' });
     return trimmed;
   }
-  return uploadFileToTempOSS(trimmed, fileName.trim() || 'file');
+  logDingTalkShare('resolve-url-start', { filePath: trimmed, fileName, source: 'oss-upload' });
+  const url = await uploadFileToTempOSS(trimmed, fileName.trim() || 'file');
+  logDingTalkShare('resolve-url-done', { filePath: trimmed, fileName, tempUrl: url });
+  return url;
 }
 
-export async function confirmDingTalkShare(draft: DingTalkShareDialogDraft): Promise<void> {
-  if (draft.kind === 'artifact') {
-    const url = await resolveDingTalkShareUrl(draft.filePath, draft.fileName);
-    await shareToDingTalk({
-      title: draft.title,
-      text: `请查看产物：${draft.fileName}`,
-      url,
-    });
-    return;
+export async function confirmDingTalkShare(draft: DingTalkShareDialogDraft): Promise<DingTalkShareBuildResult> {
+  const prepared = await prepareDingTalkShareFromDraft(draft);
+  if (prepared.status === 'too_long') {
+    throw new Error('分享内容超过字符上限，请使用超长内容确认流程');
   }
-
-  let shareUrl: string | undefined;
-  if (draft.artifact) {
-    shareUrl = await resolveDingTalkShareUrl(draft.artifact.filePath, draft.artifact.fileName);
-  }
-
-  const bodyText = draft.fullText || draft.textPreview;
-  await shareToDingTalk({
-    title: draft.artifact?.title ?? '分享对话',
-    text: bodyText || (shareUrl ? `请查看产物：${draft.artifact!.fileName}` : ''),
-    url: shareUrl,
-  });
+  return shareToDingTalk(prepared.content);
 }
 
 /**
@@ -205,9 +333,7 @@ export function buildArtifactShareDraft(file: {
 /**
  * Build DingTalk AppLink URL for PC client employee picker (no side effects).
  */
-export function prepareDingTalkShare(
-  content: DingTalkShareContent,
-): DingTalkShareBuildResult {
+export function prepareDingTalkShare(content: DingTalkShareContent): DingTalkShareBuildResult {
   const built = buildDingTalkShareAppLinkUrl(content);
   assertDingTalkShareOpenUrl(built.url);
   return built;
@@ -219,6 +345,17 @@ export function prepareDingTalkShare(
  */
 export async function shareToDingTalk(content: DingTalkShareContent): Promise<DingTalkShareBuildResult> {
   const built = prepareDingTalkShare(content);
+  logDingTalkShare('open-external', {
+    title: content.title,
+    textLength: content.text?.length ?? 0,
+    shareUrl: content.url,
+    defaultMsgLength: built.defaultMsg.length,
+    defaultMsgPreview: built.defaultMsg.slice(0, 320),
+    containsInlineOssLink: /\[([^\]]+)\]\(https?:\/\//.test(built.defaultMsg),
+    truncated: built.truncated,
+    warnings: built.warnings,
+    openUrlLength: built.url.length,
+  });
   const electron = window.electron;
   if (!electron?.openExternal) {
     throw new Error('当前环境无法打开外部链接');

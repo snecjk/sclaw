@@ -23,7 +23,6 @@ import { FilePreviewViewer } from '@/components/file-preview/FilePreviewViewer';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import {
   buildArtifactShareDialogDraft,
-  confirmDingTalkShare,
   type DingTalkShareDialogDraft,
 } from '@/lib/dingtalk-share';
 import {
@@ -85,8 +84,7 @@ export function ChatPreviewPanel({
     setShareDialogOpen(true);
   }, [activeFile, t]);
 
-  const handleConfirmShare = useCallback(async (draft: DingTalkShareDialogDraft) => {
-    await confirmDingTalkShare(draft);
+  const handleShareCompleted = useCallback(() => {
     toast.success(t('preview.shareDialog.success'));
     setShareDialogOpen(false);
     setShareDraft(null);
@@ -212,7 +210,7 @@ export function ChatPreviewPanel({
       <ArtifactShareDialog
         open={shareDialogOpen}
         draft={shareDraft}
-        onConfirm={handleConfirmShare}
+        onShared={handleShareCompleted}
         onCancel={() => {
           setShareDialogOpen(false);
           setShareDraft(null);

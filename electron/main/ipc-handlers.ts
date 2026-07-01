@@ -55,6 +55,7 @@ import { getStoToken } from '../utils/auth-store';
 import { preprocessChatSendParams } from '../utils/dingtalk-mention-send';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
+import { uploadFileToTempOSS } from '../utils/oss-temp-upload';
 import { getRecentTokenUsageHistory } from '../utils/token-usage';
 import { getProviderService } from '../services/providers/provider-service';
 import {
@@ -1453,8 +1454,6 @@ function registerGatewayHandlers(
     // Modern image formats
     'image/avif', 'image/heic', 'image/heif', 'image/tiff',
   ]);
-  const BIZ_AGENT_TEMP_UPLOAD_PATH = '/agent/v1/biz-agent/attachments/upload';
-
   function getAgentIdFromSessionKey(sessionKey: string): string {
     if (!sessionKey.startsWith('agent:')) return 'main';
     const [, agentId] = sessionKey.split(':');
@@ -1466,43 +1465,6 @@ function registerGatewayHandlers(
     const agentId = getAgentIdFromSessionKey(sessionKey);
     const agent = snapshot.agents.find((item) => item.id.trim().toLowerCase() === agentId);
     return agent?.fileTransformByOSS === true;
-  }
-
-  async function uploadMediaToTempOSS(filePath: string, fileName: string): Promise<string> {
-    const token = await getStoToken();
-    if (!token) {
-      throw new Error('stoToken is missing, cannot upload media to OSS');
-    }
-
-    const fsP = await import('fs/promises');
-    const fileBuffer = await fsP.readFile(filePath);
-    const formData = new (globalThis as { FormData: new () => any }).FormData();
-    const BlobCtor = (globalThis as { Blob: new (parts: Array<Buffer>) => any }).Blob;
-    formData.append('file', new BlobCtor([fileBuffer]), fileName);
-
-    const baseUrl = await resolveStoBaseUrl();
-    const url = `${baseUrl}${BIZ_AGENT_TEMP_UPLOAD_PATH}`;
-    const response = await proxyAwareFetch(url, {
-      method: 'POST',
-      headers: buildStoMemoryCenterAuthHeaders(token),
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const bodyText = await response.text().catch(() => '');
-      throw new Error(`temp OSS upload failed: ${response.status} ${bodyText}`);
-    }
-
-    const payload = await response.json() as {
-      success?: boolean;
-      data?: { url?: string };
-      url?: string;
-    };
-    const uploadedUrl = payload.data?.url || payload.url;
-    if (!uploadedUrl) {
-      throw new Error('temp OSS upload response missing url');
-    }
-    return uploadedUrl;
   }
 
   ipcMain.handle('chat:sendWithMedia', async (_, params: {
@@ -1548,7 +1510,7 @@ function registerGatewayHandlers(
           logger.info(`[chat:sendWithMedia] Processing file: ${m.fileName} (${m.mimeType}), path: ${m.filePath}, exists: ${exists}, isVision: ${VISION_MIME_TYPES.has(m.mimeType)}, transformByOSS: ${transformByOSS}`);
 
           if (transformByOSS) {
-            const ossTempUrl = await uploadMediaToTempOSS(m.filePath, m.fileName);
+            const ossTempUrl = await uploadFileToTempOSS(m.filePath, m.fileName, { bizTypeEnum: 'LLM' });
             fileReferences.push(
               `[media attached: ${ossTempUrl} (${m.mimeType}) | ${ossTempUrl}]`,
             );

@@ -803,11 +803,11 @@ export const workflowHeroQuickChipClass = cn(
  * 白底 + 12px 圆角 + 轻阴影；icon 16×16 + 文案 12/14 Medium Grey-10 #1D2129；内距 9/14/16
  */
 export const workflowHeroManualCreateClass = cn(
-  'relative z-[2] box-border inline-flex shrink-0 flex-nowrap items-center gap-1.5 whitespace-nowrap rounded-xl bg-card',
+  'relative z-[2] box-border inline-flex shrink-0 flex-nowrap items-center gap-1.5 whitespace-nowrap rounded-xl border border-border bg-card',
   'py-[9px] pl-[14px] pr-4 text-xs font-medium leading-[14px] text-foreground',
   'shadow-[0_2px_20px_rgba(0,0,0,0.06)]',
-  'transition-[background-color,box-shadow] duration-fast hover:bg-card/90',
-  'dark:shadow-[0_2px_20px_rgba(0,0,0,0.22)]',
+  'transition-[background-color,box-shadow,border-color] duration-fast hover:bg-card/90',
+  'dark:border-white/20 dark:bg-white/12 dark:shadow-[0_2px_20px_rgba(0,0,0,0.35)] dark:hover:bg-white/18',
 );
 
 /**
@@ -943,26 +943,38 @@ export const workflowListCardFlowStepClass =
 /** 工作流卡片底栏三钮共用圆角 8px（`rounded-lg` = `--radius`） */
 export const workflowListCardActionRadiusClass = 'rounded-lg';
 
-/** 工作流卡片底栏主操作钮（立即运行 / 安装） */
-export const workflowListCardPrimaryActionClass = cn(
-  workflowListCardActionRadiusClass,
-  'px-4 py-1.5 text-[13px] font-semibold',
-  invertedPrimarySurfaceClass,
-  'transition-[transform,background-color] duration-fast active:scale-[0.98]',
+/**
+ * 工作流卡片底栏操作钮共用面（··· / 编辑流程 / 立即运行）。
+ * 暗色卡片为 secondary 底，子钮须透明底 + border，避免 bg-card 与壳层融成「纯色块」。
+ */
+export const workflowListCardFooterActionSurfaceClass = cn(
+  'border border-border bg-transparent text-foreground',
+  'transition-[transform,background-color,border-color,color] duration-fast',
+  'hover:bg-black/[0.02] dark:hover:bg-white/[0.06]',
 );
 
-/** 工作流卡片底栏次操作钮（编辑流程 / 预览） */
-export const workflowListCardSecondaryActionClass = cn(
-  'inline-flex items-center gap-1 border border-border bg-transparent px-3 py-1.5 text-[13px] font-medium text-foreground',
+/** 工作流卡片底栏文字操作钮共用几何 */
+export const workflowListCardActionBaseClass = cn(
   workflowListCardActionRadiusClass,
-  'transition-colors duration-fast hover:bg-black/[0.02] dark:hover:bg-white/[0.06]',
+  workflowListCardFooterActionSurfaceClass,
+  'inline-flex h-[34px] box-border items-center justify-center px-4 text-[13px] font-medium leading-none',
+  'active:scale-[0.98]',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
+
+/** 工作流卡片底栏主操作钮（立即运行 / 安装） */
+export const workflowListCardPrimaryActionClass = workflowListCardActionBaseClass;
+
+/** 工作流卡片底栏次操作钮（编辑流程 / 预览） */
+export const workflowListCardSecondaryActionClass = workflowListCardActionBaseClass;
 
 /** 工作流卡片更多菜单钮（···） */
 export const workflowListCardMoreActionClass = cn(
   workflowListCardActionRadiusClass,
-  'border border-border px-2 py-1.5 text-muted-foreground',
-  'transition-colors duration-fast hover:bg-black/[0.02] hover:text-foreground dark:hover:bg-white/[0.06]',
+  workflowListCardFooterActionSurfaceClass,
+  'inline-flex h-[34px] w-[34px] box-border items-center justify-center text-muted-foreground',
+  'hover:text-foreground active:scale-[0.98]',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
 
 /** 工作流卡片浮动菜单容器 */
@@ -975,8 +987,11 @@ export const workflowListCardMenuClass = cn(
 export const workflowListCardMenuItemClass =
   'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] hover:bg-muted';
 
-/** 工作流详情弹窗遮罩 */
-export const workflowDetailModalOverlayClass = 'bg-black/20';
+/** 工作流详情 / 新建弹窗遮罩（暗色需更高不透明度，否则与页面底融在一起） */
+export const workflowDetailModalOverlayClass = cn(
+  'bg-black/20 backdrop-blur-[1px]',
+  'dark:bg-black/60 dark:backdrop-blur-sm',
+);
 
 /** 工作流详情弹窗内容壳（540px / 圆角 24 / MasterGo 阴影） */
 export const workflowDetailModalContentClass = cn(
@@ -1078,6 +1093,77 @@ export const workflowDetailModalMoreActionClass = cn(
   'transition-colors duration-fast hover:bg-black/[0.02]',
 );
 
+/** 新建工作流弹窗遮罩（复用详情弹窗语义） */
+export const createWorkflowModalOverlayClass = workflowDetailModalOverlayClass;
+
+/** 新建工作流弹窗内容壳（MasterGo 8:79172 组 7109 — 460×392 / 圆角 18） */
+export const createWorkflowModalContentClass = cn(
+  'flex w-full max-w-[460px] flex-col overflow-hidden rounded-[18px] bg-card shadow-modal',
+  'dark:border dark:border-border',
+);
+
+/** 新建工作流弹窗标题区 */
+export const createWorkflowModalHeaderClass = 'flex shrink-0 flex-col gap-2 px-4 pt-4';
+
+/** 新建工作流弹窗标题行（标题 + 关闭） */
+export const createWorkflowModalTitleRowClass =
+  'flex items-start justify-between gap-3';
+
+/** 新建工作流弹窗标题 */
+export const createWorkflowModalTitleClass =
+  'text-base font-medium leading-5 text-foreground';
+
+/** 新建工作流弹窗副标题 */
+export const createWorkflowModalSubtitleClass =
+  'text-xs font-normal leading-4 text-muted-foreground';
+
+/** 新建工作流弹窗关闭钮（标题行内 18×18） */
+export const createWorkflowModalCloseClass = cn(
+  'flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-sm',
+  'text-foreground transition-colors duration-fast hover:bg-black/[0.04]',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+);
+
+/** 新建工作流弹窗表单区 */
+export const createWorkflowModalBodyClass =
+  'flex flex-col gap-3 px-4 pb-6 pt-2';
+
+/** 新建工作流弹窗字段 label（12px medium） */
+export const createWorkflowModalFieldLabelClass =
+  'text-xs font-medium leading-[18px] text-foreground';
+
+/** 新建工作流名称输入（42px / 圆角 4px） */
+export const createWorkflowModalNameInputClass =
+  'h-[42px] rounded-sm px-3 py-2 text-xs leading-[18px]';
+
+/** 新建工作流描述区（含字数统计） */
+export const createWorkflowModalDescriptionWrapClass = 'relative';
+
+/** 新建工作流描述输入（60px / 圆角 8px） */
+export const createWorkflowModalDescriptionInputClass = cn(
+  'min-h-[60px] resize-none rounded-md px-3 py-2 text-xs leading-4',
+  'pb-5',
+);
+
+/** 新建工作流描述字数（0/50） */
+export const createWorkflowModalDescriptionCounterClass =
+  'pointer-events-none absolute bottom-2 right-3 text-[10px] leading-[14px] text-[#C9CDD4]';
+
+/** 新建工作流分类下拉（覆盖 Select 默认 h-10/py-2，避免 28px 裁切文字） */
+export const createWorkflowModalCategorySelectClass =
+  'h-9 rounded-md px-3 py-1.5 text-xs leading-[18px]';
+
+/** 新建工作流弹窗底栏 */
+export const createWorkflowModalFooterClass =
+  'flex shrink-0 items-center justify-end px-4 py-4';
+
+/** 新建工作流确认钮（#1D2129 底 / 34px / 圆角 12px） */
+export const createWorkflowModalConfirmButtonClass = cn(
+  'h-[34px] min-w-[60px] rounded-xl px-4 text-sm font-medium',
+  invertedPrimarySurfaceClass,
+  'transition-[transform,background-color] duration-fast active:scale-[0.98]',
+);
+
 /**
  * MasterGo 148:046134 — 工作流分组参数摘要外框（对话流内助手 A）
  * 圆角 12 / Grey-4 描边 / 内距 14×12；组间距 8、组内标题-内容间距 2。
@@ -1164,8 +1250,8 @@ export const workflowBuilderShell = cn(
 );
 
 /**
- * MC iframe 工作流编辑：置于 ContentHeader「工作流」标题栏下方。
- * 仅抵消水平 main 内距，不用 -mt-5，避免编辑区顶栏与全局标题栏叠层。
+ * MC iframe 工作流编辑：顶栏由 useWorkflowEditorContentHeader 注入 ContentHeader；
+ * 仅抵消水平 main 内距，iframe 占满 ContentHeader 下方剩余高度。
  */
 export const workflowMcEditorShell = cn(
   '-mx-[var(--sto-content-pad-x)] flex min-h-0 min-w-0 flex-1 flex-col',

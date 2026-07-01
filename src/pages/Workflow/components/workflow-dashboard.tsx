@@ -109,9 +109,6 @@ export function WorkflowDashboard({
       published: cards.filter(
         (c) => c.listKind === 'published' && (!q || c.name.toLowerCase().includes(q))
       ).length,
-      installed: cards.filter(
-        (c) => c.listKind === 'installed' && (!q || c.name.toLowerCase().includes(q))
-      ).length,
       draft: cards.filter((c) => c.listKind === 'draft' && (!q || c.name.toLowerCase().includes(q)))
         .length,
     };
@@ -266,7 +263,7 @@ export function WorkflowDashboard({
             </div>
             <div className="relative ml-2 shrink-0">
               <div
-                className="pointer-events-none absolute right-full top-0 z-[1] h-full w-10 bg-gradient-to-r from-transparent to-background"
+                className="pointer-events-none absolute right-full top-0 z-[1] h-full w-10 bg-gradient-to-r from-transparent to-background dark:to-[hsl(var(--card))]"
                 aria-hidden
               />
               <button
@@ -332,7 +329,7 @@ export function WorkflowDashboard({
         <section role="tabpanel" aria-label={t('tabs.mine')} hidden={tab !== 'mine'}>
           <div className={workflowListSubnavSlotClass}>
             <nav className={workflowListSubnavNavClass} aria-label={t('filter.aria')}>
-              {(['published', 'installed', 'draft'] as const).map((key) => (
+              {(['published', 'draft'] as const).map((key) => (
                 <button
                   key={key}
                   type="button"
@@ -372,7 +369,7 @@ export function WorkflowDashboard({
           ) : filteredMine.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-16 text-center">
               <p className="text-[15px] font-medium text-foreground/80">
-                {mineFilter === 'installed' ? t('list.emptyInstalled') : t('list.empty')}
+                {t('list.empty')}
               </p>
               {mineFilter === 'draft' ? (
                 <Button type="button" variant="outline" onClick={onManualCreate}>

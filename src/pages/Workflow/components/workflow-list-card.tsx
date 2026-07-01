@@ -258,9 +258,11 @@ export function WorkflowOfficialListCard({
       <div
         className={cn(workflowListCardFooterClass, 'flex flex-wrap items-center justify-end gap-2')}
       >
-        <span className="mr-auto rounded-lg bg-muted px-2 py-0.5 text-xs text-foreground/80">
-          {card.category}
-        </span>
+        {card.category ? (
+          <span className="mr-auto rounded-lg bg-muted px-2 py-0.5 text-xs text-foreground/80">
+            {card.category}
+          </span>
+        ) : null}
         {/* <button
           type="button"
           className={workflowListCardSecondaryActionClass}
