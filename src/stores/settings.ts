@@ -17,6 +17,7 @@ interface SettingsState {
   language: string;
   startMinimized: boolean;
   launchAtStartup: boolean;
+  preventSystemSleep: boolean;
   telemetryEnabled: boolean;
 
   // Gateway
@@ -49,6 +50,7 @@ interface SettingsState {
   setLanguage: (language: string) => void;
   setStartMinimized: (value: boolean) => void;
   setLaunchAtStartup: (value: boolean) => void;
+  setPreventSystemSleep: (value: boolean) => void;
   setTelemetryEnabled: (value: boolean) => void;
   setGatewayAutoStart: (value: boolean) => void;
   setGatewayPort: (port: number) => void;
@@ -73,6 +75,7 @@ const defaultSettings = {
   language: resolveSupportedLanguage(typeof navigator !== 'undefined' ? navigator.language : undefined),
   startMinimized: false,
   launchAtStartup: false,
+  preventSystemSleep: false,
   // Telemetry disabled by default for faster cold starts
   // Users can enable it in Settings > Advanced
   telemetryEnabled: false,
@@ -140,6 +143,13 @@ export const useSettingsStore = create<SettingsState>()(
         void hostApiFetch('/api/settings/launchAtStartup', {
           method: 'PUT',
           body: JSON.stringify({ value: launchAtStartup }),
+        }).catch(() => { });
+      },
+      setPreventSystemSleep: (preventSystemSleep) => {
+        set({ preventSystemSleep });
+        void hostApiFetch('/api/settings/preventSystemSleep', {
+          method: 'PUT',
+          body: JSON.stringify({ value: preventSystemSleep }),
         }).catch(() => { });
       },
       setTelemetryEnabled: (telemetryEnabled) => {

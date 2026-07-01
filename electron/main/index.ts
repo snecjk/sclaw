@@ -28,6 +28,7 @@ import { warmupNetworkOptimization } from '../utils/uv-env';
 import { isQuitting, setQuitting } from './app-state';
 import { applyProxySettings } from './proxy';
 import { syncLaunchAtStartupSettingFromStore } from './launch-at-startup';
+import { releasePreventSystemSleepOnQuit, syncPreventSystemSleepSettingFromStore } from './prevent-sleep';
 import {
   clearPendingSecondInstanceFocus,
   consumeMainWindowReady,
@@ -427,6 +428,7 @@ async function initialize(): Promise<void> {
 
   // Sync launch-at-startup setting (fast, uses electron-store)
   void syncLaunchAtStartupSettingFromStore();
+  void syncPreventSystemSleepSettingFromStore();
 
   // ── Lazy-load heavy modules in parallel while splash screen is displayed ──
   // These were previously static imports that blocked process startup with
@@ -860,6 +862,7 @@ if (gotTheLock) {
 
   app.on('before-quit', (event) => {
     setQuitting();
+    releasePreventSystemSleepOnQuit();
 
     // Reset sprite and float icon visibility so they don't auto-show on next launch
     void import('./sprite-window').then(({ resetSpriteVisibilityOnQuit }) =>

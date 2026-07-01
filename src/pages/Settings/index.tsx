@@ -84,6 +84,8 @@ export function Settings() {
     setLanguage,
     launchAtStartup,
     setLaunchAtStartup,
+    preventSystemSleep,
+    setPreventSystemSleep,
     gatewayAutoStart,
     setGatewayAutoStart,
     proxyEnabled,
@@ -659,6 +661,29 @@ export function Settings() {
                 <Switch
                   checked={launchAtStartup}
                   onCheckedChange={setLaunchAtStartup}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <Label className="text-[15px] font-medium text-foreground/80">{t('appearance.preventSystemSleep')}</Label>
+                  <p className="text-[13px] text-muted-foreground mt-1">
+                    {t('appearance.preventSystemSleepDesc')}
+                  </p>
+                  <p className="text-[12px] text-muted-foreground/80 mt-2 leading-relaxed">
+                    {t('appearance.preventSystemSleepTips')}
+                  </p>
+                </div>
+                <Switch
+                  checked={preventSystemSleep}
+                  onCheckedChange={(value) => {
+                    setPreventSystemSleep(value);
+                    toast.success(
+                      value
+                        ? t('appearance.preventSystemSleepToastEnabled')
+                        : t('appearance.preventSystemSleepToastDisabled'),
+                    );
+                  }}
+                  className="shrink-0"
                 />
               </div>
             </div>

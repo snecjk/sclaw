@@ -10,7 +10,12 @@
     "system": "跟随系统",
     "language": "语言",
     "launchAtStartup": "开机自动启动",
-    "launchAtStartupDesc": "登录系统后自动启动 S Claw"
+    "launchAtStartupDesc": "登录系统后自动启动 S Claw",
+    "preventSystemSleep": "阻止电脑睡眠",
+    "preventSystemSleepDesc": "开启后，S Claw 运行期间将阻止电脑自动进入睡眠。",
+    "preventSystemSleepTips": "使用定时任务时建议开启。请勿合盖，并连接电源；合盖或关机后无法保证正常运行。",
+    "preventSystemSleepToastEnabled": "已开启：S Claw 运行期间将阻止电脑睡眠",
+    "preventSystemSleepToastDisabled": "已关闭：电脑将按系统设置正常睡眠"
   },
   "aiProviders": {
     "title": "AI 模型提供商",

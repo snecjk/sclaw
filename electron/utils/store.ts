@@ -27,6 +27,8 @@ export interface AppSettings {
   language: string;
   startMinimized: boolean;
   launchAtStartup: boolean;
+  /** When true, keep the system awake while S Claw is running. */
+  preventSystemSleep: boolean;
   telemetryEnabled: boolean;
   machineId: string;
   hasReportedInstall: boolean;
@@ -83,6 +85,7 @@ function createDefaultSettings(): AppSettings {
     language: resolveSupportedLanguage(getSystemLocale()),
     startMinimized: false,
     launchAtStartup: false,
+    preventSystemSleep: false,
     // Telemetry is disabled by default for faster cold starts
     // Users can enable it in Settings > Advanced if they want to help improve the product
     telemetryEnabled: false,

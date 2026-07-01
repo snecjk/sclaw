@@ -43,3 +43,7 @@ export function isProxyKey(key: keyof AppSettings): boolean {
 export function isLaunchAtStartupKey(key: keyof AppSettings): boolean {
   return key === 'launchAtStartup';
 }
+
+export function isPreventSystemSleepKey(key: keyof AppSettings): boolean {
+  return key === 'preventSystemSleep';
+}
