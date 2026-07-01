@@ -56,6 +56,7 @@ import type { ChatSet } from './chat/store-api';
 import {
   absorbWorkflowExecutionStartedFromToolResults,
   dispatchBuiltinToolResult,
+  syncWorkflowCardsAfterToolDispatch,
 } from '@/lib/builtin-tool-dispatch';
 import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSessionLabel } from '@/lib/workflow-session-hint';
 import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, hasUsableSessionTitle, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
@@ -717,6 +718,20 @@ function handleBackgroundSessionEvent(
             streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
           });
         });
+        void (async () => {
+          const agentId = getAgentIdFromSessionKey(sessionKey);
+          await dispatchBuiltinToolResult({
+            id: finalMsg.id,
+            toolCallId: finalMsg.toolCallId,
+            toolName: finalMsg.toolName,
+            content: finalMsg.content,
+          }, { sessionKey, agentId });
+          syncWorkflowCardsAfterToolDispatch(sessionKey);
+          const state = useChatStore.getState();
+          if (state.currentSessionKey === sessionKey) {
+            void state.loadHistory(true);
+          }
+        })();
         break;
       }
 
@@ -2645,13 +2660,14 @@ export const useChatStore = create<ChatState>()(
               };
             });
             void (async () => {
+              const sessionKey = get().currentSessionKey;
+              const agentId = get().currentAgentId;
               await dispatchBuiltinToolResult({
                 id: finalMsg.id,
                 toolCallId: finalMsg.toolCallId,
                 toolName: finalMsg.toolName,
                 content: finalMsg.content,
-              });
-              const sessionKey = get().currentSessionKey;
+              }, { sessionKey, agentId });
               let nextMessages = get().messages;
               const withForm = patchLastAssistantWithWorkflowForm(nextMessages, getMessageText);
               if (withForm !== nextMessages) {

@@ -172,6 +172,23 @@ describe('workflow-card-injection', () => {
     expect(deduped[1].content).toEqual(messages[1].content);
   });
 
+  it('ensureWorkflowCardsInMessages attaches card when assistant mentions runId without prior memory', () => {
+    const sessionKey = 'agent:main:cron:job-1:2026-07-01';
+    const messages: RawMessage[] = [
+      { role: 'user', content: '再次执行' },
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: '工作流已重新执行，运行 ID: run_cron_1' }],
+      },
+    ];
+
+    const patched = ensureWorkflowCardsInMessages(messages, sessionKey, getMessageText);
+    expect(patched[1].content).toEqual([
+      { type: 'text', text: '工作流已重新执行，运行 ID: run_cron_1' },
+      { type: 'workflow_card', runId: 'run_cron_1', templateName: '工作流' },
+    ]);
+  });
+
   it('patchLastAssistantWithWorkflowCard attaches to tool-only assistant snapshot', () => {
     const messages: RawMessage[] = [
       { role: 'user', content: '再执行' },
