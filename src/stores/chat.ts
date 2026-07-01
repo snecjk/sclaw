@@ -1773,7 +1773,6 @@ export const useChatStore = create<ChatState>()(
     const remaining = sessions.filter((s) => s.key !== key);
 
     if (currentSessionKey === key) {
-      // Switched away from deleted session — pick the first remaining or create new
       const next = remaining[0];
       set((s) => ({
         sessions: remaining,

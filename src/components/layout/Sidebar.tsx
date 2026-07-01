@@ -85,6 +85,10 @@ import {
 import { resolveTaskGroupKeyFromSessionKey, stoBuiltinTaskGroupKey } from '../../../shared/task-group-key';
 import { useScheduledTaskNameMaps } from '@/hooks/use-scheduled-task-name-maps';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
+import {
+  type SidebarSubitemDeletePayload,
+  useSidebarDeleteConfirmStore,
+} from '@/stores/sidebar-delete-confirm';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
@@ -230,12 +234,7 @@ function SidebarTaskDateLinks({
 }: {
   taskId: StoTaskId;
   entries: readonly string[];
-  onRequestDeleteSubitem: (payload: {
-    taskId: StoTaskId;
-    entryId: string;
-    label: string;
-    sessionKey: string;
-  }) => void;
+  onRequestDeleteSubitem: (payload: SidebarSubitemDeletePayload) => void;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -333,12 +332,7 @@ function SidebarTaskGroup({
   onToggle: () => void;
   /** 路由进入该任务时自动展开（手风琴仅保留本组） */
   onRequestExpand: () => void;
-  onRequestDeleteSubitem: (payload: {
-    taskId: StoTaskId;
-    entryId: string;
-    label: string;
-    sessionKey: string;
-  }) => void;
+  onRequestDeleteSubitem: (payload: SidebarSubitemDeletePayload) => void;
   /** 任务列表首次展开行数上限；undefined = 展示全部子项 */
   maxVisibleEntries?: number;
 }) {
@@ -919,15 +913,12 @@ export function Sidebar() {
     [sessionLabels, t],
   );
 
-  const [sessionToDelete, setSessionToDelete] = useState<{ key: string; label: string } | null>(null);
+  const requestSessionDelete = useSidebarDeleteConfirmStore((s) => s.requestSessionDelete);
+  const requestSubitemDelete = useSidebarDeleteConfirmStore((s) => s.requestSubitemDelete);
+  const registerDeleteConfirmExecutors = useSidebarDeleteConfirmStore((s) => s.registerExecutors);
+
   const [editingSessionKey, setEditingSessionKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
-  const [subitemToDelete, setSubitemToDelete] = useState<{
-    taskId: StoTaskId;
-    entryId: string;
-    label: string;
-    sessionKey: string;
-  } | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
 
@@ -1183,7 +1174,8 @@ export function Sidebar() {
     if (seeded) applySeededFirstTriggered(groupKey, derived);
   }, [taskGroupFirstTriggeredAt, sessionLastActivity, applySeededFirstTriggered]);
 
-  const executeScheduledSessionDelete = useCallback(async (key: string) => {
+  const executeScheduledSessionDelete = useCallback(async ({ key }: { key: string }): Promise<boolean> => {
+    const wasCurrentSession = useChatStore.getState().currentSessionKey === key;
     const groupKey = resolveTaskGroupKeyFromSessionKey(key);
     const remaining = groupKey != null ? countScheduledSessionsInGroup(groupKey, key) : 0;
     let firstTriggerPrep: LastSessionDeleteFirstTriggerPrep | null = null;
@@ -1196,7 +1188,7 @@ export function Sidebar() {
       await ensureTaskGroupFirstTriggerBeforePartialDelete(groupKey, groupSessions);
     } else if (groupKey && remaining === 0) {
       firstTriggerPrep = await clearFirstTriggerBeforeLastSessionDelete(groupKey, fallbackAtMs);
-      if (!firstTriggerPrep) return;
+      if (!firstTriggerPrep) return false;
       additionalSuppressKeys = rememberSuppressedKeysForLastGroupSessionDelete(
         groupKey,
         groupSessions,
@@ -1212,11 +1204,12 @@ export function Sidebar() {
       if (firstTriggerPrep) {
         await revertFirstTriggerClearAfterFailedSessionDelete(firstTriggerPrep);
       }
-      return;
+      return false;
     }
-    if (useChatStore.getState().currentSessionKey === key) {
+    if (wasCurrentSession) {
       navigateToMainChatHome(navigate, location.pathname);
     }
+    return true;
   }, [
     sessionLastActivity,
     countScheduledSessionsInGroup,
@@ -1229,13 +1222,13 @@ export function Sidebar() {
     location.pathname,
   ]);
 
-  const executeStoSubitemDelete = useCallback(async (
-    payload: { sessionKey: string; taskId: StoTaskId; entryId: string },
-  ) => {
+  const executeStoSubitemDelete = useCallback(async (payload: SidebarSubitemDeletePayload): Promise<boolean> => {
     const { sessionKey, taskId, entryId } = payload;
-    const groupKey = stoBuiltinTaskGroupKey(taskId);
+    const wasCurrentSession = useChatStore.getState().currentSessionKey === sessionKey;
     const entryIds = stoEntriesByTask[taskId] ?? [];
     const remainingBefore = entryIds.filter((id) => id !== entryId).length;
+
+    const groupKey = stoBuiltinTaskGroupKey(taskId);
     let firstTriggerPrep: LastSessionDeleteFirstTriggerPrep | null = null;
     let additionalSuppressKeys: string[] = [];
     const groupSessions = buildBuiltinStoGroupSortSessions(taskId, entryIds, stoSessionKeyBySubitem);
@@ -1244,7 +1237,7 @@ export function Sidebar() {
       await ensureTaskGroupFirstTriggerBeforePartialDelete(groupKey, groupSessions);
     } else {
       firstTriggerPrep = await clearFirstTriggerBeforeLastSessionDelete(groupKey, fallbackAtMs);
-      if (!firstTriggerPrep) return;
+      if (!firstTriggerPrep) return false;
       additionalSuppressKeys = rememberSuppressedKeysForLastGroupSessionDelete(
         groupKey,
         groupSessions,
@@ -1260,12 +1253,13 @@ export function Sidebar() {
       if (firstTriggerPrep) {
         await revertFirstTriggerClearAfterFailedSessionDelete(firstTriggerPrep);
       }
-      return;
+      return false;
     }
     removeSubitem(taskId, entryId);
-    if (useChatStore.getState().currentSessionKey === sessionKey) {
+    if (wasCurrentSession) {
       navigateToMainChatHome(navigate, location.pathname);
     }
+    return true;
   }, [
     stoEntriesByTask,
     stoSessionKeyBySubitem,
@@ -1278,6 +1272,13 @@ export function Sidebar() {
     navigate,
     location.pathname,
   ]);
+
+  useLayoutEffect(() => {
+    registerDeleteConfirmExecutors({
+      deleteSession: executeScheduledSessionDelete,
+      deleteSubitem: executeStoSubitemDelete,
+    });
+  }, [registerDeleteConfirmExecutors, executeScheduledSessionDelete, executeStoSubitemDelete]);
 
   useEffect(() => {
     if (sidebarCollapsed) return;
@@ -1671,7 +1672,7 @@ export function Sidebar() {
                   isOpen={expandedTaskGroupKey === stoTaskSidebarGroupKey(item.navItem.id)}
                   onToggle={() => handleTaskGroupToggle(stoTaskSidebarGroupKey(item.navItem.id))}
                   onRequestExpand={() => handleTaskGroupExpand(stoTaskSidebarGroupKey(item.navItem.id))}
-                  onRequestDeleteSubitem={setSubitemToDelete}
+                  onRequestDeleteSubitem={requestSubitemDelete}
                   maxVisibleEntries={item.maxVisibleEntries}
                 />
               ) : (
@@ -1681,7 +1682,7 @@ export function Sidebar() {
                   sessions={item.group.sessions}
                   isOpen={expandedTaskGroupKey === scheduledTaskSidebarGroupKey(item.group.key)}
                   onToggle={() => handleTaskGroupToggle(scheduledTaskSidebarGroupKey(item.group.key))}
-                  onRequestDelete={(payload) => setSessionToDelete(payload)}
+                  onRequestDelete={requestSessionDelete}
                   maxVisibleSessions={item.maxVisibleSessions}
                 />
               ),
@@ -1862,7 +1863,7 @@ export function Sidebar() {
                                               setEditingValue(sessionLabel);
                                             }}
                                             onDelete={() => {
-                                              setSessionToDelete({
+                                              requestSessionDelete({
                                                 key: s.key,
                                                 label: sessionLabel,
                                               });
@@ -1954,7 +1955,7 @@ export function Sidebar() {
                               setEditingValue(sessionLabel);
                             }}
                             onDelete={() => {
-                              setSessionToDelete({
+                              requestSessionDelete({
                                 key: s.key,
                                 label: sessionLabel,
                               });
@@ -2151,38 +2152,6 @@ export function Sidebar() {
       ) : null}
         </>
       ) : null}
-
-      <ConfirmDialog
-        open={!!sessionToDelete}
-        title={t('common:actions.confirm')}
-        message={t('common:sidebar.deleteSessionConfirm', { label: sessionToDelete?.label })}
-        confirmLabel={t('common:actions.delete')}
-        cancelLabel={t('common:actions.cancel')}
-        variant="destructive"
-        onConfirm={() => {
-          if (!sessionToDelete) return;
-          const { key } = sessionToDelete;
-          setSessionToDelete(null);
-          void executeScheduledSessionDelete(key);
-        }}
-        onCancel={() => setSessionToDelete(null)}
-      />
-
-      <ConfirmDialog
-        open={!!subitemToDelete}
-        title={t('common:actions.confirm')}
-        message={t('tasks:deleteSubitemConfirm', { label: subitemToDelete?.label })}
-        confirmLabel={t('common:actions.delete')}
-        cancelLabel={t('common:actions.cancel')}
-        variant="destructive"
-        onConfirm={() => {
-          if (!subitemToDelete) return;
-          const payload = subitemToDelete;
-          setSubitemToDelete(null);
-          void executeStoSubitemDelete(payload);
-        }}
-        onCancel={() => setSubitemToDelete(null)}
-      />
 
       <ConfirmDialog
         open={showLogoutConfirm}
