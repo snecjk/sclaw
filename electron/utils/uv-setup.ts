@@ -6,6 +6,8 @@ import { getUvMirrorEnv } from './uv-env';
 import { logger } from './logger';
 import { quoteForCmd, needsWinShell } from './paths';
 
+let setupManagedPythonPromise: Promise<void> | null = null;
+
 /**
  * Get the path to the bundled uv binary
  */
@@ -173,7 +175,7 @@ async function runPythonInstall(
  * Tries with mirror env first (for CN region), then retries without mirror
  * if the first attempt fails, to rule out mirror-specific issues.
  */
-export async function setupManagedPython(): Promise<void> {
+async function performManagedPythonSetup(): Promise<void> {
   const { bin: uvBin, source } = resolveUvBin();
   const uvEnv = await getUvMirrorEnv();
   const hasMirror = Object.keys(uvEnv).length > 0;
@@ -225,4 +227,29 @@ export async function setupManagedPython(): Promise<void> {
   } catch (err) {
     logger.warn('Could not determine Python path after install:', err);
   }
+}
+
+export async function setupManagedPython(): Promise<void> {
+  if (await isPythonReady()) {
+    logger.debug('Managed Python 3.12 already ready; skipping install');
+    return;
+  }
+
+  if (setupManagedPythonPromise) {
+    logger.info('Managed Python setup already in progress; joining existing run');
+    return setupManagedPythonPromise;
+  }
+
+  setupManagedPythonPromise = (async () => {
+    if (await isPythonReady()) {
+      logger.debug('Managed Python 3.12 became ready before install started');
+      return;
+    }
+
+    await performManagedPythonSetup();
+  })().finally(() => {
+    setupManagedPythonPromise = null;
+  });
+
+  return setupManagedPythonPromise;
 }
