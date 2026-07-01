@@ -31,6 +31,12 @@ describe('coerceHrefForMarkdownTransform', () => {
   it('leaves http(s) unchanged regardless of link label', () => {
     const url = 'https://cdn.example.com/report.html';
     expect(coerceHrefForMarkdownTransform(url)).toBe(url);
+    expect(classifyPreviewHref(url).type).toBe('http-external');
+  });
+
+  it('classifies company *.sto* domains as in-app preview', () => {
+    const url = 'https://front.sto.cn/group/memory-center-web/workflows-workbench/wf_1';
+    expect(coerceHrefForMarkdownTransform(url)).toBe(url);
     expect(classifyPreviewHref(url).type).toBe('http-preview');
   });
 
