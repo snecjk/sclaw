@@ -31,6 +31,20 @@ export interface BuiltinToolResultMessage {
   content?: unknown;
 }
 
+/** Session that produced the tool result (cron / background runs must not use currentSessionKey). */
+export interface BuiltinToolDispatchContext {
+  sessionKey: string;
+  agentId: string;
+}
+
+function resolveDispatchContext(ctx?: BuiltinToolDispatchContext): BuiltinToolDispatchContext {
+  const chatState = useChatStore.getState();
+  return {
+    sessionKey: ctx?.sessionKey ?? chatState.currentSessionKey,
+    agentId: ctx?.agentId ?? chatState.currentAgentId,
+  };
+}
+
 export type ScheduledTaskConfirmationValues = {
   name: string;
   message?: string;
@@ -72,21 +86,35 @@ function handleWorkflowCreated(data: WorkflowCreatedData): void {
 
 async function handleWorkflowExecutionStarted(
   data: WorkflowExecutionStartedData,
+  ctx: BuiltinToolDispatchContext,
 ): Promise<void> {
-  const chatState = useChatStore.getState();
   if (!data.runId || !data.workflowId) {
     toast.error('工作流执行结果缺少 runId 或 workflowId');
     return;
   }
-  
+
   await applyWorkflowRunStarted({
-    sessionKey: chatState.currentSessionKey,
-    agentId: chatState.currentAgentId,
+    sessionKey: ctx.sessionKey,
+    agentId: ctx.agentId,
     workflowId: data.workflowId,
     runId: data.runId,
     templateName: data.templateName ?? '工作流',
     presentation: 'patch_assistant',
   });
+}
+
+/** Patch visible messages when the target session is active. */
+export function syncWorkflowCardsAfterToolDispatch(sessionKey: string): void {
+  const chatState = useChatStore.getState();
+  if (chatState.currentSessionKey !== sessionKey) return;
+  const patched = ensureWorkflowCardsInMessages(
+    chatState.messages,
+    sessionKey,
+    getAssistantMessageText,
+  );
+  if (patched !== chatState.messages) {
+    useChatStore.setState({ messages: patched });
+  }
 }
 
 /** Parse legacy scheduled_task_confirmation envelope for UI callback. */
@@ -122,6 +150,7 @@ function parseScheduledTaskConfirmation(content: unknown): {
  */
 export async function dispatchBuiltinToolResult(
   msg: BuiltinToolResultMessage,
+  ctx?: BuiltinToolDispatchContext,
 ): Promise<boolean> {
   const dedupeKey = messageDedupeKey(msg);
   if (dedupeKey) {
@@ -129,6 +158,7 @@ export async function dispatchBuiltinToolResult(
     processedToolResults.add(dedupeKey);
   }
 
+  const resolvedCtx = resolveDispatchContext(ctx);
   const envelope = parseStoToolEnvelope(msg.content) ?? parseStoToolEnvelope(msg);
 
   if (envelope?.type === 'workflow_schema_ready' && envelope.success) {
@@ -144,7 +174,9 @@ export async function dispatchBuiltinToolResult(
   if (envelope?.type === 'workflow_execution_started' && envelope.success) {
     await handleWorkflowExecutionStarted(
       (envelope.data ?? {}) as WorkflowExecutionStartedData,
+      resolvedCtx,
     );
+    syncWorkflowCardsAfterToolDispatch(resolvedCtx.sessionKey);
     return true;
   }
 
@@ -204,15 +236,10 @@ export async function absorbWorkflowExecutionStartedFromToolResults(
       return;
     }
 
-    const hasCard = chatState.messages.some((m) => messageHasWorkflowCardForRun(m, data.runId));
-    if (!hasCard) {
-      const patched = ensureWorkflowCardsInMessages(
-        chatState.messages,
-        ctx.sessionKey,
-        getAssistantMessageText,
-      );
-      if (patched !== chatState.messages) {
-        useChatStore.setState({ messages: patched });
+    if (chatState.currentSessionKey === ctx.sessionKey) {
+      const hasCard = chatState.messages.some((m) => messageHasWorkflowCardForRun(m, data.runId));
+      if (!hasCard) {
+        syncWorkflowCardsAfterToolDispatch(ctx.sessionKey);
       }
     }
     return;
