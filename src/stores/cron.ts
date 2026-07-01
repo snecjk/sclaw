@@ -229,7 +229,7 @@ export const useCronStore = create<CronState>((set) => ({
         set((state) => ({
           jobs: state.jobs.map((job) =>
             job.id === id && job.engineType === 'claude'
-              ? { ...updated, engineType: 'claude' as const }
+              ? { ...job, ...updated, engineType: 'claude' as const }
               : job
           ),
         }));

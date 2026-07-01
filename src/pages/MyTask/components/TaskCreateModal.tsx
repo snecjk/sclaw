@@ -309,10 +309,12 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                 setName(e.target.value);
                 if (errors.name) setErrors((p) => ({ ...p, name: undefined }));
               }}
+              disabled={isEditing}
               placeholder={t('myTask.createModal.namePlaceholder')}
               className={cn(
                 'h-[42px] w-full rounded-[10px] border bg-background px-3.5 text-sm transition-colors placeholder:text-muted-foreground',
                 formFieldFocusClass,
+                isEditing ? 'border-border text-muted-foreground cursor-not-allowed opacity-70' : '',
                 errors.name ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]' : 'border-border',
               )}
               autoComplete="off"

@@ -38,6 +38,8 @@ export interface ClaudeScheduledTaskSchedulerState {
     nextRunAt?: string;
     lastScheduledFor?: string;
     lastRecoveredAt?: string;
+    /** 上次为该任务计算 nextRunAt 时所用的 cronExpr，用于检测编辑后是否需要重算 */
+    cronExpr?: string;
   }>;
 }
 

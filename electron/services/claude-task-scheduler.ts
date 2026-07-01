@@ -157,12 +157,18 @@ export class ClaudeTaskScheduler {
     for (const definition of definitions) {
       if (!definition.enabled) continue;
       const existing = nextTasks[definition.id];
-      const nextRunAt = existing?.nextRunAt && new Date(existing.nextRunAt).getTime() > now.getTime()
-        ? existing.nextRunAt
+      // cronExpr 被编辑后，旧 nextRunAt 已与新计划无关，必须重算；
+      // 否则只要旧 nextRunAt 仍在未来就保留，导致卡片显示与调度都停在旧时间。
+      const cronChanged = existing?.cronExpr !== definition.cronExpr;
+      const stillFuture =
+        !!existing?.nextRunAt && new Date(existing.nextRunAt).getTime() > now.getTime();
+      const nextRunAt = stillFuture && !cronChanged
+        ? existing!.nextRunAt!
         : computeNextRunAt(definition.cronExpr, now);
       nextTasks[definition.id] = {
         ...existing,
         nextRunAt,
+        cronExpr: definition.cronExpr,
       };
       snapshots.push({
         taskId: definition.id,
@@ -204,6 +210,7 @@ export class ClaudeTaskScheduler {
         nextTasks[id] = {
           ...taskState,
           nextRunAt: computeNextRunAt(def.cronExpr, now),
+          cronExpr: def.cronExpr,
         };
         advancedTaskIds.push(id);
         changed = true;
@@ -259,11 +266,13 @@ export class ClaudeTaskScheduler {
           lastRecoveredAt: taskState.lastRecoveredAt,
           lastScheduledFor: nextRunAt,
           nextRunAt: computeNextRunAt(definition.cronExpr, baseline),
+          cronExpr: definition.cronExpr,
         };
       } else {
         nextTasks[definition.id] = {
           ...taskState,
           nextRunAt,
+          cronExpr: definition.cronExpr,
         };
       }
     }
