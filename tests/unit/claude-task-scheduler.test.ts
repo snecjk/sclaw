@@ -121,4 +121,54 @@ describe('ClaudeTaskScheduler', () => {
     expect(state.tasks['task-1']?.lastScheduledFor).toBe('2026-06-15T10:00:00.000Z');
     expect(state.tasks['task-1']?.nextRunAt).toBe('2026-06-15T11:00:00.000Z');
   });
+
+  it('recomputes nextRunAt after cronExpr is edited', async () => {
+    const store = await import('@electron/services/claude-scheduled-task-store');
+    const { ClaudeTaskScheduler, computeNextRunAt } = await import('@electron/services/claude-task-scheduler');
+
+    const now = new Date('2026-06-15T08:30:00.000Z');
+
+    await store.upsertClaudeScheduledTaskDefinition({
+      id: 'task-edit',
+      name: 'Editable task',
+      enabled: true,
+      cronExpr: '0 9 * * *',
+      promptTemplate: 'do something',
+      agentId: 'main',
+      workspacePath: '/tmp/workspace',
+      permissionProfile: 'readonly-safe',
+      timeoutSec: 60,
+      retryPolicy: { maxAttempts: 1, backoffSec: 30 },
+      failurePolicy: { pauseAfterConsecutiveFailures: 3 },
+      createdAt: '2026-06-15T00:00:00.000Z',
+      updatedAt: '2026-06-15T00:00:00.000Z',
+    });
+
+    const scheduler = new ClaudeTaskScheduler(undefined, 60_000);
+
+    // 旧 cron 首次调度：nextRunAt 落在未来
+    const before = await scheduler.refreshSchedule(now);
+    const oldNextRunAt = before[0].nextRunAt;
+    expect(new Date(oldNextRunAt).getTime()).toBeGreaterThan(now.getTime());
+
+    // 编辑 cronExpr 为更晚的时间，旧 nextRunAt 仍在未来但已与新计划无关
+    const existing = await store.getClaudeScheduledTaskDefinition('task-edit');
+    await store.upsertClaudeScheduledTaskDefinition({
+      ...existing!,
+      cronExpr: '0 14 * * *',
+      updatedAt: now.toISOString(),
+    });
+
+    const after = await scheduler.refreshSchedule(now);
+    const newNextRunAt = after[0].nextRunAt;
+
+    // 必须重算为新 cron 的下次执行时间，而不是保留旧值
+    expect(newNextRunAt).not.toBe(oldNextRunAt);
+    expect(newNextRunAt).toBe(computeNextRunAt('0 14 * * *', now));
+
+    // state 里也应落盘新值与新 cronExpr
+    const state = await store.readClaudeScheduledTaskSchedulerState();
+    expect(state.tasks['task-edit']?.nextRunAt).toBe(newNextRunAt);
+    expect(state.tasks['task-edit']?.cronExpr).toBe('0 14 * * *');
+  });
 });
