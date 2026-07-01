@@ -1183,6 +1183,102 @@ export function Sidebar() {
     if (seeded) applySeededFirstTriggered(groupKey, derived);
   }, [taskGroupFirstTriggeredAt, sessionLastActivity, applySeededFirstTriggered]);
 
+  const executeScheduledSessionDelete = useCallback(async (key: string) => {
+    const groupKey = resolveTaskGroupKeyFromSessionKey(key);
+    const remaining = groupKey != null ? countScheduledSessionsInGroup(groupKey, key) : 0;
+    let firstTriggerPrep: LastSessionDeleteFirstTriggerPrep | null = null;
+    let additionalSuppressKeys: string[] = [];
+    const groupSessions = groupKey ? collectScheduledSessionsForGroup(groupKey) : [];
+    const fallbackAtMs = groupKey
+      ? deriveGroupFirstTriggeredFromSessions(groupSessions, sessionLastActivity)
+      : 0;
+    if (groupKey && remaining > 0) {
+      await ensureTaskGroupFirstTriggerBeforePartialDelete(groupKey, groupSessions);
+    } else if (groupKey && remaining === 0) {
+      firstTriggerPrep = await clearFirstTriggerBeforeLastSessionDelete(groupKey, fallbackAtMs);
+      if (!firstTriggerPrep) return;
+      additionalSuppressKeys = rememberSuppressedKeysForLastGroupSessionDelete(
+        groupKey,
+        groupSessions,
+        key,
+        firstTriggerPrep.restoreAtMs ?? fallbackAtMs,
+      );
+    }
+    const deleted = await deleteSession(key, {
+      skipSessionRefresh: groupKey != null && remaining === 0,
+      additionalSuppressKeys,
+    });
+    if (!deleted) {
+      if (firstTriggerPrep) {
+        await revertFirstTriggerClearAfterFailedSessionDelete(firstTriggerPrep);
+      }
+      return;
+    }
+    if (useChatStore.getState().currentSessionKey === key) {
+      navigateToMainChatHome(navigate, location.pathname);
+    }
+  }, [
+    sessionLastActivity,
+    countScheduledSessionsInGroup,
+    collectScheduledSessionsForGroup,
+    ensureTaskGroupFirstTriggerBeforePartialDelete,
+    clearFirstTriggerBeforeLastSessionDelete,
+    deleteSession,
+    revertFirstTriggerClearAfterFailedSessionDelete,
+    navigate,
+    location.pathname,
+  ]);
+
+  const executeStoSubitemDelete = useCallback(async (
+    payload: { sessionKey: string; taskId: StoTaskId; entryId: string },
+  ) => {
+    const { sessionKey, taskId, entryId } = payload;
+    const groupKey = stoBuiltinTaskGroupKey(taskId);
+    const entryIds = stoEntriesByTask[taskId] ?? [];
+    const remainingBefore = entryIds.filter((id) => id !== entryId).length;
+    let firstTriggerPrep: LastSessionDeleteFirstTriggerPrep | null = null;
+    let additionalSuppressKeys: string[] = [];
+    const groupSessions = buildBuiltinStoGroupSortSessions(taskId, entryIds, stoSessionKeyBySubitem);
+    const fallbackAtMs = deriveGroupFirstTriggeredFromSessions(groupSessions, sessionLastActivity);
+    if (remainingBefore > 0) {
+      await ensureTaskGroupFirstTriggerBeforePartialDelete(groupKey, groupSessions);
+    } else {
+      firstTriggerPrep = await clearFirstTriggerBeforeLastSessionDelete(groupKey, fallbackAtMs);
+      if (!firstTriggerPrep) return;
+      additionalSuppressKeys = rememberSuppressedKeysForLastGroupSessionDelete(
+        groupKey,
+        groupSessions,
+        sessionKey,
+        firstTriggerPrep.restoreAtMs ?? fallbackAtMs,
+      );
+    }
+    const deleted = await deleteSession(sessionKey, {
+      skipSessionRefresh: remainingBefore === 0,
+      additionalSuppressKeys,
+    });
+    if (!deleted) {
+      if (firstTriggerPrep) {
+        await revertFirstTriggerClearAfterFailedSessionDelete(firstTriggerPrep);
+      }
+      return;
+    }
+    removeSubitem(taskId, entryId);
+    if (useChatStore.getState().currentSessionKey === sessionKey) {
+      navigateToMainChatHome(navigate, location.pathname);
+    }
+  }, [
+    stoEntriesByTask,
+    stoSessionKeyBySubitem,
+    sessionLastActivity,
+    ensureTaskGroupFirstTriggerBeforePartialDelete,
+    clearFirstTriggerBeforeLastSessionDelete,
+    deleteSession,
+    revertFirstTriggerClearAfterFailedSessionDelete,
+    removeSubitem,
+    navigate,
+    location.pathname,
+  ]);
+
   useEffect(() => {
     if (sidebarCollapsed) return;
     let cancelled = false;
@@ -2063,44 +2159,11 @@ export function Sidebar() {
         confirmLabel={t('common:actions.delete')}
         cancelLabel={t('common:actions.cancel')}
         variant="destructive"
-        onConfirm={async () => {
+        onConfirm={() => {
           if (!sessionToDelete) return;
           const { key } = sessionToDelete;
-          const groupKey = resolveTaskGroupKeyFromSessionKey(key);
-          const remaining = groupKey != null ? countScheduledSessionsInGroup(groupKey, key) : 0;
-          let firstTriggerPrep: LastSessionDeleteFirstTriggerPrep | null = null;
-          let additionalSuppressKeys: string[] = [];
-          const groupSessions = groupKey ? collectScheduledSessionsForGroup(groupKey) : [];
-          const fallbackAtMs = groupKey
-            ? deriveGroupFirstTriggeredFromSessions(groupSessions, sessionLastActivity)
-            : 0;
-          if (groupKey && remaining > 0) {
-            await ensureTaskGroupFirstTriggerBeforePartialDelete(
-              groupKey,
-              groupSessions,
-            );
-          } else if (groupKey && remaining === 0) {
-            firstTriggerPrep = await clearFirstTriggerBeforeLastSessionDelete(groupKey, fallbackAtMs);
-            if (!firstTriggerPrep) return;
-            additionalSuppressKeys = rememberSuppressedKeysForLastGroupSessionDelete(
-              groupKey,
-              groupSessions,
-              key,
-              firstTriggerPrep.restoreAtMs ?? fallbackAtMs,
-            );
-          }
-          const deleted = await deleteSession(key, {
-            skipSessionRefresh: groupKey != null && remaining === 0,
-            additionalSuppressKeys,
-          });
-          if (!deleted) {
-            if (firstTriggerPrep) {
-              await revertFirstTriggerClearAfterFailedSessionDelete(firstTriggerPrep);
-            }
-            return;
-          }
-          if (currentSessionKey === key) navigateToMainChatHome(navigate, location.pathname);
           setSessionToDelete(null);
+          void executeScheduledSessionDelete(key);
         }}
         onCancel={() => setSessionToDelete(null)}
       />
@@ -2112,44 +2175,11 @@ export function Sidebar() {
         confirmLabel={t('common:actions.delete')}
         cancelLabel={t('common:actions.cancel')}
         variant="destructive"
-        onConfirm={async () => {
+        onConfirm={() => {
           if (!subitemToDelete) return;
-          const { sessionKey, taskId, entryId } = subitemToDelete;
-          const groupKey = stoBuiltinTaskGroupKey(taskId);
-          const entryIds = stoEntriesByTask[taskId] ?? [];
-          const remainingBefore = entryIds.filter((id) => id !== entryId).length;
-          let firstTriggerPrep: LastSessionDeleteFirstTriggerPrep | null = null;
-          let additionalSuppressKeys: string[] = [];
-          const groupSessions = buildBuiltinStoGroupSortSessions(taskId, entryIds, stoSessionKeyBySubitem);
-          const fallbackAtMs = deriveGroupFirstTriggeredFromSessions(groupSessions, sessionLastActivity);
-          if (remainingBefore > 0) {
-            await ensureTaskGroupFirstTriggerBeforePartialDelete(
-              groupKey,
-              groupSessions,
-            );
-          } else {
-            firstTriggerPrep = await clearFirstTriggerBeforeLastSessionDelete(groupKey, fallbackAtMs);
-            if (!firstTriggerPrep) return;
-            additionalSuppressKeys = rememberSuppressedKeysForLastGroupSessionDelete(
-              groupKey,
-              groupSessions,
-              sessionKey,
-              firstTriggerPrep.restoreAtMs ?? fallbackAtMs,
-            );
-          }
-          const deleted = await deleteSession(sessionKey, {
-            skipSessionRefresh: remainingBefore === 0,
-            additionalSuppressKeys,
-          });
-          if (!deleted) {
-            if (firstTriggerPrep) {
-              await revertFirstTriggerClearAfterFailedSessionDelete(firstTriggerPrep);
-            }
-            return;
-          }
-          removeSubitem(taskId, entryId);
-          if (currentSessionKey === sessionKey) navigateToMainChatHome(navigate, location.pathname);
+          const payload = subitemToDelete;
           setSubitemToDelete(null);
+          void executeStoSubitemDelete(payload);
         }}
         onCancel={() => setSubitemToDelete(null)}
       />
