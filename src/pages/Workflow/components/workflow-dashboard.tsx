@@ -266,7 +266,7 @@ export function WorkflowDashboard({
             </div>
             <div className="relative ml-2 shrink-0">
               <div
-                className="pointer-events-none absolute right-full top-0 z-[1] h-full w-10 bg-gradient-to-r from-transparent to-background"
+                className="pointer-events-none absolute right-full top-0 z-[1] h-full w-10 bg-gradient-to-r from-transparent to-background dark:to-[hsl(var(--card))]"
                 aria-hidden
               />
               <button

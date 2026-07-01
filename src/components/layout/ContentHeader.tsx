@@ -24,12 +24,14 @@ import { ContentHeaderSessionChip } from '@/components/layout/content-header-ses
 import { useContentHeaderDisplay } from '@/components/layout/content-header-context';
 import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
 import { useSettingsStore } from '@/stores/settings';
+import { useWorkflowUiStore } from '@/stores/workflow-ui';
 
 export function ContentHeader() {
   const { t } = useTranslation('common');
   const { title, previewTabs, actions, isSplitLayout, onCloseSession } = useContentHeaderDisplay();
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
+  const workflowEditorActive = useWorkflowUiStore((s) => s.editorActive);
   const platform = window.electron?.platform;
   const isWin = platform === 'win32';
 
@@ -41,10 +43,11 @@ export function ContentHeader() {
       className={cn(
         contentHeaderTitleGroupClass,
         isSplitLayout && 'max-w-none min-w-0 shrink',
+        workflowEditorActive && showTitle && 'max-w-none min-w-0 flex-1',
         !showTitle && !sidebarCollapsed && 'min-w-0',
       )}
     >
-      {sidebarCollapsed ? (
+      {sidebarCollapsed && !workflowEditorActive ? (
         <SidebarHeaderToggle
           isCollapsed
           onToggle={() => setSidebarCollapsed(false)}
