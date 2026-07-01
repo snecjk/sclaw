@@ -10,6 +10,7 @@ import {
   buildSharePathToUrlMap,
   replaceConversationFileRefsWithShareUrls,
 } from '../../shared/dingtalk-share-text';
+import { markdownToPlainText } from '../../shared/markdown-to-plain-text';
 import { hostApiFetch, uploadFileToTempOSS } from '@/lib/host-api';
 import { isHttpUrl } from '@/lib/preview-url';
 import type { AttachedFileMeta } from '@/stores/chat';
@@ -20,6 +21,7 @@ import {
 
 export type { DingTalkShareBuildResult, DingTalkShareContent };
 export { DINGTALK_SHARE_MAX_URL_LENGTH };
+export { markdownToPlainText } from '../../shared/markdown-to-plain-text';
 
 export type DingTalkSharePrepared =
   | { status: 'ready'; content: DingTalkShareContent }
@@ -272,14 +274,16 @@ async function buildConversationShareText(
 
   const pathToUrl = buildSharePathToUrlMap(entries);
   const replaced = replaceConversationFileRefsWithShareUrls(fullText, pathToUrl);
+  const plainText = markdownToPlainText(replaced);
   logDingTalkShare('replace-file-refs', {
     fileCount: entries.length,
     originalLength: fullText.length,
     replacedLength: replaced.length,
-    replacedPreview: replaced.slice(0, 320),
+    plainTextLength: plainText.length,
+    replacedPreview: plainText.slice(0, 320),
     replacementCount: entries.length,
   });
-  return replaced;
+  return plainText;
 }
 
 /**
