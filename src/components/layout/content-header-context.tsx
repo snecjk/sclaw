@@ -55,7 +55,20 @@ function resolveDefaultTitle(pathname: string, t: (key: string) => string): stri
 export function ContentHeaderProvider({ children }: { children: ReactNode }) {
   const [slot, setSlotState] = useState<ContentHeaderSlot | null>(null);
   const setSlot = useCallback((next: ContentHeaderSlot | null) => {
-    setSlotState(next);
+    setSlotState((prev) => {
+      if (prev === next) return prev;
+      if (prev === null || next === null) return next;
+      if (
+        prev.title === next.title &&
+        prev.previewTabs === next.previewTabs &&
+        prev.actions === next.actions &&
+        prev.isSplitLayout === next.isSplitLayout &&
+        prev.onCloseSession === next.onCloseSession
+      ) {
+        return prev;
+      }
+      return next;
+    });
   }, []);
 
   const value = useMemo(() => ({ slot, setSlot }), [slot, setSlot]);
@@ -82,13 +95,18 @@ export function useContentHeader({
   actions,
   isSplitLayout = false,
   onCloseSession,
-}: ContentHeaderSlot) {
+  enabled = true,
+}: ContentHeaderSlot & { enabled?: boolean }) {
   const { setSlot } = useContentHeaderRegistry();
 
   useLayoutEffect(() => {
+    if (!enabled) {
+      setSlot(null);
+      return;
+    }
     setSlot({ title, previewTabs, actions, isSplitLayout, onCloseSession });
     return () => setSlot(null);
-  }, [title, previewTabs, actions, isSplitLayout, onCloseSession, setSlot]);
+  }, [title, previewTabs, actions, isSplitLayout, onCloseSession, enabled, setSlot]);
 }
 
 /** ContentHeader 组件读取当前应展示的 title / previewTabs / actions（含路由默认标题） */

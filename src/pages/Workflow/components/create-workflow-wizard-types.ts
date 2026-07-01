@@ -1,8 +1,6 @@
-/** 新建工作流向导 — 对齐 memory-center CreateWorkflowPage */
+/** 新建工作流表单数据 — 对齐 memory-center CreateWorkflowPage */
 
 import type { WorkflowEdge, WorkflowNode } from '@/pages/WorkflowDesigner/types';
-
-export type CreateWorkflowWizardStep = 1 | 2;
 
 export type CreateWorkflowWizardData = {
   name: string;
