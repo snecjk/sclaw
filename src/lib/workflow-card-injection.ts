@@ -290,9 +290,7 @@ export function ensureWorkflowCardsInMessages(
     let patchedMsg = msg;
     for (const runId of mentionedRunIds) {
       if (next.some((m) => messageHasWorkflowCardForRun(m, runId))) continue;
-      const cardState = useChatStore.getState().workflowCardStates[runId];
       const exec = getExecutionByRunId(runId, sessionKey);
-      if (!cardState && !exec) continue;
       patchedMsg = appendWorkflowCardBlockToMessage(
         patchedMsg,
         runId,

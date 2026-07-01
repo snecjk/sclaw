@@ -32,7 +32,6 @@ import {
 } from '@/lib/workflow-form-utils';
 import {
   artifactToPreviewFile,
-  extractPreviewableHttpUrls,
   inferMimeTypeFromUrl,
   isHttpUrl,
   isPreviewableArtifactUrl,
@@ -1090,17 +1089,6 @@ export function extractPreviewableRefs(
     const fileName = url.split('/').pop() || 'index.html';
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     addIfNotImage(url, fileName, ext, 'localhost URL in assistant text', match[0]);
-  }
-
-  // OSS / CDN http(s) links with previewable extensions
-  for (const ref of extractPreviewableHttpUrls(cleanText)) {
-    addIfNotImage(
-      ref.filePath,
-      ref.fileName,
-      ref.fileName.split('.').pop()?.toLowerCase() || '',
-      'http(s) URL with previewable extension',
-      ref.filePath,
-    );
   }
 
   // File paths (relative ./, absolute /, and Windows C:\)

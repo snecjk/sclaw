@@ -34,8 +34,9 @@ describe('resolvePreviewMimeType', () => {
     );
   });
 
-  it('marks remote xlsx URLs as previewable', () => {
-    expect(isPreviewableRemoteUrl('https://cdn.example.com/a.xlsx')).toBe(true);
+  it('marks company *.sto* remote URLs as previewable', () => {
+    expect(isPreviewableRemoteUrl('https://cdn.example.sto.cn/a.xlsx')).toBe(true);
+    expect(isPreviewableRemoteUrl('https://cdn.example.com/a.xlsx')).toBe(false);
   });
 });
 

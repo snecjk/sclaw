@@ -18,7 +18,8 @@ import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
 import {
-  buildCronSessionHistoryPath, getCronRunSessionAggregateKey, getClaudeTaskRunSessionAggregateKey,
+  buildCronSessionHistoryPath, buildScheduledTaskSessionHistoryPath,
+  getCronRunSessionAggregateKey, getClaudeTaskRunSessionAggregateKey,
   isCronSessionKey, isCronDatedSessionKey,
   isAnyCronSessionKey, isScheduledTaskSessionKey,
   isVirtualTaskSessionKey,
@@ -83,6 +84,7 @@ import type { ChatSet } from './chat/store-api';
 import {
   absorbWorkflowExecutionStartedFromToolResults,
   dispatchBuiltinToolResult,
+  syncWorkflowCardsAfterToolDispatch,
 } from '@/lib/builtin-tool-dispatch';
 import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, normalizeDerivedSessionLabel } from '@/lib/workflow-session-hint';
 import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, sanitizeGatewaySessionLabels, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
@@ -96,6 +98,10 @@ import {
   normalizeUserMessageText,
   traceLoadHistoryUserReconciliation,
 } from './chat/user-message-merge';
+import {
+  mergeHistoryMessageSources,
+  mergeHistoryWhenShrunk,
+} from './chat/history-merge';
 import {
   resolveAssistantFinalTerminalState,
   shouldAutoCompleteClaudeFromHistory,
@@ -465,6 +471,36 @@ async function loadClaudeScheduledTaskFallbackMessages(sessionKey: string, limit
   }
 }
 
+async function loadScheduledTaskFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
+  if (!isScheduledTaskSessionKey(sessionKey)) return [];
+  try {
+    const response = await hostApiFetch<{ messages?: RawMessage[] }>(
+      buildScheduledTaskSessionHistoryPath(sessionKey, limit),
+    );
+    return Array.isArray(response.messages) ? response.messages : [];
+  } catch (error) {
+    console.warn('Failed to load scheduled task fallback history:', error);
+    return [];
+  }
+}
+
+async function loadVirtualTaskFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
+  if (isCronSessionKey(sessionKey) || isCronDatedSessionKey(sessionKey)) {
+    return loadCronFallbackMessages(sessionKey, limit);
+  }
+  if (isScheduledTaskSessionKey(sessionKey)) {
+    return loadScheduledTaskFallbackMessages(sessionKey, limit);
+  }
+  if (
+    isClaudeScheduledTaskSessionKey(sessionKey)
+    || isClaudeScheduledTaskRunSessionKey(sessionKey)
+    || isClaudeScheduledTaskDatedSessionKey(sessionKey)
+  ) {
+    return loadClaudeScheduledTaskFallbackMessages(sessionKey, limit);
+  }
+  return [];
+}
+
 function normalizeAgentId(value: string | undefined | null): string {
   return (value ?? '').trim().toLowerCase() || 'main';
 }
@@ -776,6 +812,20 @@ function handleBackgroundSessionEvent(
             streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
           });
         });
+        void (async () => {
+          const agentId = getAgentIdFromSessionKey(sessionKey);
+          await dispatchBuiltinToolResult({
+            id: finalMsg.id,
+            toolCallId: finalMsg.toolCallId,
+            toolName: finalMsg.toolName,
+            content: finalMsg.content,
+          }, { sessionKey, agentId });
+          syncWorkflowCardsAfterToolDispatch(sessionKey);
+          const state = useChatStore.getState();
+          if (state.currentSessionKey === sessionKey) {
+            void state.loadHistory(true);
+          }
+        })();
         break;
       }
 
@@ -1222,14 +1272,17 @@ export const useChatStore = create<ChatState>()(
 
   // ── Load sessions via sessions.list ──
 
-  loadSessions: async () => {
+  loadSessions: async (options?: { force?: boolean }) => {
+    const force = options?.force === true;
     const now = Date.now();
     if (_loadSessionsInFlight) {
       await _loadSessionsInFlight;
-      scheduleSessionLabelHydrationFromStore(set, get);
-      return;
+      if (!force) {
+        scheduleSessionLabelHydrationFromStore(set, get);
+        return;
+      }
     }
-    if (now - _lastLoadSessionsAt < SESSION_LOAD_MIN_INTERVAL_MS) {
+    if (!force && now - _lastLoadSessionsAt < SESSION_LOAD_MIN_INTERVAL_MS) {
       scheduleSessionLabelHydrationFromStore(set, get);
       return;
     }
@@ -1670,7 +1723,10 @@ export const useChatStore = create<ChatState>()(
   // JSONL history file on disk is intentionally left intact, consistent with the
   // newSession() design that avoids sessions.reset to preserve history.
 
-  deleteSession: async (key: string) => {
+  deleteSession: async (key: string, options?: {
+    skipSessionRefresh?: boolean;
+    additionalSuppressKeys?: string[];
+  }) => {
     const session = get().sessions.find((item) => item.key === key);
     const deleteResult = await requestSessionDelete(
       key,
@@ -1687,6 +1743,30 @@ export const useChatStore = create<ChatState>()(
     }
 
     rememberOptimisticDeletedSessionKey(key);
+    const additionalSuppressKeys = (options?.additionalSuppressKeys ?? [])
+      .map((suppressKey) => suppressKey.trim())
+      .filter((suppressKey) => suppressKey && suppressKey !== key);
+    for (const suppressKey of additionalSuppressKeys) {
+      rememberOptimisticDeletedSessionKey(suppressKey);
+    }
+    if (additionalSuppressKeys.length > 0) {
+      await Promise.all(additionalSuppressKeys.map(async (suppressKey) => {
+        const suppressSession = get().sessions.find((item) => item.key === suppressKey);
+        try {
+          await requestSessionDelete(
+            suppressKey,
+            resolveSessionDeleteEngineType(
+              suppressKey,
+              suppressSession,
+              getAgentEngineType(getAgentIdFromSessionKey(suppressKey)),
+            ),
+          );
+        } catch {
+          // Best-effort tombstone for virtual placeholder keys.
+        }
+      }));
+    }
+
     useSessionUnreadStore.getState().markSessionRead(key);
 
     const { currentSessionKey, sessions } = get();
@@ -1726,7 +1806,9 @@ export const useChatStore = create<ChatState>()(
         sidebarRecentOrder: removeSidebarRecentOrderKey(s.sidebarRecentOrder, key),
       }));
     }
-    void get().loadSessions();
+    if (!options?.skipSessionRefresh) {
+      await get().loadSessions({ force: true });
+    }
     return true;
   },
 
@@ -1874,6 +1956,8 @@ export const useChatStore = create<ChatState>()(
         runtimeState?: { isRunning?: boolean; runtimeResult?: unknown },
       ) => {
       if (get().currentSessionKey !== targetSessionKey) return;
+
+      rawMessages = mergeHistoryWhenShrunk(rawMessages, get().messages);
 
       absorbWorkflowSchemaFromToolResults(rawMessages);
 
@@ -2206,7 +2290,12 @@ export const useChatStore = create<ChatState>()(
         }
 
         let rawMessages = allMessages;
-        if (rawMessages.length === 0 && (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey))) {
+        if (isVirtualTaskSessionKey(targetSessionKey)) {
+          const fallbackMessages = await loadVirtualTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
+          rawMessages = fallbackMessages.length > 0
+            ? mergeHistoryMessageSources([fallbackMessages, allMessages])
+            : allMessages;
+        } else if (rawMessages.length === 0 && (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey))) {
           rawMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
         } else if (rawMessages.length === 0 && (isClaudeScheduledTaskSessionKey(targetSessionKey) || isClaudeScheduledTaskRunSessionKey(targetSessionKey) || isClaudeScheduledTaskDatedSessionKey(targetSessionKey))) {
           rawMessages = await loadClaudeScheduledTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
@@ -2226,7 +2315,9 @@ export const useChatStore = create<ChatState>()(
         console.warn('Failed to load chat history:', err);
         if (get().currentSessionKey !== targetSessionKey) return;
         let fallbackMessages: RawMessage[] = [];
-        if (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey)) {
+        if (isVirtualTaskSessionKey(targetSessionKey)) {
+          fallbackMessages = await loadVirtualTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
+        } else if (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey)) {
           fallbackMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
         } else if (isClaudeScheduledTaskSessionKey(targetSessionKey) || isClaudeScheduledTaskRunSessionKey(targetSessionKey) || isClaudeScheduledTaskDatedSessionKey(targetSessionKey)) {
           fallbackMessages = await loadClaudeScheduledTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
@@ -2834,13 +2925,14 @@ export const useChatStore = create<ChatState>()(
               };
             });
             void (async () => {
+              const sessionKey = get().currentSessionKey;
+              const agentId = get().currentAgentId;
               await dispatchBuiltinToolResult({
                 id: finalMsg.id,
                 toolCallId: finalMsg.toolCallId,
                 toolName: finalMsg.toolName,
                 content: finalMsg.content,
-              });
-              const sessionKey = get().currentSessionKey;
+              }, { sessionKey, agentId });
               let nextMessages = get().messages;
               const withForm = patchLastAssistantWithWorkflowForm(nextMessages, getMessageText);
               if (withForm !== nextMessages) {

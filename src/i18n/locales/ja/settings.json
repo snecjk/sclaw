@@ -202,7 +202,7 @@
     "autoDownloadDesc": "更新を自動的にダウンロードしてインストール",
     "status": {
       "checking": "更新を確認中...",
-      "downloading": "更新をダウンロード中...",
+      "downloading": "v{{version}} の更新をダウンロード中...",
       "available": "更新あり: v{{version}}",
       "downloaded": "インストール準備完了: v{{version}}",
       "autoInstalling": "{{seconds}} 秒後に自動的にインストールを開始します...",

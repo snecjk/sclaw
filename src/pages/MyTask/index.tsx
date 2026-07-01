@@ -392,18 +392,19 @@ export default function MyTask() {
     [agents, defaultAgentId, editingJob, createJob, updateJob, fetchJobs]
   );
 
-  const handleDelete = useCallback(async () => {
+  const handleDelete = useCallback(() => {
     if (!deleteTarget) return;
-    try {
-      await deleteJob(deleteTarget.id, deleteTarget.engineType);
-      toast.success(t('myTask.toast.deleted'));
-      await fetchJobs().catch(() => {});
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      setDeleteTarget(null);
-    }
-  }, [deleteTarget, deleteJob, fetchJobs]);
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    void (async () => {
+      try {
+        await deleteJob(target.id, target.engineType);
+        toast.success(t('myTask.toast.deleted'));
+      } catch (err) {
+        toast.error(String(err));
+      }
+    })();
+  }, [deleteTarget, deleteJob, t]);
 
   const handleTemplateInstall = useCallback(
     (card: OfficialWorkflowCard) => {

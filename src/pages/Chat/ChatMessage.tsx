@@ -40,7 +40,6 @@ import {
   artifactToPreviewFile,
   inferMimeTypeFromUrl,
   isHttpUrl,
-  isPreviewableRemoteUrl,
   openExternalUrl,
   previewHttpUrlLabel,
   resolvePreviewLinkTarget,
@@ -1335,12 +1334,12 @@ function preprocessTextForPreviewLinks(text: string): string {
     },
   );
 
-  // Replace previewable http(s) URLs — keep real href (do NOT prefix preview://)
+  // Replace bare http(s) URLs with markdown links — keep real href (do NOT prefix preview://).
+  // Extraction into file cards is disabled; click routing uses classifyPreviewHref (.sto → preview, else external).
   text = text.replace(
     /(https?:\/\/[^\s)\]"',;<>]+)/gi,
     (rawUrl) => {
       const url = rawUrl.replace(/[.,;:!?)}\]]+$/, '');
-      if (!isPreviewableRemoteUrl(url)) return rawUrl;
       const label = previewHttpUrlLabel(url);
       return `[${label}](${url})`;
     },

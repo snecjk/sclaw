@@ -206,12 +206,15 @@ export interface ChatState {
   clearPendingWorkflow: () => void;
 
   // Actions
-  loadSessions: () => Promise<void>;
+  loadSessions: (options?: { force?: boolean }) => Promise<void>;
   switchSession: (key: string) => void;
   /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
   switchToAgentMainSession: (agentId: string) => void;
   newSession: () => void;
-  deleteSession: (key: string) => Promise<boolean>;
+  deleteSession: (key: string, options?: {
+    skipSessionRefresh?: boolean;
+    additionalSuppressKeys?: string[];
+  }) => Promise<boolean>;
   cleanupEmptySession: () => void;
   loadHistory: (quiet?: boolean, force?: boolean) => Promise<void>;
   sendMessage: (options: SendMessageOptions) => Promise<void>;

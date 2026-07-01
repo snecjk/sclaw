@@ -79,7 +79,7 @@ export function UpdateSettings() {
       case 'checking':
         return t('updates.status.checking');
       case 'downloading':
-        return t('updates.status.downloading');
+        return t('updates.status.downloading', { version: updateInfo?.version });
       case 'available':
         return t('updates.status.available', { version: updateInfo?.version });
       case 'downloaded':
