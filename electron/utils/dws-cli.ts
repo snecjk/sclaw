@@ -32,6 +32,7 @@ import { proxyAwareFetch } from './proxy-fetch';
 import { getSetting } from './store';
 import { getDwsLoginManager } from './dws-login';
 import { getOpenClawSkillsDir } from './paths';
+import { extractZip } from './zip-extract';
 import {
   SKILLS_ZIP_ASSET_NAME,
   buildGithubDirectAssetUrl,
@@ -336,21 +337,7 @@ function findBinaryInDir(dir: string): string | null {
 
 async function extractArchive(archivePath: string, destDir: string, archiveType: 'tar.gz' | 'zip'): Promise<void> {
   if (archiveType === 'zip') {
-    if (process.platform === 'win32') {
-      const result = spawnSync(
-        'powershell.exe',
-        ['-NoProfile', '-Command', `Expand-Archive -Path '${archivePath}' -DestinationPath '${destDir}' -Force`],
-        { encoding: 'utf-8', windowsHide: true },
-      );
-      if (result.status !== 0) {
-        throw new Error(result.stderr || result.stdout || 'Expand-Archive failed');
-      }
-      return;
-    }
-    const result = spawnSync('unzip', ['-o', archivePath, '-d', destDir], { encoding: 'utf-8' });
-    if (result.status !== 0) {
-      throw new Error(result.stderr || result.stdout || 'unzip failed');
-    }
+    await extractZip(archivePath, destDir);
     return;
   }
 
