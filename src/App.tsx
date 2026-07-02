@@ -25,6 +25,7 @@ import { Login } from './pages/Login';
 import { Sprite } from './pages/Sprite';
 import { FloatIcon } from './pages/FloatIcon';
 import { WorkflowTestPage } from './pages/Workflow';
+import { DataCenter } from './pages/DataCenter';
 import { useSettingsStore } from './stores/settings';
 import { useAuthStore } from './stores/auth';
 import { useGatewayStore } from './stores/gateway';
@@ -339,6 +340,7 @@ function App() {
             <Route path="/cron" element={<Cron />} />
             <Route path="/scheduled-tasks" element={<ScheduledTasks />} />
             <Route path="/my-tasks" element={<MyTask />} />
+            <Route path="/data-center" element={<DataCenter />} />
             <Route path="/workflow/*" element={<WorkflowTestPage />} />
             <Route path="/settings/*" element={<Settings />} />
           </Route>
