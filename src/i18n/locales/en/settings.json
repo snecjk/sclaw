@@ -231,7 +231,21 @@
     "currentVersion": "Current Version",
     "whatsNew": "What's New:",
     "errorDetails": "Error Details:",
-    "help": "When auto-update is enabled, updates are downloaded and installed automatically."
+    "help": "When auto-update is enabled, updates are downloaded and installed automatically.",
+    "sidebar": {
+      "newVersionTitle": "New version available",
+      "updateToVersion": "Update to v{{version}}",
+      "updateNow": "Update Now",
+      "later": "Later",
+      "updating": "Updating...",
+      "viewUpdate": "View Update"
+    },
+    "modal": {
+      "title": "v{{version}} Release Notes",
+      "close": "Close",
+      "viewChangelog": "View Changelog",
+      "noReleaseNotes": "No release notes available"
+    }
   },
   "advanced": {
     "title": "Advanced",

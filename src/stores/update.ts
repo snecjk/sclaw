@@ -10,6 +10,8 @@ export interface UpdateInfo {
   version: string;
   releaseDate?: string;
   releaseNotes?: string | null;
+  /** Release ticket title from memory-center resolve */
+  title?: string | null;
 }
 
 export interface ProgressInfo {
