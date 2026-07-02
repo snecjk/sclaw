@@ -312,15 +312,49 @@ export async function installDwsCli(): Promise<DwsInstallResponse> {
   });
 }
 
+export type UploadFileToTempOSSOptions = {
+  /** Diagnostics tag for Main log grep, e.g. `dingtalk-share`. */
+  source?: string;
+  /** Ask Main to return a copy-pasteable curl for manual reproduction. */
+  includeDebugCurl?: boolean;
+};
+
+export type UploadFileToTempOSSResult = {
+  url: string;
+  debugCurl?: string;
+  ossKey?: string;
+  resourceId?: string;
+};
+
 /** Upload a local workspace file to temp OSS; returns public HTTP URL. */
-export async function uploadFileToTempOSS(filePath: string, fileName: string): Promise<string> {
-  const payload = await hostApiFetch<{ url?: string; error?: string }>('/api/files/upload-temp', {
+export async function uploadFileToTempOSS(
+  filePath: string,
+  fileName: string,
+  options?: UploadFileToTempOSSOptions,
+): Promise<UploadFileToTempOSSResult> {
+  const payload = await hostApiFetch<{
+    url?: string;
+    error?: string;
+    debugCurl?: string;
+    ossKey?: string;
+    resourceId?: string;
+  }>('/api/files/upload-temp', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filePath, fileName }),
+    body: JSON.stringify({
+      filePath,
+      fileName,
+      source: options?.source,
+      includeDebugCurl: options?.includeDebugCurl === true,
+    }),
   });
   if (!payload.url) {
     throw new Error(payload.error || 'OSS upload response missing url');
   }
-  return payload.url;
+  return {
+    url: payload.url,
+    debugCurl: payload.debugCurl,
+    ossKey: payload.ossKey,
+    resourceId: payload.resourceId,
+  };
 }
