@@ -1958,7 +1958,7 @@ export const useChatStore = create<ChatState>()(
 
       rawMessages = mergeHistoryWhenShrunk(rawMessages, get().messages);
 
-      absorbWorkflowSchemaFromToolResults(rawMessages);
+      absorbWorkflowSchemaFromToolResults(rawMessages, targetSessionKey);
 
       // Before filtering: attach images/files from tool_result messages to the next assistant message
       const messagesWithToolImages = enrichWithToolResultFiles(rawMessages);

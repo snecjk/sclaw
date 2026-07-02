@@ -2960,4 +2960,9 @@ function registerSessionHandlers(): void {
   ipcMain.handle('workflow:sync-state', async (_, { runId }: { runId: string }) => {
     return getWorkflowExecutionTracker().getState(runId);
   });
+
+  ipcMain.handle('workflow:appendSessionRecord', async (_, input) => {
+    const { appendWorkflowSessionRecord } = await import('../services/workflow-session-writer');
+    await appendWorkflowSessionRecord(input as import('../services/workflow-session-writer').AppendWorkflowSessionRecordInput);
+  });
 }

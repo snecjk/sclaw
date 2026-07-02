@@ -75,7 +75,7 @@ describe('workflow form injection guard', () => {
     ).toBe(true);
   });
 
-  it('allows a new pending form even when the same template has prior execution in session', () => {
+  it('blocks form injection when the same template already has execution in session', () => {
     mockState.hasWorkflowExecution = true;
     const uiMessages: RawMessage[] = [
       { role: 'user', content: '客户异常监控' },
@@ -86,7 +86,7 @@ describe('workflow form injection guard', () => {
       isWorkflowFormInjectionAllowed('tpl-1', uiMessages, getMessageText, 'agent:main:main', {
         allowLivePending: true,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('resolveParameterFormForAssistantMessage builds form from pending on last assistant', async () => {
