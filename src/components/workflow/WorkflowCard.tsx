@@ -217,12 +217,10 @@ export function WorkflowCard({
   const userFacingArtifacts = (display.result?.artifacts ?? []).filter(
     (artifact) => isUserFacingArtifactUrl(artifact.url),
   );
-  const primaryArtifact = userFacingArtifacts[0];
-  const canOpenArtifactPreview = Boolean(
-    primaryArtifact
-    && onPreviewArtifact
-    && shouldPreviewInSidePanel(primaryArtifact.url),
-  );
+  const previewableArtifact = userFacingArtifacts.find((artifact) => shouldPreviewInSidePanel(artifact.url));
+  const primaryArtifact = previewableArtifact ?? userFacingArtifacts[0];
+  const shouldShowPreviewAction = Boolean(previewableArtifact);
+  const canOpenArtifactPreview = Boolean(previewableArtifact && onPreviewArtifact);
   const showWorkflowActions = isTerminal
     && !!display.workflowId
     && !!onCreateScheduledTask;
@@ -301,12 +299,10 @@ export function WorkflowCard({
             mimeType: primaryArtifact.type || 'application/octet-stream',
             t,
           })}
-          actionLabel={
-            canOpenArtifactPreview ? t('workflow.viewArtifact') : t('workflow.openArtifactLink')
-          }
+          actionLabel={shouldShowPreviewAction ? t('workflow.viewArtifact') : t('workflow.openArtifactLink')}
           onAction={() => {
             if (canOpenArtifactPreview) {
-              onPreviewArtifact!(artifactToPreviewFile(primaryArtifact));
+              onPreviewArtifact!(artifactToPreviewFile(previewableArtifact!));
               return;
             }
             openExternalUrl(primaryArtifact.url);
