@@ -1261,6 +1261,9 @@ export const useChatStore = create<ChatState>()(
       });
     }
   },
+  clearPendingWorkflowMemory: () => {
+    set({ pendingWorkflow: null });
+  },
   clearPendingWorkflow: () => {
     const sessionKey = get().currentSessionKey;
     const templateId = get().pendingWorkflow?.templateId;
@@ -1887,6 +1890,7 @@ export const useChatStore = create<ChatState>()(
         lastUserMessageAt: null,
         optimisticUserMessage: null,
         pendingToolImages: [],
+        pendingWorkflow: null,
       };
     });
     void applyWorkspaceDefaultToNewSession(newKey, newAgentId);

@@ -395,7 +395,15 @@ export async function tryResolvePendingWorkflow(
   const chatState = useChatStore.getState();
   const pending = chatState.pendingWorkflow;
 
-  const { isReExecutionIntent, isWorkflowStartIntent } = await import('@/hooks/use-workflow-intent');
+  const {
+    isReExecutionIntent,
+    isWorkflowStartIntent,
+    isWorkflowCreationIntent,
+  } = await import('@/hooks/use-workflow-intent');
+  if (isWorkflowCreationIntent(text)) {
+    chatState.clearPendingWorkflowMemory();
+    return false;
+  }
   if (isReExecutionIntent(text) || (isWorkflowStartIntent(text) && !pending)) {
     return false;
   }
