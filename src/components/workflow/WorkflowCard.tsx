@@ -9,10 +9,10 @@ import {
 } from '@/lib/format-workflow-duration';
 import {
   artifactToPreviewFile,
-  isPreviewableArtifactUrl,
   isUserFacingArtifactUrl,
   openExternalUrl,
 } from '@/lib/preview-url';
+import { shouldPreviewInSidePanel } from '@/lib/preview-href';
 import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
 import {
   ArtifactProductCard,
@@ -218,10 +218,10 @@ export function WorkflowCard({
     (artifact) => isUserFacingArtifactUrl(artifact.url),
   );
   const primaryArtifact = userFacingArtifacts[0];
-  const canPreviewArtifact = Boolean(
+  const canOpenArtifactPreview = Boolean(
     primaryArtifact
     && onPreviewArtifact
-    && isPreviewableArtifactUrl(primaryArtifact.url, primaryArtifact.type),
+    && shouldPreviewInSidePanel(primaryArtifact.url),
   );
   const showWorkflowActions = isTerminal
     && !!display.workflowId
@@ -302,14 +302,14 @@ export function WorkflowCard({
             t,
           })}
           actionLabel={
-            canPreviewArtifact ? t('workflow.viewArtifact') : t('workflow.openArtifactLink')
+            canOpenArtifactPreview ? t('workflow.viewArtifact') : t('workflow.openArtifactLink')
           }
           onAction={() => {
-            if (canPreviewArtifact) {
+            if (canOpenArtifactPreview) {
               onPreviewArtifact!(artifactToPreviewFile(primaryArtifact));
-            } else {
-              openExternalUrl(primaryArtifact.url);
+              return;
             }
+            openExternalUrl(primaryArtifact.url);
           }}
         />
       ) : null}

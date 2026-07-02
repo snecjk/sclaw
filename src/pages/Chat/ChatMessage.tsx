@@ -49,6 +49,7 @@ import {
   coerceHrefForMarkdownTransform,
   resolvePreviewHrefAction,
   resolvePreviewPathOnHost,
+  shouldPreviewInSidePanel,
 } from '@/lib/preview-href';
 import { applyDisplayNameHints, dedupeAttachedFiles, mergePreviewFileLists, normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
@@ -1396,24 +1397,27 @@ function preprocessTextForPreviewLinks(text: string): string {
 
 function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFile?: (file: AttachedFileMeta) => void }) {
   const { t } = useTranslation('chat');
-  const isPreviewable = isPreviewableFile(file);
+  const filePath = file.filePath ?? '';
+  const openInPreview = shouldPreviewInSidePanel(filePath);
 
   const handleOpen = useCallback(() => {
     logFilePreview('file-card-click', {
       filePath: file.filePath,
       fileName: file.fileName,
       mimeType: file.mimeType,
-      isPreviewable,
+      openInPreview,
       hasOnPreviewFile: !!onPreviewFile,
     });
-    if (onPreviewFile && isPreviewable) {
+    if (onPreviewFile && openInPreview) {
       onPreviewFile(file);
-    } else if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
-      openExternalUrl(file.filePath);
-    } else if (file.filePath) {
-      invokeIpc('shell:openPath', file.filePath);
+      return;
     }
-  }, [file, onPreviewFile, isPreviewable]);
+    if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+      openExternalUrl(filePath);
+    } else if (filePath) {
+      invokeIpc('shell:openPath', filePath);
+    }
+  }, [file, filePath, onPreviewFile, openInPreview]);
 
   const metaLine = buildArtifactMetaLine({
     fileName: file.fileName,
@@ -1427,6 +1431,7 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
     <ArtifactProductCard
       title={file.fileName}
       metaLine={metaLine}
+      actionLabel={openInPreview ? t('workflow.viewArtifact') : t('workflow.openArtifactLink')}
       onAction={handleOpen}
     />
   );
