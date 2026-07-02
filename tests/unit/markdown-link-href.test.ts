@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   coerceHrefForMarkdownTransform,
   extractLocalPathFromHref,
+  shouldPreviewInSidePanel,
 } from '@/lib/preview-href';
 import { classifyPreviewHref } from '../../shared/preview-href';
 
@@ -66,5 +67,20 @@ describe('coerceHrefForMarkdownTransform', () => {
     expect(coerceHrefForMarkdownTransform('ftp://files.example.com/report.html')).toBe(
       'ftp://files.example.com/report.html',
     );
+  });
+});
+
+describe('shouldPreviewInSidePanel', () => {
+  it('previews local paths, localhost, 127.0.0.1, and *.sto* http', () => {
+    expect(shouldPreviewInSidePanel('/Users/sto/report.html')).toBe(true);
+    expect(shouldPreviewInSidePanel('preview:///Users/sto/report.html')).toBe(true);
+    expect(shouldPreviewInSidePanel('http://localhost:8080/report.html')).toBe(true);
+    expect(shouldPreviewInSidePanel('http://127.0.0.1/report.html')).toBe(true);
+    expect(shouldPreviewInSidePanel('https://baseinfo-aimemory-test.sto.cn/oss/report.html')).toBe(true);
+  });
+
+  it('opens other http links in the system browser', () => {
+    expect(shouldPreviewInSidePanel('https://cdn.example.com/report.html')).toBe(false);
+    expect(shouldPreviewInSidePanel('https://www.baidu.com')).toBe(false);
   });
 });
