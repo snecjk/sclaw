@@ -230,7 +230,21 @@
     "currentVersion": "現在のバージョン",
     "whatsNew": "更新内容：",
     "errorDetails": "エラー詳細：",
-    "help": "自動アップデートが有効な場合、更新は自動的にダウンロードされインストールされます。"
+    "help": "自動アップデートが有効な場合、更新は自動的にダウンロードされインストールされます。",
+    "sidebar": {
+      "newVersionTitle": "新しいバージョンがあります",
+      "updateToVersion": "v{{version}} に更新",
+      "updateNow": "今すぐ更新",
+      "later": "後で",
+      "updating": "更新中...",
+      "viewUpdate": "更新内容を見る"
+    },
+    "modal": {
+      "title": "v{{version}} の更新内容",
+      "close": "閉じる",
+      "viewChangelog": "更新ログを見る",
+      "noReleaseNotes": "更新説明はありません"
+    }
   },
   "advanced": {
     "title": "詳細設定",
