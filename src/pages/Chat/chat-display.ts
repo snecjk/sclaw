@@ -2,6 +2,7 @@ import type { RawMessage } from '@/stores/chat';
 import {
   extractText,
   extractThinkingTimeline,
+  extractToolUse,
   isHiddenWorkflowCompleteUserMessage,
   isHiddenDuplicateWorkflowPreambleAssistantMessage,
   isHiddenWorkflowParamsUserMessage,
@@ -227,8 +228,11 @@ export function buildChatDisplayItems(messages: RawMessage[]): ChatDisplayItem[]
 
       const hasMultiple = turnMessages.length > 1;
       const onlyThinkingSnapshots = turnMessages.every(isThinkingOnlyAssistantMessage);
+      const hasToolActivity =
+        turnToolResults.length > 0
+        || turnMessages.some((message) => extractToolUse(message).length > 0);
 
-      if (hasMultiple || onlyThinkingSnapshots) {
+      if (hasMultiple || onlyThinkingSnapshots || hasToolActivity) {
         items.push({
           type: 'assistant-turn',
           messages: turnMessages,
