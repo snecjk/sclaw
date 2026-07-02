@@ -168,9 +168,10 @@ export function ChatPreviewPanel({
                 <PreviewActionButton onClick={handleDownload} aria-label={t('preview.download')}>
                   <Download className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>
-                <PreviewActionButton onClick={handleOpenShareDialog} aria-label={t('preview.share')}>
+                {/* 分产物分享功能暂时注释 */}
+                {/* <PreviewActionButton onClick={handleOpenShareDialog} aria-label={t('preview.share')}>
                   <Share2 className="h-4 w-4" aria-hidden />
-                </PreviewActionButton>
+                </PreviewActionButton> */}
                 <PreviewActionButton onClick={handleOpenExternal} aria-label={t('preview.openExternal')}>
                   <ExternalLink className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>

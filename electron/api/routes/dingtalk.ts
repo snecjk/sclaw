@@ -101,27 +101,6 @@ function mapUserItem(raw: unknown): MentionSearchItem | null {
   };
 }
 
-function mapAisearchPersonItem(raw: unknown): MentionSearchItem | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const record = raw as Record<string, unknown>;
-  const id = pickString(record, ['userId', 'userid', 'id']);
-  const title = pickString(record, ['title', 'author']);
-  if (!id || !title) return null;
-
-  const meta = record.meta;
-  const metaRecord = meta && typeof meta === 'object' ? meta as Record<string, unknown> : null;
-  const position = pickString(metaRecord ?? {}, ['position'])
-    ?? pickString(record, ['snippet']);
-  return {
-    type: 'user',
-    id,
-    title,
-    subtitle: buildUserSubtitle(position, null),
-    avatar: resolvePublicAvatarUrl(record),
-    corpId: pickString(record, ['corpId', 'corp_id']) ?? null,
-  };
-}
-
 function mapGroupItem(raw: unknown): MentionSearchItem | null {
   if (!raw || typeof raw !== 'object') return null;
   const record = raw as Record<string, unknown>;
@@ -191,17 +170,11 @@ function matchesMentionQuery(title: string, query: string): boolean {
   return title.toLowerCase().includes(keyword);
 }
 
-async function searchUsersViaAisearch(query: string, limit: number): Promise<MentionSearchItem[]> {
-  const result = await runDws(
-    ['aisearch', 'person', '--keyword', query, '--dimension', 'name', '--format', 'json'],
-    8_000,
-  );
-  if (!result.ok) return [];
-  const rows = extractDwsRows(result.data);
-  return rows
-    .map(mapAisearchPersonItem)
-    .filter((item): item is MentionSearchItem => item !== null)
-    .slice(0, limit);
+/** 联系人：姓名或部门/职位副标题须包含关键字（与群名过滤一致）。 */
+function matchesMentionUserQuery(item: MentionSearchItem, query: string): boolean {
+  if (matchesMentionQuery(item.title, query)) return true;
+  if (item.subtitle && matchesMentionQuery(item.subtitle, query)) return true;
+  return false;
 }
 
 async function searchUsersViaContact(query: string, limit: number): Promise<MentionSearchItem[]> {
@@ -259,11 +232,10 @@ async function enrichUserDetails(items: MentionSearchItem[]): Promise<MentionSea
 }
 
 async function searchUsers(query: string, limit: number): Promise<MentionSearchItem[]> {
-  const fromAisearch = await searchUsersViaAisearch(query, limit);
-  const users = fromAisearch.length > 0
-    ? fromAisearch
-    : await searchUsersViaContact(query, limit);
-  return enrichUserDetails(users);
+  const enriched = await enrichUserDetails(await searchUsersViaContact(query, limit));
+  return enriched
+    .filter((item) => matchesMentionUserQuery(item, query))
+    .slice(0, limit);
 }
 
 async function searchConversations(query: string, limit: number): Promise<MentionSearchItem[]> {
@@ -294,7 +266,7 @@ function toMentionSearchItem(row: RecentMentionRow): MentionSearchItem {
 async function enrichRecentSingleChatUsers(items: MentionSearchItem[]): Promise<MentionSearchItem[]> {
   const enriched = await Promise.all(items.map(async (item) => {
     if (item.type !== 'user' || item.id.trim()) return item;
-    const resolved = await searchUsersViaAisearch(item.title, 1);
+    const resolved = await searchUsersViaContact(item.title, 1);
     const match = resolved[0];
     if (!match?.id) return item;
     return {
@@ -473,11 +445,11 @@ export async function handleDingTalkRoutes(
       return true;
     }
 
-    const users = types.includes('user') ? await searchUsers(query, limit) : [];
-    // 已命中联系人时不再混入 chat search 的无关群（该接口 keyword 匹配很宽松）
-    const groups = types.includes('conversation') && users.length === 0
-      ? await searchConversations(query, limit)
-      : [];
+    const [users, groups] = await Promise.all([
+      types.includes('user') ? searchUsers(query, limit) : Promise.resolve([]),
+      // chat search keyword 较宽松，结果在 searchConversations 内按 title 二次过滤
+      types.includes('conversation') ? searchConversations(query, limit) : Promise.resolve([]),
+    ]);
 
     const seen = new Set<string>();
     const items: MentionSearchItem[] = [];

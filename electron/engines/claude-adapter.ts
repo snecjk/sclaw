@@ -231,6 +231,20 @@ function toEpochMs(value: unknown): number | undefined {
   return undefined;
 }
 
+/** Last message timestamp in a Claude transcript — used for sidebar sort, not read time. */
+function resolveClaudeTranscriptActivityMs(
+  messages: Array<{ timestamp?: number }>,
+): number {
+  let lastAt = 0;
+  for (const message of messages) {
+    const ts = typeof message.timestamp === 'number' && Number.isFinite(message.timestamp)
+      ? message.timestamp
+      : 0;
+    if (ts > lastAt) lastAt = ts;
+  }
+  return lastAt;
+}
+
 function isPathWithinDirectory(targetPath: string, rootPath: string): boolean {
   const resolvedRoot = resolve(rootPath);
   const resolvedTarget = resolve(targetPath);
@@ -518,6 +532,39 @@ type ClaudeDisplayMessage = {
   toolName?: string;
 };
 
+async function resolveClaudeListedActivityMs(
+  entry: EngineSessionRegistryEntry,
+): Promise<number | undefined> {
+  if (!entry.cwd) return entry.updatedAt;
+
+  const sessionIds = [
+    ...(entry.archivedClaudeSessionIds ?? []),
+    ...(entry.sessionId ? [entry.sessionId] : []),
+  ];
+  if (sessionIds.length === 0) return entry.updatedAt;
+
+  let lastAt = 0;
+  for (const sdkSessionId of sessionIds) {
+    try {
+      const batch = await loadPersistedClaudeMessagesForSdkSession(sdkSessionId, entry.cwd);
+      for (const message of batch) {
+        const ts = typeof message.timestamp === 'number' ? message.timestamp : 0;
+        if (ts > lastAt) lastAt = ts;
+      }
+    } catch {
+      // ignore per-session transcript read failures
+    }
+  }
+
+  for (const message of liveClaudeMessages.get(entry.sessionKey) ?? []) {
+    const ts = message.timestamp ?? 0;
+    if (ts > lastAt) lastAt = ts;
+  }
+
+  if (lastAt > 0) return lastAt;
+  return entry.updatedAt;
+}
+
 async function loadPersistedClaudeMessagesForSdkSession(
   sdkSessionId: string,
   cwd: string,
@@ -663,13 +710,15 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
       toolName,
     }));
 
+  const transcriptActivityAt = resolveClaudeTranscriptActivityMs(mergedMessages);
   await upsertEngineSessionRegistryEntry({
     sessionKey,
     sessionId: sessionId || entry?.sessionId,
     cwd,
     agentId: extractAgentId(sessionKey),
     engineType: 'claude',
-    updatedAt: Date.now(),
+    // Never bump activity on read — sidebar order must reflect last message time only.
+    ...(transcriptActivityAt > 0 ? { updatedAt: transcriptActivityAt } : {}),
     model: entry?.model,
     accountId: entry?.accountId,
     archivedClaudeSessionIds: entry?.archivedClaudeSessionIds,
@@ -843,7 +892,7 @@ export async function consumeClaudeQuery(
         cwd,
         agentId: extractAgentId(sessionKey),
         engineType: 'claude',
-        updatedAt: Date.now(),
+        updatedAt: toEpochMs(message.timestamp) ?? Date.now(),
         title,
         model: (await getEngineSessionRegistryEntry(sessionKey))?.model,
         accountId: (await getEngineSessionRegistryEntry(sessionKey))?.accountId,
@@ -1038,17 +1087,27 @@ export const claudeAdapter: EngineAdapter = {
   async listSessions() {
     await ensureClaudeConfigDir();
     const entries = await listEngineSessionRegistryEntries('claude');
-    const sessions: EngineSessionSummary[] = [];
-    for (const entry of entries) {
-      sessions.push({
-        key: entry.sessionKey,
-        label: entry.title,
-        displayName: entry.title,
-        updatedAt: entry.updatedAt,
-        model: entry.model,
-        engineType: 'claude',
-      });
-    }
+    const sessions: EngineSessionSummary[] = await Promise.all(
+      entries.map(async (entry) => {
+        const updatedAt = await resolveClaudeListedActivityMs(entry);
+        if (updatedAt && updatedAt !== entry.updatedAt) {
+          void upsertEngineSessionRegistryEntry({
+            ...entry,
+            updatedAt,
+          }).catch((error) => {
+            logger.warn('Failed to heal Claude session updatedAt on list:', error);
+          });
+        }
+        return {
+          key: entry.sessionKey,
+          label: entry.title,
+          displayName: entry.title,
+          updatedAt,
+          model: entry.model,
+          engineType: 'claude' as const,
+        };
+      }),
+    );
     return { success: true, result: { sessions } };
   },
 

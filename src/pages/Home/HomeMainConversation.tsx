@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowDown, Loader2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -19,8 +19,10 @@ import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
 import {
-  stoSplitChatScrollClass,
+  stoChatColumnContentTrackClass,
   stoChatScrollContentClass,
+  stoChatScrollPaneClass,
+  stoChatScrollPaneSplitClass,
   stoSplitGridBodyChatClass,
   stoSplitGridBodyPreviewClass,
   stoSplitGridBodyResizerClass,
@@ -30,6 +32,7 @@ import {
 import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
+import { useStoTaskSubitemEntry } from '@/hooks/use-sto-task-subitem-entry';
 import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
@@ -70,6 +73,7 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
+  const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
   const clearError = useChatStore((s) => s.clearError);
 
   useWorkflowCompletion(currentSessionKey);
@@ -124,6 +128,7 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
     sending,
     pendingFinal,
     showThinking,
+    lastChatEventAt,
     streamMsg,
     streamText,
     streamingTools,
@@ -228,6 +233,13 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
     },
     [scrollToBottom],
   );
+
+  const { composeSeed: subitemComposeSeed } = useStoTaskSubitemEntry({
+    scrollToLatest,
+    onSend,
+  });
+
+  const effectiveComposerSeed = subitemComposeSeed ?? seedText;
 
   const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
   const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
@@ -388,14 +400,15 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
       >
       <div
         ref={scrollRef}
-        className={cn(
-          'relative z-10 min-h-0 flex-1 py-4',
-          isSplitChatLayout
-            ? stoSplitChatScrollClass
-            : 'overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
-        )}
+        className={isSplitChatLayout ? stoChatScrollPaneSplitClass : stoChatScrollPaneClass}
       >
-        <div ref={contentRef} className={stoChatScrollContentClass}>
+        <div
+          ref={contentRef}
+          className={cn(
+            stoChatScrollContentClass,
+            stoChatColumnContentTrackClass('home', isSplitChatLayout),
+          )}
+        >
           {showLoadingPlaceholder ? (
             <div className="flex justify-center py-12 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
@@ -449,6 +462,8 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
         </div>
       </div>
 
+      <div className="relative z-10 w-full shrink-0">
+        <div className={stoChatColumnContentTrackClass('home', isSplitChatLayout)}>
       {error ? (
         <div className="shrink-0 border-t border-destructive/20 bg-destructive/10 py-2">
           <div className="flex items-center justify-between">
@@ -493,11 +508,11 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
         </div>
       </div>
 
-      <div className="relative z-10 w-full shrink-0">
-        <HomeComposer
-          seedText={seedText}
-          onSend={onSend}
-        />
+      <HomeComposer
+        seedText={effectiveComposerSeed}
+        onSend={onSend}
+      />
+        </div>
       </div>
 
       {minLoading && !sending ? (

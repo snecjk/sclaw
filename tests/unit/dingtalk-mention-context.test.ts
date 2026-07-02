@@ -48,6 +48,10 @@ describe('dingtalk mention context', () => {
     expect(stripDingTalkMentionContextForDisplay(wrapped)).toBe('@李峥 你好你好');
   });
 
+  it('returns empty when only the system marker is present', () => {
+    expect(stripDingTalkMentionContextForDisplay('[STOCLAW:DINGTALK_RECIPIENTS:v1]\n')).toBe('');
+  });
+
   it('builds rpc extras only for resolved mentions', () => {
     const mentions = [
       { type: 'user' as const, displayName: '李峥', userId: 'uid-2' },

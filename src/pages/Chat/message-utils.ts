@@ -14,6 +14,7 @@ import {
   parseParameterFormMarker,
 } from '@/lib/parameter-form-marker';
 import { resolveParameterFormId } from '@/components/parameter-form/form-handlers';
+import { currentUserTurnHasWorkflowSubmission } from '@/lib/workflow-card-injection';
 import type { RawMessage, ContentBlock } from '@/stores/chat';
 import { truncatePreviewExtractExcerpt } from '../../../shared/preview-extract-trace';
 import {
@@ -403,6 +404,10 @@ export function extractParameterForm(
         sourceId: string;
         schemaHash?: string;
       };
+      const sessionMessages = useChatStore.getState().messages;
+      if (currentUserTurnHasWorkflowSubmission(sessionMessages)) {
+        return null;
+      }
       if (
         formContext.source === 'workflow'
         && formContext.sourceId
@@ -410,7 +415,7 @@ export function extractParameterForm(
       ) {
         return null;
       }
-      
+
       return {
         formId,
         formConfig: (block as any).formConfig as import('@/types/user-form').UserFormConfig,
@@ -424,6 +429,10 @@ export function extractParameterForm(
       if (parsed) {
         const { templateId, schemaHash } = parsed;
         const sessionKey = useChatStore.getState().currentSessionKey;
+        const sessionMessages = useChatStore.getState().messages;
+        if (currentUserTurnHasWorkflowSubmission(sessionMessages)) {
+          return null;
+        }
         if (sessionHasWorkflowExecution(sessionKey, templateId)) {
           return null;
         }
@@ -576,8 +585,13 @@ export type ThinkingTimelineItem =
   | { type: 'thinking'; content: string }
   | { type: 'tool'; index: number; id: string; name: string; input: unknown };
 
+function thinkingTimelineToolKey(tool: { id: string; name: string; input: unknown }): string {
+  return tool.id || `${tool.name}::${JSON.stringify(tool.input ?? null)}`;
+}
+
 /**
  * Ordered thinking + tool_use segments from message content (preserves block order).
+ * Also picks up OpenAI `tool_calls` on the message when they are not in the content array.
  */
 export function extractThinkingTimeline(message: RawMessage | unknown): ThinkingTimelineItem[] {
   if (!message || typeof message !== 'object') return [];
@@ -612,17 +626,26 @@ export function extractThinkingTimeline(message: RawMessage | unknown): Thinking
     if (thinking) {
       items.push({ type: 'thinking', content: thinking });
     }
-    const tools = extractToolUse(message);
-    for (const tool of tools) {
-      toolIndex += 1;
-      items.push({
-        type: 'tool',
-        index: toolIndex,
-        id: tool.id || `tool-${toolIndex}`,
-        name: tool.name,
-        input: tool.input,
-      });
-    }
+  }
+
+  const capturedToolKeys = new Set(
+    items
+      .filter((item): item is Extract<ThinkingTimelineItem, { type: 'tool' }> => item.type === 'tool')
+      .map((item) => thinkingTimelineToolKey({ id: item.id, name: item.name, input: item.input })),
+  );
+
+  for (const tool of extractToolUse(message)) {
+    const key = thinkingTimelineToolKey(tool);
+    if (capturedToolKeys.has(key)) continue;
+    toolIndex += 1;
+    items.push({
+      type: 'tool',
+      index: toolIndex,
+      id: tool.id || `tool-${toolIndex}`,
+      name: tool.name,
+      input: tool.input,
+    });
+    capturedToolKeys.add(key);
   }
 
   return items;
@@ -1299,23 +1322,75 @@ export function usePreviewableFiles(
   }, [candidates, existence, workflowCardStates]);
 }
 
+function timestampToMs(timestamp: unknown): number {
+  if (timestamp == null || timestamp === '') return 0;
+  if (typeof timestamp === 'string') {
+    const numeric = Number(timestamp);
+    if (Number.isFinite(numeric)) {
+      return numeric < 1e12 ? numeric * 1000 : numeric;
+    }
+    const parsed = Date.parse(timestamp);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return 0;
+  // OpenClaw timestamps can be in seconds or milliseconds
+  return timestamp < 1e12 ? timestamp * 1000 : timestamp;
+}
+
+function startOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function calendarDaysBefore(now: Date, then: Date): number {
+  const diffMs = startOfLocalDay(now).getTime() - startOfLocalDay(then).getTime();
+  return Math.floor(diffMs / 86_400_000);
+}
+
+function formatTimeHm(date: Date): string {
+  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatAbsoluteTimestamp(date: Date, now: Date): string {
+  const time = formatTimeHm(date);
+  const dayDiff = calendarDaysBefore(now, date);
+
+  if (dayDiff >= 2 && dayDiff < 7) {
+    return `${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
+  }
+
+  if (dayDiff >= 7 || date.getFullYear() !== now.getFullYear()) {
+    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${time}`;
+  }
+
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
+}
+
 /**
- * Format a Unix timestamp (seconds) to relative time string.
+ * Format message timestamp for chat hover display.
+ * Recent messages use relative time; older ones include calendar day (and year when needed).
  */
 export function formatTimestamp(timestamp: unknown): string {
-  if (!timestamp) return '';
-  const ts = typeof timestamp === 'number' ? timestamp : Number(timestamp);
-  if (!ts || isNaN(ts)) return '';
+  const ms = timestampToMs(timestamp);
+  if (ms <= 0) return '';
 
-  // OpenClaw timestamps can be in seconds or milliseconds
-  const ms = ts > 1e12 ? ts : ts * 1000;
   const date = new Date(ms);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
 
-  if (diffMs < 60000) return '刚刚';
-  if (diffMs < 3600000) return `${Math.floor(diffMs / 60000)} 分钟前`;
-  if (diffMs < 86400000) return `${Math.floor(diffMs / 3600000)} 小时前`;
+  if (diffMs < 0) return formatAbsoluteTimestamp(date, now);
 
-  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  if (diffMs < 60_000) return '刚刚';
+  if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)} 分钟前`;
+
+  const dayDiff = calendarDaysBefore(now, date);
+
+  if (dayDiff === 0) {
+    return `${Math.floor(diffMs / 3_600_000)} 小时前`;
+  }
+
+  if (dayDiff === 1) {
+    return `昨天 ${formatTimeHm(date)}`;
+  }
+
+  return formatAbsoluteTimestamp(date, now);
 }

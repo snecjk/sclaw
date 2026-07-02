@@ -1,7 +1,7 @@
 {
     "steps": {
         "welcome": {
-            "title": "StoClawへようこそ",
+            "title": "SClawへようこそ",
             "description": "AIアシスタントの設定準備が整いました"
         },
         "runtime": {
@@ -18,12 +18,12 @@
         },
         "complete": {
             "title": "完了！",
-            "description": "StoClawを使用する準備が整いました"
+            "description": "SClawを使用する準備が整いました"
         }
     },
     "welcome": {
-        "title": "StoClawへようこそ",
-        "description": "StoClawはOpenClawのグラフィカルインターフェースで、お気に入りのメッセージングプラットフォームでAIアシスタントを簡単に使用できます。",
+        "title": "SClawへようこそ",
+        "description": "SClawはOpenClawのグラフィカルインターフェースで、お気に入りのメッセージングプラットフォームでAIアシスタントを簡単に使用できます。",
         "features": {
             "noCommand": "コマンドライン不要",
             "modernUI": "モダンで美しいインターフェース",
@@ -109,7 +109,7 @@
     },
     "complete": {
         "title": "セットアップ完了！",
-        "subtitle": "StoClawの構成が完了し、使用準備が整いました。AIアシスタントとのチャットを開始できます。",
+        "subtitle": "SClawの構成が完了し、使用準備が整いました。AIアシスタントとのチャットを開始できます。",
         "components": "コンポーネント",
         "envReady": "環境準備完了",
         "gateway": "ゲートウェイ",

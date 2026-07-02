@@ -6,6 +6,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Clock, Loader2, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { parseScheduleToLabel } from '@/lib/schedule-label';
@@ -49,22 +50,23 @@ interface TaskCardProps {
 }
 
 /** 将接口 nextRunAt 格式化为设计稿底栏文案（含分钟级精度） */
-function formatNextRunLabel(nextRunAt: string | null, enabled: boolean): string | null {
+function formatNextRunLabel(nextRunAt: string | null, enabled: boolean, t: (key: string, options?: Record<string, unknown>) => string): string | null {
   if (!enabled || nextRunAt === null) return null;
   const diffMs = new Date(nextRunAt).getTime() - Date.now();
   if (Number.isNaN(diffMs)) return null;
-  if (diffMs <= 0) return '即将执行';
+  if (diffMs <= 0) return t('myTask.card.nextRunNow');
 
   const totalMinutes = Math.ceil(diffMs / (1000 * 60));
-  if (totalMinutes < 1) return '即将执行';
-  if (totalMinutes < 60) return `下次执行${totalMinutes}分钟后`;
+  if (totalMinutes < 1) return t('myTask.card.nextRunNow');
+  if (totalMinutes < 60) return t('myTask.card.nextRunMinutes', { count: totalMinutes });
   const totalHours = Math.ceil(totalMinutes / 60);
-  if (totalHours < 24) return `下次执行${totalHours}小时后`;
+  if (totalHours < 24) return t('myTask.card.nextRunHours', { count: totalHours });
   const days = Math.ceil(totalHours / 24);
-  return `下次执行${days}天后`;
+  return t('myTask.card.nextRunDays', { count: days });
 }
 
 export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: TaskCardProps) {
+  const { t } = useTranslation('tasks');
   const [menuOpen, setMenuOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -78,7 +80,7 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
   }, [task.enabled, task.nextRunAt]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const nextRunLabel = useCallback(() => formatNextRunLabel(task.nextRunAt, task.enabled), [task.nextRunAt, task.enabled, tick])();
+  const nextRunLabel = useCallback(() => formatNextRunLabel(task.nextRunAt, task.enabled, t), [task.nextRunAt, task.enabled, tick, t])();
 
   // 点击外部关闭菜单
   useEffect(() => {
@@ -115,7 +117,7 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
           role="switch"
           aria-checked={task.enabled}
           aria-pressed={task.enabled}
-          aria-label="启用或暂停任务"
+          aria-label={t('myTask.card.toggleAria')}
           onClick={(e) => {
             e.stopPropagation();
             onToggle?.(!task.enabled);
@@ -132,7 +134,7 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
         <div className="relative shrink-0" ref={menuRef} data-menu>
           <button
             type="button"
-            aria-label="更多"
+            aria-label={t('myTask.card.moreAria')}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             onClick={(e) => {
@@ -165,10 +167,10 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
                 {running ? (
                   <span className="inline-flex items-center gap-1.5">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                    执行中…
+                    {t('myTask.card.running')}
                   </span>
                 ) : (
-                  '立即执行'
+                  t('myTask.card.runNow')
                 )}
               </button>
               <button
@@ -181,7 +183,7 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
                 }}
                 className={myTaskCardMenuItemClass()}
               >
-                编辑任务
+                {t('myTask.card.edit')}
               </button>
               <button
                 type="button"
@@ -193,7 +195,7 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
                 }}
                 className={myTaskCardMenuItemClass(true)}
               >
-                删除任务
+                {t('myTask.card.delete')}
               </button>
             </div>
           ) : null}
@@ -208,7 +210,7 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
           {workflowId && (
             <span className={myTaskWorkflowBadgeClass}>
               <svg className="w-[11px] h-[11px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="6" cy="6" r="2.1" /><circle cx="18" cy="18" r="2.1" /><path d="M8 6h6.5a3 3 0 0 1 3 3v6.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              工作流
+              {t('myTask.card.workflowBadge')}
             </span>
           )}
         </h3>

@@ -22,11 +22,11 @@ export const assistantChatCardBgStreaming = cn(
 );
 
 /**
- * 用户消息气泡（MasterGo 8:3912）：浅色 Grey-3 #F0F2F5；暗色 muted 层级，与 assistant 白/渐变卡区分。
+ * 用户消息气泡（chat-interaction-style-spec §4.1）：#F0F2F5、圆角 12px 0 12px 12px、内距 8px。
  * 使用位置：ChatMessage MessageBubble、对话列表用户侧。
  */
 export const userChatBubbleSurfaceClass = cn(
-  'rounded-xl bg-[#F0F2F5] p-3 text-foreground shadow-none',
+  'rounded-xl rounded-tr-none bg-[#F0F2F5] p-2 text-foreground shadow-none',
   'dark:bg-muted dark:shadow-none',
 );
 
@@ -319,7 +319,7 @@ export const stoSplitChatCardClass = cn(
 /** 三栏模式：左栏卡片外层（贴满分割面板；内层对话仍用 page/home 限宽壳居中） */
 export const stoSplitChatPaneCardWrapClass = cn(
   stoSplitChatCardClass,
-  'flex min-h-0 min-w-0 flex-1 flex-col items-center',
+  'flex min-h-0 min-w-0 w-full flex-1 flex-col',
 );
 
 export type StoChatColumnVariant = 'page' | 'home';
@@ -345,23 +345,50 @@ export function stoChatColumnClass(variant: StoChatColumnVariant, isSplit = fals
 }
 
 /**
- * 三栏对话区消息列表滚动区。
+ * 对话列内居中阅读轨（消息 / 输入 / 底栏共用）：限宽 + 水平内距，不含滚动。
+ * 滚动条挂在 {@link stoChatScrollPaneClass}，贴内容列右缘而非阅读轨内。
+ */
+export function stoChatColumnContentTrackClass(
+  variant: StoChatColumnVariant,
+  isSplit = false,
+): string {
+  return cn(
+    variant === 'home' ? stoChatShellHomeColumnMaxClass : stoChatShellPageColumnMaxClass,
+    'w-full px-6',
+    isSplit && 'min-w-0',
+  );
+}
+
+/**
+ * 对话消息列表滚动区：铺满内容列宽，滚动条贴列右缘。
+ */
+export const stoChatScrollPaneClass = cn(
+  'relative z-10 min-h-0 flex-1 w-full py-4',
+  'overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
+);
+
+/**
+ * 三栏对话消息滚动区。
  * min-w-0 + overflow-x-hidden：flex 子项默认 min-width:auto 会被 WorkflowCard 等块撑破列宽，
  * 导致右侧描边贴边或被卡片壳 overflow-hidden 裁切；垂直滚动仍保留。
  */
-export const stoSplitChatScrollClass = cn(
-  'min-w-0 w-full overflow-x-hidden overflow-y-auto overscroll-y-contain',
-  '[scrollbar-gutter:stable]',
+export const stoChatScrollPaneSplitClass = cn(
+  stoChatScrollPaneClass,
+  'min-w-0 overflow-x-hidden',
 );
 
+/** @deprecated 使用 {@link stoChatScrollPaneSplitClass} */
+export const stoSplitChatScrollClass = stoChatScrollPaneSplitClass;
+
 /** 三栏对话消息列表内层：与滚动区配合 min-w-0，防止块级子项撑宽 */
-export const stoChatScrollContentClass = 'min-w-0 w-full space-y-4';
+/** 对话消息列表内层间距（规范 §2.3 消息之间 20px） */
+export const stoChatScrollContentClass = 'min-w-0 w-full space-y-5';
 
 /** 三栏左栏内容外包：split 时加卡片壳，否则仅占满 pane 并居中限宽轨 */
 export function stoSplitChatPaneContentWrapClass(isSplit: boolean): string {
   return isSplit
     ? stoSplitChatPaneCardWrapClass
-    : 'flex min-h-0 min-w-0 flex-1 flex-col items-center';
+    : 'flex min-h-0 min-w-0 w-full flex-1 flex-col';
 }
 
 /** 三栏壳层水平 inset（挂在 main，Header + split row 共用同一网格可用宽） */
@@ -1076,24 +1103,56 @@ export const workflowResultSummaryClass =
   'w-full text-left text-sm font-normal leading-6 tracking-normal text-foreground whitespace-pre-wrap break-words';
 
 /**
- * 工具调用块外层（无描边；标题行在外，入参区单独套 {@link chatToolCallContentShellClass}）
+ * 工具调用块外层（规范 §4.4：标题行 + 左竖线内容区）
  */
+/** 工具/思考块内标题↔内容间距 6px（MasterGo 4:2177 gap 6px） */
 export const chatToolCallShellClass = 'flex w-full flex-col gap-1.5';
 
-/** 工具调用标题行（与 ParamsConfirmedHeader / 参数分组标题同级，在描边容器外） */
+/** 工具调用标题行（13px #86909C，图标 16px，标题行 gap 4px） */
 export const chatToolCallHeaderBtnClass = cn(
-  'flex items-center gap-1 text-left',
-  'text-[13px] leading-5 font-normal text-muted-foreground transition-colors duration-150 hover:text-foreground',
-  'disabled:cursor-default disabled:hover:text-muted-foreground',
+  'flex w-full items-center gap-1 text-left',
+  'text-[13px] leading-5 font-normal text-[#86909C] transition-colors duration-150 hover:text-foreground',
 );
 
-/** 工具入参展开区外框（与 {@link workflowParamsSummaryCardClass} / 数据来源一致） */
-export const chatToolCallContentShellClass = workflowParamsSummaryCardClass;
+/** 工具/思考内容区：16px icon 列 + 竖线居中（MasterGo 4:2177 divider @ x≈7） */
+export const chatProcessIconRailClass = 'flex w-4 shrink-0 justify-center self-stretch';
+export const chatProcessIconRailLineClass = 'w-px bg-border';
+/** 竖线列与正文间距 4px（正文起点 16+4=20px，与标题文字对齐） */
+export const chatProcessContentTextWrapClass = 'min-w-0 flex-1 pl-1';
+/** 标题行 chevron/spinner 占位：16px 控件 + gap 4px */
+export const chatProcessContentLeadOffsetClass = 'w-5 shrink-0';
 
-/** 工具入参正文（与 {@link workflowParamsSummaryGroupContentClass} 一致，保留等宽字体便于读 JSON） */
+/** @deprecated 使用 ChatProcessContentRail；保留别名避免外部引用断裂 */
+export const chatProcessContentBorderClass = cn(
+  chatProcessContentTextWrapClass,
+);
+
+/** 工具入参展开区（竖线由 ChatProcessContentRail 渲染） */
+export const chatToolCallContentShellClass = chatProcessContentTextWrapClass;
+
+/** 工具入参正文（规范 §4.4：13px 灰色 pre-wrap） */
 export const chatToolCallInputPreClass = cn(
-  workflowParamsSummaryGroupContentClass,
-  'm-0 max-h-[min(42vh,400px)] overflow-y-auto font-mono text-xs leading-5',
+  'm-0 max-h-[min(42vh,400px)] overflow-y-auto whitespace-pre-wrap break-words',
+  'text-[13px] leading-5 font-normal text-[#86909C]',
+);
+
+/** 思考/工具汇总条标题（MasterGo 4:2177：13/20 #86909C，chevron gap 4px） */
+export const chatThinkingSummaryHeaderClass = cn(
+  'flex w-full items-center gap-1 py-1 text-left',
+  'text-[13px] leading-5 font-normal text-[#86909C]',
+  'transition-colors duration-150 hover:text-foreground',
+);
+
+/** 思考/工具过程次要正文（规范 §4.3 / §4.4 内容区） */
+export const chatProcessSecondaryTextClass = 'text-[13px] leading-5 font-normal text-[#86909C]';
+
+/** Loading 等待文案（chat-interaction-style-spec §2.1 text-muted / §4.6） */
+export const chatProcessLoadingTextClass = 'text-[13px] leading-[18px] font-normal text-[#6B737D]';
+
+/** 过程块标题行（MasterGo 4:2177：icon 16px + 文案，gap 4px） */
+export const chatProcessTitleRowClass = cn(
+  'flex items-center gap-1',
+  chatProcessSecondaryTextClass,
 );
 
 /**
@@ -1111,3 +1170,124 @@ export const workflowBuilderShell = cn(
 export const workflowMcEditorShell = cn(
   '-mx-[var(--sto-content-pad-x)] flex min-h-0 min-w-0 flex-1 flex-col',
 );
+
+/**
+ * 侧栏文字色 — MasterGo 8:46454「调整标题颜色+任务icon」（MCP goto/U0JBJlCx）。
+ * 规范见 `.cursor/rules/02-styles.mdc` §侧栏文字色。
+ */
+
+/** 侧栏正文 14/20 Regular — MCP font_4:0587 / font_4:0607 / font_8:35114（默认态） */
+export const sidebarBodyTextClass = 'text-sm font-normal leading-5';
+
+/** 侧栏正文 14/20 Medium — 仅设计稿明确标注 font_8:34896 的场景（当前侧栏默认不用，保留供后续态） */
+export const sidebarBodyTextMediumClass = 'text-sm font-medium leading-5';
+
+/** 一级正文色 Grey-10 #1D2129 — MCP paint_4:0441「文字/文本-默认」 */
+export const sidebarTextDefaultClass = 'text-[var(--sto-sidebar-text-default)]';
+
+/** 行内图标色 Grey-9 #4E5969 — MCP paint_4:0490「文字/文本-浅色-二级信息」 */
+export const sidebarTextIconClass =
+  'text-[var(--sto-sidebar-text-icon)] [&_svg]:stroke-[var(--sto-sidebar-text-icon)]';
+
+/** 三级文字 Grey-8 #86909C — MCP paint_4:0520「文字/文本-更浅-三级信息」 */
+export const sidebarTextSectionClass = 'text-[var(--sto-sidebar-text-section)]';
+
+/** 品牌头版本号 — Grey-8，MCP font_8:49208（SF Pro 11px）；相对 logo 基线下移 6px */
+export const sidebarBrandVersionClass = cn(
+  'mt-1.5 text-[11px] leading-[13px]',
+  sidebarTextSectionClass,
+);
+
+/** 侧栏字 logo 尺寸 — 暗色用 sidebar-logo-dark.svg（sidebar-brand-header.tsx 按 theme 切换） */
+export const sidebarBrandLogoClass = 'sto-sidebar-brand-logo';
+
+/** 分区标题（任务 / 最近 / 工作台）默认 Grey-8 Regular；hover/focus → Grey-10 Regular（字重不变） */
+export const sidebarSectionLabelClass = cn(
+  sidebarBodyTextClass,
+  sidebarTextSectionClass,
+  'group-hover/sto-sidebar-section-toggle:text-[var(--sto-sidebar-text-default)]',
+  'group-focus-within/sto-sidebar-section-toggle:text-[var(--sto-sidebar-text-default)]',
+);
+
+/** 分区标题 chevron — 跟随分区标题色态 */
+export const sidebarSectionChevronClass = cn(
+  'shrink-0 transition-colors',
+  sidebarTextSectionClass,
+  'group-hover/sto-sidebar-section-toggle:text-[var(--sto-sidebar-text-default)]',
+  'group-focus-within/sto-sidebar-section-toggle:text-[var(--sto-sidebar-text-default)]',
+);
+
+/**
+ * 侧栏滚动区内分区标题 sticky 壳层 — §5.6 吸顶 + 实底盖住下方列表（无描边）。
+ * 配合 stickyTopClass：任务 top-0 / 最近 top-[var(--sto-sidebar-section-sticky-h)]。
+ */
+export const sidebarSectionStickyShellClass = cn(
+  'sticky bg-[var(--sto-sidebar-bg)]',
+);
+
+/** 任务分区 sticky 锚点 */
+export const sidebarSectionStickyTopTaskClass = 'top-0 z-20';
+
+/** 最近分区 sticky 锚点 — 叠在任务标题下方 */
+export const sidebarSectionStickyTopRecentClass =
+  'top-[var(--sto-sidebar-section-sticky-h)] z-[19]';
+
+/** 侧栏滚动列表 — 层级低于 sticky 分区标题 */
+export const sidebarScrollListClass = 'relative z-0';
+
+/** 展开侧栏主导航 idle — 正文 Grey-10 + 图标 Grey-9 */
+export const sidebarNavExpandedIdleClass = cn(
+  'h-9 min-h-9 rounded-[8px] px-[10px] font-normal leading-5',
+  sidebarTextDefaultClass,
+  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
+  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+);
+
+/** 展开侧栏主导航 active — 底 #EAEAED + Regular（选中仅靠底色，字重与 idle 一致） */
+export const sidebarNavExpandedActiveClass = cn(
+  'h-9 min-h-9 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
+  'bg-[var(--sto-sidebar-nav-active-bg)]',
+  sidebarTextDefaultClass,
+  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
+  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+);
+
+/** 任务组名 / 最近会话 / 三级子项 — Grey-10 Regular */
+export const sidebarListItemTextClass = cn(sidebarBodyTextClass, sidebarTextDefaultClass);
+
+/** 三级子项 idle — Grey-10 Regular */
+export const sidebarSubitemTextIdleClass = cn(
+  sidebarListItemTextClass,
+  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+);
+
+/** 三级子项路由选中 — Grey-10 Regular + Grey-4 底（MCP 子项无加粗） */
+export const sidebarSubitemTextActiveClass = cn(
+  sidebarBodyTextClass,
+  sidebarTextDefaultClass,
+  'bg-[var(--sto-sidebar-subitem-active-bg)]',
+);
+
+/** 「展开全部 / 显示更多」等辅助链 — 12px Regular Grey-8 → hover Grey-10 */
+export const sidebarMetaLinkClass = cn(
+  'text-xs font-normal',
+  sidebarTextSectionClass,
+  'transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] hover:text-[var(--sto-sidebar-text-default)]',
+);
+
+/** 侧栏底部账号名 — MCP 8:46481 / 14px Regular（视觉与列表项一致） */
+export const sidebarFooterNameClass =
+  'truncate text-sm font-normal leading-[18px] text-[var(--sto-sidebar-footer-name)]';
+
+/** 侧栏底部账号元信息 — MCP 8:46481 #8B9099 Grey-6 / 13px Regular */
+export const sidebarFooterMetaClass =
+  'truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-meta)]';
+
+/** 侧栏底部设置图标 — Grey-9 */
+export const sidebarFooterSettingsIconClass = cn('h-5 w-5 shrink-0', sidebarTextIconClass);
+
+/** 最近会话运行中 spinner — MasterGo #5F9274 */
+export const sidebarRunningSpinnerClass = 'text-[var(--sto-sidebar-running-spinner)]';
+
+/** 侧栏未读红点 — 6×6px，destructive */
+export const sidebarUnreadDotClass = 'h-1.5 w-1.5 shrink-0 rounded-full bg-destructive';

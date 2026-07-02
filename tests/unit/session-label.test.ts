@@ -78,6 +78,30 @@ describe('resolveSessionLabel', () => {
       t,
     })).toBe('新对话');
   });
+
+  it('ignores placeholder gateway label until a derived title exists', () => {
+    expect(resolveSessionLabel({
+      key: 'agent:main:session-1',
+      label: '新对话',
+      sessionLabels: { 'agent:main:session-1': '帮我发送上海下周的天气' },
+      t,
+    })).toBe('帮我发送上海下周的天气');
+    expect(resolveSessionLabel({
+      key: 'agent:main:session-2',
+      label: '新对话',
+      sessionLabels: {},
+      t,
+    })).toBe('新对话');
+  });
+
+  it('ignores corrupted DingTalk marker in sessionLabels', () => {
+    expect(resolveSessionLabel({
+      key: 'agent:main:session-1',
+      sessionLabels: { 'agent:main:session-1': '[STOCLAW:DINGTALK_RECIPIENTS:v1]' },
+      label: '@赵志坚 今晚记得学习哦',
+      t,
+    })).toBe('@赵志坚 今晚记得学习哦');
+  });
 });
 
 describe('session label corruption cleanup', () => {
@@ -87,6 +111,22 @@ describe('session label corruption cleanup', () => {
       bad: '[Subagent Context] You are running as a…',
     };
     expect(scrubCorruptedSessionLabels(input)).toEqual({ good: '全国排污水量是多少' });
+  });
+
+  it('scrubCorruptedSessionLabels removes DingTalk recipient marker titles', () => {
+    const input = {
+      good: '@赵志坚 今晚记得学习哦',
+      bad: '[STOCLAW:DINGTALK_RECIPIENTS:v1]',
+    };
+    expect(scrubCorruptedSessionLabels(input)).toEqual({ good: '@赵志坚 今晚记得学习哦' });
+  });
+
+  it('scrubCorruptedSessionLabels removes placeholder titles', () => {
+    const input = {
+      good: '对申通快递进行每日分析',
+      bad: '新对话',
+    };
+    expect(scrubCorruptedSessionLabels(input)).toEqual({ good: '对申通快递进行每日分析' });
   });
 
   it('applyStoredSessionLabels does not overwrite with corrupted stored labels', () => {
@@ -100,6 +140,23 @@ describe('session label corruption cleanup', () => {
     const labels = { 'agent:main:subagent:child-1': '[Subagent Context] You are running as a…' };
     expect(hasUsableSessionTitle(session, labels)).toBe(false);
   });
+
+  it('hasUsableSessionTitle treats placeholder labels as missing', () => {
+    expect(hasUsableSessionTitle(
+      { key: 'agent:main:session-1', label: '新对话' },
+      {},
+    )).toBe(false);
+    expect(hasUsableSessionTitle(
+      { key: 'agent:main:session-1', label: '帮我查天气' },
+      {},
+    )).toBe(true);
+  });
+
+  it('hasUsableSessionTitle treats DingTalk marker labels as missing', () => {
+    const session = { key: 'agent:main:session-1', label: undefined, displayName: undefined };
+    const labels = { 'agent:main:session-1': '[STOCLAW:DINGTALK_RECIPIENTS:v1]' };
+    expect(hasUsableSessionTitle(session, labels)).toBe(false);
+  });
 });
 
 describe('session label persist helpers', () => {
@@ -107,5 +164,6 @@ describe('session label persist helpers', () => {
     const corrupted = (label: string) => label.includes('<!--');
     expect(shouldAutoDeriveSessionLabel('agent:main:session-1', { 'agent:main:session-1': '执行工作流A' }, corrupted)).toBe(false);
     expect(shouldAutoDeriveSessionLabel('agent:main:session-1', {}, corrupted)).toBe(true);
+    expect(shouldAutoDeriveSessionLabel('agent:main:session-1', { 'agent:main:session-1': '新对话' }, corrupted)).toBe(true);
   });
 });

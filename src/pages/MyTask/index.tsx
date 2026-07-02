@@ -6,9 +6,18 @@
  */
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useCronStore } from '@/stores/cron';
 import type { ManagedLocalTask } from '@/stores/cron';
+import { forgetOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
+import {
+  ensureTaskGroupFirstTriggeredOnRun,
+  getCachedTaskGroupFirstTriggeredMap,
+  rememberOptimisticTaskGroupFirstTriggered,
+} from '@/lib/task-group-first-trigger';
+import { resolveTaskGroupKeyFromSessionKey } from '../../../shared/task-group-key';
 import { useChatStore } from '@/stores/chat';
 import { useAgentsStore } from '@/stores/agents';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
@@ -49,7 +58,6 @@ import { RecordDetailModal } from './components/RecordDetailModal';
 /** 将 ManagedLocalTask 转换为页面 TaskViewModel */
 function managedTaskToViewModel(
   task: ManagedLocalTask,
-  workflowMap: Map<string, string>
 ): TaskViewModel {
   if (task.engineType === 'claude') {
     return {
@@ -60,7 +68,6 @@ function managedTaskToViewModel(
       enabled: task.enabled,
       nextRunAt: task.nextRunAt ?? null,
       workflowCode: task.workflowCode || undefined,
-      workflowName: task.workflowCode ? workflowMap.get(task.workflowCode) : undefined,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
       agentId: task.agentId,
@@ -84,7 +91,6 @@ function managedTaskToViewModel(
     enabled: task.enabled,
     nextRunAt: task.nextRun ?? null,
     workflowCode: task.workflowCode || undefined,
-    workflowName: task.workflowCode ? workflowMap.get(task.workflowCode) : undefined,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     agentId: task.agentId,
@@ -128,6 +134,7 @@ function resolvePreferredAgentByEngine(
 export default function MyTask() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation('tasks');
 
   // ── Cron Store（本地 Gateway + Claude 任务） ──
   const {
@@ -145,10 +152,8 @@ export default function MyTask() {
   const agents = useAgentsStore((state) => state.agents);
   const defaultAgentId = useAgentsStore((state) => state.defaultAgentId);
 
-  // ── 执行记录 + 工作流 Store ──
+  // ── 执行记录 Store ──
   const {
-    workflowOptions,
-    fetchWorkflows: fetchWorkflowOptions,
     recordsLoading,
     recordStatus,
     recordSearch,
@@ -173,7 +178,6 @@ export default function MyTask() {
   // ── 初始化加载 ──
   useEffect(() => {
     fetchJobs().catch(() => {});
-    fetchWorkflowOptions().catch(() => {});
     // 拉取官方推荐工作流模版（与 Workflow 页面逻辑一致）
     listWorkflowTemplates({ page: 1, pageSize: 100 })
       .then((result) => {
@@ -195,7 +199,7 @@ export default function MyTask() {
       .catch(() => {
         setOfficialCards([]);
       });
-  }, [fetchJobs, fetchWorkflowOptions]);
+  }, [fetchJobs]);
 
   // ── 切换到执行记录 Tab 时加载 ──
   useEffect(() => {
@@ -204,18 +208,12 @@ export default function MyTask() {
     }
   }, [activeView, fetchRecords]);
 
-  // ── 工作流 code → name 映射 ──
-  const workflowMap = useMemo(
-    () => new Map(workflowOptions.map((o) => [o.value, o.label])),
-    [workflowOptions]
-  );
-
   // ── 任务视图模型列表 ──
   const safeJobs = useMemo(() => (Array.isArray(jobs) ? jobs : []), [jobs]);
 
   const allTasks = useMemo(
-    () => safeJobs.map((j) => managedTaskToViewModel(j, workflowMap)),
-    [safeJobs, workflowMap]
+    () => safeJobs.map((j) => managedTaskToViewModel(j)),
+    [safeJobs]
   );
 
   const filteredTasks = useMemo(() => {
@@ -235,7 +233,7 @@ export default function MyTask() {
     async (task: TaskViewModel, newEnabled: boolean) => {
       try {
         await toggleJob(task.id, newEnabled, task.engineType);
-        toast.success(newEnabled ? '任务已启用' : '任务已暂停');
+        toast.success(newEnabled ? t('myTask.toast.enabled') : t('myTask.toast.paused'));
       } catch (err) {
         toast.error(String(err));
       }
@@ -245,37 +243,52 @@ export default function MyTask() {
 
   const handleTrigger = useCallback(
     async (task: TaskViewModel) => {
+      const buildDatedSessionKey = (task: TaskViewModel) => {
+        const today = new Date();
+        const y = today.getFullYear();
+        const m = String(today.getMonth() + 1).padStart(2, '0');
+        const d = String(today.getDate()).padStart(2, '0');
+        if (task.engineType === 'claude') {
+          return `claude-task:${task.id}:${y}-${m}-${d}`;
+        }
+        return `agent:${task.agentId ?? 'main'}:cron:${task.id}:${y}-${m}-${d}`;
+      };
+
+      const sessionKey = buildDatedSessionKey(task);
+      const groupKey = resolveTaskGroupKeyFromSessionKey(sessionKey);
+      const triggeredAt = Date.now();
+      flushSync(() => {
+        useChatStore.getState().markScheduledSessionActivating(sessionKey);
+        if (groupKey && !getCachedTaskGroupFirstTriggeredMap()[groupKey]) {
+          rememberOptimisticTaskGroupFirstTriggered(groupKey, triggeredAt);
+        }
+      });
       try {
         await triggerJob(task.id, task.engineType);
-        if (task.engineType === 'claude') {
-          // Build dated aggregate key instead of using result.sessionKey (which is claude-task-run:{taskId}:{runId})
-          const today = new Date();
-          const y = today.getFullYear();
-          const m = String(today.getMonth() + 1).padStart(2, '0');
-          const d = String(today.getDate()).padStart(2, '0');
-          const sessionKey = `claude-task:${task.id}:${y}-${m}-${d}`;
-          navigateToMainChatHome(navigate, location.pathname, () => {
-            useChatStore.getState().switchSession(sessionKey);
-          });
-          void useChatStore.getState().loadSessions();
-        } else {
-          // Build dated session key instead of base key to avoid adding base session back
-          const today = new Date();
-          const y = today.getFullYear();
-          const m = String(today.getMonth() + 1).padStart(2, '0');
-          const d = String(today.getDate()).padStart(2, '0');
-          const sessionKey = `agent:${task.agentId ?? 'main'}:cron:${task.id}:${y}-${m}-${d}`;
-          navigateToMainChatHome(navigate, location.pathname, () => {
-            useChatStore.getState().switchSession(sessionKey);
-          });
-          void useChatStore.getState().loadSessions();
+        if (groupKey) {
+          void ensureTaskGroupFirstTriggeredOnRun(groupKey, triggeredAt);
         }
-        toast.success('测试运行已触发');
+        forgetOptimisticDeletedSessionKey(sessionKey);
+        if (task.engineType !== 'claude' && task.agentId && task.agentId !== 'main') {
+          const today = new Date();
+          const y = today.getFullYear();
+          const m = String(today.getMonth() + 1).padStart(2, '0');
+          const d = String(today.getDate()).padStart(2, '0');
+          forgetOptimisticDeletedSessionKey(`agent:main:cron:${task.id}:${y}-${m}-${d}`);
+        }
+        navigateToMainChatHome(navigate, location.pathname, () => {
+          useChatStore.getState().switchSession(sessionKey);
+        });
+        await useChatStore.getState().loadSessions();
+        toast.success(t('myTask.toast.triggered'));
       } catch (err) {
+        useChatStore.getState().clearScheduledSessionActivating(sessionKey);
         toast.error(String(err));
+      } finally {
+        useChatStore.getState().releaseScheduledSessionActivating(sessionKey);
       }
     },
-    [triggerJob, navigate, location.pathname]
+    [triggerJob, navigate, location.pathname, t]
   );
 
   const handleSave = useCallback(
@@ -286,7 +299,7 @@ export default function MyTask() {
         if (editingJob) {
           if (editingJob.engineType === 'claude') {
             if (!selectedAgent?.id) {
-              throw new Error('所选 Claude 代理缺少工作区，无法更新本地定时任务');
+              throw new Error(t('myTask.error.claudeAgentNoWorkspaceUpdate'));
             }
             const promptTemplate = prepareDingTalkAgentTurnMessage(
               input.message,
@@ -320,11 +333,11 @@ export default function MyTask() {
               },
             });
           }
-          toast.success('任务已更新');
+          toast.success(t('myTask.toast.updated'));
         } else {
           if (input.engineType === 'claude') {
             if (!selectedAgent?.id) {
-              throw new Error('所选 Claude 代理缺少工作区，无法创建本地定时任务');
+              throw new Error(t('myTask.error.claudeAgentNoWorkspaceCreate'));
             }
             const promptTemplate = prepareDingTalkAgentTurnMessage(
               input.message,
@@ -355,7 +368,7 @@ export default function MyTask() {
               },
             });
           }
-          toast.success('任务已创建');
+          toast.success(t('myTask.toast.created'));
         }
         await fetchJobs().catch(() => {});
       } catch (err) {
@@ -383,7 +396,7 @@ export default function MyTask() {
     if (!deleteTarget) return;
     try {
       await deleteJob(deleteTarget.id, deleteTarget.engineType);
-      toast.success('任务已删除');
+      toast.success(t('myTask.toast.deleted'));
       await fetchJobs().catch(() => {});
     } catch (err) {
       toast.error(String(err));
@@ -411,7 +424,7 @@ export default function MyTask() {
           {/* 页面标题 + 新建按钮 */}
           <header className="mb-6">
             <div className={myTaskPageHeaderRowClass}>
-              <h1 className={stoPageTitleClass}>我的任务</h1>
+              <h1 className={stoPageTitleClass}>{t('myTask.pageTitle')}</h1>
               {isTasksView ? (
                 <button
                   type="button"
@@ -421,12 +434,12 @@ export default function MyTask() {
                     setCreateOpen(true);
                   }}
                 >
-                  + 新建定时任务
+                  {t('myTask.newTask')}
                 </button>
               ) : null}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              按计划自动执行任务，也可随时手动触发。在任意对话中描述你想定期做的事，即可快速创建。
+              {t('myTask.subtitle')}
             </p>
           </header>
 
@@ -457,7 +470,7 @@ export default function MyTask() {
 
           {/* ── 定时任务视图 ── */}
           {isTasksView && (
-            <section aria-label="定时任务" className="flex-1 flex flex-col">
+            <section aria-label={t('myTask.taskView.aria')} className="flex-1 flex flex-col">
               {jobsLoading && safeJobs.length === 0 ? (
                 <div className="flex items-center justify-center py-20">
                   <LoadingSpinner size="lg" />
@@ -498,14 +511,14 @@ export default function MyTask() {
 
           {/* ── 执行记录视图 ── */}
           {!isTasksView && (
-            <section aria-label="执行记录">
+            <section aria-label={t('myTask.recordView.aria')}>
               {recordsLoading ? (
                 <div className="flex items-center justify-center py-20">
                   <LoadingSpinner size="lg" />
                 </div>
               ) : currentRecords.length === 0 ? (
                 <div className="py-10 text-center text-[13px] text-muted-foreground">
-                  该状态下暂无执行记录
+                  {t('myTask.taskView.emptyNoRecords')}
                 </div>
               ) : (
                 <div className="flex flex-col gap-2.5">
@@ -532,10 +545,10 @@ export default function MyTask() {
       {/* 删除确认弹窗 */}
       <ConfirmDialog
         open={!!deleteTarget}
-        title="删除定时任务？"
-        message={`确定要删除「${deleteTarget?.name ?? ''}」吗？此操作无法撤销。`}
-        confirmLabel="删除"
-        cancelLabel="取消"
+        title={t('myTask.delete.title')}
+        message={t('myTask.delete.message', { name: deleteTarget?.name ?? '' })}
+        confirmLabel={t('myTask.delete.confirm')}
+        cancelLabel={t('myTask.delete.cancel')}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
         variant="destructive"

@@ -1,7 +1,7 @@
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   homeHubCardDescClass,
@@ -12,14 +12,21 @@ import {
   homeHubTextPrimary,
   homeHubTextSecondary,
 } from './home-hub-surface-styles';
-import { formatLocalYmd } from '@/lib/sto-task-entry-label';
-import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
+import { formatLocalYmd, formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
+import { type StoTaskId } from '@/lib/sto-tasks';
 import {
   STO_TASK_PENDING_COMPOSE_KEY,
-  STO_TASK_SUBITEM_NAV_SCROLL_END,
+  setStoTaskSubitemScrollEndIntent,
 } from '@/lib/sto-task-compose-storage';
+import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { useStoTaskSubitemsStore, stoTaskSubitemKey } from '@/stores/sto-task-subitems';
 import { useChatStore } from '@/stores/chat';
+import {
+  ensureTaskGroupFirstTriggeredOnRun,
+  getCachedTaskGroupFirstTriggeredMap,
+  rememberOptimisticTaskGroupFirstTriggered,
+} from '@/lib/task-group-first-trigger';
+import { stoBuiltinTaskGroupKey } from '../../../shared/task-group-key';
 import avatar01 from '@/assets/avatars/avatar-01.png.png';
 import avatar02 from '@/assets/avatars/avatar-02.png.png';
 import avatar03 from '@/assets/avatars/avatar-03.png.png';
@@ -121,8 +128,9 @@ type SummaryCardProps =
 function SummaryCard(props: SummaryCardProps) {
   const { avatarSeed, base, statusVariant, columns } = props;
   const disabled = props.disabled === true;
-  const { t } = useTranslation('home');
+  const { t, i18n } = useTranslation(['home', 'tasks']);
   const navigate = useNavigate();
+  const location = useLocation();
   const ensureSubitem = useStoTaskSubitemsStore((s) => s.ensureSubitem);
   const stoTaskTarget = !disabled ? (props as Extract<SummaryCardProps, { stoTaskTarget: StoTaskId }>).stoTaskTarget : null;
 
@@ -130,23 +138,31 @@ function SummaryCard(props: SummaryCardProps) {
     if (!stoTaskTarget) return;
     const entryIdToday = formatLocalYmd(new Date());
     const hadToday = useStoTaskSubitemsStore.getState().listEntries(stoTaskTarget).includes(entryIdToday);
+    const groupKey = stoBuiltinTaskGroupKey(stoTaskTarget);
+    const hadAnyEntry = useStoTaskSubitemsStore.getState().listEntries(stoTaskTarget).length > 0;
     ensureSubitem(stoTaskTarget, entryIdToday);
+    if (!hadAnyEntry && !getCachedTaskGroupFirstTriggeredMap()[groupKey]) {
+      const triggeredAt = Date.now();
+      rememberOptimisticTaskGroupFirstTriggered(groupKey, triggeredAt);
+      void ensureTaskGroupFirstTriggeredOnRun(groupKey, triggeredAt);
+    }
 
     const subitemKey = stoTaskSubitemKey(stoTaskTarget, entryIdToday);
     const sessionKey = useStoTaskSubitemsStore.getState().sessionKeyBySubitem[subitemKey];
     if (!sessionKey) return;
 
-    const cardTitle = t(`summary.${base}.title`);
+    const materialTitle = t('tasks:sidebarMaterialTitle', {
+      date: formatMaterialDateFromEntryId(entryIdToday, i18n.language),
+      defaultValue: `${entryIdToday} materials`,
+    });
     const chat = useChatStore.getState();
     if (!chat.sessions.some((session) => session.key === sessionKey)) {
       useChatStore.setState((state) => ({
-        sessions: [...state.sessions, { key: sessionKey, label: cardTitle }],
+        sessions: [...state.sessions, { key: sessionKey, label: materialTitle }],
       }));
     }
-    chat.renameSession(sessionKey, cardTitle);
-    chat.switchSession(sessionKey);
+    chat.renameSession(sessionKey, materialTitle);
 
-    const path = taskDetailPath(stoTaskTarget, entryIdToday);
     if (!hadToday) {
       try {
         sessionStorage.setItem(
@@ -156,11 +172,14 @@ function SummaryCard(props: SummaryCardProps) {
       } catch {
         /* ignore quota */
       }
-      navigate(path);
     } else {
-      navigate(path, { state: { [STO_TASK_SUBITEM_NAV_SCROLL_END]: true } });
+      setStoTaskSubitemScrollEndIntent(stoTaskTarget, entryIdToday);
     }
-  }, [base, ensureSubitem, navigate, stoTaskTarget, t]);
+
+    navigateToMainChatHome(navigate, location.pathname, () => {
+      useChatStore.getState().switchSession(sessionKey);
+    });
+  }, [base, ensureSubitem, i18n.language, location.pathname, navigate, stoTaskTarget, t]);
 
   const p = `summary.${base}` as const;
   const bodyCaption = t(`${p}.bodyCaption`, { defaultValue: '' }).trim();

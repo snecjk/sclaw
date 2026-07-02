@@ -3,7 +3,7 @@ import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
 import { ChatMessage } from './ChatMessage';
 import { appendWorkflowCardBlockToMessage, sessionHasParamsConfirmedWorkflowForRun } from '@/lib/workflow-card-injection';
-import { mergeThinkingTimelines, pickAssistantReplyMessage } from './chat-display';
+import { mergeThinkingTimelines, pickAssistantReplyMessage, findLastUserMessage } from './chat-display';
 import {
   extractDingTalkSentPreviews,
   stripEchoedDingTalkSentBodiesFromAssistantReply,
@@ -35,6 +35,7 @@ export interface ActiveTurnStream {
   streamingTools: StreamingTool[];
   isConnecting: boolean;
   isProcessing: boolean;
+  isStillExecuting?: boolean;
 }
 
 interface AssistantTurnMessageProps {
@@ -50,6 +51,57 @@ interface AssistantTurnMessageProps {
   onEditMessage?: (text: string) => void;
 }
 
+function normalizeMessageRole(role: unknown): string {
+  return String(role ?? '').toLowerCase();
+}
+
+/** Skip tool_result rows; they are merged into the turn via turnToolResults for display. */
+function isToolResultMessage(role: unknown): boolean {
+  const normalized = normalizeMessageRole(role);
+  return normalized === 'toolresult' || normalized === 'tool_result';
+}
+
+/**
+ * During an active run, build the thinking/tool timeline from live session messages
+ * (plus the in-flight stream buffer). Promoted turnMessages are tool_result snapshots
+ * and lag behind; pickTimelineSourceMessages can also fold away stream-only updates.
+ */
+function collectActiveTurnStreamSources(
+  sessionMessages: RawMessage[],
+  turnMessages: RawMessage[],
+  precedingUserMessage: RawMessage | null,
+  activeStream: ActiveTurnStream,
+): RawMessage[] {
+  const anchorUser = precedingUserMessage ?? findLastUserMessage(sessionMessages);
+  let startIndex = 0;
+  if (anchorUser) {
+    const byId = anchorUser.id
+      ? sessionMessages.findIndex((message) => message.id === anchorUser.id)
+      : -1;
+    startIndex = byId >= 0 ? byId + 1 : sessionMessages.indexOf(anchorUser) + 1;
+  }
+
+  const sources: RawMessage[] = [];
+  if (startIndex > 0) {
+    for (let i = startIndex; i < sessionMessages.length; i += 1) {
+      const message = sessionMessages[i];
+      if (normalizeMessageRole(message.role) === 'user') break;
+      if (isToolResultMessage(message.role)) continue;
+      sources.push(message);
+    }
+  }
+
+  if (sources.length === 0) {
+    sources.push(...turnMessages);
+  }
+
+  if (activeStream.streamMessage) {
+    sources.push(activeStream.streamMessage);
+  }
+
+  return sources;
+}
+
 export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   turnMessages,
   turnToolResults = [],
@@ -62,13 +114,17 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   onCreateScheduledTask,
   onEditMessage,
 }: AssistantTurnMessageProps) {
+  const sessionMessages = useChatStore((s) => s.messages);
+
   const streamSources = useMemo(() => {
-    const sources = [...turnMessages];
-    if (activeStream?.streamMessage) {
-      sources.push(activeStream.streamMessage);
-    }
-    return sources;
-  }, [turnMessages, activeStream]);
+    if (!activeStream) return turnMessages;
+    return collectActiveTurnStreamSources(
+      sessionMessages,
+      turnMessages,
+      precedingUserMessage,
+      activeStream,
+    );
+  }, [sessionMessages, turnMessages, precedingUserMessage, activeStream]);
 
   const mergedTimeline = useMemo(
     () => (showThinking ? mergeThinkingTimelines(streamSources) : []),
@@ -78,6 +134,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   const isStreaming = !!activeStream;
   const isConnecting = activeStream?.isConnecting ?? false;
   const isProcessing = activeStream?.isProcessing ?? false;
+  const isStillExecuting = activeStream?.isStillExecuting ?? false;
   const streamingTools = activeStream?.streamingTools ?? [];
   const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
 
@@ -95,7 +152,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     (mergedTimeline.length > 0 ||
       streamingTools.length > 0 ||
       isConnecting ||
-      isProcessing);
+      isProcessing ||
+      isStillExecuting);
 
   const replyMessage = useMemo(() => {
     const fromHistory = pickAssistantReplyMessage(turnMessages);
@@ -168,8 +226,6 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     ? extractText(replyDisplayMessage).trim().length > 0
     : false;
 
-  const sessionMessages = useChatStore((s) => s.messages);
-
   const chatDisplayMessage = useMemo(() => {
     if (!replyDisplayMessage) return null;
     if (extractWorkflowCard(replyDisplayMessage)) return replyDisplayMessage;
@@ -189,6 +245,21 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     chatDisplayMessage && extractWorkflowCard(chatDisplayMessage)
   );
 
+  const replyTimestamp = useMemo(() => {
+    if (chatDisplayMessage?.timestamp != null) return chatDisplayMessage.timestamp;
+    for (let i = turnMessages.length - 1; i >= 0; i -= 1) {
+      const ts = turnMessages[i]?.timestamp;
+      if (ts != null) return ts;
+    }
+    return precedingUserMessage?.timestamp;
+  }, [chatDisplayMessage, turnMessages, precedingUserMessage]);
+
+  const chatDisplayMessageWithTimestamp = useMemo(() => {
+    if (!chatDisplayMessage) return null;
+    if (chatDisplayMessage.timestamp != null || replyTimestamp == null) return chatDisplayMessage;
+    return { ...chatDisplayMessage, timestamp: replyTimestamp };
+  }, [chatDisplayMessage, replyTimestamp]);
+
   const hasPreambleMessages = preambleMessages.length > 0;
 
   if (!showThinkingPanel && !replyDisplayHasText && !hasDingTalkSentPreview && !hasPreambleMessages && !chatDisplayHasWorkflowCard) {
@@ -201,14 +272,16 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       isStreaming={isStreaming}
       isConnecting={isConnecting}
       isProcessing={isProcessing}
+      isStillExecuting={isStillExecuting}
       streamingTools={streamingTools}
+      hasReplyBody={replyDisplayHasText}
       connectingLabelKey={connectingLabelKey}
     />
   ) : null;
 
-  if (((replyDisplayHasText || chatDisplayHasWorkflowCard) && chatDisplayMessage) || hasPreambleMessages) {
+  if (((replyDisplayHasText || chatDisplayHasWorkflowCard) && chatDisplayMessageWithTimestamp) || hasPreambleMessages) {
     return (
-      <div className="group flex w-full flex-col gap-2" data-chat-message-role="assistant">
+      <div className="flex w-full flex-col gap-4" data-chat-message-role="assistant">
         {thinkingPanelEl}
         {hasDingTalkSentPreview ? (
           <DingTalkSentPreview previews={dingTalkSentPreviews} />
@@ -224,15 +297,16 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
             onEditMessage={onEditMessage}
             hideAvatar
             hideThinkingPanel
+            suppressToolCards={showThinking}
           />
         ))}
         {replyDisplayHasText || chatDisplayHasWorkflowCard ? (
-          chatDisplayMessage ? (
+          chatDisplayMessageWithTimestamp ? (
           <ChatMessage
-            message={chatDisplayMessage}
+            message={chatDisplayMessageWithTimestamp}
             showThinking={false}
-            isSearchMatch={!!chatDisplayMessage.id && !!matchedMessageIds?.has(chatDisplayMessage.id)}
-            isSearchActive={!!chatDisplayMessage.id && chatDisplayMessage.id === activeMessageId}
+            isSearchMatch={!!chatDisplayMessageWithTimestamp.id && !!matchedMessageIds?.has(chatDisplayMessageWithTimestamp.id)}
+            isSearchActive={!!chatDisplayMessageWithTimestamp.id && chatDisplayMessageWithTimestamp.id === activeMessageId}
             isStreaming={isStreaming && replyDisplayHasText}
             streamingTools={isStreaming ? streamingTools : []}
             onPreviewFile={onPreviewFile}
@@ -240,6 +314,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
             onEditMessage={onEditMessage}
             hideAvatar
             hideThinkingPanel
+            suppressToolCards={showThinking}
           />
           ) : null
         ) : null}
@@ -251,7 +326,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
   if (hasDingTalkSentPreview) {
     return (
-      <div className="group flex w-full flex-col gap-2" data-chat-message-role="assistant">
+      <div className="flex w-full flex-col gap-4" data-chat-message-role="assistant">
         {thinkingPanelEl}
         <DingTalkSentPreview previews={dingTalkSentPreviews} />
       </div>
@@ -259,7 +334,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   }
 
   return (
-    <div className="group w-full" data-chat-message-role="assistant">
+    <div className="w-full" data-chat-message-role="assistant">
       {thinkingPanelEl}
     </div>
   );

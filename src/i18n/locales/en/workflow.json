@@ -55,6 +55,7 @@
     "delete": "Delete workflow",
     "noSchedule": "No schedule",
     "noScheduleDraft": "Schedule not set",
+    "createFromTemplate": "Create from template",
     "noDescription": "No description"
   },
   "detail": {

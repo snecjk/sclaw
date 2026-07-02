@@ -225,13 +225,23 @@ export function mergeOptimisticUserIntoHistory(
     userMessageAt: number | null;
     sending: boolean;
     sessionKey?: string;
+    /** Fallback when switchSession cleared messages[] but runtime still holds the optimistic user. */
+    cachedOptimistic?: RawMessage | null;
   },
 ): RawMessage[] {
-  const { userMessageAt, sending, sessionKey } = options;
+  const { userMessageAt, sending, sessionKey, cachedOptimistic } = options;
   if (!userMessageAt) return enrichedMessages;
 
-  const optimistic = [...currentMessages].reverse().find(
+  const optimisticFromMessages = [...currentMessages].reverse().find(
     (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMessageAt) < OPTIMISTIC_SEND_WINDOW_MS,
+  );
+  const optimistic = optimisticFromMessages ?? (
+    cachedOptimistic
+    && cachedOptimistic.role === 'user'
+    && cachedOptimistic.timestamp
+    && Math.abs(toMs(cachedOptimistic.timestamp) - userMessageAt) < OPTIMISTIC_SEND_WINDOW_MS
+      ? cachedOptimistic
+      : undefined
   );
   const historyEcho = optimistic
     ? findHistoryUserEcho(enrichedMessages, optimistic, userMessageAt)

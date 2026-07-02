@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { DingTalkMentionEditor, type DingTalkMentionEditorHandle } from '@/components/dingtalk/DingTalkMentionEditor';
 import { DingTalkMentionPopover } from '@/components/dingtalk/DingTalkMentionPopover';
@@ -20,6 +21,7 @@ export function DingTalkRecipientField({
   disabled = false,
   className,
 }: DingTalkRecipientFieldProps) {
+  const { t } = useTranslation('tasks');
   const [mentionTrigger, setMentionTrigger] = useState<ActiveMentionTrigger | null>(null);
   const mentionEditorRef = useRef<DingTalkMentionEditorHandle>(null);
   const isComposingRef = useRef(false);
@@ -136,7 +138,7 @@ export function DingTalkRecipientField({
           />
           <DingTalkMentionEditor
             ref={mentionEditorRef}
-            placeholder="输入 @ 搜索联系人和群，可多选"
+            placeholder={t('myTask.createModal.recipientsPlaceholder')}
             disabled={disabled}
             removableMentions
             className="min-h-[28px] max-h-[120px] text-[13px] leading-6"
@@ -153,7 +155,7 @@ export function DingTalkRecipientField({
         </div>
       </div>
       <p className="text-[11.5px] text-muted-foreground mt-1">
-        任务执行完成后，结果将自动发送给选中的对象
+        {t('myTask.createModal.recipientsHint')}
       </p>
     </div>
   );

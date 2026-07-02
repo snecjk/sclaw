@@ -2,6 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { access, appendFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { getClaudeScheduledTasksDir } from '../utils/paths';
+import { filterDeletedSessions } from '../utils/scheduled-task-poller-store';
+import { reviveClaudeTaskDatedExecutionSession } from '../utils/revive-deleted-execution-session';
+import { buildFirstTriggeredClaudeSessionPlaceholders } from '../utils/ensure-dated-execution-session';
+import { listTaskGroupFirstTriggeredAt } from '../utils/task-group-first-trigger-store';
 import type {
   ClaudeScheduledTaskDefinition,
   ClaudeScheduledTaskRunRecord,
@@ -20,7 +24,7 @@ export interface ClaudeScheduledTaskSessionListItem {
 
 export interface ClaudeScheduledTaskSessionMessage {
   id: string;
-  role: 'assistant' | 'system';
+  role: 'assistant' | 'system' | 'user';
   content: string;
   timestamp: number;
 }
@@ -101,7 +105,9 @@ function findSessionEntry(store: SessionStore, sessionKey: string): SessionStore
   }
 
   if (Array.isArray(store.sessions)) {
-    const entry = store.sessions.find((item) => item.key === sessionKey || item.sessionKey === sessionKey);
+    const entry = store.sessions.find(
+      (item) => item.key === sessionKey || item.sessionKey === sessionKey
+    );
     if (entry?.sessionId && entry.sessionFile) {
       return {
         sessionId: entry.sessionId,
@@ -117,7 +123,7 @@ function findSessionEntry(store: SessionStore, sessionKey: string): SessionStore
 async function createSummarySessionEntry(
   taskId: string,
   sessionKey: string,
-  taskName: string,
+  taskName: string
 ): Promise<SessionStoreEntry> {
   const sessionId = randomUUID();
   const sessionFile = join(getTaskSessionsDir(taskId), `${sessionId}.jsonl`);
@@ -144,7 +150,7 @@ async function createSummarySessionEntry(
 }
 
 async function ensureSummarySession(
-  definition: ClaudeScheduledTaskDefinition,
+  definition: ClaudeScheduledTaskDefinition
 ): Promise<SessionStoreEntry> {
   const sessionKey = buildClaudeTaskSummarySessionKey(definition.id);
   const store = await readSessionStore(definition.id);
@@ -166,7 +172,7 @@ async function ensureSummarySession(
  */
 async function ensureDatedSession(
   definition: ClaudeScheduledTaskDefinition,
-  date: string,
+  date: string
 ): Promise<SessionStoreEntry> {
   const sessionKey = buildClaudeTaskDatedSessionKey(definition.id, date);
   const store = await readSessionStore(definition.id);
@@ -180,6 +186,22 @@ async function ensureDatedSession(
     }
   }
   return createSummarySessionEntry(definition.id, sessionKey, definition.name);
+}
+
+/** Create dated Claude session placeholder so sidebar survives refresh before run completes. */
+export async function ensureClaudeDatedExecutionSessionPlaceholder(
+  taskId: string,
+  taskName: string,
+  date?: string,
+): Promise<void> {
+  const dateStr = date ?? (() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  })();
+  await ensureDatedSession({ id: taskId, name: taskName } as ClaudeScheduledTaskDefinition, dateStr);
 }
 
 function normalizeTimestamp(value: unknown): number | undefined {
@@ -232,7 +254,7 @@ function formatRunMeta(run: ClaudeScheduledTaskRunRecord): string {
 
 export async function appendClaudeScheduledTaskSummaryRun(
   definition: ClaudeScheduledTaskDefinition,
-  run: ClaudeScheduledTaskRunRecord,
+  run: ClaudeScheduledTaskRunRecord
 ): Promise<void> {
   // Determine the date from the run's scheduled time (or startedAt as fallback)
   const runDateStr = run.scheduledFor ?? run.startedAt ?? new Date().toISOString();
@@ -242,15 +264,26 @@ export async function appendClaudeScheduledTaskSummaryRun(
   const d = String(runDate.getDate()).padStart(2, '0');
   const dateStr = `${y}-${m}-${d}`;
 
+  await reviveClaudeTaskDatedExecutionSession(definition.id, dateStr);
+
   // Write to both the base summary session AND the dated aggregate session
   const summarySession = await ensureSummarySession(definition);
   const datedSession = await ensureDatedSession(definition, dateStr);
 
-  const now = run.completedAt ?? run.startedAt ?? new Date().toISOString();
+  const startedAt = run.startedAt ?? new Date().toISOString();
+  const completedAt = run.completedAt ?? run.startedAt ?? new Date().toISOString();
   const lines = [
     JSON.stringify({
       type: 'message',
-      timestamp: now,
+      timestamp: startedAt,
+      message: {
+        role: 'user',
+        content: definition.promptTemplate,
+      },
+    }),
+    JSON.stringify({
+      type: 'message',
+      timestamp: completedAt,
       message: {
         role: 'assistant',
         content: formatRunSummary(run),
@@ -258,7 +291,7 @@ export async function appendClaudeScheduledTaskSummaryRun(
     }),
     JSON.stringify({
       type: 'message',
-      timestamp: now,
+      timestamp: completedAt,
       message: {
         role: 'system',
         content: formatRunMeta(run),
@@ -270,7 +303,9 @@ export async function appendClaudeScheduledTaskSummaryRun(
   await appendFile(datedSession.sessionFile, content, 'utf8');
 }
 
-export async function listClaudeScheduledTaskSummarySessions(): Promise<ClaudeScheduledTaskSessionListItem[]> {
+export async function listClaudeScheduledTaskSummarySessions(): Promise<
+  ClaudeScheduledTaskSessionListItem[]
+> {
   const sessionsRoot = join(getClaudeScheduledTasksDir(), 'sessions');
   const { stat } = await import('node:fs/promises');
   const items: ClaudeScheduledTaskSessionListItem[] = [];
@@ -324,8 +359,10 @@ export async function listClaudeScheduledTaskSummarySessions(): Promise<ClaudeSc
           }
           items.push({
             key,
-            label: (typeof entry.label === 'string' ? entry.label : '') || `Claude 定时任务 ${taskId}`,
-            displayName: (typeof entry.label === 'string' ? entry.label : '') || `Claude 定时任务 ${taskId}`,
+            label:
+              (typeof entry.label === 'string' ? entry.label : '') || `Claude 定时任务 ${taskId}`,
+            displayName:
+              (typeof entry.label === 'string' ? entry.label : '') || `Claude 定时任务 ${taskId}`,
             sessionFile: String(entry.sessionFile),
             updatedAt,
             engineType: 'claude',
@@ -364,12 +401,31 @@ export async function listClaudeScheduledTaskSummarySessions(): Promise<ClaudeSc
   }
 
   items.sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0));
-  return items;
+
+  const taskNamesById = new Map<string, string>();
+  for (const item of items) {
+    const dated = item.key.match(/^claude-task:([^:]+):\d{4}-\d{2}-\d{2}$/);
+    if (dated && item.displayName?.trim()) {
+      taskNamesById.set(dated[1] ?? '', item.displayName.trim());
+    }
+  }
+  const firstTriggered = await listTaskGroupFirstTriggeredAt();
+  const existingKeys = new Set(items.map((item) => item.key));
+  for (const placeholder of buildFirstTriggeredClaudeSessionPlaceholders(firstTriggered, existingKeys, taskNamesById)) {
+    items.push({
+      ...placeholder,
+      sessionFile: '',
+      engineType: 'claude',
+    });
+  }
+  items.sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0));
+
+  return filterDeletedSessions(items);
 }
 
 export async function readClaudeScheduledTaskSessionHistory(
   sessionKey: string,
-  limit = 100,
+  limit = 100
 ): Promise<ClaudeScheduledTaskSessionMessage[]> {
   // 支持 claude-task:{taskId}（汇总会话）、claude-task:{taskId}:{YYYY-MM-DD}（按天聚合）和 claude-task-run:{taskId}:{runId}（运行会话）三种格式
   let taskId: string;
@@ -421,7 +477,11 @@ export async function readClaudeScheduledTaskSessionHistory(
       const message = record.message as Record<string, unknown> | undefined;
       const role = message?.role;
       const content = message?.content;
-      if ((role !== 'assistant' && role !== 'system') || typeof content !== 'string' || !content.trim()) {
+      if (
+        (role !== 'assistant' && role !== 'system' && role !== 'user') ||
+        typeof content !== 'string' ||
+        !content.trim()
+      ) {
         continue;
       }
       messages.push({
@@ -436,22 +496,38 @@ export async function readClaudeScheduledTaskSessionHistory(
   }
 
   messages.sort((left, right) => left.timestamp - right.timestamp);
-  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.min(messages.length, Math.floor(limit)) : messages.length;
+  const effectiveLimit =
+    Number.isFinite(limit) && limit > 0
+      ? Math.min(messages.length, Math.floor(limit))
+      : messages.length;
   return messages.slice(-effectiveLimit);
 }
 
-export async function deleteClaudeScheduledTaskSummarySession(sessionKey: string): Promise<void> {
+function resolveClaudeTaskDeleteTarget(sessionKey: string): { taskId: string; effectiveSessionKey: string } {
   if (!sessionKey.startsWith('claude-task:')) {
     throw new Error(`Unsupported Claude scheduled task session key: ${sessionKey}`);
   }
-
-  const taskId = sessionKey.slice('claude-task:'.length);
+  const rest = sessionKey.slice('claude-task:'.length);
+  const parts = rest.split(':');
+  if (parts.length === 2 && /^\d{4}-\d{2}-\d{2}$/.test(parts[1] ?? '')) {
+    const taskId = parts[0]?.trim();
+    if (!taskId) {
+      throw new Error(`Invalid Claude scheduled task session key: ${sessionKey}`);
+    }
+    return { taskId, effectiveSessionKey: sessionKey };
+  }
+  const taskId = rest.trim();
   if (!taskId) {
     throw new Error(`Invalid Claude scheduled task session key: ${sessionKey}`);
   }
+  return { taskId, effectiveSessionKey: sessionKey };
+}
+
+export async function deleteClaudeScheduledTaskSummarySession(sessionKey: string): Promise<void> {
+  const { taskId, effectiveSessionKey } = resolveClaudeTaskDeleteTarget(sessionKey);
 
   const store = await readSessionStore(taskId);
-  const entry = findSessionEntry(store, sessionKey);
+  const entry = findSessionEntry(store, effectiveSessionKey);
   if (!entry) {
     return;
   }
@@ -464,9 +540,11 @@ export async function deleteClaudeScheduledTaskSummarySession(sessionKey: string
     // Non-fatal: still remove store mapping.
   }
 
-  delete store[sessionKey];
+  delete store[effectiveSessionKey];
   if (Array.isArray(store.sessions)) {
-    store.sessions = store.sessions.filter((item) => item.key !== sessionKey && item.sessionKey !== sessionKey);
+    store.sessions = store.sessions.filter(
+      (item) => item.key !== sessionKey && item.sessionKey !== sessionKey
+    );
   }
   await writeSessionStore(taskId, store);
 }

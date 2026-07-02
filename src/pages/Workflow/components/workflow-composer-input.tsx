@@ -1,8 +1,8 @@
 /**
  * WorkflowComposerInput - 工作流列表页专用输入框
  *
- * 与首页共用 DingTalkMentionEditor + 同款圆角壳层样式，
- * 但底部无工具栏（附件 / @提及 / Agent / Workflow 按钮），仅保留右下角发送箭头。
+ * 使用普通 textarea 替代 DingTalkMentionEditor，保持同款视觉样式，
+ * 但无 @提及 / 工作流引用等 contentEditable 功能，避免与参数浮层冲突。
  * 使用位置：src/pages/Workflow/components/workflow-composer.tsx
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -14,19 +14,10 @@ import {
   chatComposerHomeShellDragOverClass,
   chatComposerHomeShellIdleClass,
 } from '@/lib/surfaces';
-import {
-  DingTalkMentionEditor,
-  type DingTalkMentionEditorHandle,
-} from '@/components/dingtalk/DingTalkMentionEditor';
 import { Button } from '@/components/ui/button';
-import type { MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
-import type { DingTalkMention } from '@/types/dingtalk-mention';
 
 export interface WorkflowComposerInputProps {
-  onSend: (
-    text: string,
-    dingTalkMentions?: DingTalkMention[],
-  ) => void;
+  onSend: (text: string) => void;
   disabled?: boolean;
   placeholder?: string;
   seedText?: string;
@@ -41,42 +32,53 @@ export function WorkflowComposerInput({
   className,
 }: WorkflowComposerInputProps) {
   const { t } = useTranslation('chat');
-  const editorRef = useRef<DingTalkMentionEditorHandle>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isComposingRef = useRef(false);
-  const [composerSnapshot, setComposerSnapshot] = useState<MentionComposerSnapshot>({
-    plainText: '',
-    mentions: [],
-    isEmpty: true,
-  });
+  const [value, setValue] = useState(() => seedText ?? '');
   const [dragOver, setDragOver] = useState(false);
 
-  const canSend = !composerSnapshot.isEmpty && composerSnapshot.plainText.trim().length > 0 && !disabled;
+  const canSend = value.trim().length > 0 && !disabled;
 
-  // Focus editor on mount
+  // Focus textarea on mount
   useEffect(() => {
     if (!disabled) {
-      editorRef.current?.focus();
+      textareaRef.current?.focus();
     }
   }, [disabled]);
 
-  // Apply seedText when it changes
+  // Auto-resize textarea height (mirrors DingTalkMentionEditor behavior)
+  const resizeTextarea = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, []);
+
   useEffect(() => {
-    if (!seedText) return;
-    editorRef.current?.setPlainText(seedText);
-    editorRef.current?.focus();
-  }, [seedText]);
+    resizeTextarea();
+  }, [resizeTextarea, value]);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setValue(e.target.value);
+  }, []);
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
-    const snapshot = editorRef.current?.getSnapshot() ?? composerSnapshot;
-    const textToSend = snapshot.plainText.trim();
-    const mentionsToSend = snapshot.mentions.length > 0 ? snapshot.mentions : undefined;
-    editorRef.current?.clear();
-    onSend(textToSend, mentionsToSend);
-  }, [canSend, composerSnapshot, onSend]);
+    const textToSend = value.trim();
+    setValue('');
+    // Reset textarea height after clearing
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el) {
+        el.style.height = 'auto';
+        el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+      }
+    });
+    onSend(textToSend);
+  }, [canSend, value, onSend]);
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         const nativeEvent = e.nativeEvent as KeyboardEvent;
         if (isComposingRef.current || nativeEvent.isComposing || nativeEvent.keyCode === 229) {
@@ -86,7 +88,7 @@ export function WorkflowComposerInput({
         handleSend();
       }
     },
-    [handleSend],
+    [handleSend]
   );
 
   // Drag & drop — visual feedback only (actual file staging not needed for workflow)
@@ -107,19 +109,17 @@ export function WorkflowComposerInput({
       <div
         className={cn(
           chatComposerHomeShellClass,
-          dragOver ? chatComposerHomeShellDragOverClass : chatComposerHomeShellIdleClass,
+          dragOver ? chatComposerHomeShellDragOverClass : chatComposerHomeShellIdleClass
         )}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
       >
         {/* 编辑区：pr-10 防文字与发送按钮重叠 */}
         <div className="flex min-h-0 flex-1 flex-col pr-10 pb-2 pl-4 pt-3">
-          <DingTalkMentionEditor
-            ref={editorRef}
-            placeholder={placeholder ?? t('composer.messagePlaceholder', { agent: '' })}
-            disabled={disabled}
-            seedText={seedText}
-            onSnapshotChange={setComposerSnapshot}
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={handleChange}
             onKeyDown={handleKeyDown}
             onCompositionStart={() => {
               isComposingRef.current = true;
@@ -127,6 +127,19 @@ export function WorkflowComposerInput({
             onCompositionEnd={() => {
               isComposingRef.current = false;
             }}
+            placeholder={placeholder ?? t('composer.messagePlaceholder', { agent: '' })}
+            disabled={disabled}
+            rows={1}
+            className={cn(
+              // 与 DingTalkMentionEditor 同款视觉样式
+              'min-h-[42px] max-h-[200px] overflow-y-auto whitespace-pre-wrap break-words',
+              'text-[15px] leading-6 text-foreground outline-none',
+              'resize-none bg-transparent',
+              // placeholder 颜色
+              'placeholder:text-muted-foreground/55',
+              // disabled 样式
+              disabled && 'opacity-50 cursor-not-allowed'
+            )}
           />
         </div>
 
@@ -139,7 +152,7 @@ export function WorkflowComposerInput({
             'absolute bottom-2 right-3 h-[30px] w-[30px] shrink-0 rounded-[16px] border transition-all',
             canSend
               ? 'border-primary/80 bg-primary text-primary-foreground shadow-[0_6px_16px_rgba(255,111,0,0.22)] hover:bg-primary/90'
-              : 'border-black/8 bg-black/5 text-muted-foreground/55 dark:border-white/10 dark:bg-white/[0.06]',
+              : 'border-black/8 bg-black/5 text-muted-foreground/55 dark:border-white/10 dark:bg-white/[0.06]'
           )}
           variant="ghost"
           title={t('composer.send')}

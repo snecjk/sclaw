@@ -176,7 +176,7 @@
     "auth": "登录状态",
     "authenticated": "已登录",
     "notAuthenticated": "未登录",
-    "install": "授权钉钉",
+    "install": "安装钉钉 CLI",
     "reinstall": "检查并更新",
     "installing": "安装中…",
     "login": "登录钉钉",
@@ -198,7 +198,7 @@
     "autoDownloadDesc": "自动下载并安装更新",
     "status": {
       "checking": "正在检查更新...",
-      "downloading": "正在下载更新...",
+      "downloading": "正在下载更新 v{{version}} 版本",
       "available": "可用更新：v{{version}}",
       "downloaded": "准备安装：v{{version}}",
       "autoInstalling": "将在 {{seconds}} 秒后自动开始安装...",

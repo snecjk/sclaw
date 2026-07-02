@@ -2,6 +2,10 @@
  * Inject current session workflow memory into user messages so the model
  * can call execute_workflow with the correct workflowId.
  */
+import {
+  messageHasDingTalkRecipientContext,
+  stripDingTalkMentionContextForDisplay,
+} from '@/lib/dingtalk-mention-context';
 import { resolveSessionWorkflowId } from '@/lib/session-workflow-context';
 import { stripWorkflowContextForDisplay } from '@/lib/workflow-context';
 import { getLatestWorkflow, getSessionWorkflows } from '@/stores/workflow-memory';
@@ -122,7 +126,9 @@ export function stripWorkflowSessionHintForDisplay(message: string): string {
 export function deriveSessionLabelFromUserText(rawText: string): string {
   const subagentTask = extractSubagentTaskLabel(rawText);
   if (subagentTask) return subagentTask;
-  const stripped = stripWorkflowContextForDisplay(stripWorkflowSessionHintForDisplay(rawText)).trim();
+  const stripped = stripDingTalkMentionContextForDisplay(
+    stripWorkflowContextForDisplay(stripWorkflowSessionHintForDisplay(rawText)),
+  ).trim();
   if (isSubagentInjectedUserText(stripped)) return '';
   return stripped;
 }
@@ -178,11 +184,13 @@ function resolveKnownSessionLabel(
   sessions: Array<{ key: string; label?: string }>,
 ): string | undefined {
   const stored = sessionLabels[sessionKey]?.trim();
-  if (stored && !isCorruptedSessionLabel(stored)) return stored;
+  if (stored && !isCorruptedSessionLabel(stored) && !isPlaceholderSessionLabel(stored)) return stored;
 
   const session = sessions.find((entry) => entry.key === sessionKey);
   const gatewayLabel = session?.label?.trim();
-  if (gatewayLabel && !isCorruptedSessionLabel(gatewayLabel)) return gatewayLabel;
+  if (gatewayLabel && !isCorruptedSessionLabel(gatewayLabel) && !isPlaceholderSessionLabel(gatewayLabel)) {
+    return gatewayLabel;
+  }
 
   return undefined;
 }
@@ -194,7 +202,7 @@ export function deriveSessionLabelFromHistory(
   options: DeriveSessionLabelOptions = {},
 ): string | undefined {
   const gatewayLabel = options.gatewayLabel?.trim();
-  if (gatewayLabel && !isCorruptedSessionLabel(gatewayLabel)) {
+  if (gatewayLabel && !isCorruptedSessionLabel(gatewayLabel) && !isPlaceholderSessionLabel(gatewayLabel)) {
     return gatewayLabel;
   }
 
@@ -222,8 +230,32 @@ export function truncateSessionLabel(label: string, maxLength = 50): string {
   return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength)}…` : trimmed;
 }
 
+/** Drop injected/system titles before persisting to sessionLabels. */
+export function normalizeDerivedSessionLabel(label: string | undefined): string | undefined {
+  const trimmed = label?.trim();
+  if (!trimmed || isCorruptedSessionLabel(trimmed) || isPlaceholderSessionLabel(trimmed)) {
+    return undefined;
+  }
+  const truncated = truncateSessionLabel(trimmed);
+  return truncated || undefined;
+}
+
 export function isCorruptedSessionLabel(label: string): boolean {
   return label.includes('<!-- StoClaw-Workflow')
     || label.includes('## 工作流')
+    || messageHasDingTalkRecipientContext(label)
     || isSubagentContextOnlyLabel(label);
+}
+
+/** Default title before the first user message is derived — not a real session title. */
+const PLACEHOLDER_SESSION_LABELS = new Set([
+  '新对话',
+  'New Chat',
+  '新しいチャット',
+]);
+
+export function isPlaceholderSessionLabel(label: string): boolean {
+  const trimmed = label.trim();
+  if (!trimmed) return true;
+  return PLACEHOLDER_SESSION_LABELS.has(trimmed);
 }

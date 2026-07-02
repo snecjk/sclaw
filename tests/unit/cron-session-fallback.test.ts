@@ -5,9 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockConfigDir = vi.hoisted(() => ({ value: '' }));
 
-vi.mock('../../electron/utils/paths', () => ({
-  getOpenClawConfigDir: () => mockConfigDir.value,
-}));
+vi.mock('../../electron/utils/paths', async () => {
+  const actual = await vi.importActual<typeof import('../../electron/utils/paths')>('../../electron/utils/paths');
+  return {
+    ...actual,
+    getOpenClawConfigDir: () => mockConfigDir.value,
+    getClawXConfigDir: () => mockConfigDir.value,
+  };
+});
 
 describe('buildCronSessionFallbackMessages', () => {
   let tempRoot = '';

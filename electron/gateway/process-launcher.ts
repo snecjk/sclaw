@@ -4,7 +4,7 @@ import path from 'path';
 import type { GatewayLaunchContext } from './config-sync';
 import type { GatewayLifecycleState } from './process-policy';
 import { logger } from '../utils/logger';
-import { appendNodeRequireToNodeOptions } from '../utils/paths';
+import { appendNodeRequireToNodeOptions, normalizeNodeRequirePathForNodeOptions } from '../utils/paths';
 
 function resolveBundledGatewayPreloadPath(): string | null {
   const candidates = [
@@ -64,15 +64,22 @@ export async function launchGatewayProcess(options: {
   const lastSpawnSummary = `mode=${mode}, entry="${entryScript}", args="${options.sanitizeSpawnArgs(gatewayArgs).join(' ')}", cwd="${openclawDir}"`;
 
   const runtimeEnv = { ...forkEnv };
-  // Security + OpenRouter preload must apply in ALL modes (dev + production)
-  // to block upgrade/install commands inside the Gateway process.
+  // Security + DWS send normalization preload must apply in ALL modes.
+  // Packaged Electron blocks `--require` in NODE_OPTIONS (see startup-stderr.ts);
+  // utilityProcess.fork execArgv is the supported path in production builds.
+  let forkExecArgv: string[] | undefined;
   try {
     const preloadPath = ensureGatewayFetchPreload();
     if (existsSync(preloadPath)) {
-      runtimeEnv.NODE_OPTIONS = appendNodeRequireToNodeOptions(
-        runtimeEnv.NODE_OPTIONS,
-        preloadPath,
-      );
+      const requirePath = normalizeNodeRequirePathForNodeOptions(preloadPath);
+      forkExecArgv = ['--require', requirePath];
+      if (!app.isPackaged) {
+        runtimeEnv.NODE_OPTIONS = appendNodeRequireToNodeOptions(
+          runtimeEnv.NODE_OPTIONS,
+          preloadPath,
+        );
+      }
+      logger.info(`Gateway security preload enabled via execArgv: ${requirePath}`);
     }
   } catch (err) {
     logger.warn('Failed to set up Gateway security preload:', err);
@@ -83,6 +90,7 @@ export async function launchGatewayProcess(options: {
       cwd: openclawDir,
       stdio: 'pipe',
       env: runtimeEnv as NodeJS.ProcessEnv,
+      execArgv: forkExecArgv,
       serviceName: 'OpenClaw Gateway',
     });
 

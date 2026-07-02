@@ -13,7 +13,12 @@ import {
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { deleteClaudeScheduledTaskSummarySession } from '../../services/claude-scheduled-task-session-store';
-import { markSessionDeleted } from '../../utils/scheduled-task-poller-store';
+import { markSessionDeleted, listDeletedSessionKeys } from '../../utils/scheduled-task-poller-store';
+import { isOpenClawHostedTaskExecutionSessionKey } from '../../../shared/session-delete-routing';
+
+async function persistSessionDeletion(sessionKey: string): Promise<void> {
+  await markSessionDeleted(sessionKey);
+}
 
 /**
  * Clean up a session entry from agents/{agentId}/sessions/sessions.json.
@@ -149,6 +154,16 @@ export async function handleSessionRoutes(
     return true;
   }
 
+  if (url.pathname === '/api/sessions/deleted-keys' && req.method === 'GET') {
+    try {
+      const keys = await listDeletedSessionKeys();
+      sendJson(res, 200, { keys });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/sessions/delete' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ sessionKey: string; engineType?: 'openclaw' | 'claude' }>(req);
@@ -157,10 +172,14 @@ export async function handleSessionRoutes(
         sendJson(res, 400, { success: false, error: `Invalid sessionKey: ${sessionKey}` });
         return true;
       }
-      const sessionEngineType = await resolveSessionEngineType(sessionKey, body.engineType);
+      const sessionEngineType = isOpenClawHostedTaskExecutionSessionKey(sessionKey)
+        ? 'openclaw'
+        : await resolveSessionEngineType(sessionKey, body.engineType);
       if (sessionEngineType === 'claude') {
         if (sessionKey.startsWith('claude-task:')) {
           await deleteClaudeScheduledTaskSummarySession(sessionKey);
+        } else if (sessionKey.startsWith('claude-task-run:')) {
+          await deleteClaudeSessionByKey(sessionKey);
         } else {
           await deleteClaudeSessionByKey(sessionKey);
         }
@@ -168,7 +187,7 @@ export async function handleSessionRoutes(
         // (scheduled-task sessions use store[sessionKey] = entry in agents/{agentId}/sessions/sessions.json)
         await cleanupAgentSessionsJson(sessionKey);
         // Mark as deleted so virtual generators (e.g. listAllCronSessions) skip it on next refresh
-        await markSessionDeleted(sessionKey).catch(() => {});
+        await persistSessionDeletion(sessionKey);
         sendJson(res, 200, { success: true });
         return true;
       }
@@ -242,9 +261,14 @@ export async function handleSessionRoutes(
       // Remove session entry from sessions.json (both direct key and array formats)
       await cleanupAgentSessionsJson(sessionKey).catch(() => {});
       await deleteEngineSessionRegistryEntry(sessionKey).catch(() => {});
+      // Purge cron run logs / dated artifacts so virtual session generators do not recreate the row.
+      if (/^agent:[^:]+:(cron|scheduled-task):[^:]+:\d{4}-\d{2}-\d{2}$/.test(sessionKey)) {
+        const { resetDatedExecutionArtifacts } = await import('../../utils/reset-dated-execution-record');
+        await resetDatedExecutionArtifacts(sessionKey).catch(() => {});
+      }
       // Mark as deleted so virtual session generators (e.g. listAllCronSessions reading cron/runs/*.jsonl)
       // skip this key on the next refresh instead of re-generating it.
-      await markSessionDeleted(sessionKey).catch(() => {});
+      await persistSessionDeletion(sessionKey);
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

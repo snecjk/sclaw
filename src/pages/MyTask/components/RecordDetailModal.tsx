@@ -5,8 +5,25 @@
  */
 
 import { useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import type { ExecutionRecord, RecordStatus } from '../types';
+
+/** Format duration from milliseconds into a localized string */
+function formatDurationI18n(
+  durationMs: number,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (durationMs < 0) return '-';
+  if (durationMs === 0) return t('myTask.recordItem.durationLessThanOneSecond');
+  const seconds = Math.floor(durationMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remainSeconds = seconds % 60;
+  if (minutes > 0) {
+    return t('myTask.recordItem.durationMinutesSeconds', { minutes, seconds: String(remainSeconds).padStart(2, '0') });
+  }
+  return t('myTask.recordItem.durationSeconds', { seconds });
+}
 
 interface RecordDetailModalProps {
   /** 当前展示的记录，null 表示关闭 */
@@ -16,19 +33,19 @@ interface RecordDetailModalProps {
 }
 
 /** 状态 pill 配置（语义 token，亮暗色通用） */
-const STATUS_PILL: Record<RecordStatus, { label: string; icon: string; className: string }> = {
+const STATUS_PILL: Record<RecordStatus, { i18nKey: string; icon: string; className: string }> = {
   success: {
-    label: '成功',
+    i18nKey: 'myTask.recordDetail.statusPill.success',
     icon: '✓',
     className: 'bg-success/10 text-success',
   },
   failed: {
-    label: '失败',
+    i18nKey: 'myTask.recordDetail.statusPill.failed',
     icon: '✕',
     className: 'bg-destructive/10 text-destructive',
   },
   running: {
-    label: '执行中',
+    i18nKey: 'myTask.recordDetail.statusPill.running',
     icon: '',
     className: 'bg-primary/10 text-primary',
   },
@@ -45,6 +62,8 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 }
 
 export function RecordDetailModal({ record, onClose }: RecordDetailModalProps) {
+  const { t } = useTranslation('tasks');
+
   // Escape 键关闭
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -84,13 +103,13 @@ export function RecordDetailModal({ record, onClose }: RecordDetailModalProps) {
         {/* 头部 */}
         <div className="flex items-center justify-between px-5 pt-5 pb-1">
           <h2 id="record-detail-title" className="text-lg font-bold text-foreground m-0">
-            执行记录详情
+            {t('myTask.recordDetail.title')}
           </h2>
           <button
             type="button"
             onClick={onClose}
             className="px-1 text-[22px] leading-none text-muted-foreground transition-colors hover:text-foreground"
-            aria-label="关闭"
+            aria-label={t('myTask.recordDetail.closeAria')}
           >
             ×
           </button>
@@ -98,13 +117,13 @@ export function RecordDetailModal({ record, onClose }: RecordDetailModalProps) {
 
         {/* 内容 */}
         <div className="px-[22px] pt-[8px] pb-[22px]">
-          <DetailRow label="任务名称">{record.taskName}</DetailRow>
+          <DetailRow label={t('myTask.recordDetail.taskName')}>{record.taskName}</DetailRow>
 
-          <DetailRow label="关联工作流">
+          <DetailRow label={t('myTask.recordDetail.workflow')}>
             {record.workflowName || '-'}
           </DetailRow>
 
-          <DetailRow label="执行状态">
+          <DetailRow label={t('myTask.recordDetail.status')}>
             <span
               className={cn(
                 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[13px] font-medium',
@@ -112,17 +131,17 @@ export function RecordDetailModal({ record, onClose }: RecordDetailModalProps) {
               )}
             >
               {pill.icon && <span>{pill.icon}</span>}
-              {pill.label}
+              {t(pill.i18nKey)}
             </span>
           </DetailRow>
 
-          <DetailRow label="执行时间">{record.startTime}</DetailRow>
+          <DetailRow label={t('myTask.recordDetail.startTime')}>{record.startTime}</DetailRow>
 
-          <DetailRow label="执行耗时">{record.duration}</DetailRow>
+          <DetailRow label={t('myTask.recordDetail.duration')}>{formatDurationI18n(record.durationMs, t)}</DetailRow>
 
           {/* 失败原因：仅 failed 状态显示 */}
           {isFailed && (
-            <DetailRow label="失败原因">
+            <DetailRow label={t('myTask.recordDetail.failReason')}>
               <span className="text-destructive">{record.failReason}</span>
             </DetailRow>
           )}

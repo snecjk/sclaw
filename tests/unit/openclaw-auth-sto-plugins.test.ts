@@ -85,6 +85,7 @@ describe('syncStoPluginsToOpenClaw', () => {
     expect(writtenConfig.plugins.allow).toContain('sto-skill-call-monitor');
     expect(writtenConfig.plugins.allow).toContain('sto-media-understanding');
     expect(writtenConfig.plugins.allow).toContain('sto-workflow-tool');
+    expect(writtenConfig.plugins.allow).toContain('sto-distinctive-design-guard');
     expect(writtenConfig.plugins.entries['sto-workflow-tool']).toEqual({
       enabled: true,
       config: {
@@ -104,6 +105,14 @@ describe('syncStoPluginsToOpenClaw', () => {
     expect(writtenConfig.plugins.entries['sto-media-understanding']).toEqual({
       enabled: true,
       config: {},
+    });
+    expect(writtenConfig.plugins.entries['sto-distinctive-design-guard']).toEqual({
+      enabled: true,
+      config: {
+        enabled: true,
+        enforceRead: true,
+        lintEnabled: true,
+      },
     });
   });
 });

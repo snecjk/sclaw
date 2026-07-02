@@ -4,11 +4,10 @@
  * 用途：Chat / 首页会话 / 任务子项三栏左栏结构一致；
  * 双栏与三栏共用同一套列内内容宽（page 862px / home 780px）阅读轨，避免三栏时 flex stretch 撑满。
  *
- * 使用位置：src/pages/Chat、HomeMainConversation、TaskSubitemChatSurface
+ * 使用位置：src/pages/Chat、HomeMainConversation
  */
 import { cn } from '@/lib/utils';
 import {
-  stoChatColumnClass,
   stoSplitChatPaneClass,
   stoSplitChatPaneContentWrapClass,
   type StoChatColumnVariant,
@@ -27,18 +26,16 @@ export interface ChatConversationColumnProps {
 }
 
 export function ChatConversationColumn({
-  variant,
+  variant: _variant,
   isSplitLayout,
   splitGridChatClass,
   className,
   children,
 }: ChatConversationColumnProps) {
   return (
-    <div className={cn(stoSplitChatPaneClass, splitGridChatClass)}>
+    <div className={cn(stoSplitChatPaneClass, splitGridChatClass, className)}>
       <div className={stoSplitChatPaneContentWrapClass(isSplitLayout)}>
-        <div className={cn(stoChatColumnClass(variant, isSplitLayout), className)}>
-          {children}
-        </div>
+        {children}
       </div>
     </div>
   );

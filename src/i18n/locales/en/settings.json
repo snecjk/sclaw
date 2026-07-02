@@ -198,7 +198,7 @@
     "autoDownloadDesc": "Automatically download and install updates",
     "status": {
       "checking": "Checking for updates...",
-      "downloading": "Downloading update...",
+      "downloading": "Downloading update v{{version}}...",
       "available": "Update available: v{{version}}",
       "downloaded": "Ready to install: v{{version}}",
       "autoInstalling": "Installing automatically in {{seconds}}s...",

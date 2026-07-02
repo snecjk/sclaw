@@ -34,6 +34,29 @@ describe('mergeThinkingTimelines', () => {
     expect(timeline.filter((item) => item.type === 'tool')).toHaveLength(1);
   });
 
+  it('includes OpenAI tool_calls on the message when content already has thinking', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: '数据全部拿到了，我来生成报表。' },
+          { type: 'text', text: '数据全部拿到了，我来生成报表...' },
+        ],
+        tool_calls: [
+          {
+            id: 'call_write_1',
+            type: 'function',
+            function: { name: 'write', arguments: '{"path":"report.md"}' },
+          },
+        ],
+      },
+    ];
+
+    const timeline = mergeThinkingTimelines(messages);
+    expect(timeline.filter((item) => item.type === 'tool')).toHaveLength(1);
+    expect(timeline.find((item) => item.type === 'tool')?.name).toBe('write');
+  });
+
   it('keeps distinct thinking before and after a tool call', () => {
     const messages = [
       {

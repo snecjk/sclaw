@@ -38,7 +38,77 @@
     }
   },
   "myTask": {
+    "pageTitle": "My Tasks",
+    "subtitle": "Run tasks automatically on schedule or trigger them manually anytime. Describe what you want done regularly in any chat to quickly create one.",
+    "newTask": "+ New Scheduled Task",
+    "viewTabs": {
+      "tasks": "Scheduled Tasks",
+      "records": "Execution Records",
+      "aria": "Task views"
+    },
+    "taskView": {
+      "aria": "Scheduled tasks",
+      "emptyNoRecords": "No execution records in this status"
+    },
+    "recordView": {
+      "aria": "Execution records"
+    },
+    "delete": {
+      "title": "Delete scheduled task?",
+      "message": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+      "confirm": "Delete",
+      "cancel": "Cancel"
+    },
+    "toast": {
+      "enabled": "Task enabled",
+      "paused": "Task paused",
+      "triggered": "Test run triggered",
+      "updated": "Task updated",
+      "created": "Task created",
+      "deleted": "Task deleted"
+    },
+    "error": {
+      "claudeAgentNoWorkspaceUpdate": "Selected Claude agent has no workspace; cannot update local scheduled task",
+      "claudeAgentNoWorkspaceCreate": "Selected Claude agent has no workspace; cannot create local scheduled task",
+      "nameDuplicate": "Task name already exists, please use a different name"
+    },
+    "toolbar": {
+      "searchSrOnly": "Search scheduled task names",
+      "searchPlaceholder": "Search task name",
+      "sortAria": "Sort by"
+    },
+    "recordToolbar": {
+      "searchSrOnly": "Search execution record task names",
+      "searchPlaceholder": "Search task name"
+    },
+    "recordStatusNav": {
+      "aria": "Filter by execution status"
+    },
+    "empty": {
+      "searchNoMatch": "No matching tasks found",
+      "noTasks": "No scheduled tasks",
+      "noTasksDescription": "Create scheduled tasks to automate recurring AI agent work",
+      "officialAria": "Official recommended workflows",
+      "templateFallbackCategory": "Workflow template",
+      "addTemplate": "Add"
+    },
     "createModal": {
+      "editTitle": "Edit Scheduled Task",
+      "createTitle": "New Scheduled Task",
+      "subtitle": "Run tasks automatically on schedule or trigger them manually anytime. Describe what you want done regularly in any chat to quickly create one.",
+      "closeAria": "Close",
+      "nameLabel": "Task Name",
+      "namePlaceholder": "Describe your task",
+      "nameRequired": "Please enter a task name",
+      "engineLabel": "Engine",
+      "engineEditHint": "Engine is set at creation and cannot be changed when editing.",
+      "engineClaudeHint": "Creates a Claude local scheduled task that runs independently on this machine.",
+      "engineOpenclawHint": "Creates an OpenClaw local scheduled task.",
+      "workflowLabel": "Linked Workflow",
+      "workflowPlaceholder": "Select",
+      "workflowEmpty": "No workflows available",
+      "instructionsLabel": "What should S Claw do for you…",
+      "instructionsPlaceholder": "What should S Claw do for you…",
       "instructionsRequired": "Please describe what S Claw should do",
       "workflowAutoHint": "Linked workflow — description auto-generated",
       "instructionsHint": "Set the schedule above; click AI Beautify to refine the task description with the model.",
@@ -49,7 +119,85 @@
       "beautifyFallback": "Model unavailable; applied basic rule-based polish",
       "beautifySuccess": "Task description beautified",
       "beautifySuccessWithModel": "Beautified with {{model}}",
-      "beautifyFailed": "AI beautify failed; please try again"
+      "beautifyFailed": "AI beautify failed; please try again",
+      "scheduleLabel": "Schedule",
+      "recipientsLabel": "Recipients",
+      "recipientsPlaceholder": "Type @ to search contacts and groups (multi-select)",
+      "recipientsHint": "Results will be automatically sent to selected recipients when the task finishes",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "save": "Save",
+      "buildWorkflowInstructions": "Run workflow with id: {{workflowCode}} [{{label}}]",
+      "buildWorkflowInstructionsNoLabel": "Run workflow with id: {{workflowCode}}"
+    },
+    "card": {
+      "toggleAria": "Enable or pause task",
+      "moreAria": "More",
+      "runNow": "Run now",
+      "running": "Running…",
+      "edit": "Edit task",
+      "delete": "Delete task",
+      "workflowBadge": "Workflow",
+      "nextRunNow": "Running soon",
+      "nextRunMinutes": "Next run in {{count}} min",
+      "nextRunHours": "Next run in {{count}} hr",
+      "nextRunDays": "Next run in {{count}} day(s)"
+    },
+    "schedule": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "weekday": {
+        "0": "Sun",
+        "1": "Mon",
+        "2": "Tue",
+        "3": "Wed",
+        "4": "Thu",
+        "5": "Fri",
+        "6": "Sat"
+      },
+      "everyDay": "Every day",
+      "workday": "Workdays",
+      "pleaseSelect": "Select",
+      "monthDay": "Day {{day}}"
+    },
+    "sort": {
+      "createdDesc": "Created (latest)",
+      "createdAsc": "Created (earliest)",
+      "nameAsc": "Name A-Z",
+      "nameDesc": "Name Z-A"
+    },
+    "recordStatus": {
+      "running": "Running",
+      "success": "Succeeded",
+      "failed": "Failed"
+    },
+    "recordItem": {
+      "running": "Running",
+      "success": "Succeeded",
+      "failed": "Failed",
+      "inProgress": "In progress",
+      "failedWithReason": "Failed · {{reason}}",
+      "duration": "Duration {{duration}}",
+      "durationLessThanOneSecond": "< 1s",
+      "durationSeconds": "{{seconds}}s",
+      "durationMinutesSeconds": "{{minutes}}m {{seconds}}s",
+      "viewDetail": "View details"
+    },
+    "recordDetail": {
+      "title": "Execution Record Details",
+      "closeAria": "Close",
+      "taskName": "Task name",
+      "workflow": "Linked workflow",
+      "status": "Status",
+      "startTime": "Start time",
+      "duration": "Duration",
+      "failReason": "Failure reason",
+      "statusPill": {
+        "success": "Success",
+        "failed": "Failed",
+        "running": "Running"
+      }
     }
   }
 }
