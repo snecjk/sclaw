@@ -38,12 +38,12 @@ const thinkingPanelBodyGridClass = (expanded: boolean, animate: boolean) =>
     expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
   );
 
-/** §5.6 / §6.2：箭头 200ms ease；收起 -90°（→），展开 180°（↑） */
+/** §5.6 / §6.2：箭头 200ms ease；收起向下，展开向上（rotate-180） */
 const thinkingPanelChevronClass = (expanded: boolean, animate: boolean) =>
   cn(
     'h-3.5 w-3.5 shrink-0 opacity-70 transition-transform',
     animate ? 'duration-200 ease-[ease]' : 'transition-none',
-    expanded ? 'rotate-180' : '-rotate-90',
+    expanded && 'rotate-180',
   );
 
 type StreamingTool = {
@@ -203,6 +203,26 @@ function resolveSkillNamesInThinking(
     result = result.replace(regex, replacements.get(key)!);
   }
   return result;
+}
+
+/** 二级思考/工具块折叠态：段结束收起；流式末段展开 + shimmer（对齐 sai-desktop） */
+function resolveTimelineBlockCollapseState(
+  index: number,
+  timelineLength: number,
+  isLiveStream: boolean,
+  hasReplyBody: boolean,
+  sequentialIndex: number | null,
+): { isComplete: boolean; autoExpand: boolean; isActive: boolean } {
+  const isComplete =
+    !isLiveStream || index < timelineLength - 1 || hasReplyBody;
+  const autoExpand = isLiveStream && !isComplete;
+  const isLastIndex = index === timelineLength - 1;
+  const isActive =
+    isLiveStream
+    && !isComplete
+    && (sequentialIndex !== null ? sequentialIndex === index : isLastIndex);
+
+  return { isComplete, autoExpand, isActive };
 }
 
 export function ThinkingProcessPanel({
@@ -381,11 +401,22 @@ export function ThinkingProcessPanel({
 
             if (item.type === 'thinking') {
               const thinkingContent = resolveSkillNamesInThinking(item.content, skills);
+              const collapse = resolveTimelineBlockCollapseState(
+                i,
+                mergedTimeline.length,
+                isLiveStream,
+                hasReplyBody,
+                sequentialIndex,
+              );
               return (
                 <ChatProcessBlock
                   key={blockResetKey}
                   title={t('streaming.deepThinkingLabel')}
                   icon={ThinkingIcon}
+                  collapsible={isLiveStream}
+                  isComplete={collapse.isComplete}
+                  autoExpand={collapse.autoExpand}
+                  isActive={collapse.isActive}
                 >
                   <ThinkingBlockBody
                     content={thinkingContent}
@@ -399,6 +430,13 @@ export function ThinkingProcessPanel({
 
             const key = toolRowKey(item);
             const toolStatus = streamingStatusByKey.get(key);
+            const collapse = resolveTimelineBlockCollapseState(
+              i,
+              mergedTimeline.length,
+              isLiveStream,
+              hasReplyBody,
+              sequentialIndex,
+            );
             return (
               <ChatToolCallCard
                 key={key}
@@ -408,6 +446,10 @@ export function ThinkingProcessPanel({
                 status={toolStatus}
                 variant="readonly"
                 presentation="thinkingProcess"
+                thinkingProcessCollapsible={isLiveStream}
+                isComplete={collapse.isComplete}
+                autoExpand={collapse.autoExpand}
+                isActive={collapse.isActive}
                 isInputTypewriterActive={reveal.isTypewriterActive && item.input != null}
                 typewriterResetKey={blockResetKey}
                 onInputRevealComplete={() => markBlockRevealFinished(blockResetKey)}
