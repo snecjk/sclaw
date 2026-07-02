@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { getStoToken } from './auth-store';
-import { info } from './logger';
+import { error, info } from './logger';
 import { buildStoMemoryCenterAuthHeaders } from './sto-memory-api-auth';
 import { resolveStoBaseUrl } from './sto-domain';
 import { proxyAwareFetch } from './proxy-fetch';
@@ -18,11 +18,17 @@ export type OssFileUploadResult = {
   name: string | null;
   /** Last segment of `ossKey`, e.g. `1770000000000_report.xlsx` */
   resourceId: string;
+  /** Copy-pasteable curl for manual reproduction (when requested). */
+  debugCurl?: string;
 };
 
 export type UploadOssFileOptions = {
   bizTypeEnum?: OssBizTypeEnum;
   expiresSeconds?: number;
+  /** Log tag prefix, e.g. `dingtalk-share` for share-flow uploads. */
+  logTag?: string;
+  /** Include `debugCurl` in the upload result for client-side diagnostics. */
+  includeDebugCurl?: boolean;
 };
 
 const DEFAULT_EXPIRES_SECONDS = 86_400;
@@ -116,6 +122,7 @@ export async function uploadOssFile(
   fileName: string,
   options: UploadOssFileOptions = {},
 ): Promise<OssFileUploadResult> {
+  const logTag = options.logTag?.trim() || 'oss-upload';
   const token = await getStoToken();
   if (!token) {
     throw new Error('stoToken is missing, cannot upload media to OSS');
@@ -130,7 +137,15 @@ export async function uploadOssFile(
     bizTypeEnum: options.bizTypeEnum,
     expiresSeconds: options.expiresSeconds,
   });
-  info(`[oss-upload] POST ${baseUrl}${OSS_FILE_UPLOAD_PATH}\n${curl}`);
+  info(`[${logTag}] oss-upload start`, {
+    filePath,
+    fileName,
+    bizTypeEnum: options.bizTypeEnum ?? 'temp',
+    expiresSeconds: options.expiresSeconds ?? DEFAULT_EXPIRES_SECONDS,
+    endpoint: `${baseUrl}${OSS_FILE_UPLOAD_PATH}`,
+    fileSizeBytes: fileBuffer.byteLength,
+  });
+  info(`[${logTag}] oss-upload curl\n${curl}`);
 
   const response = await proxyAwareFetch(`${baseUrl}${OSS_FILE_UPLOAD_PATH}`, {
     method: 'POST',
@@ -140,6 +155,13 @@ export async function uploadOssFile(
 
   const rawText = await response.text().catch(() => '');
   if (!response.ok) {
+    error(`[${logTag}] oss-upload failed`, {
+      status: response.status,
+      responsePreview: rawText.slice(0, 500),
+      filePath,
+      fileName,
+    });
+    error(`[${logTag}] oss-upload curl (retry)\n${curl}`);
     throw new Error(`OSS upload failed: ${response.status} ${rawText}`);
   }
 
@@ -147,10 +169,27 @@ export async function uploadOssFile(
   try {
     payload = JSON.parse(rawText) as unknown;
   } catch {
+    error(`[${logTag}] oss-upload invalid-json`, {
+      responsePreview: rawText.slice(0, 500),
+      filePath,
+      fileName,
+    });
+    error(`[${logTag}] oss-upload curl (retry)\n${curl}`);
     throw new Error(`OSS upload failed: invalid JSON response (${rawText.slice(0, 200)})`);
   }
 
-  return parseOssFileUploadPayload(payload);
+  const parsed = parseOssFileUploadPayload(payload);
+  info(`[${logTag}] oss-upload success`, {
+    filePath,
+    fileName,
+    ossKey: parsed.ossKey,
+    tempUrl: parsed.tempUrl,
+    resourceId: parsed.resourceId,
+  });
+  return {
+    ...parsed,
+    debugCurl: options.includeDebugCurl ? curl : undefined,
+  };
 }
 
 /**

@@ -789,6 +789,7 @@ export const ChatMessage = memo(function ChatMessage({
             text={text}
             timestamp={message.timestamp}
             onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
+            onShare={openConversationShare}
           />
         ) : null}
 
@@ -962,10 +963,12 @@ function AssistantMessageMetaRow({
   text,
   timestamp,
   onCopyDebugSnapshot,
+  onShare,
 }: {
   text: string;
   timestamp?: number;
   onCopyDebugSnapshot?: () => Promise<void> | void;
+  onShare?: () => void;
 }) {
   const { t } = useTranslation('chat');
   const [copied, setCopied] = useState(false);
@@ -997,6 +1000,18 @@ function AssistantMessageMetaRow({
       >
         {copied ? <Check className="h-3 w-3 text-green-500" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
       </Button>
+      {onShare ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 rounded-full border border-border bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-foreground dark:bg-background/70 dark:hover:bg-background"
+          onClick={onShare}
+          title={t('messageActions.share')}
+          aria-label={t('messageActions.share')}
+        >
+          <Share2 className="h-3 w-3" aria-hidden />
+        </Button>
+      ) : null}
       {timestamp ? (
         <span className="text-xs text-muted-foreground">
           {formatTimestamp(timestamp)}

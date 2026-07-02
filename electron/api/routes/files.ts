@@ -230,6 +230,9 @@ export async function handleFileRoutes(
         fileName?: string;
         bizTypeEnum?: 'temp' | 'workflow' | 'LLM' | 'skill';
         expiresSeconds?: number;
+        /** Diagnostics tag for Main log grep, e.g. `dingtalk-share`. */
+        source?: string;
+        includeDebugCurl?: boolean;
       }>(req);
       const rawPath = body.filePath?.trim() || '';
       if (!rawPath) {
@@ -241,6 +244,8 @@ export async function handleFileRoutes(
       const uploaded = await uploadOssFile(filePath, fileName, {
         bizTypeEnum: body.bizTypeEnum ?? 'temp',
         expiresSeconds: body.expiresSeconds,
+        logTag: body.source?.trim() || undefined,
+        includeDebugCurl: body.includeDebugCurl === true,
       });
       sendJson(res, 200, {
         url: uploaded.tempUrl,
@@ -249,6 +254,7 @@ export async function handleFileRoutes(
         resourceId: uploaded.resourceId,
         fileType: uploaded.fileType,
         name: uploaded.name,
+        ...(uploaded.debugCurl ? { debugCurl: uploaded.debugCurl } : {}),
       });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
