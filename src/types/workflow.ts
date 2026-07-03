@@ -240,6 +240,18 @@ export interface WorkflowRunClientResult {
   summary?: string | null;
   status?: string | null;
   data?: unknown;
+  artifacts?: Array<{
+    id?: string;
+    name?: string;
+    kind?: string;
+    type?: string;
+    url?: string;
+    tempUrl?: string;
+    previewUrl?: string;
+    filePath?: string;
+    contentType?: string;
+    size?: number;
+  }>;
 }
 
 export interface WorkflowRunResponse {
