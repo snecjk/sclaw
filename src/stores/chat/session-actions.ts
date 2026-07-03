@@ -1,5 +1,4 @@
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
-import { peekHomeLandingIntent } from '@/lib/home-landing';
 import { hostApiFetch } from '@/lib/host-api';
 import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
 import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
@@ -192,7 +191,6 @@ export function createSessionActions(
           // new-chat home instead of jumping into the most recent session.
           if (
             nextSessionKey !== DEFAULT_SESSION_KEY
-            && !peekHomeLandingIntent()
             && !hasLocalPendingSession
           ) {
             nextSessionKey = mergedSessions[0].key;

@@ -90,7 +90,6 @@ import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, normalizeDerive
 import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, sanitizeGatewaySessionLabels, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
-import { peekHomeLandingIntent } from '@/lib/home-landing';
 import { traceChatSession } from '../../shared/chat-session-trace';
 import {
   dedupeRedundantUserMessages,
@@ -1523,7 +1522,6 @@ export const useChatStore = create<ChatState>()(
             // new-chat home instead of jumping into the most recent session.
             if (
               nextSessionKey !== DEFAULT_SESSION_KEY
-              && !peekHomeLandingIntent()
               && !hasLocalPendingSession
               && !isVirtualTaskSessionKey(nextSessionKey)
             ) {

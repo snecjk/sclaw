@@ -58,12 +58,6 @@ import { resolveSessionLabel } from '@/lib/session-label';
 import { sortSessionsByRecentActivity } from '@/lib/sidebar-recent-order';
 import { type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
-import {
-  clearHomeLandingIntent,
-  isAwaitingFirstSendTemporarySessionKey,
-  peekHomeLandingIntent,
-  requestHomeLanding,
-} from '@/lib/home-landing';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { scheduleSessionLabelHydrationForStore } from '@/stores/chat/session-metadata-hydrate';
 import { isSidebarHiddenChatSessionKey, buildBuiltinStoGroupSortSessions } from '@/lib/sto-task-session';
@@ -839,31 +833,17 @@ export function Sidebar() {
       // HashRouter: use React Router pathname — window.location.pathname is the HTML file path in Electron.
       if (isOnHome) {
         const state = useChatStore.getState();
-        const landingIntent = peekHomeLandingIntent();
         // Preserve locally-created sessions (workflow run, skill use, etc.) awaiting first send.
-        if (
-          !landingIntent
-          && isAwaitingFirstSendTemporarySessionKey(state.currentSessionKey, {
-            messageCount: state.messages.length,
-            sessionLastActivity: state.sessionLastActivity,
-            sessionLabels: state.sessionLabels,
-          })
-        ) {
+        if (isTemporaryAgentSessionKey(state.currentSessionKey)) {
           return;
         }
         // Task/cron execution sessions intentionally open on home chat — do not reset to :main.
         if (isVirtualTaskSessionKey(state.currentSessionKey)) {
           const hasExistingMessages = state.messages.length > 0;
           await loadHistory(hasExistingMessages);
-          clearHomeLandingIntent();
           return;
         }
-        if (
-          landingIntent
-          || state.currentSessionKey !== DEFAULT_SESSION_KEY
-          || state.messages.length > 0
-          || state.loading
-        ) {
+        if (state.currentSessionKey !== DEFAULT_SESSION_KEY || state.messages.length > 0 || state.loading) {
           const nextRuntimeBySessionKey = {
             ...state.runtimeBySessionKey,
             [state.currentSessionKey]: {
@@ -911,7 +891,6 @@ export function Sidebar() {
             pendingWorkflow: null,
           });
         }
-        clearHomeLandingIntent();
         return;
       }
 
@@ -1557,7 +1536,6 @@ export function Sidebar() {
   // 点击新对话时，切换到默认会话并清空消息，让页面显示初始内容
   const handleHomeClick = item.to === '/'
     ? () => {
-        requestHomeLanding();
         const {
           messages,
           currentSessionKey: currKey,
