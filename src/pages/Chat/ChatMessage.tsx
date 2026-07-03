@@ -933,13 +933,15 @@ function UserMessageMetaRow({
       </Button>
       {onShare ? (
         <Button
+          type="button"
           variant="ghost"
           size="icon"
-          className="h-7 w-7 rounded-full border border-border bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-foreground dark:bg-background/70 dark:hover:bg-background"
+          className={MESSAGE_META_ICON_BUTTON_CLASS}
           onClick={onShare}
+          aria-label={t('messageActions.share')}
           title={t('messageActions.share')}
         >
-          <Share2 className="h-3 w-3" />
+          <Share2 className="h-3 w-3" aria-hidden />
         </Button>
       ) : null}
       <Button

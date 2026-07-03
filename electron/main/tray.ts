@@ -2,12 +2,16 @@
  * System Tray Management
  * Creates and manages the system tray icon and menu
  */
-import { Tray, Menu, BrowserWindow, app, nativeImage } from 'electron';
+import { Tray, Menu, BrowserWindow, app, nativeImage, type NativeImage } from 'electron';
+import { readFileSync } from 'fs';
 import { join } from 'path';
 import { getCurrentEnvConfig } from '../../shared/env-config';
 
 const envConfig = getCurrentEnvConfig();
 const envSuffix = envConfig.displaySuffix ? ` ${envConfig.displaySuffix}` : '';
+
+/** macOS 菜单栏逻辑尺寸（pt）；@3x 素材 66px 按此显示 */
+const MAC_TRAY_LOGICAL_PX = 22;
 
 let tray: Tray | null = null;
 let floatIconVisible = false; // Track float icon visibility state
@@ -22,6 +26,29 @@ function getIconsDir(): string {
     return join(process.resourcesPath, 'resources', 'icons');
   }
   return join(__dirname, '../../resources/icons');
+}
+
+/** @Nx tray-icon-Template.png → 菜单栏 22pt 逻辑尺寸 */
+function loadDarwinTrayTemplateIcon(iconPath: string): NativeImage {
+  const buffer = readFileSync(iconPath);
+  const probe = nativeImage.createFromBuffer(buffer);
+  if (probe.isEmpty()) {
+    return probe;
+  }
+
+  const { width, height } = probe.getSize();
+  const maxSide = Math.max(width, height);
+  const scaleFactor = Math.max(1, maxSide / MAC_TRAY_LOGICAL_PX);
+
+  const icon = nativeImage.createEmpty();
+  icon.addRepresentation({
+    scaleFactor,
+    width,
+    height,
+    buffer,
+  });
+  icon.setTemplateImage(true);
+  return icon;
 }
 
 /**
@@ -130,21 +157,25 @@ export function createTray(mainWindow: BrowserWindow, _onToggleSprite?: () => vo
     iconPath = join(iconsDir, '32x32.png');
   }
 
-  let icon = nativeImage.createFromPath(iconPath);
+  let icon: NativeImage;
+
+  if (process.platform === 'darwin') {
+    icon = loadDarwinTrayTemplateIcon(iconPath);
+  } else {
+    icon = nativeImage.createFromPath(iconPath);
+  }
 
   // Fallback to icon.png if platform-specific icon not found
   if (icon.isEmpty()) {
     icon = nativeImage.createFromPath(join(iconsDir, 'icon.png'));
-    // Still try to set as template for macOS
     if (process.platform === 'darwin') {
+      icon = icon.resize({
+        width: MAC_TRAY_LOGICAL_PX,
+        height: MAC_TRAY_LOGICAL_PX,
+        quality: 'best',
+      });
       icon.setTemplateImage(true);
     }
-  }
-
-  // Note: Using "Template" suffix in filename automatically marks it as template image
-  // But we can also explicitly set it for safety
-  if (process.platform === 'darwin') {
-    icon.setTemplateImage(true);
   }
 
   tray = new Tray(icon);
