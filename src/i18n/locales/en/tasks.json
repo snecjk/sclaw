@@ -53,6 +53,14 @@
     "recordView": {
       "aria": "Execution records"
     },
+    "runGuard": {
+      "aria": "Run guard",
+      "preventSleep": "Prevent system sleep",
+      "preventSleepDesc": "While enabled, StoClaw prevents the computer from sleeping automatically while it is running.",
+      "preventSleepTips": "Recommended while scheduled tasks are running. Keep the lid open and connect to power; sleep or shutdown may prevent normal operation.",
+      "toastEnabled": "Enabled: StoClaw will prevent sleep while running",
+      "toastDisabled": "Disabled: the computer will sleep according to system settings"
+    },
     "delete": {
       "title": "Delete scheduled task?",
       "message": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",

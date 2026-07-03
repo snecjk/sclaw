@@ -53,6 +53,14 @@
     "recordView": {
       "aria": "実行記録"
     },
+    "runGuard": {
+      "aria": "実行保障",
+      "preventSleep": "PC のスリープを防止",
+      "preventSleepDesc": "有効にすると、StoClaw 実行中は PC が自動的にスリープしなくなります。",
+      "preventSleepTips": "定期タスク実行中は有効化を推奨します。フタは開け、電源に接続してください。フタ閉じやシャットダウン後は正常動作を保証できません。",
+      "toastEnabled": "有効：StoClaw 実行中はスリープを防止します",
+      "toastDisabled": "無効：PC はシステム設定どおりスリープします"
+    },
     "delete": {
       "title": "定期タスクを削除しますか？",
       "message": "「{{name}}」を削除しますか？この操作は取り消せません。",
