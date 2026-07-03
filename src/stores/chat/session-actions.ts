@@ -1,4 +1,5 @@
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
+import { peekHomeLandingIntent } from '@/lib/home-landing';
 import { hostApiFetch } from '@/lib/host-api';
 import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
 import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
@@ -187,7 +188,7 @@ export function createSessionActions(
             isTemporaryAgentSessionKey(nextSessionKey)
             || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
             || localSessions.some((session) => session.key === nextSessionKey);
-          if (!hasLocalPendingSession) {
+          if (!peekHomeLandingIntent() && !hasLocalPendingSession) {
             nextSessionKey = mergedSessions[0].key;
           }
         }

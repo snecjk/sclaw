@@ -90,6 +90,7 @@ import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, normalizeDerive
 import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, sanitizeGatewaySessionLabels, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
+import { peekHomeLandingIntent } from '@/lib/home-landing';
 import { traceChatSession } from '../../shared/chat-session-trace';
 import {
   dedupeRedundantUserMessages,
@@ -1519,7 +1520,11 @@ export const useChatStore = create<ChatState>()(
             // `agent:*:cron:*` dated session) are resolved by key prefix in
             // loadHistory and may not be in the backend list yet — keep them, or
             // the composer falls back to the default agent's engine.
-            if (!hasLocalPendingSession && !isVirtualTaskSessionKey(nextSessionKey)) {
+            if (
+              !peekHomeLandingIntent()
+              && !hasLocalPendingSession
+              && !isVirtualTaskSessionKey(nextSessionKey)
+            ) {
               nextSessionKey = mergedSessions[0].key;
             }
           }
