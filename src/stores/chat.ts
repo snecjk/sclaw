@@ -1509,8 +1509,7 @@ export const useChatStore = create<ChatState>()(
             }
           }
           if (!mergedSessions.find((s) => s.key === nextSessionKey) && mergedSessions.length > 0) {
-            // Preserve only locally-created pending sessions. On initial boot the
-            // default ghost key (`agent:main:main`) should yield to real history.
+            // Preserve only locally-created pending sessions.
             const hasLocalPendingSession =
               isTemporaryAgentSessionKey(nextSessionKey)
               || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
@@ -1519,7 +1518,13 @@ export const useChatStore = create<ChatState>()(
             // `agent:*:cron:*` dated session) are resolved by key prefix in
             // loadHistory and may not be in the backend list yet — keep them, or
             // the composer falls back to the default agent's engine.
-            if (!hasLocalPendingSession && !isVirtualTaskSessionKey(nextSessionKey)) {
+            // On cold boot the default key (`agent:main:main`) must stay on the
+            // new-chat home instead of jumping into the most recent session.
+            if (
+              nextSessionKey !== DEFAULT_SESSION_KEY
+              && !hasLocalPendingSession
+              && !isVirtualTaskSessionKey(nextSessionKey)
+            ) {
               nextSessionKey = mergedSessions[0].key;
             }
           }
