@@ -11,7 +11,7 @@
     "sendAria": "Generate workflow",
     "chipWeekly": "Generate HQ settlement report every Monday",
     "chipAbnormal": "Alert me and create follow-up tasks when abnormal customers are found",
-    "chipDaily": "Email me daily branch revenue summary"
+    "chipDaily": "Daily branch revenue summary"
   },
   "tabs": {
     "aria": "Workflow groups",
