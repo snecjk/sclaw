@@ -20,6 +20,8 @@ export interface ArtifactProductCardProps {
   actionLabel?: string;
   /** 点击整卡或「查看产物」 */
   onAction: () => void;
+  /** 是否显示右侧操作文案（默认显示） */
+  showActionLabel?: boolean;
   /** 可选样式覆盖 */
   className?: string;
 }
@@ -51,6 +53,7 @@ export function ArtifactProductCard({
   metaLine,
   actionLabel,
   onAction,
+  showActionLabel = true,
   className,
 }: ArtifactProductCardProps) {
   const { t } = useTranslation('chat');
@@ -70,9 +73,11 @@ export function ArtifactProductCard({
         <p className="truncate text-sm font-semibold leading-5 text-foreground">{title}</p>
         <p className="truncate text-xs leading-[18px] text-muted-foreground">{metaLine}</p>
       </div>
-      <span className="shrink-0 text-sm font-medium leading-[18px] text-primary">
-        {actionLabel ?? t('workflow.viewArtifact')}
-      </span>
+      {showActionLabel ? (
+        <span className="shrink-0 text-sm font-medium leading-[18px] text-primary">
+          {actionLabel ?? t('workflow.viewArtifact')}
+        </span>
+      ) : null}
     </button>
   );
 }
