@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { artifactToPreviewFile, isPreviewableArtifactUrl, isUserFacingArtifactUrl } from '@/lib/preview-url';
+import { artifactToPreviewFile, isUserFacingArtifactUrl } from '@/lib/preview-url';
+import { shouldPreviewInSidePanel } from '@/lib/preview-href';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import type { AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
@@ -19,11 +20,9 @@ export function WorkflowCompletionActions({
   if (!state || !isTerminalWorkflowRunStatus(state.status)) return null;
 
   const artifacts = (state.result?.artifacts ?? []).filter((a) => isUserFacingArtifactUrl(a.url));
-  const primaryArtifact = artifacts.find((a) => isPreviewableArtifactUrl(a.url, a.type)) ?? artifacts[0];
-  const canPreview = primaryArtifact && onPreviewArtifact
-    && isPreviewableArtifactUrl(primaryArtifact.url, primaryArtifact.type);
+  const primaryArtifact = artifacts.find((a) => shouldPreviewInSidePanel(a.url)) ?? null;
 
-  if (!canPreview || !primaryArtifact) return null;
+  if (!primaryArtifact || !onPreviewArtifact) return null;
 
   return (
     <div className="mt-3 w-full">

@@ -195,6 +195,7 @@ export function ArtifactShareDialog({
               title={artifactCard.title}
               metaLine={artifactCard.metaLine}
               onAction={() => {}}
+              showActionLabel={false}
               className="pointer-events-none"
             />
           ) : null}

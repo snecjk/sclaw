@@ -1261,6 +1261,9 @@ export const useChatStore = create<ChatState>()(
       });
     }
   },
+  clearPendingWorkflowMemory: () => {
+    set({ pendingWorkflow: null });
+  },
   clearPendingWorkflow: () => {
     const sessionKey = get().currentSessionKey;
     const templateId = get().pendingWorkflow?.templateId;
@@ -1887,6 +1890,7 @@ export const useChatStore = create<ChatState>()(
         lastUserMessageAt: null,
         optimisticUserMessage: null,
         pendingToolImages: [],
+        pendingWorkflow: null,
       };
     });
     void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
@@ -1958,7 +1962,7 @@ export const useChatStore = create<ChatState>()(
 
       rawMessages = mergeHistoryWhenShrunk(rawMessages, get().messages);
 
-      absorbWorkflowSchemaFromToolResults(rawMessages);
+      absorbWorkflowSchemaFromToolResults(rawMessages, targetSessionKey);
 
       // Before filtering: attach images/files from tool_result messages to the next assistant message
       const messagesWithToolImages = enrichWithToolResultFiles(rawMessages);

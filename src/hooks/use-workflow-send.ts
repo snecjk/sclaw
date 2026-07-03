@@ -24,6 +24,7 @@ import { useChatStore } from '@/stores/chat';
 import { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } from '@/lib/workflow-local-turn';
 import { buildWorkflowContextSummary, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
+import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
 import type { WorkflowSchemaField } from '@/types/workflow';
 
 export interface WorkflowSendContext {
@@ -183,6 +184,18 @@ export async function createAndStartWorkflowDirect(
       updatedAt: trackStartMs,
       collectedInputs: inputs,
       paramsSummary: userText,
+    });
+
+    appendWorkflowSessionRecord({
+      phase: 'started',
+      sessionKey: context.sessionKey,
+      templateId,
+      templateName,
+      workflowId: created.workflowId,
+      runId: run.runId,
+      status: 'running',
+      paramsSummary: userText,
+      collectedInputs: inputs,
     });
 
     const { dismissWorkflowParameterFormsForTemplate } = await import(
@@ -382,7 +395,15 @@ export async function tryResolvePendingWorkflow(
   const chatState = useChatStore.getState();
   const pending = chatState.pendingWorkflow;
 
-  const { isReExecutionIntent, isWorkflowStartIntent } = await import('@/hooks/use-workflow-intent');
+  const {
+    isReExecutionIntent,
+    isWorkflowStartIntent,
+    isWorkflowCreationIntent,
+  } = await import('@/hooks/use-workflow-intent');
+  if (isWorkflowCreationIntent(text)) {
+    chatState.clearPendingWorkflowMemory();
+    return false;
+  }
   if (isReExecutionIntent(text) || (isWorkflowStartIntent(text) && !pending)) {
     return false;
   }

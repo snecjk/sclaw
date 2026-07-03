@@ -49,6 +49,7 @@ import {
   coerceHrefForMarkdownTransform,
   resolvePreviewHrefAction,
   resolvePreviewPathOnHost,
+  shouldPreviewInSidePanel,
 } from '@/lib/preview-href';
 import { applyDisplayNameHints, dedupeAttachedFiles, mergePreviewFileLists, normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
@@ -789,6 +790,7 @@ export const ChatMessage = memo(function ChatMessage({
             text={text}
             timestamp={message.timestamp}
             onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
+            onShare={openConversationShare}
           />
         ) : null}
 
@@ -962,10 +964,12 @@ function AssistantMessageMetaRow({
   text,
   timestamp,
   onCopyDebugSnapshot,
+  onShare,
 }: {
   text: string;
   timestamp?: number;
   onCopyDebugSnapshot?: () => Promise<void> | void;
+  onShare?: () => void;
 }) {
   const { t } = useTranslation('chat');
   const [copied, setCopied] = useState(false);
@@ -997,6 +1001,18 @@ function AssistantMessageMetaRow({
       >
         {copied ? <Check className="h-3 w-3 text-green-500" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
       </Button>
+      {onShare ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 rounded-full border border-border bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-foreground dark:bg-background/70 dark:hover:bg-background"
+          onClick={onShare}
+          title={t('messageActions.share')}
+          aria-label={t('messageActions.share')}
+        >
+          <Share2 className="h-3 w-3" aria-hidden />
+        </Button>
+      ) : null}
       {timestamp ? (
         <span className="text-xs text-muted-foreground">
           {formatTimestamp(timestamp)}
@@ -1381,24 +1397,27 @@ function preprocessTextForPreviewLinks(text: string): string {
 
 function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFile?: (file: AttachedFileMeta) => void }) {
   const { t } = useTranslation('chat');
-  const isPreviewable = isPreviewableFile(file);
+  const filePath = file.filePath ?? '';
+  const openInPreview = shouldPreviewInSidePanel(filePath);
 
   const handleOpen = useCallback(() => {
     logFilePreview('file-card-click', {
       filePath: file.filePath,
       fileName: file.fileName,
       mimeType: file.mimeType,
-      isPreviewable,
+      openInPreview,
       hasOnPreviewFile: !!onPreviewFile,
     });
-    if (onPreviewFile && isPreviewable) {
+    if (onPreviewFile && openInPreview) {
       onPreviewFile(file);
-    } else if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
-      openExternalUrl(file.filePath);
-    } else if (file.filePath) {
-      invokeIpc('shell:openPath', file.filePath);
+      return;
     }
-  }, [file, onPreviewFile, isPreviewable]);
+    if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+      openExternalUrl(filePath);
+    } else if (filePath) {
+      invokeIpc('shell:openPath', filePath);
+    }
+  }, [file, filePath, onPreviewFile, openInPreview]);
 
   const metaLine = buildArtifactMetaLine({
     fileName: file.fileName,
@@ -1412,6 +1431,7 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
     <ArtifactProductCard
       title={file.fileName}
       metaLine={metaLine}
+      actionLabel={openInPreview ? t('workflow.viewArtifact') : t('workflow.openArtifactLink')}
       onAction={handleOpen}
     />
   );

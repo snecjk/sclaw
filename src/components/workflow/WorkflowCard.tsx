@@ -9,10 +9,10 @@ import {
 } from '@/lib/format-workflow-duration';
 import {
   artifactToPreviewFile,
-  isPreviewableArtifactUrl,
   isUserFacingArtifactUrl,
   openExternalUrl,
 } from '@/lib/preview-url';
+import { shouldPreviewInSidePanel } from '@/lib/preview-href';
 import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
 import {
   ArtifactProductCard,
@@ -217,12 +217,10 @@ export function WorkflowCard({
   const userFacingArtifacts = (display.result?.artifacts ?? []).filter(
     (artifact) => isUserFacingArtifactUrl(artifact.url),
   );
-  const primaryArtifact = userFacingArtifacts[0];
-  const canPreviewArtifact = Boolean(
-    primaryArtifact
-    && onPreviewArtifact
-    && isPreviewableArtifactUrl(primaryArtifact.url, primaryArtifact.type),
-  );
+  const previewableArtifact = userFacingArtifacts.find((artifact) => shouldPreviewInSidePanel(artifact.url));
+  const primaryArtifact = previewableArtifact ?? userFacingArtifacts[0];
+  const shouldShowPreviewAction = Boolean(previewableArtifact);
+  const canOpenArtifactPreview = Boolean(previewableArtifact && onPreviewArtifact);
   const showWorkflowActions = isTerminal
     && !!display.workflowId
     && !!onCreateScheduledTask;
@@ -301,15 +299,13 @@ export function WorkflowCard({
             mimeType: primaryArtifact.type || 'application/octet-stream',
             t,
           })}
-          actionLabel={
-            canPreviewArtifact ? t('workflow.viewArtifact') : t('workflow.openArtifactLink')
-          }
+          actionLabel={shouldShowPreviewAction ? t('workflow.viewArtifact') : t('workflow.openArtifactLink')}
           onAction={() => {
-            if (canPreviewArtifact) {
-              onPreviewArtifact!(artifactToPreviewFile(primaryArtifact));
-            } else {
-              openExternalUrl(primaryArtifact.url);
+            if (canOpenArtifactPreview) {
+              onPreviewArtifact!(artifactToPreviewFile(previewableArtifact!));
+              return;
             }
+            openExternalUrl(primaryArtifact.url);
           }}
         />
       ) : null}

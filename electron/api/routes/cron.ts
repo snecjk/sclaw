@@ -182,26 +182,44 @@ async function readRunSessionMessages(sessionKey: string): Promise<CronSessionFa
         continue;
       }
 
-      // Handle content format: string or array of text blocks
-      let textContent = '';
+      const extractTextBlocks = (blocks: unknown[]): string => blocks
+        .filter((c: unknown) => c && typeof c === 'object' && (c as Record<string, unknown>).type === 'text')
+        .map((c: unknown) => (c as Record<string, unknown>).text as string)
+        .filter(Boolean)
+        .join('');
+
+      const hasToolUseBlocks = (blocks: unknown[]): boolean => blocks.some(
+        (c: unknown) => c && typeof c === 'object'
+          && ((c as Record<string, unknown>).type === 'tool_use'
+            || (c as Record<string, unknown>).type === 'toolCall'),
+      );
+
+      // Preserve tool_use blocks so the UI can render DingTalk sent-content preview cards.
       if (typeof content === 'string') {
-        textContent = content;
-      } else if (Array.isArray(content)) {
-        textContent = content
-          .filter((c: unknown) => c && typeof c === 'object' && (c as Record<string, unknown>).type === 'text')
-          .map((c: unknown) => (c as Record<string, unknown>).text as string)
-          .filter(Boolean)
-          .join('');
+        if (!content.trim()) continue;
+        messages.push({
+          id: `cron-run-msg-${parsed.runSessionId}-${i}`,
+          role: role === 'system' ? 'system' : 'assistant',
+          content,
+          timestamp,
+        });
+        continue;
       }
 
-      if (!textContent) continue;
+      if (Array.isArray(content)) {
+        const textContent = extractTextBlocks(content);
+        const hasToolUse = hasToolUseBlocks(content);
+        if (!textContent && !hasToolUse) continue;
+        messages.push({
+          id: `cron-run-msg-${parsed.runSessionId}-${i}`,
+          role: role === 'system' ? 'system' : 'assistant',
+          content: hasToolUse ? content : textContent,
+          timestamp,
+        });
+        continue;
+      }
 
-      messages.push({
-        id: `cron-run-msg-${parsed.runSessionId}-${i}`,
-        role: role === 'user' ? 'user' : role === 'system' ? 'system' : 'assistant',
-        content: textContent,
-        timestamp,
-      });
+      continue;
     } catch {
       // Ignore malformed lines
     }

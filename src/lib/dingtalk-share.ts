@@ -299,9 +299,29 @@ export async function resolveDingTalkShareUrl(filePath: string, fileName: string
     return trimmed;
   }
   logDingTalkShare('resolve-url-start', { filePath: trimmed, fileName, source: 'oss-upload' });
-  const url = await uploadFileToTempOSS(trimmed, fileName.trim() || 'file');
-  logDingTalkShare('resolve-url-done', { filePath: trimmed, fileName, tempUrl: url });
-  return url;
+  try {
+    const uploaded = await uploadFileToTempOSS(trimmed, fileName.trim() || 'file', {
+      source: 'dingtalk-share',
+      includeDebugCurl: true,
+    });
+    logDingTalkShare('resolve-url-done', {
+      filePath: trimmed,
+      fileName,
+      tempUrl: uploaded.url,
+      ossKey: uploaded.ossKey,
+      resourceId: uploaded.resourceId,
+      ossUploadCurl: uploaded.debugCurl,
+    });
+    return uploaded.url;
+  } catch (error) {
+    logDingTalkShare('resolve-url-failed', {
+      filePath: trimmed,
+      fileName,
+      error: error instanceof Error ? error.message : String(error),
+      hint: 'See Main log for [dingtalk-share] oss-upload curl',
+    });
+    throw error;
+  }
 }
 
 export async function confirmDingTalkShare(draft: DingTalkShareDialogDraft): Promise<DingTalkShareBuildResult> {

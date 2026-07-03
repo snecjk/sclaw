@@ -508,6 +508,12 @@ export class AppUpdater extends EventEmitter {
         friendly = '网络连接异常，请检查网络后重试';
       } else if (raw.includes('signature') || raw.includes('checksum') || raw.includes('sha512')) {
         friendly = '更新包校验失败，请重试或联系管理员';
+      } else if (
+        process.platform === 'win32'
+        && (raw.includes('.zip') || raw.includes('%20Claw') && raw.includes('x-oss-signature'))
+      ) {
+        friendly =
+          '更新包格式异常（Windows 需 NSIS 安装包 .exe，或下载链接解析失败），请联系管理员重新发布 Windows 安装包';
       } else if (raw.includes('ENOENT') || raw.includes('not found') || raw.includes('Could not find')) {
         friendly = '未找到可用更新，请稍后重试';
       } else if (raw.includes('permission') || raw.includes('EACCES')) {

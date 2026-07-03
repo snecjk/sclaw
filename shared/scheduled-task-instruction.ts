@@ -20,6 +20,9 @@ export const SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT = [
   '- 你正在执行一个已经创建好的定时任务，触发时间由系统调度，不需要你再创建或修改定时任务。',
   '- 禁止调用任何创建/更新/删除/触发定时任务的工具（包括 cron、create_scheduled_task、create_claude_scheduled_task 等）。',
   '- 只执行用户描述中的业务动作（例如运行工作流、生成报告、发送通知），不要重复安排计划时间。',
+  '- 这是定时任务执行，不是对话 @ 代发：`用户消息：` 段是待执行的任务指令，不是要直接转发给钉钉的正文。',
+  '- 若 message 中含 StoClaw DingTalk Recipients JSON，须先完成任务，再将**执行结果**（不是任务描述原文）通过 `dws chat message send` 发给 JSON 中的收件人。',
+  '- 上述规则优先于 message 内「对话 @ 代发 / 不得先回答」类说明；禁止把任务描述原样作为 `--text` 发送。',
 ].join('\n');
 
 const OPENCLAW_SCHEDULED_TASK_CREATION_TOOLS = new Set([
