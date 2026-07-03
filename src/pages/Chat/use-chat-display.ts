@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useChatStore, type RawMessage } from '@/stores/chat';
-import { buildChatDisplayItems, findLastUserMessage, isAssistantRole, type ChatDisplayItem } from './chat-display';
+import {
+  buildChatDisplayItems,
+  findLastUserMessage,
+  isAssistantRole,
+  resolveActiveTurnStableKey,
+  type ChatDisplayItem,
+} from './chat-display';
 import type { ActiveTurnStream } from './AssistantTurnMessage';
 import { extractImages, extractThinking, extractToolUse } from './message-utils';
 
@@ -77,6 +83,7 @@ export function useChatDisplay(params: {
   const { staticItems, activeTurn } = useMemo(() => {
     if (!sending) {
       return { staticItems: displayItems, activeTurn: null as null | {
+        turnStableKey: string;
         turnMessages: RawMessage[];
         turnToolResults: RawMessage[];
         precedingUserMessage: RawMessage | null;
@@ -115,6 +122,7 @@ export function useChatDisplay(params: {
       return {
         staticItems: displayItems.slice(0, -1),
         activeTurn: {
+          turnStableKey: last.key,
           turnMessages: last.messages,
           turnToolResults: last.toolResults,
           precedingUserMessage: last.precedingUserMessage ?? findLastUserMessage(messages),
@@ -127,6 +135,7 @@ export function useChatDisplay(params: {
       return {
         staticItems: displayItems.slice(0, -1),
         activeTurn: {
+          turnStableKey: last.key,
           turnMessages: [last.message],
           turnToolResults: [],
           precedingUserMessage: findLastUserMessage(messages),
@@ -135,12 +144,14 @@ export function useChatDisplay(params: {
       };
     }
 
+    const precedingUserMessage = findLastUserMessage(messages);
     return {
       staticItems: displayItems,
       activeTurn: {
+        turnStableKey: resolveActiveTurnStableKey(messages) ?? 'active-turn',
         turnMessages: [],
         turnToolResults: [],
-        precedingUserMessage: findLastUserMessage(messages),
+        precedingUserMessage,
         activeStream,
       },
     };

@@ -136,7 +136,15 @@ export function ChatProcessBlock({
     ) : null;
 
   return (
-    <div ref={collapsible ? wrapperRef : undefined} className={cn(chatToolCallShellClass, className)}>
+    <div
+      ref={collapsible ? wrapperRef : undefined}
+      className={cn(
+        chatToolCallShellClass,
+        // A1 样式：收起时去掉 header/body 间距，避免一级摘要折叠后留白
+        collapsible && !expanded && 'gap-0',
+        className,
+      )}
+    >
       {headerRow}
       {body != null && collapsible ? (
         <div className={bodyGridClass}>

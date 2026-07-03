@@ -25,7 +25,7 @@ import {
   chatToolCallInputPreClass,
   chatToolCallShellClass,
 } from '@/lib/surfaces';
-import { maskSensitiveToolInputForDisplay } from '@/pages/Chat/message-utils';
+import { maskSensitiveToolInputForDisplay, hasDisplayableToolInput } from '@/pages/Chat/message-utils';
 
 export interface ChatToolCallCardProps {
   /** 原始工具名（用于图标映射） */
@@ -77,7 +77,7 @@ function ToolCallContent({
   status?: 'running' | 'completed' | 'error';
 }) {
   const { t } = useTranslation('chat');
-  const hasInput = input != null;
+  const hasInput = hasDisplayableToolInput(input);
   const inputText = hasInput ? maskSensitiveToolInputForDisplay(input) : '';
   const { text: displayed, isAnimating } = useTypewriterReveal(inputText, isInputTypewriterActive, {
     resetKey: typewriterResetKey,
