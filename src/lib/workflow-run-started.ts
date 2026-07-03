@@ -17,6 +17,7 @@ import {
   saveWorkflowExecution,
   updateWorkflowRunMetadata,
 } from '@/stores/workflow-memory';
+import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
 
 export type WorkflowRunPresentation = 'local_turn' | 'patch_assistant';
 
@@ -112,6 +113,20 @@ export async function applyWorkflowRunStarted(
     collectedInputs: inputs,
     paramsSummary: resolvedUserText,
   });
+
+  if (presentation === 'local_turn' && wfRecord?.templateId) {
+    appendWorkflowSessionRecord({
+      phase: 'started',
+      sessionKey,
+      templateId: wfRecord.templateId,
+      templateName,
+      workflowId,
+      runId,
+      status: 'running',
+      paramsSummary: resolvedUserText,
+      collectedInputs: inputs,
+    });
+  }
 
   const chatStore = useChatStore.getState();
   chatStore.setWorkflowCardState(runId, {

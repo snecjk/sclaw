@@ -888,6 +888,7 @@ export function Sidebar() {
             pendingFinal: false,
             lastUserMessageAt: null,
             pendingToolImages: [],
+            pendingWorkflow: null,
           });
         }
         return;
@@ -1596,7 +1597,10 @@ export function Sidebar() {
             pendingFinal: false,
             lastUserMessageAt: null,
             pendingToolImages: [],
+            pendingWorkflow: null,
           });
+        } else {
+          useChatStore.getState().clearPendingWorkflowMemory();
         }
       }
     : undefined;

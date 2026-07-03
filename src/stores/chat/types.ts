@@ -203,6 +203,8 @@ export interface ChatState {
     modelGuidanceSent?: boolean;
   } | null;
   setPendingWorkflow: (pending: ChatState['pendingWorkflow']) => void;
+  /** Drop in-memory pending only; keeps localStorage draft for session restore. */
+  clearPendingWorkflowMemory: () => void;
   clearPendingWorkflow: () => void;
 
   // Actions
