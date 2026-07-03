@@ -76,7 +76,9 @@ describe('shouldPreviewInSidePanel', () => {
     expect(shouldPreviewInSidePanel('preview:///Users/sto/report.html')).toBe(true);
     expect(shouldPreviewInSidePanel('http://localhost:8080/report.html')).toBe(true);
     expect(shouldPreviewInSidePanel('http://127.0.0.1/report.html')).toBe(true);
+    expect(shouldPreviewInSidePanel('https://sto.cn/report.html')).toBe(true);
     expect(shouldPreviewInSidePanel('https://baseinfo-aimemory-test.sto.cn/oss/report.html')).toBe(true);
+    expect(shouldPreviewInSidePanel('https://sai-agent.oss-cn-shanghai.aliyuncs.com/report.html')).toBe(true);
   });
 
   it('opens other http links in the system browser', () => {

@@ -22,10 +22,15 @@ const EXTERNAL_SCHEMES = new Set([
   'slack:', 'discord:',
 ]);
 
-/** True when URL hostname contains company `.sto` segment (e.g. *.sto.cn). */
+const PREVIEWABLE_HTTP_HOSTS = new Set([
+  'sai-agent.oss-cn-shanghai.aliyuncs.com',
+]);
+
+/** True when URL hostname is Sto domain (e.g. sto.cn / *.sto.cn). */
 export function isStoCompanyUrl(url: string): boolean {
   try {
-    return new URL(url).hostname.toLowerCase().includes('.sto');
+    const host = new URL(url).hostname.toLowerCase();
+    return host === 'sto.cn' || host.includes('.sto') || PREVIEWABLE_HTTP_HOSTS.has(host);
   } catch {
     return false;
   }
