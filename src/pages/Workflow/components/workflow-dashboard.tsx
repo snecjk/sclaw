@@ -461,9 +461,12 @@ export function WorkflowDashboard({
                     // onCardClick={() => openDetailForOfficial(card)}
                     // onPreview={() => openDetailForOfficial(card)}
                     onInstall={() => {
-                      const q = encodeURIComponent(`/${card.name}`);
-                      const wid = encodeURIComponent(card.id);
-                      navigate(`/?q=${q}&workflowId=${wid}`);
+                      navigateToNewSessionWithPrompt(
+                        navigate,
+                        location.pathname,
+                        `/${card.name}`,
+                        { extraSearchParams: { workflowId: card.id } },
+                      );
                     }}
                   />
                 ))}
