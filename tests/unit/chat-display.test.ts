@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildChatDisplayItems,
+  buildTurnStableKey,
   isRedundantThinking,
   mergeThinkingTimelines,
+  pickTimelineSourceMessages,
+  resolveActiveTurnStableKey,
+  shouldReplaceStreamSnapshot,
 } from '../../src/pages/Chat/chat-display';
+import { parseThinkingTurnLayout } from '../../src/pages/Chat/thinking-turn-segments';
 
 describe('mergeThinkingTimelines', () => {
   it('folds streaming thinking-only snapshots to the latest one', () => {
@@ -71,6 +77,222 @@ describe('mergeThinkingTimelines', () => {
 
     const timeline = mergeThinkingTimelines(messages);
     expect(timeline.filter((item) => item.type === 'thinking')).toHaveLength(2);
+  });
+
+  it('folds Claude streaming snapshots that only refresh thinking on known tools', () => {
+    const planning = '用户要周报PPT，我先读取模板目录确认可用文件。';
+    const rephrase = `${planning}再检查 skills 目录。`;
+    const messages = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: planning },
+          { type: 'tool_use', id: 'toolu_read', name: 'read', input: { path: '/tmp' } },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: rephrase },
+          { type: 'tool_use', id: 'toolu_read', name: 'read', input: { path: '/tmp' } },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: '模板已确认，开始写入周报骨架。' },
+          { type: 'tool_use', id: 'toolu_write', name: 'write', input: { path: '/out.pptx' } },
+        ],
+      },
+    ];
+
+    expect(pickTimelineSourceMessages(messages)).toHaveLength(2);
+
+    const timeline = mergeThinkingTimelines(messages);
+    expect(timeline.filter((item) => item.type === 'thinking')).toHaveLength(2);
+    expect(timeline.filter((item) => item.type === 'tool')).toHaveLength(2);
+  });
+
+  it('does not grow thought count on repeated Claude snapshots in one tool round', () => {
+    const base = '了解，我直接为您生成一个专业美观的周报PPT模板。';
+    const snapshots = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: base },
+          { type: 'thinking', thinking: '先读取工作区文件。' },
+          { type: 'tool_use', id: 'toolu_1', name: 'read', input: {} },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: base },
+          {
+            type: 'thinking',
+            thinking: '先读取工作区文件，确认是否有周报模板或技能目录。',
+          },
+          { type: 'tool_use', id: 'toolu_1', name: 'read', input: {} },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: base },
+          {
+            type: 'thinking',
+            thinking: '先读取工作区文件，确认是否有周报模板或技能目录，再决定生成方式。',
+          },
+          { type: 'tool_use', id: 'toolu_1', name: 'read', input: {} },
+        ],
+      },
+    ];
+
+    const counts = snapshots.map((_, end) => {
+      const layout = parseThinkingTurnLayout(snapshots.slice(0, end + 1), { isLiveStream: true });
+      const group = layout.segments.find((segment) => segment.kind === 'tool-group');
+      if (group?.kind !== 'tool-group') return 0;
+      return group.timeline.filter((item) => item.type === 'thinking').length;
+    });
+
+    expect(counts[0]).toBe(1);
+    expect(counts[1]).toBe(1);
+    expect(counts[2]).toBe(1);
+  });
+
+  it('folds Claude snapshots with same tool set even when phase text changes', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: '我来帮你生成周报PPT。' },
+          { type: 'thinking', thinking: '先读取工作区文件。' },
+          { type: 'tool_use', id: 'toolu_1', name: 'read', input: {} },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: '让我先检查 skills 目录里有没有模板。' },
+          { type: 'thinking', thinking: '先读取工作区文件，确认模板路径。' },
+          { type: 'thinking', thinking: '若没有模板就手动创建骨架。' },
+          { type: 'tool_use', id: 'toolu_1', name: 'read', input: {} },
+        ],
+      },
+    ];
+
+    expect(pickTimelineSourceMessages(messages)).toHaveLength(1);
+
+    const layout = parseThinkingTurnLayout(messages, { isLiveStream: true });
+    const group = layout.segments.find((segment) => segment.kind === 'tool-group');
+    expect(group?.kind).toBe('tool-group');
+    if (group?.kind !== 'tool-group') return;
+    expect(group.timeline.filter((item) => item.type === 'thinking').length).toBeLessThanOrEqual(2);
+    expect(group.timeline.filter((item) => item.type === 'tool')).toHaveLength(1);
+  });
+
+  it('keeps narration text when a later thinking-only snapshot arrives', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: '我来帮你分析数据。' }],
+      },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: '先查 dws。' },
+          { type: 'tool_use', id: 't1', name: 'dws', input: {} },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'text',
+            text: '我需要先获取近半年的单量数据。让我使用 dws 工具来查询相关数据。',
+          },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [{ type: 'thinking', thinking: '确认字段后继续。' }],
+      },
+    ];
+
+    const picked = pickTimelineSourceMessages(messages);
+    expect(picked).toHaveLength(4);
+    const narration = picked[2] as { content?: Array<{ text?: string }> };
+    expect(narration.content?.[0]?.text?.slice(0, 6)).toBe('我需要先获取');
+  });
+
+  it('replaces narration-only stream snapshot when the same buffer grows tools', () => {
+    const committed = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: '我来帮你分析数据。' },
+          { type: 'thinking', thinking: '先查 dws。' },
+          { type: 'tool_use', id: 't1', name: 'dws', input: {} },
+        ],
+      },
+    ];
+    const narrationStream = {
+      role: 'assistant',
+      content: [
+        {
+          type: 'text',
+          text: '我需要先获取近半年的单量数据。让我使用 dws 工具来查询相关数据。',
+        },
+      ],
+    };
+    const toolStream = {
+      role: 'assistant',
+      content: [
+        { type: 'thinking', thinking: '先查 dws，确认字段。' },
+        { type: 'tool_use', id: 't1', name: 'dws', input: {} },
+      ],
+    };
+
+    expect(shouldReplaceStreamSnapshot(narrationStream, toolStream)).toBe(true);
+
+    const layout = parseThinkingTurnLayout([...committed, toolStream], { isLiveStream: true });
+    const groups = layout.segments.filter((segment) => segment.kind === 'tool-group');
+    expect(groups).toHaveLength(1);
+    if (groups[0]?.kind !== 'tool-group') return;
+    expect(groups[0].timeline.filter((item) => item.type === 'thinking')).toHaveLength(1);
+    expect(groups[0].timeline.filter((item) => item.type === 'tool')).toHaveLength(1);
+  });
+});
+
+describe('buildTurnStableKey', () => {
+  it('uses preceding user id so key does not change when final reply is appended', () => {
+    const user = { id: 'user-weather-1', role: 'user' as const, content: '查上海天气' };
+    const snapshot = {
+      id: 'snap-1',
+      role: 'assistant' as const,
+      content: [
+        { type: 'thinking', thinking: '先查天气' },
+        { type: 'tool_use', id: 'toolu_abc', name: 'web_search', input: {} },
+      ],
+    };
+    const finalReply = {
+      id: 'final-1',
+      role: 'assistant' as const,
+      content: [{ type: 'text', text: '明天上海晴，18°C。' }],
+    };
+
+    const midTurn = buildChatDisplayItems([user, snapshot]);
+    const doneTurn = buildChatDisplayItems([user, snapshot, finalReply]);
+
+    expect(midTurn).toHaveLength(2);
+    expect(doneTurn).toHaveLength(2);
+    if (midTurn[1]?.type !== 'assistant-turn' || doneTurn[1]?.type !== 'assistant-turn') return;
+
+    expect(midTurn[1].key).toBe('turn-user-user-weather-1');
+    expect(doneTurn[1].key).toBe(midTurn[1].key);
+    expect(resolveActiveTurnStableKey([user, snapshot])).toBe('turn-user-user-weather-1');
+    expect(resolveActiveTurnStableKey([user, snapshot, finalReply])).toBe('turn-user-user-weather-1');
+    expect(buildTurnStableKey(user, 1)).toBe('turn-user-user-weather-1');
   });
 });
 

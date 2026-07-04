@@ -1,12 +1,13 @@
 /**
  * ChatProcessBlock — 思考/工具过程块通用壳（MasterGo 4:2177）
  *
- * 结构：标题行（icon + 文案）+ 可选左竖线内容区。
- * 竖线在 16px icon 列内水平居中，与标题 icon 对齐。
+ * 结构：标题行（icon + 文案 + 可选 chevron）+ 可选左竖线内容区。
+ * 思考面板内 `collapsible` 仅流式中启用；结束后平铺展开、无 chevron。
  */
 import type { LucideIcon } from 'lucide-react';
-import { Loader2 } from 'lucide-react';
+import { ChevronDown, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useProcessBlockCollapse } from '@/hooks/use-process-block-collapse';
 import {
   chatProcessContentTextWrapClass,
   chatProcessIconRailClass,
@@ -52,6 +53,14 @@ export interface ChatProcessBlockProps {
   icon: LucideIcon;
   /** 运行中时在图标前展示 spinner */
   isRunning?: boolean;
+  /** 思考面板：标题行可折叠 + chevron */
+  collapsible?: boolean;
+  /** 该 timeline 段已结束 */
+  isComplete?: boolean;
+  /** 流式且未完成时自动展开 */
+  autoExpand?: boolean;
+  /** 当前活跃段：标题 shimmer（§6.1） */
+  isActive?: boolean;
   /** 左竖线内容区；省略则仅标题行（连接/等待态） */
   children?: React.ReactNode;
   className?: string;
@@ -61,21 +70,87 @@ export function ChatProcessBlock({
   title,
   icon: Icon,
   isRunning = false,
+  collapsible = false,
+  isComplete = false,
+  autoExpand = false,
+  isActive = false,
   children,
   className,
 }: ChatProcessBlockProps) {
-  return (
-    <div className={cn(chatToolCallShellClass, className)}>
-      <div className={chatProcessTitleRowClass}>
-        {isRunning ? (
-          <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-70" aria-hidden />
-        ) : null}
-        <Icon className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-        <span className="min-w-0 truncate">{title}</span>
-      </div>
-      {children != null ? (
-        <ChatProcessContentRail hasLeadingOffset={isRunning}>{children}</ChatProcessContentRail>
+  const {
+    wrapperRef,
+    expanded,
+    toggle,
+    bodyGridClass,
+    chevronClass,
+  } = useProcessBlockCollapse({
+    collapsible,
+    isComplete,
+    autoExpand,
+  });
+
+  const titleWithChevron = collapsible ? (
+    <span className="flex min-w-0 items-center gap-1">
+      <span
+        className={cn(
+          'truncate',
+          isActive && 'chat-interaction-shimmer-text',
+        )}
+      >
+        {title}
+      </span>
+      <ChevronDown className={chevronClass} aria-hidden />
+    </span>
+  ) : (
+    <span className="min-w-0 truncate">{title}</span>
+  );
+
+  const headerRow = collapsible ? (
+    <button
+      type="button"
+      className={cn(
+        chatProcessTitleRowClass,
+        'w-full text-left transition-colors duration-150 hover:text-foreground',
+      )}
+      onClick={toggle}
+      aria-expanded={expanded}
+    >
+      <Icon className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+      {titleWithChevron}
+    </button>
+  ) : (
+    <div className={chatProcessTitleRowClass}>
+      {isRunning ? (
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-70" aria-hidden />
       ) : null}
+      <Icon className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+      {titleWithChevron}
+    </div>
+  );
+
+  const body =
+    children != null ? (
+      <ChatProcessContentRail hasLeadingOffset={!collapsible && isRunning}>
+        {children}
+      </ChatProcessContentRail>
+    ) : null;
+
+  return (
+    <div
+      ref={collapsible ? wrapperRef : undefined}
+      className={cn(
+        chatToolCallShellClass,
+        // A1 样式：收起时去掉 header/body 间距，避免一级摘要折叠后留白
+        collapsible && !expanded && 'gap-0',
+        className,
+      )}
+    >
+      {headerRow}
+      {body != null && collapsible ? (
+        <div className={bodyGridClass}>
+          <div className="min-h-0 overflow-hidden">{body}</div>
+        </div>
+      ) : body}
     </div>
   );
 }
