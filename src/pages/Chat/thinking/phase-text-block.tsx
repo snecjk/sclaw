@@ -28,7 +28,7 @@ export function PhaseTextBlock({
     <div
       className={cn(
         'max-w-none text-foreground',
-        !isStreaming && 'prose prose-sm dark:prose-invert',
+        !isStreaming && 'prose prose-sm dark:prose-invert [&_p:first-child]:mt-0 [&_p:last-child]:mb-0',
         className,
       )}
       aria-busy={isStreaming ? true : undefined}

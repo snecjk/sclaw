@@ -18,7 +18,7 @@ import {
   ChatProcessLoadingInlineIndicator,
 } from '@/components/chat/chat-process-loading-indicator';
 import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
-import { chatThinkingSummaryHeaderClass } from '@/lib/surfaces';
+import { chatThinkingSegmentSummaryHeaderClass } from '@/lib/surfaces';
 import {
   timelineBlockResetKey,
   toolRowKey,
@@ -574,7 +574,7 @@ function ThinkingToolGroupPanel({
     <div className="w-full">
       <button
         type="button"
-        className={chatThinkingSummaryHeaderClass}
+        className={chatThinkingSegmentSummaryHeaderClass}
         onClick={handleSummaryToggle}
         aria-expanded={expanded}
       >

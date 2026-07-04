@@ -1229,6 +1229,12 @@ export const chatThinkingSummaryHeaderClass = cn(
   'transition-colors duration-150 hover:text-foreground',
 );
 
+/** 分段思考栈内一级摘要：与 phase-text 间距由外层 gap-3（12px）控制，去掉 py-1 避免视觉超出 12px */
+export const chatThinkingSegmentSummaryHeaderClass = cn(
+  chatThinkingSummaryHeaderClass,
+  'py-0',
+);
+
 /** 思考/工具过程次要正文（规范 §4.3 / §4.4 内容区） */
 export const chatProcessSecondaryTextClass = 'text-[13px] leading-5 font-normal text-[#86909C]';
 
