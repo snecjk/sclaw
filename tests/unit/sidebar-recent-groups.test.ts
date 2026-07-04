@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSidebarRecentGroupSections } from '@/lib/sidebar-recent-groups';
+import { buildSidebarRecentGroupSections, suggestNextSidebarRecentGroupName } from '@/lib/sidebar-recent-groups';
 import type { SidebarRecentGroup } from '@/stores/sidebar-recent-groups';
 
 type TestSession = { key: string; label?: string };
@@ -100,5 +100,33 @@ describe('useSidebarRecentGroupsStore behavior (via import)', () => {
     useSidebarRecentGroupsStore.setState({ groups: [], sessionGroupByKey: {}, expandedGroupIds: {} });
     const id = useSidebarRecentGroupsStore.getState().createGroupAndAssignSession('   ', 'sk1');
     expect(id).toBeNull();
+  });
+});
+
+describe('suggestNextSidebarRecentGroupName', () => {
+  it('returns default example when no existing names use the prefix', () => {
+    expect(suggestNextSidebarRecentGroupName([], '我的分组1')).toBe('我的分组1');
+  });
+
+  it('increments when default name already exists', () => {
+    expect(suggestNextSidebarRecentGroupName(['我的分组1'], '我的分组1')).toBe('我的分组2');
+  });
+
+  it('skips to next free number when intermediate numbers are taken', () => {
+    expect(
+      suggestNextSidebarRecentGroupName(['我的分组1', '我的分组2'], '我的分组1'),
+    ).toBe('我的分组3');
+  });
+
+  it('fills lowest free slot when a number is missing', () => {
+    expect(suggestNextSidebarRecentGroupName(['我的分组2'], '我的分组1')).toBe('我的分组1');
+  });
+
+  it('works with English default example', () => {
+    expect(suggestNextSidebarRecentGroupName(['My group 1'], 'My group 1')).toBe('My group 2');
+  });
+
+  it('returns trimmed example unchanged when it has no trailing number', () => {
+    expect(suggestNextSidebarRecentGroupName(['Custom'], 'Custom')).toBe('Custom');
   });
 });

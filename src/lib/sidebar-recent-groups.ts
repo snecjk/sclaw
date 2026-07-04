@@ -39,3 +39,41 @@ export function buildSidebarRecentGroupSections<TSession extends { key: string }
 
   return { groupedSections, ungroupedSessions };
 }
+
+/** 从 i18n 默认名（如「我的分组1」）解析前缀，返回下一个未占用的「前缀+序号」 */
+export function suggestNextSidebarRecentGroupName(
+  existingGroupNames: readonly string[],
+  defaultGroupNameExample: string,
+): string {
+  const trimmedExample = defaultGroupNameExample.trim();
+  const exampleMatch = trimmedExample.match(/^(.*?)(\d+)$/);
+  if (!exampleMatch) {
+    return trimmedExample;
+  }
+
+  const prefix = exampleMatch[1] ?? trimmedExample;
+  const parsedStart = Number.parseInt(exampleMatch[2] ?? '1', 10);
+  const startNum = Number.isFinite(parsedStart) && parsedStart > 0 ? parsedStart : 1;
+
+  const usedNumbers = new Set<number>();
+  const namePattern = new RegExp(`^${escapeRegExpForSidebarGroupName(prefix)}(\\d+)$`);
+
+  for (const name of existingGroupNames) {
+    const nameMatch = name.trim().match(namePattern);
+    if (!nameMatch) continue;
+    const n = Number.parseInt(nameMatch[1] ?? '', 10);
+    if (Number.isFinite(n) && n > 0) {
+      usedNumbers.add(n);
+    }
+  }
+
+  let candidate = startNum;
+  while (usedNumbers.has(candidate)) {
+    candidate += 1;
+  }
+  return `${prefix}${candidate}`;
+}
+
+function escapeRegExpForSidebarGroupName(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

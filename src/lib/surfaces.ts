@@ -1408,8 +1408,8 @@ export const sidebarRecentMenuDeleteItemClass = cn(
   '[&_svg]:text-[var(--sto-sidebar-text-icon)] focus:[&_svg]:text-destructive data-[highlighted]:[&_svg]:text-destructive',
 );
 
-/** 最近分组子菜单分隔 — MCP #F2F3F5 */
-export const sidebarRecentMenuDividerClass = 'my-1 h-px bg-[#F2F3F5]';
+/** 最近分组子菜单分隔 — MCP #F2F3F5（配合 DropdownMenuSeparator） */
+export const sidebarRecentMenuDividerClass = '-mx-1 my-1 h-px bg-[#F2F3F5]';
 
 /** 分组/最近空态行 — MCP Grey-5 #C9CDD4 */
 export const sidebarRecentEmptyLineClass = cn(

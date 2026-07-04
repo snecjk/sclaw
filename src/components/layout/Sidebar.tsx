@@ -54,7 +54,7 @@ import {
   SidebarRecentGroupDialogs,
   type SidebarRecentGroupDialogState,
 } from '@/components/layout/sidebar-recent-group-dialogs';
-import { buildSidebarRecentGroupSections } from '@/lib/sidebar-recent-groups';
+import { buildSidebarRecentGroupSections, suggestNextSidebarRecentGroupName } from '@/lib/sidebar-recent-groups';
 import { useSidebarRecentGroupsStore } from '@/stores/sidebar-recent-groups';
 import { isSessionUnreadNow } from '@/stores/session-unread';
 import { toast } from 'sonner';
@@ -597,7 +597,7 @@ function SidebarCollapsibleSectionLabel({
   onToggle: () => void;
   label: string;
   toggleAriaLabel: string;
-  /** 分区标题与上方区块间距，默认 mt-4（导航→首分区）；次分区可收紧 */
+  /** 分区标题与上方区块间距；主导航→首滚动分区由 nav pb-2（8px）承担，此处默认不加 mt */
   className?: string;
   /** sticky 外壳 ref（任务区 scroll-collapse 检测用） */
   shellRef?: React.RefObject<HTMLDivElement | null>;
@@ -610,7 +610,6 @@ function SidebarCollapsibleSectionLabel({
       className={cn(
         sidebarSectionStickyShellClass,
         stickyTopClass ?? sidebarSectionStickyTopTaskClass,
-        'mt-4',
         className,
       )}
     >
@@ -946,6 +945,21 @@ export function Sidebar() {
   const toggleRecentGroup = useSidebarRecentGroupsStore((s) => s.toggleGroup);
   const expandRecentGroup = useSidebarRecentGroupsStore((s) => s.expandGroup);
   const pruneMissingRecentGroupSessions = useSidebarRecentGroupsStore((s) => s.pruneMissingSessions);
+
+  const openCreateRecentGroupDialog = useCallback(
+    (sessionKey: string) => {
+      setGroupDialog({
+        mode: 'create',
+        sessionKey,
+        defaultName: suggestNextSidebarRecentGroupName(
+          recentGroups.map((g) => g.name),
+          t('common:sidebar.defaultGroupName'),
+        ),
+      });
+    },
+    [recentGroups, t],
+  );
+
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
 
   useEffect(() => {
@@ -1670,6 +1684,7 @@ export function Sidebar() {
         {sidebarVis.workspace ? (
           !sidebarCollapsed ? (
             <SidebarCollapsibleSectionLabel
+              className="mt-4"
               open={workspaceSectionOpen}
               onToggle={() => setWorkspaceSectionOpen((o) => !o)}
               label={t('common:sidebar.workspace')}
@@ -1698,7 +1713,7 @@ export function Sidebar() {
       <div
         ref={scrollContainerRef}
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden',
+          'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden',
           sidebarCollapsed ? 'px-0' : 'px-2',
         )}
       >
@@ -1753,13 +1768,13 @@ export function Sidebar() {
         {!sidebarCollapsed ? (
           <div
             ref={recentSectionSentinelRef}
-            className="pointer-events-none h-px w-full shrink-0 opacity-0"
+            className="pointer-events-none -mb-1 h-0 w-full shrink-0 overflow-hidden opacity-0"
             aria-hidden
           />
         ) : null}
 
         {!sidebarCollapsed && groupedSections.length > 0
-          ? groupedSections.map((section, groupIndex) => {
+          ? groupedSections.map((section) => {
               const isGroupOpen = expandedGroupIds[section.group.id] === true;
               const hasGroupUnread =
                 !isGroupOpen && section.sessions.some((s) => isSessionUnreadNow(s.key));
@@ -1770,7 +1785,6 @@ export function Sidebar() {
                     className={cn(
                       sidebarSectionStickyShellClass,
                       sidebarSectionStickyTopGroupClass,
-                      groupIndex === 0 && 'mt-2',
                     )}
                   >
                     <SidebarRecentGroupRow
@@ -1828,11 +1842,7 @@ export function Sidebar() {
                                 requestSessionDelete({ key: s.key, label: sessionLabel });
                               }}
                               onCreateGroup={() => {
-                                setGroupDialog({
-                                  mode: 'create',
-                                  sessionKey: s.key,
-                                  defaultName: t('common:sidebar.defaultGroupName'),
-                                });
+                                openCreateRecentGroupDialog(s.key);
                               }}
                               onAssignGroup={(groupId) => {
                                 assignSessionToGroup(s.key, groupId);
@@ -1864,7 +1874,6 @@ export function Sidebar() {
             onToggle={() => setRecentOpen((o) => !o)}
             label={t('common:sidebar.recent')}
             toggleAriaLabel={t('common:sidebar.toggleRecentSection')}
-            className="mt-2"
           />
         ) : null}
 
@@ -1980,11 +1989,7 @@ export function Sidebar() {
                                       requestSessionDelete({ key: s.key, label: sessionLabel });
                                     }}
                                     onCreateGroup={() => {
-                                      setGroupDialog({
-                                        mode: 'create',
-                                        sessionKey: s.key,
-                                        defaultName: t('common:sidebar.defaultGroupName'),
-                                      });
+                                      openCreateRecentGroupDialog(s.key);
                                     }}
                                     onAssignGroup={(groupId) => {
                                       assignSessionToGroup(s.key, groupId);
@@ -2047,11 +2052,7 @@ export function Sidebar() {
                           requestSessionDelete({ key: s.key, label: sessionLabel });
                         }}
                         onCreateGroup={() => {
-                          setGroupDialog({
-                            mode: 'create',
-                            sessionKey: s.key,
-                            defaultName: t('common:sidebar.defaultGroupName'),
-                          });
+                          openCreateRecentGroupDialog(s.key);
                         }}
                         onAssignGroup={(groupId) => {
                           assignSessionToGroup(s.key, groupId);

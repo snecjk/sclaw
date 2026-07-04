@@ -16,6 +16,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -130,21 +131,18 @@ export function SidebarRecentSessionRowTrailing({
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className={sidebarRecentMenuContentClass}>
                 {currentGroupId !== null ? (
-                  <>
-                    <DropdownMenuItem
-                      className={sidebarRecentMenuItemClass}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onUngroup();
-                      }}
-                    >
-                      {t('sidebar.ungroup')}
-                    </DropdownMenuItem>
-                    <div className={sidebarRecentMenuDividerClass} role="separator" />
-                  </>
+                  <DropdownMenuItem
+                    className={cn(sidebarRecentMenuItemClass, 'justify-start')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUngroup();
+                    }}
+                  >
+                    {t('sidebar.ungroup')}
+                  </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuItem
-                  className={sidebarRecentMenuItemClass}
+                  className={cn(sidebarRecentMenuItemClass, 'justify-start')}
                   onClick={(e) => {
                     e.stopPropagation();
                     onCreateGroup();
@@ -154,25 +152,21 @@ export function SidebarRecentSessionRowTrailing({
                 </DropdownMenuItem>
                 {groups.length > 0 ? (
                   <>
-                    <div className={sidebarRecentMenuDividerClass} role="separator" />
+                    <DropdownMenuSeparator className={sidebarRecentMenuDividerClass} />
                     {groups.map((group) => (
                       <DropdownMenuItem
                         key={group.id}
-                        className={sidebarRecentMenuItemClass}
+                        className={cn(sidebarRecentMenuItemClass, 'justify-between gap-2')}
                         onClick={(e) => {
                           e.stopPropagation();
                           if (group.id === currentGroupId) return;
                           onAssignGroup(group.id);
                         }}
                       >
-                        <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
-                          {group.id === currentGroupId ? (
-                            <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-                          ) : (
-                            <span className="w-3.5 shrink-0" aria-hidden />
-                          )}
-                          <span className="truncate">{group.name}</span>
-                        </span>
+                        <span className="min-w-0 flex-1 truncate text-left">{group.name}</span>
+                        {group.id === currentGroupId ? (
+                          <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                        ) : null}
                       </DropdownMenuItem>
                     ))}
                   </>
