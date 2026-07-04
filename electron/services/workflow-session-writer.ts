@@ -3,7 +3,7 @@
  *
  * Appends workflow execution lifecycle records to session transcripts:
  * - OpenClaw: agents/{id}/sessions/*.jsonl
- * - Claude: ~/.stoclaw/.claude/projects/**/{sessionId}.jsonl
+ * - Claude: ~/.stoclaw/.claude/projects/<project-hash>/{sessionId}.jsonl
  *
  * Completed workflow UI can be restored after app reinstall when session files remain.
  */
