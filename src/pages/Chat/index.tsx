@@ -16,6 +16,7 @@ import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ChatMessage } from './ChatMessage';
 import { AssistantTurnMessage } from './AssistantTurnMessage';
 import { useChatDisplay } from './use-chat-display';
+import { isAssistantRole } from './chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
 import { ChatContentHeaderActions } from './ChatSearchBar';
@@ -563,6 +564,7 @@ export function Chat() {
                     onPreviewFile={openArtifactPreview}
                     onCreateScheduledTask={openWorkflowCronTaskModal}
                     onEditMessage={handleEditMessage}
+                    isTurnDisplayReply={isAssistantRole(item.message.role)}
                   />
                 );
               })}
