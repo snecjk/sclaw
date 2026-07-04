@@ -5,6 +5,7 @@ import {
   dedupeRedundantUserMessages,
   isSameUserMessage,
   mergeOptimisticUserIntoHistory,
+  recoverInitialUserFromSessionLabel,
 } from '@/stores/chat/user-message-merge';
 
 describe('user-message-merge', () => {
@@ -184,5 +185,54 @@ describe('user-message-merge', () => {
     const deduped = dedupeRedundantUserMessages(messages, 1710000000000);
 
     expect(deduped.map((m) => m.id)).toEqual(['assistant-1', 'history-user']);
+  });
+
+  it('recovers optimistic user after run completes when history omits the opening turn', () => {
+    const optimistic = {
+      id: 'local-user-1',
+      role: 'user',
+      content: '客户成本分析 创建工作流',
+      timestamp: 1710000000,
+    } as RawMessage;
+    const enriched = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: [{ type: 'text', text: '正在配置工作流…' }],
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = mergeOptimisticUserIntoHistory(enriched, [optimistic], {
+      userMessageAt: null,
+      sending: false,
+      cachedOptimistic: optimistic,
+    });
+
+    expect(merged.map((message) => message.content)).toEqual([
+      '客户成本分析 创建工作流',
+      [{ type: 'text', text: '正在配置工作流…' }],
+    ]);
+  });
+
+  it('reconstructs opening user turn from stored session label when history and cache are empty', () => {
+    const enriched = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '参数已确认',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = recoverInitialUserFromSessionLabel(
+      enriched,
+      'agent:main:session-1',
+      { 'agent:main:session-1': '客户成本分析 创建工作流' },
+    );
+
+    expect(merged[0]?.role).toBe('user');
+    expect(merged[0]?.content).toBe('客户成本分析 创建工作流');
+    expect(merged[1]?.role).toBe('assistant');
   });
 });

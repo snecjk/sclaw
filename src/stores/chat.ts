@@ -96,6 +96,7 @@ import {
   isSameUserMessage,
   mergeOptimisticUserIntoHistory,
   normalizeUserMessageText,
+  recoverInitialUserFromSessionLabel,
   traceLoadHistoryUserReconciliation,
 } from './chat/user-message-merge';
 import {
@@ -1997,28 +1998,34 @@ export const useChatStore = create<ChatState>()(
         get().runtimeBySessionKey,
         targetSessionKey,
       ).optimisticUserMessage ?? get().optimisticUserMessage;
-      if (userMsgAt) {
-        finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
-          userMessageAt: userMsgAt,
-          sending: get().sending,
-          sessionKey: targetSessionKey,
-          cachedOptimistic,
-        });
-        if (cachedOptimistic && finalMessages.some((m) => isSameUserMessage(m, cachedOptimistic, userMsgAt))) {
+      finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
+        userMessageAt: userMsgAt,
+        sending: get().sending,
+        sessionKey: targetSessionKey,
+        cachedOptimistic,
+      });
+      const optimisticRefAt = userMsgAt
+        ?? (cachedOptimistic?.timestamp ? toMs(cachedOptimistic.timestamp) : 0);
+      if (cachedOptimistic && optimisticRefAt > 0
+        && finalMessages.some((m) => isSameUserMessage(m, cachedOptimistic, optimisticRefAt))) {
+        set((s) => patchSessionRuntimeState(s, targetSessionKey, { optimisticUserMessage: null }));
+      } else if (cachedOptimistic) {
+        const cachedNorm = normalizeUserMessageText(cachedOptimistic.content);
+        if (
+          cachedNorm.length > 0
+          && finalMessages.some((m) => (
+            m.role === 'user'
+            && normalizeUserMessageText(m.content) === cachedNorm
+          ))
+        ) {
           set((s) => patchSessionRuntimeState(s, targetSessionKey, { optimisticUserMessage: null }));
-        } else if (cachedOptimistic) {
-          const cachedNorm = normalizeUserMessageText(cachedOptimistic.content);
-          if (
-            cachedNorm.length > 0
-            && finalMessages.some((m) => (
-              m.role === 'user'
-              && normalizeUserMessageText(m.content) === cachedNorm
-            ))
-          ) {
-            set((s) => patchSessionRuntimeState(s, targetSessionKey, { optimisticUserMessage: null }));
-          }
         }
       }
+      finalMessages = recoverInitialUserFromSessionLabel(
+        finalMessages,
+        targetSessionKey,
+        get().sessionLabels,
+      );
 
       if (get().currentSessionKey !== targetSessionKey) return;
 
