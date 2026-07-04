@@ -1,15 +1,20 @@
 /**
  * Workflow Session Writer
  *
- * Appends workflow execution lifecycle records to OpenClaw session .jsonl
- * so completed workflow UI can be restored after app reinstall.
+ * Appends workflow execution lifecycle records to session transcripts:
+ * - OpenClaw: agents/{id}/sessions/*.jsonl
+ * - Claude: ~/.stoclaw/.claude/projects/**/{sessionId}.jsonl
+ *
+ * Completed workflow UI can be restored after app reinstall when session files remain.
  */
 
 import { randomUUID } from 'node:crypto';
 import { readFile, appendFile, access, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { getEngineSessionRegistryEntry } from '../engines/session-registry';
 import { getOpenClawConfigDir } from '../utils/paths';
 import { logger } from '../utils/logger';
+import { appendClaudeWorkflowSessionRecord } from './claude-workflow-session-writer';
 import {
   buildWorkflowExecutionSessionRecord,
   type WorkflowExecutionSessionRecord,
@@ -98,6 +103,12 @@ export { buildWorkflowExecutionSessionRecord };
 export async function appendWorkflowSessionRecord(
   input: AppendWorkflowSessionRecordInput,
 ): Promise<void> {
+  const registryEntry = await getEngineSessionRegistryEntry(input.sessionKey);
+  if (registryEntry?.engineType === 'claude') {
+    await appendClaudeWorkflowSessionRecord(input);
+    return;
+  }
+
   const agentId = getAgentIdFromSessionKey(input.sessionKey);
   const sessionFile = await resolveSessionFile(agentId, input.sessionKey);
   if (!sessionFile) return;
