@@ -3,6 +3,7 @@ import type { RawMessage } from '@/stores/chat/types';
 import { WORKFLOW_SESSION_HINT_MARKER } from '@/lib/workflow-session-hint';
 import {
   dedupeRedundantUserMessages,
+  ensureOpeningUserMessageFirst,
   isSameUserMessage,
   mergeOptimisticUserIntoHistory,
   recoverInitialUserFromSessionLabel,
@@ -233,6 +234,39 @@ describe('user-message-merge', () => {
 
     expect(merged[0]?.role).toBe('user');
     expect(merged[0]?.content).toBe('客户成本分析 创建工作流');
+    expect(merged[1]?.role).toBe('assistant');
+  });
+
+  it('moves a late-recovered opening user turn ahead of workflow results', () => {
+    const messages = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '参数已确认，工作流已在后台启动执行',
+        timestamp: 1710000003,
+      },
+      {
+        id: 'assistant-2',
+        role: 'assistant',
+        content: '已完成',
+        timestamp: 1710000063,
+      },
+      {
+        id: 'session-label-user',
+        role: 'user',
+        content: '客户异常监控 创建工作流',
+        timestamp: 1710000123,
+      },
+    ] as RawMessage[];
+
+    const merged = ensureOpeningUserMessageFirst(
+      messages,
+      'agent:main:session-1',
+      { 'agent:main:session-1': '客户异常监控 创建工作流' },
+    );
+
+    expect(merged[0]?.role).toBe('user');
+    expect(merged[0]?.content).toBe('客户异常监控 创建工作流');
     expect(merged[1]?.role).toBe('assistant');
   });
 });

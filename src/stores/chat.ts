@@ -97,6 +97,7 @@ import {
   mergeOptimisticUserIntoHistory,
   normalizeUserMessageText,
   recoverInitialUserFromSessionLabel,
+  ensureOpeningUserMessageFirst,
   traceLoadHistoryUserReconciliation,
 } from './chat/user-message-merge';
 import {
@@ -2021,11 +2022,6 @@ export const useChatStore = create<ChatState>()(
           set((s) => patchSessionRuntimeState(s, targetSessionKey, { optimisticUserMessage: null }));
         }
       }
-      finalMessages = recoverInitialUserFromSessionLabel(
-        finalMessages,
-        targetSessionKey,
-        get().sessionLabels,
-      );
 
       if (get().currentSessionKey !== targetSessionKey) return;
 
@@ -2040,6 +2036,16 @@ export const useChatStore = create<ChatState>()(
       finalMessages = mergeWorkflowCardBlocksFromCurrent(finalMessages, get().messages);
       finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
       finalMessages = ensureWorkflowCardsInMessages(finalMessages, targetSessionKey, getMessageText);
+      finalMessages = recoverInitialUserFromSessionLabel(
+        finalMessages,
+        targetSessionKey,
+        get().sessionLabels,
+      );
+      finalMessages = ensureOpeningUserMessageFirst(
+        finalMessages,
+        targetSessionKey,
+        get().sessionLabels,
+      );
       finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null, {
         sessionKey: targetSessionKey,
       });

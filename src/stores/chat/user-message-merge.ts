@@ -266,6 +266,22 @@ function findRecoverableUserMessage(
   return undefined;
 }
 
+function earliestMessageTimestampMs(messages: RawMessage[]): number | undefined {
+  let min: number | undefined;
+  for (const message of messages) {
+    if (typeof message.timestamp !== 'number') continue;
+    const ms = toMs(message.timestamp);
+    if (ms <= 0) continue;
+    min = min === undefined ? ms : Math.min(min, ms);
+  }
+  return min;
+}
+
+function openingUserTimestampSeconds(messages: RawMessage[]): number {
+  const earliestMs = earliestMessageTimestampMs(messages);
+  return earliestMs !== undefined ? (earliestMs - 1) / 1000 : Date.now() / 1000;
+}
+
 /** Reconstruct the opening user turn from a stored session title when history omits it. */
 export function recoverInitialUserFromSessionLabel(
   enrichedMessages: RawMessage[],
@@ -275,16 +291,53 @@ export function recoverInitialUserFromSessionLabel(
   if (historyHasVisibleUserMessage(enrichedMessages)) return enrichedMessages;
   const label = sessionLabels[sessionKey]?.trim();
   if (!label || isPlaceholderSessionLabel(label)) return enrichedMessages;
-  const firstTs = enrichedMessages[0]?.timestamp;
-  const userTimestamp = typeof firstTs === 'number'
-    ? (toMs(firstTs) - 1) / 1000
-    : Date.now() / 1000;
   return insertOptimisticUserMessage(enrichedMessages, {
     role: 'user',
     content: label,
-    timestamp: userTimestamp,
+    timestamp: openingUserTimestampSeconds(enrichedMessages),
     id: `session-label-user-${sessionKey}`,
   } as RawMessage);
+}
+
+/** Keep the session-opening user turn before assistant/workflow messages after history merges. */
+export function ensureOpeningUserMessageFirst(
+  messages: RawMessage[],
+  sessionKey: string,
+  sessionLabels: Record<string, string>,
+): RawMessage[] {
+  const visibleUsers = messages.filter((message) => (
+    message.role === 'user'
+    && normalizeUserMessageForDisplay(getMessageText(message.content)).length > 0
+  ));
+  if (visibleUsers.length === 0) return messages;
+
+  const label = sessionLabels[sessionKey]?.trim();
+  let openingUser = visibleUsers.reduce((earliest, message) => (
+    toMs(message.timestamp) < toMs(earliest.timestamp) ? message : earliest
+  ));
+  if (label && !isPlaceholderSessionLabel(label)) {
+    const labeled = visibleUsers.find(
+      (message) => normalizeUserMessageForDisplay(getMessageText(message.content)) === label,
+    );
+    if (labeled) openingUser = labeled;
+  }
+
+  const sorted = [...messages].sort((left, right) => toMs(left.timestamp) - toMs(right.timestamp));
+  const openingIndex = sorted.findIndex((message) => (
+    message.id === openingUser.id
+    || (message.role === 'user' && displayTextMatches(message, openingUser))
+  ));
+  if (openingIndex <= 0) return sorted;
+
+  const correctedTimestamp = openingUserTimestampSeconds(messages);
+  const patched = messages.map((message) => {
+    if (message.id !== openingUser.id && !displayTextMatches(message, openingUser)) {
+      return message;
+    }
+    if (message.role !== 'user') return message;
+    return { ...message, timestamp: correctedTimestamp };
+  });
+  return patched.sort((left, right) => toMs(left.timestamp) - toMs(right.timestamp));
 }
 
 export function mergeOptimisticUserIntoHistory(
