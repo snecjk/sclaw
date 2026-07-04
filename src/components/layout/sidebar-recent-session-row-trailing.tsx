@@ -1,34 +1,71 @@
 /**
- * SidebarRecentSessionRowTrailing — 最近会话行右侧：状态位 + hover 重命名/删除。
+ * SidebarRecentSessionRowTrailing — 最近会话行尾：状态位 + hover「...」菜单（重命名 / 分组 / 删除）。
  *
- * 默认展示 running / 失败 / 未读；行 hover 时操作钮盖住状态位（与设计稿同槽位）。
+ * 使用位置：SidebarRecentSessionRow
  */
-import { Pencil, Trash2 } from 'lucide-react';
+import {
+  Check,
+  ChevronRight,
+  Folder,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { cn } from '@/lib/utils';
-import { sidebarTextIconClass } from '@/lib/surfaces';
+import {
+  sidebarRecentMenuContentClass,
+  sidebarRecentMenuDeleteItemClass,
+  sidebarRecentMenuDividerClass,
+  sidebarRecentMenuItemClass,
+  sidebarTextIconClass,
+} from '@/lib/surfaces';
+import type { SidebarRecentGroup } from '@/stores/sidebar-recent-groups';
 
 export interface SidebarRecentSessionRowTrailingProps {
   /** OpenClaw session key */
   sessionKey: string;
-  /** 当前会话行是否选中（操作区底色与行态一致） */
+  /** 当前会话行是否选中 */
   isActive?: boolean;
+  /** 全部分组（子菜单列表） */
+  groups: SidebarRecentGroup[];
+  /** 当前会话所属 groupId；null = 未分组 */
+  currentGroupId: string | null;
   /** 点击重命名 */
-  onEdit: () => void;
+  onRename: () => void;
   /** 点击删除 */
   onDelete: () => void;
+  /** 子菜单：新建分组 */
+  onCreateGroup: () => void;
+  /** 子菜单：移入已有分组 */
+  onAssignGroup: (groupId: string) => void;
+  /** 子菜单：不分组（仅已分组时展示） */
+  onUngroup: () => void;
   className?: string;
 }
 
-/** 右侧状态 / 操作区固定宽度，与 pr-12 行内距对齐 */
 const SIDEBAR_RECENT_ROW_TRAILING_W_CLASS = 'w-12';
 
 export function SidebarRecentSessionRowTrailing({
   sessionKey,
   isActive = false,
-  onEdit,
+  groups,
+  currentGroupId,
+  onRename,
   onDelete,
+  onCreateGroup,
+  onAssignGroup,
+  onUngroup,
   className,
 }: SidebarRecentSessionRowTrailingProps) {
   const { t } = useTranslation('common');
@@ -51,43 +88,109 @@ export function SidebarRecentSessionRowTrailing({
       </div>
       <div
         className={cn(
-          'absolute inset-0 flex items-center justify-end gap-0',
+          'absolute inset-0 flex items-center justify-end',
           'invisible opacity-0 transition-opacity group-hover:visible group-hover:opacity-100',
           'rounded-md',
           isActive
-            ? 'bg-[var(--sto-sidebar-subitem-active-bg)] group-hover:bg-[var(--sto-sidebar-row-hover-bg)]'
+            ? 'bg-[#DCDCDC] group-hover:bg-[var(--sto-sidebar-row-hover-bg)]'
             : 'bg-[var(--sto-sidebar-bg)] group-hover:bg-[var(--sto-sidebar-row-hover-bg)]',
         )}
       >
-        <button
-          type="button"
-          aria-label={t('actions.edit')}
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit();
-          }}
-          className={cn(
-            'flex items-center justify-center rounded p-0.5',
-            sidebarTextIconClass,
-            'hover:bg-black/[0.04]',
-          )}
-        >
-          <Pencil className="h-3.5 w-3.5" aria-hidden />
-        </button>
-        <button
-          type="button"
-          aria-label={t('actions.delete')}
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className={cn(
-            'flex items-center justify-center rounded p-0.5',
-            'text-muted-foreground hover:bg-destructive/10 hover:text-destructive',
-          )}
-        >
-          <Trash2 className="h-3.5 w-3.5" aria-hidden />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label={t('sidebar.sessionRowMenu')}
+              onClick={(e) => e.stopPropagation()}
+              className={cn(
+                'flex h-7 w-7 items-center justify-center rounded-md',
+                sidebarTextIconClass,
+                'hover:bg-black/[0.04]',
+              )}
+            >
+              <MoreHorizontal className="h-4 w-4" aria-hidden />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className={sidebarRecentMenuContentClass}>
+            <DropdownMenuItem
+              className={sidebarRecentMenuItemClass}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRename();
+              }}
+            >
+              <Pencil className="h-4 w-4 shrink-0" aria-hidden />
+              {t('actions.rename')}
+            </DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className={sidebarRecentMenuItemClass}>
+                <Folder className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="flex-1 truncate">{t('sidebar.group')}</span>
+                <ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className={sidebarRecentMenuContentClass}>
+                {currentGroupId !== null ? (
+                  <>
+                    <DropdownMenuItem
+                      className={sidebarRecentMenuItemClass}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUngroup();
+                      }}
+                    >
+                      {t('sidebar.ungroup')}
+                    </DropdownMenuItem>
+                    <div className={sidebarRecentMenuDividerClass} role="separator" />
+                  </>
+                ) : null}
+                <DropdownMenuItem
+                  className={sidebarRecentMenuItemClass}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCreateGroup();
+                  }}
+                >
+                  {t('sidebar.newGroup')}
+                </DropdownMenuItem>
+                {groups.length > 0 ? (
+                  <>
+                    <div className={sidebarRecentMenuDividerClass} role="separator" />
+                    {groups.map((group) => (
+                      <DropdownMenuItem
+                        key={group.id}
+                        className={sidebarRecentMenuItemClass}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (group.id === currentGroupId) return;
+                          onAssignGroup(group.id);
+                        }}
+                      >
+                        <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
+                          {group.id === currentGroupId ? (
+                            <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                          ) : (
+                            <span className="w-3.5 shrink-0" aria-hidden />
+                          )}
+                          <span className="truncate">{group.name}</span>
+                        </span>
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                ) : null}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuItem
+              className={sidebarRecentMenuDeleteItemClass}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+            >
+              <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+              {t('actions.delete')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );

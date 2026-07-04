@@ -3,6 +3,8 @@
  * does not re-render the full Sidebar tree.
  */
 import { create } from 'zustand';
+import { toast } from 'sonner';
+import i18n from '@/i18n';
 import type { StoTaskId } from '@/lib/sto-tasks';
 
 export type SidebarSessionDeletePayload = { key: string; label: string };
@@ -59,6 +61,7 @@ export async function confirmSidebarSessionDelete(): Promise<void> {
   const deleted = await sessionDeleteExecutor(payload);
   if (deleted) {
     clearSessionDelete();
+    toast.success(i18n.t('common:sidebar.deleteSessionSucceeded'));
   }
 }
 

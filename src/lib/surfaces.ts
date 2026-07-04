@@ -1311,7 +1311,7 @@ export const sidebarSectionChevronClass = cn(
 
 /**
  * 侧栏滚动区内分区标题 sticky 壳层 — §5.6 吸顶 + 实底盖住下方列表（无描边）。
- * 配合 stickyTopClass：任务 top-0 / 最近 top-[var(--sto-sidebar-section-sticky-h)]。
+ * 配合 stickyTopClass：任务 top-0 / 分组·最近 top-[var(--sto-sidebar-section-sticky-h)]（z 分组 18 < 最近 19）。
  */
 export const sidebarSectionStickyShellClass = cn(
   'sticky bg-[var(--sto-sidebar-bg)]',
@@ -1319,6 +1319,10 @@ export const sidebarSectionStickyShellClass = cn(
 
 /** 任务分区 sticky 锚点 */
 export const sidebarSectionStickyTopTaskClass = 'top-0 z-20';
+
+/** 自建分组 sticky 锚点 — 与「最近」同 top 接力；须包在 section 内，滚出本组后释放 */
+export const sidebarSectionStickyTopGroupClass =
+  'top-[var(--sto-sidebar-section-sticky-h)] z-[18]';
 
 /** 最近分区 sticky 锚点 — 叠在任务标题下方 */
 export const sidebarSectionStickyTopRecentClass =
@@ -1383,3 +1387,32 @@ export const sidebarRunningSpinnerClass = 'text-[var(--sto-sidebar-running-spinn
 
 /** 侧栏未读红点 — 6×6px，destructive */
 export const sidebarUnreadDotClass = 'h-1.5 w-1.5 shrink-0 rounded-full bg-destructive';
+
+/** 最近分组内会话选中底 — MCP paint_8:90700 #DCDCDC */
+export const sidebarRecentSessionActiveClass = 'bg-[#DCDCDC]';
+
+/** 最近会话/分组下拉 — MCP 140px 菜单容器 */
+export const sidebarRecentMenuContentClass =
+  'min-w-[140px] rounded-lg border border-border bg-card p-1 shadow-[0_4px_12px_rgba(0,0,0,0.1)]';
+
+/** 最近会话/分组下拉项 — MCP 132×34, hover #F0F2F5 */
+export const sidebarRecentMenuItemClass = cn(
+  'flex h-[34px] cursor-pointer select-none items-center gap-1 rounded-md px-2 text-sm leading-[18px] text-foreground outline-none',
+  'focus:bg-[#F0F2F5] data-[highlighted]:bg-[#F0F2F5]',
+);
+
+/** 最近会话下拉删除项 hover — MCP #FFF2F0 + destructive 字/图标 */
+export const sidebarRecentMenuDeleteItemClass = cn(
+  sidebarRecentMenuItemClass,
+  'focus:bg-[#FFF2F0] focus:text-destructive data-[highlighted]:bg-[#FFF2F0] data-[highlighted]:text-destructive',
+  '[&_svg]:text-[var(--sto-sidebar-text-icon)] focus:[&_svg]:text-destructive data-[highlighted]:[&_svg]:text-destructive',
+);
+
+/** 最近分组子菜单分隔 — MCP #F2F3F5 */
+export const sidebarRecentMenuDividerClass = 'my-1 h-px bg-[#F2F3F5]';
+
+/** 分组/最近空态行 — MCP Grey-5 #C9CDD4 */
+export const sidebarRecentEmptyLineClass = cn(
+  sidebarBodyTextClass,
+  'px-[10px] py-2 text-[#C9CDD4]',
+);
