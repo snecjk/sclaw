@@ -2036,15 +2036,18 @@ export const useChatStore = create<ChatState>()(
       finalMessages = mergeWorkflowCardBlocksFromCurrent(finalMessages, get().messages);
       finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
       finalMessages = ensureWorkflowCardsInMessages(finalMessages, targetSessionKey, getMessageText);
+      const gatewaySessionLabel = get().sessions.find((session) => session.key === targetSessionKey)?.label;
       finalMessages = recoverInitialUserFromSessionLabel(
         finalMessages,
         targetSessionKey,
         get().sessionLabels,
+        gatewaySessionLabel,
       );
       finalMessages = ensureOpeningUserMessageFirst(
         finalMessages,
         targetSessionKey,
         get().sessionLabels,
+        gatewaySessionLabel,
       );
       finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null, {
         sessionKey: targetSessionKey,

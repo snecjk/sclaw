@@ -1,5 +1,9 @@
 import { normalizeUserMessageForDisplay } from '@/lib/user-message-display';
-import { isPlaceholderSessionLabel } from '@/lib/workflow-session-hint';
+import { resolveStoredSessionLabel } from '@/lib/session-label';
+import {
+  isCorruptedSessionLabel,
+  isPlaceholderSessionLabel,
+} from '@/lib/workflow-session-hint';
 import {
   formatChatSessionTraceLine,
   traceChatSession,
@@ -282,15 +286,39 @@ function openingUserTimestampSeconds(messages: RawMessage[]): number {
   return earliestMs !== undefined ? (earliestMs - 1) / 1000 : Date.now() / 1000;
 }
 
+function resolveOpeningSessionLabel(
+  sessionKey: string,
+  sessionLabels: Record<string, string>,
+  gatewayLabel?: string,
+): string | undefined {
+  const stored = resolveStoredSessionLabel(sessionKey, sessionLabels)?.trim();
+  if (stored && !isCorruptedSessionLabel(stored) && !isPlaceholderSessionLabel(stored)) {
+    return stored;
+  }
+  const label = gatewayLabel?.trim();
+  if (label && !isCorruptedSessionLabel(label) && !isPlaceholderSessionLabel(label)) {
+    return label;
+  }
+  return undefined;
+}
+
+function historyHasOpeningUserTurn(messages: RawMessage[], openingLabel: string | undefined): boolean {
+  if (!openingLabel) return false;
+  return messages.some((message) => (
+    message.role === 'user'
+    && normalizeUserMessageForDisplay(getMessageText(message.content)) === openingLabel
+  ));
+}
+
 /** Reconstruct the opening user turn from a stored session title when history omits it. */
 export function recoverInitialUserFromSessionLabel(
   enrichedMessages: RawMessage[],
   sessionKey: string,
   sessionLabels: Record<string, string>,
+  gatewayLabel?: string,
 ): RawMessage[] {
-  if (historyHasVisibleUserMessage(enrichedMessages)) return enrichedMessages;
-  const label = sessionLabels[sessionKey]?.trim();
-  if (!label || isPlaceholderSessionLabel(label)) return enrichedMessages;
+  const label = resolveOpeningSessionLabel(sessionKey, sessionLabels, gatewayLabel);
+  if (!label || historyHasOpeningUserTurn(enrichedMessages, label)) return enrichedMessages;
   return insertOptimisticUserMessage(enrichedMessages, {
     role: 'user',
     content: label,
@@ -304,33 +332,39 @@ export function ensureOpeningUserMessageFirst(
   messages: RawMessage[],
   sessionKey: string,
   sessionLabels: Record<string, string>,
+  gatewayLabel?: string,
 ): RawMessage[] {
-  const visibleUsers = messages.filter((message) => (
+  const label = resolveOpeningSessionLabel(sessionKey, sessionLabels, gatewayLabel);
+  let working = messages;
+  if (label && !historyHasOpeningUserTurn(working, label)) {
+    working = recoverInitialUserFromSessionLabel(working, sessionKey, sessionLabels, gatewayLabel);
+  }
+
+  const visibleUsers = working.filter((message) => (
     message.role === 'user'
     && normalizeUserMessageForDisplay(getMessageText(message.content)).length > 0
   ));
-  if (visibleUsers.length === 0) return messages;
+  if (visibleUsers.length === 0) return working;
 
-  const label = sessionLabels[sessionKey]?.trim();
   let openingUser = visibleUsers.reduce((earliest, message) => (
     toMs(message.timestamp) < toMs(earliest.timestamp) ? message : earliest
   ));
-  if (label && !isPlaceholderSessionLabel(label)) {
+  if (label) {
     const labeled = visibleUsers.find(
       (message) => normalizeUserMessageForDisplay(getMessageText(message.content)) === label,
     );
     if (labeled) openingUser = labeled;
   }
 
-  const sorted = [...messages].sort((left, right) => toMs(left.timestamp) - toMs(right.timestamp));
+  const sorted = [...working].sort((left, right) => toMs(left.timestamp) - toMs(right.timestamp));
   const openingIndex = sorted.findIndex((message) => (
     message.id === openingUser.id
     || (message.role === 'user' && displayTextMatches(message, openingUser))
   ));
   if (openingIndex <= 0) return sorted;
 
-  const correctedTimestamp = openingUserTimestampSeconds(messages);
-  const patched = messages.map((message) => {
+  const correctedTimestamp = openingUserTimestampSeconds(working);
+  const patched = working.map((message) => {
     if (message.id !== openingUser.id && !displayTextMatches(message, openingUser)) {
       return message;
     }

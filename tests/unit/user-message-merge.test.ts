@@ -237,6 +237,54 @@ describe('user-message-merge', () => {
     expect(merged[1]?.role).toBe('assistant');
   });
 
+  it('still restores opening user when history only has parameter-confirm user turns', () => {
+    const enriched = [
+      {
+        id: 'user-params',
+        role: 'user',
+        content: '参数：统计月份=2025-06',
+        timestamp: 1710000002,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '参数已确认，工作流已在后台启动执行',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = recoverInitialUserFromSessionLabel(
+      enriched,
+      'agent:main:session-1',
+      { 'agent:main:session-1': '总部结算对账 创建工作流' },
+    );
+
+    expect(merged[0]?.role).toBe('user');
+    expect(merged[0]?.content).toBe('总部结算对账 创建工作流');
+    expect(merged.filter((message) => message.role === 'user')).toHaveLength(2);
+  });
+
+  it('falls back to gateway session label on cold start when memory labels are empty', () => {
+    const enriched = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '已完成',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = recoverInitialUserFromSessionLabel(
+      enriched,
+      'agent:main:session-1',
+      {},
+      '总部结算对账 创建工作流',
+    );
+
+    expect(merged[0]?.role).toBe('user');
+    expect(merged[0]?.content).toBe('总部结算对账 创建工作流');
+  });
+
   it('moves a late-recovered opening user turn ahead of workflow results', () => {
     const messages = [
       {
