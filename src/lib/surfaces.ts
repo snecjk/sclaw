@@ -1311,7 +1311,7 @@ export const sidebarSectionChevronClass = cn(
 
 /**
  * 侧栏滚动区内分区标题 sticky 壳层 — §5.6 吸顶 + 实底盖住下方列表（无描边）。
- * 配合 stickyTopClass：任务 top-0 / 分组·最近 top-[var(--sto-sidebar-section-sticky-h)]（z 分组 18 < 最近 19）。
+ * 任务 top-0；分组·最近同 top 接力（z 分组 19 > 最近 18，section 内分组压住最近，滚出后最近接管）。
  */
 export const sidebarSectionStickyShellClass = cn(
   'sticky bg-[var(--sto-sidebar-bg)]',
@@ -1320,13 +1320,13 @@ export const sidebarSectionStickyShellClass = cn(
 /** 任务分区 sticky 锚点 */
 export const sidebarSectionStickyTopTaskClass = 'top-0 z-20';
 
-/** 自建分组 sticky 锚点 — 与「最近」同 top 接力；须包在 section 内，滚出本组后释放 */
+/** 自建分组 sticky 锚点 — 与「最近」同 top 接力；section 内 z 高于最近，滚出本组后释放 */
 export const sidebarSectionStickyTopGroupClass =
-  'top-[var(--sto-sidebar-section-sticky-h)] z-[18]';
-
-/** 最近分区 sticky 锚点 — 叠在任务标题下方 */
-export const sidebarSectionStickyTopRecentClass =
   'top-[var(--sto-sidebar-section-sticky-h)] z-[19]';
+
+/** 最近分区 sticky 锚点 — 叠在任务标题下方；无活跃分组 section 时显示于同 top 层 */
+export const sidebarSectionStickyTopRecentClass =
+  'top-[var(--sto-sidebar-section-sticky-h)] z-[18]';
 
 /** 侧栏滚动列表 — 层级低于 sticky 分区标题 */
 export const sidebarScrollListClass = 'relative z-0';

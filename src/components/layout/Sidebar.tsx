@@ -787,6 +787,9 @@ export function Sidebar() {
     }
   }, [workflowEditorActive, setSidebarCollapsed]);
 
+  const revealTaskListAfterOpenRef = useRef(false);
+  const suppressNextTaskAutoCollapseRef = useRef(false);
+
   const closeTaskListSection = useCallback(() => {
     setTaskListSectionOpen(false);
     setTaskListShowAll(false);
@@ -796,6 +799,8 @@ export function Sidebar() {
     if (taskListSectionOpen) {
       closeTaskListSection();
     } else {
+      revealTaskListAfterOpenRef.current = true;
+      suppressNextTaskAutoCollapseRef.current = true;
       setTaskListSectionOpen(true);
     }
   }, [taskListSectionOpen, closeTaskListSection]);
@@ -806,6 +811,7 @@ export function Sidebar() {
   }, [sidebarCollapsed, sessions, stoEntriesByTask]);
 
   const handleCollapseTaskSectionFromScroll = useCallback(() => {
+    if (suppressNextTaskAutoCollapseRef.current) return;
     closeTaskListSection();
   }, [closeTaskListSection]);
 
@@ -818,6 +824,35 @@ export function Sidebar() {
     taskListSectionOpen,
     onCollapseTaskSection: handleCollapseTaskSectionFromScroll,
   });
+
+  // 用户手动展开任务：吸顶态下滚回顶部露出列表，并暂缓 scroll-collapse（不改 sticky top 栈）
+  useLayoutEffect(() => {
+    if (!revealTaskListAfterOpenRef.current || !taskListSectionOpen) return;
+    revealTaskListAfterOpenRef.current = false;
+
+    const container = scrollContainerRef.current;
+    const taskHeader = taskSectionHeaderRef.current;
+    if (!container || !taskHeader) {
+      suppressNextTaskAutoCollapseRef.current = false;
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const taskHeaderRect = taskHeader.getBoundingClientRect();
+
+    const isTaskHeaderStuck = taskHeaderRect.top <= containerRect.top + 1;
+
+    // 须在 expand 后判定：sentinel 已被任务列表顶下去，不能再用 sentinel 决定是否滚动
+    if (isTaskHeaderStuck) {
+      container.scrollTo({ top: 0 });
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        suppressNextTaskAutoCollapseRef.current = false;
+      });
+    });
+  }, [taskListSectionOpen, scrollContainerRef, taskSectionHeaderRef]);
 
   useEffect(() => {
     if (!isGatewayRunning) return;
@@ -1449,6 +1484,8 @@ export function Sidebar() {
 
   useLayoutEffect(() => {
     if (sidebarCollapsed || !taskListSectionOpen) return;
+    // 手动展开任务时由 reveal effect 滚回顶部，避免 scrollIntoView 把视口又拉下去触发 auto-collapse
+    if (suppressNextTaskAutoCollapseRef.current) return;
 
     let focusSessionKey: string | null = null;
     const activatingEntries = Object.entries(activatingScheduledSessionAt);
@@ -1779,7 +1816,7 @@ export function Sidebar() {
               const hasGroupUnread =
                 !isGroupOpen && section.sessions.some((s) => isSessionUnreadNow(s.key));
               return (
-                // section 边界：分组标题只在本组内容滚动期间吸顶，滚出 section 后释放，避免被「最近」同 top 硬盖
+                // section 边界：分组标题只在本组内容滚动期间吸顶；z 高于「最近」接力，滚出 section 后由最近接管同 top 层
                 <section key={section.group.id} className="flex flex-col gap-1">
                   <div
                     className={cn(
