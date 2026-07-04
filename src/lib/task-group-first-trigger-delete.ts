@@ -43,7 +43,7 @@ export function notifyTaskGroupFirstTriggerClearFailed(): void {
  */
 export async function prepareFirstTriggerClearBeforeLastSessionDelete(
   groupKey: string,
-  options?: { fallbackAtMs?: number },
+  options?: { fallbackAtMs?: number; notifyOnFailure?: boolean },
 ): Promise<LastSessionDeleteFirstTriggerPrep | null> {
   const trimmed = groupKey.trim();
   if (!trimmed) return null;
@@ -55,7 +55,12 @@ export async function prepareFirstTriggerClearBeforeLastSessionDelete(
   const cleared = await clearTaskGroupFirstTriggered(trimmed);
   if (!cleared) {
     revertOptimisticFirstTriggerClear(prep);
-    notifyTaskGroupFirstTriggerClearFailed();
+    // Clearing the first-trigger placeholder is best-effort. Callers that still
+    // proceed with the actual session delete (the authoritative tombstone) pass
+    // notifyOnFailure=false to avoid a misleading "delete failed" toast.
+    if (options?.notifyOnFailure !== false) {
+      notifyTaskGroupFirstTriggerClearFailed();
+    }
     return null;
   }
 

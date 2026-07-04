@@ -239,7 +239,9 @@ function scheduleCompletedRunHistoryReload(runId: unknown, sessionKey: unknown):
               },
             },
           }));
-          markSessionUnreadAfterSuccessfulRun(completionSessionKey, latest.currentSessionKey);
+          markSessionUnreadAfterSuccessfulRun(completionSessionKey, latest.currentSessionKey, {
+            runId: completionRunId,
+          });
         })
         .catch(() => {});
     }, delayMs);

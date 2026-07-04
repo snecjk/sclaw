@@ -11,8 +11,8 @@ import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-opt
 import { hostApiFetch } from '@/lib/host-api';
 import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
 import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
-import { markSessionUnreadAfterSuccessfulRun } from '@/lib/session-unread-notify';
-import { useSessionUnreadStore } from '@/stores/session-unread';
+import { markSessionUnreadAfterSuccessfulRun, noteObservedRun } from '@/lib/session-unread-notify';
+import { touchSessionReadAt, useSessionUnreadStore } from '@/stores/session-unread';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
@@ -741,6 +741,8 @@ function handleBackgroundSessionEvent(
 ): void {
   switch (resolvedState) {
     case 'started': {
+      // 记录本次运行期间真实观测到的 run，未读打标仅认这些 run（防重放误标）。
+      noteObservedRun(runId);
       set((s) => patchSessionRuntimeState(s, sessionKey, {
         sending: true,
         activeRunId: runId || getSessionRuntimeState(s.runtimeBySessionKey, sessionKey).activeRunId,
@@ -749,6 +751,7 @@ function handleBackgroundSessionEvent(
       break;
     }
     case 'delta': {
+      noteObservedRun(runId);
       const updates = collectToolUpdates(event.message, resolvedState);
       set((s) => patchSessionRuntimeState(s, sessionKey, (runtime) => ({
         sending: true,
@@ -854,8 +857,14 @@ function handleBackgroundSessionEvent(
           lastUserMessageAt: isTerminalOutput ? null : currentRuntime.lastUserMessageAt,
           error: null,
         }));
-        if (isTerminalOutput && sessionKey !== s.currentSessionKey) {
-          markSessionUnreadAfterSuccessfulRun(sessionKey, s.currentSessionKey);
+        if (isTerminalOutput) {
+          if (sessionKey !== s.currentSessionKey) {
+            markSessionUnreadAfterSuccessfulRun(sessionKey, s.currentSessionKey, { runId });
+          } else {
+            // 前台会话运行完成即视为已读，刷新已读水位，
+            // 避免离开后迟到/后台事件把刚看过的会话重新标未读。
+            touchSessionReadAt(sessionKey);
+          }
         }
         return next;
       });
@@ -1898,6 +1907,8 @@ export const useChatStore = create<ChatState>()(
         pendingWorkflow: null,
       };
     });
+    // 新建即视为已读，写入已读水位；后续该会话前台完成的迟到事件不会误标未读。
+    touchSessionReadAt(newKey);
     void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
   },
 
