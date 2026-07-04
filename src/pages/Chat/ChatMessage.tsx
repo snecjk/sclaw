@@ -783,12 +783,13 @@ export const ChatMessage = memo(function ChatMessage({
           </div>
         )}
 
-        {/* 助手消息：时间戳 + 复制 — 置于正文/工作流/产物等全部内容之后 */}
+        {/* 助手消息：复制 + 分享 + 时间 — 置于正文/工作流/产物等全部内容之后 */}
         {!isUser && showAssistantMessageMeta ? (
           <AssistantMessageMetaRow
             text={text}
             timestamp={message.timestamp}
             onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
+            onShare={openConversationShare}
           />
         ) : null}
 
@@ -959,15 +960,17 @@ function UserMessageMetaRow({
   );
 }
 
-/** 助手消息底栏：复制 + 时间，常态展示于正文下方 */
+/** 助手消息底栏：复制 + 分享 + 时间，常态展示于正文下方 */
 function AssistantMessageMetaRow({
   text,
   timestamp,
   onCopyDebugSnapshot,
+  onShare,
 }: {
   text: string;
   timestamp?: number;
   onCopyDebugSnapshot?: () => Promise<void> | void;
+  onShare?: () => void;
 }) {
   const { t } = useTranslation('chat');
   const [copied, setCopied] = useState(false);
@@ -999,6 +1002,19 @@ function AssistantMessageMetaRow({
       >
         {copied ? <Check className="h-3 w-3 text-green-500" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
       </Button>
+      {onShare ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={MESSAGE_META_ICON_BUTTON_CLASS}
+          onClick={onShare}
+          aria-label={t('messageActions.share')}
+          title={t('messageActions.share')}
+        >
+          <Share2 className="h-3 w-3" aria-hidden />
+        </Button>
+      ) : null}
       {timestamp ? (
         <span className="text-xs text-muted-foreground">
           {formatTimestamp(timestamp)}
