@@ -1339,7 +1339,7 @@ export const sidebarNavExpandedIdleClass = cn(
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
-/** 展开侧栏主导航 active — 底 #EAEAED + Regular（选中仅靠底色，字重与 idle 一致） */
+/** 展开侧栏主导航 active — 底 #DCDCDC + Regular（选中仅靠底色，字重与 idle 一致） */
 export const sidebarNavExpandedActiveClass = cn(
   'h-9 min-h-9 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
   'bg-[var(--sto-sidebar-nav-active-bg)]',

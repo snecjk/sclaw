@@ -1,8 +1,8 @@
 /**
- * SidebarRecentGroupDialogs — 分组新建/重命名输入弹窗 + 解散二次确认。
+ * SidebarRecentGroupDialogs — 分组新建输入弹窗 + 解散二次确认。
  *
- * 新建/重命名样式对齐「我的任务」TaskCreateModal（bg-black/40、rounded-[22px]、底栏主钮等）。
- * 解散仍用 ConfirmDialog（与同页删除确认一致）。
+ * 新建样式对齐「我的任务」TaskCreateModal（bg-black/40、rounded-[22px]、底栏主钮等）。
+ * 解散仍用 ConfirmDialog（与同页删除确认一致）；分组重命名走 SidebarRecentGroupRow inline 编辑。
  * 使用位置：Sidebar（MainLayout 内），由 Sidebar 持有 open 状态。
  */
 import { useEffect, useRef, useState } from 'react';
@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formFieldFocusClass, modalPrimarySubmitButtonClass } from '@/lib/surfaces';
 
-export type SidebarRecentGroupDialogMode = 'create' | 'rename' | 'dissolve' | null;
+export type SidebarRecentGroupDialogMode = 'create' | 'dissolve' | null;
 
 export interface SidebarRecentGroupDialogState {
   mode: SidebarRecentGroupDialogMode;
@@ -28,7 +28,6 @@ export interface SidebarRecentGroupDialogsProps {
   dialog: SidebarRecentGroupDialogState;
   onClose: () => void;
   onCreateConfirm: (name: string, sessionKey: string) => void | Promise<void>;
-  onRenameConfirm: (name: string, groupId: string) => void | Promise<void>;
   onDissolveConfirm: (groupId: string) => void | Promise<void>;
 }
 
@@ -36,7 +35,6 @@ export function SidebarRecentGroupDialogs({
   dialog,
   onClose,
   onCreateConfirm,
-  onRenameConfirm,
   onDissolveConfirm,
 }: SidebarRecentGroupDialogsProps) {
   const { t } = useTranslation('common');
@@ -45,18 +43,24 @@ export function SidebarRecentGroupDialogs({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (dialog.mode === 'create' || dialog.mode === 'rename') {
+    if (dialog.mode === 'create') {
       setNameDraft(dialog.defaultName ?? t('sidebar.defaultGroupName'));
       setSubmitting(false);
     }
   }, [dialog.mode, dialog.defaultName, t]);
 
   useEffect(() => {
-    if ((dialog.mode === 'create' || dialog.mode === 'rename') && inputRef.current) {
+    if (dialog.mode === 'create' && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
     }
   }, [dialog.mode, dialog.defaultName]);
+
+  const handleDissolveConfirm = async () => {
+    if (!dialog.groupId) return;
+    await onDissolveConfirm(dialog.groupId);
+    onClose();
+  };
 
   if (dialog.mode === 'dissolve') {
     return (
@@ -67,21 +71,15 @@ export function SidebarRecentGroupDialogs({
         confirmLabel={t('sidebar.dissolveGroup')}
         cancelLabel={t('actions.cancel')}
         variant="destructive"
-        onConfirm={() => {
-          if (!dialog.groupId) return;
-          return onDissolveConfirm(dialog.groupId);
-        }}
+        onConfirm={() => void handleDissolveConfirm()}
         onCancel={onClose}
       />
     );
   }
 
-  if (dialog.mode !== 'create' && dialog.mode !== 'rename') {
+  if (dialog.mode !== 'create') {
     return null;
   }
-
-  const title =
-    dialog.mode === 'create' ? t('sidebar.addToNewGroup') : t('actions.rename');
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape' && !submitting) {
@@ -97,10 +95,8 @@ export function SidebarRecentGroupDialogs({
 
     setSubmitting(true);
     try {
-      if (dialog.mode === 'create' && dialog.sessionKey) {
+      if (dialog.sessionKey) {
         await onCreateConfirm(trimmed, dialog.sessionKey);
-      } else if (dialog.mode === 'rename' && dialog.groupId) {
-        await onRenameConfirm(trimmed, dialog.groupId);
       }
       onClose();
     } finally {
@@ -127,7 +123,7 @@ export function SidebarRecentGroupDialogs({
             id="sidebar-group-input-title"
             className="text-xl font-bold leading-[1.3] tracking-[-0.02em] text-foreground"
           >
-            {title}
+            {t('sidebar.addToNewGroup')}
           </h2>
           <button
             type="button"

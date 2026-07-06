@@ -4,7 +4,6 @@
  * 使用位置：SidebarRecentSessionRow
  */
 import {
-  Check,
   ChevronRight,
   Folder,
   MoreHorizontal,
@@ -70,6 +69,7 @@ export function SidebarRecentSessionRowTrailing({
   className,
 }: SidebarRecentSessionRowTrailingProps) {
   const { t } = useTranslation('common');
+  const assignableGroups = groups.filter((group) => group.id !== currentGroupId);
 
   return (
     <div
@@ -150,23 +150,24 @@ export function SidebarRecentSessionRowTrailing({
                 >
                   {t('sidebar.newGroup')}
                 </DropdownMenuItem>
-                {groups.length > 0 ? (
+                {assignableGroups.length > 0 ? (
                   <>
                     <DropdownMenuSeparator className={sidebarRecentMenuDividerClass} />
-                    {groups.map((group) => (
+                    {assignableGroups.map((group) => (
                       <DropdownMenuItem
                         key={group.id}
-                        className={cn(sidebarRecentMenuItemClass, 'justify-between gap-2')}
+                        className={cn(sidebarRecentMenuItemClass, 'justify-start')}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (group.id === currentGroupId) return;
                           onAssignGroup(group.id);
                         }}
                       >
-                        <span className="min-w-0 flex-1 truncate text-left">{group.name}</span>
-                        {group.id === currentGroupId ? (
-                          <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-                        ) : null}
+                        <span
+                          className="min-w-0 max-w-[8em] truncate text-left"
+                          title={group.name}
+                        >
+                          {group.name}
+                        </span>
                       </DropdownMenuItem>
                     ))}
                   </>

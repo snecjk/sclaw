@@ -1,6 +1,7 @@
 /**
  * SidebarRecentGroupRow — 「我的分组 N」标题行：展开/收起 + hover「...」（重命名 / 解散分组）。
  *
+ * 重命名在标题原位置 inline 输入；解散仍走 Sidebar 弹窗确认。
  * 使用位置：Sidebar 最近分组区（「最近」标题上方）；分组标题不 sticky，随列表滚动。
  */
 import { ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
@@ -28,12 +29,19 @@ export interface SidebarRecentGroupRowProps {
   isOpen: boolean;
   /** 收起时组内是否有未读 */
   hasUnread?: boolean;
+  /** 是否 inline 重命名中 */
+  isEditing: boolean;
+  /** 重命名 draft */
+  editingValue: string;
   /** 切换展开 */
   onToggle: () => void;
   /** 菜单：重命名 */
   onRename: () => void;
   /** 菜单：解散分组 */
   onDissolve: () => void;
+  onEditingValueChange: (value: string) => void;
+  onCommitRename: () => void;
+  onCancelRename: () => void;
   className?: string;
 }
 
@@ -41,18 +49,49 @@ export function SidebarRecentGroupRow({
   group,
   isOpen,
   hasUnread = false,
+  isEditing,
+  editingValue,
   onToggle,
   onRename,
   onDissolve,
+  onEditingValueChange,
+  onCommitRename,
+  onCancelRename,
   className,
 }: SidebarRecentGroupRowProps) {
   const { t } = useTranslation('common');
+
+  if (isEditing) {
+    return (
+      <div className={cn('relative', className)}>
+        <input
+          type="text"
+          autoFocus
+          value={editingValue}
+          aria-label={t('actions.rename')}
+          onChange={(e) => onEditingValueChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onCommitRename();
+            else if (e.key === 'Escape') onCancelRename();
+          }}
+          onBlur={onCommitRename}
+          onClick={(e) => e.stopPropagation()}
+          onFocus={(e) => e.currentTarget.select()}
+          className={cn(
+            'h-[30px] w-full rounded-lg border border-[var(--sto-brand-6)] bg-white px-[10px] py-[5px] text-left outline-none',
+            sidebarSectionLabelClass,
+          )}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={cn('group/sto-recent-group-row relative', className)}>
       <button
         type="button"
         aria-expanded={isOpen}
+        title={group.name}
         onClick={onToggle}
         className={cn(
           'flex h-[30px] w-full items-center rounded-lg px-[10px] py-[5px] text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring',

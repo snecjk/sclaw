@@ -967,6 +967,8 @@ export function Sidebar() {
 
   const [editingSessionKey, setEditingSessionKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editingGroupValue, setEditingGroupValue] = useState('');
   const [groupDialog, setGroupDialog] = useState<SidebarRecentGroupDialogState>({ mode: null });
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
@@ -995,6 +997,32 @@ export function Sidebar() {
     },
     [recentGroups, t],
   );
+
+  const startRenameRecentGroup = useCallback((groupId: string, name: string) => {
+    setEditingSessionKey(null);
+    setEditingGroupId(groupId);
+    setEditingGroupValue(name);
+  }, []);
+
+  const commitRenameRecentGroup = useCallback(
+    (groupId: string, originalName: string) => {
+      const trimmed = editingGroupValue.trim();
+      setEditingGroupId(null);
+      setEditingGroupValue('');
+
+      if (!trimmed || trimmed === originalName) return;
+
+      if (renameGroup(groupId, trimmed)) {
+        toast.success(t('common:sidebar.renameGroupSucceeded'));
+      }
+    },
+    [editingGroupValue, renameGroup, t],
+  );
+
+  const cancelRenameRecentGroup = useCallback(() => {
+    setEditingGroupId(null);
+    setEditingGroupValue('');
+  }, []);
 
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
 
@@ -1628,7 +1656,7 @@ export function Sidebar() {
       <nav
         className={cn(
           'flex shrink-0 flex-col gap-0.5 overflow-x-hidden pb-2',
-          sidebarCollapsed ? 'px-0 pt-2' : 'px-2 pt-2',
+          sidebarCollapsed ? 'px-0 pt-2' : 'px-2 pt-0',
         )}
       >
         {/* 固定区：新对话、定时任务、技能广场、工作区等 */}
@@ -1838,16 +1866,17 @@ export function Sidebar() {
                       isOpen={isGroupOpen}
                       hasUnread={hasGroupUnread}
                       onToggle={() => toggleRecentGroup(section.group.id)}
-                      onRename={() =>
-                        setGroupDialog({
-                          mode: 'rename',
-                          groupId: section.group.id,
-                          defaultName: section.group.name,
-                        })
-                      }
+                      onRename={() => startRenameRecentGroup(section.group.id, section.group.name)}
                       onDissolve={() =>
                         setGroupDialog({ mode: 'dissolve', groupId: section.group.id })
                       }
+                      isEditing={editingGroupId === section.group.id}
+                      editingValue={editingGroupValue}
+                      onEditingValueChange={setEditingGroupValue}
+                      onCommitRename={() =>
+                        commitRenameRecentGroup(section.group.id, section.group.name)
+                      }
+                      onCancelRename={cancelRenameRecentGroup}
                     />
                   </div>
                   {isGroupOpen ? (
@@ -2136,7 +2165,12 @@ export function Sidebar() {
       <SidebarUpdateNotice collapsed={sidebarCollapsed} />
 
       {authUser ? (
-        <div className="shrink-0 bg-[var(--sto-sidebar-bg)] p-2">
+        <div
+          className={cn(
+            'shrink-0 bg-[var(--sto-sidebar-bg)]',
+            sidebarCollapsed ? 'p-2' : 'px-2 py-1',
+          )}
+        >
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -2146,7 +2180,7 @@ export function Sidebar() {
                   sidebarVis.userProfileCard
                     ? sidebarCollapsed
                       ? 'flex-col items-center justify-center gap-0 p-2'
-                      : 'items-center justify-between gap-3 px-2 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.04]'
+                      : 'items-center justify-between gap-3 px-2 py-2 hover:bg-[var(--sto-sidebar-row-hover-bg)] dark:hover:bg-white/[0.04]'
                     : 'items-center justify-center rounded-[8px] p-2 hover:bg-black/[0.02] dark:hover:bg-muted/40',
                 )}
                 title={
@@ -2312,11 +2346,6 @@ export function Sidebar() {
           const id = createGroupAndAssignSession(name, sessionKey);
           if (id) {
             toast.success(t('common:sidebar.groupAdded'));
-          }
-        }}
-        onRenameConfirm={(name, groupId) => {
-          if (renameGroup(groupId, name)) {
-            toast.success(t('common:sidebar.renameGroupSucceeded'));
           }
         }}
         onDissolveConfirm={(groupId) => {
