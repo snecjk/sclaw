@@ -1,6 +1,8 @@
 import type { RawMessage } from '@/stores/chat';
 import { RUN_ID_IN_TEXT } from '@/lib/workflow-card-injection';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
+import { getExecutionByRunId } from '@/stores/workflow-memory';
+import type { WorkflowRunStatus } from '@/types/workflow';
 import { extractText, extractWorkflowCard } from '@/pages/Chat/message-utils';
 
 export function findLastUserMessageIndex(messages: RawMessage[]): number {
@@ -17,6 +19,17 @@ export function isLastUserMessage(message: RawMessage, messages: RawMessage[]): 
   const last = messages[lastIdx];
   if (message.id != null && last.id != null) return message.id === last.id;
   return messages.indexOf(message) === lastIdx;
+}
+
+function turnHasWorkflowCardForRun(messages: RawMessage[], lastUserIdx: number, runId: string): boolean {
+  for (let i = lastUserIdx + 1; i < messages.length; i += 1) {
+    const msg = messages[i];
+    if (msg.role === 'user') break;
+    if (msg.role !== 'assistant') continue;
+    const card = extractWorkflowCard(msg);
+    if (card?.runId === runId) return true;
+  }
+  return false;
 }
 
 function collectRunIdsAfterUser(messages: RawMessage[], lastUserIdx: number): string[] {
@@ -49,6 +62,56 @@ function lastAssistantHasOpenParameterForm(messages: RawMessage[], lastUserIdx: 
   return false;
 }
 
+function resolveWorkflowRunStatusForTurn(
+  runId: string,
+  workflowCardStates: Record<string, { status?: string } | undefined>,
+  sessionKey?: string,
+): WorkflowRunStatus | undefined {
+  const fromStore = workflowCardStates[runId]?.status;
+  if (fromStore != null) return fromStore as WorkflowRunStatus;
+  if (!sessionKey) return undefined;
+  return getExecutionByRunId(runId, sessionKey)?.status;
+}
+
+/** 该助手行是否带有用户可见的正文/工作流卡（会单独成泡或作为合并回复主体）。 */
+export function assistantMessageHasVisibleReplyBody(message: RawMessage): boolean {
+  if (extractText(message).trim().length > 0) return true;
+  if (extractWorkflowCard(message)) return true;
+  return false;
+}
+
+/**
+ * 同轮内用于挂载 meta 的「展示回复」消息。
+ * 与 AssistantTurnMessage / pickAssistantReplyMessage 口径对齐：取最后一条带正文的助手行；
+ * 若仅有 workflow_card 等无正文行，则回退到该轮最后一条助手。
+ */
+export function findTurnDisplayAssistantMessage(
+  messages: RawMessage[],
+  turnUserIdx: number,
+): RawMessage | null {
+  let lastTextReply: RawMessage | null = null;
+  let lastVisible: RawMessage | null = null;
+  for (let i = turnUserIdx + 1; i < messages.length; i += 1) {
+    const msg = messages[i];
+    if (msg.role === 'user') break;
+    if (msg.role !== 'assistant') continue;
+    if (assistantMessageHasVisibleReplyBody(msg)) {
+      lastVisible = msg;
+      if (extractText(msg).trim().length > 0) {
+        lastTextReply = msg;
+      }
+    }
+  }
+  // 与 pickAssistantReplyMessage + workflow_card 注入一致：优先挂载在有正文的行上
+  if (lastTextReply) return lastTextReply;
+  if (lastVisible) return lastVisible;
+
+  for (let i = messages.length - 1; i > turnUserIdx; i -= 1) {
+    if (messages[i].role === 'assistant') return messages[i];
+  }
+  return null;
+}
+
 /**
  * 当前用户轮次是否仍未结束（流式 / 填表 / 工作流非终态等）。
  * 用于隐藏用户/助手消息的时间戳与复制，直到整轮对话真正结束。
@@ -59,6 +122,7 @@ export function isCurrentUserTurnIncomplete(options: {
   lastUserMessageAt: number | null;
   workflowCardStates: Record<string, { status?: string } | undefined>;
   hasPendingWorkflowSchema: boolean;
+  sessionKey?: string;
 }): boolean {
   const {
     sessionMessages,
@@ -66,6 +130,7 @@ export function isCurrentUserTurnIncomplete(options: {
     lastUserMessageAt,
     workflowCardStates,
     hasPendingWorkflowSchema,
+    sessionKey,
   } = options;
 
   if (sending || lastUserMessageAt != null) return true;
@@ -77,8 +142,12 @@ export function isCurrentUserTurnIncomplete(options: {
   if (lastAssistantHasOpenParameterForm(sessionMessages, lastUserIdx)) return true;
 
   for (const runId of collectRunIdsAfterUser(sessionMessages, lastUserIdx)) {
-    const state = workflowCardStates[runId];
-    if (state?.status == null || !isTerminalWorkflowRunStatus(state.status)) {
+    const status = resolveWorkflowRunStatusForTurn(runId, workflowCardStates, sessionKey);
+    if (status != null && !isTerminalWorkflowRunStatus(status)) {
+      return true;
+    }
+    // 仅正文提及 runId、无 workflow_card / 无状态记录时，不阻塞技能/普通对话 meta
+    if (status == null && turnHasWorkflowCardForRun(sessionMessages, lastUserIdx, runId)) {
       return true;
     }
   }
@@ -107,21 +176,29 @@ export function findTurnUserIndexForMessage(
   return -1;
 }
 
-/** 是否为该用户轮次内的最后一条助手消息（每轮各一条，不限于会话最后一轮） */
-export function isLastAssistantInUserTurn(
+/** 是否为该轮 UI 合并展示的最终助手回复（meta 挂载点）。 */
+export function isTurnDisplayAssistantMessage(
   message: RawMessage,
   messages: RawMessage[],
 ): boolean {
   if (message.role !== 'assistant') return false;
-  const msgIdx = messageIndex(message, messages);
-  if (msgIdx < 0) return false;
+  const turnUserIdx = findTurnUserIndexForMessage(message, messages);
+  if (turnUserIdx < 0) return false;
+  const display = findTurnDisplayAssistantMessage(messages, turnUserIdx);
+  if (!display) return false;
+  if (message.id != null && display.id != null) return message.id === display.id;
+  return message === display;
+}
 
-  for (let i = msgIdx + 1; i < messages.length; i += 1) {
-    const role = messages[i].role;
-    if (role === 'user') return true;
-    if (role === 'assistant') return false;
-  }
-  return true;
+/**
+ * 是否为该用户轮次内的最后一条助手消息（每轮各一条，不限于会话最后一轮）。
+ * @deprecated 展示层请优先使用 isTurnDisplayAssistantMessage
+ */
+export function isLastAssistantInUserTurn(
+  message: RawMessage,
+  messages: RawMessage[],
+): boolean {
+  return isTurnDisplayAssistantMessage(message, messages);
 }
 
 /** 消息是否属于会话中最后一轮（最后一条 user 之后） */

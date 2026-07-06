@@ -19,9 +19,9 @@ import { assistantChatCardBg, chatProcessTitleRowClass, chatToolCallShellClass, 
 import { ChatProcessContentRail } from '@/components/chat/chat-process-block';
 import {
   isCurrentUserTurnIncomplete,
-  isLastAssistantInUserTurn,
   isLastUserMessage,
   isMessageInCurrentUserTurn,
+  isTurnDisplayAssistantMessage,
 } from '@/pages/Chat/chat-turn-meta';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
@@ -109,6 +109,8 @@ interface ChatMessageProps {
   hideThinkingPanel?: boolean;
   /** 父级已展示思考面板时，正文内不再重复渲染工具卡 */
   suppressToolCards?: boolean;
+  /** AssistantTurnMessage 合并展示的同轮最终回复，视为该轮 meta 挂载点 */
+  isTurnDisplayReply?: boolean;
 }
 
 const HOVER_REVEAL_CLASS = 'opacity-0 transition-opacity duration-200 group-hover:opacity-100';
@@ -138,6 +140,7 @@ export const ChatMessage = memo(function ChatMessage({
   hideAvatar = false,
   hideThinkingPanel = false,
   suppressToolCards = false,
+  isTurnDisplayReply = false,
 }: ChatMessageProps) {
   const { t } = useTranslation('chat');
   const isUser = message.role === 'user';
@@ -379,7 +382,9 @@ export const ChatMessage = memo(function ChatMessage({
 
   const sending = useChatStore((s) => s.sending);
   const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
-  const isLastAssistantInTurn = !isUser && isLastAssistantInUserTurn(message, sessionMessages);
+  const isLastAssistantInTurn = !isUser && (
+    isTurnDisplayReply || isTurnDisplayAssistantMessage(message, sessionMessages)
+  );
   const isInCurrentUserTurn = isMessageInCurrentUserTurn(message, sessionMessages);
   const isLastUserInTurn = isUser && isLastUserMessage(message, sessionMessages);
   /** 与 AwaitingReplyIndicator 同口径：表单待提交时轮次未结束 */
@@ -393,8 +398,9 @@ export const ChatMessage = memo(function ChatMessage({
         lastUserMessageAt,
         workflowCardStates,
         hasPendingWorkflowSchema: pendingWorkflow?.schema != null,
+        sessionKey,
       }),
-    [sessionMessages, sending, lastUserMessageAt, workflowCardStates, pendingWorkflow?.schema],
+    [sessionMessages, sending, lastUserMessageAt, workflowCardStates, pendingWorkflow?.schema, sessionKey],
   );
   const isAssistantTurnIncomplete =
     isLastAssistantInTurn
