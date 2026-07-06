@@ -19,7 +19,11 @@ export interface WorkflowRunArtifact {
   id: string;
   name: string;
   type: string;
+  /** Preview / external-open URL (office viewer, inline HTML, etc.). */
   url: string;
+  previewUrl?: string;
+  /** Signed OSS download URL (Content-Disposition: attachment). */
+  tempUrl?: string;
   size?: number;
 }
 
@@ -36,6 +40,8 @@ export interface WorkflowExecutionResult {
     name: string;
     type: string;
     url: string;
+    previewUrl?: string;
+    tempUrl?: string;
     size?: number;
   }>;
 }
@@ -67,7 +73,7 @@ export interface WorkflowRunApiPayload {
   startedAt?: string;
   completedAt?: string | null;
   nodeRuns?: WorkflowRunNodeRun[] | null;
-  artifacts?: Array<Partial<WorkflowRunArtifact> & { uri?: string; kind?: string; tempUrl?: string }> | null;
+  artifacts?: Array<Partial<WorkflowRunArtifact> & { uri?: string; kind?: string; previewUrl?: string; tempUrl?: string }> | null;
   output?: unknown;
   result?: { title?: string | null; summary?: string | null; status?: string | null } | null;
   error?: string | null;
@@ -154,15 +160,20 @@ export function normalizeRunArtifacts(
   return artifacts
     .map((a) => {
       const contentType = (a as { contentType?: string }).contentType;
+      const legacyUrl = a.url?.trim() || a.uri?.trim() || '';
+      const tempUrl = a.tempUrl?.trim() || legacyUrl;
+      const previewUrl = a.previewUrl?.trim() || legacyUrl || tempUrl;
       return {
         id: a.id ?? '',
         name: a.name ?? a.kind ?? 'artifact',
         type: a.type ?? a.kind ?? contentType ?? 'file',
-        url: a.tempUrl ?? a.url ?? a.uri ?? '',
+        url: previewUrl,
+        previewUrl,
+        tempUrl,
         size: a.size,
       };
     })
-    .filter((a) => a.id || a.url);
+    .filter((a) => a.id || a.url || a.previewUrl || a.tempUrl);
 }
 
 function collectArtifactsFromNodeRuns(
@@ -222,6 +233,8 @@ function mapArtifacts(artifacts: WorkflowRunArtifact[]) {
     name: a.name,
     type: a.type,
     url: a.url,
+    previewUrl: a.previewUrl,
+    tempUrl: a.tempUrl,
     size: a.size,
   }));
 }

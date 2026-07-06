@@ -41,7 +41,10 @@ export interface AttachedFileMeta {
   mimeType: string;
   fileSize: number;
   preview: string | null;
+  /** Preview / external-open URL (workflow previewUrl). */
   filePath?: string;
+  /** Download URL (workflow tempUrl). Falls back to filePath when absent. */
+  downloadUrl?: string;
 }
 
 /** Raw message from OpenClaw chat.history */
