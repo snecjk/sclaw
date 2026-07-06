@@ -1,95 +1,160 @@
 /**
- * Data Center Page
- * 数据中心页面，嵌入 STO 业务组织管理系统 iframe
- * 根据当前构建环境自动显示对应的数据中心
+ * /data-center — 侧栏「数据中心」，页内：我的文件 → 线上文件 → 客户关系卡片。
  */
 import { useEffect, useMemo, useState } from 'react';
-import { useAuthStore } from '@/stores/auth';
+import { useNavigate } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { cn } from '@/lib/utils';
-import { glassSectionSurface } from '@/lib/surfaces';
+import { stoMainInnerShell, stoPageTitleClass, workflowListTabClass } from '@/lib/surfaces';
+import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { getAppEnv } from '../../../shared/env-config';
+import customerRelationsCardIcon from '@/assets/data-center-customer-relations-card.png';
 
-/** 各环境对应的数据中心 URL */
 const DATA_CENTER_URLS: Record<string, string> = {
   production: 'https://wd-vip.sto.cn/claw-businessOrganization',
   staging: 'https://pre-wd-vip.sto.cn/claw-businessOrganization',
   test: 'https://wd-vip-test.sto.cn/claw-businessOrganization',
-  development: 'https://wd-vip-test.sto.cn/claw-businessOrganization', // 开发环境默认用测试
+  development: 'https://wd-vip-test.sto.cn/claw-businessOrganization',
 };
 
-export function DataCenter() {
-  const authUser = useAuthStore((s) => s.user);
-  const [iframeLoaded, setIframeLoaded] = useState(false);
-  const [iframeError, setIframeError] = useState<string | null>(null);
-
-  const stoToken = authUser?.stoToken;
+function CustomerRelationsIframe({ token }: { token: string }) {
+  const { t } = useTranslation('common');
 
   const iframeUrl = useMemo(() => {
-    const token = stoToken?.trim();
-    if (!token) {
-      return null;
-    }
+    const trimmed = token.trim();
+    if (!trimmed) return null;
     const appEnv = getAppEnv();
     const baseUrl = DATA_CENTER_URLS[appEnv] ?? DATA_CENTER_URLS.production;
-    return `${baseUrl}?token=${encodeURIComponent(token)}`;
-  }, [stoToken]);
+    return `${baseUrl}?token=${encodeURIComponent(trimmed)}`;
+  }, [token]);
 
-  // Reset state when token is unavailable
+  if (!iframeUrl) {
+    return (
+      <div className="flex min-h-[400px] flex-1 items-center justify-center rounded-2xl border border-[#E5E6EB] bg-white">
+        <p className="text-sm text-muted-foreground">{t('dataCenterPage.linkUnavailable')}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-[#E5E6EB] bg-white">
+      <iframe
+        src={iframeUrl}
+        className="h-[calc(100%+50px)] w-full border-0"
+        title={t('dataCenterPage.customerRelationsTitle')}
+        allow="clipboard-read; clipboard-write"
+      />
+    </div>
+  );
+}
+
+function CustomerRelationsCard({ onOpen }: { onOpen: () => void }) {
+  const { t } = useTranslation('common');
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-[278px] max-w-full flex-col overflow-hidden rounded-[18px] bg-white text-left shadow-[0_0_4px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-[0_0_16px_rgba(0,0,0,0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6F00]/40"
+    >
+      <div className="px-1 pt-1">
+        <div className="flex h-[90px] items-center justify-center rounded-[14px] bg-[rgba(255,232,193,0.25)]">
+          <img
+            src={customerRelationsCardIcon}
+            alt=""
+            className="h-[96px] w-auto max-w-[85%] object-contain"
+            draggable={false}
+          />
+        </div>
+      </div>
+      <div className="flex flex-col gap-1 px-[18px] pt-[13px] pb-4">
+        <h3 className="text-base font-semibold leading-6 text-[#1D2129]">
+          {t('dataCenterPage.customerRelationsTitle')}
+        </h3>
+        <p className="text-sm leading-[22px] text-[#86909C]">
+          {t('dataCenterPage.customerRelationsDesc')}
+        </p>
+      </div>
+    </button>
+  );
+}
+
+export function DataCenter() {
+  const { t } = useTranslation('common');
+  const navigate = useNavigate();
+  const authUser = useAuthStore((s) => s.user);
+  const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
+  const isSite =
+    siteDepartmentTypes !== null && isSiteUser(authUser?.categoryCode);
+  const stoToken = authUser?.stoToken?.trim() ?? '';
+  const [opened, setOpened] = useState(false);
+  const pageTitle = t('dataCenterPage.title');
+
   useEffect(() => {
-    if (!stoToken) {
-      setIframeError('未获取到登录令牌，请重新登录');
-    } else {
-      setIframeError(null);
+    if (siteDepartmentTypes !== null && !isSite) {
+      navigate('/', { replace: true });
     }
-  }, [stoToken]);
+  }, [isSite, navigate, siteDepartmentTypes]);
 
-  const handleIframeLoad = () => {
-    setIframeLoaded(true);
-  };
+  if (siteDepartmentTypes === null) {
+    return (
+      <div className={cn('flex h-full min-h-0 flex-col items-center justify-center', stoMainInnerShell)}>
+        <LoadingSpinner />
+      </div>
+    );
+  }
 
-  const handleIframeError = () => {
-    setIframeError('页面加载失败，请检查网络连接');
-  };
+  if (!isSite) {
+    return null;
+  }
 
   if (!stoToken) {
     return (
-      <div className={cn('flex h-full flex-col', glassSectionSurface)}>
+      <div className={cn('flex h-full min-h-0 flex-col', stoMainInnerShell)}>
         <div className="flex flex-1 items-center justify-center">
-          <div className="text-center">
-            <p className="text-lg text-muted-foreground">
-              {iframeError || '未获取到登录令牌，请重新登录'}
-            </p>
-          </div>
+          <p className="text-base text-muted-foreground">{t('dataCenterPage.tokenMissing')}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={cn('flex h-full flex-col', glassSectionSurface)}>
-      {/* 标题栏 */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
-        <h1 className="text-base font-semibold">客户关系</h1>
+    <div className={cn('flex h-full min-h-0 flex-col', stoMainInnerShell)}>
+      <header className="shrink-0">
+        <h1 className={stoPageTitleClass}>{pageTitle}</h1>
+        <p className="mt-2 max-w-4xl text-sm leading-6 text-[#86909C]">
+          {t('dataCenterPage.subtitle')}
+        </p>
+      </header>
+
+      <div
+        className="mt-6 shrink-0 border-b border-[#E5E6EB] pb-3"
+        role="tablist"
+        aria-label={t('dataCenterPage.tabAria')}
+      >
+        <span className={workflowListTabClass(true)} role="tab" aria-selected>
+          {t('dataCenterPage.onlineTab')}
+        </span>
       </div>
 
-      {/* iframe 内容区 - 使用裁剪隐藏外部页面的顶部导航 */}
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        {iframeUrl ? (
-          <iframe
-            src={iframeUrl}
-            style={{
-              width: '100%',
-              height: 'calc(100% + 50px)',
-              border: 'none',
-            }}
-            title="客户关系"
-            onLoad={handleIframeLoad}
-            onError={handleIframeError}
-            allow="clipboard-read; clipboard-write"
-          />
+      <div className="mt-6 flex min-h-0 flex-1 flex-col">
+        {opened ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setOpened(false)}
+              className="mb-4 inline-flex w-fit items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium text-[#4E5969] hover:bg-[#F5F6F7] hover:text-[#1D2129]"
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden />
+              {t('actions.back')}
+            </button>
+            <CustomerRelationsIframe token={stoToken} />
+          </>
         ) : (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-muted-foreground">无法生成访问链接</p>
+          <div className="flex flex-wrap gap-3">
+            <CustomerRelationsCard onOpen={() => setOpened(true)} />
           </div>
         )}
       </div>

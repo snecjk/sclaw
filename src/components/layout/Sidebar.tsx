@@ -3,7 +3,7 @@
  * 省区布局：展开 260px / 收起 w-0 完全隐藏；折叠钮在侧栏列顶行（无全局顶栏）。
  * 完整布局：展开 260px / 收起 72px 图标轨。
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import {
   Puzzle,
@@ -42,7 +42,7 @@ import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -644,7 +644,7 @@ function SidebarNavLink({
   icon: ReactNode;
   label: string;
   collapsed: boolean;
-  onClick?: () => void;
+  onClick?: (e: MouseEvent<HTMLAnchorElement>) => void;
   isActiveOverride?: boolean;
   badge?: ReactNode;
 }) {
@@ -719,6 +719,9 @@ export function Sidebar() {
 
   const authUser = useAuthStore((s) => s.user);
   const authLogout = useAuthStore((s) => s.logout);
+  const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
+  const isSite =
+    siteDepartmentTypes !== null && isSiteUser(authUser?.categoryCode);
 
   const language = useSettingsStore((s) => s.language);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
@@ -1341,15 +1344,16 @@ export function Sidebar() {
       { to: '/skills', icon: <Puzzle className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/workflow', icon: <Workflow className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.workflow') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
-      // { to: '/data-center', icon: <Database className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.dataCenter') },
+      { to: '/data-center', icon: <Database className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.dataCenter') },
     ];
     return all.filter((item) => {
       if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
+      if (item.to === '/data-center' && (siteDepartmentTypes === null || !isSite)) return false;
       if (item.to === '/scheduled-tasks' && getCurrentEnvConfig().isProduction) return false;
       if (item.to === '/cron' && getCurrentEnvConfig().isProduction) return false;
       return true;
     });
-  }, [sidebarVis.primaryMyData, t]);
+  }, [isSite, sidebarVis.primaryMyData, siteDepartmentTypes, t]);
 
   const workspaceNav = [
     { to: '/agents', icon: <Bot className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.agents') },
@@ -1485,7 +1489,16 @@ export function Sidebar() {
       icon={item.icon}
       label={item.label}
       collapsed={sidebarCollapsed}
-      onClick={item.to === '/' ? handleHomeClick : undefined}
+      onClick={
+        item.to === '/'
+          ? () => handleHomeClick?.()
+          : item.to === '/data-center'
+            ? (e) => {
+                e.preventDefault();
+                navigate('/data-center');
+              }
+            : undefined
+      }
       isActiveOverride={homeIsActiveOverride}
       badge={item.badge}
     />
