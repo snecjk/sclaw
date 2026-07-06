@@ -13,7 +13,7 @@
         "newChat": "新しいチャット",
         "cronTasks": "定期タスク",
         "myTasks": "マイタスク",
-        "dataCenter": "マイファイル",
+        "dataCenter": "データセンター",
         "skills": "スキル",
         "workflow": "ワークフロー",
         "agents": "Agents",
@@ -43,6 +43,16 @@
         "sessionFailed": "実行失敗",
         "sessionUnread": "未読",
         "compactAccountMenu": "アカウントと設定"
+    },
+    "dataCenterPage": {
+        "title": "マイファイル",
+        "subtitle": "システムデータ表、アップロードファイル、ナレッジベースを一元管理します。",
+        "onlineTab": "オンラインファイル",
+        "tabAria": "ファイル種別",
+        "customerRelationsTitle": "顧客関係",
+        "customerRelationsDesc": "顧客プロファイル、コミュニケーション記録、要件追跡、保守戦略など CRM 中核資料を集約します。",
+        "tokenMissing": "ログイントークンを取得できません。再度ログインしてください。",
+        "linkUnavailable": "アクセスリンクを生成できません"
     },
     "actions": {
         "save": "保存",

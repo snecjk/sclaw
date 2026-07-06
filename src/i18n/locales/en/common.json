@@ -13,7 +13,7 @@
         "newChat": "New Chat",
         "cronTasks": "Scheduled tasks",
         "myTasks": "My Tasks",
-        "dataCenter": "My Files",
+        "dataCenter": "Data Center",
         "skills": "Skills",
         "workflow": "Workflows",
         "agents": "Agents",
@@ -43,6 +43,16 @@
         "sessionFailed": "Run failed",
         "sessionUnread": "Unread",
         "compactAccountMenu": "Account and settings"
+    },
+    "dataCenterPage": {
+        "title": "My Files",
+        "subtitle": "Manage system data tables, uploaded files, and knowledge bases for AI and business workflows.",
+        "onlineTab": "Online files",
+        "tabAria": "File type",
+        "customerRelationsTitle": "Customer relations",
+        "customerRelationsDesc": "Core CRM materials including customer profiles, communication records, requirement tracking, and maintenance strategies.",
+        "tokenMissing": "Login token unavailable. Please sign in again.",
+        "linkUnavailable": "Unable to generate access link"
     },
     "actions": {
         "save": "Save",

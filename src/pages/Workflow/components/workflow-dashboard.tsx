@@ -70,11 +70,11 @@ export function WorkflowDashboard({
   const { t } = useTranslation('workflow');
   const navigate = useNavigate();
   const location = useLocation();
-  const { cards, mineLoading, officialLoading, error, refetchMine, officialCards } =
-    useWorkflowList();
+  const { tab, setTab, mineFilter, setMineFilter } = viewState;
+  const { cards, cardsByKind, mineLoading, officialLoading, error, refetchMine, officialCards } =
+    useWorkflowList(mineFilter);
   /** chip 点击后 bump key，使 ChatInput 重挂载并应用 seedText */
   const [composerSeed, setComposerSeed] = useState<{ text: string; key: number } | null>(null);
-  const { tab, setTab, mineFilter, setMineFilter } = viewState;
   const [search, setSearch] = useState('');
   const [officialFilter, setOfficialFilter] = useState<OfficialFilter>('all');
   const [menuIndex, setMenuIndex] = useState<number | null>(null);
@@ -106,12 +106,10 @@ export function WorkflowDashboard({
   /** 我的工作流各分类搜索后数量统计 */
   const mineSearchCounts: Record<WorkflowMineListKind, number> = (() => {
     const q = search.trim().toLowerCase();
+    const match = (c: WorkflowCardItem) => !q || c.name.toLowerCase().includes(q);
     return {
-      published: cards.filter(
-        (c) => c.listKind === 'published' && (!q || c.name.toLowerCase().includes(q))
-      ).length,
-      draft: cards.filter((c) => c.listKind === 'draft' && (!q || c.name.toLowerCase().includes(q)))
-        .length,
+      published: cardsByKind.published.filter(match).length,
+      draft: cardsByKind.draft.filter(match).length,
     };
   })();
 
@@ -136,6 +134,9 @@ export function WorkflowDashboard({
     }
     return list;
   })();
+
+  /** 后端「我的工作流」按 Tab 各取最新 100 条；命中上限时在底部给出提示 */
+  const showMineCappedHint = !mineLoading && !error && cards.length >= 100;
 
   /** 官方推荐：先按分类筛选，再在分类下按名称搜索 */
   const filteredOfficial = (() => {
@@ -369,9 +370,7 @@ export function WorkflowDashboard({
             </div>
           ) : filteredMine.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-16 text-center">
-              <p className="text-[15px] font-medium text-foreground/80">
-                {t('list.empty')}
-              </p>
+              <p className="text-[15px] font-medium text-foreground/80">{t('list.empty')}</p>
               {mineFilter === 'draft' ? (
                 <Button type="button" variant="outline" onClick={onManualCreate}>
                   {t('generate.manualCreate')}
@@ -415,6 +414,12 @@ export function WorkflowDashboard({
                 );
               })}
             </WorkflowListCardGrid>
+          )}
+
+          {showMineCappedHint && (
+            <p className="mt-3 text-center text-[12px] text-muted-foreground">
+              {t('list.cappedHint')}
+            </p>
           )}
         </section>
 
@@ -461,12 +466,9 @@ export function WorkflowDashboard({
                     // onCardClick={() => openDetailForOfficial(card)}
                     // onPreview={() => openDetailForOfficial(card)}
                     onInstall={() => {
-                      navigateToNewSessionWithPrompt(
-                        navigate,
-                        location.pathname,
-                        `/${card.name}`,
-                        { extraSearchParams: { workflowId: card.id } },
-                      );
+                      navigateToNewSessionWithPrompt(navigate, location.pathname, `/${card.name}`, {
+                        extraSearchParams: { workflowId: card.id },
+                      });
                     }}
                   />
                 ))}
