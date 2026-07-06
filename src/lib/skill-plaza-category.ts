@@ -4,6 +4,7 @@
  * after plaza list / meta cache / local label resolution.
  */
 import type { CategoryDef, PlazaSkillMeta, SkillSummary } from '@/types/skill-plaza';
+import { pickNavCategoryFromApiSkill } from '../../shared/skill-plaza-category-resolve';
 
 export const MINE_FALLBACK_CATEGORY_CODE = 'qita';
 export const MINE_FALLBACK_CATEGORY_LABEL = '其他';
@@ -21,6 +22,25 @@ export function normalizeMineCategoryBucket(
   return navCategorySlugs(categories).has(resolved) ? resolved : MINE_FALLBACK_CATEGORY_CODE;
 }
 
+function mergeCategorySource(
+  skill: SkillSummary,
+  metaMap: Record<string, PlazaSkillMeta>,
+  plazaSkill?: SkillSummary,
+): {
+  categoryCode?: string | null;
+  category?: string | null;
+  categoryCodes?: string[];
+  categoryNames?: string[];
+} {
+  const meta = metaMap[skill.slug];
+  return {
+    categoryCode: skill.categoryCode ?? plazaSkill?.categoryCode ?? meta?.categoryCode ?? null,
+    category: skill.category ?? plazaSkill?.category ?? meta?.category ?? null,
+    categoryCodes: skill.categoryCodes ?? plazaSkill?.categoryCodes ?? meta?.categoryCodes,
+    categoryNames: skill.categoryNames ?? plazaSkill?.categoryNames ?? meta?.categoryNames,
+  };
+}
+
 /** Resolve category slug without applying the qita fallback. */
 export function resolveMineSkillCategoryCode(
   skill: SkillSummary,
@@ -28,21 +48,17 @@ export function resolveMineSkillCategoryCode(
   metaMap: Record<string, PlazaSkillMeta>,
   plazaSkill?: SkillSummary,
 ): string | null {
-  let code = skill.categoryCode || null;
-  // Ignore backend/placeholder qita so plaza + meta cache can still enrich real categories.
-  if (code === MINE_FALLBACK_CATEGORY_CODE) code = null;
+  const merged = mergeCategorySource(skill, metaMap, plazaSkill);
+  const picked = pickNavCategoryFromApiSkill(merged, categories);
+  if (picked.code) return picked.code;
 
-  if (!code) {
-    code = plazaSkill?.categoryCode || metaMap[skill.slug]?.categoryCode || null;
+  if (merged.categoryCode === MINE_FALLBACK_CATEGORY_CODE) return null;
+
+  if (merged.category) {
+    const cat = categories.find((c) => c.label === merged.category);
+    if (cat) return cat.slug;
   }
-  if (!code) {
-    const label = plazaSkill?.category || metaMap[skill.slug]?.category || skill.category;
-    if (label) {
-      const cat = categories.find((c) => c.label === label);
-      if (cat) code = cat.slug;
-    }
-  }
-  return code;
+  return null;
 }
 
 export function resolveMineSkillCategoryLabel(
@@ -61,6 +77,13 @@ export function applyMineCategoryFallback(
   metaMap: Record<string, PlazaSkillMeta>,
   plazaSkill?: SkillSummary,
 ): SkillSummary {
+  const navSlugs = navCategorySlugs(categories);
+  if (skill.categoryCode && navSlugs.has(skill.categoryCode)) {
+    const category = resolveMineSkillCategoryLabel(skill, categories, skill.categoryCode);
+    if (skill.category === category) return skill;
+    return { ...skill, categoryCode: skill.categoryCode, category };
+  }
+
   const resolvedCode = resolveMineSkillCategoryCode(skill, categories, metaMap, plazaSkill);
   const categoryCode = normalizeMineCategoryBucket(resolvedCode, categories);
   const category = resolveMineSkillCategoryLabel(skill, categories, categoryCode);
@@ -88,7 +111,6 @@ export function computeMineCategoryCounts(
     counts[code] = (counts[code] || 0) + 1;
   }
 
-  // 「全部」= 当前 Tab 下技能总数（含导航未展示分类的技能）
   counts[''] = skills.length;
 
   return counts;

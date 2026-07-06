@@ -204,6 +204,8 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
           description: skill.description,
           category: skill.category,
           categoryCode: skill.categoryCode,
+          categoryCodes: skill.categoryCodes,
+          categoryNames: skill.categoryNames,
           installCount: skill.installCount,
           useCount: skill.useCount,
         };

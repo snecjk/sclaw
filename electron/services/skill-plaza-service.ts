@@ -19,6 +19,7 @@ import {
 } from '../utils/skill-version';
 import { PREINSTALLED_MARKER_NAME } from './sto-skill-service';
 import { parseSkillFrontmatter, readSkillMdFrontmatter } from '../utils/skill-frontmatter';
+import { pickNavCategoryFromApiSkill } from '../../shared/skill-plaza-category-resolve';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -30,6 +31,8 @@ export interface SkillSummary {
   description: string;
   category: string | null;
   categoryCode: string | null;
+  categoryCodes?: string[];
+  categoryNames?: string[];
   source: 'official' | 'mine';
   installed: boolean;
   enabled?: boolean;
@@ -210,8 +213,11 @@ function convertPlazaListResponse(raw: Record<string, unknown>): PlazaListResult
 }
 
 function convertSkillDetail(raw: Record<string, unknown>): SkillDetail {
-  const converted = convertKeysToCamelCase<SkillDetail>(raw);
-  return normalizeSkillDetail(converted);
+  const payload =
+    raw.skill && typeof raw.skill === 'object'
+      ? (convertKeysToCamelCase<Record<string, unknown>>(raw.skill))
+      : convertKeysToCamelCase<SkillDetail>(raw);
+  return normalizeSkillDetail(payload as Partial<SkillDetail>);
 }
 
 // ---------------------------------------------------------------------------
@@ -225,6 +231,8 @@ function normalizeSkillSummary(skill: Partial<SkillSummary>): SkillSummary {
     description: skill.description || '',
     category: skill.category ?? null,
     categoryCode: skill.categoryCode ?? null,
+    categoryCodes: Array.isArray(skill.categoryCodes) ? skill.categoryCodes : undefined,
+    categoryNames: Array.isArray(skill.categoryNames) ? skill.categoryNames : undefined,
     source: skill.source === 'mine' ? 'mine' : 'official',
     installed: skill.installed ?? false,
     enabled: skill.enabled,
@@ -289,14 +297,22 @@ function readLockJsonSkillEntries(configDir: string): Map<string, {
   versionSource?: string;
 }> {
   const lockFile = path.join(configDir, '.clawhub', 'lock.json');
-  const entries = new Map<string, { version?: string; source?: string; versionSource?: string }>();
+  const entries = new Map<string, {
+    version?: string;
+    source?: string;
+    versionSource?: string;
+  }>();
   try {
     if (fs.existsSync(lockFile)) {
       const data = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
       const skills = data?.skills || {};
       for (const [slug, info] of Object.entries(skills)) {
         if (info && typeof info === 'object') {
-          const record = info as { version?: string; source?: string; versionSource?: string };
+          const record = info as {
+            version?: string;
+            source?: string;
+            versionSource?: string;
+          };
           entries.set(slug, record);
         }
       }
@@ -585,6 +601,84 @@ export class SkillPlazaService {
     return skills.filter((s) => Boolean(s.categoryCode));
   }
 
+  private async resolvePlazaCategorysFilter(): Promise<string> {
+    try {
+      const authState = await getAuthState();
+      const categoryCode = authState.user?.categoryCode;
+      const apolloKey = isSiteUser(categoryCode)
+        ? 'claw.site.skill.category'
+        : 'claw.prov_head.skill.category';
+      const configValue = await fetchApolloConfigValue(apolloKey);
+      return configValue || '';
+    } catch (err) {
+      logger.warn('[SkillPlazaService] Failed to resolve categorys filter for enrichment:', err);
+      return '';
+    }
+  }
+
+  /** Raw remote plaza list for local skill category enrichment (no uncategorized filter). */
+  private async fetchPlazaSkillMapForLocalEnrichment(
+    labelToSlug: Map<string, string>,
+    categoryDefs: CategoryDef[],
+  ): Promise<{
+    skills: Map<string, SkillSummary>;
+    navBuckets: Map<string, { slug: string; label: string }>;
+  }> {
+    const categorys = await this.resolvePlazaCategorysFilter();
+    const map = new Map<string, SkillSummary>();
+    const navBuckets = new Map<string, { slug: string; label: string }>();
+
+    const ingest = (skills: SkillSummary[], implied?: { slug: string; label: string }) => {
+      const normalized = this.normalizeRemotePlazaSkills(skills, labelToSlug).map((s) => {
+        const overlaid = this.overlayLocalState(s);
+        if (implied) {
+          if (overlaid.slug) {
+            navBuckets.set(overlaid.slug, implied);
+          }
+          // Skills listed under a nav tab use that tab's bucket (Apollo-visible categories).
+          return {
+            ...overlaid,
+            categoryCode: implied.slug,
+            category: implied.label,
+          };
+        }
+        return overlaid;
+      });
+      for (const skill of normalized) {
+        if (!skill.slug) continue;
+        const existing = map.get(skill.slug);
+        if (!existing || (!existing.categoryCode && skill.categoryCode)) {
+          map.set(skill.slug, skill);
+        }
+      }
+    };
+
+    const fetchPages = async (
+      params: SkillPlazaListParams,
+      implied?: { slug: string; label: string },
+    ) => {
+      let page = 1;
+      while (true) {
+        const result = await this.client.getPlazaSkills(
+          { ...params, page, pageSize: 1000 },
+          categorys || undefined,
+        );
+        ingest(result.skills, implied);
+        if (!result.hasMore || result.skills.length === 0) break;
+        page++;
+        if (page > 50) break;
+      }
+    };
+
+    await fetchPages({ page: 1, pageSize: 1000 });
+    for (const cat of categoryDefs) {
+      if (!cat.slug) continue;
+      await fetchPages({ page: 1, pageSize: 1000, category: cat.slug }, cat);
+    }
+
+    return { skills: map, navBuckets };
+  }
+
   // ---- Office skills from local filesystem ----
 
   private getOfficeSkillsFromLocal(q?: string): SkillSummary[] {
@@ -831,32 +925,23 @@ export class SkillPlazaService {
 
     // 获取 plaza 分类列表，建立 label → slug 映射（权威来源）
     let labelToSlug = new Map<string, string>();
+    let categoryDefs: CategoryDef[] = [];
     try {
-      const categories = await this.getCategories();
-      labelToSlug = new Map(categories.map((c) => [c.label, c.slug]));
-      logger.info(`[getLocalSkills] categories loaded: ${categories.map((c) => `${c.label}=${c.slug}`).join(', ')}`);
+      categoryDefs = await this.getCategories();
+      labelToSlug = new Map(categoryDefs.map((c) => [c.label, c.slug]));
+      logger.info(`[getLocalSkills] categories loaded: ${categoryDefs.map((c) => `${c.label}=${c.slug}`).join(', ')}`);
     } catch (err) {
       logger.warn('[SkillPlazaService] Failed to fetch categories for local skills:', err);
     }
 
-    // 先拉 plaza 列表，用于补全官方技能的分类信息（循环拉取全部）
+    // 先拉 plaza 列表，用于补全官方技能的分类信息（含按分类分页拉取）
     let plazaSkillMap = new Map<string, SkillSummary>();
+    let navBuckets = new Map<string, { slug: string; label: string }>();
     try {
-      const allPlazaSkills: SkillSummary[] = [];
-      let page = 1;
-      while (true) {
-        const result = await this.getPlazaSkills({ page, pageSize: 1000 });
-        allPlazaSkills.push(...result.skills);
-        if (!result.hasMore || result.skills.length === 0) break;
-        page++;
-        if (page > 50) break; // safety limit
-      }
-      plazaSkillMap = new Map(allPlazaSkills.map((s) => [s.slug, s]));
-      logger.info(`[getLocalSkills] loaded ${allPlazaSkills.length} plaza skills for categorization`);
-      // 打印 plaza 技能的分类信息样本（用于排查）
-      for (const [s, skill] of plazaSkillMap.entries()) {
-        logger.info(`[getLocalSkills] plaza skill sample: slug=${s}, category=${skill.category}, categoryCode=${skill.categoryCode}`);
-      }
+      const enriched = await this.fetchPlazaSkillMapForLocalEnrichment(labelToSlug, categoryDefs);
+      plazaSkillMap = enriched.skills;
+      navBuckets = enriched.navBuckets;
+      logger.info(`[getLocalSkills] loaded ${plazaSkillMap.size} plaza skills, ${navBuckets.size} nav buckets for categorization`);
     } catch (err) {
       logger.warn('[SkillPlazaService] Failed to fetch plaza skills for categorization:', err);
     }
@@ -910,28 +995,30 @@ export class SkillPlazaService {
           if (isOfficial) {
             const plazaSkill = plazaSkillMap.get(slug);
             if (plazaSkill) {
-              // 部分 plaza 接口 categoryCode 可能为空字符串，但 category（中文 label）可靠
-              resolvedCode = plazaSkill.categoryCode || null;
-              resolvedLabel = plazaSkill.category || null;
+              const picked = pickNavCategoryFromApiSkill(plazaSkill, categoryDefs);
+              resolvedCode = picked.code;
+              resolvedLabel = picked.label;
+            }
 
-              // 若 categoryCode 缺失但 label 存在，通过分类列表反查 slug
-              if (!resolvedCode && resolvedLabel) {
-                resolvedCode = labelToSlug.get(resolvedLabel) || null;
+            if (!resolvedCode) {
+              try {
+                const detail = await this.getSkillDetail(slug);
+                const picked = pickNavCategoryFromApiSkill(detail, categoryDefs);
+                resolvedCode = picked.code;
+                resolvedLabel = picked.label;
+                logger.info(
+                  `[getLocalSkills] detail category_codes pick for ${slug}: categoryCode=${resolvedCode}, category=${resolvedLabel}, codes=${JSON.stringify(detail.categoryCodes)}`,
+                );
+              } catch (detailErr) {
+                logger.warn(`[getLocalSkills] getSkillDetail failed for ${slug}:`, detailErr);
               }
+            }
 
-              // 若 plaza 列表中既无 categoryCode 也无 category，尝试调详情接口补全
-              if (!resolvedCode && !resolvedLabel) {
-                try {
-                  const detail = await this.getSkillDetail(slug);
-                  resolvedCode = detail.categoryCode || null;
-                  resolvedLabel = detail.category || null;
-                  if (!resolvedCode && resolvedLabel) {
-                    resolvedCode = labelToSlug.get(resolvedLabel) || null;
-                  }
-                  logger.info(`[getLocalSkills] detail fallback for ${slug}: categoryCode=${resolvedCode}, category=${resolvedLabel}`);
-                } catch (detailErr) {
-                  logger.warn(`[getLocalSkills] getSkillDetail failed for ${slug}:`, detailErr);
-                }
+            if (!resolvedCode) {
+              const navBucket = navBuckets.get(slug);
+              if (navBucket) {
+                resolvedCode = navBucket.slug;
+                resolvedLabel = navBucket.label;
               }
             }
           }
