@@ -20,8 +20,6 @@ import {
   workflowListSubnavNavClass,
   workflowListSubnavSlotClass,
   workflowListTabClass,
-  workflowListCardMenuClass,
-  workflowListCardMenuItemClass,
   workflowListMainSectionClass,
   workflowListToolbarClass,
 } from '@/lib/surfaces';
@@ -60,7 +58,7 @@ interface WorkflowDashboardProps {
 
 type OfficialFilter = 'all' | string;
 
-/** 工作流列表页主面板：Hero 生成区 + Tab 切换（我的/官方） + 卡片网格 + 右键菜单 + 详情弹窗 */
+/** 工作流列表页主面板：Hero 生成区 + Tab 切换（我的/官方） + 卡片网格 + 详情弹窗 */
 export function WorkflowDashboard({
   viewState,
   onManualCreate,
@@ -77,8 +75,6 @@ export function WorkflowDashboard({
   const [composerSeed, setComposerSeed] = useState<{ text: string; key: number } | null>(null);
   const [search, setSearch] = useState('');
   const [officialFilter, setOfficialFilter] = useState<OfficialFilter>('all');
-  const [menuIndex, setMenuIndex] = useState<number | null>(null);
-  const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
   const renameRef = useRef<HTMLInputElement>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   // TODO: 预览/详情弹窗暂不启用，相关逻辑先注释
@@ -148,18 +144,6 @@ export function WorkflowDashboard({
     }
     return list;
   })();
-
-  const openMenu = (e: React.MouseEvent, index: number) => {
-    e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setMenuIndex(index);
-    setMenuPos({
-      x: Math.max(8, rect.right - 200),
-      y: Math.min(rect.bottom + 6, window.innerHeight - 230),
-    });
-  };
-
-  const closeMenu = () => setMenuIndex(null);
 
   /** 立即运行：按标题复用已有会话，否则新建并命名，再跳转首页自动发送。 */
   const runWorkflowInChat = useCallback(
@@ -379,40 +363,43 @@ export function WorkflowDashboard({
             </div>
           ) : (
             <WorkflowListCardGrid>
-              {filteredMine.map((card) => {
-                const index = cards.findIndex((c) => c.id === card.id);
-                return (
-                  <WorkflowMineListCard
-                    key={card.id}
-                    card={card}
-                    isRenaming={renamingId === card.id}
-                    renameRef={renameRef}
-                    onRenameCommit={async (name) => {
-                      setRenameLoading(true);
-                      try {
-                        await renameWorkflow(card.id, name);
-                        setRenamingId(null);
-                        toast.success(t('toast.renamed'));
-                        await refetchMine();
-                      } catch (error) {
-                        toast.error(error instanceof Error ? error.message : '重命名失败');
-                      } finally {
-                        setRenameLoading(false);
-                      }
-                    }}
-                    // TODO: 等待后端 API 对接 — onToggleEnabled 暂不启用
-                    // onToggleEnabled={(on) => {
-                    //   updateCard(index, { enabled: on, showPausedLabel: !on });
-                    //   toast.success(on ? t('toast.resumed') : t('toast.paused'));
-                    // }}
-                    // TODO: 等待后端 API 对接 — onCardClick 暂不启用
-                    // onCardClick={() => openDetailForMine(card)}
-                    onRun={() => runWorkflowInChat(card)}
-                    onEdit={() => onEditCard(card.id)}
-                    onMore={(e) => openMenu(e, index)}
-                  />
-                );
-              })}
+              {filteredMine.map((card) => (
+                <WorkflowMineListCard
+                  key={card.id}
+                  card={card}
+                  isRenaming={renamingId === card.id}
+                  renameRef={renameRef}
+                  onRenameCommit={async (name) => {
+                    setRenameLoading(true);
+                    try {
+                      await renameWorkflow(card.id, name);
+                      setRenamingId(null);
+                      toast.success(t('toast.renamed'));
+                      await refetchMine();
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : '重命名失败');
+                    } finally {
+                      setRenameLoading(false);
+                    }
+                  }}
+                  // TODO: 等待后端 API 对接 — onToggleEnabled 暂不启用
+                  // onToggleEnabled={(on) => {
+                  //   updateCard(index, { enabled: on, showPausedLabel: !on });
+                  //   toast.success(on ? t('toast.resumed') : t('toast.paused'));
+                  // }}
+                  // TODO: 等待后端 API 对接 — onCardClick 暂不启用
+                  // onCardClick={() => openDetailForMine(card)}
+                  onRun={() => runWorkflowInChat(card)}
+                  onEdit={() => onEditCard(card.id)}
+                  isRenameDisabled={renameLoading}
+                  isDeleteDisabled={deleteLoading}
+                  onRenameRequest={() => {
+                    setRenamingId(card.id);
+                    requestAnimationFrame(() => renameRef.current?.focus());
+                  }}
+                  onDeleteRequest={() => setDeleteTarget(card)}
+                />
+              ))}
             </WorkflowListCardGrid>
           )}
 
@@ -477,82 +464,6 @@ export function WorkflowDashboard({
           )}
         </section>
       </div>
-
-      {menuIndex !== null ? (
-        <>
-          <button
-            type="button"
-            className="fixed inset-0 z-[125] cursor-default bg-transparent"
-            aria-label={t('card.more')}
-            onClick={closeMenu}
-          />
-          <div
-            className={workflowListCardMenuClass}
-            style={{ left: menuPos.x, top: menuPos.y }}
-            role="menu"
-          >
-            {/* <button
-              type="button"
-              role="menuitem"
-              className={workflowListCardMenuItemClass}
-              onClick={() => {
-                const c = cards[menuIndex];
-                if (!c) return;
-                updateCard(menuIndex, { enabled: !c.enabled, showPausedLabel: c.enabled });
-                toast.success(c.enabled ? t('toast.paused') : t('toast.resumed'));
-                closeMenu();
-              }}
-            >
-              {cards[menuIndex]?.enabled ? t('card.pauseSchedule') : t('card.resumeSchedule')}
-            </button> */}
-            <button
-              type="button"
-              role="menuitem"
-              className={workflowListCardMenuItemClass}
-              disabled={renameLoading}
-              onClick={() => {
-                const c = cards[menuIndex];
-                if (!c) return;
-                setRenamingId(c.id);
-                closeMenu();
-                requestAnimationFrame(() => renameRef.current?.focus());
-              }}
-            >
-              {t('card.rename')}
-            </button>
-            {/* <button
-              type="button"
-              role="menuitem"
-              className={workflowListCardMenuItemClass}
-              onClick={() => {
-                const c = cards[menuIndex];
-                if (c) handleShare();
-                closeMenu();
-              }}
-            >
-              {t('card.share')}
-            </button> */}
-            <div className="mx-2 my-1.5 h-px bg-border" />
-            <button
-              type="button"
-              role="menuitem"
-              className={cn(
-                workflowListCardMenuItemClass,
-                'text-destructive hover:bg-destructive/10'
-              )}
-              disabled={deleteLoading}
-              onClick={() => {
-                const c = cards[menuIndex];
-                if (!c) return;
-                setDeleteTarget(c);
-                closeMenu();
-              }}
-            >
-              {t('card.delete')}
-            </button>
-          </div>
-        </>
-      ) : null}
 
       {/* TODO: 预览/详情弹窗暂不启用 */}
       {/* <WorkflowDetailModal
