@@ -323,8 +323,9 @@ export function artifactToPreviewFile(artifact: {
     artifact.url,
     artifact.name,
   );
-  const fileName = artifact.name && artifact.name !== 'preview' && !artifact.name.startsWith('http')
-    ? (artifact.name.includes('.') ? artifact.name : previewFileNameFromUrl(artifact.url, mimeType))
+  const displayName = artifact.name?.trim();
+  const fileName = displayName && displayName !== 'preview' && !displayName.startsWith('http')
+    ? displayName
     : previewFileNameFromUrl(artifact.url, mimeType);
 
   return {
