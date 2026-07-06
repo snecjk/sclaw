@@ -214,6 +214,7 @@ export function WorkflowMineListCard({
             sideOffset={8}
             collisionPadding={8}
             className={cn(workflowListCardMenuClass, 'z-[10041] w-[200px]')}
+            onCloseAutoFocus={(e) => e.preventDefault()}
             onClick={(e) => e.stopPropagation()}
           >
             <DropdownMenuItem
