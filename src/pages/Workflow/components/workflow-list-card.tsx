@@ -103,7 +103,6 @@ export interface WorkflowMineListCardProps {
   isRenaming: boolean;
   renameRef?: RefObject<HTMLInputElement | null>;
   onRenameCommit: (name: string) => void;
-  onRenameCancel?: () => void;
   // TODO: 等待后端 API 对接
   // onToggleEnabled: (enabled: boolean) => void;
   onCardClick?: () => void;
@@ -121,7 +120,6 @@ export function WorkflowMineListCard({
   isRenaming,
   renameRef,
   onRenameCommit,
-  onRenameCancel,
   // onToggleEnabled,
   onCardClick,
   onRun,
@@ -150,17 +148,9 @@ export function WorkflowMineListCard({
                   defaultValue={card.name}
                   className="w-full rounded-md border border-primary/30 px-2 py-0.5 text-[15px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   onClick={(e) => e.stopPropagation()}
-                  onBlur={() => onRenameCancel?.()}
+                  onBlur={(e) => onRenameCommit(e.target.value.trim() || card.name)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      onRenameCommit(
-                        (e.target as HTMLInputElement).value.trim() || card.name
-                      );
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault();
-                      onRenameCancel?.();
-                    }
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                   }}
                 />
               ) : (

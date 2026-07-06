@@ -370,6 +370,11 @@ export function WorkflowDashboard({
                   isRenaming={renamingId === card.id}
                   renameRef={renameRef}
                   onRenameCommit={async (name) => {
+                    // 内容未变化（含清空后回退为原名）时，仅退出重命名模式，不调用保存接口
+                    if (name === card.name) {
+                      setRenamingId(null);
+                      return;
+                    }
                     setRenameLoading(true);
                     try {
                       await renameWorkflow(card.id, name);
@@ -397,7 +402,6 @@ export function WorkflowDashboard({
                     setRenamingId(card.id);
                     requestAnimationFrame(() => renameRef.current?.focus());
                   }}
-                  onRenameCancel={() => setRenamingId(null)}
                   onDeleteRequest={() => setDeleteTarget(card)}
                 />
               ))}
