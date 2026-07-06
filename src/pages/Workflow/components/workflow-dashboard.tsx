@@ -397,6 +397,7 @@ export function WorkflowDashboard({
                     setRenamingId(card.id);
                     requestAnimationFrame(() => renameRef.current?.focus());
                   }}
+                  onRenameCancel={() => setRenamingId(null)}
                   onDeleteRequest={() => setDeleteTarget(card)}
                 />
               ))}
