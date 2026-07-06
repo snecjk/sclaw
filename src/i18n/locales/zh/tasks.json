@@ -48,7 +48,8 @@
     },
     "taskView": {
       "aria": "定时任务",
-      "emptyNoRecords": "该状态下暂无执行记录"
+      "emptyNoRecords": "该状态下暂无执行记录",
+      "recordsCappedHint": "工作流执行记录仅返回最新的 200 条"
     },
     "recordView": {
       "aria": "执行记录"

@@ -35,7 +35,8 @@
     "empty": "还没有工作流",
     "emptyInstalled": "暂无已安装的工作流",
     "neverUpdated": "尚未更新",
-    "updatedAt": "更新于 {{time}}"
+    "updatedAt": "更新于 {{time}}",
+    "cappedHint": "我的工作流仅显示最新的 200 条数据"
   },
   "card": {
     "flow": "工作流节点",

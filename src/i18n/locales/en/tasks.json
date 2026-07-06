@@ -48,7 +48,8 @@
     },
     "taskView": {
       "aria": "Scheduled tasks",
-      "emptyNoRecords": "No execution records in this status"
+      "emptyNoRecords": "No execution records in this status",
+      "recordsCappedHint": "Only the latest 200 workflow execution records are returned."
     },
     "recordView": {
       "aria": "Execution records"

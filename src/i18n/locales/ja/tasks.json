@@ -48,7 +48,8 @@
     },
     "taskView": {
       "aria": "定期タスク",
-      "emptyNoRecords": "この状態の実行記録はありません"
+      "emptyNoRecords": "この状態の実行記録はありません",
+      "recordsCappedHint": "ワークフロー実行記録は最新の 200 件のみ返却されます"
     },
     "recordView": {
       "aria": "実行記録"

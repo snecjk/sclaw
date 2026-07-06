@@ -137,6 +137,9 @@ export function WorkflowDashboard({
     return list;
   })();
 
+  /** 后端「我的工作流」固定截断到最新 200 条；命中上限时在底部给出提示 */
+  const showMineCappedHint = !mineLoading && !error && cards.length >= 200;
+
   /** 官方推荐：先按分类筛选，再在分类下按名称搜索 */
   const filteredOfficial = (() => {
     let list = officialCards;
@@ -369,9 +372,7 @@ export function WorkflowDashboard({
             </div>
           ) : filteredMine.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-16 text-center">
-              <p className="text-[15px] font-medium text-foreground/80">
-                {t('list.empty')}
-              </p>
+              <p className="text-[15px] font-medium text-foreground/80">{t('list.empty')}</p>
               {mineFilter === 'draft' ? (
                 <Button type="button" variant="outline" onClick={onManualCreate}>
                   {t('generate.manualCreate')}
@@ -415,6 +416,12 @@ export function WorkflowDashboard({
                 );
               })}
             </WorkflowListCardGrid>
+          )}
+
+          {showMineCappedHint && (
+            <p className="mt-3 text-center text-[12px] text-muted-foreground">
+              {t('list.cappedHint')}
+            </p>
           )}
         </section>
 
@@ -461,12 +468,9 @@ export function WorkflowDashboard({
                     // onCardClick={() => openDetailForOfficial(card)}
                     // onPreview={() => openDetailForOfficial(card)}
                     onInstall={() => {
-                      navigateToNewSessionWithPrompt(
-                        navigate,
-                        location.pathname,
-                        `/${card.name}`,
-                        { extraSearchParams: { workflowId: card.id } },
-                      );
+                      navigateToNewSessionWithPrompt(navigate, location.pathname, `/${card.name}`, {
+                        extraSearchParams: { workflowId: card.id },
+                      });
                     }}
                   />
                 ))}

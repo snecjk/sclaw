@@ -56,9 +56,7 @@ import { RecordDetailModal } from './components/RecordDetailModal';
 // ──── 工具函数 ────
 
 /** 将 ManagedLocalTask 转换为页面 TaskViewModel */
-function managedTaskToViewModel(
-  task: ManagedLocalTask,
-): TaskViewModel {
+function managedTaskToViewModel(task: ManagedLocalTask): TaskViewModel {
   if (task.engineType === 'claude') {
     return {
       id: task.id,
@@ -164,6 +162,9 @@ export default function MyTask() {
 
   const recordCounts = useMyTaskStore(useShallow(selectRecordCounts));
   const currentRecords = useMyTaskStore(useShallow(selectCurrentRecords));
+  // 后端执行记录接口不分页，固定截断到最新 200 条；命中上限时在底部给出提示
+  const fetchedRecordsTotal = useMyTaskStore((state) => state.records.length);
+  const showRecordsCappedHint = !recordsLoading && fetchedRecordsTotal >= 200;
 
   // ── 页面级状态 ──
   const [activeView, setActiveView] = useState<TaskView>('tasks');
@@ -246,10 +247,7 @@ export default function MyTask() {
   // ── 任务视图模型列表 ──
   const safeJobs = useMemo(() => (Array.isArray(jobs) ? jobs : []), [jobs]);
 
-  const allTasks = useMemo(
-    () => safeJobs.map((j) => managedTaskToViewModel(j)),
-    [safeJobs]
-  );
+  const allTasks = useMemo(() => safeJobs.map((j) => managedTaskToViewModel(j)), [safeJobs]);
 
   const filteredTasks = useMemo(() => {
     let result = allTasks;
@@ -443,12 +441,9 @@ export default function MyTask() {
 
   const handleTemplateInstall = useCallback(
     (card: OfficialWorkflowCard) => {
-      navigateToNewSessionWithPrompt(
-        navigate,
-        location.pathname,
-        `/${card.name}`,
-        { extraSearchParams: { workflowId: card.id } },
-      );
+      navigateToNewSessionWithPrompt(navigate, location.pathname, `/${card.name}`, {
+        extraSearchParams: { workflowId: card.id },
+      });
     },
     [navigate, location.pathname]
   );
@@ -477,9 +472,7 @@ export default function MyTask() {
                 </button>
               ) : null}
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t('myTask.subtitle')}
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{t('myTask.subtitle')}</p>
           </header>
 
           {/* Tab 行：左侧视图 Tab + 右侧搜索/排序 */}
@@ -565,6 +558,12 @@ export default function MyTask() {
                     <RecordItem key={record.id} record={record} onViewDetail={setDetailRecord} />
                   ))}
                 </div>
+              )}
+
+              {showRecordsCappedHint && (
+                <p className="mt-3 text-center text-[12px] text-muted-foreground">
+                  {t('myTask.taskView.recordsCappedHint')}
+                </p>
               )}
             </section>
           )}
