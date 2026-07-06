@@ -14,6 +14,7 @@ import {
   parseParameterFormMarker,
 } from '@/lib/parameter-form-marker';
 import { resolveParameterFormId } from '@/components/parameter-form/form-handlers';
+import { currentUserTurnHasWorkflowSubmission } from '@/lib/workflow-card-injection';
 import type { RawMessage, ContentBlock } from '@/stores/chat';
 import { truncatePreviewExtractExcerpt } from '../../../shared/preview-extract-trace';
 import {
@@ -29,9 +30,9 @@ import {
   isWorkflowParamsSummaryText,
   isWorkflowParamsUserText,
 } from '@/lib/workflow-form-utils';
+import { isLikelyPlanningNarration } from '@/pages/Chat/thinking/classify-text';
 import {
   artifactToPreviewFile,
-  extractPreviewableHttpUrls,
   inferMimeTypeFromUrl,
   isHttpUrl,
   isPreviewableArtifactUrl,
@@ -211,6 +212,16 @@ export function maskSensitiveToolInputForDisplay(input: unknown): string {
   }
 }
 
+/** Claude 等引擎常传 null 或空 object；UI 统一视为「无参数」 */
+export function hasDisplayableToolInput(input: unknown): boolean {
+  if (input == null) return false;
+  if (typeof input === 'string') return input.trim().length > 0;
+  if (typeof input === 'object' && !Array.isArray(input)) {
+    return Object.keys(input as Record<string, unknown>).length > 0;
+  }
+  return true;
+}
+
 export function stripDwsSendMetadataForDisplay(text: string): string {
   let cleaned = text
     .replace(DWS_SEND_METADATA_PATTERN, '')
@@ -275,7 +286,7 @@ export function messageHasWorkflowCard(msg: RawMessage): boolean {
     && (msg.content as ContentBlock[]).some((block) => block.type === 'workflow_card');
 }
 
-function messageHasParameterFormBlock(msg: RawMessage): boolean {
+export function messageHasParameterFormBlock(msg: RawMessage): boolean {
   return Array.isArray(msg.content)
     && (msg.content as ContentBlock[]).some((block) => block.type === 'parameter_form');
 }
@@ -284,6 +295,8 @@ function messageHasParameterFormBlock(msg: RawMessage): boolean {
 export function isWorkflowPreambleAssistantMessage(msg: RawMessage): boolean {
   if (!isAssistantMessageRole(msg.role)) return false;
   const text = extractText(msg).trim();
+  // 思考区 phase-text 已展示的规划旁白，不再重复渲染工作流 preamble 卡
+  if (isLikelyPlanningNarration(text)) return false;
   if (isWorkflowParamsSummaryText(text)) return true;
   if (isWorkflowGuidanceAssistantText(text)) return true;
   if (isWorkflowParameterIntroText(text)) return true;
@@ -404,6 +417,10 @@ export function extractParameterForm(
         sourceId: string;
         schemaHash?: string;
       };
+      const sessionMessages = useChatStore.getState().messages;
+      if (currentUserTurnHasWorkflowSubmission(sessionMessages)) {
+        return null;
+      }
       if (
         formContext.source === 'workflow'
         && formContext.sourceId
@@ -411,7 +428,7 @@ export function extractParameterForm(
       ) {
         return null;
       }
-      
+
       return {
         formId,
         formConfig: (block as any).formConfig as import('@/types/user-form').UserFormConfig,
@@ -425,6 +442,10 @@ export function extractParameterForm(
       if (parsed) {
         const { templateId, schemaHash } = parsed;
         const sessionKey = useChatStore.getState().currentSessionKey;
+        const sessionMessages = useChatStore.getState().messages;
+        if (currentUserTurnHasWorkflowSubmission(sessionMessages)) {
+          return null;
+        }
         if (sessionHasWorkflowExecution(sessionKey, templateId)) {
           return null;
         }
@@ -575,10 +596,17 @@ export function extractThinking(message: RawMessage | unknown): string | null {
 
 export type ThinkingTimelineItem =
   | { type: 'thinking'; content: string }
+  /** 思考区内的阶段旁白（原 phase-text，按时序夹在 thinking/tool 之间） */
+  | { type: 'narration'; content: string }
   | { type: 'tool'; index: number; id: string; name: string; input: unknown };
+
+function thinkingTimelineToolKey(tool: { id: string; name: string; input: unknown }): string {
+  return tool.id || `${tool.name}::${JSON.stringify(tool.input ?? null)}`;
+}
 
 /**
  * Ordered thinking + tool_use segments from message content (preserves block order).
+ * Also picks up OpenAI `tool_calls` on the message when they are not in the content array.
  */
 export function extractThinkingTimeline(message: RawMessage | unknown): ThinkingTimelineItem[] {
   if (!message || typeof message !== 'object') return [];
@@ -613,17 +641,26 @@ export function extractThinkingTimeline(message: RawMessage | unknown): Thinking
     if (thinking) {
       items.push({ type: 'thinking', content: thinking });
     }
-    const tools = extractToolUse(message);
-    for (const tool of tools) {
-      toolIndex += 1;
-      items.push({
-        type: 'tool',
-        index: toolIndex,
-        id: tool.id || `tool-${toolIndex}`,
-        name: tool.name,
-        input: tool.input,
-      });
-    }
+  }
+
+  const capturedToolKeys = new Set(
+    items
+      .filter((item): item is Extract<ThinkingTimelineItem, { type: 'tool' }> => item.type === 'tool')
+      .map((item) => thinkingTimelineToolKey({ id: item.id, name: item.name, input: item.input })),
+  );
+
+  for (const tool of extractToolUse(message)) {
+    const key = thinkingTimelineToolKey(tool);
+    if (capturedToolKeys.has(key)) continue;
+    toolIndex += 1;
+    items.push({
+      type: 'tool',
+      index: toolIndex,
+      id: tool.id || `tool-${toolIndex}`,
+      name: tool.name,
+      input: tool.input,
+    });
+    capturedToolKeys.add(key);
   }
 
   return items;
@@ -1067,17 +1104,6 @@ export function extractPreviewableRefs(
     const fileName = url.split('/').pop() || 'index.html';
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     addIfNotImage(url, fileName, ext, 'localhost URL in assistant text', match[0]);
-  }
-
-  // OSS / CDN http(s) links with previewable extensions
-  for (const ref of extractPreviewableHttpUrls(cleanText)) {
-    addIfNotImage(
-      ref.filePath,
-      ref.fileName,
-      ref.fileName.split('.').pop()?.toLowerCase() || '',
-      'http(s) URL with previewable extension',
-      ref.filePath,
-    );
   }
 
   // File paths (relative ./, absolute /, and Windows C:\)

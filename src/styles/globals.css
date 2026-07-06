@@ -692,6 +692,64 @@
   border-bottom: 0;
 }
 
+/* chat-interaction-style-spec §6.1 — Loading / 进行中标题 shimmer */
+@keyframes chat-interaction-shimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+.chat-interaction-shimmer-text {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  color: #6b737d;
+}
+
+.chat-interaction-shimmer-text::after {
+  content: '';
+  position: absolute;
+  inset: -2px 0;
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.8) 50%,
+    transparent 100%
+  );
+  filter: blur(8px);
+  animation: chat-interaction-shimmer 2s linear infinite;
+  pointer-events: none;
+}
+
+/* 思考/工具正文加载尾「...」 */
+@keyframes chat-process-ellipsis-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+
+  40% {
+    opacity: 1;
+  }
+}
+
+.chat-process-loading-ellipsis span {
+  animation: chat-process-ellipsis-dot 1.4s ease-in-out infinite;
+}
+
+.chat-process-loading-ellipsis span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.chat-process-loading-ellipsis span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
 /* Typing indicator animation */
 @keyframes bounce {
 

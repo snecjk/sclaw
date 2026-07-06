@@ -233,13 +233,12 @@ export function Cron() {
     try {
       await deleteJob(deleteTarget.id, deleteTarget.engineType);
       toast.success(t('toast.deleted'));
-      await fetchJobs().catch(() => {});
     } catch {
       toast.error(t('toast.failedDelete'));
     } finally {
       setDeleteTarget(null);
     }
-  }, [deleteTarget, deleteJob, fetchJobs, t]);
+  }, [deleteTarget, deleteJob, t]);
 
   const handleRecommendAdd = useCallback((task: RecommendTask) => {
     setRecommendInitialValues({ name: task.title, message: task.desc });

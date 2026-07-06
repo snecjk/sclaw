@@ -10,7 +10,12 @@
     "system": "跟随系统",
     "language": "语言",
     "launchAtStartup": "开机自动启动",
-    "launchAtStartupDesc": "登录系统后自动启动 S Claw"
+    "launchAtStartupDesc": "登录系统后自动启动 S Claw",
+    "preventSystemSleep": "阻止电脑睡眠",
+    "preventSystemSleepDesc": "开启后，S Claw 运行期间将阻止电脑自动进入睡眠。",
+    "preventSystemSleepTips": "使用定时任务时建议开启。请勿合盖，并连接电源；合盖或关机后无法保证正常运行。",
+    "preventSystemSleepToastEnabled": "已开启：S Claw 运行期间将阻止电脑睡眠",
+    "preventSystemSleepToastDisabled": "已关闭：电脑将按系统设置正常睡眠"
   },
   "aiProviders": {
     "title": "AI 模型提供商",
@@ -198,7 +203,7 @@
     "autoDownloadDesc": "自动下载并安装更新",
     "status": {
       "checking": "正在检查更新...",
-      "downloading": "正在下载更新...",
+      "downloading": "正在下载更新 v{{version}} 版本",
       "available": "可用更新：v{{version}}",
       "downloaded": "准备安装：v{{version}}",
       "autoInstalling": "将在 {{seconds}} 秒后自动开始安装...",
@@ -226,7 +231,21 @@
     "currentVersion": "当前版本",
     "whatsNew": "更新内容：",
     "errorDetails": "错误详情：",
-    "help": "开启自动更新后，更新将自动下载并安装。"
+    "help": "开启自动更新后，更新将自动下载并安装。",
+    "sidebar": {
+      "newVersionTitle": "有新版本待更新",
+      "updateToVersion": "更新至 v{{version}} 版本",
+      "updateNow": "立即更新",
+      "later": "稍后",
+      "updating": "更新中...",
+      "viewUpdate": "查看更新"
+    },
+    "modal": {
+      "title": "v{{version}} 更新内容",
+      "close": "关闭",
+      "viewChangelog": "查看更新日志",
+      "noReleaseNotes": "暂无更新说明"
+    }
   },
   "advanced": {
     "title": "高级",

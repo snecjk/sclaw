@@ -11,7 +11,7 @@
     "sendAria": "Generate workflow",
     "chipWeekly": "Generate HQ settlement report every Monday",
     "chipAbnormal": "Alert me and create follow-up tasks when abnormal customers are found",
-    "chipDaily": "Email me daily branch revenue summary"
+    "chipDaily": "Daily branch revenue summary"
   },
   "tabs": {
     "aria": "Workflow groups",
@@ -86,6 +86,29 @@
     "recoverHint": "Recoverable from recycle bin within 30 days",
     "cancel": "Cancel",
     "confirm": "Delete"
+  },
+  "editor": {
+    "editTitle": "Edit workflow",
+    "aiCreateTitle": "AI create workflow",
+    "openInBrowser": "Open in browser",
+    "backAria": "Back to list"
+  },
+  "createModal": {
+    "title": "Basic information",
+    "subtitle": "Name your workflow and describe the business scenario",
+    "nameLabel": "Workflow name",
+    "namePlaceholder": "e.g. Contract review workflow",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Describe scenarios, triggers, and outputs",
+    "descriptionCounter": "{{count}}/{{max}}",
+    "categoryLabel": "Category",
+    "categoryPlaceholder": "Select",
+    "confirm": "Confirm",
+    "confirming": "Creating…",
+    "close": "Close",
+    "created": "Workflow created",
+    "createFailed": "Failed to create workflow",
+    "templateLoadFailed": "Failed to load templates"
   },
   "builder": {
     "back": "Back",

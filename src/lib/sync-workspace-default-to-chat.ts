@@ -49,6 +49,9 @@ export async function syncWorkspaceDefaultModelToChat(opts: {
 
   try {
     if (chat.sending) {
+      // Model switch aborts the active run; don't let that abort auto-fire queued messages.
+      const { suspendAutoSend } = await import('@/stores/message-queue');
+      suspendAutoSend(currentSessionKey);
       await chat.abortRun();
     }
     await hostApiFetch('/api/sessions/model', {

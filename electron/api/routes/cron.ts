@@ -8,7 +8,7 @@ import type { DingTalkMention } from '../../../shared/dingtalk-mention';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { getOpenClawConfigDir } from '../../utils/paths';
-import { filterDeletedSessions } from '../../utils/scheduled-task-poller-store';
+import { filterDeletedSessions, listDeletedSessionKeys } from '../../utils/scheduled-task-poller-store';
 import { reviveCronDatedExecutionSession } from '../../utils/revive-deleted-execution-session';
 import {
   buildFirstTriggeredCronSessionPlaceholders,
@@ -62,10 +62,12 @@ interface CronSessionKeyParts {
 
 interface CronSessionFallbackMessage {
   id: string;
-  role: 'assistant' | 'system';
-  content: string;
+  role: 'assistant' | 'system' | 'user' | 'toolresult' | 'tool_result';
+  content: string | unknown[];
   timestamp: number;
   isError?: boolean;
+  toolCallId?: string;
+  toolName?: string;
 }
 
 function parseCronSessionKey(sessionKey: string): CronSessionKeyParts | null {
@@ -141,30 +143,83 @@ async function readRunSessionMessages(sessionKey: string): Promise<CronSessionFa
 
       const role = msg.role as string | undefined;
       const content = msg.content as string | unknown[] | undefined;
-      if (!role || !content) continue;
+      if (!role || content == null) continue;
 
-      // Handle content format: string or array of text blocks
-      let textContent = '';
-      if (typeof content === 'string') {
-        textContent = content;
-      } else if (Array.isArray(content)) {
-        textContent = content
-          .filter((c: unknown) => c && typeof c === 'object' && (c as Record<string, unknown>).type === 'text')
-          .map((c: unknown) => (c as Record<string, unknown>).text as string)
-          .filter(Boolean)
-          .join('');
-      }
-
-      if (!textContent) continue;
-
+      const normalizedRole = role.toLowerCase();
       const timestamp = normalizeTimestampMs(record.timestamp) ?? Date.now();
 
-      messages.push({
-        id: `cron-run-msg-${parsed.runSessionId}-${i}`,
-        role: role === 'user' ? 'user' : role === 'system' ? 'system' : 'assistant',
-        content: textContent,
-        timestamp,
-      });
+      // Preserve tool_result rows so the renderer can absorb workflow_execution_started.
+      if (normalizedRole === 'toolresult' || normalizedRole === 'tool_result') {
+        messages.push({
+          id: `cron-run-msg-${parsed.runSessionId}-${i}`,
+          role: normalizedRole === 'tool_result' ? 'tool_result' : 'toolresult',
+          content,
+          timestamp,
+          toolCallId: typeof msg.toolCallId === 'string' ? msg.toolCallId : undefined,
+          toolName: typeof msg.toolName === 'string' ? msg.toolName : undefined,
+        });
+        continue;
+      }
+
+      if (normalizedRole === 'user') {
+        let textContent = '';
+        if (typeof content === 'string') {
+          textContent = content;
+        } else if (Array.isArray(content)) {
+          textContent = content
+            .filter((c: unknown) => c && typeof c === 'object' && (c as Record<string, unknown>).type === 'text')
+            .map((c: unknown) => (c as Record<string, unknown>).text as string)
+            .filter(Boolean)
+            .join('');
+        }
+        if (!textContent) continue;
+        messages.push({
+          id: `cron-run-msg-${parsed.runSessionId}-${i}`,
+          role: 'user',
+          content: textContent,
+          timestamp,
+        });
+        continue;
+      }
+
+      const extractTextBlocks = (blocks: unknown[]): string => blocks
+        .filter((c: unknown) => c && typeof c === 'object' && (c as Record<string, unknown>).type === 'text')
+        .map((c: unknown) => (c as Record<string, unknown>).text as string)
+        .filter(Boolean)
+        .join('');
+
+      const hasToolUseBlocks = (blocks: unknown[]): boolean => blocks.some(
+        (c: unknown) => c && typeof c === 'object'
+          && ((c as Record<string, unknown>).type === 'tool_use'
+            || (c as Record<string, unknown>).type === 'toolCall'),
+      );
+
+      // Preserve tool_use blocks so the UI can render DingTalk sent-content preview cards.
+      if (typeof content === 'string') {
+        if (!content.trim()) continue;
+        messages.push({
+          id: `cron-run-msg-${parsed.runSessionId}-${i}`,
+          role: role === 'system' ? 'system' : 'assistant',
+          content,
+          timestamp,
+        });
+        continue;
+      }
+
+      if (Array.isArray(content)) {
+        const textContent = extractTextBlocks(content);
+        const hasToolUse = hasToolUseBlocks(content);
+        if (!textContent && !hasToolUse) continue;
+        messages.push({
+          id: `cron-run-msg-${parsed.runSessionId}-${i}`,
+          role: role === 'system' ? 'system' : 'assistant',
+          content: hasToolUse ? content : textContent,
+          timestamp,
+        });
+        continue;
+      }
+
+      continue;
     } catch {
       // Ignore malformed lines
     }
@@ -427,10 +482,12 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
 
   sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 
+  const deletedKeys = new Set(await listDeletedSessionKeys());
   const firstTriggered = await listTaskGroupFirstTriggeredAt();
   const existingKeys = new Set(sessions.map((session) => session.key));
   sessions.push(
-    ...buildFirstTriggeredCronSessionPlaceholders(firstTriggered, existingKeys, jobNamesById),
+    ...buildFirstTriggeredCronSessionPlaceholders(firstTriggered, existingKeys, jobNamesById)
+      .filter((placeholder) => !deletedKeys.has(placeholder.key)),
   );
   sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 

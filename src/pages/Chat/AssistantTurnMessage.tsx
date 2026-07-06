@@ -1,9 +1,23 @@
 import { memo, useMemo } from 'react';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
+import { useChatSessionEngineType } from '@/hooks/use-chat-session-engine-type';
 import { ChatMessage } from './ChatMessage';
 import { appendWorkflowCardBlockToMessage, sessionHasParamsConfirmedWorkflowForRun } from '@/lib/workflow-card-injection';
-import { mergeThinkingTimelines, pickAssistantReplyMessage } from './chat-display';
+import {
+  collectTurnAssistantSources,
+  pickAssistantReplyMessage,
+  resolveTurnChronologicalEntries,
+  buildTurnStableKey,
+} from './chat-display';
+import { parseThinkingTurnLayout, trimTrailingThinkingOnlyToolGroupSegments } from './thinking-turn-segments';
+import {
+  readTurnStreamingToolsCache,
+  readTurnToolResultsCache,
+  writeTurnStreamingToolsCache,
+} from '@/lib/thinking-turn-tools-cache';
+import { resolveDoneTurnStreamingTools } from '@/lib/thinking-done-tools';
+import { migrateTurnDisplayCache } from '@/pages/Chat/thinking/segment-merge';
 import {
   extractDingTalkSentPreviews,
   stripEchoedDingTalkSentBodiesFromAssistantReply,
@@ -18,13 +32,14 @@ import {
   isWorkflowPreambleAssistantMessage,
 } from './message-utils';
 import { DingTalkSentPreview } from './DingTalkSentPreview';
-import { ThinkingProcessPanel, type ConnectingLabelKey } from './ThinkingProcessPanel';
+import { ThinkingTurnProcess, type ConnectingLabelKey } from './ThinkingProcessPanel';
 
 type StreamingTool = {
   id?: string;
   toolCallId?: string;
   name: string;
   status: 'running' | 'completed' | 'error';
+  input?: unknown;
   durationMs?: number;
   summary?: string;
 };
@@ -42,6 +57,8 @@ interface AssistantTurnMessageProps {
   turnMessages: RawMessage[];
   turnToolResults?: RawMessage[];
   precedingUserMessage?: RawMessage | null;
+  /** 与 buildChatDisplayItems 的 turn key 对齐，流式→完成 remount 时保留 timeline 缓存 */
+  turnStableKey?: string;
   showThinking: boolean;
   matchedMessageIds?: ReadonlySet<string>;
   activeMessageId?: string | null;
@@ -51,10 +68,25 @@ interface AssistantTurnMessageProps {
   onEditMessage?: (text: string) => void;
 }
 
+function collectActiveTurnStreamSources(
+  sessionMessages: RawMessage[],
+  turnMessages: RawMessage[],
+  precedingUserMessage: RawMessage | null,
+  activeStream: ActiveTurnStream,
+): RawMessage[] {
+  return collectTurnAssistantSources(
+    sessionMessages,
+    turnMessages,
+    precedingUserMessage,
+    activeStream.streamMessage,
+  );
+}
+
 export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   turnMessages,
   turnToolResults = [],
   precedingUserMessage = null,
+  turnStableKey,
   showThinking,
   matchedMessageIds,
   activeMessageId = null,
@@ -63,25 +95,88 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   onCreateScheduledTask,
   onEditMessage,
 }: AssistantTurnMessageProps) {
-  const streamSources = useMemo(() => {
-    const sources = [...turnMessages];
-    if (activeStream?.streamMessage) {
-      sources.push(activeStream.streamMessage);
-    }
-    return sources;
-  }, [turnMessages, activeStream]);
-
-  const mergedTimeline = useMemo(
-    () => (showThinking ? mergeThinkingTimelines(streamSources) : []),
-    [showThinking, streamSources],
-  );
+  const sessionMessages = useChatStore((s) => s.messages);
+  const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
+  const engineType = useChatSessionEngineType();
 
   const isStreaming = !!activeStream;
-  const isConnecting = activeStream?.isConnecting ?? false;
-  const isProcessing = activeStream?.isProcessing ?? false;
-  const isStillExecuting = activeStream?.isStillExecuting ?? false;
   const streamingTools = activeStream?.streamingTools ?? [];
-  const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
+
+  if (turnStableKey && turnStableKey !== 'active-turn') {
+    migrateTurnDisplayCache('active-turn', turnStableKey);
+  }
+
+  if (turnStableKey && streamingTools.length > 0) {
+    writeTurnStreamingToolsCache(turnStableKey, streamingTools);
+  }
+
+  const streamSources = useMemo(() => {
+    if (activeStream) {
+      return collectActiveTurnStreamSources(
+        sessionMessages,
+        turnMessages,
+        precedingUserMessage,
+        activeStream,
+      );
+    }
+    return collectTurnAssistantSources(sessionMessages, turnMessages, precedingUserMessage);
+  }, [sessionMessages, turnMessages, precedingUserMessage, activeStream]);
+
+  const turnCacheAliasKeys = useMemo(() => {
+    const aliases: string[] = [];
+    if (turnStableKey !== 'active-turn') {
+      aliases.push('active-turn');
+    }
+    const userKey = precedingUserMessage?.id
+      ? buildTurnStableKey(precedingUserMessage, 0)
+      : null;
+    if (userKey && userKey !== turnStableKey && !aliases.includes(userKey)) {
+      aliases.push(userKey);
+    }
+    return aliases;
+  }, [precedingUserMessage, turnStableKey]);
+
+  const cachedToolResultsForTurn = useMemo(
+    () => readTurnToolResultsCache(turnStableKey, turnCacheAliasKeys),
+    [turnStableKey, turnCacheAliasKeys],
+  );
+
+  const chronologicalEntries = useMemo(() => {
+    const cachedToolResults = cachedToolResultsForTurn;
+    const toolResults =
+      cachedToolResults.length > 0 ? cachedToolResults : turnToolResults;
+    return resolveTurnChronologicalEntries(
+      sessionMessages,
+      precedingUserMessage,
+      turnMessages,
+      toolResults,
+    );
+  }, [sessionMessages, precedingUserMessage, turnMessages, turnToolResults, cachedToolResultsForTurn]);
+
+  const bakedStreamingTools = useMemo(() => {
+    if (isStreaming && streamingTools.length > 0) return streamingTools;
+    if (engineType === 'claude') {
+      return resolveDoneTurnStreamingTools({
+        turnStableKey,
+        aliasKeys: turnCacheAliasKeys,
+        turnMessages,
+        toolResults:
+          cachedToolResultsForTurn.length > 0
+            ? cachedToolResultsForTurn
+            : turnToolResults,
+      });
+    }
+    return readTurnStreamingToolsCache(turnStableKey, turnCacheAliasKeys);
+  }, [
+    turnStableKey,
+    turnCacheAliasKeys,
+    isStreaming,
+    streamingTools,
+    engineType,
+    turnMessages,
+    cachedToolResultsForTurn,
+    turnToolResults,
+  ]);
 
   const connectingLabelKey = useMemo((): ConnectingLabelKey => {
     if (pendingWorkflow !== null) return 'connectingModel';
@@ -92,43 +187,97 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     return hasWorkflowInTurn ? 'connectingModel' : 'understandingQuestion';
   }, [turnMessages, pendingWorkflow]);
 
+  const isConnecting = activeStream?.isConnecting ?? false;
+  const isProcessing = activeStream?.isProcessing ?? false;
+  const isStillExecuting = activeStream?.isStillExecuting ?? false;
+
+  const precedingUserText = useMemo(() => {
+    if (precedingUserMessage) {
+      return extractText(precedingUserMessage).trim() || null;
+    }
+    return null;
+  }, [precedingUserMessage]);
+
+  const thinkingLayout = useMemo(
+    () =>
+      showThinking
+        ? parseThinkingTurnLayout(streamSources, {
+            isLiveStream: isStreaming,
+            streamingTools:
+              bakedStreamingTools.length > 0 ? bakedStreamingTools : undefined,
+            chronologicalEntries:
+              chronologicalEntries.length > 0 ? chronologicalEntries : undefined,
+            precedingUserText,
+            engineProfile: engineType,
+          })
+        : { segments: [], finalReplyText: null },
+    [
+      showThinking,
+      streamSources,
+      isStreaming,
+      bakedStreamingTools,
+      chronologicalEntries,
+      precedingUserText,
+      engineType,
+    ],
+  );
+
   const showThinkingPanel =
     showThinking &&
-    (mergedTimeline.length > 0 ||
-      streamingTools.length > 0 ||
+    (thinkingLayout.segments.length > 0 ||
+      bakedStreamingTools.length > 0 ||
       isConnecting ||
       isProcessing ||
       isStillExecuting);
 
   const replyMessage = useMemo(() => {
-    const fromHistory = pickAssistantReplyMessage(turnMessages);
-    const streamText = activeStream?.streamText?.trim() ?? '';
-    if (streamText.length > 0) {
-      const base = activeStream?.streamMessage ?? fromHistory ?? turnMessages[turnMessages.length - 1];
-      if (!base) return null;
+    const replySources = isStreaming ? streamSources : turnMessages;
+    const fromHistory = pickAssistantReplyMessage(replySources);
+    const base = fromHistory ?? replySources[replySources.length - 1] ?? null;
+    if (!base) return null;
+
+    if (thinkingLayout.finalReplyText) {
       return {
         ...base,
         role: 'assistant' as const,
-        content: activeStream?.streamMessage?.content ?? streamText,
+        content: thinkingLayout.finalReplyText,
       } as RawMessage;
     }
-    return fromHistory;
-  }, [turnMessages, activeStream]);
 
-  /** 分组参数 intro 等前置块（与 pickAssistantReplyMessage 选中的执行卡消息分开展示） */
+    if (isStreaming) return null;
+
+    return fromHistory;
+  }, [turnMessages, streamSources, isStreaming, thinkingLayout.finalReplyText]);
+
   const preambleMessages = useMemo(() => {
     if (!replyMessage) return [];
+
+    const phaseTextsInThinking = new Set(
+      thinkingLayout.segments
+        .filter((segment) => segment.kind === 'phase-text')
+        .map((segment) => segment.text.trim()),
+    );
+    const isCoveredByThinkingPhaseText = (text: string): boolean => {
+      const trimmed = text.trim();
+      if (!trimmed) return false;
+      if (phaseTextsInThinking.has(trimmed)) return true;
+      for (const phase of phaseTextsInThinking) {
+        if (phase.startsWith(trimmed) || trimmed.startsWith(phase)) return true;
+      }
+      return false;
+    };
+
     if (isWorkflowPreambleAssistantMessage(replyMessage)) return [];
 
     const candidates = turnMessages.filter((msg) => {
       if (msg.id && replyMessage.id && msg.id === replyMessage.id) return false;
-      return isWorkflowPreambleAssistantMessage(msg);
+      if (!isWorkflowPreambleAssistantMessage(msg)) return false;
+      return !isCoveredByThinkingPhaseText(extractText(msg));
     });
     if (candidates.length <= 1) return candidates;
 
-    // 流式阶段可能连续追加多条 intro/摘要，仅保留最后一条 preamble
     return [candidates[candidates.length - 1]];
-  }, [turnMessages, replyMessage]);
+  }, [turnMessages, replyMessage, thinkingLayout.segments]);
 
   const mentionHints = useMemo(() => {
     if (!precedingUserMessage) return [];
@@ -171,8 +320,6 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     ? extractText(replyDisplayMessage).trim().length > 0
     : false;
 
-  const sessionMessages = useChatStore((s) => s.messages);
-
   const chatDisplayMessage = useMemo(() => {
     if (!replyDisplayMessage) return null;
     if (extractWorkflowCard(replyDisplayMessage)) return replyDisplayMessage;
@@ -209,25 +356,51 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
   const hasPreambleMessages = preambleMessages.length > 0;
 
+  const hasThinkingFinalReply =
+    replyDisplayHasText
+    || hasPreambleMessages
+    || (!isStreaming && chatDisplayHasWorkflowCard);
+
+  const thinkingSegmentsForDisplay = useMemo(() => {
+    const { segments } = thinkingLayout;
+    if (isStreaming || segments.length === 0) return segments;
+
+    const replyShownOutside =
+      hasPreambleMessages
+      || replyDisplayHasText
+      || Boolean(thinkingLayout.finalReplyText?.trim());
+    if (!replyShownOutside) return segments;
+
+    return trimTrailingThinkingOnlyToolGroupSegments(segments);
+  }, [
+    thinkingLayout.segments,
+    thinkingLayout.finalReplyText,
+    isStreaming,
+    hasPreambleMessages,
+    replyDisplayHasText,
+  ]);
+
   if (!showThinkingPanel && !replyDisplayHasText && !hasDingTalkSentPreview && !hasPreambleMessages && !chatDisplayHasWorkflowCard) {
     return null;
   }
 
   const thinkingPanelEl = showThinkingPanel ? (
-    <ThinkingProcessPanel
-      timeline={mergedTimeline}
+    <ThinkingTurnProcess
+      turnStableKey={turnStableKey}
+      segments={thinkingSegmentsForDisplay}
       isStreaming={isStreaming}
       isConnecting={isConnecting}
       isProcessing={isProcessing}
       isStillExecuting={isStillExecuting}
-      streamingTools={streamingTools}
+      streamingTools={bakedStreamingTools}
+      hasFinalReply={hasThinkingFinalReply}
       connectingLabelKey={connectingLabelKey}
     />
   ) : null;
 
   if (((replyDisplayHasText || chatDisplayHasWorkflowCard) && chatDisplayMessageWithTimestamp) || hasPreambleMessages) {
     return (
-      <div className="flex w-full flex-col gap-2" data-chat-message-role="assistant">
+      <div className="flex w-full flex-col gap-4" data-chat-message-role="assistant">
         {thinkingPanelEl}
         {hasDingTalkSentPreview ? (
           <DingTalkSentPreview previews={dingTalkSentPreviews} />
@@ -243,23 +416,25 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
             onEditMessage={onEditMessage}
             hideAvatar
             hideThinkingPanel
+            suppressToolCards={showThinking}
           />
         ))}
         {replyDisplayHasText || chatDisplayHasWorkflowCard ? (
           chatDisplayMessageWithTimestamp ? (
-          <ChatMessage
-            message={chatDisplayMessageWithTimestamp}
-            showThinking={false}
-            isSearchMatch={!!chatDisplayMessageWithTimestamp.id && !!matchedMessageIds?.has(chatDisplayMessageWithTimestamp.id)}
-            isSearchActive={!!chatDisplayMessageWithTimestamp.id && chatDisplayMessageWithTimestamp.id === activeMessageId}
-            isStreaming={isStreaming && replyDisplayHasText}
-            streamingTools={isStreaming ? streamingTools : []}
-            onPreviewFile={onPreviewFile}
-            onCreateScheduledTask={onCreateScheduledTask}
-            onEditMessage={onEditMessage}
-            hideAvatar
-            hideThinkingPanel
-          />
+            <ChatMessage
+              message={chatDisplayMessageWithTimestamp}
+              showThinking={false}
+              isSearchMatch={!!chatDisplayMessageWithTimestamp.id && !!matchedMessageIds?.has(chatDisplayMessageWithTimestamp.id)}
+              isSearchActive={!!chatDisplayMessageWithTimestamp.id && chatDisplayMessageWithTimestamp.id === activeMessageId}
+              isStreaming={isStreaming && replyDisplayHasText}
+              streamingTools={isStreaming ? streamingTools : []}
+              onPreviewFile={onPreviewFile}
+              onCreateScheduledTask={onCreateScheduledTask}
+              onEditMessage={onEditMessage}
+              hideAvatar
+              hideThinkingPanel
+              suppressToolCards={showThinking}
+            />
           ) : null
         ) : null}
       </div>
@@ -270,7 +445,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
   if (hasDingTalkSentPreview) {
     return (
-      <div className="flex w-full flex-col gap-2" data-chat-message-role="assistant">
+      <div className="flex w-full flex-col gap-4" data-chat-message-role="assistant">
         {thinkingPanelEl}
         <DingTalkSentPreview previews={dingTalkSentPreviews} />
       </div>

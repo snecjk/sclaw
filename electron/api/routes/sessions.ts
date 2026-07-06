@@ -261,6 +261,11 @@ export async function handleSessionRoutes(
       // Remove session entry from sessions.json (both direct key and array formats)
       await cleanupAgentSessionsJson(sessionKey).catch(() => {});
       await deleteEngineSessionRegistryEntry(sessionKey).catch(() => {});
+      // Purge cron run logs / dated artifacts so virtual session generators do not recreate the row.
+      if (/^agent:[^:]+:(cron|scheduled-task):[^:]+:\d{4}-\d{2}-\d{2}$/.test(sessionKey)) {
+        const { resetDatedExecutionArtifacts } = await import('../../utils/reset-dated-execution-record');
+        await resetDatedExecutionArtifacts(sessionKey).catch(() => {});
+      }
       // Mark as deleted so virtual session generators (e.g. listAllCronSessions reading cron/runs/*.jsonl)
       // skip this key on the next refresh instead of re-generating it.
       await persistSessionDeletion(sessionKey);

@@ -1,15 +1,27 @@
-/** 工作流列表数据 hook：个人模板调用 /api/my-tasks/agent/v1/my-workflow，官方推荐调用 POST /agent/v1/workflow-templates。搜索由前端本地按名称过滤，不触发后端 API。 */
+/** 工作流列表数据 hook */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { hostApiFetch } from '@/lib/host-api';
 import { listWorkflowTemplates } from '@/lib/workflow-api';
 import { pickCoverKeyFromWorkflowId } from '@/pages/Workflow/workflow-mapper';
 import { useMinLoading } from '@/hooks/use-min-loading';
-import type { OfficialWorkflowCard, WorkflowCardItem, WorkflowMineListKind } from '@/pages/Workflow/types';
+import type {
+  OfficialWorkflowCard,
+  WorkflowCardItem,
+  WorkflowMineListKind,
+} from '@/pages/Workflow/types';
 
 interface MineWorkflowResponse {
   success?: boolean;
-  data?: Array<{ id: string; name: string; description?: string; templateId?: string }>;
+  data?: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    templateId?: string;
+    /** 工作流生命周期状态：draft / active  */
+    lifecycleStatus?: string;
+    updatedAt?: string;
+  }>;
 }
 
 export interface UseWorkflowListResult {
@@ -27,7 +39,7 @@ export interface UseWorkflowListResult {
   refetchMine: () => Promise<void>;
   /** 手动触发重新拉取官方推荐数据 */
   refetchOfficial: () => Promise<void>;
-  /** 各 Tab（published / installed / draft）下的卡片数量，由 cards 派生 */
+  /** 各 Tab（published / draft）下的卡片数量，由 cards 派生 */
   mineCounts: Record<WorkflowMineListKind, number>;
   /** 系统官方推荐的工作流卡片列表 */
   officialCards: OfficialWorkflowCard[];
@@ -37,7 +49,6 @@ export interface UseWorkflowListResult {
 function countByListKind(cards: WorkflowCardItem[]): Record<WorkflowMineListKind, number> {
   return {
     published: cards.filter((c) => c.listKind === 'published').length,
-    installed: cards.filter((c) => c.listKind === 'installed').length,
     draft: cards.filter((c) => c.listKind === 'draft').length,
   };
 }
@@ -61,6 +72,7 @@ export function useWorkflowList(): UseWorkflowListResult {
   }, [officialCards]);
 
   /** 个人工作流数据拉取（全量，搜索由前端本地过滤） */
+  // FastAPI: GET /agent/v1/my-workflow → memory-center workflow_client.py:list_my_workflows
   const fetchMine = useCallback(async () => {
     const seq = mineFetchSeq.current + 1;
     mineFetchSeq.current = seq;
@@ -69,7 +81,7 @@ export function useWorkflowList(): UseWorkflowListResult {
 
     try {
       const mineResponse = await hostApiFetch<MineWorkflowResponse>(
-        '/api/my-tasks/agent/v1/my-workflow',
+        '/api/my-tasks/agent/v1/my-workflow'
       );
       if (mineFetchSeq.current !== seq) return;
 
@@ -81,23 +93,22 @@ export function useWorkflowList(): UseWorkflowListResult {
       const mappedCards: WorkflowCardItem[] = rawItems.map((item) => {
         const templateId = item.templateId != null ? String(item.templateId) : null;
         const isCustom = templateId == null || !officialTemplateIdsRef.current.has(templateId);
+        /** lifecycleStatus: draft → 草稿 Tab, active → 已发布 Tab, 缺失时默认 published */
+        const listKind: WorkflowMineListKind =
+          item.lifecycleStatus?.toUpperCase() === 'DRAFT' ? 'draft' : 'published';
         return {
           id: item.id,
           name: item.name,
-          listKind: 'published' as WorkflowMineListKind,
-          scope: 'personal' as const,
-          category: '',
-          schedule: '',
-          scheduleIcon: 'clock' as const,
-          enabled: true,
+          listKind,
+          schedule: listKind === 'draft' ? t('card.noScheduleDraft') : '',
+          enabled: listKind === 'published',
           description: item.description ?? '',
-          flow: [],
-          lastRun: '',
           coverKey: pickCoverKeyFromWorkflowId(item.id),
+          flow: [],
           isCustom,
           templateId,
           neverRun: true,
-          scheduleMuted: false,
+          scheduleMuted: listKind === 'draft',
           showPausedLabel: false,
         };
       });
@@ -112,6 +123,7 @@ export function useWorkflowList(): UseWorkflowListResult {
   }, [t]);
 
   /** 官方推荐数据拉取 */
+  // FastAPI: POST /agent/v1/workflow-templates → memory-center workflow_client.py:list_templates
   const fetchOfficial = useCallback(async () => {
     const seq = officialFetchSeq.current + 1;
     officialFetchSeq.current = seq;
@@ -127,25 +139,19 @@ export function useWorkflowList(): UseWorkflowListResult {
         label: String(item.label ?? ''),
         description: item.description != null ? String(item.description) : null,
         category: item.category != null ? String(item.category) : null,
-        scope: 'system' as const,
-        ownerUserId: null,
-        createdAt: null,
-        updatedAt: null,
         nodeCount: Number(item.nodeCount) || 0,
-        nodes: Array.isArray(item.nodes) ? item.nodes as Record<string, unknown>[] : [],
-        edges: Array.isArray(item.edges) ? item.edges as Record<string, unknown>[] : [],
       }));
-      setOfficialCards(officialItems.map((item) => ({
-        id: item.id,
-        name: item.label,
-        category: item.category ?? '',
-        schedule: '',
-        scheduleIcon: 'clock' as const,
-        description: item.description ?? '',
-        // TODO: 官方推荐流程节点 — POST /agent/v1/workflow-templates nodes/edges 未就绪，暂不接 card.flow
-        flow: [],
-        coverKey: pickCoverKeyFromWorkflowId(item.id),
-      })));
+      setOfficialCards(
+        officialItems.map((item) => ({
+          id: item.id,
+          name: item.label,
+          category: item.category ?? '',
+          schedule: '',
+          description: item.description ?? '',
+          flow: [],
+          coverKey: pickCoverKeyFromWorkflowId(item.id),
+        }))
+      );
 
       // 官方模板列表更新后，重新推导已有卡片的 isCustom
       const officialIds = new Set(officialItems.map((item) => item.id));
@@ -153,8 +159,9 @@ export function useWorkflowList(): UseWorkflowListResult {
         prev.map((card) => {
           const isCustom = card.templateId == null || !officialIds.has(card.templateId);
           return card.isCustom === isCustom ? card : { ...card, isCustom };
-        }),
+        })
       );
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (err) {
       if (officialFetchSeq.current !== seq) return;
       setOfficialCards([]);
@@ -172,7 +179,9 @@ export function useWorkflowList(): UseWorkflowListResult {
         void fetchOfficial();
       }
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [fetchMine, fetchOfficial]);
 
   /** 由 cards 派生各 Tab 下的卡片数量，避免额外 setState */

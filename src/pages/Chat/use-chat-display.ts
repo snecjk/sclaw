@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useChatStore, type RawMessage } from '@/stores/chat';
-import { buildChatDisplayItems, findLastUserMessage, isAssistantRole, type ChatDisplayItem } from './chat-display';
+import {
+  buildChatDisplayItems,
+  findLastUserMessage,
+  isAssistantRole,
+  resolveActiveTurnStableKey,
+  type ChatDisplayItem,
+} from './chat-display';
 import type { ActiveTurnStream } from './AssistantTurnMessage';
 import { extractImages, extractThinking, extractToolUse } from './message-utils';
 
@@ -23,6 +29,22 @@ function hasStreamPayload(
   const hasStreamImages = streamMsg ? extractImages(streamMsg).length > 0 : false;
   const hasStreamToolStatus = streamingTools.length > 0;
   return hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasStreamToolStatus;
+}
+
+/** 仍在增量输出的流式内容（不含仅 completed 的 streamingTools） */
+function hasActiveStreamContent(
+  streamMsg: { content?: unknown } | null,
+  streamText: string,
+  streamingTools: StreamingTool[],
+  showThinking: boolean,
+): boolean {
+  const hasStreamText = streamText.trim().length > 0;
+  const streamThinking = streamMsg ? extractThinking(streamMsg) : null;
+  const hasStreamThinking = showThinking && !!streamThinking && streamThinking.trim().length > 0;
+  const hasStreamTools = streamMsg ? extractToolUse(streamMsg).length > 0 : false;
+  const hasStreamImages = streamMsg ? extractImages(streamMsg).length > 0 : false;
+  const hasRunningStreamTool = streamingTools.some((tool) => tool.status === 'running');
+  return hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasRunningStreamTool;
 }
 
 export function useChatDisplay(params: {
@@ -48,6 +70,7 @@ export function useChatDisplay(params: {
   const displayItems = useMemo(() => buildChatDisplayItems(messages), [messages]);
 
   const hasAnyStreamContent = hasStreamPayload(streamMsg, streamText, streamingTools, showThinking);
+  const hasLiveStreamContent = hasActiveStreamContent(streamMsg, streamText, streamingTools, showThinking);
   const shouldRenderStreaming = sending && hasAnyStreamContent;
 
   const isStillExecuting = useMemo(() => {
@@ -60,6 +83,7 @@ export function useChatDisplay(params: {
   const { staticItems, activeTurn } = useMemo(() => {
     if (!sending) {
       return { staticItems: displayItems, activeTurn: null as null | {
+        turnStableKey: string;
         turnMessages: RawMessage[];
         turnToolResults: RawMessage[];
         precedingUserMessage: RawMessage | null;
@@ -84,7 +108,7 @@ export function useChatDisplay(params: {
       streamText,
       streamingTools,
       isConnecting: !pendingFinal && !hasAnyStreamContent && !isStillExecuting,
-      isProcessing: pendingFinal && !shouldRenderStreaming,
+      isProcessing: pendingFinal && sending && !hasLiveStreamContent,
       isStillExecuting,
     };
 
@@ -98,6 +122,7 @@ export function useChatDisplay(params: {
       return {
         staticItems: displayItems.slice(0, -1),
         activeTurn: {
+          turnStableKey: last.key,
           turnMessages: last.messages,
           turnToolResults: last.toolResults,
           precedingUserMessage: last.precedingUserMessage ?? findLastUserMessage(messages),
@@ -110,6 +135,7 @@ export function useChatDisplay(params: {
       return {
         staticItems: displayItems.slice(0, -1),
         activeTurn: {
+          turnStableKey: last.key,
           turnMessages: [last.message],
           turnToolResults: [],
           precedingUserMessage: findLastUserMessage(messages),
@@ -118,12 +144,14 @@ export function useChatDisplay(params: {
       };
     }
 
+    const precedingUserMessage = findLastUserMessage(messages);
     return {
       staticItems: displayItems,
       activeTurn: {
+        turnStableKey: resolveActiveTurnStableKey(messages) ?? 'active-turn',
         turnMessages: [],
         turnToolResults: [],
-        precedingUserMessage: findLastUserMessage(messages),
+        precedingUserMessage,
         activeStream,
       },
     };

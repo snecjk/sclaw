@@ -32,9 +32,7 @@
         "searchPrev": "Previous result",
         "searchNext": "Next result",
         "searchClear": "Clear search",
-        "searchClose": "Close search",
-        "openPreview": "Open preview",
-        "closeSession": "Close current session"
+        "searchClose": "Close search"
     },
     "composer": {
         "attachFiles": "Attach files",
@@ -60,7 +58,7 @@
         "dingtalkLoadMore": "Load more",
         "dingtalkNoResults": "No matches found",
         "dingtalkNeedsInstall": "Install DingTalk CLI to mention contacts",
-        "dingtalkInstall": "Authorize DingTalk",
+        "dingtalkInstall": "Install DingTalk CLI",
         "dingtalkInstalling": "Installing…",
         "dingtalkNeedsAuth": "Sign in to DingTalk to search contacts",
         "dingtalkLogin": "Sign in to DingTalk",
@@ -82,12 +80,14 @@
     "streaming": {
         "connectingModel": "Connecting to model...",
         "understandingQuestion": "Understanding your question…",
-        "stillExecuting": "Still running (writing files)…",
         "awaitingReply": "Claw will continue after you reply…",
         "thinkingProcessTitle": "Thinking process",
         "deepThinkingLabel": "Deep thinking",
         "collapsedSummary": "Thought {{thoughtCount}} times, used {{toolCount}} tools",
+        "collapsedSummaryThoughtsOnly": "Thought {{thoughtCount}} times",
+        "collapsedSummaryToolsOnly": "Used {{toolCount}} tools",
         "invokeToolLabel": "Invoke tool – {{toolName}}",
+        "toolNoParams": "No parameters",
         "paramsConfirmedLabel": "Parameters confirmed",
         "toolCallLabel": "Tool call {{index}}",
         "processMessageLabel": "Process messages {{count}}",
@@ -153,46 +153,8 @@
         "durationHours": "{{count}} hr",
         "durationHoursHalf": "{{count}}.5 hr",
         "durationHoursMinutes": "{{hours}} hr {{minutes}} min",
-        "defaultName": "Workflow",
-        "backgroundRunningWithId": "Workflow ID: {{workflowId}}",
-        "withId": "Workflow ID: {{workflowId}}",
         "viewArtifact": "View artifact",
         "openArtifactLink": "Open link",
-        "viewWorkflowAction": "View workflow",
-        "createScheduledTaskAction": "Create scheduled task"
-    },
-    "artifact": {
-        "typeDocument": "Document",
-        "typeSpreadsheet": "Spreadsheet",
-        "typeImage": "Image",
-        "typeArchive": "Archive",
-        "typeMedia": "Media",
-        "typeFile": "File"
-    },
-    "preview": {
-        "collapsePanel": "Collapse preview",
-        "overflowMenu": "All artifacts",
-        "fullscreen": "Fullscreen",
-        "refresh": "Refresh",
-        "download": "Download",
-        "share": "Share to DingTalk",
-        "openExternal": "Open in browser",
-        "editWorkflow": "Edit workflow",
-        "workflowTab": "Workflow",
-        "emptyHint": "Click a file link in the chat to preview",
-        "emptyHintSub": "Or select an artifact above",
-        "dismissTab": "Close this artifact",
-        "shareDialog": {
-            "title": "Share to DingTalk",
-            "description": "Confirm the content, then DingTalk will open the recipient picker.",
-            "fieldTitle": "Title",
-            "fieldBody": "Body",
-            "fieldLink": "Link",
-            "localUrlHint": "This link is a local preview URL. Colleagues outside your network may not be able to open it.",
-            "cancel": "Cancel",
-            "confirm": "Share",
-            "success": "DingTalk recipient picker opened",
-            "failed": "Share failed. Please try again."
-        }
+        "viewWorkflowAction": "View workflow"
     }
 }

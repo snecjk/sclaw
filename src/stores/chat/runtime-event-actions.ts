@@ -11,10 +11,14 @@ export function createRuntimeEventActions(set: ChatSet, get: ChatGet): Pick<Runt
       const { activeRunId, currentSessionKey } = get();
 
       // Only process events for the current session (when sessionKey is present)
-      if (eventSessionKey != null && eventSessionKey !== currentSessionKey) return;
+      if (eventSessionKey != null && eventSessionKey !== currentSessionKey) {
+        return;
+      }
 
       // Only process events for the active run (or if no active run set)
-      if (activeRunId && runId && runId !== activeRunId) return;
+      if (activeRunId && runId && runId !== activeRunId) {
+        return;
+      }
 
       setLastChatEventAt(Date.now());
 

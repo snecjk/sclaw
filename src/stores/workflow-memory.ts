@@ -355,6 +355,10 @@ export function saveWorkflowExecution(record: WorkflowExecutionRecord): void {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   });
+
+  if (record.templateId) {
+    clearPendingWorkflowDraft(sessionKey, record.templateId);
+  }
 }
 
 export function patchWorkflowExecution(
@@ -397,6 +401,9 @@ export function updateExecutionStatus(
       store[key] = records;
       saveExecutionsStore(store);
       syncRunStatusToWorkflowRecord(key, exec.workflowId, runId, status, now);
+      if (exec.templateId && (status === 'completed' || status === 'failed' || status === 'timeout')) {
+        clearPendingWorkflowDraft(key, exec.templateId);
+      }
       return;
     }
   }

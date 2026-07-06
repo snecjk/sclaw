@@ -10,7 +10,12 @@
     "system": "System",
     "language": "Language",
     "launchAtStartup": "Launch at system startup",
-    "launchAtStartupDesc": "Automatically launch StoClaw when you log in"
+    "launchAtStartupDesc": "Automatically launch StoClaw when you log in",
+    "preventSystemSleep": "Prevent system sleep",
+    "preventSystemSleepDesc": "While enabled, StoClaw prevents the computer from sleeping automatically while it is running.",
+    "preventSystemSleepTips": "Recommended for scheduled tasks. Keep the lid open and connect to power; sleep or shutdown may prevent normal operation.",
+    "preventSystemSleepToastEnabled": "Enabled: StoClaw will prevent sleep while running",
+    "preventSystemSleepToastDisabled": "Disabled: the computer will sleep according to system settings"
   },
   "aiProviders": {
     "title": "AI Providers",
@@ -198,7 +203,7 @@
     "autoDownloadDesc": "Automatically download and install updates",
     "status": {
       "checking": "Checking for updates...",
-      "downloading": "Downloading update...",
+      "downloading": "Downloading update v{{version}}...",
       "available": "Update available: v{{version}}",
       "downloaded": "Ready to install: v{{version}}",
       "autoInstalling": "Installing automatically in {{seconds}}s...",
@@ -226,7 +231,21 @@
     "currentVersion": "Current Version",
     "whatsNew": "What's New:",
     "errorDetails": "Error Details:",
-    "help": "When auto-update is enabled, updates are downloaded and installed automatically."
+    "help": "When auto-update is enabled, updates are downloaded and installed automatically.",
+    "sidebar": {
+      "newVersionTitle": "New version available",
+      "updateToVersion": "Update to v{{version}}",
+      "updateNow": "Update Now",
+      "later": "Later",
+      "updating": "Updating...",
+      "viewUpdate": "View Update"
+    },
+    "modal": {
+      "title": "v{{version}} Release Notes",
+      "close": "Close",
+      "viewChangelog": "View Changelog",
+      "noReleaseNotes": "No release notes available"
+    }
   },
   "advanced": {
     "title": "Advanced",

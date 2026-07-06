@@ -209,15 +209,20 @@ export interface ChatState {
     modelGuidanceSent?: boolean;
   } | null;
   setPendingWorkflow: (pending: ChatState['pendingWorkflow']) => void;
+  /** Drop in-memory pending only; keeps localStorage draft for session restore. */
+  clearPendingWorkflowMemory: () => void;
   clearPendingWorkflow: () => void;
 
   // Actions
-  loadSessions: () => Promise<void>;
+  loadSessions: (options?: { force?: boolean }) => Promise<void>;
   switchSession: (key: string) => void;
   /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
   switchToAgentMainSession: (agentId: string) => void;
   newSession: () => Promise<void>;
-  deleteSession: (key: string) => Promise<boolean>;
+  deleteSession: (key: string, options?: {
+    skipSessionRefresh?: boolean;
+    additionalSuppressKeys?: string[];
+  }) => Promise<boolean>;
   cleanupEmptySession: () => void;
   loadHistory: (quiet?: boolean, force?: boolean) => Promise<void>;
   sendMessage: (options: SendMessageOptions) => Promise<void>;

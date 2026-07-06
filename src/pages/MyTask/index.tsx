@@ -20,7 +20,7 @@ import {
 import { resolveTaskGroupKeyFromSessionKey } from '../../../shared/task-group-key';
 import { useChatStore } from '@/stores/chat';
 import { useAgentsStore } from '@/stores/agents';
-import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
+import { navigateToMainChatHome, navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
 import {
   stripInstructionFromTaskMessage,
   prepareDingTalkAgentTurnMessage,
@@ -392,26 +392,30 @@ export default function MyTask() {
     [agents, defaultAgentId, editingJob, createJob, updateJob, fetchJobs]
   );
 
-  const handleDelete = useCallback(async () => {
+  const handleDelete = useCallback(() => {
     if (!deleteTarget) return;
-    try {
-      await deleteJob(deleteTarget.id, deleteTarget.engineType);
-      toast.success(t('myTask.toast.deleted'));
-      await fetchJobs().catch(() => {});
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      setDeleteTarget(null);
-    }
-  }, [deleteTarget, deleteJob, fetchJobs]);
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    void (async () => {
+      try {
+        await deleteJob(target.id, target.engineType);
+        toast.success(t('myTask.toast.deleted'));
+      } catch (err) {
+        toast.error(String(err));
+      }
+    })();
+  }, [deleteTarget, deleteJob, t]);
 
   const handleTemplateInstall = useCallback(
     (card: OfficialWorkflowCard) => {
-      const q = encodeURIComponent(`/${card.name}`);
-      const wid = encodeURIComponent(card.id);
-      navigate(`/?q=${q}&workflowId=${wid}`);
+      navigateToNewSessionWithPrompt(
+        navigate,
+        location.pathname,
+        `/${card.name}`,
+        { extraSearchParams: { workflowId: card.id } },
+      );
     },
-    [navigate]
+    [navigate, location.pathname]
   );
 
   // ── 渲染 ──

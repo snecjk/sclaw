@@ -37,13 +37,17 @@ export function forgetOptimisticTaskGroupFirstTriggered(groupKey: string): void 
   optimisticMap.delete(trimmed);
 }
 
+type PostTaskGroupFirstTriggeredResult =
+  | { ok: true; triggeredAtMs?: number }
+  | { ok: false };
+
 async function postTaskGroupFirstTriggered(
   groupKey: string,
   action: FirstTriggerAction,
   triggeredAtMs?: number,
-): Promise<number | undefined> {
+): Promise<PostTaskGroupFirstTriggeredResult> {
   const trimmed = groupKey.trim();
-  if (!trimmed) return undefined;
+  if (!trimmed) return { ok: false };
   try {
     const res = await hostApiFetch<{
       success?: boolean;
@@ -53,17 +57,18 @@ async function postTaskGroupFirstTriggered(
       method: 'POST',
       body: JSON.stringify({ groupKey: trimmed, action, triggeredAtMs }),
     });
+    if (res.success === false) return { ok: false };
     if (action === 'clear') {
       rememberOptimistic(trimmed, undefined);
       delete cachedMap[trimmed];
-      return undefined;
+      return { ok: true };
     }
     const at = typeof res.triggeredAtMs === 'number' ? res.triggeredAtMs : triggeredAtMs ?? Date.now();
     cachedMap[trimmed] = at;
     rememberOptimistic(trimmed, at);
-    return at;
+    return { ok: true, triggeredAtMs: at };
   } catch {
-    return undefined;
+    return { ok: false };
   }
 }
 
@@ -77,8 +82,19 @@ export async function resetTaskGroupFirstTriggered(groupKey: string, triggeredAt
   await postTaskGroupFirstTriggered(groupKey, 'reset', triggeredAtMs);
 }
 
-export async function clearTaskGroupFirstTriggered(groupKey: string): Promise<void> {
-  await postTaskGroupFirstTriggered(groupKey, 'clear');
+export async function clearTaskGroupFirstTriggered(groupKey: string): Promise<boolean> {
+  const result = await postTaskGroupFirstTriggered(groupKey, 'clear');
+  return result.ok;
+}
+
+/** Restore first-trigger after a failed last-session delete rollback. */
+export async function restoreTaskGroupFirstTriggered(
+  groupKey: string,
+  triggeredAtMs: number,
+): Promise<boolean> {
+  if (!(triggeredAtMs > 0)) return false;
+  const result = await postTaskGroupFirstTriggered(groupKey, 'reset', triggeredAtMs);
+  return result.ok;
 }
 
 /**
@@ -105,6 +121,13 @@ export function rememberOptimisticTaskGroupFirstTriggeredClear(groupKey: string)
   rememberOptimistic(groupKey, undefined);
 }
 
+/** True after optimistic clear until a new first-trigger value is written. */
+export function isTaskGroupFirstTriggerOptimisticallyCleared(groupKey: string): boolean {
+  const trimmed = groupKey.trim();
+  if (!trimmed) return false;
+  return optimisticMap.has(trimmed) && optimisticMap.get(trimmed) === undefined;
+}
+
 /**
  * Lock group first-trigger before partial subitem delete or lazy backfill for legacy groups.
  * No-op when the group already has a persisted/optimistic timestamp.
@@ -118,6 +141,6 @@ export async function seedTaskGroupFirstTriggeredIfAbsent(
   const effective = getCachedTaskGroupFirstTriggeredMap()[trimmed];
   if (typeof effective === 'number' && effective > 0) return false;
   rememberOptimistic(trimmed, triggeredAtMs);
-  await postTaskGroupFirstTriggered(trimmed, 'mark', triggeredAtMs);
-  return true;
+  const result = await postTaskGroupFirstTriggered(trimmed, 'mark', triggeredAtMs);
+  return result.ok;
 }

@@ -14,6 +14,7 @@ import {
   workflowRunResponseToExecutionState,
   type WorkflowRunApiPayload,
 } from '../../../shared/workflow-run-status';
+import { appendWorkflowSessionRecord } from '../../services/workflow-session-writer';
 
 const POLL_INTERVAL_MS = 2_000;
 const MAX_TRACKED_EXECUTIONS = 50;
@@ -333,6 +334,18 @@ class WorkflowExecutionTracker {
         );
       }
       logger.info(`[Tracker] Run ${session.runId} finished with status: ${newState.status}`);
+      void appendWorkflowSessionRecord({
+        phase: newState.status === 'completed' ? 'completed' : 'failed',
+        sessionKey: session.sessionKey,
+        templateId: '',
+        templateName: newState.result?.title ?? '',
+        workflowId: session.workflowId,
+        runId: session.runId,
+        status: newState.status,
+        completedAt: new Date().toISOString(),
+      }).catch((err) => {
+        logger.warn(`[WorkflowSessionWriter] terminal append failed runId=${session.runId}: ${String(err)}`);
+      });
     }
   }
 

@@ -6,7 +6,12 @@ import {
   DINGTALK_SHARE_APPLINK_PATH,
   DINGTALK_SHARE_DEEPLINK_ORIGIN,
 } from '../../shared/dingtalk-share';
-import { buildArtifactShareDraft } from '../../src/lib/dingtalk-share';
+import {
+  buildArtifactShareDialogDraft,
+  buildArtifactShareDraft,
+  isDingTalkShareContentTooLong,
+  truncateConversationPreview,
+} from '../../src/lib/dingtalk-share';
 
 describe('buildDingTalkShareDefaultMsg', () => {
   it('builds text only', () => {
@@ -63,6 +68,14 @@ describe('buildDingTalkShareAppLinkUrl', () => {
     expect(payload.defaultMsg).toBe('分享测试');
   });
 
+  it('does not truncate share body within 2080 characters', () => {
+    const body = '报告已生成并通过质量检查。\n\n'.repeat(40).trimEnd();
+    expect(body.length).toBeLessThanOrEqual(2080);
+    const built = buildDingTalkShareAppLinkUrl({ text: body, title: '分享对话' });
+    expect(built.truncated).toBe(false);
+    expect(built.defaultMsg).toBe(body);
+  });
+
   it('truncates very long content to fit url length budget', () => {
     const built = buildDingTalkShareAppLinkUrl(
       { text: 'x'.repeat(5000) },
@@ -70,6 +83,46 @@ describe('buildDingTalkShareAppLinkUrl', () => {
     );
     expect(built.url.length).toBeLessThanOrEqual(500);
     expect(built.truncated).toBe(true);
+  });
+
+  it('preserves share url when truncating long text', () => {
+    const shareUrl = 'https://oss.example.com/report.html?sig=abc123';
+    const built = buildDingTalkShareAppLinkUrl(
+      {
+        text: '报告已生成并通过质量检查。\n\n'.repeat(80),
+        url: shareUrl,
+      },
+      { maxUrlLength: 900 },
+    );
+    expect(built.truncated).toBe(true);
+    expect(built.defaultMsg).toContain(`[链接](${shareUrl})`);
+    expect(built.defaultMsg).toContain('…（内容已截断）');
+  });
+  it('detects share content over 2080 characters', () => {
+    expect(isDingTalkShareContentTooLong({ text: 'a'.repeat(2081) })).toBe(true);
+    expect(isDingTalkShareContentTooLong({ text: 'a'.repeat(2080) })).toBe(false);
+  });
+});
+
+describe('truncateConversationPreview', () => {
+  it('keeps up to two lines and appends ellipsis', () => {
+    const preview = truncateConversationPreview('第一行\n第二行\n第三行');
+    expect(preview).toBe('第一行\n第二行...');
+  });
+
+  it('wraps a long single paragraph into two lines', () => {
+    const preview = truncateConversationPreview(
+      '申通快递（002468.SZ）深度分析摘要：公司基本面稳健增长，盈利能力持续改善，估值处于合理区间。报告已生成并通过质量检查。更多详细内容请查看附件产物。',
+    );
+    expect(preview.split('\n').length).toBe(2);
+    expect(preview.length).toBeGreaterThan(52);
+  });
+
+  it('truncates very long single line', () => {
+    const preview = truncateConversationPreview('a'.repeat(200));
+    expect(preview.endsWith('...')).toBe(true);
+    expect(preview.split('\n').length).toBe(2);
+    expect(preview.length).toBeLessThan(120);
   });
 });
 
@@ -85,12 +138,27 @@ describe('buildArtifactShareDraft', () => {
     expect(draft.isLocalServeUrl).toBe(false);
   });
 
-  it('builds local serve url for workspace files', () => {
+  it('marks local files without serve url', () => {
     const draft = buildArtifactShareDraft({
       fileName: 'demo-dashboard.html',
       filePath: '/tmp/demo-dashboard.html',
     });
-    expect(draft.url).toContain('/api/files/serve?path=');
+    expect(draft.url).toBe('');
     expect(draft.isLocalServeUrl).toBe(true);
+  });
+});
+
+describe('buildArtifactShareDialogDraft', () => {
+  it('builds artifact card draft', () => {
+    const draft = buildArtifactShareDialogDraft({
+      fileName: '每周总部对账单.html',
+      filePath: 'https://cdn.example.com/report.html',
+      mimeType: 'text/html',
+    }, (key) => key);
+    expect(draft.kind).toBe('artifact');
+    if (draft.kind === 'artifact') {
+      expect(draft.title).toBe('每周总部对账单');
+      expect(draft.filePath).toBe('https://cdn.example.com/report.html');
+    }
   });
 });

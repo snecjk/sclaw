@@ -18,6 +18,10 @@ import type {
   ScheduledTaskCreateInput,
   ScheduledTaskUpdateInput,
 } from '../types/scheduled-task';
+import {
+  applyCronDeletedTombstones,
+  rememberDeletedCronJob,
+} from './cron-deleted-tombstones';
 
 export type ManagedLocalTask =
   | ({ engineType: 'openclaw' } & CronJob)
@@ -69,10 +73,10 @@ export const useCronStore = create<CronState>((set) => ({
         hostApiFetch<CronJob[]>('/api/cron/jobs').catch(() => []),
         hostApiFetch<ClaudeScheduledTask[]>('/api/claude-scheduled-tasks').catch(() => []),
       ]);
-      const jobs: ManagedLocalTask[] = [
+      const jobs = applyCronDeletedTombstones([
         ...openclawJobs.map((job) => ({ ...job, engineType: 'openclaw' as const })),
         ...claudeTasks.map((task) => ({ ...task, engineType: 'claude' as const })),
-      ];
+      ]);
       set({ jobs, loading: false });
     } catch (error) {
       set({ error: String(error), loading: false });
@@ -225,7 +229,7 @@ export const useCronStore = create<CronState>((set) => ({
         set((state) => ({
           jobs: state.jobs.map((job) =>
             job.id === id && job.engineType === 'claude'
-              ? { ...updated, engineType: 'claude' as const }
+              ? { ...job, ...updated, engineType: 'claude' as const }
               : job
           ),
         }));
@@ -255,6 +259,7 @@ export const useCronStore = create<CronState>((set) => ({
         : `/api/cron/jobs/${encodeURIComponent(id)}`, {
         method: 'DELETE',
       });
+      rememberDeletedCronJob(id, engineType);
       set((state) => ({
         jobs: state.jobs.filter((job) => !(job.id === id && job.engineType === engineType)),
       }));
@@ -309,10 +314,10 @@ export const useCronStore = create<CronState>((set) => ({
           hostApiFetch<ClaudeScheduledTask[]>('/api/claude-scheduled-tasks').catch(() => []),
         ]);
         set({
-          jobs: [
+          jobs: applyCronDeletedTombstones([
             ...openclawJobs.map((job) => ({ ...job, engineType: 'openclaw' as const })),
             ...claudeTasks.map((task) => ({ ...task, engineType: 'claude' as const })),
-          ],
+          ]),
         });
       } catch {
         // Ignore refresh error

@@ -23,10 +23,12 @@ const electronAPI = {
         'gateway:rpc',
         'gateway:httpProxy',
         'hostapi:fetch',
+        'preview:httpFetch',
         // Workflow
         'workflow:startTracking',
         'workflow:stopTracking',
         'workflow:sync-state',
+        'workflow:appendSessionRecord',
         'workflow:stream:subscribe',
         'workflow:stream:unsubscribe',
         'gateway:health',
@@ -167,6 +169,7 @@ const electronAPI = {
         'workflow:startTracking',
         'workflow:stopTracking',
         'workflow:sync-state',
+        'workflow:appendSessionRecord',
         'workflow:stream:subscribe',
         'workflow:stream:unsubscribe',
       ];

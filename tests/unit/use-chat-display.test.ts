@@ -71,4 +71,21 @@ describe('useChatDisplay', () => {
     )).toBe(true);
     expect(result.current.activeTurn?.turnMessages).toEqual([]);
   });
+
+  it('sets isProcessing when pendingFinal and only completed streaming tools remain', () => {
+    mockLastUserMessageAt = 900;
+
+    const { result } = renderHook(() => useChatDisplay({
+      messages: assistantTurnMessages,
+      sending: true,
+      pendingFinal: true,
+      showThinking: true,
+      lastChatEventAt: Date.now(),
+      streamMsg: null,
+      streamText: '',
+      streamingTools: [{ id: 'tool-1', name: 'exec', status: 'completed' }],
+    }));
+
+    expect(result.current.activeTurn?.activeStream.isProcessing).toBe(true);
+  });
 });

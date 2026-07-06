@@ -24,7 +24,7 @@ import { PendingQueuePanel } from './PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
 import { ChatPreviewPanel } from './ChatPreviewPanel';
 import { extractText } from './message-utils';
-import { useMessageQueueStore, createAutoSendWatcher } from '@/stores/message-queue';
+import { useMessageQueueStore, createAutoSendWatcher, suspendAutoSend } from '@/stores/message-queue';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
@@ -350,6 +350,13 @@ export function Chat() {
     useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, dingTalkMentions, workflowId);
   }, []);
 
+  // Stop: suppress the auto-send that the abort's sending→false would otherwise trigger,
+  // keeping any queued messages for the next successful run instead of firing them now.
+  const handleStop = useCallback(() => {
+    suspendAutoSend(useChatStore.getState().currentSessionKey);
+    void abortRun();
+  }, [abortRun]);
+
   const handleEditMessage = useCallback((text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -659,7 +666,7 @@ export function Chat() {
       {/* Input Area */}
       <ChatInput
         onSend={handleSend}
-        onStop={abortRun}
+        onStop={handleStop}
         onQueue={handleQueue}
         disabled={composerDisabled}
         sending={sending}

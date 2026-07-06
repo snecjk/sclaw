@@ -10,9 +10,17 @@ import type { WorkflowSchemaReadyData } from '@/lib/builtin-tool-envelope';
 import { parseStoToolEnvelope } from '@/lib/builtin-tool-envelope';
 import { isWorkflowFormUserTurn } from '@/hooks/use-workflow-intent';
 import { PARAM_FORM_MARKER_REGEX, parseParameterFormMarker } from '@/lib/parameter-form-marker';
+import { currentUserTurnHasWorkflowSubmission } from '@/lib/workflow-card-injection';
 import { messageHasWorkflowContext } from '@/lib/workflow-context';
 import { deriveSessionLabelFromUserText } from '@/lib/workflow-session-hint';
-import { saveWorkflowRecord, sessionHasWorkflowExecution } from '@/stores/workflow-memory';
+import {
+  extractWorkflowExecutionsFromHistory,
+  findLatestSchemaReadyTemplateId,
+  seedWorkflowMemoryFromHistory,
+  shouldSkipWorkflowSchemaAbsorb,
+} from '@/lib/workflow-history-recovery';
+import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
+import { clearPendingWorkflowDraft, saveWorkflowRecord, sessionHasWorkflowExecution } from '@/stores/workflow-memory';
 import { useChatStore } from '@/stores/chat';
 import { isToolResultRole } from '@/stores/chat/helpers';
 import type { WorkflowSchema } from '@/types/workflow';
@@ -75,10 +83,11 @@ function hasLivePendingWorkflowForTemplate(
   if (!options?.allowLivePending) return false;
   const state = useChatStore.getState();
   const pending = state.pendingWorkflow;
+  // Only treat as "live" while the form submit is in-flight — not after modelGuidanceSent alone.
   return Boolean(
     pending?.templateId === templateId
     && pending.schema
-    && (state.sending || pending.modelGuidanceSent),
+    && state.sending,
   );
 }
 
@@ -199,7 +208,7 @@ export function isWorkflowFormInjectionAllowed(
     if (
       pending?.templateId === templateId
       && pending.schema
-      && (state.sending || pending.modelGuidanceSent)
+      && state.sending
       && isWorkflowFormUserTurn(userVisible, pending.templateName)
     ) {
       return true;
@@ -229,6 +238,11 @@ export function reconcilePendingWorkflowForSession(
 ): void {
   const pending = useChatStore.getState().pendingWorkflow;
   if (!pending?.templateId) return;
+  // 本轮已提交并启动工作流时，pending 属于 stale 状态，避免 B3 等待指示残留
+  if (currentUserTurnHasWorkflowSubmission(uiMessages, getMessageText)) {
+    useChatStore.getState().clearPendingWorkflow();
+    return;
+  }
   if (
     isWorkflowFormInjectionAllowed(
       pending.templateId,
@@ -237,9 +251,7 @@ export function reconcilePendingWorkflowForSession(
       sessionKey,
       {
         rawMessages,
-        allowLivePending:
-          useChatStore.getState().sending
-          || !!useChatStore.getState().pendingWorkflow?.modelGuidanceSent,
+        allowLivePending: useChatStore.getState().sending,
       },
     )
   ) {
@@ -398,6 +410,17 @@ function registerWorkflowSubmitHandler(
         collectedInputs: values,
         paramsSummary: userText,
       });
+      appendWorkflowSessionRecord({
+        phase: 'started',
+        sessionKey: chatState.currentSessionKey,
+        templateId,
+        templateName,
+        workflowId: created.workflowId,
+        runId: run.runId,
+        status: 'running',
+        paramsSummary: userText,
+        collectedInputs: values,
+      });
       chatState.setWorkflowCardState(run.runId, {
         runId: run.runId,
         workflowId: created.workflowId,
@@ -440,6 +463,14 @@ export function sessionHasWorkflowParameterForm(
 export function applyWorkflowSchemaReady(data: WorkflowSchemaReadyData): boolean {
   if (!data.templateId || !data.schema) return false;
   const templateName = data.templateName ?? data.matchedLabel ?? data.templateId;
+  console.log(
+    '[sto-workflow-tool] get_workflow_schema ok templateId=%s templateName=%s schemaHash=%s fields=%d steps=%d',
+    data.templateId,
+    templateName,
+    data.schemaHash ?? '(none)',
+    data.schema?.fields?.length ?? 0,
+    data.schema?.steps?.length ?? 0,
+  );
   useChatStore.getState().setPendingWorkflow({
     templateId: data.templateId,
     templateName,
@@ -459,7 +490,24 @@ export function applyWorkflowSchemaReady(data: WorkflowSchemaReadyData): boolean
 }
 
 /** Read workflow_schema_ready from gateway history (tool results are filtered from UI). */
-export function absorbWorkflowSchemaFromToolResults(rawMessages: RawMessage[]): void {
+export function absorbWorkflowSchemaFromToolResults(
+  rawMessages: RawMessage[],
+  sessionKey?: string,
+): void {
+  const key = sessionKey ?? useChatStore.getState().currentSessionKey;
+  const hints = extractWorkflowExecutionsFromHistory(rawMessages);
+  if (hints.length > 0) {
+    seedWorkflowMemoryFromHistory(hints, key);
+  }
+  if (shouldSkipWorkflowSchemaAbsorb(rawMessages, key)) {
+    const schemaTemplateId = findLatestSchemaReadyTemplateId(rawMessages);
+    if (schemaTemplateId) {
+      clearPendingWorkflowDraft(key, schemaTemplateId);
+    }
+    useChatStore.getState().clearPendingWorkflow();
+    return;
+  }
+
   for (let i = rawMessages.length - 1; i >= 0; i--) {
     const msg = rawMessages[i];
     if (!isToolResultRole(msg.role)) continue;
@@ -674,6 +722,10 @@ export function resolveParameterFormForAssistantMessage(
   },
 ): ReturnType<typeof buildWorkflowParameterFormFromPending> {
   const { sessionMessages, sessionKey, pendingWorkflow, getMessageText } = options;
+
+  if (currentUserTurnHasWorkflowSubmission(sessionMessages, getMessageText)) {
+    return null;
+  }
 
   const contentBlocks = Array.isArray(message.content)
     ? (message.content as ContentBlock[])

@@ -23,6 +23,7 @@ import { getSidebarLayoutVariant } from '@/lib/sidebar-layout';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { useSettingsStore } from '@/stores/settings';
+import { SidebarDeleteConfirmPortal } from '@/components/layout/sidebar-delete-confirm-portal';
 import { Sidebar } from './Sidebar';
 import { TitleBar } from './TitleBar';
 
@@ -115,6 +116,7 @@ export function MainLayout() {
             </ContentHeaderProvider>
           </div>
         </div>
+        <SidebarDeleteConfirmPortal />
       </div>
     );
   }
@@ -128,6 +130,7 @@ export function MainLayout() {
           <Outlet />
         </main>
       </div>
+      <SidebarDeleteConfirmPortal />
     </div>
   );
 }

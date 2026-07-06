@@ -92,7 +92,7 @@ export function buildScheduledTaskGroupDisplayName(
 
   const resolved = pickHumanTaskGroupName([mapName, ...sessionNames]);
   if (resolved) {
-    return stripCronLabelPrefix(resolved).replace(/^定时任务\s*/i, '').trim() || resolved;
+    return stripCronLabelPrefix(resolved).trim() || resolved;
   }
 
   if (kind === 'claude') return `Claude 定时任务 ${taskId}`;

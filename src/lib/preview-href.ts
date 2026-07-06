@@ -5,7 +5,7 @@ import {
   type PreviewHrefResult,
 } from '../../shared/preview-href';
 import { hostApiFetch } from '@/lib/host-api';
-import { isHttpUrl, isPreviewableRemoteUrl, normalizeLocalFilePath, toMarkdownPreviewPath } from '@/lib/preview-url';
+import { isHttpUrl, normalizeLocalFilePath, toMarkdownPreviewPath } from '@/lib/preview-url';
 
 export type PreviewHrefAction =
   | { action: 'preview-local'; path: string }
@@ -83,9 +83,7 @@ export function resolvePreviewHrefAction(href: string): PreviewHrefAction {
   if (result.type === 'blocked') return { action: 'unsupported' };
 
   if (result.type === 'http-preview') {
-    return isPreviewableRemoteUrl(result.target)
-      ? { action: 'preview-remote', url: result.target }
-      : { action: 'open-external', url: result.target };
+    return { action: 'preview-remote', url: result.target };
   }
 
   if (result.type === 'http-external' || result.type === 'external') {
@@ -95,7 +93,10 @@ export function resolvePreviewHrefAction(href: string): PreviewHrefAction {
   if (result.type === 'local') {
     const rawTarget = result.target || extractLocalPathFromHref(trimmed);
     if (isHttpUrl(rawTarget)) {
-      return isPreviewableRemoteUrl(rawTarget)
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(rawTarget)) {
+        return { action: 'preview-local', path: rawTarget };
+      }
+      return classifyPreviewHref(rawTarget).type === 'http-preview'
         ? { action: 'preview-remote', url: rawTarget }
         : { action: 'open-external', url: rawTarget };
     }
@@ -105,6 +106,12 @@ export function resolvePreviewHrefAction(href: string): PreviewHrefAction {
   }
 
   return { action: 'unsupported' };
+}
+
+/** True when href should open in the side preview panel (local path, localhost/127, or *.sto* http). */
+export function shouldPreviewInSidePanel(href: string): boolean {
+  const action = resolvePreviewHrefAction(href);
+  return action.action === 'preview-local' || action.action === 'preview-remote';
 }
 
 /** Ask Main to resolve a path hint to an on-disk file (search fallback). */

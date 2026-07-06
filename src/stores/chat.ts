@@ -11,14 +11,15 @@ import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-opt
 import { hostApiFetch } from '@/lib/host-api';
 import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
 import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
-import { markSessionUnreadAfterSuccessfulRun } from '@/lib/session-unread-notify';
-import { useSessionUnreadStore } from '@/stores/session-unread';
+import { markSessionUnreadAfterSuccessfulRun, noteObservedRun } from '@/lib/session-unread-notify';
+import { touchSessionReadAt, useSessionUnreadStore } from '@/stores/session-unread';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
 import {
-  buildCronSessionHistoryPath, getCronRunSessionAggregateKey, getClaudeTaskRunSessionAggregateKey,
+  buildCronSessionHistoryPath, buildScheduledTaskSessionHistoryPath,
+  getCronRunSessionAggregateKey, getClaudeTaskRunSessionAggregateKey,
   isCronSessionKey, isCronDatedSessionKey,
   isAnyCronSessionKey, isScheduledTaskSessionKey,
   isVirtualTaskSessionKey,
@@ -83,6 +84,7 @@ import type { ChatSet } from './chat/store-api';
 import {
   absorbWorkflowExecutionStartedFromToolResults,
   dispatchBuiltinToolResult,
+  syncWorkflowCardsAfterToolDispatch,
 } from '@/lib/builtin-tool-dispatch';
 import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, normalizeDerivedSessionLabel } from '@/lib/workflow-session-hint';
 import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, sanitizeGatewaySessionLabels, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
@@ -94,8 +96,14 @@ import {
   isSameUserMessage,
   mergeOptimisticUserIntoHistory,
   normalizeUserMessageText,
+  recoverInitialUserFromSessionLabel,
+  ensureOpeningUserMessageFirst,
   traceLoadHistoryUserReconciliation,
 } from './chat/user-message-merge';
+import {
+  mergeHistoryMessageSources,
+  mergeHistoryWhenShrunk,
+} from './chat/history-merge';
 import {
   resolveAssistantFinalTerminalState,
   shouldAutoCompleteClaudeFromHistory,
@@ -465,6 +473,36 @@ async function loadClaudeScheduledTaskFallbackMessages(sessionKey: string, limit
   }
 }
 
+async function loadScheduledTaskFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
+  if (!isScheduledTaskSessionKey(sessionKey)) return [];
+  try {
+    const response = await hostApiFetch<{ messages?: RawMessage[] }>(
+      buildScheduledTaskSessionHistoryPath(sessionKey, limit),
+    );
+    return Array.isArray(response.messages) ? response.messages : [];
+  } catch (error) {
+    console.warn('Failed to load scheduled task fallback history:', error);
+    return [];
+  }
+}
+
+async function loadVirtualTaskFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
+  if (isCronSessionKey(sessionKey) || isCronDatedSessionKey(sessionKey)) {
+    return loadCronFallbackMessages(sessionKey, limit);
+  }
+  if (isScheduledTaskSessionKey(sessionKey)) {
+    return loadScheduledTaskFallbackMessages(sessionKey, limit);
+  }
+  if (
+    isClaudeScheduledTaskSessionKey(sessionKey)
+    || isClaudeScheduledTaskRunSessionKey(sessionKey)
+    || isClaudeScheduledTaskDatedSessionKey(sessionKey)
+  ) {
+    return loadClaudeScheduledTaskFallbackMessages(sessionKey, limit);
+  }
+  return [];
+}
+
 function normalizeAgentId(value: string | undefined | null): string {
   return (value ?? '').trim().toLowerCase() || 'main';
 }
@@ -705,6 +743,8 @@ function handleBackgroundSessionEvent(
 ): void {
   switch (resolvedState) {
     case 'started': {
+      // 记录本次运行期间真实观测到的 run，未读打标仅认这些 run（防重放误标）。
+      noteObservedRun(runId);
       set((s) => patchSessionRuntimeState(s, sessionKey, {
         sending: true,
         activeRunId: runId || getSessionRuntimeState(s.runtimeBySessionKey, sessionKey).activeRunId,
@@ -713,6 +753,7 @@ function handleBackgroundSessionEvent(
       break;
     }
     case 'delta': {
+      noteObservedRun(runId);
       const updates = collectToolUpdates(event.message, resolvedState);
       set((s) => patchSessionRuntimeState(s, sessionKey, (runtime) => ({
         sending: true,
@@ -776,6 +817,20 @@ function handleBackgroundSessionEvent(
             streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
           });
         });
+        void (async () => {
+          const agentId = getAgentIdFromSessionKey(sessionKey);
+          await dispatchBuiltinToolResult({
+            id: finalMsg.id,
+            toolCallId: finalMsg.toolCallId,
+            toolName: finalMsg.toolName,
+            content: finalMsg.content,
+          }, { sessionKey, agentId });
+          syncWorkflowCardsAfterToolDispatch(sessionKey);
+          const state = useChatStore.getState();
+          if (state.currentSessionKey === sessionKey) {
+            void state.loadHistory(true);
+          }
+        })();
         break;
       }
 
@@ -804,8 +859,14 @@ function handleBackgroundSessionEvent(
           lastUserMessageAt: isTerminalOutput ? null : currentRuntime.lastUserMessageAt,
           error: null,
         }));
-        if (isTerminalOutput && sessionKey !== s.currentSessionKey) {
-          markSessionUnreadAfterSuccessfulRun(sessionKey, s.currentSessionKey);
+        if (isTerminalOutput) {
+          if (sessionKey !== s.currentSessionKey) {
+            markSessionUnreadAfterSuccessfulRun(sessionKey, s.currentSessionKey, { runId });
+          } else {
+            // 前台会话运行完成即视为已读，刷新已读水位，
+            // 避免离开后迟到/后台事件把刚看过的会话重新标未读。
+            touchSessionReadAt(sessionKey);
+          }
         }
         return next;
       });
@@ -1216,6 +1277,9 @@ export const useChatStore = create<ChatState>()(
       });
     }
   },
+  clearPendingWorkflowMemory: () => {
+    set({ pendingWorkflow: null });
+  },
   clearPendingWorkflow: () => {
     const sessionKey = get().currentSessionKey;
     const templateId = get().pendingWorkflow?.templateId;
@@ -1227,14 +1291,17 @@ export const useChatStore = create<ChatState>()(
 
   // ── Load sessions via sessions.list ──
 
-  loadSessions: async () => {
+  loadSessions: async (options?: { force?: boolean }) => {
+    const force = options?.force === true;
     const now = Date.now();
     if (_loadSessionsInFlight) {
       await _loadSessionsInFlight;
-      scheduleSessionLabelHydrationFromStore(set, get);
-      return;
+      if (!force) {
+        scheduleSessionLabelHydrationFromStore(set, get);
+        return;
+      }
     }
-    if (now - _lastLoadSessionsAt < SESSION_LOAD_MIN_INTERVAL_MS) {
+    if (!force && now - _lastLoadSessionsAt < SESSION_LOAD_MIN_INTERVAL_MS) {
       scheduleSessionLabelHydrationFromStore(set, get);
       return;
     }
@@ -1293,19 +1360,38 @@ export const useChatStore = create<ChatState>()(
           const cronDated = new Set<string>();
           const scheduledTaskDated = new Set<string>();
           const claudeTaskDated = new Set<string>();
+          // Most-recent dated aggregate key per task/job. Key order is lexicographic
+          // == chronological for `...:{YYYY-MM-DD}` suffixes, so the greatest key is
+          // today's. Used to redirect an active base/run key to its dated aggregate
+          // below, so the dated-supersedes-base rule also governs the active session.
+          const claudeTaskDatedKeyByTask = new Map<string, string>();
+          const cronDatedKeyByJob = new Map<string, string>();
+          const scheduledTaskDatedKeyByTask = new Map<number, string>();
           for (const session of sessions) {
             const cronParts = parseCronSessionKey(session.key);
             if (cronParts && cronParts.date) {
               cronDated.add(`agent:main:cron:${cronParts.jobId}`);
+              const prev = cronDatedKeyByJob.get(cronParts.jobId);
+              if (!prev || session.key > prev) {
+                cronDatedKeyByJob.set(cronParts.jobId, session.key);
+              }
             }
             const stParts = parseScheduledTaskAgentSessionKey(session.key);
             if (stParts && stParts.date) {
               scheduledTaskDated.add(`agent:main:scheduled-task:${stParts.taskId}`);
+              const prev = scheduledTaskDatedKeyByTask.get(stParts.taskId);
+              if (!prev || session.key > prev) {
+                scheduledTaskDatedKeyByTask.set(stParts.taskId, session.key);
+              }
             }
             // Claude dated aggregate: claude-task:{taskId}:{YYYY-MM-DD}
             const claudeParts = parseClaudeScheduledTaskSessionKey(session.key);
             if (claudeParts && claudeParts.date) {
               claudeTaskDated.add(`claude-task:${claudeParts.taskId}`);
+              const prev = claudeTaskDatedKeyByTask.get(claudeParts.taskId);
+              if (!prev || session.key > prev) {
+                claudeTaskDatedKeyByTask.set(claudeParts.taskId, session.key);
+              }
             }
           }
 
@@ -1401,9 +1487,45 @@ export const useChatStore = create<ChatState>()(
               nextSessionKey = canonicalMatch;
             }
           }
+          // If the active session is a claude-task / cron / scheduled-task base or
+          // run key that has been superseded by a dated aggregate, redirect to that
+          // dated key. Without this, sessionsWithCurrent below re-appends the
+          // filtered-out base key and the sidebar shows two same-named entries
+          // (dated + base). The loadHistory() call at the tail of loadSessions
+          // reloads the dated aggregate's history, mirroring the canonical redirect
+          // above.
+          {
+            const claudeBase = parseClaudeScheduledTaskSessionKey(nextSessionKey);
+            const claudeRun = parseClaudeScheduledTaskRunSessionKey(nextSessionKey);
+            const claudeTaskId = claudeBase?.taskId ?? claudeRun?.taskId;
+            if ((Boolean(claudeRun) || Boolean(claudeBase && !claudeBase.date)) && claudeTaskId) {
+              const datedKey = claudeTaskDatedKeyByTask.get(claudeTaskId);
+              if (datedKey && mergedSessions.some((s) => s.key === datedKey)) {
+                nextSessionKey = datedKey;
+              }
+            }
+            const cronParts = parseCronSessionKey(nextSessionKey);
+            if (cronParts && (cronParts.runSessionId || !cronParts.date)) {
+              const datedKey = cronDatedKeyByJob.get(cronParts.jobId);
+              if (datedKey && mergedSessions.some((s) => s.key === datedKey)) {
+                nextSessionKey = datedKey;
+              }
+            }
+            if (nextSessionKey.startsWith('agent:')) {
+              const stParts = nextSessionKey.split(':');
+              if (stParts.length === 4 && stParts[2] === 'scheduled-task') {
+                const stTaskId = Number(stParts[3]);
+                if (!Number.isNaN(stTaskId)) {
+                  const datedKey = scheduledTaskDatedKeyByTask.get(stTaskId);
+                  if (datedKey && mergedSessions.some((s) => s.key === datedKey)) {
+                    nextSessionKey = datedKey;
+                  }
+                }
+              }
+            }
+          }
           if (!mergedSessions.find((s) => s.key === nextSessionKey) && mergedSessions.length > 0) {
-            // Preserve only locally-created pending sessions. On initial boot the
-            // default ghost key (`agent:main:main`) should yield to real history.
+            // Preserve only locally-created pending sessions.
             const hasLocalPendingSession =
               isTemporaryAgentSessionKey(nextSessionKey)
               || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
@@ -1412,7 +1534,13 @@ export const useChatStore = create<ChatState>()(
             // `agent:*:cron:*` dated session) are resolved by key prefix in
             // loadHistory and may not be in the backend list yet — keep them, or
             // the composer falls back to the default agent's engine.
-            if (!hasLocalPendingSession && !isVirtualTaskSessionKey(nextSessionKey)) {
+            // On cold boot the default key (`agent:main:main`) must stay on the
+            // new-chat home instead of jumping into the most recent session.
+            if (
+              nextSessionKey !== DEFAULT_SESSION_KEY
+              && !hasLocalPendingSession
+              && !isVirtualTaskSessionKey(nextSessionKey)
+            ) {
               nextSessionKey = mergedSessions[0].key;
             }
           }
@@ -1619,7 +1747,10 @@ export const useChatStore = create<ChatState>()(
   // JSONL history file on disk is intentionally left intact, consistent with the
   // newSession() design that avoids sessions.reset to preserve history.
 
-  deleteSession: async (key: string) => {
+  deleteSession: async (key: string, options?: {
+    skipSessionRefresh?: boolean;
+    additionalSuppressKeys?: string[];
+  }) => {
     const session = get().sessions.find((item) => item.key === key);
     const deleteResult = await requestSessionDelete(
       key,
@@ -1636,13 +1767,36 @@ export const useChatStore = create<ChatState>()(
     }
 
     rememberOptimisticDeletedSessionKey(key);
+    const additionalSuppressKeys = (options?.additionalSuppressKeys ?? [])
+      .map((suppressKey) => suppressKey.trim())
+      .filter((suppressKey) => suppressKey && suppressKey !== key);
+    for (const suppressKey of additionalSuppressKeys) {
+      rememberOptimisticDeletedSessionKey(suppressKey);
+    }
+    if (additionalSuppressKeys.length > 0) {
+      await Promise.all(additionalSuppressKeys.map(async (suppressKey) => {
+        const suppressSession = get().sessions.find((item) => item.key === suppressKey);
+        try {
+          await requestSessionDelete(
+            suppressKey,
+            resolveSessionDeleteEngineType(
+              suppressKey,
+              suppressSession,
+              getAgentEngineType(getAgentIdFromSessionKey(suppressKey)),
+            ),
+          );
+        } catch {
+          // Best-effort tombstone for virtual placeholder keys.
+        }
+      }));
+    }
+
     useSessionUnreadStore.getState().markSessionRead(key);
 
     const { currentSessionKey, sessions } = get();
     const remaining = sessions.filter((s) => s.key !== key);
 
     if (currentSessionKey === key) {
-      // Switched away from deleted session — pick the first remaining or create new
       const next = remaining[0];
       set((s) => ({
         sessions: remaining,
@@ -1675,7 +1829,9 @@ export const useChatStore = create<ChatState>()(
         sidebarRecentOrder: removeSidebarRecentOrderKey(s.sidebarRecentOrder, key),
       }));
     }
-    void get().loadSessions();
+    if (!options?.skipSessionRefresh) {
+      await get().loadSessions({ force: true });
+    }
     return true;
   },
 
@@ -1761,8 +1917,10 @@ export const useChatStore = create<ChatState>()(
         lastUserMessageAt: null,
         optimisticUserMessage: null,
         pendingToolImages: [],
+        pendingWorkflow: null,
       };
     });
+    touchSessionReadAt(newKey);
     await applyWorkspaceDefaultToNewSession(newKey, newAgentId);
   },
 
@@ -1830,7 +1988,9 @@ export const useChatStore = create<ChatState>()(
       ) => {
       if (get().currentSessionKey !== targetSessionKey) return;
 
-      absorbWorkflowSchemaFromToolResults(rawMessages);
+      rawMessages = mergeHistoryWhenShrunk(rawMessages, get().messages);
+
+      absorbWorkflowSchemaFromToolResults(rawMessages, targetSessionKey);
 
       // Before filtering: attach images/files from tool_result messages to the next assistant message
       const messagesWithToolImages = enrichWithToolResultFiles(rawMessages);
@@ -1849,26 +2009,27 @@ export const useChatStore = create<ChatState>()(
         get().runtimeBySessionKey,
         targetSessionKey,
       ).optimisticUserMessage ?? get().optimisticUserMessage;
-      if (userMsgAt) {
-        finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
-          userMessageAt: userMsgAt,
-          sending: get().sending,
-          sessionKey: targetSessionKey,
-          cachedOptimistic,
-        });
-        if (cachedOptimistic && finalMessages.some((m) => isSameUserMessage(m, cachedOptimistic, userMsgAt))) {
+      finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
+        userMessageAt: userMsgAt,
+        sending: get().sending,
+        sessionKey: targetSessionKey,
+        cachedOptimistic,
+      });
+      const optimisticRefAt = userMsgAt
+        ?? (cachedOptimistic?.timestamp ? toMs(cachedOptimistic.timestamp) : 0);
+      if (cachedOptimistic && optimisticRefAt > 0
+        && finalMessages.some((m) => isSameUserMessage(m, cachedOptimistic, optimisticRefAt))) {
+        set((s) => patchSessionRuntimeState(s, targetSessionKey, { optimisticUserMessage: null }));
+      } else if (cachedOptimistic) {
+        const cachedNorm = normalizeUserMessageText(cachedOptimistic.content);
+        if (
+          cachedNorm.length > 0
+          && finalMessages.some((m) => (
+            m.role === 'user'
+            && normalizeUserMessageText(m.content) === cachedNorm
+          ))
+        ) {
           set((s) => patchSessionRuntimeState(s, targetSessionKey, { optimisticUserMessage: null }));
-        } else if (cachedOptimistic) {
-          const cachedNorm = normalizeUserMessageText(cachedOptimistic.content);
-          if (
-            cachedNorm.length > 0
-            && finalMessages.some((m) => (
-              m.role === 'user'
-              && normalizeUserMessageText(m.content) === cachedNorm
-            ))
-          ) {
-            set((s) => patchSessionRuntimeState(s, targetSessionKey, { optimisticUserMessage: null }));
-          }
         }
       }
 
@@ -1885,6 +2046,19 @@ export const useChatStore = create<ChatState>()(
       finalMessages = mergeWorkflowCardBlocksFromCurrent(finalMessages, get().messages);
       finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
       finalMessages = ensureWorkflowCardsInMessages(finalMessages, targetSessionKey, getMessageText);
+      const gatewaySessionLabel = get().sessions.find((session) => session.key === targetSessionKey)?.label;
+      finalMessages = recoverInitialUserFromSessionLabel(
+        finalMessages,
+        targetSessionKey,
+        get().sessionLabels,
+        gatewaySessionLabel,
+      );
+      finalMessages = ensureOpeningUserMessageFirst(
+        finalMessages,
+        targetSessionKey,
+        get().sessionLabels,
+        gatewaySessionLabel,
+      );
       finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null, {
         sessionKey: targetSessionKey,
       });
@@ -2161,7 +2335,12 @@ export const useChatStore = create<ChatState>()(
         }
 
         let rawMessages = allMessages;
-        if (rawMessages.length === 0 && (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey))) {
+        if (isVirtualTaskSessionKey(targetSessionKey)) {
+          const fallbackMessages = await loadVirtualTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
+          rawMessages = fallbackMessages.length > 0
+            ? mergeHistoryMessageSources([fallbackMessages, allMessages])
+            : allMessages;
+        } else if (rawMessages.length === 0 && (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey))) {
           rawMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
         } else if (rawMessages.length === 0 && (isClaudeScheduledTaskSessionKey(targetSessionKey) || isClaudeScheduledTaskRunSessionKey(targetSessionKey) || isClaudeScheduledTaskDatedSessionKey(targetSessionKey))) {
           rawMessages = await loadClaudeScheduledTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
@@ -2181,7 +2360,9 @@ export const useChatStore = create<ChatState>()(
         console.warn('Failed to load chat history:', err);
         if (get().currentSessionKey !== targetSessionKey) return;
         let fallbackMessages: RawMessage[] = [];
-        if (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey)) {
+        if (isVirtualTaskSessionKey(targetSessionKey)) {
+          fallbackMessages = await loadVirtualTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
+        } else if (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey)) {
           fallbackMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
         } else if (isClaudeScheduledTaskSessionKey(targetSessionKey) || isClaudeScheduledTaskRunSessionKey(targetSessionKey) || isClaudeScheduledTaskDatedSessionKey(targetSessionKey)) {
           fallbackMessages = await loadClaudeScheduledTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
@@ -2790,13 +2971,14 @@ export const useChatStore = create<ChatState>()(
               };
             });
             void (async () => {
+              const sessionKey = get().currentSessionKey;
+              const agentId = get().currentAgentId;
               await dispatchBuiltinToolResult({
                 id: finalMsg.id,
                 toolCallId: finalMsg.toolCallId,
                 toolName: finalMsg.toolName,
                 content: finalMsg.content,
-              });
-              const sessionKey = get().currentSessionKey;
+              }, { sessionKey, agentId });
               let nextMessages = get().messages;
               const withForm = patchLastAssistantWithWorkflowForm(nextMessages, getMessageText);
               if (withForm !== nextMessages) {
@@ -3167,7 +3349,11 @@ export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null
   const state = useChatStore.getState();
   const targetKey = sessionKey ?? state.currentSessionKey;
   const engineType = resolveEngineTypeForSession(state.sessions, targetKey, state.currentAgentId);
-  if (engineType !== 'openclaw') return;
+  // Finalize on agent.completed for both agentic engines. Claude runs whose
+  // terminal 'final' event lacks phase=completed are treated as non-terminal
+  // fragments (see resolveAssistantFinalTerminalState), so they rely on this
+  // path to clear sending. Without it the spinner stays stuck after the run.
+  if (engineType !== 'openclaw' && engineType !== 'claude') return;
 
   clearHistoryPoll();
   useChatStore.setState((prev) => patchSessionRuntimeState(prev, targetKey, {

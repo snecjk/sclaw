@@ -4,7 +4,7 @@
  * 测试：https://front-test.sto.cn/group/memory-center-web
  * 生产：https://front.sto.cn/group/memory-center-web
  *
- * - 新建：StoClaw 本地向导 `/workflow/new`
+ * - 新建：StoClaw 列表页弹窗（深链 `/workflow/new` 兼容）
  * - 编辑：iframe 嵌入 `/workflows-workbench/{workflowId}`
  */
 import { openExternalUrl } from '@/lib/preview-url';

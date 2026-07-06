@@ -7,6 +7,7 @@ import { copyFile, mkdtemp, readFile, unlink } from 'node:fs/promises';
 import { getOpenClawConfigDir } from '../../utils/paths';
 import { resolveWorkspaceFilePath } from '../../utils/artifact-path';
 import { existsSync } from 'node:fs';
+import { uploadOssFile } from '../../utils/oss-temp-upload';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -216,6 +217,45 @@ export async function handleFileRoutes(
         }
       }
       sendJson(res, 200, { exists });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/files/upload-temp' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{
+        filePath: string;
+        fileName?: string;
+        bizTypeEnum?: 'temp' | 'workflow' | 'LLM' | 'skill';
+        expiresSeconds?: number;
+        /** Diagnostics tag for Main log grep, e.g. `dingtalk-share`. */
+        source?: string;
+        includeDebugCurl?: boolean;
+      }>(req);
+      const rawPath = body.filePath?.trim() || '';
+      if (!rawPath) {
+        sendJson(res, 400, { success: false, error: 'Missing filePath' });
+        return true;
+      }
+      const filePath = resolveWorkspaceFilePath(rawPath);
+      const fileName = body.fileName?.trim() || filePath.split(/[\\/]/).pop() || 'file';
+      const uploaded = await uploadOssFile(filePath, fileName, {
+        bizTypeEnum: body.bizTypeEnum ?? 'temp',
+        expiresSeconds: body.expiresSeconds,
+        logTag: body.source?.trim() || undefined,
+        includeDebugCurl: body.includeDebugCurl === true,
+      });
+      sendJson(res, 200, {
+        url: uploaded.tempUrl,
+        tempUrl: uploaded.tempUrl,
+        ossKey: uploaded.ossKey,
+        resourceId: uploaded.resourceId,
+        fileType: uploaded.fileType,
+        name: uploaded.name,
+        ...(uploaded.debugCurl ? { debugCurl: uploaded.debugCurl } : {}),
+      });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

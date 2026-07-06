@@ -34,9 +34,35 @@ export function isParamsConfirmedWorkflowAssistantMessage(
   return /参数已确认/.test(getMessageText(message.content));
 }
 
-function messageHasWorkflowCard(message: RawMessage): boolean {
+export function messageHasWorkflowCard(message: RawMessage): boolean {
   if (!Array.isArray(message.content)) return false;
   return (message.content as ContentBlock[]).some((block) => block.type === 'workflow_card');
+}
+
+/**
+ * 当前用户轮次内是否已有工作流提交（参数已确认 / workflow_card）。
+ * B3「等待回复」仅应在提交前展示；提交后 intro 与 reply 消息都不应再解析出 parameter_form。
+ */
+export function currentUserTurnHasWorkflowSubmission(
+  messages: RawMessage[],
+  getMessageText: (content: unknown) => string = getAssistantMessageText,
+): boolean {
+  let lastUserIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].role === 'user') {
+      lastUserIdx = i;
+      break;
+    }
+  }
+  if (lastUserIdx < 0) return false;
+
+  for (let i = lastUserIdx + 1; i < messages.length; i += 1) {
+    const message = messages[i];
+    if (message.role !== 'assistant') continue;
+    if (isParamsConfirmedWorkflowAssistantMessage(message, getMessageText)) return true;
+    if (messageHasWorkflowCard(message)) return true;
+  }
+  return false;
 }
 
 /** 会话内是否已有「参数已确认」消息承载该 run（可排除当前消息 id）。 */
@@ -264,9 +290,7 @@ export function ensureWorkflowCardsInMessages(
     let patchedMsg = msg;
     for (const runId of mentionedRunIds) {
       if (next.some((m) => messageHasWorkflowCardForRun(m, runId))) continue;
-      const cardState = useChatStore.getState().workflowCardStates[runId];
       const exec = getExecutionByRunId(runId, sessionKey);
-      if (!cardState && !exec) continue;
       patchedMsg = appendWorkflowCardBlockToMessage(
         patchedMsg,
         runId,

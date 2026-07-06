@@ -1,13 +1,14 @@
-import { Navigate, useParams } from 'react-router-dom';
+import { useLayoutEffect } from 'react';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { isStoTaskId, isYmdEntryId, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
-import { TaskSubitemChatSurface } from '@/pages/TaskDetail/TaskSubitemChatSurface';
 import { stoChatShellPageClass } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
-import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
 import { useAuthStore } from '@/stores/auth';
-import { useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
+import { useStoTaskSubitemsStore, stoTaskSubitemKey } from '@/stores/sto-task-subitems';
 import { useContentHeader } from '@/components/layout/content-header-context';
+import { useChatStore } from '@/stores/chat';
+import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 
 function TaskOverviewBody({ taskId }: { taskId: StoTaskId }) {
   const { t } = useTranslation('tasks');
@@ -32,20 +33,26 @@ function TaskOverviewPage({ taskId }: { taskId: StoTaskId }) {
   );
 }
 
-function TaskSubitemPage({ id, entryId }: { id: StoTaskId; entryId: string }) {
-  const { isSplitGridPassthrough, splitGridPassthroughClass } = useSplitGridPassthroughClass();
+/**
+ * 旧 `/tasks/:id/:entryId` 深链：切到子项 session 后回首页对话（与侧栏定时任务一致）。
+ */
+function TaskSubitemRedirect({ id, entryId }: { id: StoTaskId; entryId: string }) {
+  const navigate = useNavigate();
 
-  return (
-    <div
-      className={cn(
-        isSplitGridPassthrough
-          ? splitGridPassthroughClass
-          : 'flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden',
-      )}
-    >
-      <TaskSubitemChatSurface taskId={id} entryId={entryId} className="min-h-0 flex-1" />
-    </div>
-  );
+  useLayoutEffect(() => {
+    useStoTaskSubitemsStore.getState().ensureSubitem(id, entryId);
+    const sessionKey =
+      useStoTaskSubitemsStore.getState().sessionKeyBySubitem[stoTaskSubitemKey(id, entryId)] ?? '';
+    if (sessionKey) {
+      navigateToMainChatHome(navigate, window.location.pathname, () => {
+        useChatStore.getState().switchSession(sessionKey);
+      });
+    } else {
+      navigate('/', { replace: true });
+    }
+  }, [id, entryId, navigate]);
+
+  return null;
 }
 
 export function TaskDetail() {
@@ -69,7 +76,7 @@ export function TaskDetail() {
       return <Navigate to={taskOverviewPath(id)} replace />;
     }
     useStoTaskSubitemsStore.getState().ensureSubitem(id, entryId);
-    return <TaskSubitemPage id={id} entryId={entryId} />;
+    return <TaskSubitemRedirect id={id} entryId={entryId} />;
   }
 
   return <TaskOverviewPage taskId={id} />;

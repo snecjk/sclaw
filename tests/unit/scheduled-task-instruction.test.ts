@@ -5,6 +5,7 @@ import {
   evaluateScheduledTaskCreationBlock,
   isScheduledTaskExecutionSessionKey,
   normalizeScheduledTaskInstruction,
+  SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT,
 } from '../../shared/scheduled-task-instruction';
 
 describe('scheduled-task-instruction', () => {
@@ -62,5 +63,12 @@ describe('scheduled-task-instruction', () => {
   it('detects meta task intent', () => {
     expect(detectMetaScheduledTaskIntent('帮我每天 10 点创建一个定时任务')).toBe(true);
     expect(detectMetaScheduledTaskIntent('执行客户成本分析工作流')).toBe(false);
+  });
+
+  it('execution system prompt overrides chat forward rules for dingtalk delivery', () => {
+    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('不是对话 @ 代发');
+    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('执行结果');
+    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('dws chat message send');
+    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('优先于 message 内');
   });
 });

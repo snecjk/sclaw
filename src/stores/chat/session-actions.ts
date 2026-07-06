@@ -189,7 +189,12 @@ export function createSessionActions(
             isTemporaryAgentSessionKey(nextSessionKey)
             || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
             || localSessions.some((session) => session.key === nextSessionKey);
-          if (!hasLocalPendingSession) {
+          // On cold boot keep the default key (`agent:main:main`) on the
+          // new-chat home instead of jumping into the most recent session.
+          if (
+            nextSessionKey !== DEFAULT_SESSION_KEY
+            && !hasLocalPendingSession
+          ) {
             nextSessionKey = mergedSessions[0].key;
           }
         }
