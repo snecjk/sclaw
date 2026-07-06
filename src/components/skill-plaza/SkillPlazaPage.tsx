@@ -14,6 +14,10 @@ import { SkillDetailModal } from './SkillDetailModal';
 import type { SkillSummary } from '@/types/skill-plaza';
 import { cn } from '@/lib/utils';
 import { stoMainInnerShell } from '@/lib/surfaces';
+import {
+  normalizeMineCategoryBucket,
+  resolveMineSkillCategoryCode,
+} from '@/lib/skill-plaza-category';
 
 export function SkillPlazaPage() {
   const { t } = useTranslation('skills');
@@ -23,6 +27,8 @@ export function SkillPlazaPage() {
     searchQuery,
     plazaSkills,
     mySkills,
+    categories,
+    plazaSkillMetaMap,
     loading,
     syncingUserSkills,
     viewMode,
@@ -61,10 +67,21 @@ export function SkillPlazaPage() {
     }
   }, [activeTab, fetchLocalSkills]);
 
+  const resolveMineCategoryCode = useCallback(
+    (skill: SkillSummary) => {
+      const plazaSkill = plazaSkills.find((p) => p.slug === skill.slug);
+      return normalizeMineCategoryBucket(
+        resolveMineSkillCategoryCode(skill, categories, plazaSkillMetaMap, plazaSkill),
+        categories,
+      );
+    },
+    [plazaSkills, categories, plazaSkillMetaMap],
+  );
+
   const rawSkills = activeTab === 'all'
     ? plazaSkills
     : activeCategory
-      ? mySkills.filter((s) => s.categoryCode === activeCategory)
+      ? mySkills.filter((s) => resolveMineCategoryCode(s) === activeCategory)
       : mySkills;
 
   const normalizedQuery = searchQuery.trim().toLowerCase();

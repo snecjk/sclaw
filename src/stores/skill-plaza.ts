@@ -13,6 +13,7 @@ import {
   toggleSkillEnabled,
   type InstallPlazaSkillOptions,
 } from '@/lib/skill-plaza-api';
+import { applyMineCategoryFallback } from '@/lib/skill-plaza-category';
 import type {
   SkillSummary,
   CategoryDef,
@@ -239,56 +240,33 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
       const enrichedSkills = result.skills.map((skill) => {
         const plazaSkill = plazaSkills.find((s) => s.slug === skill.slug);
         const meta = plazaSkillMetaMap[skill.slug];
-        if (!plazaSkill && !meta) return skill;
 
-        let code = skill.categoryCode || plazaSkill?.categoryCode || meta?.categoryCode || null;
-        if (!code && (plazaSkill?.category || meta?.category)) {
-          const label = plazaSkill?.category || meta?.category;
-          const cat = categories.find((c) => c.label === label);
-          if (cat) code = cat.slug;
-        }
+        let merged: SkillSummary = { ...skill };
 
-        const merged: SkillSummary = { ...skill };
-
-        // title/description: plaza list > meta cache > local (from API)
-        if (plazaSkill?.title) {
-          merged.title = plazaSkill.title;
-        } else if (meta?.title) {
-          merged.title = meta.title;
-        }
-        if (plazaSkill?.description) {
-          merged.description = plazaSkill.description;
-        } else if (meta?.description) {
-          merged.description = meta.description;
-        }
-
-        if (code) {
-          merged.category = plazaSkill?.category || meta?.category || skill.category;
-          merged.categoryCode = code;
-        }
-        if (plazaSkill?.installCount != null) {
-          merged.installCount = plazaSkill.installCount;
-        } else if (meta?.installCount != null) {
-          merged.installCount = meta.installCount;
-        }
-        if (plazaSkill?.useCount != null) {
-          merged.useCount = plazaSkill.useCount;
-        } else if (meta?.useCount != null) {
-          merged.useCount = meta.useCount;
+        if (plazaSkill || meta) {
+          if (plazaSkill?.title) {
+            merged.title = plazaSkill.title;
+          } else if (meta?.title) {
+            merged.title = meta.title;
+          }
+          if (plazaSkill?.description) {
+            merged.description = plazaSkill.description;
+          } else if (meta?.description) {
+            merged.description = meta.description;
+          }
+          if (plazaSkill?.installCount != null) {
+            merged.installCount = plazaSkill.installCount;
+          } else if (meta?.installCount != null) {
+            merged.installCount = meta.installCount;
+          }
+          if (plazaSkill?.useCount != null) {
+            merged.useCount = plazaSkill.useCount;
+          } else if (meta?.useCount != null) {
+            merged.useCount = meta.useCount;
+          }
         }
 
-        // Return original object if nothing changed
-        if (
-          merged.title === skill.title &&
-          merged.description === skill.description &&
-          merged.category === skill.category &&
-          merged.categoryCode === skill.categoryCode &&
-          merged.installCount === skill.installCount &&
-          merged.useCount === skill.useCount
-        ) {
-          return skill;
-        }
-        return merged;
+        return applyMineCategoryFallback(merged, categories, plazaSkillMetaMap, plazaSkill);
       });
 
       const nextState: Partial<SkillPlazaState> = {

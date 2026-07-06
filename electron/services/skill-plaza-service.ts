@@ -978,8 +978,7 @@ export class SkillPlazaService {
     }
 
     // 基于实际返回的 skills 数组计算分类计数，确保 categoryCounts 与 skills 严格一致
-    // 规则：所有技能（官方/预安装/自建）都按实际 categoryCode 归类；
-    //       未分类技能（categoryCode 为 null）只在"全部"（''）中计数，不计入任何具体分类
+    // 未分类（categoryCode 为 null）只在「全部」中计数；「其他」兜底仅在前端 enrich 阶段处理
     const finalCategoryCounts: Record<string, number> = {};
     for (const skill of skills) {
       const code = skill.categoryCode;
