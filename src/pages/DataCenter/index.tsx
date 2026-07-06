@@ -7,7 +7,16 @@ import { ChevronLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { cn } from '@/lib/utils';
-import { stoMainInnerShell, stoPageTitleClass, workflowListTabClass } from '@/lib/surfaces';
+import {
+  stoMainInnerShell,
+  stoPageTitleClass,
+  workflowListCardBodyClass,
+  workflowListCardCoverClass,
+  workflowListCardCoverWrapClass,
+  workflowListCardMainClass,
+  workflowListCardShellClass,
+  workflowListTabClass,
+} from '@/lib/surfaces';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { getAppEnv } from '../../../shared/env-config';
 import customerRelationsCardIcon from '@/assets/data-center-customer-relations-card.png';
@@ -32,14 +41,14 @@ function CustomerRelationsIframe({ token }: { token: string }) {
 
   if (!iframeUrl) {
     return (
-      <div className="flex min-h-[400px] flex-1 items-center justify-center rounded-2xl border border-[#E5E6EB] bg-white">
+      <div className="flex min-h-[400px] flex-1 items-center justify-center rounded-2xl border border-border bg-card dark:bg-secondary">
         <p className="text-sm text-muted-foreground">{t('dataCenterPage.linkUnavailable')}</p>
       </div>
     );
   }
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-[#E5E6EB] bg-white">
+    <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-border bg-card dark:bg-secondary">
       <iframe
         src={iframeUrl}
         className="h-[calc(100%+50px)] w-full border-0"
@@ -57,10 +66,19 @@ function CustomerRelationsCard({ onOpen }: { onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-[278px] max-w-full flex-col overflow-hidden rounded-[18px] bg-white text-left shadow-[0_0_4px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-[0_0_16px_rgba(0,0,0,0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6F00]/40"
+      className={cn(
+        workflowListCardShellClass,
+        'w-[278px] max-w-full text-left',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+      )}
     >
-      <div className="px-1 pt-1">
-        <div className="flex h-[90px] items-center justify-center rounded-[14px] bg-[rgba(255,232,193,0.25)]">
+      <div className={workflowListCardCoverWrapClass}>
+        <div
+          className={cn(
+            workflowListCardCoverClass,
+            'flex h-[90px] items-center justify-center bg-[rgba(255,232,193,0.25)] dark:bg-primary/10',
+          )}
+        >
           <img
             src={customerRelationsCardIcon}
             alt=""
@@ -69,13 +87,15 @@ function CustomerRelationsCard({ onOpen }: { onOpen: () => void }) {
           />
         </div>
       </div>
-      <div className="flex flex-col gap-1 px-[18px] pt-[13px] pb-4">
-        <h3 className="text-base font-semibold leading-6 text-[#1D2129]">
-          {t('dataCenterPage.customerRelationsTitle')}
-        </h3>
-        <p className="text-sm leading-[22px] text-[#86909C]">
-          {t('dataCenterPage.customerRelationsDesc')}
-        </p>
+      <div className={workflowListCardBodyClass}>
+        <div className={workflowListCardMainClass}>
+          <h3 className="text-base font-semibold leading-6 text-foreground">
+            {t('dataCenterPage.customerRelationsTitle')}
+          </h3>
+          <p className="text-sm leading-[22px] text-muted-foreground">
+            {t('dataCenterPage.customerRelationsDesc')}
+          </p>
+        </div>
       </div>
     </button>
   );
@@ -92,7 +112,7 @@ function DataCenterTabs() {
 
   return (
     <div
-      className="mt-6 flex shrink-0 items-center gap-5 border-b border-[#E5E6EB] pb-3"
+      className="mt-6 flex shrink-0 items-center gap-5 border-b border-border pb-3"
       role="tablist"
       aria-label={t('dataCenterPage.tabAria')}
     >
@@ -160,7 +180,7 @@ export function DataCenter() {
     <div className={cn('flex h-full min-h-0 flex-col', stoMainInnerShell)}>
       <header className="shrink-0">
         <h1 className={stoPageTitleClass}>{pageTitle}</h1>
-        <p className="mt-2 max-w-4xl text-sm leading-6 text-[#86909C]">
+        <p className="mt-2 max-w-4xl text-sm leading-6 text-muted-foreground">
           {t('dataCenterPage.subtitle')}
         </p>
       </header>
@@ -173,7 +193,7 @@ export function DataCenter() {
             <button
               type="button"
               onClick={() => setOpened(false)}
-              className="mb-4 inline-flex w-fit items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium text-[#4E5969] hover:bg-[#F5F6F7] hover:text-[#1D2129]"
+              className="mb-4 inline-flex w-fit items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <ChevronLeft className="h-4 w-4" aria-hidden />
               {t('actions.back')}
