@@ -977,9 +977,9 @@ export const workflowListCardMoreActionClass = cn(
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
 
-/** 工作流卡片浮动菜单容器 */
+/** 工作流卡片 DropdownMenu 内容壳 — Radix portal，层级高于侧栏 sticky */
 export const workflowListCardMenuClass = cn(
-  'fixed z-[126] w-[200px] rounded-xl border border-border bg-card p-1.5',
+  'z-[10041] w-[200px] rounded-xl border border-border bg-card p-1.5',
   'shadow-[0_8px_40px_rgba(0,0,0,0.16)] dark:shadow-modal',
 );
 
