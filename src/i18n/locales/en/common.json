@@ -19,6 +19,7 @@
         "channels": "Channels",
         "dashboard": "Dashboard",
         "settings": "Settings",
+        "checkUpdates": "Check for Updates",
         "devConsole": "Developer Console",
         "models": "Models",
         "deleteSessionConfirm": "Are you sure you want to delete session \"{{label}}\"?",
@@ -41,7 +42,13 @@
         "sessionRunning": "Running",
         "sessionFailed": "Run failed",
         "sessionUnread": "Unread",
-        "compactAccountMenu": "Account and settings"
+        "compactAccountMenu": "Account and settings",
+        "supportGroup": {
+            "title": "STO Claw Product Support Group",
+            "hint": "Scan with DingTalk to join and ask questions",
+            "helpAria": "View product support group QR code",
+            "loadError": "Failed to load QR code. Please try again later."
+        }
     },
     "actions": {
         "save": "Save",

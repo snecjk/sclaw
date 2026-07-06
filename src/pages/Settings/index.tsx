@@ -30,8 +30,8 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings';
 import { useGatewayStore } from '@/stores/gateway';
-import { useUpdateStore } from '@/stores/update';
 import { UpdateSettings } from '@/components/settings/UpdateSettings';
+import { UpdateChangelogPanel } from '@/components/settings/update/UpdateChangelogPanel';
 import { DwsCliSettings } from '@/components/settings/DwsCliSettings';
 import {
   getGatewayWsDiagnosticEnabled,
@@ -100,10 +100,6 @@ export function Settings() {
     setProxyHttpsServer,
     setProxyAllServer,
     setProxyBypassRules,
-    autoCheckUpdate,
-    setAutoCheckUpdate,
-    autoDownloadUpdate,
-    setAutoDownloadUpdate,
     devModeUnlocked,
     setDevModeUnlocked,
     telemetryEnabled,
@@ -111,8 +107,6 @@ export function Settings() {
   } = useSettingsStore();
 
   const { status: gatewayStatus, restart: restartGateway } = useGatewayStore();
-  const currentVersion = useUpdateStore((state) => state.currentVersion);
-  const updateSetAutoDownload = useUpdateStore((state) => state.setAutoDownload);
   const [controlUiInfo, setControlUiInfo] = useState<ControlUiInfo | null>(null);
   const [openclawCliCommand, setOpenclawCliCommand] = useState('');
   const [openclawCliError, setOpenclawCliError] = useState<string | null>(null);
@@ -545,7 +539,7 @@ export function Settings() {
             <div className="flex flex-col gap-0.5">
               {([
                 { id: 'gateway', path: '/settings/gateway', label: t('gateway.title'), icon: Activity },
-                { id: 'updates', path: '/settings/updates', label: t('updates.title'), icon: RefreshCw },
+                { id: 'updates', path: '/settings/updates', label: t('common:sidebar.checkUpdates'), icon: RefreshCw },
               ] as const).map(item => {
                 const Icon = item.icon;
                 return (
@@ -1195,77 +1189,18 @@ export function Settings() {
         {/* Updates section */}
         {activeSection === 'updates' && (
     <div className={cn(stoMainInnerShell, 'flex flex-col gap-8 pb-10')}>
-      <div className="flex flex-col gap-6">
-          <section className={glassSectionSurface}>
-            <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
-              {t('updates.title')}
-            </h2>
-            <div className="space-y-6">
-              <UpdateSettings />
+      <header className="shrink-0">
+        <h1 className="text-[20px] font-bold leading-tight text-[#1D2129] dark:text-foreground">
+          {t('updates.title')}
+        </h1>
+        <p className="mt-2 text-[14px] font-normal leading-relaxed text-[#86909C] dark:text-muted-foreground">
+          {t('updates.subtitle')}
+        </p>
+      </header>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-[15px] font-medium text-foreground">{t('updates.autoCheck')}</Label>
-                  <p className="text-[13px] text-muted-foreground mt-1">
-                    {t('updates.autoCheckDesc')}
-                  </p>
-                </div>
-                <Switch
-                  checked={autoCheckUpdate}
-                  onCheckedChange={setAutoCheckUpdate}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-[15px] font-medium text-foreground">{t('updates.autoDownload')}</Label>
-                  <p className="text-[13px] text-muted-foreground mt-1">
-                    {t('updates.autoDownloadDesc')}
-                  </p>
-                </div>
-                <Switch
-                  checked={autoDownloadUpdate}
-                  onCheckedChange={(value) => {
-                    setAutoDownloadUpdate(value);
-                    updateSetAutoDownload(value);
-                  }}
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className={glassSectionSurface}>
-            <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
-              {t('about.title')}
-            </h2>
-            <div className="space-y-3 text-[14px] text-muted-foreground">
-              <p>
-                <strong className="text-foreground font-semibold">{t('about.appName')}</strong> - {t('about.tagline')}
-              </p>
-              <p>{t('about.basedOn')}</p>
-              <p>{t('about.version', { version: currentVersion })}</p>
-              {!getCurrentEnvConfig().isProduction && (
-                <p className="flex items-center gap-2">
-                  <span className="text-foreground/70">{t('about.environment', { defaultValue: '环境' })}:</span>
-                  <span
-                    className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-bold leading-none text-white"
-                    style={{ backgroundColor: getCurrentEnvConfig().badgeColor }}
-                  >
-                    {getCurrentEnvConfig().displayLabel}
-                  </span>
-                </p>
-              )}
-              <div className="flex gap-4 pt-3">
-                <Button
-                  variant="link"
-                  className="h-auto p-0 text-[14px] text-link hover:opacity-90 font-medium"
-                  onClick={() => window.electron.openExternal('https://www.sto.cn')}
-                >
-                  {t('about.docs')}
-                </Button>
-              </div>
-            </div>
-          </section>
+      <div className="flex flex-col gap-8">
+          <UpdateSettings />
+          <UpdateChangelogPanel />
       </div>
     </div>
         )}
