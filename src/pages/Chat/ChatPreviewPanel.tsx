@@ -10,8 +10,8 @@ import {
   MonitorPlay,
   Eye,
   ExternalLink,
-  Share2,
 } from 'lucide-react';
+import { ShareMessageIcon } from '@/components/icons/ShareMessageIcon';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -170,7 +170,7 @@ export function ChatPreviewPanel({
                   <Download className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>
                 <PreviewActionButton onClick={handleOpenShareDialog} aria-label={t('preview.share')}>
-                  <Share2 className="h-4 w-4" aria-hidden />
+                  <ShareMessageIcon className="h-4 w-4" />
                 </PreviewActionButton>
                 <PreviewActionButton onClick={handleOpenExternal} aria-label={t('preview.openExternal')}>
                   <ExternalLink className="h-4 w-4" aria-hidden />

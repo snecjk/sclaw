@@ -45,10 +45,12 @@
         "compactAccountMenu": "アカウントと設定"
     },
     "dataCenterPage": {
-        "title": "マイファイル",
+        "title": "データセンター",
         "subtitle": "システムデータ表、アップロードファイル、ナレッジベースを一元管理します。",
-        "onlineTab": "オンラインファイル",
-        "tabAria": "ファイル種別",
+        "onlineTab": "オンラインデータ",
+        "localTab": "ローカルファイル",
+        "dataAccessTab": "データ連携",
+        "tabAria": "データ種別",
         "customerRelationsTitle": "顧客関係",
         "customerRelationsDesc": "顧客プロファイル、コミュニケーション記録、要件追跡、保守戦略など CRM 中核資料を集約します。",
         "tokenMissing": "ログイントークンを取得できません。再度ログインしてください。",
