@@ -250,6 +250,35 @@ function normalizeSkillDetail(skill: Partial<SkillDetail>): SkillDetail {
   };
 }
 
+/** Resolve category slug from categoryCode or Chinese category label. */
+function resolveSkillCategoryCode(
+  skill: SkillSummary,
+  labelToSlug: Map<string, string>,
+): string | null {
+  if (skill.categoryCode) return skill.categoryCode;
+  if (skill.category) return labelToSlug.get(skill.category) ?? null;
+  return null;
+}
+
+/** Apply local preinstalled skill deltas onto remote category_counts. */
+function applyLocalPreinstalledCountDelta(
+  counts: Record<string, number>,
+  newLocalOffice: SkillSummary[],
+  newLocalOthers: SkillSummary[],
+): Record<string, number> {
+  const officeDelta = newLocalOffice.length;
+  const othersDelta = newLocalOthers.length;
+  const totalDelta = officeDelta + othersDelta;
+  if (totalDelta === 0) return counts;
+
+  return {
+    ...counts,
+    '': (counts[''] || 0) + totalDelta,
+    [OFFICE_CATEGORY_SLUG]: (counts[OFFICE_CATEGORY_SLUG] || 0) + officeDelta,
+    qita: (counts['qita'] || 0) + othersDelta,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Local state helpers
 // ---------------------------------------------------------------------------
@@ -482,6 +511,80 @@ export class SkillPlazaService {
     };
   }
 
+  private normalizeRemotePlazaSkills(
+    skills: SkillSummary[],
+    labelToSlug: Map<string, string>,
+  ): SkillSummary[] {
+    return skills.map((s) => this.overlayLocalState(s)).map((s) => {
+      if (OFFICE_SKILL_SLUGS.has(s.slug)) {
+        return { ...s, category: OFFICE_CATEGORY_LABEL, categoryCode: OFFICE_CATEGORY_SLUG };
+      }
+      const code = resolveSkillCategoryCode(s, labelToSlug);
+      if (code && code !== s.categoryCode) {
+        return { ...s, categoryCode: code };
+      }
+      return s;
+    });
+  }
+
+  private mergeLocalPreinstalledSkills(
+    skills: SkillSummary[],
+    localOfficeSkills: SkillSummary[],
+    localPreinstalledOthers: SkillSummary[],
+    hasCategoryFilter: boolean,
+    isQitaFilter: boolean,
+  ): SkillSummary[] {
+    const existingSlugs = new Set(skills.map((s) => s.slug));
+    const newLocalOffice = localOfficeSkills.filter((s) => !existingSlugs.has(s.slug));
+    const newLocalOthers = localPreinstalledOthers.filter((s) => !existingSlugs.has(s.slug));
+
+    let merged = skills;
+    if (!hasCategoryFilter) {
+      if (newLocalOffice.length > 0) {
+        merged = [...merged, ...newLocalOffice];
+      }
+      if (newLocalOthers.length > 0) {
+        merged = [...merged, ...newLocalOthers];
+      }
+    } else if (isQitaFilter && newLocalOthers.length > 0) {
+      merged = [...merged, ...newLocalOthers];
+    }
+    return merged;
+  }
+
+  /**
+   * Fetch category_counts from remote API (no category_code filter).
+   * Also returns first-page remote slugs for local preinstall dedupe.
+   */
+  private async fetchRemoteCategoryCounts(
+    params: SkillPlazaListParams,
+    categorys: string,
+  ): Promise<{ categoryCounts: Record<string, number>; remoteSlugs: Set<string> }> {
+    const result = await this.client.getPlazaSkills(
+      { ...params, category: undefined, page: 1, pageSize: 50 },
+      categorys || undefined,
+    );
+    return {
+      categoryCounts: { ...(result.categoryCounts || {}) },
+      remoteSlugs: new Set(result.skills.map((s) => s.slug)),
+    };
+  }
+
+  private resolveLocalPreinstallCountDelta(
+    localOfficeSkills: SkillSummary[],
+    localPreinstalledOthers: SkillSummary[],
+    remoteSlugs: Set<string>,
+  ): { newLocalOffice: SkillSummary[]; newLocalOthers: SkillSummary[] } {
+    return {
+      newLocalOffice: localOfficeSkills.filter((s) => !remoteSlugs.has(s.slug)),
+      newLocalOthers: localPreinstalledOthers.filter((s) => !remoteSlugs.has(s.slug)),
+    };
+  }
+
+  private filterUncategorizedPlazaSkills(skills: SkillSummary[]): SkillSummary[] {
+    return skills.filter((s) => Boolean(s.categoryCode));
+  }
+
   // ---- Office skills from local filesystem ----
 
   private getOfficeSkillsFromLocal(q?: string): SkillSummary[] {
@@ -636,12 +739,29 @@ export class SkillPlazaService {
     const localOfficeSkills = this.getOfficeSkillsFromLocal(params.q);
     const localPreinstalledOthers = this.getPreinstalledNonOfficeSkillsFromLocal(params.q);
 
+    let labelToSlug = new Map<string, string>();
+    try {
+      const categories = await this.getCategories();
+      labelToSlug = new Map(categories.map((c) => [c.label, c.slug]));
+    } catch (err) {
+      logger.warn('[SkillPlazaService] Failed to load categories for skill normalization:', err);
+    }
+
     if (isOfficeFilter) {
-      // API doesn't know about "办公" category; return local office skills only
-      const categoryCounts: Record<string, number> = {};
-      categoryCounts[OFFICE_CATEGORY_SLUG] = localOfficeSkills.length;
-      categoryCounts['qita'] = localPreinstalledOthers.length;
-      categoryCounts[''] = localOfficeSkills.length;
+      const { categoryCounts: remoteCounts, remoteSlugs } = await this.fetchRemoteCategoryCounts(
+        params,
+        categorys,
+      );
+      const { newLocalOffice, newLocalOthers } = this.resolveLocalPreinstallCountDelta(
+        localOfficeSkills,
+        localPreinstalledOthers,
+        remoteSlugs,
+      );
+      const categoryCounts = applyLocalPreinstalledCountDelta(
+        remoteCounts,
+        newLocalOffice,
+        newLocalOthers,
+      );
 
       return {
         skills: localOfficeSkills,
@@ -653,43 +773,52 @@ export class SkillPlazaService {
       };
     }
 
-    // Normal request: fetch from API and merge local preinstalled skills
+    // List: remote API with category_code filter so cards match backend management platform.
     const result = await this.client.getPlazaSkills(params, categorys || undefined);
-    let skills = result.skills.map((s) => this.overlayLocalState(s)).map((s) => {
-      if (OFFICE_SKILL_SLUGS.has(s.slug)) {
-        return { ...s, category: OFFICE_CATEGORY_LABEL, categoryCode: OFFICE_CATEGORY_SLUG };
-      }
-      return s;
-    });
+    let skills = this.mergeLocalPreinstalledSkills(
+      this.normalizeRemotePlazaSkills(result.skills, labelToSlug),
+      localOfficeSkills,
+      localPreinstalledOthers,
+      hasCategoryFilter,
+      isQitaFilter,
+    );
 
-    // Merge local preinstalled skills
-    const existingSlugs = new Set(skills.map((s) => s.slug));
-    const newLocalOffice = localOfficeSkills.filter((s) => !existingSlugs.has(s.slug));
-    const newLocalOthers = localPreinstalledOthers.filter((s) => !existingSlugs.has(s.slug));
-
+    // Remote category_counts[''] excludes uncategorized skills; align list on "全部" view.
     if (!hasCategoryFilter) {
-      if (newLocalOffice.length > 0) {
-        skills = [...skills, ...newLocalOffice];
-      }
-      if (newLocalOthers.length > 0) {
-        skills = [...skills, ...newLocalOthers];
-      }
-    } else if (isQitaFilter) {
-      if (newLocalOthers.length > 0) {
-        skills = [...skills, ...newLocalOthers];
-      }
+      skills = this.filterUncategorizedPlazaSkills(skills);
     }
 
-    // Update category counts: only add *new* local skills (deduped against remote)
-    const newLocalCount = newLocalOffice.length + newLocalOthers.length;
-    result.categoryCounts[''] = (result.categoryCounts[''] || 0) + newLocalCount;
-    result.categoryCounts[OFFICE_CATEGORY_SLUG] = (result.categoryCounts[OFFICE_CATEGORY_SLUG] || 0) + newLocalOffice.length;
-    result.categoryCounts['qita'] = (result.categoryCounts['qita'] || 0) + newLocalOthers.length;
+    // Nav counts always reflect full category panorama (incl. local preinstall),
+    // regardless of which category is selected for the card list.
+    const { categoryCounts: remoteCounts, remoteSlugs } = await this.fetchRemoteCategoryCounts(
+      params,
+      categorys,
+    );
+    const { newLocalOffice, newLocalOthers } = this.resolveLocalPreinstallCountDelta(
+      localOfficeSkills,
+      localPreinstalledOthers,
+      remoteSlugs,
+    );
+    const categoryCounts = applyLocalPreinstalledCountDelta(
+      remoteCounts,
+      newLocalOffice,
+      newLocalOthers,
+    );
+
+    const listNewLocalOthers = isQitaFilter ? newLocalOthers : [];
+
+    let total = result.total ?? skills.length;
+    if (!hasCategoryFilter) {
+      total = categoryCounts[''] ?? skills.length;
+    } else if (isQitaFilter) {
+      total = (result.total || 0) + listNewLocalOthers.length;
+    }
 
     return {
       ...result,
       skills,
-      total: (result.total || 0) + newLocalOffice.length + newLocalOthers.length,
+      categoryCounts,
+      total,
     };
   }
 

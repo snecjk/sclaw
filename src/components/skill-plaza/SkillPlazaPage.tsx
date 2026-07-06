@@ -68,12 +68,14 @@ export function SkillPlazaPage() {
       : mySkills;
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
-  const skills = normalizedQuery
-    ? rawSkills.filter((s) =>
-        s.title.toLowerCase().includes(normalizedQuery) ||
-        s.description?.toLowerCase().includes(normalizedQuery)
-      )
-    : rawSkills;
+  const skills = activeTab === 'all'
+    ? rawSkills
+    : normalizedQuery
+      ? rawSkills.filter((s) =>
+          s.title.toLowerCase().includes(normalizedQuery) ||
+          s.description?.toLowerCase().includes(normalizedQuery)
+        )
+      : rawSkills;
   const isMine = activeTab === 'mine';
   const isGrid = viewMode === 'grid';
 

@@ -219,7 +219,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
         plazaStale: false,
         plazaSkillMetaMap: metaMap,
       };
-      if (!skipCategoryCounts && get().activeTab === 'all' && !get().activeCategory) {
+      if (!skipCategoryCounts && get().activeTab === 'all') {
         nextState.categoryCounts = result.categoryCounts;
       }
       set(nextState);
