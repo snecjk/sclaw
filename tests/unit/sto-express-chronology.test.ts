@@ -123,7 +123,15 @@ describe('STO express chronology', () => {
 
     expect(live.segments.map((s) =>
       s.kind === 'phase-text' ? `P:${s.key}:${s.text.slice(0, 15)}` : `G:${s.state}`,
-    )).toMatchInlineSnapshot();
+    )).toMatchInlineSnapshot(`
+      [
+        "G:completed",
+        "P:phase-text-opening:我来帮你分析申通快递近半年的单",
+        "P:phase-text-after-0:我需要先获取申通快递近半年的单",
+        "P:phase-text-after-1-mid-0:我需要获取申通快递的单量数据。",
+        "G:active",
+      ]
+    `);
   });
 
   it('keeps live-stream narration in thinking panel after first tool group', () => {

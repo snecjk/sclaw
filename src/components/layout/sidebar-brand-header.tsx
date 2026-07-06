@@ -18,8 +18,8 @@ import packageJson from '../../../package.json';
 
 /** 与 Sidebar nav 容器一致（展开态 `px-2`） */
 const SIDEBAR_BRAND_OUTER_X = 'px-2';
-/** 与展开态 NavLink `px-[10px]` 一致，使标题与图标左缘对齐 */
-const SIDEBAR_BRAND_INNER_X = 'px-[10px]';
+/** 品牌标题左缘比 nav 图标左移 2px（pl-2 + pr-[10px]） */
+const SIDEBAR_BRAND_INNER_X = 'pl-2 pr-[10px]';
 
 export interface SidebarBrandHeaderProps {
   /** 侧栏 layout 变体（省区 / 完整） */
@@ -93,7 +93,7 @@ export function SidebarBrandHeader({
           </div>
           {toggle}
         </div>
-        <div className={cn('mt-1.5 flex shrink-0 items-center pb-2.5', SIDEBAR_BRAND_OUTER_X)}>
+        <div className={cn('mt-1.5 flex shrink-0 items-center pb-1.5', SIDEBAR_BRAND_OUTER_X)}>
           <div className={cn('min-w-0', SIDEBAR_BRAND_INNER_X)}>
             <SidebarBrandTitle displayVersion={displayVersion} showEnvBadgeAfterVersion={false} />
           </div>
@@ -105,7 +105,7 @@ export function SidebarBrandHeader({
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center justify-between gap-2 pb-3',
+        'flex shrink-0 items-center justify-between gap-2 pb-2',
         SIDEBAR_BRAND_OUTER_X,
         isProvincial ? 'pt-[var(--sto-chrome-toggle-inset-top)]' : 'border-b border-[var(--sto-sidebar-border)] pt-3',
       )}

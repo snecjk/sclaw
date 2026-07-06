@@ -49,7 +49,16 @@ import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unrea
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
-import { SidebarRecentSessionRowTrailing } from '@/components/layout/sidebar-recent-session-row-trailing';
+import { SidebarRecentSessionRow } from '@/components/layout/sidebar-recent-session-row';
+import { SidebarRecentGroupRow } from '@/components/layout/sidebar-recent-group-row';
+import {
+  SidebarRecentGroupDialogs,
+  type SidebarRecentGroupDialogState,
+} from '@/components/layout/sidebar-recent-group-dialogs';
+import { buildSidebarRecentGroupSections, suggestNextSidebarRecentGroupName } from '@/lib/sidebar-recent-groups';
+import { useSidebarRecentGroupsStore } from '@/stores/sidebar-recent-groups';
+import { isSessionUnreadNow } from '@/stores/session-unread';
+import { toast } from 'sonner';
 import {
   SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
   SidebarTaskSubitemDeleteTrailing,
@@ -110,9 +119,11 @@ import {
   sidebarTextSectionClass,
   sidebarUnreadDotClass,
   sidebarSectionStickyShellClass,
+  sidebarSectionStickyTopGroupClass,
   sidebarSectionStickyTopTaskClass,
   sidebarSectionStickyTopRecentClass,
   sidebarScrollListClass,
+  sidebarRecentEmptyLineClass,
 } from '@/lib/surfaces';
 import { useSidebarTaskScrollCollapse } from '@/hooks/use-sidebar-task-scroll-collapse';
 
@@ -587,7 +598,7 @@ function SidebarCollapsibleSectionLabel({
   onToggle: () => void;
   label: string;
   toggleAriaLabel: string;
-  /** 分区标题与上方区块间距，默认 mt-4（导航→首分区）；次分区可收紧 */
+  /** 分区标题与上方区块间距；主导航→首滚动分区由 nav pb-2（8px）承担，此处默认不加 mt */
   className?: string;
   /** sticky 外壳 ref（任务区 scroll-collapse 检测用） */
   shellRef?: React.RefObject<HTMLDivElement | null>;
@@ -600,7 +611,6 @@ function SidebarCollapsibleSectionLabel({
       className={cn(
         sidebarSectionStickyShellClass,
         stickyTopClass ?? sidebarSectionStickyTopTaskClass,
-        'mt-4',
         className,
       )}
     >
@@ -781,6 +791,9 @@ export function Sidebar() {
     }
   }, [workflowEditorActive, setSidebarCollapsed]);
 
+  const revealTaskListAfterOpenRef = useRef(false);
+  const suppressNextTaskAutoCollapseRef = useRef(false);
+
   const closeTaskListSection = useCallback(() => {
     setTaskListSectionOpen(false);
     setTaskListShowAll(false);
@@ -790,6 +803,8 @@ export function Sidebar() {
     if (taskListSectionOpen) {
       closeTaskListSection();
     } else {
+      revealTaskListAfterOpenRef.current = true;
+      suppressNextTaskAutoCollapseRef.current = true;
       setTaskListSectionOpen(true);
     }
   }, [taskListSectionOpen, closeTaskListSection]);
@@ -800,6 +815,7 @@ export function Sidebar() {
   }, [sidebarCollapsed, sessions, stoEntriesByTask]);
 
   const handleCollapseTaskSectionFromScroll = useCallback(() => {
+    if (suppressNextTaskAutoCollapseRef.current) return;
     closeTaskListSection();
   }, [closeTaskListSection]);
 
@@ -812,6 +828,35 @@ export function Sidebar() {
     taskListSectionOpen,
     onCollapseTaskSection: handleCollapseTaskSectionFromScroll,
   });
+
+  // 用户手动展开任务：吸顶态下滚回顶部露出列表，并暂缓 scroll-collapse（不改 sticky top 栈）
+  useLayoutEffect(() => {
+    if (!revealTaskListAfterOpenRef.current || !taskListSectionOpen) return;
+    revealTaskListAfterOpenRef.current = false;
+
+    const container = scrollContainerRef.current;
+    const taskHeader = taskSectionHeaderRef.current;
+    if (!container || !taskHeader) {
+      suppressNextTaskAutoCollapseRef.current = false;
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const taskHeaderRect = taskHeader.getBoundingClientRect();
+
+    const isTaskHeaderStuck = taskHeaderRect.top <= containerRect.top + 1;
+
+    // 须在 expand 后判定：sentinel 已被任务列表顶下去，不能再用 sentinel 决定是否滚动
+    if (isTaskHeaderStuck) {
+      container.scrollTo({ top: 0 });
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        suppressNextTaskAutoCollapseRef.current = false;
+      });
+    });
+  }, [taskListSectionOpen, scrollContainerRef, taskSectionHeaderRef]);
 
   useEffect(() => {
     if (!isGatewayRunning) return;
@@ -925,7 +970,63 @@ export function Sidebar() {
 
   const [editingSessionKey, setEditingSessionKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editingGroupValue, setEditingGroupValue] = useState('');
+  const [groupDialog, setGroupDialog] = useState<SidebarRecentGroupDialogState>({ mode: null });
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const recentGroups = useSidebarRecentGroupsStore((s) => s.groups);
+  const sessionGroupByKey = useSidebarRecentGroupsStore((s) => s.sessionGroupByKey);
+  const expandedGroupIds = useSidebarRecentGroupsStore((s) => s.expandedGroupIds);
+  const createGroupAndAssignSession = useSidebarRecentGroupsStore((s) => s.createGroupAndAssignSession);
+  const assignSessionToGroup = useSidebarRecentGroupsStore((s) => s.assignSessionToGroup);
+  const ungroupSession = useSidebarRecentGroupsStore((s) => s.ungroupSession);
+  const renameGroup = useSidebarRecentGroupsStore((s) => s.renameGroup);
+  const dissolveGroup = useSidebarRecentGroupsStore((s) => s.dissolveGroup);
+  const toggleRecentGroup = useSidebarRecentGroupsStore((s) => s.toggleGroup);
+  const expandRecentGroup = useSidebarRecentGroupsStore((s) => s.expandGroup);
+  const pruneMissingRecentGroupSessions = useSidebarRecentGroupsStore((s) => s.pruneMissingSessions);
+
+  const openCreateRecentGroupDialog = useCallback(
+    (sessionKey: string) => {
+      setGroupDialog({
+        mode: 'create',
+        sessionKey,
+        defaultName: suggestNextSidebarRecentGroupName(
+          recentGroups.map((g) => g.name),
+          t('common:sidebar.defaultGroupName'),
+        ),
+      });
+    },
+    [recentGroups, t],
+  );
+
+  const startRenameRecentGroup = useCallback((groupId: string, name: string) => {
+    setEditingSessionKey(null);
+    setEditingGroupId(groupId);
+    setEditingGroupValue(name);
+  }, []);
+
+  const commitRenameRecentGroup = useCallback(
+    (groupId: string, originalName: string) => {
+      const trimmed = editingGroupValue.trim();
+      setEditingGroupId(null);
+      setEditingGroupValue('');
+
+      if (!trimmed || trimmed === originalName) return;
+
+      if (renameGroup(groupId, trimmed)) {
+        toast.success(t('common:sidebar.renameGroupSucceeded'));
+      }
+    },
+    [editingGroupValue, renameGroup, t],
+  );
+
+  const cancelRenameRecentGroup = useCallback(() => {
+    setEditingGroupId(null);
+    setEditingGroupValue('');
+  }, []);
+
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
 
   useEffect(() => {
@@ -991,6 +1092,25 @@ export function Sidebar() {
     () => sortSessionsByRecentActivity(normalSessions, sessionLastActivity),
     [normalSessions, sessionLastActivity],
   );
+
+  const { groupedSections, ungroupedSessions } = buildSidebarRecentGroupSections({
+    groups: recentGroups,
+    sessionsSortedByRecent: recentSessionsSorted,
+    sessionGroupByKey,
+  });
+
+  useEffect(() => {
+    if (sidebarCollapsed) return;
+    pruneMissingRecentGroupSessions(recentSessionsSorted.map((s) => s.key));
+  }, [sidebarCollapsed, recentSessionsSorted, pruneMissingRecentGroupSessions]);
+
+  useEffect(() => {
+    if (sidebarCollapsed) return;
+    if (!currentSessionKey || currentSessionKey === DEFAULT_SESSION_KEY) return;
+    const groupId = sessionGroupByKey[currentSessionKey];
+    if (!groupId) return;
+    expandRecentGroup(groupId);
+  }, [sidebarCollapsed, currentSessionKey, sessionGroupByKey, expandRecentGroup]);
 
   // Legacy 日期分桶：折叠轨与潜在回滚仍可能读取 bucket 数据
   for (const session of recentSessionsSorted) {
@@ -1220,6 +1340,9 @@ export function Sidebar() {
     if (wasCurrentSession) {
       navigateToMainChatHome(navigate, location.pathname);
     }
+    if (groupKey === null) {
+      useSidebarRecentGroupsStore.getState().removeSessionAssignment(key);
+    }
     return true;
   }, [
     sessionLastActivity,
@@ -1400,6 +1523,8 @@ export function Sidebar() {
 
   useLayoutEffect(() => {
     if (sidebarCollapsed || !taskListSectionOpen) return;
+    // 手动展开任务时由 reveal effect 滚回顶部，避免 scrollIntoView 把视口又拉下去触发 auto-collapse
+    if (suppressNextTaskAutoCollapseRef.current) return;
 
     let focusSessionKey: string | null = null;
     const activatingEntries = Object.entries(activatingScheduledSessionAt);
@@ -1535,7 +1660,7 @@ export function Sidebar() {
       <nav
         className={cn(
           'flex shrink-0 flex-col gap-0.5 overflow-x-hidden pb-2',
-          sidebarCollapsed ? 'px-0 pt-2' : 'px-2 pt-2',
+          sidebarCollapsed ? 'px-0 pt-2' : 'px-2 pt-0',
         )}
       >
         {/* 固定区：新对话、定时任务、技能广场、工作区等 */}
@@ -1646,6 +1771,7 @@ export function Sidebar() {
         {sidebarVis.workspace ? (
           !sidebarCollapsed ? (
             <SidebarCollapsibleSectionLabel
+              className="mt-4"
               open={workspaceSectionOpen}
               onToggle={() => setWorkspaceSectionOpen((o) => !o)}
               label={t('common:sidebar.workspace')}
@@ -1674,7 +1800,7 @@ export function Sidebar() {
       <div
         ref={scrollContainerRef}
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden',
+          'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden',
           sidebarCollapsed ? 'px-0' : 'px-2',
         )}
       >
@@ -1729,10 +1855,105 @@ export function Sidebar() {
         {!sidebarCollapsed ? (
           <div
             ref={recentSectionSentinelRef}
-            className="pointer-events-none h-px w-full shrink-0 opacity-0"
+            className="pointer-events-none -mb-1 h-0 w-full shrink-0 overflow-hidden opacity-0"
             aria-hidden
           />
         ) : null}
+
+        {!sidebarCollapsed && groupedSections.length > 0
+          ? groupedSections.map((section) => {
+              const isGroupOpen = expandedGroupIds[section.group.id] === true;
+              const hasGroupUnread =
+                !isGroupOpen && section.sessions.some((s) => isSessionUnreadNow(s.key));
+              return (
+                // section 边界：分组标题只在本组内容滚动期间吸顶；z 高于「最近」接力，滚出 section 后由最近接管同 top 层
+                <section key={section.group.id} className="flex flex-col gap-1">
+                  <div
+                    className={cn(
+                      sidebarSectionStickyShellClass,
+                      sidebarSectionStickyTopGroupClass,
+                    )}
+                  >
+                    <SidebarRecentGroupRow
+                      group={section.group}
+                      isOpen={isGroupOpen}
+                      hasUnread={hasGroupUnread}
+                      onToggle={() => toggleRecentGroup(section.group.id)}
+                      onRename={() => startRenameRecentGroup(section.group.id, section.group.name)}
+                      onDissolve={() =>
+                        setGroupDialog({ mode: 'dissolve', groupId: section.group.id })
+                      }
+                      isEditing={editingGroupId === section.group.id}
+                      editingValue={editingGroupValue}
+                      onEditingValueChange={setEditingGroupValue}
+                      onCommitRename={() =>
+                        commitRenameRecentGroup(section.group.id, section.group.name)
+                      }
+                      onCancelRename={cancelRenameRecentGroup}
+                    />
+                  </div>
+                  {isGroupOpen ? (
+                    <div className={cn('space-y-1', sidebarScrollListClass)}>
+                      {section.sessions.length > 0 ? (
+                        section.sessions.map((s) => {
+                          const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
+                          const isRecentSessionActive =
+                            isOnHome &&
+                            currentSessionKey === s.key &&
+                            currentSessionKey !== DEFAULT_SESSION_KEY;
+                          return (
+                            <SidebarRecentSessionRow
+                              key={s.key}
+                              session={s}
+                              label={sessionLabel}
+                              isActive={isRecentSessionActive}
+                              isEditing={editingSessionKey === s.key}
+                              editingValue={editingValue}
+                              groups={recentGroups}
+                              currentGroupId={sessionGroupByKey[s.key] ?? null}
+                              onOpen={() => {
+                                navigateToMainChatHome(navigate, location.pathname, () =>
+                                  switchSession(s.key),
+                                );
+                              }}
+                              onStartRename={() => {
+                                setEditingSessionKey(s.key);
+                                setEditingValue(sessionLabel);
+                              }}
+                              onEditingValueChange={setEditingValue}
+                              onCommitRename={() => {
+                                renameSession(s.key, editingValue);
+                                setEditingSessionKey(null);
+                              }}
+                              onCancelRename={() => setEditingSessionKey(null)}
+                              onDelete={() => {
+                                requestSessionDelete({ key: s.key, label: sessionLabel });
+                              }}
+                              onCreateGroup={() => {
+                                openCreateRecentGroupDialog(s.key);
+                              }}
+                              onAssignGroup={(groupId) => {
+                                assignSessionToGroup(s.key, groupId);
+                                toast.success(t('common:sidebar.groupMoved'));
+                              }}
+                              onUngroup={() => {
+                                ungroupSession(s.key);
+                                toast.success(t('common:sidebar.groupUngrouped'));
+                              }}
+                            />
+                          );
+                        })
+                      ) : (
+                        <p className={sidebarRecentEmptyLineClass}>
+                          {t('common:sidebar.emptyGroupSessions')}
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })
+          : null}
 
         {!sidebarCollapsed ? (
           <SidebarCollapsibleSectionLabel
@@ -1741,7 +1962,6 @@ export function Sidebar() {
             onToggle={() => setRecentOpen((o) => !o)}
             label={t('common:sidebar.recent')}
             toggleAriaLabel={t('common:sidebar.toggleRecentSection')}
-            className="mt-2"
           />
         ) : null}
 
@@ -1797,13 +2017,12 @@ export function Sidebar() {
             </div>
           ) : null}
           {!sidebarCollapsed &&
-            (recentSessionsSorted.length === 0 ? (
+            (recentSessionsSorted.length === 0 && recentGroups.length === 0 ? (
               <p className={cn('px-2 pt-2 text-center text-sm leading-5 opacity-80', sidebarTextSectionClass)}>
                 {t('common:sidebar.emptyChatHistory')}
               </p>
             ) : recentOpen ? (
               <>
-                {/* Legacy 按日期分桶 UI — 保留供回滚，默认关闭 */}
                 {USE_LEGACY_SESSION_DATE_BUCKETS
                   ? sessionBuckets.map((bucket) =>
                       bucket.sessions.length > 0 ? (
@@ -1828,78 +2047,47 @@ export function Sidebar() {
                           {bucketOpen[bucket.key] ? (
                             <>
                               {bucket.sessions.slice(0, getBucketVisibleCount(bucket.key)).map((s) => {
-                                const isEditing = editingSessionKey === s.key;
                                 const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
                                 const isRecentSessionActive =
                                   isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
                                 return (
-                                  <div key={s.key} className="group relative flex w-full min-w-0 items-center">
-                                    {isEditing ? (
-                                      <input
-                                        type="text"
-                                        autoFocus
-                                        value={editingValue}
-                                        onChange={(e) => setEditingValue(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            renameSession(s.key, editingValue);
-                                            setEditingSessionKey(null);
-                                          } else if (e.key === 'Escape') {
-                                            setEditingSessionKey(null);
-                                          }
-                                        }}
-                                        onBlur={() => {
-                                          renameSession(s.key, editingValue);
-                                          setEditingSessionKey(null);
-                                        }}
-                                        className={cn(
-                                          'w-full rounded-[8px] px-[10px] py-[6px] pr-16 text-left text-sm leading-5 transition-colors outline-none',
-                                          'bg-white border border-[var(--sto-brand-6)] text-foreground dark:bg-card',
-                                        )}
-                                      />
-                                    ) : (
-                                      <>
-                                        <div
-                                          className={cn(
-                                            'relative flex h-9 w-full items-center rounded-lg transition-colors',
-                                            isRecentSessionActive
-                                              ? cn(
-                                                  sidebarSubitemTextActiveClass,
-                                                  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
-                                                )
-                                              : sidebarSubitemTextIdleClass,
-                                          )}
-                                        >
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
-                                            }}
-                                            title={sessionLabel}
-                                            className="flex h-9 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
-                                          >
-                                            <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>
-                                              {sessionLabel}
-                                            </span>
-                                          </button>
-                                          <SidebarRecentSessionRowTrailing
-                                            sessionKey={s.key}
-                                            isActive={isRecentSessionActive}
-                                            onEdit={() => {
-                                              setEditingSessionKey(s.key);
-                                              setEditingValue(sessionLabel);
-                                            }}
-                                            onDelete={() => {
-                                              requestSessionDelete({
-                                                key: s.key,
-                                                label: sessionLabel,
-                                              });
-                                            }}
-                                          />
-                                        </div>
-                                      </>
-                                    )}
-                                  </div>
+                                  <SidebarRecentSessionRow
+                                    key={s.key}
+                                    session={s}
+                                    label={sessionLabel}
+                                    isActive={isRecentSessionActive}
+                                    isEditing={editingSessionKey === s.key}
+                                    editingValue={editingValue}
+                                    groups={recentGroups}
+                                    currentGroupId={sessionGroupByKey[s.key] ?? null}
+                                    onOpen={() => {
+                                      navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
+                                    }}
+                                    onStartRename={() => {
+                                      setEditingSessionKey(s.key);
+                                      setEditingValue(sessionLabel);
+                                    }}
+                                    onEditingValueChange={setEditingValue}
+                                    onCommitRename={() => {
+                                      renameSession(s.key, editingValue);
+                                      setEditingSessionKey(null);
+                                    }}
+                                    onCancelRename={() => setEditingSessionKey(null)}
+                                    onDelete={() => {
+                                      requestSessionDelete({ key: s.key, label: sessionLabel });
+                                    }}
+                                    onCreateGroup={() => {
+                                      openCreateRecentGroupDialog(s.key);
+                                    }}
+                                    onAssignGroup={(groupId) => {
+                                      assignSessionToGroup(s.key, groupId);
+                                      toast.success(t('common:sidebar.groupMoved'));
+                                    }}
+                                    onUngroup={() => {
+                                      ungroupSession(s.key);
+                                      toast.success(t('common:sidebar.groupUngrouped'));
+                                    }}
+                                  />
                                 );
                               })}
                               {bucket.sessions.length > getBucketVisibleCount(bucket.key) ? (
@@ -1920,80 +2108,57 @@ export function Sidebar() {
                       ) : null,
                     )
                   : null}
-                {recentSessionsSorted.slice(0, getRecentVisibleCount()).map((s) => {
-                  const isEditing = editingSessionKey === s.key;
-                  const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
-                  const isRecentSessionActive =
-                    isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
-                  return (
-                    <div key={s.key} className="relative flex w-full min-w-0 items-center">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          autoFocus
-                          value={editingValue}
-                          onChange={(e) => setEditingValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              renameSession(s.key, editingValue);
-                              setEditingSessionKey(null);
-                            } else if (e.key === 'Escape') {
-                              setEditingSessionKey(null);
-                            }
-                          }}
-                          onBlur={() => {
-                            renameSession(s.key, editingValue);
-                            setEditingSessionKey(null);
-                          }}
-                          className={cn(
-                            'w-full rounded-[8px] px-[10px] py-[6px] pr-16 text-left text-sm leading-5 transition-colors outline-none',
-                            'bg-white border border-[var(--sto-brand-6)] text-foreground dark:bg-card',
-                          )}
-                        />
-                      ) : (
-                        <div
-                          className={cn(
-                            'group relative flex h-9 w-full items-center rounded-lg transition-colors',
-                            isRecentSessionActive
-                              ? cn(
-                                  sidebarSubitemTextActiveClass,
-                                  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
-                                )
-                              : sidebarSubitemTextIdleClass,
-                          )}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
-                            }}
-                            title={sessionLabel}
-                            className="flex h-9 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
-                          >
-                            <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>
-                              {sessionLabel}
-                            </span>
-                          </button>
-                          <SidebarRecentSessionRowTrailing
-                            sessionKey={s.key}
-                            isActive={isRecentSessionActive}
-                            onEdit={() => {
-                              setEditingSessionKey(s.key);
-                              setEditingValue(sessionLabel);
-                            }}
-                            onDelete={() => {
-                              requestSessionDelete({
-                                key: s.key,
-                                label: sessionLabel,
-                              });
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {recentSessionsSorted.length > getRecentVisibleCount() ? (
+                {ungroupedSessions.length > 0 ? (
+                  ungroupedSessions.slice(0, getRecentVisibleCount()).map((s) => {
+                    const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
+                    const isRecentSessionActive =
+                      isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
+                    return (
+                      <SidebarRecentSessionRow
+                        key={s.key}
+                        session={s}
+                        label={sessionLabel}
+                        isActive={isRecentSessionActive}
+                        isEditing={editingSessionKey === s.key}
+                        editingValue={editingValue}
+                        groups={recentGroups}
+                        currentGroupId={null}
+                        onOpen={() => {
+                          navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
+                        }}
+                        onStartRename={() => {
+                          setEditingSessionKey(s.key);
+                          setEditingValue(sessionLabel);
+                        }}
+                        onEditingValueChange={setEditingValue}
+                        onCommitRename={() => {
+                          renameSession(s.key, editingValue);
+                          setEditingSessionKey(null);
+                        }}
+                        onCancelRename={() => setEditingSessionKey(null)}
+                        onDelete={() => {
+                          requestSessionDelete({ key: s.key, label: sessionLabel });
+                        }}
+                        onCreateGroup={() => {
+                          openCreateRecentGroupDialog(s.key);
+                        }}
+                        onAssignGroup={(groupId) => {
+                          assignSessionToGroup(s.key, groupId);
+                          toast.success(t('common:sidebar.groupMoved'));
+                        }}
+                        onUngroup={() => {
+                          ungroupSession(s.key);
+                          toast.success(t('common:sidebar.groupUngrouped'));
+                        }}
+                      />
+                    );
+                  })
+                ) : (
+                  <p className={sidebarRecentEmptyLineClass}>
+                    {t('common:sidebar.emptyUngroupedSessions')}
+                  </p>
+                )}
+                {ungroupedSessions.length > getRecentVisibleCount() ? (
                   <button
                     type="button"
                     onClick={showMoreRecentSessions}
@@ -2001,7 +2166,7 @@ export function Sidebar() {
                   >
                     {t('common:actions.showMore', {
                       defaultValue: '显示更多（{{count}}）',
-                      count: recentSessionsSorted.length - getRecentVisibleCount(),
+                      count: ungroupedSessions.length - getRecentVisibleCount(),
                     })}
                   </button>
                 ) : null}
@@ -2013,7 +2178,12 @@ export function Sidebar() {
       <SidebarUpdateNotice collapsed={sidebarCollapsed} />
 
       {authUser ? (
-        <div className="shrink-0 bg-[var(--sto-sidebar-bg)] p-2">
+        <div
+          className={cn(
+            'shrink-0 bg-[var(--sto-sidebar-bg)]',
+            sidebarCollapsed ? 'p-2' : 'px-2 py-1',
+          )}
+        >
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -2023,7 +2193,7 @@ export function Sidebar() {
                   sidebarVis.userProfileCard
                     ? sidebarCollapsed
                       ? 'flex-col items-center justify-center gap-0 p-2'
-                      : 'items-center justify-between gap-3 px-2 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.04]'
+                      : 'items-center justify-between gap-3 px-2 py-2 hover:bg-[var(--sto-sidebar-row-hover-bg)] dark:hover:bg-white/[0.04]'
                     : 'items-center justify-center rounded-[8px] p-2 hover:bg-black/[0.02] dark:hover:bg-muted/40',
                 )}
                 title={
@@ -2181,6 +2351,21 @@ export function Sidebar() {
       ) : null}
         </>
       ) : null}
+
+      <SidebarRecentGroupDialogs
+        dialog={groupDialog}
+        onClose={() => setGroupDialog({ mode: null })}
+        onCreateConfirm={(name, sessionKey) => {
+          const id = createGroupAndAssignSession(name, sessionKey);
+          if (id) {
+            toast.success(t('common:sidebar.groupAdded'));
+          }
+        }}
+        onDissolveConfirm={(groupId) => {
+          dissolveGroup(groupId);
+          toast.success(t('common:sidebar.groupDissolved'));
+        }}
+      />
 
       <ConfirmDialog
         open={showLogoutConfirm}
