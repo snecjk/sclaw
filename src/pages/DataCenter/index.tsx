@@ -1,5 +1,5 @@
 /**
- * /data-center — 侧栏「数据中心」，页内：我的文件 → 线上文件 → 客户关系卡片。
+ * /data-center — 侧栏「数据中心」，页内：数据中心 → 线上数据 → 客户关系卡片。
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -81,6 +81,42 @@ function CustomerRelationsCard({ onOpen }: { onOpen: () => void }) {
   );
 }
 
+const DATA_CENTER_TABS = [
+  { key: 'online', labelKey: 'dataCenterPage.onlineTab' as const, disabled: false },
+  { key: 'local', labelKey: 'dataCenterPage.localTab' as const, disabled: true },
+  { key: 'access', labelKey: 'dataCenterPage.dataAccessTab' as const, disabled: true },
+];
+
+function DataCenterTabs() {
+  const { t } = useTranslation('common');
+
+  return (
+    <div
+      className="mt-6 flex shrink-0 items-center gap-5 border-b border-[#E5E6EB] pb-3"
+      role="tablist"
+      aria-label={t('dataCenterPage.tabAria')}
+    >
+      {DATA_CENTER_TABS.map((tab) =>
+        tab.disabled ? (
+          <span
+            key={tab.key}
+            role="tab"
+            aria-selected={false}
+            aria-disabled="true"
+            className={cn(workflowListTabClass(false), 'cursor-not-allowed opacity-45')}
+          >
+            {t(tab.labelKey)}
+          </span>
+        ) : (
+          <span key={tab.key} role="tab" aria-selected className={workflowListTabClass(true)}>
+            {t(tab.labelKey)}
+          </span>
+        ),
+      )}
+    </div>
+  );
+}
+
 export function DataCenter() {
   const { t } = useTranslation('common');
   const navigate = useNavigate();
@@ -129,15 +165,7 @@ export function DataCenter() {
         </p>
       </header>
 
-      <div
-        className="mt-6 shrink-0 border-b border-[#E5E6EB] pb-3"
-        role="tablist"
-        aria-label={t('dataCenterPage.tabAria')}
-      >
-        <span className={workflowListTabClass(true)} role="tab" aria-selected>
-          {t('dataCenterPage.onlineTab')}
-        </span>
-      </div>
+      <DataCenterTabs />
 
       <div className="mt-6 flex min-h-0 flex-1 flex-col">
         {opened ? (

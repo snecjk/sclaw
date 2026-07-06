@@ -45,10 +45,12 @@
         "compactAccountMenu": "Account and settings"
     },
     "dataCenterPage": {
-        "title": "My Files",
+        "title": "Data Center",
         "subtitle": "Manage system data tables, uploaded files, and knowledge bases for AI and business workflows.",
-        "onlineTab": "Online files",
-        "tabAria": "File type",
+        "onlineTab": "Online data",
+        "localTab": "Local files",
+        "dataAccessTab": "Data access",
+        "tabAria": "Data type",
         "customerRelationsTitle": "Customer relations",
         "customerRelationsDesc": "Core CRM materials including customer profiles, communication records, requirement tracking, and maintenance strategies.",
         "tokenMissing": "Login token unavailable. Please sign in again.",
