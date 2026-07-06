@@ -115,6 +115,8 @@ export interface ToolStatus {
   toolCallId?: string;
   name: string;
   status: 'running' | 'completed' | 'error';
+  /** Anthropic tool_use / OpenAI arguments；可被后续事件补全 */
+  input?: unknown;
   durationMs?: number;
   summary?: string;
   updatedAt: number;

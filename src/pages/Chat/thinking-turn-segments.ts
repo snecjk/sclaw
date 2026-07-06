@@ -15,10 +15,22 @@ import {
   relocateInterruptPhaseBetweenAdjacentToolGroups,
 } from '@/pages/Chat/thinking/adjacent-group-phase';
 import {
+  mergeToolInput,
+  thinkingTimelineToolIdentityKey,
+} from '@/lib/tool-input-merge';
+import {
   isStableToolId,
   resolveStreamingToolId,
+  shouldAppendStreamingExtraTool,
   streamingToolMatchesTimelineTool,
 } from '@/lib/thinking-timeline-active';
+import {
+  applyTurnPartsToParsedTurn,
+} from '@/pages/Chat/thinking/turn-part-adapter';
+import {
+  appendInterruptedPart,
+  reduceTurnParts,
+} from '@/pages/Chat/thinking/turn-part-reducer';
 import {
   dedupePhaseTextsAgainstFinalReply,
   dedupePhaseTextsEchoingUserQuery,
@@ -31,6 +43,7 @@ import {
   reclaimLeadingDeliverablePhaseText,
   shouldPromoteTextToFinalReply,
 } from '@/pages/Chat/thinking/classify-text';
+import { applyTextOwnershipToParsedTurn } from '@/pages/Chat/thinking/text-ownership';
 import {
   type EngineProfile,
   resolveEngineProfile,
@@ -54,6 +67,7 @@ import {
 import {
   isChronologicallyOrderedLayout,
   normalizeDoneThinkingSegments,
+  shouldSkipDoneSegmentNormalize,
 } from '@/pages/Chat/thinking/done-segment-normalize';
 import {
   OPENING_PHASE_TEXT_KEY,
@@ -80,8 +94,7 @@ type ContentBlock = {
 };
 
 function thinkingTimelineToolKey(tool: { id: string; name: string; input: unknown }): string {
-  if (isStableToolId(tool.id, tool.name)) return tool.id;
-  return `${tool.name}::${JSON.stringify(tool.input ?? null)}`;
+  return thinkingTimelineToolIdentityKey({ id: tool.id, name: tool.name });
 }
 
 function collectTimelineTools(
@@ -1123,6 +1136,25 @@ function mergeRawTurnEvents(
 
   for (const event of events) {
     if (event.type === 'tool') {
+      const identityKey = thinkingTimelineToolIdentityKey(event);
+      let mergedExisting = false;
+      for (let i = merged.length - 1; i >= 0; i -= 1) {
+        const candidate = merged[i];
+        if (candidate?.type !== 'tool') continue;
+        const sameIdentity =
+          thinkingTimelineToolIdentityKey(candidate) === identityKey
+          || (isStableToolId(event.id, event.name) && candidate.id === event.id);
+        if (!sameIdentity) continue;
+        merged[i] = {
+          ...candidate,
+          input: mergeToolInput(candidate.input, event.input),
+        };
+        registerToolEventKeys(merged[i], seenToolKeys, seenStableIds);
+        mergedExisting = true;
+        break;
+      }
+      if (mergedExisting) continue;
+
       if (isDuplicateToolEvent(event, seenToolKeys, seenStableIds)) {
         continue;
       }
@@ -1259,6 +1291,30 @@ function mergeEventsFromPickedMessages(picked: RawMessage[]): RawTurnEvent[] {
   return merged;
 }
 
+/** Phase 2/4：供 TurnPart reducer 使用的 merged events（与 parse 同源） */
+export function buildMergedRawTurnEvents(
+  messages: RawMessage[],
+  options: Pick<ParseThinkingTurnLayoutOptions, 'isLiveStream' | 'chronologicalEntries'>,
+): RawTurnEvent[] {
+  const picked = pickTimelineSourceMessages(messages);
+  if (picked.length === 0) return [];
+
+  const pickedFromMessages = mergeEventsFromPickedMessages(picked);
+  // live / history 共用 chronological 合并，避免流式期间短 text 堆叠、切会话后才分段
+  let mergedEvents =
+    (options.chronologicalEntries?.length ?? 0) > 0
+      ? mergeEventsFromChronologicalTurn(picked, options.chronologicalEntries!)
+      : pickedFromMessages;
+  if (
+    (options.chronologicalEntries?.length ?? 0) > 0
+    && mergedEvents.length === 0
+    && pickedFromMessages.length > 0
+  ) {
+    mergedEvents = pickedFromMessages;
+  }
+  return mergedEvents;
+}
+
 function findLastThinkingOnlyToolGroupIndex(segments: ThinkingTurnSegment[]): number {
   for (let index = segments.length - 1; index >= 0; index -= 1) {
     const segment = segments[index];
@@ -1355,13 +1411,12 @@ export function parseThinkingTurnLayout(
   // 必须合并全部 picked snapshot：最后一条常为纯 text，只读它会丢光 thinking/tool
   const pickedFromMessages = mergeEventsFromPickedMessages(picked);
   let mergedEvents =
-    !options.isLiveStream && (options.chronologicalEntries?.length ?? 0) > 0
+    (options.chronologicalEntries?.length ?? 0) > 0
       ? mergeEventsFromChronologicalTurn(picked, options.chronologicalEntries!)
       : pickedFromMessages;
   // chronological 与 picked 引用不一致时可能漏事件；回退 picked 合并保批次间旁白
   if (
-    !options.isLiveStream
-    && (options.chronologicalEntries?.length ?? 0) > 0
+    (options.chronologicalEntries?.length ?? 0) > 0
     && mergedEvents.length === 0
     && pickedFromMessages.length > 0
   ) {
@@ -1631,6 +1686,22 @@ export function parseThinkingTurnLayout(
       options.precedingUserText,
       true,
     );
+    // live + history 共用 normalize：mergedEvents 已含 text↔tool 交错时才实时拆段
+    const hasInterleavedEventSources =
+      mergedEvents.some((event) => event.type === 'tool')
+      && mergedEvents.some((event) => event.type === 'text');
+    if (
+      hasInterleavedEventSources
+      && !shouldSkipDoneSegmentNormalize(segments, mergedEvents, lastTextEventIndex)
+      && !isChronologicallyOrderedLayout(segments)
+    ) {
+      normalizeDoneThinkingSegments(
+        segments,
+        mergedEvents,
+        lastTextEventIndex,
+        options.precedingUserText,
+      );
+    }
   }
 
   // live 顺序由事件交错 + batch flush 决定；完成态才做堆叠旁白的一次性整理
@@ -1672,7 +1743,20 @@ export function parseThinkingTurnLayout(
   relocateInterruptPhaseBetweenAdjacentToolGroups(segments);
   mergeAdjacentOrphanedThinkingAndToolGroups(segments);
 
-  return { segments, finalReplyText };
+  const layout: ParsedThinkingTurn = { segments, finalReplyText };
+  let parts = reduceTurnParts(mergedEvents, {
+    isLiveStream: options.isLiveStream,
+    streamingTools: options.streamingTools,
+  });
+  if (options.wasInterrupted) {
+    parts = appendInterruptedPart(parts);
+  }
+  return applyTextOwnershipToParsedTurn(
+    applyTurnPartsToParsedTurn(layout, parts, {
+      wasInterrupted: options.wasInterrupted,
+    }),
+    { isLiveStream: options.isLiveStream },
+  );
 }
 
 function countToolsInSegments(segments: ThinkingTurnSegment[]): number {
@@ -1703,6 +1787,8 @@ function ensureClaudeDoneSegmentsIncludeStreamingTools(
 
   let pendingGroup: ThinkingTimelineItem[] = [];
   for (const tool of streamingTools) {
+    if (!shouldAppendStreamingExtraTool(tool)) continue;
+
     const id = resolveStreamingToolId(tool);
     const candidate = { id, name: tool.name, input: tool.input ?? null };
     const key = thinkingTimelineToolKey(candidate);

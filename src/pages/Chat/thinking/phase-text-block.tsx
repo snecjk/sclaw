@@ -1,18 +1,17 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import { ChatProcessLoadingInlineIndicator } from '@/components/chat/chat-process-loading-indicator';
 
 /**
  * PhaseTextBlock - 阶段短 text（摘要之间的正文段落，不是最终交付正文）
  *
  * 使用位置：ThinkingTurnProcess、TimelineBody（narration 折进 timeline 时）
+ * loading 文案由父级 TurnProcessStatus 统一渲染，本组件不展示过程 loading。
  */
 export interface PhaseTextBlockProps {
   /** 阶段叙述正文（用户可见，正常 foreground 色） */
   text: string;
-  /** 流式中最后一段 phase-text 时为 true */
+  /** 流式中最后一段 phase-text 时为 true（仅影响排版，不渲染 loading） */
   isStreaming?: boolean;
   className?: string;
 }
@@ -22,8 +21,6 @@ export function PhaseTextBlock({
   isStreaming = false,
   className,
 }: PhaseTextBlockProps) {
-  const { t } = useTranslation('chat');
-
   return (
     <div
       className={cn(
@@ -38,12 +35,6 @@ export function PhaseTextBlock({
       ) : (
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
       )}
-      {isStreaming ? (
-        <ChatProcessLoadingInlineIndicator
-          label={t('streaming.processingTitle')}
-          className="mt-3"
-        />
-      ) : null}
     </div>
   );
 }

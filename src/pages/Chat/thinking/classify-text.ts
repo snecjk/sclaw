@@ -1,4 +1,8 @@
 import type { RawTurnEvent, ThinkingTurnSegment } from '@/pages/Chat/thinking/types';
+import {
+  classifyTextOverlap,
+  normalizeDisplayTextForOwnership,
+} from '@/pages/Chat/thinking/text-ownership';
 
 function groupHasTool(
   group: { type: string }[],
@@ -44,9 +48,19 @@ export function isLikelyDeliverableReply(text: string): boolean {
   return false;
 }
 
+/** OpenClaw / Claude 英文过程旁白（工具调用前叙述），应留在思考区 */
+const ENGLISH_PLANNING_LEAD =
+  /^(Now let me|Let me|I will|I'll|Next,? I|I need to|Now I'll|I'm going to|I am going to|Okay,? let me|Sure,? let me|First,? I|I'll go ahead and)\b/i;
+
 /** 长段规划旁白（PPT/技能调用前叙述），应留在思考区而非正文 / 工作流 preamble 卡 */
 export function isLikelyPlanningNarration(text: string): boolean {
   const trimmed = text.trim();
+  if (ENGLISH_PLANNING_LEAD.test(trimmed)) {
+    if (trimmed.length < 220) return true;
+    if (/\b(search|query|check|look up|find|call|use|tool|skill|workflow|fetch|retrieve)\b/i.test(trimmed)) {
+      return true;
+    }
+  }
   // 短句也可能是批次间规划（搜模板失败 → 换技能），不要落成正文或 preamble 气泡
   if (/^(我来|让我|我将|现在我来|好的|看起来)/.test(trimmed)) {
     if (/工作流模板|技能|PPT|pptx/i.test(trimmed)) return true;
@@ -167,13 +181,24 @@ export function dedupePhaseTextsAgainstFinalReply(
       segments.splice(i, 1);
       continue;
     }
-    // 批次间短旁白（图二）永不因与正文部分重叠而删除
-    if (segment.key.startsWith('phase-text-after-')) continue;
-    if (phaseTrimmed === finalTrimmed) {
+    // 批次间短旁白也参与去重；与 final 同句开头/前缀重复则移除
+    const overlap = classifyTextOverlap(phaseTrimmed, finalTrimmed);
+    if (overlap === 'same' || overlap === 'process_prefix_of_final') {
       segments.splice(i, 1);
       continue;
     }
-    if (finalTrimmed.includes(phaseTrimmed) && phaseTrimmed.length >= 80) {
+    // 英文/中文规划旁白误入正文时，思考区不再重复展示
+    if (isLikelyPlanningNarration(phaseTrimmed) && finalTrimmed.includes(phaseTrimmed)) {
+      segments.splice(i, 1);
+      continue;
+    }
+    if (
+      finalTrimmed.includes(phaseTrimmed)
+      && phaseTrimmed.length >= 80
+      && normalizeDisplayTextForOwnership(phaseTrimmed) === normalizeDisplayTextForOwnership(
+        finalTrimmed.slice(0, phaseTrimmed.length),
+      )
+    ) {
       segments.splice(i, 1);
     }
   }
@@ -192,6 +217,7 @@ export function finalizeReplyText(
     && !turnHasToolGroups(segments)
     && turnHasThinkingContent(segments, [])
     && isLikelyDeliverableReply(segments[0].text)
+    && !isLikelyPlanningNarration(segments[0].text)
   ) {
     finalReplyText = mergeFinalReplyCandidate(finalReplyText, segments[0].text);
     segments.shift();
@@ -200,7 +226,9 @@ export function finalizeReplyText(
   if (segments.length > 0) {
     const last = segments[segments.length - 1];
     if (last?.kind === 'phase-text') {
-      const promoteTrailingPhase = isLikelyDeliverableReply(last.text);
+      const promoteTrailingPhase =
+        isLikelyDeliverableReply(last.text)
+        && !isLikelyPlanningNarration(last.text);
       if (promoteTrailingPhase) {
         finalReplyText = mergeFinalReplyCandidate(finalReplyText, last.text);
         segments.pop();

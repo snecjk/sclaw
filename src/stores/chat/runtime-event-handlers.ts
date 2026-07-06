@@ -8,7 +8,6 @@ import {
   getMessageText,
   getToolCallFilePath,
   hasErrorRecoveryTimer,
-  hasNonToolAssistantContent,
   isSessionLockErrorMessage,
   isToolOnlyMessage,
   isToolResultRole,
@@ -16,6 +15,7 @@ import {
   setErrorRecoveryTimer,
   upsertToolStatuses,
 } from './helpers';
+import { resolveAssistantFinalTerminalState } from './run-completion';
 import type { AttachedFileMeta, RawMessage } from './types';
 import type { ChatGet, ChatSet } from './store-api';
 import { dedupeRedundantUserMessages } from './user-message-merge';
@@ -129,11 +129,18 @@ export function handleRuntimeEventState(
               break;
             }
             const toolOnly = isToolOnlyMessage(finalMsg);
-            const hasOutput = hasNonToolAssistantContent(finalMsg);
+            const session = get().sessions.find((item) => item.key === get().currentSessionKey);
+            const currentEngineType = session?.engineType;
+            const { isTerminalOutput } = resolveAssistantFinalTerminalState(
+              currentEngineType,
+              get().sending,
+              event.phase,
+              finalMsg,
+            );
             const msgId = finalMsg.id || (toolOnly ? `run-${runId}-tool-${Date.now()}` : `run-${runId}`);
             set((s) => {
               const nextTools = updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools;
-              const streamingTools = hasOutput ? [] : nextTools;
+              const streamingTools = isTerminalOutput ? [] : nextTools;
 
               // Attach any images collected from preceding tool results
               const pendingImgs = s.pendingToolImages;
@@ -159,11 +166,11 @@ export function handleRuntimeEventState(
                 } : {
                   streamingText: '',
                   streamingMessage: null,
-                  sending: hasOutput ? false : s.sending,
-                  activeRunId: hasOutput ? null : s.activeRunId,
-                  pendingFinal: hasOutput ? false : true,
+                  sending: isTerminalOutput ? false : s.sending,
+                  activeRunId: isTerminalOutput ? null : s.activeRunId,
+                  pendingFinal: isTerminalOutput ? false : true,
                   streamingTools,
-                  lastUserMessageAt: hasOutput ? null : s.lastUserMessageAt,
+                  lastUserMessageAt: isTerminalOutput ? null : s.lastUserMessageAt,
                   ...clearPendingImages,
                 };
               }
@@ -183,17 +190,17 @@ export function handleRuntimeEventState(
                 messages: nextMessages,
                 streamingText: '',
                 streamingMessage: null,
-                sending: hasOutput ? false : s.sending,
-                activeRunId: hasOutput ? null : s.activeRunId,
-                pendingFinal: hasOutput ? false : true,
+                sending: isTerminalOutput ? false : s.sending,
+                activeRunId: isTerminalOutput ? null : s.activeRunId,
+                pendingFinal: isTerminalOutput ? false : true,
                 streamingTools,
-                lastUserMessageAt: hasOutput ? null : s.lastUserMessageAt,
+                lastUserMessageAt: isTerminalOutput ? null : s.lastUserMessageAt,
                 ...clearPendingImages,
               };
             });
             // After the final response, quietly reload history to surface all intermediate
             // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
-            if (hasOutput && !toolOnly) {
+            if (isTerminalOutput && !toolOnly) {
               clearHistoryPoll();
               void get().loadHistory(true);
             }

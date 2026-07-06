@@ -16,7 +16,7 @@ import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ChatMessage } from './ChatMessage';
 import { AssistantTurnMessage } from './AssistantTurnMessage';
 import { useChatDisplay } from './use-chat-display';
-import { isAssistantRole } from './chat-display';
+import { isAssistantRole, resolveActiveTurnStableKey } from './chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
 import { ChatContentHeaderActions } from './ChatSearchBar';
@@ -26,6 +26,7 @@ import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock
 import { ChatPreviewPanel } from './ChatPreviewPanel';
 import { extractText } from './message-utils';
 import { useMessageQueueStore, createAutoSendWatcher, suspendAutoSend } from '@/stores/message-queue';
+import { markTurnInterrupted } from '@/lib/turn-interrupt-marker';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
@@ -354,9 +355,16 @@ export function Chat() {
   // Stop: suppress the auto-send that the abort's sending→false would otherwise trigger,
   // keeping any queued messages for the next successful run instead of firing them now.
   const handleStop = useCallback(() => {
-    suspendAutoSend(useChatStore.getState().currentSessionKey);
+    const state = useChatStore.getState();
+    suspendAutoSend(state.currentSessionKey);
+    const turnKey =
+      activeTurn?.turnStableKey
+      ?? resolveActiveTurnStableKey(state.messages);
+    if (turnKey) {
+      markTurnInterrupted(turnKey);
+    }
     void abortRun();
-  }, [abortRun]);
+  }, [abortRun, activeTurn?.turnStableKey]);
 
   const handleEditMessage = useCallback((text: string) => {
     const trimmed = text.trim();

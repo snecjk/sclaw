@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
 import { useChatSessionEngineType } from '@/hooks/use-chat-session-engine-type';
@@ -17,6 +17,7 @@ import {
   writeTurnStreamingToolsCache,
 } from '@/lib/thinking-turn-tools-cache';
 import { resolveDoneTurnStreamingTools } from '@/lib/thinking-done-tools';
+import { consumeTurnInterrupted } from '@/lib/turn-interrupt-marker';
 import { migrateTurnDisplayCache } from '@/pages/Chat/thinking/segment-merge';
 import {
   extractDingTalkSentPreviews,
@@ -33,6 +34,7 @@ import {
 } from './message-utils';
 import { DingTalkSentPreview } from './DingTalkSentPreview';
 import { ThinkingTurnProcess, type ConnectingLabelKey } from './ThinkingProcessPanel';
+import { resolveTurnProcessStatus } from '@/pages/Chat/thinking/turn-process-status';
 
 type StreamingTool = {
   id?: string;
@@ -101,6 +103,14 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
   const isStreaming = !!activeStream;
   const streamingTools = activeStream?.streamingTools ?? [];
+
+  const [wasInterrupted, setWasInterrupted] = useState(false);
+  useEffect(() => {
+    if (!turnStableKey) return;
+    if (consumeTurnInterrupted(turnStableKey)) {
+      setWasInterrupted(true);
+    }
+  }, [turnStableKey]);
 
   if (turnStableKey && turnStableKey !== 'active-turn') {
     migrateTurnDisplayCache('active-turn', turnStableKey);
@@ -209,6 +219,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
               chronologicalEntries.length > 0 ? chronologicalEntries : undefined,
             precedingUserText,
             engineProfile: engineType,
+            wasInterrupted,
           })
         : { segments: [], finalReplyText: null },
     [
@@ -219,6 +230,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       chronologicalEntries,
       precedingUserText,
       engineType,
+      wasInterrupted,
     ],
   );
 
@@ -380,6 +392,31 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     replyDisplayHasText,
   ]);
 
+  const processStatus = useMemo(
+    () =>
+      resolveTurnProcessStatus({
+        isLiveStream:
+          isStreaming || isConnecting || isProcessing || isStillExecuting,
+        isConnecting,
+        isProcessing,
+        isStillExecuting,
+        streamingTools: bakedStreamingTools,
+        hasProcessSegments:
+          thinkingSegmentsForDisplay.length > 0 || bakedStreamingTools.length > 0,
+        hasFinalReplyStreaming:
+          isStreaming && replyDisplayHasText,
+      }),
+    [
+      isStreaming,
+      isConnecting,
+      isProcessing,
+      isStillExecuting,
+      bakedStreamingTools,
+      thinkingSegmentsForDisplay.length,
+      replyDisplayHasText,
+    ],
+  );
+
   if (!showThinkingPanel && !replyDisplayHasText && !hasDingTalkSentPreview && !hasPreambleMessages && !chatDisplayHasWorkflowCard) {
     return null;
   }
@@ -395,6 +432,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       streamingTools={bakedStreamingTools}
       hasFinalReply={hasThinkingFinalReply}
       connectingLabelKey={connectingLabelKey}
+      processStatus={processStatus}
     />
   ) : null;
 

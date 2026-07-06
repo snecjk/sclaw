@@ -23,6 +23,7 @@ import {
   isMessageInCurrentUserTurn,
   isTurnDisplayAssistantMessage,
 } from '@/pages/Chat/chat-turn-meta';
+import { canShowAssistantTurnMeta, resolveCurrentTurnLifecycleForMeta } from '@/pages/Chat/turn-lifecycle';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
@@ -382,6 +383,8 @@ export const ChatMessage = memo(function ChatMessage({
 
   const sending = useChatStore((s) => s.sending);
   const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
+  const pendingFinal = useChatStore((s) => s.pendingFinal);
+  const activeRunId = useChatStore((s) => s.activeRunId);
   const isLastAssistantInTurn = !isUser && (
     isTurnDisplayReply || isTurnDisplayAssistantMessage(message, sessionMessages)
   );
@@ -396,24 +399,72 @@ export const ChatMessage = memo(function ChatMessage({
         sessionMessages,
         sending,
         lastUserMessageAt,
+        pendingFinal,
+        activeRunId,
         workflowCardStates,
         hasPendingWorkflowSchema: pendingWorkflow?.schema != null,
         sessionKey,
       }),
-    [sessionMessages, sending, lastUserMessageAt, workflowCardStates, pendingWorkflow?.schema, sessionKey],
+    [
+      sessionMessages,
+      sending,
+      lastUserMessageAt,
+      pendingFinal,
+      activeRunId,
+      workflowCardStates,
+      pendingWorkflow?.schema,
+      sessionKey,
+    ],
   );
-  const isAssistantTurnIncomplete =
-    isLastAssistantInTurn
-    && isInCurrentUserTurn
-    && (isStreaming || isAwaitingUserToContinue || currentUserTurnIncomplete);
+  /** 工作流 / 填表阻塞（不含 sending 等 runtime 字段，供 TurnLifecycle 分层） */
+  const hasWorkflowBlockers = useMemo(
+    () =>
+      isCurrentUserTurnIncomplete({
+        sessionMessages,
+        sending: false,
+        lastUserMessageAt: null,
+        pendingFinal: false,
+        activeRunId: null,
+        workflowCardStates,
+        hasPendingWorkflowSchema: pendingWorkflow?.schema != null,
+        sessionKey,
+      }),
+    [sessionMessages, workflowCardStates, pendingWorkflow?.schema, sessionKey],
+  );
+  const turnLifecycle = useMemo(
+    () =>
+      resolveCurrentTurnLifecycleForMeta({
+        sending,
+        pendingFinal,
+        lastUserMessageAt,
+        activeRunId,
+        isStreaming,
+        isAwaitingUserToContinue,
+        hasWorkflowBlockers,
+        runId: activeRunId,
+      }),
+    [
+      sending,
+      pendingFinal,
+      lastUserMessageAt,
+      activeRunId,
+      isStreaming,
+      isAwaitingUserToContinue,
+      hasWorkflowBlockers,
+    ],
+  );
   const hasAssistantMetaContent =
     showAssistantTextBubble
     || workflowCard !== null
     || previewFiles.length > 0
     || showAssistantParamsFold;
-  /** 每轮助手回复结束后，在产物/正文下方常态展示复制 + 时间 */
-  const showAssistantMessageMeta =
-    hasAssistantMetaContent && isLastAssistantInTurn && !isAssistantTurnIncomplete;
+  /** 每轮助手回复结束后，在产物/正文下方常态展示复制 + 时间（TurnLifecycle.canShowMeta） */
+  const showAssistantMessageMeta = canShowAssistantTurnMeta({
+    hasAssistantMetaContent,
+    isLastAssistantInTurn,
+    isInCurrentUserTurn,
+    lifecycle: turnLifecycle,
+  });
   /** 用户参数摘要卡由同轮最后一条助手消息统一展示 meta，避免出现在「参数已确认」上方 */
   const showUserMessageMeta =
     hasText
