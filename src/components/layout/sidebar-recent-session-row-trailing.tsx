@@ -93,7 +93,7 @@ export function SidebarRecentSessionRowTrailing({
           'invisible opacity-0 transition-opacity group-hover:visible group-hover:opacity-100',
           'rounded-md',
           isActive
-            ? 'bg-[#DCDCDC] group-hover:bg-[var(--sto-sidebar-row-hover-bg)]'
+            ? 'bg-[var(--sto-sidebar-subitem-active-bg)] group-hover:bg-[var(--sto-sidebar-row-hover-bg)]'
             : 'bg-[var(--sto-sidebar-bg)] group-hover:bg-[var(--sto-sidebar-row-hover-bg)]',
         )}
       >
