@@ -49,7 +49,7 @@
     "taskView": {
       "aria": "定期タスク",
       "emptyNoRecords": "この状態の実行記録はありません",
-      "recordsCappedHint": "ワークフロー実行記録は最新の 200 件のみ返却されます"
+      "recordsCappedHint": "実行記録が多すぎるため、最新の 100 件の実行記録を表示しています。"
     },
     "recordView": {
       "aria": "実行記録"

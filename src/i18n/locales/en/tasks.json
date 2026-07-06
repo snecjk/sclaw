@@ -49,7 +49,7 @@
     "taskView": {
       "aria": "Scheduled tasks",
       "emptyNoRecords": "No execution records in this status",
-      "recordsCappedHint": "Only the latest 200 workflow execution records are returned."
+      "recordsCappedHint": "So many execution records! Showing the latest 100 execution records."
     },
     "recordView": {
       "aria": "Execution records"

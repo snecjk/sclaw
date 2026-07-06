@@ -162,9 +162,9 @@ export default function MyTask() {
 
   const recordCounts = useMyTaskStore(useShallow(selectRecordCounts));
   const currentRecords = useMyTaskStore(useShallow(selectCurrentRecords));
-  // 后端执行记录接口不分页，固定截断到最新 200 条；命中上限时在底部给出提示
+  // 后端执行记录接口不分页，固定截断到最新 100 条；命中上限时在底部给出提示
   const fetchedRecordsTotal = useMyTaskStore((state) => state.records.length);
-  const showRecordsCappedHint = !recordsLoading && fetchedRecordsTotal >= 200;
+  const showRecordsCappedHint = !recordsLoading && fetchedRecordsTotal >= 100;
 
   // ── 页面级状态 ──
   const [activeView, setActiveView] = useState<TaskView>('tasks');

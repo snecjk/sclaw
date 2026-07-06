@@ -34,7 +34,7 @@
     "emptyInstalled": "No installed workflows",
     "neverUpdated": "Not updated yet",
     "updatedAt": "Updated {{time}}",
-    "cappedHint": "My workflows only shows the latest 200 entries."
+    "cappedHint": "So many workflows! Showing the latest 100 workflows."
   },
   "card": {
     "flow": "Workflow nodes",
