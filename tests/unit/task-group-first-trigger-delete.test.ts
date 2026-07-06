@@ -65,6 +65,22 @@ describe('task-group-first-trigger-delete', () => {
     expect(toast.error).toHaveBeenCalled();
   });
 
+  it('suppresses the failure toast when notifyOnFailure=false so delete can still proceed', async () => {
+    const atMs = Date.parse('2026-06-28T10:00:00+08:00');
+    rememberOptimisticTaskGroupFirstTriggered('cron:job-6', atMs);
+    hostApiFetchMock.mockResolvedValueOnce({ success: false });
+
+    const prep = await prepareFirstTriggerClearBeforeLastSessionDelete('cron:job-6', {
+      notifyOnFailure: false,
+    });
+
+    // Clear failed → prep null and optimistic state rolled back, but NO toast,
+    // because the caller still writes the authoritative delete tombstone.
+    expect(prep).toBeNull();
+    expect(getCachedTaskGroupFirstTriggeredMap()['cron:job-6']).toBe(atMs);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
   it('revert restores persisted first-trigger after failed deleteSession', async () => {
     const atMs = Date.parse('2026-06-28T10:00:00+08:00');
     hostApiFetchMock.mockImplementation(async (_path: string, init?: { method?: string; body?: string }) => {

@@ -16,6 +16,8 @@ interface PendingQueuePanelProps {
   onRemove: (id: string) => void;
   onMoveUp: (id: string) => void;
   onMoveDown: (id: string) => void;
+  /** Override the outer wrapper width/padding to align with the host composer. */
+  className?: string;
 }
 
 function truncateText(text: string, max = 60): string {
@@ -109,13 +111,13 @@ const QueueItem = memo(function QueueItem({
   );
 });
 
-export function PendingQueuePanel({ queue, onRemove, onMoveUp, onMoveDown }: PendingQueuePanelProps) {
+export function PendingQueuePanel({ queue, onRemove, onMoveUp, onMoveDown, className }: PendingQueuePanelProps) {
   const { t } = useTranslation('chat');
 
   if (queue.length === 0) return null;
 
   return (
-    <div className="w-full px-6 pb-1">
+    <div className={cn('w-full px-6 pb-1', className)}>
       <div className="rounded-xl border border-border/40 bg-white/40 p-2 shadow-sm backdrop-blur-sm dark:bg-white/[0.03]">
         <div className="mb-1.5 px-1 text-[11px] font-medium text-muted-foreground/70">
           {t('queue.label', { count: queue.length })}

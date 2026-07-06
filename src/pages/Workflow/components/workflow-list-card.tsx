@@ -2,6 +2,13 @@ import { MoreHorizontal, Route } from 'lucide-react';
 import { Fragment, type ReactNode, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   workflowListCardBodyClass,
   workflowListCardCoverClass,
   workflowListCardCoverWrapClass,
@@ -14,6 +21,8 @@ import {
   workflowListCardGridClass,
   workflowListCardHeadClass,
   workflowListCardMainClass,
+  workflowListCardMenuClass,
+  workflowListCardMenuItemClass,
   workflowListCardMoreActionClass,
   workflowListCardPrimaryActionClass,
   workflowListCardScheduleRowClass,
@@ -99,7 +108,10 @@ export interface WorkflowMineListCardProps {
   onCardClick?: () => void;
   onRun: () => void;
   onEdit: () => void;
-  onMore: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onRenameRequest: () => void;
+  onDeleteRequest: () => void;
+  isRenameDisabled?: boolean;
+  isDeleteDisabled?: boolean;
 }
 
 /** 「我的工作流」卡片：标题+开关+排期+描述+流程+操作按钮 */
@@ -112,7 +124,10 @@ export function WorkflowMineListCard({
   onCardClick,
   onRun,
   onEdit,
-  onMore,
+  onRenameRequest,
+  onDeleteRequest,
+  isRenameDisabled = false,
+  isDeleteDisabled = false,
 }: WorkflowMineListCardProps) {
   const { t } = useTranslation('workflow');
 
@@ -182,17 +197,52 @@ export function WorkflowMineListCard({
       </div>
 
       <div className={cn(workflowListCardFooterClass, 'flex items-center justify-between gap-2')}>
-        <button
-          type="button"
-          className={workflowListCardMoreActionClass}
-          aria-label={t('card.more')}
-          onClick={(e) => {
-            e.stopPropagation();
-            onMore(e);
-          }}
-        >
-          <MoreHorizontal className="h-4 w-4" aria-hidden />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={workflowListCardMoreActionClass}
+              aria-label={t('card.more')}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreHorizontal className="h-4 w-4" aria-hidden />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            side="top"
+            align="start"
+            sideOffset={8}
+            collisionPadding={8}
+            className={cn(workflowListCardMenuClass, 'z-[10041] w-[200px]')}
+            onCloseAutoFocus={(e) => e.preventDefault()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <DropdownMenuItem
+              className={workflowListCardMenuItemClass}
+              disabled={isRenameDisabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRenameRequest();
+              }}
+            >
+              {t('card.rename')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className={cn(
+                workflowListCardMenuItemClass,
+                'text-destructive focus:bg-destructive/10 focus:text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive',
+              )}
+              disabled={isDeleteDisabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteRequest();
+              }}
+            >
+              {t('card.delete')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"

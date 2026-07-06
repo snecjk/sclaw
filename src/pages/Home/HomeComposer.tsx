@@ -6,13 +6,15 @@
  * - 未进入会话（Hero/卡片）：各 Surface 底部 footer 唯一实例
  * - 已进入会话：仅由 HomeMainConversation 内嵌渲染（footer 不要再挂一份）
  */
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { useMessageQueueStore } from '@/stores/message-queue';
 import { cn } from '@/lib/utils';
-import { stoHeroInputShellClass, stoParameterFormDockLayout } from '@/lib/surfaces';
+import { stoChatShellHomeClass, stoHeroInputShellClass, stoParameterFormDockLayout } from '@/lib/surfaces';
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
+import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
 import { ChatEngineSelector, ChatModelSelector } from '@/pages/Chat/ChatEngineModelSelectors';
 import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
@@ -70,6 +72,11 @@ export function HomeComposer({
   const error = useChatStore((s) => s.error);
   const { handleHubSend, handleHubQueue } = useHomeChatEntrySend();
 
+  const queue = useMessageQueueStore((s) => s.getQueue(currentSessionKey));
+  const queueRemove = useCallback((id: string) => useMessageQueueStore.getState().remove(currentSessionKey, id), [currentSessionKey]);
+  const queueMoveUp = useCallback((id: string) => useMessageQueueStore.getState().moveUp(currentSessionKey, id), [currentSessionKey]);
+  const queueMoveDown = useCallback((id: string) => useMessageQueueStore.getState().moveDown(currentSessionKey, id), [currentSessionKey]);
+
   const currentAgent = useMemo(
     () => agents.find((agent) => agent.id === currentAgentId),
     [agents, currentAgentId],
@@ -103,6 +110,13 @@ export function HomeComposer({
   return (
     <div className={cn(stoHeroInputShellClass, className)}>
       <ParameterFormDock layout={stoParameterFormDockLayout('home')} />
+      <PendingQueuePanel
+        queue={queue}
+        onRemove={queueRemove}
+        onMoveUp={queueMoveUp}
+        onMoveDown={queueMoveDown}
+        className={cn(stoChatShellHomeClass, 'px-0')}
+      />
       <section className="flex flex-col" aria-label={t('assistant.placeholder')}>
         <ChatInput
           {...inputProps}

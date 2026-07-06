@@ -30,6 +30,7 @@ import {
   isWorkflowParamsSummaryText,
   isWorkflowParamsUserText,
 } from '@/lib/workflow-form-utils';
+import { isLikelyPlanningNarration } from '@/pages/Chat/thinking/classify-text';
 import {
   artifactToPreviewFile,
   inferMimeTypeFromUrl,
@@ -211,6 +212,16 @@ export function maskSensitiveToolInputForDisplay(input: unknown): string {
   }
 }
 
+/** Claude 等引擎常传 null 或空 object；UI 统一视为「无参数」 */
+export function hasDisplayableToolInput(input: unknown): boolean {
+  if (input == null) return false;
+  if (typeof input === 'string') return input.trim().length > 0;
+  if (typeof input === 'object' && !Array.isArray(input)) {
+    return Object.keys(input as Record<string, unknown>).length > 0;
+  }
+  return true;
+}
+
 export function stripDwsSendMetadataForDisplay(text: string): string {
   let cleaned = text
     .replace(DWS_SEND_METADATA_PATTERN, '')
@@ -275,7 +286,7 @@ export function messageHasWorkflowCard(msg: RawMessage): boolean {
     && (msg.content as ContentBlock[]).some((block) => block.type === 'workflow_card');
 }
 
-function messageHasParameterFormBlock(msg: RawMessage): boolean {
+export function messageHasParameterFormBlock(msg: RawMessage): boolean {
   return Array.isArray(msg.content)
     && (msg.content as ContentBlock[]).some((block) => block.type === 'parameter_form');
 }
@@ -284,6 +295,8 @@ function messageHasParameterFormBlock(msg: RawMessage): boolean {
 export function isWorkflowPreambleAssistantMessage(msg: RawMessage): boolean {
   if (!isAssistantMessageRole(msg.role)) return false;
   const text = extractText(msg).trim();
+  // 思考区 phase-text 已展示的规划旁白，不再重复渲染工作流 preamble 卡
+  if (isLikelyPlanningNarration(text)) return false;
   if (isWorkflowParamsSummaryText(text)) return true;
   if (isWorkflowGuidanceAssistantText(text)) return true;
   if (isWorkflowParameterIntroText(text)) return true;
@@ -583,6 +596,8 @@ export function extractThinking(message: RawMessage | unknown): string | null {
 
 export type ThinkingTimelineItem =
   | { type: 'thinking'; content: string }
+  /** 思考区内的阶段旁白（原 phase-text，按时序夹在 thinking/tool 之间） */
+  | { type: 'narration'; content: string }
   | { type: 'tool'; index: number; id: string; name: string; input: unknown };
 
 function thinkingTimelineToolKey(tool: { id: string; name: string; input: unknown }): string {

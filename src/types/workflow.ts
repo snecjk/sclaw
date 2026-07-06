@@ -216,6 +216,8 @@ export interface WorkflowRunArtifact {
   name: string;
   type: string;
   url: string;
+  previewUrl?: string;
+  tempUrl?: string;
   size?: number;
 }
 
@@ -240,6 +242,18 @@ export interface WorkflowRunClientResult {
   summary?: string | null;
   status?: string | null;
   data?: unknown;
+  artifacts?: Array<{
+    id?: string;
+    name?: string;
+    kind?: string;
+    type?: string;
+    url?: string;
+    tempUrl?: string;
+    previewUrl?: string;
+    filePath?: string;
+    contentType?: string;
+    size?: number;
+  }>;
 }
 
 export interface WorkflowRunResponse {
@@ -287,6 +301,8 @@ export interface WorkflowExecutionResult {
     name: string;
     type: string;
     url: string;
+    previewUrl?: string;
+    tempUrl?: string;
     size?: number;
   }>;
 }

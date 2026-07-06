@@ -2,12 +2,13 @@
  * ChatToolCallCard — 对话流内工具调用展示（思考面板 + 助手消息共用）
  *
  * - `collapsible`：助手消息内独立 tool 块，可折叠（默认）
- * - `readonly`：思考面板展开态，平铺只读（MasterGo 4:2177）
+ * - `readonly` + `thinkingProcess`：思考面板内可折叠只读块（对齐 sai-desktop）
  */
 import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { useProcessBlockCollapse } from '@/hooks/use-process-block-collapse';
 import {
   resolveChatProcessToolIcon,
   resolveChatThinkingProcessToolIcon,
@@ -24,7 +25,7 @@ import {
   chatToolCallInputPreClass,
   chatToolCallShellClass,
 } from '@/lib/surfaces';
-import { maskSensitiveToolInputForDisplay } from '@/pages/Chat/message-utils';
+import { maskSensitiveToolInputForDisplay, hasDisplayableToolInput } from '@/pages/Chat/message-utils';
 
 export interface ChatToolCallCardProps {
   /** 原始工具名（用于图标映射） */
@@ -47,6 +48,14 @@ export interface ChatToolCallCardProps {
   onInputRevealComplete?: () => void;
   /** 顺序队列轮到该工具但参数尚未到达 */
   isAwaitingToolInput?: boolean;
+  /** 思考面板流式中二级折叠；结束后平铺展开、无 chevron */
+  thinkingProcessCollapsible?: boolean;
+  /** 思考面板：段结束自动收起 */
+  isComplete?: boolean;
+  /** 思考面板：流式未完成时自动展开 */
+  autoExpand?: boolean;
+  /** 思考面板：当前活跃工具标题 shimmer */
+  isActive?: boolean;
   className?: string;
 }
 
@@ -68,7 +77,7 @@ function ToolCallContent({
   status?: 'running' | 'completed' | 'error';
 }) {
   const { t } = useTranslation('chat');
-  const hasInput = input != null;
+  const hasInput = hasDisplayableToolInput(input);
   const inputText = hasInput ? maskSensitiveToolInputForDisplay(input) : '';
   const { text: displayed, isAnimating } = useTypewriterReveal(inputText, isInputTypewriterActive, {
     resetKey: typewriterResetKey,
@@ -132,6 +141,10 @@ export function ChatToolCallCard({
   typewriterResetKey,
   onInputRevealComplete,
   isAwaitingToolInput = false,
+  thinkingProcessCollapsible = false,
+  isComplete = false,
+  autoExpand = false,
+  isActive = false,
   className,
 }: ChatToolCallCardProps) {
   const { t } = useTranslation('chat');
@@ -139,6 +152,19 @@ export function ChatToolCallCard({
   const isRunning = status === 'running';
   const isReadonly = variant === 'readonly';
   const isThinkingProcess = presentation === 'thinkingProcess';
+  const isThinkingProcessCollapsible =
+    isReadonly && isThinkingProcess && thinkingProcessCollapsible;
+  const {
+    wrapperRef,
+    expanded: thinkingExpanded,
+    toggle: toggleThinkingBlock,
+    bodyGridClass,
+    chevronClass,
+  } = useProcessBlockCollapse({
+    collapsible: isThinkingProcessCollapsible,
+    isComplete,
+    autoExpand,
+  });
   const baseLabel = displayName ?? resolveChatToolDisplayName(name.trim() || '…');
   const label = isThinkingProcess
     ? t('streaming.invokeToolLabel', { toolName: baseLabel })
@@ -147,25 +173,58 @@ export function ChatToolCallCard({
     ? resolveChatThinkingProcessToolIcon()
     : resolveChatProcessToolIcon(name);
 
+  const toolBody = (
+    <ToolCallContent
+      input={input}
+      hasLeadingOffset={!isThinkingProcessCollapsible && isRunning}
+      isInputTypewriterActive={isInputTypewriterActive}
+      typewriterResetKey={typewriterResetKey ?? `tool-${name}`}
+      onInputRevealComplete={onInputRevealComplete}
+      isAwaitingToolInput={isAwaitingToolInput}
+      status={status}
+    />
+  );
+
+  if (isThinkingProcessCollapsible) {
+    return (
+      <div ref={wrapperRef} className={cn(chatToolCallShellClass, className)}>
+        <button
+          type="button"
+          className={cn(
+            chatProcessTitleRowClass,
+            'w-full text-left transition-colors duration-150 hover:text-foreground',
+          )}
+          onClick={toggleThinkingBlock}
+          aria-expanded={thinkingExpanded}
+        >
+          <ToolIcon className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+          <span className="flex min-w-0 items-center gap-1">
+            <span
+              className={cn(
+                'truncate',
+                isActive && 'chat-interaction-shimmer-text',
+              )}
+            >
+              {label}
+            </span>
+            <ChevronDown className={chevronClass} aria-hidden />
+          </span>
+        </button>
+        <div className={bodyGridClass}>
+          <div className="min-h-0 overflow-hidden">{toolBody}</div>
+        </div>
+      </div>
+    );
+  }
+
   if (isReadonly) {
     return (
       <div className={cn(chatToolCallShellClass, className)}>
         <div className={chatProcessTitleRowClass}>
-          {isRunning ? (
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-70" aria-hidden />
-          ) : null}
           <ToolIcon className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
           <span className="min-w-0 truncate">{label}</span>
         </div>
-        <ToolCallContent
-          input={input}
-          hasLeadingOffset={isRunning}
-          isInputTypewriterActive={isInputTypewriterActive}
-          typewriterResetKey={typewriterResetKey ?? `tool-${name}`}
-          onInputRevealComplete={onInputRevealComplete}
-          isAwaitingToolInput={isAwaitingToolInput}
-          status={status}
-        />
+        {toolBody}
       </div>
     );
   }

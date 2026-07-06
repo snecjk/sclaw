@@ -1,5 +1,5 @@
 import { migrateLegacyOpenClawWorkspacePath, stripFileUrlScheme } from './artifact-path';
-import { createFileUrlInTextRegex } from './preview-raw-path';
+import { createFileUrlInTextRegex, localPathFromFileUrlCapture } from './preview-raw-path';
 
 /** Normalize local paths for share-time lookup (slashes, no trailing slash). */
 export function normalizeSharePathKey(path: string): string {
@@ -87,4 +87,23 @@ export function replaceConversationFileRefsWithShareUrls(
   });
 
   return result;
+}
+
+/** Collect local file paths referenced inline as file:// URLs in conversation text. */
+export function collectConversationFileRefsFromText(
+  text: string,
+): Array<{ fileName: string; filePath: string }> {
+  const seen = new Set<string>();
+  const results: Array<{ fileName: string; filePath: string }> = [];
+  const regex = createFileUrlInTextRegex();
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    const localPath = localPathFromFileUrlCapture(match[1]!);
+    const key = normalizeSharePathKey(localPath);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const fileName = key.split('/').pop() || 'file';
+    results.push({ fileName, filePath: localPath });
+  }
+  return results;
 }

@@ -1,5 +1,6 @@
 /**
- * Workflow execution record persisted to OpenClaw session .jsonl transcripts.
+ * Workflow execution record persisted to session transcripts (OpenClaw .jsonl
+ * and Claude SDK JSONL under ~/.stoclaw/.claude/projects/).
  * Survives app reinstall (localStorage cleared) when session files remain on disk.
  */
 

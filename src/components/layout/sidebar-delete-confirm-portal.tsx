@@ -22,9 +22,9 @@ export function SidebarDeleteConfirmPortal() {
     <>
       <ConfirmDialog
         open={!!sessionToDelete}
-        title={t('common:actions.confirm')}
-        message={t('common:sidebar.deleteSessionConfirm', { label: sessionToDelete?.label })}
-        confirmLabel={t('common:actions.delete')}
+        title={t('common:sidebar.deleteSessionTitle')}
+        message={t('common:sidebar.deleteSessionMessage')}
+        confirmLabel={t('common:actions.confirm')}
         confirmingLabel={deletingLabel}
         cancelLabel={t('common:actions.cancel')}
         variant="destructive"

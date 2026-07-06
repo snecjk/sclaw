@@ -33,6 +33,7 @@
 import { useMemo } from 'react';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
+import { suspendAutoSend } from '@/stores/message-queue';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 
@@ -110,7 +111,11 @@ export function useChatInputBindings(options: ChatInputBindingsOptions): ChatInp
   return useMemo(
     () => ({
       onSend: options.onSend,
-      onStop: () => void abortRun(),
+      onStop: () => {
+        // Keep queued messages instead of firing them right after Stop.
+        suspendAutoSend();
+        void abortRun();
+      },
       onQueue: options.onQueue,
       disabled: requiresGateway && !isGatewayRunning,
       sending,

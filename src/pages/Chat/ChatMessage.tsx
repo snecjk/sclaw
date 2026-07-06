@@ -4,7 +4,7 @@
  * with markdown, thinking sections, images, and tool cards.
  */
 import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
-import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, CircleCheck, Share2 } from 'lucide-react';
+import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, CircleCheck } from 'lucide-react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { createPortal } from 'react-dom';
@@ -19,9 +19,9 @@ import { assistantChatCardBg, chatProcessTitleRowClass, chatToolCallShellClass, 
 import { ChatProcessContentRail } from '@/components/chat/chat-process-block';
 import {
   isCurrentUserTurnIncomplete,
-  isLastAssistantInUserTurn,
   isLastUserMessage,
   isMessageInCurrentUserTurn,
+  isTurnDisplayAssistantMessage,
 } from '@/pages/Chat/chat-turn-meta';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
@@ -49,7 +49,6 @@ import {
   coerceHrefForMarkdownTransform,
   resolvePreviewHrefAction,
   resolvePreviewPathOnHost,
-  shouldPreviewInSidePanel,
 } from '@/lib/preview-href';
 import { applyDisplayNameHints, dedupeAttachedFiles, mergePreviewFileLists, normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
@@ -76,6 +75,7 @@ import { highlightAtMentionsInChildren } from '@/lib/at-mention-highlight';
 import { renderUserMessageMentionNodes } from '@/components/dingtalk/DingTalkMentionTag';
 import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessPanel';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
+import { ShareMessageIcon } from '@/components/icons/ShareMessageIcon';
 import {
   buildConversationShareDialogDraft,
   type DingTalkShareDialogDraft,
@@ -110,6 +110,8 @@ interface ChatMessageProps {
   hideThinkingPanel?: boolean;
   /** 父级已展示思考面板时，正文内不再重复渲染工具卡 */
   suppressToolCards?: boolean;
+  /** AssistantTurnMessage 合并展示的同轮最终回复，视为该轮 meta 挂载点 */
+  isTurnDisplayReply?: boolean;
 }
 
 const HOVER_REVEAL_CLASS = 'opacity-0 transition-opacity duration-200 group-hover:opacity-100';
@@ -139,6 +141,7 @@ export const ChatMessage = memo(function ChatMessage({
   hideAvatar = false,
   hideThinkingPanel = false,
   suppressToolCards = false,
+  isTurnDisplayReply = false,
 }: ChatMessageProps) {
   const { t } = useTranslation('chat');
   const isUser = message.role === 'user';
@@ -380,7 +383,9 @@ export const ChatMessage = memo(function ChatMessage({
 
   const sending = useChatStore((s) => s.sending);
   const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
-  const isLastAssistantInTurn = !isUser && isLastAssistantInUserTurn(message, sessionMessages);
+  const isLastAssistantInTurn = !isUser && (
+    isTurnDisplayReply || isTurnDisplayAssistantMessage(message, sessionMessages)
+  );
   const isInCurrentUserTurn = isMessageInCurrentUserTurn(message, sessionMessages);
   const isLastUserInTurn = isUser && isLastUserMessage(message, sessionMessages);
   /** 与 AwaitingReplyIndicator 同口径：表单待提交时轮次未结束 */
@@ -394,8 +399,9 @@ export const ChatMessage = memo(function ChatMessage({
         lastUserMessageAt,
         workflowCardStates,
         hasPendingWorkflowSchema: pendingWorkflow?.schema != null,
+        sessionKey,
       }),
-    [sessionMessages, sending, lastUserMessageAt, workflowCardStates, pendingWorkflow?.schema],
+    [sessionMessages, sending, lastUserMessageAt, workflowCardStates, pendingWorkflow?.schema, sessionKey],
   );
   const isAssistantTurnIncomplete =
     isLastAssistantInTurn
@@ -470,9 +476,9 @@ export const ChatMessage = memo(function ChatMessage({
   }, [debugLinks, debugMarkdownSource, text]);
 
   const openConversationShare = useCallback(() => {
-    setShareDraft(buildConversationShareDialogDraft(text, previewFiles, t));
+    setShareDraft(buildConversationShareDialogDraft(text, previewFiles));
     setShareDialogOpen(true);
-  }, [text, previewFiles, t]);
+  }, [text, previewFiles]);
 
   const handleShareCompleted = useCallback(() => {
     toast.success(t('preview.shareDialog.success'));
@@ -557,7 +563,7 @@ export const ChatMessage = memo(function ChatMessage({
     >
       {thinkingOutsideAvatar ? (
         <ThinkingProcessPanel
-          timeline={thinkingTimeline}
+          message={message}
           isStreaming={isStreaming && !isUser}
           streamingTools={isStreaming ? streamingTools : []}
           hasReplyBody={!isUser && hasText}
@@ -580,7 +586,7 @@ export const ChatMessage = memo(function ChatMessage({
 
         {!thinkingOutsideAvatar && showThinkingPanel && (
           <ThinkingProcessPanel
-            timeline={thinkingTimeline}
+            message={message}
             isStreaming={isStreaming && !isUser}
             streamingTools={isStreaming ? streamingTools : []}
             hasReplyBody={!isUser && hasText}
@@ -784,7 +790,7 @@ export const ChatMessage = memo(function ChatMessage({
           </div>
         )}
 
-        {/* 助手消息：时间戳 + 复制 — 置于正文/工作流/产物等全部内容之后 */}
+        {/* 助手消息：复制 + 分享 + 时间 — 置于正文/工作流/产物等全部内容之后 */}
         {!isUser && showAssistantMessageMeta ? (
           <AssistantMessageMetaRow
             text={text}
@@ -935,13 +941,15 @@ function UserMessageMetaRow({
       </Button>
       {onShare ? (
         <Button
+          type="button"
           variant="ghost"
           size="icon"
-          className="h-7 w-7 rounded-full border border-border bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-foreground dark:bg-background/70 dark:hover:bg-background"
+          className={MESSAGE_META_ICON_BUTTON_CLASS}
           onClick={onShare}
+          aria-label={t('messageActions.share')}
           title={t('messageActions.share')}
         >
-          <Share2 className="h-3 w-3" />
+          <ShareMessageIcon className="h-3 w-3" />
         </Button>
       ) : null}
       <Button
@@ -959,7 +967,7 @@ function UserMessageMetaRow({
   );
 }
 
-/** 助手消息底栏：复制 + 时间，常态展示于正文下方 */
+/** 助手消息底栏：复制 + 分享 + 时间，常态展示于正文下方 */
 function AssistantMessageMetaRow({
   text,
   timestamp,
@@ -1003,14 +1011,15 @@ function AssistantMessageMetaRow({
       </Button>
       {onShare ? (
         <Button
+          type="button"
           variant="ghost"
           size="icon"
-          className="h-7 w-7 rounded-full border border-border bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-foreground dark:bg-background/70 dark:hover:bg-background"
+          className={MESSAGE_META_ICON_BUTTON_CLASS}
           onClick={onShare}
-          title={t('messageActions.share')}
           aria-label={t('messageActions.share')}
+          title={t('messageActions.share')}
         >
-          <Share2 className="h-3 w-3" aria-hidden />
+          <ShareMessageIcon className="h-3 w-3" />
         </Button>
       ) : null}
       {timestamp ? (
@@ -1397,27 +1406,24 @@ function preprocessTextForPreviewLinks(text: string): string {
 
 function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFile?: (file: AttachedFileMeta) => void }) {
   const { t } = useTranslation('chat');
-  const filePath = file.filePath ?? '';
-  const openInPreview = shouldPreviewInSidePanel(filePath);
+  const isPreviewable = isPreviewableFile(file);
 
   const handleOpen = useCallback(() => {
     logFilePreview('file-card-click', {
       filePath: file.filePath,
       fileName: file.fileName,
       mimeType: file.mimeType,
-      openInPreview,
+      isPreviewable,
       hasOnPreviewFile: !!onPreviewFile,
     });
-    if (onPreviewFile && openInPreview) {
+    if (onPreviewFile && isPreviewable) {
       onPreviewFile(file);
-      return;
+    } else if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
+      openExternalUrl(file.filePath);
+    } else if (file.filePath) {
+      invokeIpc('shell:openPath', file.filePath);
     }
-    if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-      openExternalUrl(filePath);
-    } else if (filePath) {
-      invokeIpc('shell:openPath', filePath);
-    }
-  }, [file, filePath, onPreviewFile, openInPreview]);
+  }, [file, onPreviewFile, isPreviewable]);
 
   const metaLine = buildArtifactMetaLine({
     fileName: file.fileName,
@@ -1431,7 +1437,6 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
     <ArtifactProductCard
       title={file.fileName}
       metaLine={metaLine}
-      actionLabel={openInPreview ? t('workflow.viewArtifact') : t('workflow.openArtifactLink')}
       onAction={handleOpen}
     />
   );

@@ -12,6 +12,9 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 
 const QUEUE_MAX_PER_SESSION = 10;
 
+/** Stable empty-array reference so `getQueue` selectors don't churn when a session has no queue. */
+const EMPTY_QUEUE: QueuedMessage[] = [];
+
 export interface QueuedMessage {
   id: string;
   text: string;
@@ -24,7 +27,6 @@ export interface QueuedMessage {
 
 interface SessionQueue {
   queue: QueuedMessage[];
-  isActive: boolean; // Whether this session's queue is being processed
 }
 
 interface MessageQueueState {
@@ -38,12 +40,11 @@ interface MessageQueueState {
   dequeueFirst: (sessionKey: string) => QueuedMessage | null;
   getQueue: (sessionKey: string) => QueuedMessage[];
   getSessionQueue: (sessionKey: string) => SessionQueue;
-  setSessionActive: (sessionKey: string, active: boolean) => void;
 }
 
 function getOrCreateSessionQueue(queues: Map<string, SessionQueue>, sessionKey: string): SessionQueue {
   if (!queues.has(sessionKey)) {
-    queues.set(sessionKey, { queue: [], isActive: false });
+    queues.set(sessionKey, { queue: [] });
   }
   return queues.get(sessionKey)!;
 }
@@ -64,7 +65,9 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       workflowId,
       queuedAt: Date.now(),
     };
-    session.queue.push(item);
+    // Immutable update: new array + new session object so `getQueue` selectors
+    // see a changed reference and re-render (in-place push would not).
+    queues.set(sessionKey, { queue: [...session.queue, item] });
     set({ queues: new Map(queues) });
   },
 
@@ -72,7 +75,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     const { queues } = get();
     const session = queues.get(sessionKey);
     if (!session) return;
-    session.queue = session.queue.filter((m) => m.id !== id);
+    queues.set(sessionKey, { queue: session.queue.filter((m) => m.id !== id) });
     set({ queues: new Map(queues) });
   },
 
@@ -82,8 +85,9 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     if (!session) return;
     const idx = session.queue.findIndex((m) => m.id === id);
     if (idx <= 0) return;
-    const [item] = session.queue.splice(idx, 1);
-    session.queue.splice(idx - 1, 0, item);
+    const next = [...session.queue];
+    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+    queues.set(sessionKey, { queue: next });
     set({ queues: new Map(queues) });
   },
 
@@ -93,16 +97,17 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     if (!session) return;
     const idx = session.queue.findIndex((m) => m.id === id);
     if (idx < 0 || idx >= session.queue.length - 1) return;
-    const [item] = session.queue.splice(idx, 1);
-    session.queue.splice(idx + 1, 0, item);
+    const next = [...session.queue];
+    [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+    queues.set(sessionKey, { queue: next });
     set({ queues: new Map(queues) });
   },
 
   clear: (sessionKey) => {
     const { queues } = get();
     const session = queues.get(sessionKey);
-    if (!session) return;
-    session.queue = [];
+    if (!session || session.queue.length === 0) return;
+    queues.set(sessionKey, { queue: [] });
     set({ queues: new Map(queues) });
   },
 
@@ -114,7 +119,8 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     const { queues } = get();
     const session = queues.get(sessionKey);
     if (!session || session.queue.length === 0) return null;
-    const item = session.queue.shift()!;
+    const [item, ...rest] = session.queue;
+    queues.set(sessionKey, { queue: rest });
     set({ queues: new Map(queues) });
     return item;
   },
@@ -122,121 +128,157 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   getQueue: (sessionKey) => {
     const { queues } = get();
     const session = queues.get(sessionKey);
-    return session?.queue ?? [];
+    return session?.queue ?? EMPTY_QUEUE;
   },
 
   getSessionQueue: (sessionKey) => {
     const { queues } = get();
     const session = queues.get(sessionKey);
-    return session ?? { queue: [], isActive: false };
-  },
-
-  setSessionActive: (sessionKey, active) => {
-    const { queues } = get();
-    const session = getOrCreateSessionQueue(queues, sessionKey);
-    session.isActive = active;
-    set({ queues: new Map(queues) });
+    return session ?? { queue: [] };
   },
 }));
 
-export function createAutoSendWatcher(
-  onAutoSend?: () => void,
-) {
-  let prevSending = false;
+// ── Auto-send singleton ──────────────────────────────────────────────────────
+// All surfaces (Chat page, Home, task subitems) share ONE chat-store
+// subscription so a run finishing dequeues exactly one message, even when
+// several `createAutoSendWatcher` callers are mounted at the same time.
 
-  const getSessionState = (sessionKey: string) => {
-    const state = useChatStore.getState();
-    return {
-      sessionKey,
-      sending: state.sending,
-      error: state.error,
-      messages: state.messages,
-    };
-  };
+type AutoSendCallback = () => void;
 
-  const unsub = useChatStore.subscribe((state) => {
-    const { sending, currentSessionKey } = state;
-    const sessionQueue = useMessageQueueStore.getState().getSessionQueue(currentSessionKey);
+const autoSendCallbacks = new Set<AutoSendCallback>();
+/** Sessions whose next "run finished" transition was caused by an explicit user abort. */
+const suppressedSessions = new Set<string>();
+let storeUnsub: (() => void) | null = null;
+let watcherRefCount = 0;
+let prevSending = false;
 
-    if (!sessionQueue.isActive || sessionQueue.queue.length === 0) return;
+function mapQueuedAttachments(attachments?: FileAttachment[]) {
+  return attachments?.map((a) => ({
+    fileName: a.fileName,
+    mimeType: a.mimeType,
+    fileSize: a.fileSize,
+    stagedPath: a.stagedPath,
+    preview: a.preview,
+  }));
+}
 
-    const prevWasSending = prevSending;
-    prevSending = sending;
+function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
+  const chatState = useChatStore.getState();
 
-    // When AI finishes responding (sending transitions from true to false),
-    // dequeue and send the first queued message
-    if (prevWasSending && !sending && sessionQueue.queue.length > 0) {
-      const msg = useMessageQueueStore.getState().dequeueFirst(currentSessionKey);
-      if (!msg) return;
-
-      const chatState = useChatStore.getState();
-
-      // Workflow queue: create and start workflow, then send message
-      if (msg.workflowId) {
-        import('@/hooks/use-workflow-send').then(({ sendWithWorkflow }) => {
-          sendWithWorkflow(
-            msg.text,
-            msg.workflowId!,
-            { sessionKey: currentSessionKey, agentId: chatState.currentAgentId },
-            async (textToSend, runId, wfId, ctx) => {
-              const wfCtx = ctx as import('@/stores/chat').WorkflowContextBlock | undefined;
-              await chatState.sendMessage({
-                text: textToSend,
-                attachments: msg.attachments?.map((a) => ({
-                  fileName: a.fileName,
-                  mimeType: a.mimeType,
-                  fileSize: a.fileSize,
-                  stagedPath: a.stagedPath,
-                  preview: a.preview,
-                })),
-                targetAgentId: msg.targetAgentId,
-                dingTalkMentions: msg.dingTalkMentions,
-                workflowId: wfId,
-                runId,
-                workflowContext: wfCtx,
-              });
-            },
-          ).catch((err: unknown) => {
-            console.error('[message-queue] workflow auto-send failed:', err);
-            // Fall back to normal send so the message isn't lost
-            chatState.sendMessage({
-              text: msg.text,
-              attachments: msg.attachments?.map((a) => ({
-                fileName: a.fileName,
-                mimeType: a.mimeType,
-                fileSize: a.fileSize,
-                stagedPath: a.stagedPath,
-                preview: a.preview,
-              })),
+  // Workflow queue: create/start the workflow, then send through its context.
+  if (msg.workflowId) {
+    import('@/hooks/use-workflow-send')
+      .then(({ sendWithWorkflow }) =>
+        sendWithWorkflow(
+          msg.text,
+          msg.workflowId!,
+          { sessionKey, agentId: chatState.currentAgentId },
+          async (textToSend, runId, wfId, ctx) => {
+            await chatState.sendMessage({
+              text: textToSend,
+              attachments: mapQueuedAttachments(msg.attachments),
               targetAgentId: msg.targetAgentId,
               dingTalkMentions: msg.dingTalkMentions,
+              workflowId: wfId ?? undefined,
+              runId: runId ?? undefined,
+              workflowContext: ctx as import('@/stores/chat').WorkflowContextBlock | undefined,
             });
-          });
-          return;
+          },
+        ),
+      )
+      .catch((err: unknown) => {
+        console.error('[message-queue] workflow auto-send failed:', err);
+        // Fall back to a normal send so the message isn't lost.
+        void chatState.sendMessage({
+          text: msg.text,
+          attachments: mapQueuedAttachments(msg.attachments),
+          targetAgentId: msg.targetAgentId,
+          dingTalkMentions: msg.dingTalkMentions,
         });
-        return;
-      }
-
-      onAutoSend?.();
-      chatState.sendMessage({
-        text: msg.text,
-        attachments: msg.attachments?.map((a) => ({
-          fileName: a.fileName,
-          mimeType: a.mimeType,
-          fileSize: a.fileSize,
-          stagedPath: a.stagedPath,
-          preview: a.preview,
-        })),
-        targetAgentId: msg.targetAgentId,
-        dingTalkMentions: msg.dingTalkMentions,
-        workflowId: msg.workflowId,
       });
-    } else {
-      // No transition, just track state
-    }
-  });
+    return;
+  }
 
+  void chatState.sendMessage({
+    text: msg.text,
+    attachments: mapQueuedAttachments(msg.attachments),
+    targetAgentId: msg.targetAgentId,
+    dingTalkMentions: msg.dingTalkMentions,
+    workflowId: msg.workflowId,
+  });
+}
+
+/**
+ * Suppress the auto-send that would otherwise fire when the current run ends
+ * because of an explicit user abort (Stop). Queued messages are kept and will
+ * drain after the next successful run instead of firing right after Stop.
+ *
+ * Only meaningful while a run is active; otherwise the flag could linger and
+ * wrongly suppress a future legitimate completion.
+ */
+export function suspendAutoSend(sessionKey?: string): void {
+  const state = useChatStore.getState();
+  if (!state.sending) return;
+  suppressedSessions.add(sessionKey ?? state.currentSessionKey);
+}
+
+/**
+ * Auto-send watcher. Drives "queue while running → auto-send when the run
+ * finishes". Callers get a disposer; the underlying subscription is ref-counted
+ * and shared across all callers.
+ *
+ * Rules:
+ * - Fire only on a run finishing (sending: true → false).
+ * - Skip (and consume) when the finish was an explicit user abort (Stop).
+ * - Skip when the run failed (error set) — avoids cascading failures.
+ * - Dequeue exactly one message per finish, sent serially.
+ */
+export function createAutoSendWatcher(onAutoSend?: AutoSendCallback): () => void {
+  if (onAutoSend) autoSendCallbacks.add(onAutoSend);
+  watcherRefCount += 1;
+
+  if (!storeUnsub) {
+    prevSending = useChatStore.getState().sending;
+    storeUnsub = useChatStore.subscribe((state) => {
+      const { sending, currentSessionKey, error } = state;
+      const wasSending = prevSending;
+      prevSending = sending;
+
+      // Only react to a run finishing.
+      if (!wasSending || sending) return;
+
+      // Consume any abort suppression regardless of queue state so it never lingers.
+      if (suppressedSessions.delete(currentSessionKey)) return;
+
+      // Never chain-send after a failed run.
+      if (error) return;
+
+      const queueStore = useMessageQueueStore.getState();
+      if (queueStore.getSessionQueue(currentSessionKey).queue.length === 0) return;
+
+      const msg = queueStore.dequeueFirst(currentSessionKey);
+      if (!msg) return;
+
+      autoSendCallbacks.forEach((cb) => {
+        try {
+          cb();
+        } catch {
+          // Never let a UI callback (e.g. scroll) block auto-send.
+        }
+      });
+      deliverQueuedMessage(currentSessionKey, msg);
+    });
+  }
+
+  let disposed = false;
   return () => {
-    unsub();
+    if (disposed) return;
+    disposed = true;
+    if (onAutoSend) autoSendCallbacks.delete(onAutoSend);
+    watcherRefCount = Math.max(0, watcherRefCount - 1);
+    if (watcherRefCount === 0 && storeUnsub) {
+      storeUnsub();
+      storeUnsub = null;
+    }
   };
 }
