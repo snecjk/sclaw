@@ -112,7 +112,6 @@ const PLUGINS = [
   { type: 'local', localDir: 'sto-skill-call-monitor', pluginId: 'sto-skill-call-monitor' },
   { type: 'local', localDir: 'sto-media-understanding', pluginId: 'sto-media-understanding' },
   { type: 'local', localDir: 'sto-dingtalk-send-guard', pluginId: 'sto-dingtalk-send-guard' },
-  { type: 'local', localDir: 'sto-distinctive-design-guard', pluginId: 'sto-distinctive-design-guard' },
   { type: 'local', localDir: 'sto-workflow-tool', pluginId: 'sto-workflow-tool' },
 ];
 

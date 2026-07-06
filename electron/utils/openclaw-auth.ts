@@ -1359,7 +1359,6 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
       'sto-skill-call-monitor',
       'sto-media-understanding',
       DINGTALK_SEND_GUARD_PLUGIN_ID,
-      'sto-distinctive-design-guard',
     ]) {
       if (!allow.includes(pluginId)) {
         allow.push(pluginId);
@@ -1417,14 +1416,6 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
     entries[DINGTALK_SEND_GUARD_PLUGIN_ID] = {
       enabled: true,
       config: {},
-    };
-    entries['sto-distinctive-design-guard'] = {
-      enabled: true,
-      config: {
-        enabled: true,
-        enforceRead: true,
-        lintEnabled: true,
-      },
     };
     plugins.entries = entries;
     config.plugins = plugins;
