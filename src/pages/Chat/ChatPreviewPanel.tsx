@@ -116,8 +116,9 @@ export function ChatPreviewPanel({
 
   const handleDownload = useCallback(async () => {
     if (!activeFile?.filePath) return;
-    if (activeFile.filePath.startsWith('http://') || activeFile.filePath.startsWith('https://')) {
-      window.electron.openExternal(activeFile.filePath);
+    const downloadTarget = activeFile.downloadUrl?.trim() || activeFile.filePath;
+    if (downloadTarget.startsWith('http://') || downloadTarget.startsWith('https://')) {
+      window.electron.openExternal(downloadTarget);
       return;
     }
     try {
