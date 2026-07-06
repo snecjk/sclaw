@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  artifactToPreviewFile,
   inferMimeTypeFromPath,
   inferMimeTypeFromUrl,
   isPreviewableRemoteUrl,
@@ -37,6 +38,35 @@ describe('resolvePreviewMimeType', () => {
   it('marks company *.sto* remote URLs as previewable', () => {
     expect(isPreviewableRemoteUrl('https://cdn.example.sto.cn/a.xlsx')).toBe(true);
     expect(isPreviewableRemoteUrl('https://cdn.example.com/a.xlsx')).toBe(false);
+  });
+});
+
+describe('artifactToPreviewFile', () => {
+  it('uses artifact display name without extension (workflow cards)', () => {
+    const file = artifactToPreviewFile({
+      name: '客户异常监控报告_20260705',
+      type: 'html_report',
+      url: 'https://cdn.example.sto.cn/artifacts/preview?token=abc',
+    });
+    expect(file.fileName).toBe('客户异常监控报告_20260705');
+  });
+
+  it('falls back to URL inference when name is the preview placeholder', () => {
+    const file = artifactToPreviewFile({
+      name: 'preview',
+      type: 'html',
+      url: 'https://cdn.example.sto.cn/artifacts/preview?token=abc',
+    });
+    expect(file.fileName).toBe('preview.html');
+  });
+
+  it('keeps artifact name when it already includes an extension', () => {
+    const file = artifactToPreviewFile({
+      name: '申通快递股价分析_20260706.html',
+      type: 'html',
+      url: 'https://cdn.example.sto.cn/artifacts/preview?token=abc',
+    });
+    expect(file.fileName).toBe('申通快递股价分析_20260706.html');
   });
 });
 

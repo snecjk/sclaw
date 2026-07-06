@@ -14,6 +14,7 @@ const SIDEBAR_PRIMARY_NAV_ROUTE_MATCHERS: ReadonlyArray<{ path: string; end?: bo
   { path: '/skills' },
   { path: '/workflow' },
   { path: '/models' },
+  { path: '/data-center' },
 ];
 
 /** 当前 pathname 是否命中侧栏 primaryNav 固定入口（非工作台二级 nav） */
