@@ -208,16 +208,20 @@ export default function MyTask() {
     }
   }, [activeView, fetchRecords]);
 
-  // ── 任务视图下低频轮询：到点后后端会推进 nextRunAt，前端需及时拉取以重启倒计时 ──
-  // 仅在 tasks 视图且页面可见时轮询；切回可见时立即补一次，避免长时间隐藏后数据陈旧
+  // ── 低频轮询：任务视图下到点后端会推进 nextRunAt，需及时拉取以重启倒计时；
+  //     执行记录视图下刷新以反映最新执行状态。两者共用一个计时器，按当前视图分发。
+  //     仅在页面可见时轮询；切回可见时立即补一次，避免长时间隐藏后数据陈旧 ──
   useEffect(() => {
-    if (activeView !== 'tasks') return;
     let timer: number | null = null;
     const POLL_INTERVAL = 60_000;
     const poll = async () => {
       try {
         if (document.visibilityState === 'visible') {
-          await fetchJobs();
+          if (activeView === 'tasks') {
+            await fetchJobs();
+          } else {
+            await fetchRecords();
+          }
         }
       } catch {
         // 轮询失败静默忽略，下一轮重试
@@ -237,7 +241,7 @@ export default function MyTask() {
       if (timer) window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [activeView, fetchJobs]);
+  }, [activeView, fetchJobs, fetchRecords]);
 
   // ── 任务视图模型列表 ──
   const safeJobs = useMemo(() => (Array.isArray(jobs) ? jobs : []), [jobs]);
