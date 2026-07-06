@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { getOpenClawConfigDir, getOpenClawSkillsDir, getOpenClawUserSkillsDir, getOpenClawUserDisabledDir } from '../utils/paths';
 import { getCurrentActiveUserCode } from './user-skill-workspace';
-import { setSkillsEnabled } from '../utils/skill-config';
+import { setSkillsEnabled, readPreinstalledManifestSlugs } from '../utils/skill-config';
 import { getStoToken, getAuthState, isSiteUser } from '../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
@@ -827,6 +827,7 @@ export class SkillPlazaService {
     const disabledSlugs = readDisabledDirSlugs(this.getDisabledDir());
     const allSlugs = new Set([...activeSlugs, ...disabledSlugs]);
     const fromLock = readLockJsonSkills(this.configDir);
+    const manifestSlugs = readPreinstalledManifestSlugs();
 
     // 获取 plaza 分类列表，建立 label → slug 映射（权威来源）
     let labelToSlug = new Map<string, string>();
@@ -886,12 +887,10 @@ export class SkillPlazaService {
       const summary = readLocalSkillSummary(skillDir, slug);
       if (summary) {
         const plazaSkill = plazaSkillMap.get(slug);
-        const isOfficial = fromLock.has(slug) || plazaSkill?.source === 'official';
-        const source: 'official' | 'mine' = isOfficial ? 'official' : 'mine';
-
-        // 判断是否为预安装技能（通过 .stoclaw-preinstalled.json marker 文件）
         const skillDirPath = isEnabled ? path.join(this.skillsDir, slug) : path.join(this.getDisabledDir(), slug);
         const isPreinstalled = isPreinstalledSkill(skillDirPath);
+        const isOfficial = fromLock.has(slug) || plazaSkill?.source === 'official' || manifestSlugs.has(slug);
+        const source: 'official' | 'mine' = isOfficial ? 'official' : 'mine';
         const isOfficeSkill = OFFICE_SKILL_SLUGS.has(slug);
 
         // 分类优先级：办公技能 > 预安装技能（其他）> 按 plaza 权威数据 / 本地元数据
