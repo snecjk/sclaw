@@ -85,6 +85,7 @@ describe('syncStoPluginsToOpenClaw', () => {
     expect(writtenConfig.plugins.allow).toContain('sto-skill-call-monitor');
     expect(writtenConfig.plugins.allow).toContain('sto-media-understanding');
     expect(writtenConfig.plugins.allow).toContain('sto-workflow-tool');
+    expect(writtenConfig.plugins.allow).not.toContain('sto-distinctive-design-guard');
     expect(writtenConfig.plugins.entries['sto-workflow-tool']).toEqual({
       enabled: true,
       config: {

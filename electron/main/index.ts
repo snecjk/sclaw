@@ -452,6 +452,7 @@ async function initialize(): Promise<void> {
     { autoInstallSaiCliIfNeeded },
     { autoInstallDwsCliIfNeeded },
     { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled, watchLocalSkillsForDev },
+    { cleanupRetiredSkillsAndPlugins },
     { ensureLongOutputConstraint, ensureChineseThinkingConstraint, getAgentWorkspacePath },
     { ensureAllBundledPluginsInstalledAsync },
     { startHostApiServer },
@@ -476,6 +477,7 @@ async function initialize(): Promise<void> {
     import('../utils/sai-cli'),
     import('../utils/dws-cli'),
     import('../utils/skill-config'),
+    import('../utils/retired-skills-cleanup'),
     import('../utils/agent-config'),
     import('../utils/plugin-install'),
     import('../api/server'),
@@ -604,6 +606,10 @@ async function initialize(): Promise<void> {
   // startup is responsive on Windows and avoids blank/unresponsive cold starts.
   schedulePostFirstPaintWork(window, async () => {
     logger.info('Running deferred startup maintenance tasks');
+
+    await cleanupRetiredSkillsAndPlugins({ skipPluginDirs: true }).catch((error) => {
+      logger.warn('Failed to cleanup retired skills/plugins:', error);
+    });
 
     await ensureBuiltinSkillsInstalled().catch((error) => {
       logger.warn('Failed to install built-in skills:', error);
@@ -740,6 +746,9 @@ async function initialize(): Promise<void> {
 
   // Install bundled plugins before Gateway so the first agent run uses the latest mirror.
   sendStartupProgress('Installing plugins...');
+  await cleanupRetiredSkillsAndPlugins().catch((error) => {
+    logger.warn('Failed to cleanup retired skills/plugins before plugin install:', error);
+  });
   await ensureAllBundledPluginsInstalledAsync().catch((error) => {
     logger.warn('Failed to install/upgrade bundled plugins:', error);
   });

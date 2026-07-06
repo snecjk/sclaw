@@ -1,4 +1,5 @@
 import type { HookCallbackMatcher, HookEvent, McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
+import { RETIRED_SKILLS_SYSTEM_PROMPT } from '../../shared/retired-skills';
 import {
   buildStoDingTalkSendGuardClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk';
@@ -131,7 +132,7 @@ const agentTelemetryExtension: ClaudeRuntimeExtension = {
 const ssoUserContextExtension: ClaudeRuntimeExtension = {
   id: 'sto-sso-user-context',
   async build() {
-    const blocks: string[] = [];
+    const blocks: string[] = [RETIRED_SKILLS_SYSTEM_PROMPT];
 
     blocks.push([
       '产物文件引用规范（重要）：',
