@@ -9,6 +9,7 @@ import {
 import {
   buildArtifactShareDialogDraft,
   buildArtifactShareDraft,
+  buildConversationShareDialogDraft,
   isDingTalkShareContentTooLong,
   truncateConversationPreview,
 } from '../../src/lib/dingtalk-share';
@@ -123,6 +124,26 @@ describe('truncateConversationPreview', () => {
     expect(preview.endsWith('...')).toBe(true);
     expect(preview.split('\n').length).toBe(2);
     expect(preview.length).toBeLessThan(120);
+  });
+
+  it('keeps up to nine lines for conversation share preview', () => {
+    const lines = Array.from({ length: 12 }, (_, i) => `第${i + 1}行`).join('\n');
+    const preview = truncateConversationPreview(lines, 9);
+    expect(preview).toBe('第1行\n第2行\n第3行\n第4行\n第5行\n第6行\n第7行\n第8行\n第9行...');
+  });
+});
+
+describe('buildConversationShareDialogDraft', () => {
+  it('uses plain text preview without injecting share urls', () => {
+    const draft = buildConversationShareDialogDraft(
+      '请查看 [产物](https://oss.example.com/report.html)\n第二行',
+      [],
+    );
+    expect(draft.kind).toBe('conversation');
+    if (draft.kind === 'conversation') {
+      expect(draft.textPreview).not.toContain('[链接]');
+      expect(draft.textPreview).toContain('产物');
+    }
   });
 });
 
