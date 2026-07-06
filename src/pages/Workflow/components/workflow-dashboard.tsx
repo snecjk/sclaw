@@ -49,18 +49,20 @@ import { useWorkflowList } from '@/pages/Workflow/use-workflow-list';
 import { renameWorkflow, deleteWorkflow } from '@/lib/workflow-api';
 import { navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
 import { WorkflowComposer } from '@/pages/Workflow/components/workflow-composer';
+import type { WorkflowListViewState } from '@/pages/Workflow/hooks/use-workflow-list-view-state';
 
 interface WorkflowDashboardProps {
+  viewState: WorkflowListViewState;
   onManualCreate: () => void;
   onGenerate: (prompt: string) => void;
   onEditCard: (workflowId: string) => void;
 }
 
-type MineFilter = WorkflowMineListKind;
 type OfficialFilter = 'all' | string;
 
 /** 工作流列表页主面板：Hero 生成区 + Tab 切换（我的/官方） + 卡片网格 + 右键菜单 + 详情弹窗 */
 export function WorkflowDashboard({
+  viewState,
   onManualCreate,
   onGenerate,
   onEditCard,
@@ -72,9 +74,8 @@ export function WorkflowDashboard({
     useWorkflowList();
   /** chip 点击后 bump key，使 ChatInput 重挂载并应用 seedText */
   const [composerSeed, setComposerSeed] = useState<{ text: string; key: number } | null>(null);
-  const [tab, setTab] = useState<'mine' | 'official'>('mine');
+  const { tab, setTab, mineFilter, setMineFilter } = viewState;
   const [search, setSearch] = useState('');
-  const [mineFilter, setMineFilter] = useState<MineFilter>('published');
   const [officialFilter, setOfficialFilter] = useState<OfficialFilter>('all');
   const [menuIndex, setMenuIndex] = useState<number | null>(null);
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
@@ -460,9 +461,12 @@ export function WorkflowDashboard({
                     // onCardClick={() => openDetailForOfficial(card)}
                     // onPreview={() => openDetailForOfficial(card)}
                     onInstall={() => {
-                      const q = encodeURIComponent(`/${card.name}`);
-                      const wid = encodeURIComponent(card.id);
-                      navigate(`/?q=${q}&workflowId=${wid}`);
+                      navigateToNewSessionWithPrompt(
+                        navigate,
+                        location.pathname,
+                        `/${card.name}`,
+                        { extraSearchParams: { workflowId: card.id } },
+                      );
                     }}
                   />
                 ))}

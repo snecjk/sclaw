@@ -11,8 +11,8 @@ import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-opt
 import { hostApiFetch } from '@/lib/host-api';
 import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
 import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
-import { markSessionUnreadAfterSuccessfulRun } from '@/lib/session-unread-notify';
-import { useSessionUnreadStore } from '@/stores/session-unread';
+import { markSessionUnreadAfterSuccessfulRun, noteObservedRun } from '@/lib/session-unread-notify';
+import { touchSessionReadAt, useSessionUnreadStore } from '@/stores/session-unread';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
@@ -96,6 +96,8 @@ import {
   isSameUserMessage,
   mergeOptimisticUserIntoHistory,
   normalizeUserMessageText,
+  recoverInitialUserFromSessionLabel,
+  ensureOpeningUserMessageFirst,
   traceLoadHistoryUserReconciliation,
 } from './chat/user-message-merge';
 import {
@@ -741,6 +743,8 @@ function handleBackgroundSessionEvent(
 ): void {
   switch (resolvedState) {
     case 'started': {
+      // 记录本次运行期间真实观测到的 run，未读打标仅认这些 run（防重放误标）。
+      noteObservedRun(runId);
       set((s) => patchSessionRuntimeState(s, sessionKey, {
         sending: true,
         activeRunId: runId || getSessionRuntimeState(s.runtimeBySessionKey, sessionKey).activeRunId,
@@ -749,6 +753,7 @@ function handleBackgroundSessionEvent(
       break;
     }
     case 'delta': {
+      noteObservedRun(runId);
       const updates = collectToolUpdates(event.message, resolvedState);
       set((s) => patchSessionRuntimeState(s, sessionKey, (runtime) => ({
         sending: true,
@@ -854,8 +859,14 @@ function handleBackgroundSessionEvent(
           lastUserMessageAt: isTerminalOutput ? null : currentRuntime.lastUserMessageAt,
           error: null,
         }));
-        if (isTerminalOutput && sessionKey !== s.currentSessionKey) {
-          markSessionUnreadAfterSuccessfulRun(sessionKey, s.currentSessionKey);
+        if (isTerminalOutput) {
+          if (sessionKey !== s.currentSessionKey) {
+            markSessionUnreadAfterSuccessfulRun(sessionKey, s.currentSessionKey, { runId });
+          } else {
+            // 前台会话运行完成即视为已读，刷新已读水位，
+            // 避免离开后迟到/后台事件把刚看过的会话重新标未读。
+            touchSessionReadAt(sessionKey);
+          }
         }
         return next;
       });
@@ -1509,8 +1520,7 @@ export const useChatStore = create<ChatState>()(
             }
           }
           if (!mergedSessions.find((s) => s.key === nextSessionKey) && mergedSessions.length > 0) {
-            // Preserve only locally-created pending sessions. On initial boot the
-            // default ghost key (`agent:main:main`) should yield to real history.
+            // Preserve only locally-created pending sessions.
             const hasLocalPendingSession =
               isTemporaryAgentSessionKey(nextSessionKey)
               || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
@@ -1519,7 +1529,13 @@ export const useChatStore = create<ChatState>()(
             // `agent:*:cron:*` dated session) are resolved by key prefix in
             // loadHistory and may not be in the backend list yet — keep them, or
             // the composer falls back to the default agent's engine.
-            if (!hasLocalPendingSession && !isVirtualTaskSessionKey(nextSessionKey)) {
+            // On cold boot the default key (`agent:main:main`) must stay on the
+            // new-chat home instead of jumping into the most recent session.
+            if (
+              nextSessionKey !== DEFAULT_SESSION_KEY
+              && !hasLocalPendingSession
+              && !isVirtualTaskSessionKey(nextSessionKey)
+            ) {
               nextSessionKey = mergedSessions[0].key;
             }
           }
@@ -1893,6 +1909,8 @@ export const useChatStore = create<ChatState>()(
         pendingWorkflow: null,
       };
     });
+    // 新建即视为已读，写入已读水位；后续该会话前台完成的迟到事件不会误标未读。
+    touchSessionReadAt(newKey);
     void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
   },
 
@@ -1981,26 +1999,27 @@ export const useChatStore = create<ChatState>()(
         get().runtimeBySessionKey,
         targetSessionKey,
       ).optimisticUserMessage ?? get().optimisticUserMessage;
-      if (userMsgAt) {
-        finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
-          userMessageAt: userMsgAt,
-          sending: get().sending,
-          sessionKey: targetSessionKey,
-          cachedOptimistic,
-        });
-        if (cachedOptimistic && finalMessages.some((m) => isSameUserMessage(m, cachedOptimistic, userMsgAt))) {
+      finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
+        userMessageAt: userMsgAt,
+        sending: get().sending,
+        sessionKey: targetSessionKey,
+        cachedOptimistic,
+      });
+      const optimisticRefAt = userMsgAt
+        ?? (cachedOptimistic?.timestamp ? toMs(cachedOptimistic.timestamp) : 0);
+      if (cachedOptimistic && optimisticRefAt > 0
+        && finalMessages.some((m) => isSameUserMessage(m, cachedOptimistic, optimisticRefAt))) {
+        set((s) => patchSessionRuntimeState(s, targetSessionKey, { optimisticUserMessage: null }));
+      } else if (cachedOptimistic) {
+        const cachedNorm = normalizeUserMessageText(cachedOptimistic.content);
+        if (
+          cachedNorm.length > 0
+          && finalMessages.some((m) => (
+            m.role === 'user'
+            && normalizeUserMessageText(m.content) === cachedNorm
+          ))
+        ) {
           set((s) => patchSessionRuntimeState(s, targetSessionKey, { optimisticUserMessage: null }));
-        } else if (cachedOptimistic) {
-          const cachedNorm = normalizeUserMessageText(cachedOptimistic.content);
-          if (
-            cachedNorm.length > 0
-            && finalMessages.some((m) => (
-              m.role === 'user'
-              && normalizeUserMessageText(m.content) === cachedNorm
-            ))
-          ) {
-            set((s) => patchSessionRuntimeState(s, targetSessionKey, { optimisticUserMessage: null }));
-          }
         }
       }
 
@@ -2017,6 +2036,19 @@ export const useChatStore = create<ChatState>()(
       finalMessages = mergeWorkflowCardBlocksFromCurrent(finalMessages, get().messages);
       finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
       finalMessages = ensureWorkflowCardsInMessages(finalMessages, targetSessionKey, getMessageText);
+      const gatewaySessionLabel = get().sessions.find((session) => session.key === targetSessionKey)?.label;
+      finalMessages = recoverInitialUserFromSessionLabel(
+        finalMessages,
+        targetSessionKey,
+        get().sessionLabels,
+        gatewaySessionLabel,
+      );
+      finalMessages = ensureOpeningUserMessageFirst(
+        finalMessages,
+        targetSessionKey,
+        get().sessionLabels,
+        gatewaySessionLabel,
+      );
       finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null, {
         sessionKey: targetSessionKey,
       });

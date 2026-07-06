@@ -24,6 +24,7 @@ import {
   Radio,
   ChevronDown,
   Workflow,
+  Database,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -1225,7 +1226,10 @@ export function Sidebar() {
     groupKey: string,
     fallbackAtMs: number,
   ): Promise<LastSessionDeleteFirstTriggerPrep | null> => {
-    const prep = await prepareFirstTriggerClearBeforeLastSessionDelete(groupKey, { fallbackAtMs });
+    const prep = await prepareFirstTriggerClearBeforeLastSessionDelete(groupKey, {
+      fallbackAtMs,
+      notifyOnFailure: false,
+    });
     if (!prep) return null;
     applyTaskGroupFirstTriggeredReactClear(groupKey);
     return prep;
@@ -1281,13 +1285,15 @@ export function Sidebar() {
     if (groupKey && remaining > 0) {
       await ensureTaskGroupFirstTriggerBeforePartialDelete(groupKey, groupSessions);
     } else if (groupKey && remaining === 0) {
+      // 清 first-trigger 占位是尽力而为：即使失败也继续删除。
+      // deleteSession 写入的删除墓碑（deletedSessions）才是刷新/重启/重装后
+      // 过滤已删记录的权威依据，绝不能因清占位失败而跳过。
       firstTriggerPrep = await clearFirstTriggerBeforeLastSessionDelete(groupKey, fallbackAtMs);
-      if (!firstTriggerPrep) return false;
       additionalSuppressKeys = rememberSuppressedKeysForLastGroupSessionDelete(
         groupKey,
         groupSessions,
         key,
-        firstTriggerPrep.restoreAtMs ?? fallbackAtMs,
+        firstTriggerPrep?.restoreAtMs ?? fallbackAtMs,
       );
     }
     const deleted = await deleteSession(key, {
@@ -1333,13 +1339,15 @@ export function Sidebar() {
     if (remainingBefore > 0) {
       await ensureTaskGroupFirstTriggerBeforePartialDelete(groupKey, groupSessions);
     } else {
+      // 清 first-trigger 占位是尽力而为：即使失败也继续删除。
+      // deleteSession 写入的删除墓碑（deletedSessions）才是刷新/重启/重装后
+      // 过滤已删记录的权威依据，绝不能因清占位失败而跳过。
       firstTriggerPrep = await clearFirstTriggerBeforeLastSessionDelete(groupKey, fallbackAtMs);
-      if (!firstTriggerPrep) return false;
       additionalSuppressKeys = rememberSuppressedKeysForLastGroupSessionDelete(
         groupKey,
         groupSessions,
         sessionKey,
-        firstTriggerPrep.restoreAtMs ?? fallbackAtMs,
+        firstTriggerPrep?.restoreAtMs ?? fallbackAtMs,
       );
     }
     const deleted = await deleteSession(sessionKey, {
@@ -1564,6 +1572,7 @@ export function Sidebar() {
       { to: '/skills', icon: <Puzzle className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/workflow', icon: <Workflow className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.workflow') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
+      // { to: '/data-center', icon: <Database className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.dataCenter') },
     ];
     return all.filter((item) => {
       if (item.to === '/models' && !sidebarVis.primaryMyData) return false;

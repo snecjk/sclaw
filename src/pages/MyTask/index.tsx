@@ -20,7 +20,7 @@ import {
 import { resolveTaskGroupKeyFromSessionKey } from '../../../shared/task-group-key';
 import { useChatStore } from '@/stores/chat';
 import { useAgentsStore } from '@/stores/agents';
-import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
+import { navigateToMainChatHome, navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
 import {
   stripInstructionFromTaskMessage,
   prepareDingTalkAgentTurnMessage,
@@ -408,11 +408,14 @@ export default function MyTask() {
 
   const handleTemplateInstall = useCallback(
     (card: OfficialWorkflowCard) => {
-      const q = encodeURIComponent(`/${card.name}`);
-      const wid = encodeURIComponent(card.id);
-      navigate(`/?q=${q}&workflowId=${wid}`);
+      navigateToNewSessionWithPrompt(
+        navigate,
+        location.pathname,
+        `/${card.name}`,
+        { extraSearchParams: { workflowId: card.id } },
+      );
     },
-    [navigate]
+    [navigate, location.pathname]
   );
 
   // ── 渲染 ──

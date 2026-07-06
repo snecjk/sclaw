@@ -13,6 +13,10 @@ import { useWorkflowEditorContentHeader } from '@/hooks/use-workflow-editor-cont
 import { cacheAiWorkflowPrompt, createWorkflowStudio } from '@/lib/workflow-studio-api';
 import { workflowPageContentClass, workflowPageRootClass } from '@/lib/surfaces';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
+import {
+  useWorkflowListViewState,
+  type WorkflowListViewState,
+} from '@/pages/Workflow/hooks/use-workflow-list-view-state';
 
 function useEditorActive(active: boolean) {
   const setEditorActive = useWorkflowUiStore((s) => s.setEditorActive);
@@ -27,7 +31,7 @@ type WorkflowListLocationState = {
   createModalInitial?: CreateWorkflowModalInitialValues;
 };
 
-function WorkflowListRoute() {
+function WorkflowListRoute({ viewState }: { viewState: WorkflowListViewState }) {
   useEditorActive(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -62,6 +66,7 @@ function WorkflowListRoute() {
       <WorkflowPageShading />
       <div className={workflowPageContentClass}>
         <WorkflowDashboard
+          viewState={viewState}
           onManualCreate={() => openCreateModal()}
           onGenerate={(prompt) => {
             navigate('/workflow/generate', { state: { prompt } });
@@ -203,9 +208,10 @@ function WorkflowEditRoute() {
 }
 
 export function WorkflowRoutes() {
+  const viewState = useWorkflowListViewState();
   return (
     <Routes>
-      <Route index element={<WorkflowListRoute />} />
+      <Route index element={<WorkflowListRoute viewState={viewState} />} />
       <Route path="new" element={<WorkflowNewRoute />} />
       <Route path="generate" element={<WorkflowGenerateRoute />} />
       <Route path=":workflowId" element={<WorkflowEditRoute />} />

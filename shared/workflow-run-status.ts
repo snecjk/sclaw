@@ -67,9 +67,23 @@ export interface WorkflowRunApiPayload {
   startedAt?: string;
   completedAt?: string | null;
   nodeRuns?: WorkflowRunNodeRun[] | null;
-  artifacts?: Array<Partial<WorkflowRunArtifact> & { uri?: string; kind?: string; tempUrl?: string }> | null;
+  artifacts?: Array<
+    Partial<WorkflowRunArtifact> & {
+      uri?: string;
+      kind?: string;
+      tempUrl?: string;
+      previewUrl?: string;
+      filePath?: string;
+      contentType?: string;
+    }
+  > | null;
   output?: unknown;
-  result?: { title?: string | null; summary?: string | null; status?: string | null } | null;
+  result?: {
+    title?: string | null;
+    summary?: string | null;
+    status?: string | null;
+    artifacts?: WorkflowRunApiPayload['artifacts'];
+  } | null;
   error?: string | null;
 }
 
@@ -147,18 +161,33 @@ function isHttpArtifactUrl(url: string): boolean {
   return url.startsWith('http://') || url.startsWith('https://');
 }
 
+/** Prefer signed in-app preview URL over raw OSS tempUrl (no VPN required). */
+export function resolveWorkflowArtifactUrl(
+  artifact: Partial<WorkflowRunArtifact> & {
+    uri?: string;
+    tempUrl?: string;
+    previewUrl?: string;
+  },
+): string {
+  return artifact.previewUrl?.trim()
+    || artifact.tempUrl?.trim()
+    || artifact.url?.trim()
+    || artifact.uri?.trim()
+    || '';
+}
+
 export function normalizeRunArtifacts(
   artifacts: WorkflowRunApiPayload['artifacts'],
 ): WorkflowRunArtifact[] {
   if (!Array.isArray(artifacts)) return [];
   return artifacts
     .map((a) => {
-      const contentType = (a as { contentType?: string }).contentType;
+      const contentType = a.contentType;
       return {
         id: a.id ?? '',
         name: a.name ?? a.kind ?? 'artifact',
         type: a.type ?? a.kind ?? contentType ?? 'file',
-        url: a.tempUrl ?? a.url ?? a.uri ?? '',
+        url: resolveWorkflowArtifactUrl(a),
         size: a.size,
       };
     })
@@ -189,6 +218,7 @@ function collectArtifactsFromNodeRuns(
 export function collectAllRunArtifacts(run: WorkflowRunApiPayload): WorkflowRunArtifact[] {
   const pools = [
     normalizeRunArtifacts(run.artifacts),
+    normalizeRunArtifacts(run.result?.artifacts),
     collectArtifactsFromOutput(run.output),
     collectArtifactsFromNodeRuns(run.nodeRuns),
   ].flat();

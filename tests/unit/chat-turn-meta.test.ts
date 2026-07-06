@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
+  assistantMessageHasVisibleReplyBody,
   findLastUserMessageIndex,
+  findTurnDisplayAssistantMessage,
   isCurrentUserTurnIncomplete,
   isLastAssistantInUserTurn,
   isLastUserMessage,
   isMessageInCurrentUserTurn,
+  isTurnDisplayAssistantMessage,
 } from '@/pages/Chat/chat-turn-meta';
 import type { RawMessage } from '@/stores/chat';
 
@@ -69,5 +72,59 @@ describe('chat-turn-meta', () => {
     expect(isLastAssistantInUserTurn(assistant2, messages)).toBe(true);
     expect(isMessageInCurrentUserTurn(assistantMsg, messages)).toBe(false);
     expect(isMessageInCurrentUserTurn(assistant2, messages)).toBe(false);
+  });
+
+  it('uses last text reply as display assistant when skill turn has trailing tool-only snapshots', () => {
+    const reply: RawMessage = {
+      id: 'a_text',
+      role: 'assistant',
+      content: '一口价 HTML 报告已生成',
+    };
+    const toolOnly: RawMessage = {
+      id: 'a_tool',
+      role: 'assistant',
+      content: [{ type: 'tool_use', id: 'tu1', name: 'write_file', input: {} }],
+    };
+    const messages = [userMsg, reply, toolOnly];
+
+    expect(assistantMessageHasVisibleReplyBody(reply)).toBe(true);
+    expect(assistantMessageHasVisibleReplyBody(toolOnly)).toBe(false);
+    expect(findTurnDisplayAssistantMessage(messages, 0)).toBe(reply);
+    expect(isTurnDisplayAssistantMessage(reply, messages)).toBe(true);
+    expect(isTurnDisplayAssistantMessage(toolOnly, messages)).toBe(false);
+  });
+
+  it('treats trailing workflow_card-only assistant as non-blocking for display reply', () => {
+    const reply: RawMessage = {
+      id: 'a_text',
+      role: 'assistant',
+      content: '报告已生成',
+    };
+    const cardOnly: RawMessage = {
+      id: 'a_card',
+      role: 'assistant',
+      content: [{ type: 'workflow_card', runId: 'run_abc', templateName: 'test' }],
+    };
+    const messages = [userMsg, reply, cardOnly];
+
+    expect(isTurnDisplayAssistantMessage(reply, messages)).toBe(true);
+    expect(findTurnDisplayAssistantMessage(messages, 0)).toBe(reply);
+  });
+
+  it('does not block meta when runId appears only in prose without workflow card', () => {
+    const prose: RawMessage = {
+      id: 'a_prose',
+      role: 'assistant',
+      content: '参考 run_ghost 已处理完毕',
+    };
+    expect(
+      isCurrentUserTurnIncomplete({
+        sessionMessages: [userMsg, prose],
+        sending: false,
+        lastUserMessageAt: null,
+        workflowCardStates: {},
+        hasPendingWorkflowSchema: false,
+      }),
+    ).toBe(false);
   });
 });
