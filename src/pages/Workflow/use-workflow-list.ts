@@ -140,7 +140,7 @@ export function useWorkflowList(mineFilter: WorkflowMineFilter): UseWorkflowList
             id: item.id,
             name: item.name,
             listKind,
-            schedule: listKind === 'draft' ? t('card.noScheduleDraft') : '',
+            schedule: '',
             enabled: listKind === 'published',
             description: item.description ?? '',
             coverKey: pickCoverKeyFromWorkflowId(item.id),
