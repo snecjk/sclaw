@@ -58,6 +58,26 @@ const OVERLAP_PRIORITY: Record<TextOverlapKind, number> = {
   different: 0,
 };
 
+/** 思考区是否已完整展示 target 文本（供 UI fallback 兜底，避免正文气泡重复） */
+export function processSegmentsCoverText(
+  segments: ThinkingTurnSegment[],
+  text: string,
+): boolean {
+  const target = text.trim();
+  if (!target) return false;
+
+  const processTexts = collectProcessTexts(segments);
+
+  return processTexts.some((processText) => {
+    const overlap = classifyTextOverlap(processText, target);
+    return (
+      overlap === 'same'
+      || overlap === 'process_prefix_of_final'
+      || overlap === 'final_prefix_of_process'
+    );
+  });
+}
+
 function collectProcessTexts(segments: ThinkingTurnSegment[]): string[] {
   const texts: string[] = [];
   for (const segment of segments) {
