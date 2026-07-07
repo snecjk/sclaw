@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildSharePathToUrlMap,
+  collectConversationFileRefsFromText,
   normalizeSharePathKey,
   replaceConversationFileRefsWithShareUrls,
 } from '../../shared/dingtalk-share-text';
@@ -41,6 +42,17 @@ describe('replaceConversationFileRefsWithShareUrls', () => {
     const replaced = replaceConversationFileRefsWithShareUrls(text, pathToUrl);
     expect(replaced).toContain(OSS_URL);
     expect(replaced).not.toContain('file:///Users/sto/.openclaw');
+  });
+});
+
+describe('collectConversationFileRefsFromText', () => {
+  it('collects inline file urls from conversation text', () => {
+    const refs = collectConversationFileRefsFromText(
+      '报告文件：demo.html: file:///Users/sto/.stoclaw/openclaw/workspace/.claw-output/demo.html',
+    );
+    expect(refs).toHaveLength(1);
+    expect(refs[0]?.fileName).toBe('demo.html');
+    expect(refs[0]?.filePath).toContain('demo.html');
   });
 });
 

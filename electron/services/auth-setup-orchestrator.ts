@@ -13,6 +13,7 @@ import type { SsoUserInfo } from '../utils/auth-store';
 import { getAuthState, getImpersonationOrigin, syncSsoAuthToOpenClaw } from '../utils/auth-store';
 import { resolveAuthMode } from './sto-auth-mode';
 import { syncStoPluginsToOpenClaw } from '../utils/openclaw-auth';
+import { cleanupRetiredSkillsAndPlugins } from '../utils/retired-skills-cleanup';
 import { logger } from '../utils/logger';
 import { getStoModelSyncService, type StoSyncResult } from './providers/sto-model-sync';
 import {
@@ -212,6 +213,7 @@ async function runSetup(
   let needsGatewayRefresh = false;
 
   try {
+    await cleanupRetiredSkillsAndPlugins();
     await syncStoPluginsToOpenClaw();
   } catch (err) {
     logger.warn(`${logPrefix} STO plugins config failed:`, err);

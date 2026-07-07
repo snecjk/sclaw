@@ -8,6 +8,8 @@ import {
 } from '../../shared/dingtalk-share';
 import {
   buildSharePathToUrlMap,
+  collectConversationFileRefsFromText,
+  normalizeSharePathKey,
   replaceConversationFileRefsWithShareUrls,
 } from '../../shared/dingtalk-share-text';
 import { markdownToPlainText } from '../../shared/markdown-to-plain-text';
@@ -45,18 +47,9 @@ async function buildShareContentFromDraft(draft: DingTalkShareDialogDraft): Prom
     };
   }
 
-  const files = [...draft.files];
-  if (draft.artifact && !files.some((file) => file.filePath === draft.artifact!.filePath)) {
-    files.push({
-      fileName: draft.artifact.fileName,
-      filePath: draft.artifact.filePath,
-    });
-  }
-
-  const bodyText = await buildConversationShareText(draft.fullText, files);
   return {
-    title: draft.artifact?.title ?? '分享对话',
-    text: bodyText,
+    title: '分享对话',
+    text: await buildConversationShareText(draft.fullText, draft.files),
   };
 }
 
@@ -65,9 +58,8 @@ export async function prepareDingTalkShareFromDraft(
 ): Promise<DingTalkSharePrepared> {
   logDingTalkShare('confirm-start', {
     kind: draft.kind,
-    title: draft.kind === 'artifact' ? draft.title : draft.artifact?.title,
-    fileName: draft.kind === 'artifact' ? draft.fileName : draft.artifact?.fileName,
-    hasArtifact: draft.kind === 'conversation' ? Boolean(draft.artifact) : true,
+    title: draft.kind === 'artifact' ? draft.title : '分享对话',
+    fileName: draft.kind === 'artifact' ? draft.fileName : undefined,
   });
 
   const content = await buildShareContentFromDraft(draft);
@@ -125,12 +117,6 @@ export type DingTalkShareDialogDraft =
       textPreview: string;
       fullText: string;
       files: Array<{ fileName: string; filePath: string }>;
-      artifact?: {
-        title: string;
-        metaLine: string;
-        fileName: string;
-        filePath: string;
-      };
     };
 
 /** @deprecated Use DingTalkShareDialogDraft */
@@ -192,12 +178,23 @@ function displayArtifactTitle(fileName: string): string {
   return trimmed.replace(/\.[^.]+$/, '') || trimmed;
 }
 
-function pickPrimaryShareArtifact(files: AttachedFileMeta[]): AttachedFileMeta | null {
-  if (!files.length) return null;
-  const document = files.find(
-    (file) => !file.mimeType.startsWith('image/') && file.filePath.trim().length > 0,
-  );
-  return document ?? files[0] ?? null;
+export function buildConversationShareDialogDraft(
+  text: string,
+  files: AttachedFileMeta[],
+): DingTalkShareDialogDraft {
+  const shareFiles = files
+    .filter((file) => file.filePath.trim().length > 0)
+    .map((file) => ({
+      fileName: file.fileName.trim() || 'file',
+      filePath: file.filePath.trim(),
+    }));
+  const plainText = markdownToPlainText(text.trim());
+  return {
+    kind: 'conversation',
+    textPreview: truncateConversationPreview(plainText, 9),
+    fullText: text.trim(),
+    files: shareFiles,
+  };
 }
 
 function buildArtifactDraftFields(
@@ -229,45 +226,34 @@ export function buildArtifactShareDialogDraft(
   };
 }
 
-export function buildConversationShareDialogDraft(
-  text: string,
-  files: AttachedFileMeta[],
-  t: (key: string) => string,
-): DingTalkShareDialogDraft {
-  const artifactFile = pickPrimaryShareArtifact(files);
-  const shareFiles = files
-    .filter((file) => file.filePath.trim().length > 0)
-    .map((file) => ({
-      fileName: file.fileName.trim() || 'file',
-      filePath: file.filePath.trim(),
-    }));
-  return {
-    kind: 'conversation',
-    textPreview: truncateConversationPreview(text),
-    fullText: text.trim(),
-    files: shareFiles,
-    artifact: artifactFile
-      ? buildArtifactDraftFields(artifactFile, t)
-      : undefined,
+function mergeConversationShareFiles(
+  files: Array<{ fileName: string; filePath: string }>,
+  fullText: string,
+): Array<{ fileName: string; filePath: string }> {
+  const uniqueFiles = new Map<string, { fileName: string; filePath: string }>();
+  const add = (file: { fileName: string; filePath: string }) => {
+    const filePath = file.filePath.trim();
+    if (!filePath || isHttpUrl(filePath)) return;
+    const key = normalizeSharePathKey(filePath);
+    if (!key || uniqueFiles.has(key)) return;
+    uniqueFiles.set(key, {
+      fileName: file.fileName.trim() || key.split(/[/\\]/).pop() || 'file',
+      filePath,
+    });
   };
+
+  for (const file of files) add(file);
+  for (const file of collectConversationFileRefsFromText(fullText)) add(file);
+  return [...uniqueFiles.values()];
 }
 
 async function buildConversationShareText(
   fullText: string,
   files: Array<{ fileName: string; filePath: string }>,
 ): Promise<string> {
-  const uniqueFiles = new Map<string, { fileName: string; filePath: string }>();
-  for (const file of files) {
-    const filePath = file.filePath.trim();
-    if (!filePath || uniqueFiles.has(filePath)) continue;
-    uniqueFiles.set(filePath, {
-      fileName: file.fileName.trim() || 'file',
-      filePath,
-    });
-  }
-
+  const localFiles = mergeConversationShareFiles(files, fullText);
   const entries: Array<{ localPath: string; shareUrl: string }> = [];
-  for (const file of uniqueFiles.values()) {
+  for (const file of localFiles) {
     const shareUrl = await resolveDingTalkShareUrl(file.filePath, file.fileName);
     entries.push({ localPath: file.filePath, shareUrl });
   }
@@ -281,7 +267,6 @@ async function buildConversationShareText(
     replacedLength: replaced.length,
     plainTextLength: plainText.length,
     replacedPreview: plainText.slice(0, 320),
-    replacementCount: entries.length,
   });
   return plainText;
 }

@@ -434,6 +434,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
               hideAvatar
               hideThinkingPanel
               suppressToolCards={showThinking}
+              isTurnDisplayReply
             />
           ) : null
         ) : null}

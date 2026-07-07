@@ -50,9 +50,9 @@
     --link-foreground: 0 0% 100%;
     --link-muted: 228 100% 97%;
 
-    /* S Claw 壳层（归档设计稿对齐）：侧栏与 gutter 共用 Grey-3 #F1F1F3 */
-    --sto-page-bg: #f1f1f3;
-    --sto-sidebar-bg: var(--sto-page-bg);
+    /* S Claw 壳层（归档设计稿对齐）：侧栏与 gutter 共用 #EDEDED */
+    --sto-page-bg: #ededed;
+    --sto-sidebar-bg: #ededed;
     --sto-sidebar-border: #e8eaef;
     --sto-accent: #ff8c00;
     --sto-accent-soft: #fff3e0;
@@ -68,7 +68,7 @@
     --sto-chrome-toggle-inset-top: 12px;
     --sto-chrome-h: calc(var(--sto-chrome-toggle-inset-top) + 32px);
     --sto-shell-card-gap: 8px;
-    /* MasterGo 2:23107 主内容卡片：18px 圆角 + 无描边 + 轻阴影（#F7F8FA 与壳层 #F1F1F3 区分 gutter） */
+    /* MasterGo 2:23107 主内容卡片：18px 圆角 + 无描边 + 轻阴影（#F7F8FA 与壳层 #EDEDED 区分 gutter） */
     --sto-main-card-radius: 18px;
     --sto-main-card-bg: #f7f8fa;
     --sto-main-card-shadow: 0 0 16px rgba(0, 0, 0, 0.01);
@@ -100,12 +100,12 @@
     --sto-sidebar-text-default: var(--sto-grey-10);
     --sto-sidebar-text-icon: var(--sto-grey-9);
     --sto-sidebar-text-section: var(--sto-grey-8);
-    --sto-sidebar-row-hover-bg: #eaeaed;
-    --sto-sidebar-nav-active-bg: var(--sto-sidebar-row-hover-bg);
+    --sto-sidebar-row-hover-bg: #e4e4e4;
+    --sto-sidebar-nav-active-bg: #dcdcdc;
     /** 分区标题 sticky 行高（任务 top-0，最近叠在其下） */
     --sto-sidebar-section-sticky-h: 30px;
     --sto-sidebar-running-spinner: #5f9274;
-    --sto-sidebar-subitem-active-bg: #e5e6eb;
+    --sto-sidebar-subitem-active-bg: #dcdcdc;
     --sto-sidebar-footer-name: #1a1a1a;
     --sto-sidebar-footer-meta: #8b9099;
     /* MainLayout main `[scrollbar-gutter:stable]` 预留宽度，底纹右出血需一并抵消 */
