@@ -26,8 +26,8 @@ import {
   type UsageWindow,
 } from './usage-history';
 
-/** 非网点余额申请外链（占位，后期替换为正式页面） */
-const HQ_BALANCE_APPLY_URL = 'https://www.baidu.com';
+/** 非网点余额申请外链 */
+const HQ_BALANCE_APPLY_URL = 'https://devops-new.sto.cn/personMainInfo';
 
 const DEFAULT_USAGE_FETCH_MAX_ATTEMPTS = 2;
 const WINDOWS_USAGE_FETCH_MAX_ATTEMPTS = 3;
