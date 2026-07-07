@@ -25,14 +25,12 @@ import {
   workflowListCardMenuItemClass,
   workflowListCardMoreActionClass,
   workflowListCardPrimaryActionClass,
-  workflowListCardScheduleRowClass,
   workflowListCardSecondaryActionClass,
   workflowListCardShellClass,
   workflowListCardTitleRowClass,
 } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
 import { WorkflowCardCover } from '@/pages/Workflow/components/workflow-card-cover';
-// import { WorkflowScheduleToggle } from '@/pages/Workflow/components/workflow-schedule-toggle';
 import type {
   OfficialWorkflowCard,
   WorkflowCardItem,
@@ -103,8 +101,6 @@ export interface WorkflowMineListCardProps {
   isRenaming: boolean;
   renameRef?: RefObject<HTMLInputElement | null>;
   onRenameCommit: (name: string) => void;
-  // TODO: 等待后端 API 对接
-  // onToggleEnabled: (enabled: boolean) => void;
   onCardClick?: () => void;
   onRun: () => void;
   onEdit: () => void;
@@ -120,7 +116,6 @@ export function WorkflowMineListCard({
   isRenaming,
   renameRef,
   onRenameCommit,
-  // onToggleEnabled,
   onCardClick,
   onRun,
   onEdit,
@@ -156,40 +151,10 @@ export function WorkflowMineListCard({
               ) : (
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   {card.name}
-                  {card.isCustom ? (
-                    <span className="rounded-sm bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                      {t('card.customTag')}
-                    </span>
-                  ) : (
-                    <span className="rounded-sm bg-muted px-2 py-0.5 text-xs font-medium text-foreground/70">
-                      {t('card.systemTag')}
-                    </span>
-                  )}
                 </span>
               )}
             </div>
-            {/* TODO: 等待后端 API 对接 */}
-            {/* <WorkflowScheduleToggle
-              checked={card.enabled}
-              onCheckedChange={onToggleEnabled}
-              aria-label={card.enabled ? t('card.pauseSchedule') : t('card.resumeSchedule')}
-            /> */}
           </div>
-          {card.schedule.trim() || card.showPausedLabel ? (
-            <div
-              className={cn(
-                workflowListCardScheduleRowClass,
-                'flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5'
-              )}
-            >
-              <span className={cn(card.scheduleMuted && 'text-muted-foreground/80')}>
-                {card.schedule}
-              </span>
-              {card.showPausedLabel ? (
-                <span className="text-warning">{t('card.pausedLabel')}</span>
-              ) : null}
-            </div>
-          ) : null}
         </div>
 
         <p className="m-0 text-[13px] leading-relaxed text-foreground/80">{card.description}</p>
@@ -300,9 +265,6 @@ export function WorkflowOfficialListCard({
               {card.name}
             </div>
           </div>
-          {card.schedule.trim() ? (
-            <div className={workflowListCardScheduleRowClass}>{card.schedule}</div>
-          ) : null}
         </div>
         <p className="m-0 text-[13px] leading-relaxed text-foreground/80">{card.description}</p>
         {/* TODO: POST /agent/v1/workflow-templates 节点摘要未就绪，card.flow 暂为空；接口稳定后恢复 WorkflowFlowRow */}

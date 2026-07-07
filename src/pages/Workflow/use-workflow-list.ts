@@ -89,12 +89,6 @@ export function useWorkflowList(mineFilter: WorkflowMineFilter): UseWorkflowList
   const mineInFlight = useRef(0);
   const officialFetchSeq = useRef(0);
 
-  /** 官方模板 ID 集合（保持最新，供 fetchMine 闭包内读取，避免闭包过期） */
-  const officialTemplateIdsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    officialTemplateIdsRef.current = new Set(officialCards.map((c) => c.id));
-  }, [officialCards]);
-
   /** 当前 mineFilter 的最新引用，供 refetchMine 等无参闭包读取 */
   const mineFilterRef = useRef(mineFilter);
   useEffect(() => {
@@ -133,23 +127,18 @@ export function useWorkflowList(mineFilter: WorkflowMineFilter): UseWorkflowList
         const rawItems = mineResponse.data ?? [];
         const mappedCards: WorkflowCardItem[] = rawItems.map((item) => {
           const templateId = item.templateId != null ? String(item.templateId) : null;
-          const isCustom = templateId == null || !officialTemplateIdsRef.current.has(templateId);
           /** 后端已按 lifecycle_status 过滤，listKind 即当前 Tab */
           const listKind: WorkflowMineListKind = filter;
           return {
             id: item.id,
             name: item.name,
             listKind,
-            schedule: '',
             enabled: listKind === 'published',
             description: item.description ?? '',
             coverKey: pickCoverKeyFromWorkflowId(item.id),
             flow: [],
-            isCustom,
             templateId,
             neverRun: true,
-            scheduleMuted: listKind === 'draft',
-            showPausedLabel: false,
           };
         });
         setCardsByKind((prev) => ({ ...prev, [filter]: mappedCards }));
@@ -189,25 +178,12 @@ export function useWorkflowList(mineFilter: WorkflowMineFilter): UseWorkflowList
           id: item.id,
           name: item.label,
           category: item.category ?? '',
-          schedule: '',
           description: item.description ?? '',
           flow: [],
           coverKey: pickCoverKeyFromWorkflowId(item.id),
         }))
       );
 
-      // 官方模板列表更新后，重新推导各 Tab 缓存卡片的 isCustom
-      const officialIds = new Set(officialItems.map((item) => item.id));
-      setCardsByKind((prev) => ({
-        published: prev.published.map((card) => {
-          const isCustom = card.templateId == null || !officialIds.has(card.templateId);
-          return card.isCustom === isCustom ? card : { ...card, isCustom };
-        }),
-        draft: prev.draft.map((card) => {
-          const isCustom = card.templateId == null || !officialIds.has(card.templateId);
-          return card.isCustom === isCustom ? card : { ...card, isCustom };
-        }),
-      }));
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (err) {
       if (officialFetchSeq.current !== seq) return;
@@ -220,7 +196,7 @@ export function useWorkflowList(mineFilter: WorkflowMineFilter): UseWorkflowList
   /**
    * 首次加载：并发拉取 published / draft 两个 Tab（保证两个角标计数均立即准确）；
    * 切换 mineFilter 时：仅刷新当前 Tab（拉取最新数据）。
-   * official 仅首次加载（用于推导 isCustom）。
+   * official 仅首次加载（用于「官方推荐」列表展示）。
    */
   const didInitialMountRef = useRef(false);
   useEffect(() => {
