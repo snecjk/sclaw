@@ -25,7 +25,10 @@ import {
   type UsageHistoryEntry,
   type UsageWindow,
 } from './usage-history';
-import { TokenQuotaDialog } from './TokenQuotaDialog';
+
+/** 非网点余额申请外链（占位，后期替换为正式页面） */
+const HQ_BALANCE_APPLY_URL = 'https://www.baidu.com';
+
 const DEFAULT_USAGE_FETCH_MAX_ATTEMPTS = 2;
 const WINDOWS_USAGE_FETCH_MAX_ATTEMPTS = 3;
 const USAGE_FETCH_RETRY_DELAY_MS = 1500;
@@ -49,17 +52,14 @@ export function Models() {
 
   type TokenBalanceState = {
     status: 'idle' | 'loading' | 'done' | 'error';
-    tokenId: string;
     spend: number;
     maxBudget: number;
   };
   const [tokenBalance, setTokenBalance] = useState<TokenBalanceState>({
     status: 'idle',
-    tokenId: '',
     spend: 0,
     maxBudget: 0,
   });
-  const [showQuotaDialog, setShowQuotaDialog] = useState(false);
 
   type FetchState = {
     status: 'idle' | 'loading' | 'done';
@@ -94,12 +94,6 @@ export function Models() {
   }, []);
 
   useEffect(() => {
-    if (isSiteForAi) {
-      setShowQuotaDialog(false);
-    }
-  }, [isSiteForAi]);
-
-  useEffect(() => {
     let cancelled = false;
     async function fetchTokenBalance() {
       setTokenBalance((prev) => ({ ...prev, status: 'loading' }));
@@ -108,7 +102,6 @@ export function Models() {
         if (cancelled) return;
         setTokenBalance({
           status: 'done',
-          tokenId: res.tokenId ?? '',
           spend: res.spend ?? 0,
           maxBudget: res.maxBudget ?? 0,
         });
@@ -122,21 +115,6 @@ export function Models() {
       cancelled = true;
     };
   }, []);
-
-  const refreshTokenBalance = async () => {
-    setTokenBalance((prev) => ({ ...prev, status: 'loading' }));
-    try {
-      const res = await hostApiFetch<{ tokenId: string; spend: number; maxBudget: number }>('/api/token-balance');
-      setTokenBalance({
-        status: 'done',
-        tokenId: res.tokenId ?? '',
-        spend: res.spend ?? 0,
-        maxBudget: res.maxBudget ?? 0,
-      });
-    } catch {
-      setTokenBalance((prev) => ({ ...prev, status: 'error' }));
-    }
-  };
 
   useEffect(() => {
     if (usageFetchTimerRef.current) {
@@ -306,7 +284,7 @@ export function Models() {
                 className="h-8 rounded-md border-border bg-transparent px-3 text-[13px] hover:bg-primary/[0.06]"
                 onClick={() => {
                   trackUiEvent('models.token_balance_apply_clicked');
-                  setShowQuotaDialog(true);
+                  void window.electron.openExternal(HQ_BALANCE_APPLY_URL);
                 }}
               >
                 {t('dashboard:tokenBalance.apply', '余额申请')}
@@ -576,16 +554,6 @@ export function Models() {
           unknownModelLabel={t('dashboard:recentTokenHistory.unknownModel')}
         />
       )}
-      {!isSiteForAi ? (
-        <TokenQuotaDialog
-          open={showQuotaDialog}
-          onClose={() => setShowQuotaDialog(false)}
-          tokenId={tokenBalance.tokenId}
-          spend={tokenBalance.spend}
-          maxBudget={tokenBalance.maxBudget}
-          onQuotaChanged={() => void refreshTokenBalance()}
-        />
-      ) : null}
     </div>
   );
 }
