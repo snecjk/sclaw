@@ -30,7 +30,6 @@ import {
   STO_CANONICAL_ACCOUNT_ID,
   isStoCatalogReady,
 } from './sto-placeholder-utils';
-import crypto from 'crypto';
 import {
   detectStoCatalogLegacyState,
   markStoCatalogMigrationComplete,
@@ -54,6 +53,18 @@ const STO_DOMAINS: Record<string, string> = {
 const STO_DOMAIN_DEFAULT = 'https://baseinfo-aimemory.sto.cn/agent';
 
 const SYNC_INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
+
+function inferenceHeadersEqual(
+  current: Record<string, string> | undefined,
+  expected: Record<string, string>,
+): boolean {
+  const currentKeys = Object.keys(current ?? {});
+  const expectedKeys = Object.keys(expected);
+  if (currentKeys.length !== expectedKeys.length) {
+    return false;
+  }
+  return expectedKeys.every((key) => (current ?? {})[key] === expected[key]);
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -150,18 +161,18 @@ export class StoModelSyncService {
       return result;
     }
 
-    // Step 2 — AI resource user code for secret header (HQ origin when demo-as-site)
-    const { resolveAiResourceContext } = await import('../sto-auth-mode');
-    const aiCtx = await resolveAiResourceContext();
-    const userCode = aiCtx?.aiUser.code ?? '';
-    if (!userCode) {
-      result.error = 'no-user-code';
-      return result;
-    }
-    const secretHeader = crypto.createHash('md5').update(userCode).digest('hex');
-
+    // Step 2 — Resolve strategy for inference key/headers
     const { getAuthState } = await import('../../utils/auth-store');
     const authState = await getAuthState();
+    const { resolveStrategy } = await import('../sto-sk-strategy');
+    const strategy = await resolveStrategy(authState.user);
+    if (!strategy || !authState.user) {
+      result.error = 'no-strategy';
+      return result;
+    }
+
+    const inferenceSk = await strategy.formatInferenceApiKey(authState.user, sk);
+    const inferenceHeaders = await strategy.getInferenceHeaders(authState.user);
 
     const legacyState = await detectStoCatalogLegacyState();
     if (legacyState.needsMigration) {
@@ -173,14 +184,9 @@ export class StoModelSyncService {
     }
 
     // Step 3 — Fetch remote models and supplier domain via strategy (网点/非网点)
-    const { resolveStrategy } = await import('../sto-sk-strategy');
-    const strategy = await resolveStrategy(authState.user);
     let remoteModels: StoRemoteModel[];
     let supplierDomain: string;
     try {
-      if (!strategy || !authState.user) {
-        throw new Error('No strategy or user available');
-      }
       const models = await strategy.getUserModels(authState.user);
       remoteModels = (models ?? []).map((id) => ({ id, name: id }));
       supplierDomain = await strategy.getSupplierDomain();
@@ -257,9 +263,7 @@ export class StoModelSyncService {
         model: remoteModelIds[0],
         enabled: true,
         isDefault: false,
-        headers: {
-          secret: secretHeader,
-        },
+        headers: inferenceHeaders,
         metadata: {
           managedBy: 'sto-auto-sync',
           customModels: remoteModelIds,
@@ -269,10 +273,10 @@ export class StoModelSyncService {
       };
 
       try {
-        await providerService.createAccount(account, sk);
+        await providerService.createAccount(account, inferenceSk);
         await syncSavedProviderToRuntime(
           providerAccountToConfig(account),
-          sk,
+          inferenceSk,
           runtimeGateway,
         );
         result.created.push(STO_ACCOUNT_ID);
@@ -287,7 +291,7 @@ export class StoModelSyncService {
       const baseUrlChanged = existingAccount.baseUrl !== expectedBaseUrl;
       const currentModelRemoved =
         existingAccount.model && !remoteModelIds.includes(existingAccount.model);
-      const headersChanged = existingAccount.headers?.secret !== secretHeader;
+      const headersChanged = !inferenceHeadersEqual(existingAccount.headers, inferenceHeaders);
       const vendorIdNeedsNormalize = existingAccount.vendorId !== 'sto';
 
       if (
@@ -302,7 +306,7 @@ export class StoModelSyncService {
           vendorId: 'sto',
           baseUrl: expectedBaseUrl,
           enabled: true,
-          headers: { secret: secretHeader },
+          headers: inferenceHeaders,
           metadata: {
             ...existingAccount.metadata,
             managedBy: 'sto-auto-sync',
@@ -316,7 +320,7 @@ export class StoModelSyncService {
         }
 
         try {
-          await providerService.updateAccount(STO_ACCOUNT_ID, patch, sk);
+          await providerService.updateAccount(STO_ACCOUNT_ID, patch, inferenceSk);
           const updatedAccount = {
             ...existingAccount,
             ...patch,
@@ -325,7 +329,7 @@ export class StoModelSyncService {
           };
           await syncSavedProviderToRuntime(
             providerAccountToConfig(updatedAccount),
-            sk,
+            inferenceSk,
             runtimeGateway,
           );
           result.updated.push(STO_ACCOUNT_ID);
@@ -335,9 +339,9 @@ export class StoModelSyncService {
       } else {
         try {
           const currentKey = await getApiKey(STO_ACCOUNT_ID);
-          if (currentKey !== sk) {
-            await storeApiKey(STO_ACCOUNT_ID, sk);
-            await syncProviderApiKeyToRuntime('sto', STO_ACCOUNT_ID, sk);
+          if (currentKey !== inferenceSk) {
+            await storeApiKey(STO_ACCOUNT_ID, inferenceSk);
+            await syncProviderApiKeyToRuntime('sto', STO_ACCOUNT_ID, inferenceSk);
             result.updated.push(STO_ACCOUNT_ID);
           }
         } catch (err) {
@@ -347,7 +351,7 @@ export class StoModelSyncService {
     }
 
     // Step 5b — Provider store may be ready while openclaw.json still has legacy residue
-    await this.ensureStoCatalogMirroredToOpenClaw(sk, runtimeGateway, result);
+    await this.ensureStoCatalogMirroredToOpenClaw(inferenceSk, runtimeGateway, result);
 
     // Step 6 — Set default provider if needed
     const currentDefault = await getDefaultProviderAccountId();

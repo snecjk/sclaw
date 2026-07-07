@@ -24,6 +24,7 @@ vi.mock('@electron/utils/auth-store', () => ({
 }));
 
 import { SiteSkStrategy } from '@electron/services/sto-site-sk-strategy';
+import crypto from 'crypto';
 
 const siteUser: SsoUserInfo = {
   id: '2',
@@ -99,5 +100,18 @@ describe('SiteSkStrategy', () => {
 
   it('getDecryptKey is no longer supported on client', async () => {
     await expect(strategy.getDecryptKey()).rejects.toThrow('memory-center');
+  });
+
+  it('formatInferenceApiKey returns plain sk unchanged', async () => {
+    await expect(strategy.formatInferenceApiKey(siteUser, 'site-sk-plain')).resolves.toBe(
+      'site-sk-plain',
+    );
+  });
+
+  it('getInferenceHeaders returns md5 secret for user code', async () => {
+    const expectedSecret = crypto.createHash('md5').update(siteUser.code).digest('hex');
+    await expect(strategy.getInferenceHeaders(siteUser)).resolves.toEqual({
+      secret: expectedSecret,
+    });
   });
 });

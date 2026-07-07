@@ -32,6 +32,12 @@ export interface StoSkStrategy {
   /** 获取消息发送域名（用于 Gateway 发送消息） */
   getSupplierDomain(): Promise<string>;
 
+  /** 推理用 API Key（HQ: plainSk&&productCode；Site: plainSk） */
+  formatInferenceApiKey(user: SsoUserInfo, plainSk: string): Promise<string>;
+
+  /** 推理附加请求头（HQ: {}；Site: { secret: md5(userCode) }） */
+  getInferenceHeaders(user: SsoUserInfo): Promise<Record<string, string>>;
+
   /** 获取 SK 解密密钥（根据当前环境返回对应密钥） */
   getDecryptKey(): Promise<string>;
 

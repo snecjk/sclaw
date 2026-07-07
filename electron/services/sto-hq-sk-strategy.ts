@@ -17,6 +17,7 @@ import {
   fetchHqTokenQuotaTiersViaMemoryCenter,
   StoHqMemoryApiError,
 } from './sto-hq-memory-api-service';
+import { getHqInferenceProductCode, hasHqInferenceProductCodeCached, loadHqInferenceProductCode } from './sto-apollo-config-service';
 
 export class HqSkStrategy implements StoSkStrategy {
   private static readonly CACHE_KEY = 'sto-sk-v2';
@@ -25,8 +26,8 @@ export class HqSkStrategy implements StoSkStrategy {
 
   /** 模型推理 Gateway baseUrl 域名（客户端本地，不经 memory-center） */
   private static readonly SUPPLIER_DOMAINS: Record<string, string> = {
-    prod: 'https://devops-llmgateway.sto.cn',
-    test: 'https://devops-llmgateway-test.sto.cn',
+    prod: 'https://devops-llmgatewayportal.sto.cn',
+    test: 'https://devops-llmgatewayportal-test.sto.cn',
   };
 
   // ─── 公开接口实现 ───
@@ -124,6 +125,20 @@ export class HqSkStrategy implements StoSkStrategy {
     return domain;
   }
 
+  async formatInferenceApiKey(_user: SsoUserInfo, plainSk: string): Promise<string> {
+    if (!hasHqInferenceProductCodeCached()) {
+      await loadHqInferenceProductCode();
+    }
+    const productCode = getHqInferenceProductCode();
+    const inferenceKey = `${plainSk}&&${productCode}`;
+    logger.info(`[hq-sk] formatInferenceApiKey: productCode=${productCode}`);
+    return inferenceKey;
+  }
+
+  async getInferenceHeaders(_user: SsoUserInfo): Promise<Record<string, string>> {
+    return {};
+  }
+
   async getDecryptKey(): Promise<string> {
     throw new Error('SK decryption is handled by memory-center');
   }
@@ -155,7 +170,7 @@ export class HqSkStrategy implements StoSkStrategy {
 
   private isTestEnvironment(env?: string | null): boolean {
     const normalized = env?.trim().toLowerCase() || '';
-    return ['test', 'pre-release', 'daily', 'daily-external'].some(
+    return ['test', 'pre-release', 'daily', 'daily-external', 'local'].some(
       (e) => normalized.includes(e),
     );
   }

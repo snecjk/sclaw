@@ -11,6 +11,7 @@ import type { TokenQuotaTierQueryResult } from '../../shared/sto-token-quota-tie
 import { getSsoEnvironment } from '../utils/auth-store';
 import { storeApiKey, getApiKey, deleteApiKey } from '../utils/secure-storage';
 import { logger } from '../utils/logger';
+import crypto from 'crypto';
 import {
   ensureSiteKeyViaMemoryCenter,
 } from './sto-site-memory-api-service';
@@ -98,6 +99,19 @@ export class SiteSkStrategy implements StoSkStrategy {
     return domain;
   }
 
+  async formatInferenceApiKey(_user: SsoUserInfo, plainSk: string): Promise<string> {
+    return plainSk;
+  }
+
+  async getInferenceHeaders(user: SsoUserInfo): Promise<Record<string, string>> {
+    const userCode = user.code?.trim() ?? '';
+    if (!userCode) {
+      return {};
+    }
+    const secret = crypto.createHash('md5').update(userCode).digest('hex');
+    return { secret };
+  }
+
   async getDecryptKey(): Promise<string> {
     throw new Error('SK decryption is handled by memory-center');
   }
@@ -174,7 +188,7 @@ export class SiteSkStrategy implements StoSkStrategy {
 
   private isTestEnvironment(env?: string | null): boolean {
     const normalized = env?.trim().toLowerCase() || '';
-    return ['test', 'pre-release', 'daily', 'daily-external'].some(
+    return ['test', 'pre-release', 'daily', 'daily-external', 'local'].some(
       (e) => normalized.includes(e),
     );
   }

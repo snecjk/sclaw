@@ -79,3 +79,27 @@ export async function loadSiteDepartmentTypes(): Promise<Set<string>> {
   logger.info('[ApolloConfig] site department types loaded:', Array.from(types));
   return types;
 }
+
+const DEFAULT_HQ_INFERENCE_PRODUCT_CODE = 'enterprise-Intelligence';
+
+let hqInferenceProductCode: string | null = null;
+
+/**
+ * Load HQ inference product code from Apollo config.
+ * Key: claw.hq.inference.product.code
+ */
+export async function loadHqInferenceProductCode(): Promise<void> {
+  const value = await fetchApolloConfigValue('claw.hq.inference.product.code');
+  if (value?.trim()) {
+    hqInferenceProductCode = value.trim();
+    logger.info(`[ApolloConfig] HQ inference product code loaded: ${hqInferenceProductCode}`);
+  }
+}
+
+export function getHqInferenceProductCode(): string {
+  return hqInferenceProductCode ?? DEFAULT_HQ_INFERENCE_PRODUCT_CODE;
+}
+
+export function hasHqInferenceProductCodeCached(): boolean {
+  return hqInferenceProductCode !== null;
+}

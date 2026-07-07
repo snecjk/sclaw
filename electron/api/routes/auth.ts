@@ -20,7 +20,7 @@ import { removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-au
 import { getStoPolicyReportApiHost } from '../../../shared/env-config';
 import { computeCrmWeekReportSurfaceAllowed } from '../../../shared/crm-week-report-policy';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
-import { loadSiteDepartmentTypes } from '../../services/sto-apollo-config-service';
+import { loadSiteDepartmentTypes, loadHqInferenceProductCode } from '../../services/sto-apollo-config-service';
 import { getClientSiteAccessService } from '../../services/client-site-access-service';
 import type { ClientSiteAccessCheckResult } from '../../../shared/client-site-access';
 import { syncClaudeDefaultContext } from '../../services/claude-context-sync';
@@ -79,6 +79,10 @@ function schedulePostLoginBackgroundWork(user: SsoUserInfo, ctx: HostApiContext)
 
     void loadSiteDepartmentTypes().catch((err) =>
       logger.warn('Post-login site department types load failed:', err),
+    );
+
+    void loadHqInferenceProductCode().catch((err) =>
+      logger.warn('Post-login HQ inference product code load failed:', err),
     );
 
     try {

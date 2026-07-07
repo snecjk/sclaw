@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => ({
   getApiKey: vi.fn(),
   storeApiKey: vi.fn(),
   deleteApiKey: vi.fn(),
+  getHqInferenceProductCode: vi.fn().mockReturnValue('enterprise-Intelligence'),
+  hasHqInferenceProductCodeCached: vi.fn().mockReturnValue(true),
+  loadHqInferenceProductCode: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@electron/services/sto-hq-memory-api-service', () => ({
@@ -27,6 +30,12 @@ vi.mock('@electron/utils/secure-storage', () => ({
 
 vi.mock('@electron/utils/auth-store', () => ({
   getSsoEnvironment: vi.fn().mockResolvedValue('production'),
+}));
+
+vi.mock('@electron/services/sto-apollo-config-service', () => ({
+  getHqInferenceProductCode: mocks.getHqInferenceProductCode,
+  hasHqInferenceProductCodeCached: mocks.hasHqInferenceProductCodeCached,
+  loadHqInferenceProductCode: mocks.loadHqInferenceProductCode,
 }));
 
 import { HqSkStrategy } from '@electron/services/sto-hq-sk-strategy';
@@ -61,6 +70,8 @@ describe('HqSkStrategy', () => {
     mocks.getApiKey.mockResolvedValue(null);
     mocks.storeApiKey.mockResolvedValue(undefined);
     mocks.deleteApiKey.mockResolvedValue(undefined);
+    mocks.getHqInferenceProductCode.mockReturnValue('enterprise-Intelligence');
+    mocks.hasHqInferenceProductCodeCached.mockReturnValue(true);
   });
 
   it('getUserSk stores and returns plaintext apiKey from memory-center', async () => {
@@ -99,5 +110,27 @@ describe('HqSkStrategy', () => {
 
   it('getDecryptKey is no longer supported on client', async () => {
     await expect(strategy.getDecryptKey()).rejects.toThrow('memory-center');
+  });
+
+  it('getSupplierDomain returns hardcoded llmgatewayportal prod domain', async () => {
+    const domain = await strategy.getSupplierDomain();
+    expect(domain).toBe('https://devops-llmgatewayportal.sto.cn');
+  });
+
+  it('getSupplierDomain returns test portal for local SSO environment', async () => {
+    const { getSsoEnvironment } = await import('@electron/utils/auth-store');
+    vi.mocked(getSsoEnvironment).mockResolvedValueOnce('local');
+
+    const domain = await strategy.getSupplierDomain();
+    expect(domain).toBe('https://devops-llmgatewayportal-test.sto.cn');
+  });
+
+  it('formatInferenceApiKey appends product code with &&', async () => {
+    const inferenceKey = await strategy.formatInferenceApiKey(hqUser, 'sk-plain');
+    expect(inferenceKey).toBe('sk-plain&&enterprise-Intelligence');
+  });
+
+  it('getInferenceHeaders returns empty object for HQ', async () => {
+    await expect(strategy.getInferenceHeaders(hqUser)).resolves.toEqual({});
   });
 });

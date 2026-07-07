@@ -47,6 +47,20 @@ export class DemoSkStrategy implements StoSkStrategy {
     return getHqSkStrategy().getSupplierDomain();
   }
 
+  async formatInferenceApiKey(user: SsoUserInfo, plainSk: string): Promise<string> {
+    const origin = await this.requireOriginUser();
+    if (!origin) return plainSk;
+    logger.info('[demo-sk] formatInferenceApiKey delegating to HQ');
+    return getHqSkStrategy().formatInferenceApiKey(origin, plainSk);
+  }
+
+  async getInferenceHeaders(user: SsoUserInfo): Promise<Record<string, string>> {
+    const origin = await this.requireOriginUser();
+    if (!origin) return {};
+    logger.info('[demo-sk] getInferenceHeaders delegating to HQ');
+    return getHqSkStrategy().getInferenceHeaders(origin);
+  }
+
   async getDecryptKey(): Promise<string> {
     return getHqSkStrategy().getDecryptKey();
   }
