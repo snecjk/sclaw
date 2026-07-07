@@ -19,6 +19,7 @@ export const WORKFLOW_SYSTEM_PROMPT = [
   "- Use execute_workflow to start or rerun a known workflowId.",
   "- Use get_workflow_status to check a known runId.",
   "- Do not use Bash, exec, or filesystem reads to operate STO workflows. Regular non-workflow sai-cli commands are allowed.",
+  "- Important (scheduled-task execution context): if the context/message contains StoClaw DingTalk Recipients JSON, after the workflow status becomes completed, you MUST take the final output and immediately call `dws chat message send` to send it to those recipients. Never just reply \"completed\" without sending the DingTalk message.",
 ].join("\n");
 
 const WORKFLOW_TOOL_NAMES = new Set([

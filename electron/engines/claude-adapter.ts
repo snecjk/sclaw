@@ -825,6 +825,12 @@ export async function consumeClaudeQuery(
       }
       if ((message.type === 'user' || message.type === 'assistant') && 'message' in message) {
         if (message.type === 'user' && shouldHideClaudeUserMessage(message, (message as { message?: unknown }).message)) {
+          // Hidden user messages carry tool_result blocks (e.g. the scheduled-task
+          // worker reads the dws send result here to set dingtalkAlreadySent). The
+          // `continue` below skips the tail onMessage call, so surface the message
+          // to observers first — otherwise the worker's dws-result detection is dead
+          // code and the workflow fallback re-sends dingtalk the agent already sent.
+          await onMessage?.(message);
           const workflowToolResult = extractWorkflowToolResult((message as { message?: unknown }).message);
           if (workflowToolResult) {
             const nextEntry = {
