@@ -16,6 +16,8 @@ import {
 import { buildClaudeTaskRuntimeContext } from './claude-task-runtime-builder';
 import { upsertEngineSessionRegistryEntry } from '../engines/session-registry';
 import { consumeClaudeQuery } from '../engines/claude-adapter';
+import { normalizeToolName } from '../../shared/scheduled-task-instruction';
+import { sendWorkflowResultFallback } from './claude-task-workflow-watchdog';
 
 export interface ClaudeTaskExecutionResult {
   completedAt?: string;
@@ -46,6 +48,27 @@ export type ClaudeTaskExecutor = (params: {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+/** 解析一段文本里可能内嵌的 JSON 片段（工具文本输出常带 markdown 代码栅栏或说明文字）。 */
+function tryParseJson(text: string): { domain?: string; type?: string; data?: { runId?: string } } | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // 尝试取首个 `{ ... }` 子串再解析。
+    const start = trimmed.indexOf('{');
+    const end = trimmed.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(trimmed.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
 }
 
 async function executeClaudeTask(params: {
@@ -108,11 +131,49 @@ async function executeClaudeTask(params: {
   let runtimeResult: ClaudeScheduledTaskRunRecord['runtimeResult'];
   let actualSessionId = runtime.sessionId;
 
+  // 工作流超时兜底所需的状态：从 SDK 消息流实时捕获。
+  // - workflowRunIds：从 `get_workflow_status` 的 tool_use.input.runId 与
+  //   `execute_workflow` 响应信封 data.runId 两路收集，用于超时后直连工作流 API 轮询。
+  // - pendingDwsSendToolUseIds：agent 发起的 `dws chat message send` Bash 调用的
+  //   tool_use_id；其 tool_result 非 error 即说明钉钉已发成功，避免兜底重发。
+  const workflowRunIds = new Set<string>();
+  const pendingDwsSendToolUseIds = new Set<string>();
+  let dingtalkAlreadySent = false;
+
+  // —— 诊断日志：任务启动画像，便于排查"工作流跑完却没发钉钉"——
+  // 5 分钟级工作流不会被超时掐断（默认 1800s），此类问题多源于 agent 自身未发 /
+  // 发送失败 / 工作流未真完成，故在此打印关键启动信号。
+  {
+    const tpl = params.definition.promptTemplate ?? '';
+    const hasRecipient = /STOCLAW:DINGTALK_RECIPIENTS/i.test(tpl);
+    const hasWorkflow = /execute_workflow|get_workflow_status|workflowId/i.test(tpl);
+    logger.info(
+      `[ClaudeTaskWorker] task start name=${params.definition.name} timeoutSec=${params.definition.timeoutSec} hasRecipientMarker=${hasRecipient} hasWorkflowMarker=${hasWorkflow}`,
+    );
+  }
+
+  function readBlockText(content: unknown): string {
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return '';
+    return content
+      .map((part) => {
+        if (!part || typeof part !== 'object') return '';
+        const record = part as Record<string, unknown>;
+        if (typeof record.text === 'string') return record.text;
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
   // Extract run-record fields from the SDK message stream. consumeClaudeQuery
   // owns event emission + liveClaudeMessages population; this callback only
   // captures what the run record needs (summary text, runtime result, actual
-  // session id). It is invoked for user/assistant/result messages (not
-  // stream_event, which consumeClaudeQuery continues past).
+  // session id) plus the workflow watchdog signals. It is invoked for
+  // user/assistant/result messages (not stream_event, which consumeClaudeQuery
+  // continues past) — including the synthetic `user` messages that carry
+  // tool_result blocks (claude-adapter.ts consumeClaudeQuery awaits
+  // onMessage for every non-stream message).
   const onMessage = (message: Record<string, unknown>) => {
     if (typeof message.session_id === 'string' && message.session_id.trim()) {
       actualSessionId = message.session_id.trim();
@@ -131,20 +192,81 @@ async function executeClaudeTask(params: {
           })
           .filter(Boolean)
           .join('\n');
+
+        // 工作流 runId / dws 发送意图从 assistant 的 tool_use 块捕获。
+        for (const block of content) {
+          if (!block || typeof block !== 'object') continue;
+          const record = block as Record<string, unknown>;
+          if (record.type !== 'tool_use' || typeof record.id !== 'string') continue;
+          const toolName = normalizeToolName(String(record.name ?? ''));
+          const input = record.input;
+          const inputRecord = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+
+          if (toolName === 'get_workflow_status' && typeof inputRecord.runId === 'string' && inputRecord.runId.trim()) {
+            workflowRunIds.add(inputRecord.runId.trim());
+          }
+          if (toolName === 'Bash' && typeof inputRecord.command === 'string') {
+            const cmd = inputRecord.command;
+            if (/dws\b/.test(cmd) && /chat\s+message\s+send\b/.test(cmd)) {
+              pendingDwsSendToolUseIds.add(record.id);
+            }
+          }
+        }
+      }
+    }
+    if (message.type === 'user' && 'message' in message) {
+      // synthetic user message 携带 tool_result 块：据此判定 dws 是否已发成功、
+      // 并从 execute_workflow 响应信封补捕 runId。
+      const payload = (message as { message?: { content?: unknown } }).message;
+      const content = payload?.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (!block || typeof block !== 'object') continue;
+          const record = block as Record<string, unknown>;
+          if (record.type !== 'tool_result' || typeof record.tool_use_id !== 'string') continue;
+
+          if (pendingDwsSendToolUseIds.has(record.tool_use_id)) {
+            const preview = readBlockText(record.content).replace(/\s+/g, ' ').slice(0, 160);
+            if (record.is_error === true) {
+              logger.warn(
+                `[ClaudeTaskWorker] dws send FAILED (is_error) toolUseId=${record.tool_use_id} content=${preview}`,
+              );
+            } else {
+              dingtalkAlreadySent = true;
+            }
+          }
+
+          const text = readBlockText(record.content);
+          if (!text) continue;
+          // execute_workflow 响应信封形如：
+          // { type:'workflow_execution_started', domain:'workflow', success:true, data:{ runId, ... } }
+          // tryParseJson 会自行剥离 markdown 代码栅栏与说明文字。
+          const obj = tryParseJson(text);
+          if (obj?.domain === 'workflow'
+            && obj.type === 'workflow_execution_started'
+            && typeof obj.data?.runId === 'string'
+            && obj.data.runId.trim()) {
+            workflowRunIds.add(obj.data.runId.trim());
+          }
+        }
       }
     }
     if (message.type === 'result') {
       const stopReason = message.stop_reason ?? message.stopReason;
+      const subtypeStr = typeof message.subtype === 'string' ? message.subtype : '';
+      const stopReasonStr = typeof stopReason === 'string' ? stopReason : '';
+      const isErrorFlag = subtypeStr.startsWith('error_');
+      const durationMsVal = typeof message.duration_ms === 'number'
+        ? message.duration_ms
+        : typeof message.durationMs === 'number'
+          ? message.durationMs
+          : undefined;
       runtimeResult = {
         type: typeof message.type === 'string' ? message.type : undefined,
-        subtype: typeof message.subtype === 'string' ? message.subtype : undefined,
-        stopReason: typeof stopReason === 'string' ? stopReason : null,
-        isError: typeof message.subtype === 'string' ? message.subtype.startsWith('error_') : false,
-        durationMs: typeof message.duration_ms === 'number'
-          ? message.duration_ms
-          : typeof message.durationMs === 'number'
-            ? message.durationMs
-            : undefined,
+        subtype: subtypeStr || undefined,
+        stopReason: stopReasonStr || null,
+        isError: isErrorFlag,
+        durationMs: durationMsVal,
       };
     }
   };
@@ -192,6 +314,27 @@ async function executeClaudeTask(params: {
   });
 
   if (timedOut) {
+    // 工作流超时钉钉兜底：仅当 agent 卡在工作流轮询、且从未成功发出钉钉时，
+    // 异步接管轮询服务端工作流运行态并把结果发给已配置的收件人。
+    // fire-and-forget——绝不让本兜底把 worker 主流程拖死或抛错。
+    logger.warn(
+      `[ClaudeTaskWorker] task TIMED OUT workflowRunIds=${workflowRunIds.size} dingtalkAlreadySent=${dingtalkAlreadySent}`,
+    );
+    if (workflowRunIds.size > 0 && !dingtalkAlreadySent) {
+      logger.info(`[ClaudeTaskWorker] firing workflow fallback (timeout) runs=${workflowRunIds.size}`);
+      void sendWorkflowResultFallback({
+        taskName: params.definition.name,
+        promptTemplate: params.definition.promptTemplate,
+        workflowRunIds: [...workflowRunIds],
+        dingtalkAlreadySent,
+      }).catch((err) => {
+        logger.warn(
+          `[ClaudeTaskWorker] workflow fallback threw: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    } else {
+      logger.info('[ClaudeTaskWorker] no fallback on timeout (no runId or already sent)');
+    }
     return {
       completedAt: nowIso(),
       error: `Claude task timed out after ${params.definition.timeoutSec}s`,
@@ -201,10 +344,36 @@ async function executeClaudeTask(params: {
     };
   }
 
+  // —— 关键诊断：非超时结束时的钉钉发送画像 ——
+  // 5 分钟级工作流会走到这里。若 status=succeeded 且 dingtalkAlreadySent=false，
+  // 即说明 agent 跑完但没成功发钉钉（最常见根因：agent 压根没调 dws，或调了但 is_error，
+  // 或 prompt 仅要求"执行工作流"而未要求"把结果发钉钉"）。
+  const finalStatus = runtimeResult?.isError ? 'failed' : 'succeeded';
+  logger.info(
+    `[ClaudeTaskWorker] task end status=${finalStatus} workflowRunIds=${workflowRunIds.size} dingtalkAlreadySent=${dingtalkAlreadySent} dwsSendAttempts=${pendingDwsSendToolUseIds.size} stopReason=${runtimeResult?.stopReason ?? '(none)'}`,
+  );
+
+  // —— 非超时兜底：agent 正常结束但有工作流 runId 且未发钉钉 ——
+  // 场景：prompt 仅要求"执行工作流"，agent 执行后 end_turn，没有主动发钉钉。
+  // 本兜底异步轮询 runId 到终态并把结果补发给已配置收件人。
+  if (workflowRunIds.size > 0 && !dingtalkAlreadySent) {
+    logger.info(`[ClaudeTaskWorker] firing workflow fallback (normal-completion) runs=${workflowRunIds.size}`);
+    void sendWorkflowResultFallback({
+      taskName: params.definition.name,
+      promptTemplate: params.definition.promptTemplate,
+      workflowRunIds: [...workflowRunIds],
+      dingtalkAlreadySent,
+    }).catch((err) => {
+      logger.warn(
+        `[ClaudeTaskWorker] workflow fallback threw: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+  }
+
   return {
     completedAt: nowIso(),
     runtimeResult,
-    status: runtimeResult?.isError ? 'failed' : 'succeeded',
+    status: finalStatus,
     summary: lastAssistantText || undefined,
   };
 }
