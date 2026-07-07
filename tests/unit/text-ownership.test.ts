@@ -4,6 +4,7 @@ import {
   applyTextOwnershipToParsedTurn,
   classifyTextOverlap,
   normalizeDisplayTextForOwnership,
+  processSegmentsCoverText,
   textsAreOwnershipDuplicates,
 } from '@/pages/Chat/thinking/text-ownership';
 
@@ -122,6 +123,15 @@ describe('TextOwnership', () => {
 
     expect(layout.finalReplyText).toBeNull();
     expect(layout.segments).toHaveLength(1);
+  });
+
+  it('processSegmentsCoverText detects overlap for UI fallback', () => {
+    const narration = '让我查看支持全国维度的增量成本查询命令：';
+    const segments = [
+      { kind: 'phase-text' as const, key: 'phase-text-0', text: narration },
+    ];
+    expect(processSegmentsCoverText(segments, narration)).toBe(true);
+    expect(processSegmentsCoverText(segments, '完全不同的正文')).toBe(false);
   });
 
   it('parseThinkingTurnLayout applies ownership on duplicate final', () => {

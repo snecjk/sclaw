@@ -1743,6 +1743,9 @@ export function parseThinkingTurnLayout(
   relocateInterruptPhaseBetweenAdjacentToolGroups(segments);
   mergeAdjacentOrphanedThinkingAndToolGroups(segments);
 
+  // normalize 可能重新生成 phase-text；澄清正文优先需再扫一遍同类 phase
+  dedupePhaseTextsAgainstFinalReply(segments, finalReplyText);
+
   const layout: ParsedThinkingTurn = { segments, finalReplyText };
   let parts = reduceTurnParts(mergedEvents, {
     isLiveStream: options.isLiveStream,

@@ -35,6 +35,11 @@ import {
 import { DingTalkSentPreview } from './DingTalkSentPreview';
 import { ThinkingTurnProcess, type ConnectingLabelKey } from './ThinkingProcessPanel';
 import { resolveTurnProcessStatus } from '@/pages/Chat/thinking/turn-process-status';
+import { processSegmentsCoverText } from '@/pages/Chat/thinking/text-ownership';
+import {
+  isLikelyPlanningNarration,
+  isLikelyUserClarificationReply,
+} from '@/pages/Chat/thinking/classify-text';
 
 type StreamingTool = ToolStatus;
 
@@ -289,8 +294,26 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
     if (isStreaming) return null;
 
+    if (fromHistory) {
+      const fallbackText = extractText(fromHistory).trim();
+
+      const coveredByThinking = processSegmentsCoverText(
+        thinkingLayout.segments,
+        fallbackText,
+      );
+
+      // 工具前旁白已在思考区展示时，不再重复生成正文气泡；参数追问正文优先
+      if (
+        coveredByThinking
+        && isLikelyPlanningNarration(fallbackText)
+        && !isLikelyUserClarificationReply(fallbackText)
+      ) {
+        return null;
+      }
+    }
+
     return fromHistory;
-  }, [turnMessages, streamSources, isStreaming, thinkingLayout.finalReplyText]);
+  }, [turnMessages, streamSources, isStreaming, thinkingLayout.finalReplyText, thinkingLayout.segments]);
 
   const preambleMessages = useMemo(() => {
     if (!replyMessage) return [];

@@ -52,9 +52,46 @@ export function isLikelyDeliverableReply(text: string): boolean {
 const ENGLISH_PLANNING_LEAD =
   /^(Now let me|Let me|I will|I'll|Next,? I|I need to|Now I'll|I'm going to|I am going to|Okay,? let me|Sure,? let me|First,? I|I'll go ahead and)\b/i;
 
+/** 工具调用前的过程旁白（搜索命令 / 查看参数等），应留在思考区 */
+const TOOL_PLANNING_PATTERN =
+  /(搜索匹配的命令|查看.*参数说明|查看.*命令|查询命令|调用工具|使用工具|使用技能|执行命令|先搜索|让我查看|我来查看|我先查看|找到相关命令)/;
+
+/** 等待用户补信息的追问 / 参数确认文本，应正文优先（不是工具前旁白） */
+export function isLikelyUserClarificationReply(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  const hasQuestionMark = /[？?]/.test(trimmed);
+  const hasClarificationVerb =
+    /(还需要确认|需要确认|请确认|请提供|请告诉|需要您|麻烦提供|补充一下|请补充|需要补充|确认几个参数|确认.*参数|确认.*信息|补充以下|以下.*信息|选择|请选择|确认一下)/.test(trimmed);
+
+  const hasParameterWords =
+    /(参数|信息|查询月份|月份|导出类型|金额类型|时间范围|开始日期|结束日期|维度|口径|系统|数据源|格式|科目|总部|网点|客户|产品|类型|哪个月|哪一天|哪个|是否|还是)/.test(trimmed);
+
+  const hasListLikeQuestion =
+    /(^|\n)\s*(?:[-*]\s*)?[^：:\n]{1,20}[：:]\s*.+[？?]?/m.test(trimmed);
+
+  // 强规则：澄清动词 + 参数字汇 → 参数澄清（即使与正文措辞不完全相同）
+  if (hasClarificationVerb && hasParameterWords && trimmed.length <= 360) {
+    return true;
+  }
+
+  if (hasClarificationVerb && (hasParameterWords || hasQuestionMark || hasListLikeQuestion)) {
+    return true;
+  }
+
+  if (hasQuestionMark && hasParameterWords && trimmed.length <= 260) {
+    return true;
+  }
+
+  return false;
+}
+
 /** 长段规划旁白（PPT/技能调用前叙述），应留在思考区而非正文 / 工作流 preamble 卡 */
 export function isLikelyPlanningNarration(text: string): boolean {
   const trimmed = text.trim();
+  if (isLikelyUserClarificationReply(text)) return false;
+  if (TOOL_PLANNING_PATTERN.test(trimmed)) return true;
   if (ENGLISH_PLANNING_LEAD.test(trimmed)) {
     if (trimmed.length < 220) return true;
     if (/\b(search|query|check|look up|find|call|use|tool|skill|workflow|fetch|retrieve)\b/i.test(trimmed)) {
@@ -104,6 +141,11 @@ export function shouldPromoteTextToFinalReply(
   lastTextEventIndex: number,
   hasFollowingToolEvents = false,
 ): boolean {
+  // 参数追问若是本轮最后一段 text，晋升正文而非 phase-text
+  if (isLikelyUserClarificationReply(text)) {
+    if (hasFollowingToolEvents) return false;
+    return eventIndex === lastTextEventIndex;
+  }
   if (isLikelyPlanningNarration(text)) return false;
   if (!isLiveStream) {
     if (eventIndex !== lastTextEventIndex) return false;
@@ -172,12 +214,21 @@ export function dedupePhaseTextsAgainstFinalReply(
 ): void {
   if (!finalReplyText?.trim()) return;
   const finalTrimmed = finalReplyText.trim();
+  const finalIsClarification = isLikelyUserClarificationReply(finalTrimmed);
 
   for (let i = segments.length - 1; i >= 0; i -= 1) {
     const segment = segments[i];
     if (segment?.kind !== 'phase-text') continue;
     const phaseTrimmed = segment.text.trim();
     if (!phaseTrimmed) {
+      segments.splice(i, 1);
+      continue;
+    }
+    // 澄清正文优先：同类参数澄清 phase-text 全部清掉（不要求逐字重复）
+    if (
+      finalIsClarification
+      && isLikelyUserClarificationReply(phaseTrimmed)
+    ) {
       segments.splice(i, 1);
       continue;
     }
