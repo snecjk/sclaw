@@ -72,6 +72,8 @@ export function Chat() {
   const refresh = useChatStore((s) => s.refresh);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
+  const streamingMessages = useChatStore((s) => s.streamingMessages);
+  const streamingToolResults = useChatStore((s) => s.streamingToolResults);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
@@ -169,6 +171,8 @@ export function Chat() {
     lastChatEventAt,
     streamMsg,
     streamText,
+    streamingMessages,
+    streamingToolResults,
     streamingTools,
   });
 
@@ -179,6 +183,8 @@ export function Chat() {
         staticItems.length,
         activeTurn ? 1 : 0,
         streamText.length,
+        streamingMessages.length,
+        streamingToolResults.length,
         streamingTools.length,
         pendingFinal ? 1 : 0,
         shouldRenderStreaming ? 1 : 0,
@@ -188,6 +194,8 @@ export function Chat() {
       staticItems.length,
       activeTurn,
       streamText.length,
+      streamingMessages.length,
+      streamingToolResults.length,
       streamingTools.length,
       pendingFinal,
       shouldRenderStreaming,

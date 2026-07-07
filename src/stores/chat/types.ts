@@ -137,6 +137,10 @@ export interface SessionRuntimeState {
   activeRunId: string | null;
   streamingText: string;
   streamingMessage: unknown | null;
+  /** Live assistant snapshots seen during the active turn, in arrival order. */
+  streamingMessages: RawMessage[];
+  /** Live tool result messages seen during the active turn, in arrival order. */
+  streamingToolResults: RawMessage[];
   streamingTools: ToolStatus[];
   pendingFinal: boolean;
   lastUserMessageAt: number | null;
@@ -161,6 +165,10 @@ export interface ChatState {
   activeRunId: string | null;
   streamingText: string;
   streamingMessage: unknown | null;
+  /** Live assistant snapshots seen during the active turn, in arrival order. */
+  streamingMessages: RawMessage[];
+  /** Live tool result messages seen during the active turn, in arrival order. */
+  streamingToolResults: RawMessage[];
   streamingTools: ToolStatus[];
   pendingFinal: boolean;
   /** Timestamp (ms) of the last gateway chat event; used for stale-run UI hints. */

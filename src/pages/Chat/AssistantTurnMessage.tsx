@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState } from 'react';
-import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
+import type { RawMessage, AttachedFileMeta, ToolStatus } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
 import { useChatSessionEngineType } from '@/hooks/use-chat-session-engine-type';
 import { ChatMessage } from './ChatMessage';
@@ -36,20 +36,39 @@ import { DingTalkSentPreview } from './DingTalkSentPreview';
 import { ThinkingTurnProcess, type ConnectingLabelKey } from './ThinkingProcessPanel';
 import { resolveTurnProcessStatus } from '@/pages/Chat/thinking/turn-process-status';
 
-type StreamingTool = {
+type StreamingTool = ToolStatus;
+
+type BakedStreamingToolLike = {
   id?: string;
   toolCallId?: string;
   name: string;
-  status: 'running' | 'completed' | 'error';
+  status?: 'running' | 'completed' | 'error';
   input?: unknown;
   durationMs?: number;
   summary?: string;
+  updatedAt?: number;
 };
+
+function normalizeBakedStreamingTools(tools: readonly BakedStreamingToolLike[]): ToolStatus[] {
+  const now = Date.now();
+  return tools.map((tool, index) => ({
+    id: tool.id,
+    toolCallId: tool.toolCallId,
+    name: tool.name,
+    status: tool.status ?? 'completed',
+    input: tool.input,
+    durationMs: tool.durationMs,
+    summary: tool.summary,
+    updatedAt: tool.updatedAt ?? now + index,
+  }));
+}
 
 export interface ActiveTurnStream {
   streamMessage: RawMessage | null;
   streamText: string;
   streamingTools: StreamingTool[];
+  streamingMessages: RawMessage[];
+  streamingToolResults: RawMessage[];
   isConnecting: boolean;
   isProcessing: boolean;
   isStillExecuting?: boolean;
@@ -76,12 +95,13 @@ function collectActiveTurnStreamSources(
   precedingUserMessage: RawMessage | null,
   activeStream: ActiveTurnStream,
 ): RawMessage[] {
-  return collectTurnAssistantSources(
+  const sources = collectTurnAssistantSources(
     sessionMessages,
-    turnMessages,
+    [...turnMessages, ...activeStream.streamingMessages],
     precedingUserMessage,
     activeStream.streamMessage,
   );
+  return sources;
 }
 
 export const AssistantTurnMessage = memo(function AssistantTurnMessage({
@@ -103,6 +123,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
   const isStreaming = !!activeStream;
   const streamingTools = activeStream?.streamingTools ?? [];
+  const streamingToolResults = activeStream?.streamingToolResults ?? [];
 
   const [wasInterrupted, setWasInterrupted] = useState(false);
   useEffect(() => {
@@ -154,29 +175,39 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   const chronologicalEntries = useMemo(() => {
     const cachedToolResults = cachedToolResultsForTurn;
     const toolResults =
-      cachedToolResults.length > 0 ? cachedToolResults : turnToolResults;
+      cachedToolResults.length > 0
+        ? cachedToolResults
+        : [...turnToolResults, ...streamingToolResults];
     return resolveTurnChronologicalEntries(
       sessionMessages,
       precedingUserMessage,
       turnMessages,
       toolResults,
     );
-  }, [sessionMessages, precedingUserMessage, turnMessages, turnToolResults, cachedToolResultsForTurn]);
+  }, [
+    sessionMessages,
+    precedingUserMessage,
+    turnMessages,
+    turnToolResults,
+    streamingToolResults,
+    cachedToolResultsForTurn,
+  ]);
 
-  const bakedStreamingTools = useMemo(() => {
+  const bakedStreamingTools = useMemo((): ToolStatus[] => {
     if (isStreaming && streamingTools.length > 0) return streamingTools;
-    if (engineType === 'claude') {
-      return resolveDoneTurnStreamingTools({
-        turnStableKey,
-        aliasKeys: turnCacheAliasKeys,
-        turnMessages,
-        toolResults:
-          cachedToolResultsForTurn.length > 0
-            ? cachedToolResultsForTurn
-            : turnToolResults,
-      });
-    }
-    return readTurnStreamingToolsCache(turnStableKey, turnCacheAliasKeys);
+    const doneTools =
+      engineType === 'claude'
+        ? resolveDoneTurnStreamingTools({
+            turnStableKey,
+            aliasKeys: turnCacheAliasKeys,
+            turnMessages,
+            toolResults:
+              cachedToolResultsForTurn.length > 0
+                ? cachedToolResultsForTurn
+                : turnToolResults,
+          })
+        : readTurnStreamingToolsCache(turnStableKey, turnCacheAliasKeys);
+    return normalizeBakedStreamingTools(doneTools);
   }, [
     turnStableKey,
     turnCacheAliasKeys,

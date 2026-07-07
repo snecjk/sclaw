@@ -1200,9 +1200,9 @@ export const chatToolCallHeaderBtnClass = cn(
   'text-[13px] leading-5 font-normal text-[#86909C] transition-colors duration-150 hover:text-foreground',
 );
 
-/** 工具/思考内容区：16px icon 列 + 竖线居中（MasterGo 4:2177 divider @ x≈7） */
-export const chatProcessIconRailClass = 'flex w-4 shrink-0 justify-center self-stretch';
-export const chatProcessIconRailLineClass = 'w-px bg-border';
+/** 工具/思考内容区：16px icon 列 + 竖线固定在 icon 中线 */
+export const chatProcessIconRailClass = 'relative w-4 shrink-0 self-stretch';
+export const chatProcessIconRailLineClass = 'absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border';
 /** 竖线列与正文间距 4px（正文起点 16+4=20px，与标题文字对齐） */
 export const chatProcessContentTextWrapClass = 'min-w-0 flex-1 pl-1';
 /** 标题行 chevron/spinner 占位：16px 控件 + gap 4px */
