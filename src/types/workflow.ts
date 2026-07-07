@@ -216,6 +216,8 @@ export interface WorkflowRunArtifact {
   name: string;
   type: string;
   url: string;
+  previewUrl?: string;
+  tempUrl?: string;
   size?: number;
 }
 
@@ -299,6 +301,8 @@ export interface WorkflowExecutionResult {
     name: string;
     type: string;
     url: string;
+    previewUrl?: string;
+    tempUrl?: string;
     size?: number;
   }>;
 }

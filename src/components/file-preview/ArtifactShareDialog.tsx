@@ -16,6 +16,11 @@ import {
 
 type DialogStep = 'preview' | 'too_long';
 
+const SHARE_DIALOG_PANEL_CLASS =
+  'mx-4 w-full max-w-[480px] rounded-2xl bg-white p-6 shadow-2xl focus:outline-none';
+const SHARE_DIALOG_CONTENT_CLASS =
+  'box-border flex w-full flex-col gap-3 self-stretch rounded-xl border border-[#E8EAEF] bg-[#FAFBFC] px-4 py-3';
+
 type TooLongPayload = {
   defaultMsg: string;
   title: string;
@@ -113,10 +118,7 @@ export function ArtifactShareDialog({
         onKeyDown={handleKeyDown}
       >
         <div
-          className={cn(
-            'mx-4 w-full max-w-[480px] rounded-2xl border border-glass-border glass-panel p-6',
-            'shadow-2xl focus:outline-none',
-          )}
+          className={cn(SHARE_DIALOG_PANEL_CLASS)}
           tabIndex={-1}
         >
           <h2 id="artifact-share-too-long-title" className="text-lg font-semibold">
@@ -157,9 +159,7 @@ export function ArtifactShareDialog({
     ? t('preview.shareDialog.artifactDescription')
     : t('preview.shareDialog.conversationDescription');
 
-  const artifactCard = isArtifact
-    ? draft
-    : draft.artifact;
+  const artifactCard = isArtifact ? draft : null;
 
   return createPortal(
     <div
@@ -170,10 +170,7 @@ export function ArtifactShareDialog({
       onKeyDown={handleKeyDown}
     >
       <div
-        className={cn(
-          'mx-4 w-full max-w-[480px] rounded-2xl border border-glass-border glass-panel p-6',
-          'shadow-2xl focus:outline-none',
-        )}
+        className={SHARE_DIALOG_PANEL_CLASS}
         tabIndex={-1}
       >
         <h2 id="artifact-share-dialog-title" className="text-lg font-semibold">
@@ -183,11 +180,13 @@ export function ArtifactShareDialog({
           {description}
         </p>
 
-        <div className="mt-4 space-y-3">
+        <div className="mt-4">
           {!isArtifact && draft.textPreview ? (
-            <p className="whitespace-pre-line text-sm leading-6 text-foreground">
-              {draft.textPreview}
-            </p>
+            <div className={SHARE_DIALOG_CONTENT_CLASS}>
+              <p className="line-clamp-9 whitespace-pre-line text-sm leading-6 text-foreground">
+                {draft.textPreview}
+              </p>
+            </div>
           ) : null}
 
           {artifactCard ? (
@@ -213,7 +212,7 @@ export function ArtifactShareDialog({
           </Button>
           <Button
             onClick={handlePreviewConfirm}
-            disabled={confirming || (!isArtifact && !draft.textPreview && !draft.artifact)}
+            disabled={confirming || (!isArtifact && !draft.textPreview)}
             className="rounded-full px-5"
           >
             {confirming ? t('preview.shareDialog.uploading') : t('preview.shareDialog.confirm')}

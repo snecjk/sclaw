@@ -977,9 +977,9 @@ export const workflowListCardMoreActionClass = cn(
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
 
-/** 工作流卡片浮动菜单容器 */
+/** 工作流卡片 DropdownMenu 内容壳 — Radix portal，层级高于侧栏 sticky */
 export const workflowListCardMenuClass = cn(
-  'fixed z-[126] w-[200px] rounded-xl border border-border bg-card p-1.5',
+  'z-[10041] w-[200px] rounded-xl border border-border bg-card p-1.5',
   'shadow-[0_8px_40px_rgba(0,0,0,0.16)] dark:shadow-modal',
 );
 
@@ -1311,7 +1311,7 @@ export const sidebarSectionChevronClass = cn(
 
 /**
  * 侧栏滚动区内分区标题 sticky 壳层 — §5.6 吸顶 + 实底盖住下方列表（无描边）。
- * 配合 stickyTopClass：任务 top-0 / 最近 top-[var(--sto-sidebar-section-sticky-h)]。
+ * 任务 top-0；分组·最近同 top 接力（z 分组 19 > 最近 18，section 内分组压住最近，滚出后最近接管）。
  */
 export const sidebarSectionStickyShellClass = cn(
   'sticky bg-[var(--sto-sidebar-bg)]',
@@ -1320,9 +1320,13 @@ export const sidebarSectionStickyShellClass = cn(
 /** 任务分区 sticky 锚点 */
 export const sidebarSectionStickyTopTaskClass = 'top-0 z-20';
 
-/** 最近分区 sticky 锚点 — 叠在任务标题下方 */
-export const sidebarSectionStickyTopRecentClass =
+/** 自建分组 sticky 锚点 — 与「最近」同 top 接力；section 内 z 高于最近，滚出本组后释放 */
+export const sidebarSectionStickyTopGroupClass =
   'top-[var(--sto-sidebar-section-sticky-h)] z-[19]';
+
+/** 最近分区 sticky 锚点 — 叠在任务标题下方；无活跃分组 section 时显示于同 top 层 */
+export const sidebarSectionStickyTopRecentClass =
+  'top-[var(--sto-sidebar-section-sticky-h)] z-[18]';
 
 /** 侧栏滚动列表 — 层级低于 sticky 分区标题 */
 export const sidebarScrollListClass = 'relative z-0';
@@ -1335,7 +1339,7 @@ export const sidebarNavExpandedIdleClass = cn(
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
-/** 展开侧栏主导航 active — 底 #EAEAED + Regular（选中仅靠底色，字重与 idle 一致） */
+/** 展开侧栏主导航 active — 底 #DCDCDC + Regular（选中仅靠底色，字重与 idle 一致） */
 export const sidebarNavExpandedActiveClass = cn(
   'h-9 min-h-9 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
   'bg-[var(--sto-sidebar-nav-active-bg)]',
@@ -1383,3 +1387,32 @@ export const sidebarRunningSpinnerClass = 'text-[var(--sto-sidebar-running-spinn
 
 /** 侧栏未读红点 — 6×6px，destructive */
 export const sidebarUnreadDotClass = 'h-1.5 w-1.5 shrink-0 rounded-full bg-destructive';
+
+/** 最近分组内会话选中底 — light #DCDCDC；dark 走 --sto-sidebar-subitem-active-bg */
+export const sidebarRecentSessionActiveClass = 'bg-[var(--sto-sidebar-subitem-active-bg)]';
+
+/** 最近会话/分组下拉 — MCP 140px 菜单容器 */
+export const sidebarRecentMenuContentClass =
+  'min-w-[140px] rounded-lg border border-border bg-card p-1 shadow-[0_4px_12px_rgba(0,0,0,0.1)]';
+
+/** 最近会话/分组下拉项 — MCP 132×34；hover 走 muted，light/dark 自适应 */
+export const sidebarRecentMenuItemClass = cn(
+  'flex h-[34px] cursor-pointer select-none items-center gap-1 rounded-md px-2 text-sm leading-[18px] text-foreground outline-none',
+  'focus:bg-muted data-[highlighted]:bg-muted data-[state=open]:bg-muted',
+);
+
+/** 最近会话下拉删除项 hover — destructive 浅底 + 字/图标 */
+export const sidebarRecentMenuDeleteItemClass = cn(
+  sidebarRecentMenuItemClass,
+  'focus:bg-destructive/10 focus:text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive',
+  '[&_svg]:text-[var(--sto-sidebar-text-icon)] focus:[&_svg]:text-destructive data-[highlighted]:[&_svg]:text-destructive',
+);
+
+/** 最近分组子菜单分隔 — 走 border token，light/dark 自适应 */
+export const sidebarRecentMenuDividerClass = '-mx-1 my-1 h-px bg-border';
+
+/** 分组/最近空态行 — MCP Grey-5 #C9CDD4 */
+export const sidebarRecentEmptyLineClass = cn(
+  sidebarBodyTextClass,
+  'px-[10px] py-2 text-[#C9CDD4]',
+);

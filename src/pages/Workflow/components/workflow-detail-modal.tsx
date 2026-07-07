@@ -374,7 +374,7 @@ export function WorkflowDetailModal({
               onClick={() => setMoreOpen(false)}
             />
             <div
-              className={workflowListCardMenuClass}
+              className={cn(workflowListCardMenuClass, 'fixed')}
               // 锚点坐标来自 getBoundingClientRect，只能用 style 注入（与列表卡片菜单一致）
               style={{
                 left: moreMenuPos.x,

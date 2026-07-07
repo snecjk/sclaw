@@ -48,7 +48,8 @@
     },
     "taskView": {
       "aria": "Scheduled tasks",
-      "emptyNoRecords": "No execution records in this status"
+      "emptyNoRecords": "No execution records in this status",
+      "recordsCappedHint": "So many execution records! Showing the latest 100 execution records."
     },
     "recordView": {
       "aria": "Execution records"
