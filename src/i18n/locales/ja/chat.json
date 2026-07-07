@@ -32,7 +32,10 @@
         "searchPrev": "前の結果",
         "searchNext": "次の結果",
         "searchClear": "検索をクリア",
-        "searchClose": "検索を閉じる"
+        "searchClose": "検索を閉じる",
+        "openPreview": "プレビューを開く",
+        "closePreview": "プレビューを閉じる",
+        "closeSession": "現在のセッションを閉じる"
     },
     "composer": {
         "attachFiles": "ファイルを添付",
@@ -80,6 +83,7 @@
     "streaming": {
         "connectingModel": "モデルに接続中...",
         "understandingQuestion": "ご質問を理解しています…",
+        "stillExecuting": "実行中（ファイル書き込み中…）",
         "awaitingReply": "返信後、Clawが作業を続けます…",
         "thinkingProcessTitle": "思考過程",
         "deepThinkingLabel": "深い思考",
@@ -113,6 +117,7 @@
     "messageActions": {
         "copy": "コピー",
         "copyFailed": "コピーに失敗しました",
+        "share": "钉钉で共有",
         "editAndResend": "編集して再送信",
         "editUnavailable": "このページでは編集して再送信を利用できません"
     },
@@ -133,6 +138,11 @@
         "queueFull": "キューが満杯です（最大 {{max}} 件）"
     },
     "splitting": "質問を分析中...",
+    "systemNotice": {
+        "label": "システム通知",
+        "expand": "展開",
+        "collapse": "折りたたむ"
+    },
     "workflow": {
         "statusPending": "待機中",
         "statusRunning": "実行中",
@@ -148,8 +158,55 @@
         "durationHours": "{{count}} 時間",
         "durationHoursHalf": "{{count}} 時間半",
         "durationHoursMinutes": "{{hours}} 時間 {{minutes}} 分",
+        "defaultName": "ワークフロー",
+        "backgroundRunningWithId": "ワークフロー ID: {{workflowId}}",
+        "withId": "ワークフロー ID: {{workflowId}}",
         "viewArtifact": "成果物を見る",
         "openArtifactLink": "リンクを開く",
-        "viewWorkflowAction": "ワークフローを見る"
+        "viewWorkflowAction": "ワークフローを見る",
+        "createScheduledTaskAction": "定期タスクを作成"
+    },
+    "artifact": {
+        "typeDocument": "文書",
+        "typeSpreadsheet": "スプレッドシート",
+        "typeImage": "画像",
+        "typeArchive": "アーカイブ",
+        "typeMedia": "メディア",
+        "typeFile": "ファイル"
+    },
+    "preview": {
+        "collapsePanel": "プレビューパネルを閉じる",
+        "overflowMenu": "すべての成果物",
+        "fullscreen": "全画面表示",
+        "refresh": "更新",
+        "download": "ダウンロード",
+        "share": "钉钉で共有",
+        "openExternal": "ブラウザで開く",
+        "editWorkflow": "ワークフローを編集",
+        "workflowTab": "ワークフロー",
+        "emptyHint": "メッセージ内のファイルリンクをクリックしてプレビュー",
+        "emptyHintSub": "または上から成果物を選択",
+        "dismissTab": "この成果物を閉じる",
+        "shareDialog": {
+            "artifactTitle": "成果物を共有",
+            "artifactDescription": "钉钉の連絡先またはグループに共有",
+            "conversationTitle": "会話を共有",
+            "conversationDescription": "内容を確認後、钉钉の連絡先選択画面が開きます。",
+            "title": "钉钉で共有",
+            "description": "内容を確認後、钉钉の連絡先選択画面が開きます。",
+            "fieldTitle": "タイトル",
+            "fieldBody": "本文",
+            "fieldLink": "リンク",
+            "localUrlHint": "このリンクはローカルプレビュー用です。同一ネットワーク内の同僚でも開けない場合があります。",
+            "cancel": "キャンセル",
+            "confirm": "共有を確認",
+            "uploading": "アップロード中…",
+            "tooLongTitle": "共有内容が長すぎます",
+            "tooLongDescription": "文字数が多すぎて事前入力できません。確認後、会話全文がクリップボードにコピーされ、钉钉の連絡先選択画面が開きます。メッセージ入力欄に貼り付け（⌘V / Ctrl+V）してから送信してください。",
+            "tooLongConfirm": "钉钉を開く",
+            "tooLongPickerHint": "コピーした会話本文をメッセージ入力欄に貼り付けてください（⌘V / Ctrl+V）",
+            "success": "钉钉の連絡先選択画面を開きました",
+            "failed": "共有に失敗しました。しばらくしてから再試行してください"
+        }
     }
 }
