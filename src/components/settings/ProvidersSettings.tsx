@@ -60,7 +60,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { invokeIpc } from '@/lib/api-client';
 import { useSettingsStore } from '@/stores/settings';
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
 
@@ -171,6 +171,10 @@ export function ProvidersSettings() {
   const { t } = useTranslation('settings');
   const devModeUnlocked = useSettingsStore((state) => state.devModeUnlocked);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authUser = useAuthStore((state) => state.user);
+  const siteDepartmentTypes = useAuthStore((state) => state.siteDepartmentTypes);
+  const isSite =
+    siteDepartmentTypes !== null && isSiteUser(authUser?.categoryCode);
   const {
     statuses,
     accounts,
@@ -385,10 +389,12 @@ export function ProvidersSettings() {
         <h2 className="text-lg font-semibold tracking-tight text-foreground">
           {t('aiProviders.title', 'AI Providers')}
         </h2>
-        <Button onClick={() => setShowAddDialog(true)} className="h-9 rounded-md px-4 text-[13px] font-medium shadow-none">
-          <Plus className="mr-2 h-4 w-4" />
-          {t('aiProviders.add')}
-        </Button>
+        {!isSite && (
+          <Button onClick={() => setShowAddDialog(true)} className="h-9 rounded-md px-4 text-[13px] font-medium shadow-none">
+            <Plus className="mr-2 h-4 w-4" />
+            {t('aiProviders.add')}
+          </Button>
+        )}
       </div>
 
       {/* STO 模型同步失败 / 进行中 */}
@@ -436,10 +442,12 @@ export function ProvidersSettings() {
           <p className="mb-6 max-w-sm text-center text-[13px]">
             {t('aiProviders.empty.desc')}
           </p>
-          <Button onClick={() => setShowAddDialog(true)} className="h-10 rounded-md px-6">
-            <Plus className="mr-2 h-4 w-4" />
-            {t('aiProviders.empty.cta')}
-          </Button>
+          {!isSite && (
+            <Button onClick={() => setShowAddDialog(true)} className="h-10 rounded-md px-6">
+              <Plus className="mr-2 h-4 w-4" />
+              {t('aiProviders.empty.cta')}
+            </Button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -500,7 +508,7 @@ export function ProvidersSettings() {
       )}
 
       {/* Add Provider Dialog */}
-      {showAddDialog && (
+      {showAddDialog && !isSite && (
         <AddProviderDialog
           existingVendorIds={existingVendorIds}
           vendors={vendors}

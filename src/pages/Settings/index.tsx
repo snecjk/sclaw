@@ -30,6 +30,7 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings';
 import { useGatewayStore } from '@/stores/gateway';
+import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { UpdateSettings } from '@/components/settings/UpdateSettings';
 import { UpdateChangelogPanel } from '@/components/settings/update/UpdateChangelogPanel';
 import { DwsCliSettings } from '@/components/settings/DwsCliSettings';
@@ -107,6 +108,10 @@ export function Settings() {
   } = useSettingsStore();
 
   const { status: gatewayStatus, restart: restartGateway } = useGatewayStore();
+  const authUser = useAuthStore((s) => s.user);
+  const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
+  const isSite =
+    siteDepartmentTypes !== null && isSiteUser(authUser?.categoryCode);
   const [controlUiInfo, setControlUiInfo] = useState<ControlUiInfo | null>(null);
   const [openclawCliCommand, setOpenclawCliCommand] = useState('');
   const [openclawCliError, setOpenclawCliError] = useState<string | null>(null);
@@ -770,31 +775,35 @@ export function Settings() {
               </div>
 
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-[15px] font-medium text-foreground">{t('advanced.devMode')}</Label>
-                  <p className="text-[13px] text-muted-foreground mt-1">
-                    {t('advanced.devModeDesc')}
-                  </p>
+              {!isSite && (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-[15px] font-medium text-foreground">{t('advanced.devMode')}</Label>
+                    <p className="text-[13px] text-muted-foreground mt-1">
+                      {t('advanced.devModeDesc')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={devModeUnlocked}
+                    onCheckedChange={setDevModeUnlocked}
+                  />
                 </div>
-                <Switch
-                  checked={devModeUnlocked}
-                  onCheckedChange={setDevModeUnlocked}
-                />
-              </div>
+              )}
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-[15px] font-medium text-foreground">{t('advanced.telemetry')}</Label>
-                  <p className="text-[13px] text-muted-foreground mt-1">
-                    {t('advanced.telemetryDesc')}
-                  </p>
+              {!isSite && (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-[15px] font-medium text-foreground">{t('advanced.telemetry')}</Label>
+                    <p className="text-[13px] text-muted-foreground mt-1">
+                      {t('advanced.telemetryDesc')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={telemetryEnabled}
+                    onCheckedChange={setTelemetryEnabled}
+                  />
                 </div>
-                <Switch
-                  checked={telemetryEnabled}
-                  onCheckedChange={setTelemetryEnabled}
-                />
-              </div>
+              )}
 
             </div>
           </section>
