@@ -23,6 +23,25 @@ import {
   type MentionComposerSnapshot,
 } from '@/lib/dingtalk-mention-composer';
 
+function focusEditorAtEnd(root: HTMLElement): void {
+  root.focus();
+
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  const range = document.createRange();
+  const lastChild = root.lastChild;
+  if (lastChild?.nodeType === Node.TEXT_NODE) {
+    range.setStart(lastChild, lastChild.textContent?.length ?? 0);
+  } else {
+    range.selectNodeContents(root);
+    range.collapse(false);
+  }
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
 export interface DingTalkMentionEditorHandle {
   focus: () => void;
   clear: () => void;
@@ -70,7 +89,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
     ref,
   ) {
     const editorRef = useRef<HTMLDivElement>(null);
-    const seedAppliedRef = useRef(false);
+    const lastAppliedSeedRef = useRef<string | undefined>(undefined);
     const isComposingRef = useRef(false);
 
     const syncTriggerRafRef = useRef<number | null>(null);
@@ -117,7 +136,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       setPlainText: (text) => {
         const root = editorRef.current;
         if (!root) return;
-        seedAppliedRef.current = false;
+        lastAppliedSeedRef.current = undefined;
         setMentionEditorPlainText(root, text);
         resizeEditor();
         syncFromDom();
@@ -164,20 +183,16 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       if (!root) return;
 
       if (trimmed) {
-        if (seedAppliedRef.current) return;
-        seedAppliedRef.current = true;
-        setMentionEditorPlainText(root, trimmed);
+        if (lastAppliedSeedRef.current === trimmed) return;
+        lastAppliedSeedRef.current = trimmed;
+        setMentionEditorPlainText(root, `${trimmed} `);
+        focusEditorAtEnd(root);
         resizeEditor();
         syncFromDom();
         return;
       }
 
-      if (seedAppliedRef.current) {
-        seedAppliedRef.current = false;
-        clearMentionEditor(root);
-        resizeEditor();
-        syncFromDom();
-      }
+      lastAppliedSeedRef.current = undefined;
     }, [resizeEditor, seedText, syncFromDom]);
 
     const handleInput = useCallback(() => {
