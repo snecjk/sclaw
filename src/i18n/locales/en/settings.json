@@ -196,11 +196,24 @@
   },
   "updates": {
     "title": "Updates",
+    "subtitle": "Keep Sto Claw updated for a more stable and secure experience",
     "description": "Keep StoClaw up to date",
+    "loading": "Loading…",
+    "currentVersionLabel": "Current version",
+    "currentVersionLine": "Current version v{{version}}",
+    "cardHint": "With auto-update enabled, updates will be downloaded and installed automatically. A prompt will appear when you're already on the latest version.",
+    "downloadingLabel": "Downloading v{{version}}...",
+    "changelogTitle": "Release notes",
+    "changelogLoading": "Loading release notes…",
+    "changelog": {
+      "loginRequired": "Sign in to view full release notes",
+      "loadFailed": "Failed to load release notes. Please try again later.",
+      "empty": "No published release notes yet"
+    },
     "autoCheck": "Auto-check for updates",
-    "autoCheckDesc": "Periodically check with the server for updates (default ~6h; configurable per release)",
-    "autoDownload": "Auto-update",
-    "autoDownloadDesc": "Automatically download and install updates",
+    "autoCheckDesc": "Periodically check if new versions are released",
+    "autoDownload": "Auto-download updates",
+    "autoDownloadDesc": "Automatically download and install new versions in the background",
     "status": {
       "checking": "Checking for updates...",
       "downloading": "Downloading update v{{version}}...",
@@ -217,8 +230,9 @@
     },
     "action": {
       "checking": "Checking...",
-      "downloading": "Downloading...",
+      "downloading": "Download...",
       "download": "Download Update",
+      "downloadNewVersion": "Download New Version",
       "install": "Install Now",
       "installing": "Installing...",
       "restart": "Restart App",
@@ -229,9 +243,7 @@
       "check": "Check for Updates"
     },
     "currentVersion": "Current Version",
-    "whatsNew": "What's New:",
     "errorDetails": "Error Details:",
-    "help": "When auto-update is enabled, updates are downloaded and installed automatically.",
     "sidebar": {
       "newVersionTitle": "New version available",
       "updateToVersion": "Update to v{{version}}",

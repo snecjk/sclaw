@@ -10,6 +10,29 @@ export const glassSectionSurface = cn(
   'dark:shadow-[0_4px_28px_rgba(0,0,0,0.22),inset_0_1px_0_hsl(var(--glass-highlight)/0.08)]',
 );
 
+/** 设置页右侧内容区白卡片（MasterGo：8px 圆角、#E5E6EB 描边、白底） */
+export const stoSettingsSectionCardClass = cn(
+  'overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-6',
+  'dark:border-border dark:bg-card',
+);
+
+/** 设置页右侧内容卡片外槽：顶/右/底 8px 留白（MasterGo top:8px） */
+export const stoSettingsContentPanelWrapClass = cn(
+  'flex min-h-0 min-w-0 flex-1 flex-col pt-2 pr-2 pb-2',
+);
+
+/** 设置页右侧内容卡片（MasterGo：18px 圆角、#F7F8FA、0 0 16px rgba(0,0,0,0.01)） */
+export const stoSettingsContentPanelClass = cn(
+  'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[18px] bg-[#F7F8FA]',
+  'shadow-[0_0_16px_0_rgba(0,0,0,0.01)]',
+  'dark:bg-background dark:shadow-none',
+);
+
+/** 设置页右侧内容卡片内滚动区 */
+export const stoSettingsContentPanelBodyClass = cn(
+  'min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-8 py-6 [scrollbar-gutter:stable]',
+);
+
 /** Chat assistant bubbles/cards: light = soft white; dark = neutral muted/card（与用户侧主色气泡区分） */
 export const assistantChatCardBg = cn(
   'bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(255,255,255,0.86))]',

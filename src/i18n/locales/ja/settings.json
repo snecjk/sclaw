@@ -195,11 +195,24 @@
   },
   "updates": {
     "title": "アップデート",
+    "subtitle": "Sto Claw を最新に保ち、より安定で安全な機能をお使いください",
     "description": "StoClaw を最新に保つ",
+    "loading": "読み込み中…",
+    "currentVersionLabel": "現在のバージョン",
+    "currentVersionLine": "現在のバージョン v{{version}}",
+    "cardHint": "自動更新を有効にすると、更新は自動的にダウンロードおよびインストールされます。最新版の場合はここに表示されます。",
+    "downloadingLabel": "新バージョンv{{version}}をダウンロード中...",
+    "changelogTitle": "更新ログ",
+    "changelogLoading": "更新ログを読み込み中…",
+    "changelog": {
+      "loginRequired": "ログインすると更新ログを表示できます",
+      "loadFailed": "更新ログの読み込みに失敗しました。後でもう一度お試しください。",
+      "empty": "公開済みの更新ログはありません"
+    },
     "autoCheck": "自動更新チェック",
-    "autoCheckDesc": "一定間隔でサーバーに更新を確認（既定は約6時間、リリース設定で変更可）",
-    "autoDownload": "自動アップデート",
-    "autoDownloadDesc": "更新を自動的にダウンロードしてインストール",
+    "autoCheckDesc": "定期的に新しいバージョンがリリースされていないか確認します",
+    "autoDownload": "更新の自動ダウンロード",
+    "autoDownloadDesc": "バックグラウンドで新しいバージョンを自動的にダウンロードしてインストールします",
     "status": {
       "checking": "更新を確認中...",
       "downloading": "v{{version}} の更新をダウンロード中...",
@@ -216,8 +229,9 @@
     },
     "action": {
       "checking": "確認中...",
-      "downloading": "ダウンロード中...",
+      "downloading": "ダウンロード...",
       "download": "更新をダウンロード",
+      "downloadNewVersion": "新バージョンをダウンロード",
       "install": "今すぐインストール",
       "installing": "インストール中...",
       "restart": "アプリを再起動",
@@ -228,9 +242,7 @@
       "check": "更新を確認"
     },
     "currentVersion": "現在のバージョン",
-    "whatsNew": "更新内容：",
     "errorDetails": "エラー詳細：",
-    "help": "自動アップデートが有効な場合、更新は自動的にダウンロードされインストールされます。",
     "sidebar": {
       "newVersionTitle": "新しいバージョンがあります",
       "updateToVersion": "v{{version}} に更新",
