@@ -71,6 +71,8 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
   const toggleThinking = useChatStore((s) => s.toggleThinking);
   const refresh = useChatStore((s) => s.refresh);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
+  const streamingMessages = useChatStore((s) => s.streamingMessages);
+  const streamingToolResults = useChatStore((s) => s.streamingToolResults);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
@@ -131,13 +133,24 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
     lastChatEventAt,
     streamMsg,
     streamText,
+    streamingMessages,
+    streamingToolResults,
     streamingTools,
   });
 
   useEffect(() => {
      
     updateJumpToLatestVisibility();
-  }, [messages.length, sending, pendingFinal, streamText, streamingTools.length, updateJumpToLatestVisibility]);
+  }, [
+    messages.length,
+    sending,
+    pendingFinal,
+    streamText,
+    streamingMessages.length,
+    streamingToolResults.length,
+    streamingTools.length,
+    updateJumpToLatestVisibility,
+  ]);
 
   useEffect(() => {
     const contentElement = contentRef.current;

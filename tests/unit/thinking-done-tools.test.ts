@@ -57,12 +57,32 @@ describe('thinking-done-tools', () => {
     expect(tools[0]?.name).toBe('Bash');
   });
 
-  it('prefers module cache when present', () => {
+  it('merges assistant message input over cache placeholder for same toolCallId', () => {
     writeTurnStreamingToolsCache('turn-user-u1', [
-      { toolCallId: 'toolu_cached', name: 'exec', status: 'completed' },
+      { toolCallId: 'toolu_cached', name: 'Bash', status: 'completed' },
     ]);
     const tools = resolveDoneTurnStreamingTools({
       turnStableKey: 'turn-user-u1',
+      turnMessages: [
+        {
+          role: 'assistant',
+          content: [
+            { type: 'tool_use', id: 'toolu_cached', name: 'Bash', input: { command: 'curl wttr.in' } },
+          ],
+        },
+      ],
+      toolResults: [],
+    });
+    expect(tools).toHaveLength(1);
+    expect(tools[0]?.input).toEqual({ command: 'curl wttr.in' });
+  });
+
+  it('still reads cache-only tools when messages are empty', () => {
+    writeTurnStreamingToolsCache('turn-cache-only', [
+      { toolCallId: 'toolu_cached', name: 'exec', input: { cmd: 'ls' }, status: 'completed' },
+    ]);
+    const tools = resolveDoneTurnStreamingTools({
+      turnStableKey: 'turn-cache-only',
       turnMessages: [],
       toolResults: [],
     });

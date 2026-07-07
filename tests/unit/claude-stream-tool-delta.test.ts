@@ -49,6 +49,29 @@ describe('upsertToolStatuses input preservation', () => {
 
     expect(updates.some((tool) => tool.toolCallId === 'toolu_2' && tool.input)).toBe(true);
   });
+
+  it('upgrades tool input when later tool_use carries params for same id', () => {
+    const first = collectToolUpdates(
+      {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 'toolu_3', name: 'Bash', input: {} }],
+      },
+      'delta',
+    );
+    let tools = upsertToolStatuses([], first);
+    const second = collectToolUpdates(
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool_use', id: 'toolu_3', name: 'Bash', input: { command: 'ls -la' } },
+        ],
+      },
+      'final',
+    );
+    tools = upsertToolStatuses(tools, second);
+    expect(tools).toHaveLength(1);
+    expect(tools[0]?.input).toEqual({ command: 'ls -la' });
+  });
 });
 
 describe('shouldAppendStreamingExtraTool', () => {
