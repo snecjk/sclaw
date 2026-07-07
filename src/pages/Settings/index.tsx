@@ -486,7 +486,7 @@ export function Settings() {
         {activeSection === 'models' && <Models />}
         {activeSection === 'channels' && <Channels />}
         {activeSection === 'general' && (
-    <div className="flex w-full flex-col gap-8 pb-10">
+    <>
       <header className="shrink-0">
         <h1 className="text-[20px] font-bold leading-tight text-[#1D2129] dark:text-foreground">
           {t('title')}
@@ -586,12 +586,12 @@ export function Settings() {
             </div>
           </section>
       </div>
-    </div>
+    </>
         )}
 
         {/* Gateway section */}
         {activeSection === 'gateway' && (
-    <div className="flex w-full flex-col gap-8 pb-10">
+    <>
       <div className="flex flex-col gap-6">
           <section className={stoSettingsSectionCardClass}>
             <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
@@ -708,12 +708,12 @@ export function Settings() {
 
           <DwsCliSettings />
       </div>
-    </div>
+    </>
         )}
 
         {/* Developer section */}
         {activeSection === 'developer' && devModeUnlocked && (
-    <div className="flex w-full flex-col gap-8 pb-10">
+    <>
       <div className="flex flex-col gap-6">
             <section className={stoSettingsSectionCardClass}>
                 <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
@@ -1090,12 +1090,12 @@ export function Settings() {
                 </div>
             </section>
       </div>
-    </div>
+    </>
         )}
 
         {/* Updates section */}
         {activeSection === 'updates' && (
-    <div className="flex w-full flex-col gap-8 pb-10">
+    <>
       <header className="shrink-0">
         <h1 className="text-[20px] font-bold leading-tight text-[#1D2129] dark:text-foreground">
           {t('updates.title')}
@@ -1105,11 +1105,9 @@ export function Settings() {
         </p>
       </header>
 
-      <div className="flex flex-col gap-8">
-          <UpdateSettings />
-          <UpdateChangelogPanel />
-      </div>
-    </div>
+      <UpdateSettings />
+      <UpdateChangelogPanel />
+    </>
         )}
     </SettingsShell>
   );

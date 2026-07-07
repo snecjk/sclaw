@@ -30,7 +30,13 @@ export const stoSettingsContentPanelClass = cn(
 
 /** 设置页右侧内容卡片内滚动区 */
 export const stoSettingsContentPanelBodyClass = cn(
-  'min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-8 py-6 [scrollbar-gutter:stable]',
+  'min-h-0 flex-1 overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
+);
+
+/** 设置页右侧内容主列（MasterGo 容器 7361：862×958、left 145px 于卡片内、top 72px、gap 36px） */
+export const stoSettingsContentInnerClass = cn(
+  'mx-auto box-border flex w-full max-w-[862px] flex-col gap-[36px] pt-[72px] pb-10',
+  'px-6 min-[974px]:px-0',
 );
 
 /** Chat assistant bubbles/cards: light = soft white; dark = neutral muted/card（与用户侧主色气泡区分） */
