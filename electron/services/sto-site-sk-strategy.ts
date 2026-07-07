@@ -14,18 +14,13 @@ import { logger } from '../utils/logger';
 import {
   ensureSiteKeyViaMemoryCenter,
 } from './sto-site-memory-api-service';
-import crypto from 'crypto';
 
 export class SiteSkStrategy implements StoSkStrategy {
   /** @deprecated 旧版全局 SK 缓存键，仅用于迁移清理 */
   private static readonly LEGACY_SK_CACHE_KEY = 'sto-site-sk';
-  private static readonly SK_CACHE_KEY_PREFIX = 'sto-site-sk:';
-
-  /** 网点 SK 解密密钥（按环境区分） */
-  private static readonly AES_KEYS: Record<string, string> = {
-    prod: '2074c2350686f0e4',
-    test: '2074c2350686f0e4',
-  };
+  /** @deprecated 旧版按用户密文缓存前缀，仅用于迁移清理 */
+  private static readonly LEGACY_SK_CACHE_KEY_PREFIX = 'sto-site-sk:';
+  private static readonly SK_CACHE_KEY_PREFIX = 'sto-site-sk-v2:';
 
   /**
    * 模型推理 Gateway baseUrl 域名（客户端本地，不经 memory-center）
@@ -42,7 +37,7 @@ export class SiteSkStrategy implements StoSkStrategy {
     if (forceRefresh) {
       await this.clearSkCache(user);
     } else {
-      await this.purgeLegacySkCache();
+      await this.purgeLegacySkCache(user);
       const cachedSk = await this.getCachedSkForUser(user);
       if (cachedSk) {
         return cachedSk;
@@ -50,17 +45,17 @@ export class SiteSkStrategy implements StoSkStrategy {
     }
 
     const ensured = await ensureSiteKeyViaMemoryCenter(forceRefresh);
-    if (!ensured?.encryptedKey) {
+    if (!ensured?.apiKey) {
       logger.warn('[site-sk] ensure key via memory-center failed');
       return null;
     }
 
     const skCacheKey = this.skCacheKey(ensured.tenantCode, user.code);
-    await storeApiKey(skCacheKey, ensured.encryptedKey);
+    await storeApiKey(skCacheKey, ensured.apiKey);
     logger.info(
-      `[site-sk] encryptedKey stored in cache key=${skCacheKey} (len=${ensured.encryptedKey.length}), created=${ensured.created}`,
+      `[site-sk] apiKey stored in cache key=${skCacheKey} (len=${ensured.apiKey.length}), created=${ensured.created}`,
     );
-    return this.decryptSk(ensured.encryptedKey);
+    return ensured.apiKey;
   }
 
   async getUserSkDetail(
@@ -104,12 +99,7 @@ export class SiteSkStrategy implements StoSkStrategy {
   }
 
   async getDecryptKey(): Promise<string> {
-    const env = await getSsoEnvironment();
-    const key = this.isTestEnvironment(env)
-      ? SiteSkStrategy.AES_KEYS.test
-      : SiteSkStrategy.AES_KEYS.prod;
-    logger.info(`[site-sk] getDecryptKey: env=${env}, key=${key.substring(0, 4)}...`);
-    return key;
+    throw new Error('SK decryption is handled by memory-center');
   }
 
   async clearCache(user: SsoUserInfo): Promise<void> {
@@ -129,6 +119,10 @@ export class SiteSkStrategy implements StoSkStrategy {
     return `${SiteSkStrategy.SK_CACHE_KEY_PREFIX}${tenantCode}:${userCode}`;
   }
 
+  private legacySkCacheKey(tenantCode: string, userCode: string): string {
+    return `${SiteSkStrategy.LEGACY_SK_CACHE_KEY_PREFIX}${tenantCode}:${userCode}`;
+  }
+
   /** 本地缓存 key 命名 hint（与 memory-center tenantCode 规则对齐） */
   private resolveTenantCodeHint(user: SsoUserInfo): string | null {
     const companyCode = user.companyCode?.trim() ?? '';
@@ -144,18 +138,12 @@ export class SiteSkStrategy implements StoSkStrategy {
     if (!cached) {
       return null;
     }
-    try {
-      const sk = await this.decryptSk(cached);
-      logger.info(`[site-sk] SK decrypted from cache for tenant=${tenantCode} (len=${sk.length})`);
-      return sk;
-    } catch {
-      logger.info('[site-sk] Legacy plaintext SK cache hit, will re-encrypt on next fetch');
-      return cached;
-    }
+    logger.info(`[site-sk] SK loaded from cache for tenant=${tenantCode} (len=${cached.length})`);
+    return cached;
   }
 
   private async clearSkCache(user: SsoUserInfo): Promise<void> {
-    await this.purgeLegacySkCache();
+    await this.purgeLegacySkCache(user);
     if (!user.code) return;
     const tenantCode = this.resolveTenantCodeHint(user);
     if (tenantCode) {
@@ -169,15 +157,19 @@ export class SiteSkStrategy implements StoSkStrategy {
     }
   }
 
-  private async purgeLegacySkCache(): Promise<void> {
+  private async purgeLegacySkCache(user?: SsoUserInfo): Promise<void> {
     await deleteApiKey(SiteSkStrategy.LEGACY_SK_CACHE_KEY);
-  }
-
-  private async decryptSk(encrypted: string): Promise<string> {
-    const key = await this.getDecryptKey();
-    const keyBuffer = Buffer.from(key, 'utf-8');
-    const decipher = crypto.createDecipheriv('aes-128-ecb', keyBuffer, null);
-    return decipher.update(encrypted, 'base64', 'utf-8') + decipher.final('utf-8');
+    if (!user?.code) return;
+    const tenantCode = this.resolveTenantCodeHint(user);
+    if (tenantCode) {
+      await deleteApiKey(this.legacySkCacheKey(tenantCode, user.code));
+    }
+    if (user.companyCode?.trim() && user.companyCode.trim() !== tenantCode) {
+      await deleteApiKey(this.legacySkCacheKey(user.companyCode.trim(), user.code));
+    }
+    if (user.code !== tenantCode) {
+      await deleteApiKey(this.legacySkCacheKey(user.code, user.code));
+    }
   }
 
   private isTestEnvironment(env?: string | null): boolean {

@@ -24,7 +24,7 @@ export class StoSiteMemoryApiError extends StoMemoryApiError {
 
 export interface SiteKeyEnsureResult {
   created: boolean;
-  encryptedKey: string;
+  apiKey: string;
   tokenId: string;
   models: string[];
   status: string;
@@ -56,10 +56,10 @@ export async function ensureSiteKeyViaMemoryCenter(
     return null;
   }
 
-  const encryptedKey = String(data.encrypted_key ?? '').trim();
+  const apiKey = String(data.api_key ?? '').trim();
   const tokenId = String(data.token_id ?? '').trim();
   const tenantCode = String(data.tenant_code ?? '').trim();
-  if (!encryptedKey || !tokenId || !tenantCode) {
+  if (!apiKey || !tokenId || !tenantCode) {
     return null;
   }
 
@@ -68,7 +68,7 @@ export async function ensureSiteKeyViaMemoryCenter(
 
   return {
     created: Boolean(data.created),
-    encryptedKey,
+    apiKey,
     tokenId,
     models,
     status: String(data.status ?? ''),

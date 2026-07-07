@@ -22,7 +22,7 @@ export class StoHqMemoryApiError extends StoMemoryApiError {
 
 export interface HqKeyEnsureResult {
   created: boolean;
-  encryptedKey: string;
+  apiKey: string;
   tokenId: string;
   models: string[];
   status: string;
@@ -51,9 +51,9 @@ export async function ensureHqKeyViaMemoryCenter(): Promise<HqKeyEnsureResult | 
     return null;
   }
 
-  const encryptedKey = String(data.encrypted_key ?? '').trim();
+  const apiKey = String(data.api_key ?? '').trim();
   const tokenId = String(data.token_id ?? '').trim();
-  if (!encryptedKey || !tokenId) {
+  if (!apiKey || !tokenId) {
     return null;
   }
 
@@ -62,7 +62,7 @@ export async function ensureHqKeyViaMemoryCenter(): Promise<HqKeyEnsureResult | 
 
   return {
     created: Boolean(data.created),
-    encryptedKey,
+    apiKey,
     tokenId,
     models,
     status: String(data.status ?? ''),

@@ -17,16 +17,11 @@ import {
   fetchHqTokenQuotaTiersViaMemoryCenter,
   StoHqMemoryApiError,
 } from './sto-hq-memory-api-service';
-import crypto from 'crypto';
 
 export class HqSkStrategy implements StoSkStrategy {
-  private static readonly CACHE_KEY = 'sto';
-
-  /** 非网点 SK 解密密钥（按环境区分） */
-  private static readonly AES_KEYS: Record<string, string> = {
-    prod: '2074c2350686f0e4',
-    test: '2074c2350686f0e4',
-  };
+  private static readonly CACHE_KEY = 'sto-sk-v2';
+  /** @deprecated 旧版密文缓存键，仅用于迁移清理 */
+  private static readonly LEGACY_CACHE_KEY = 'sto';
 
   /** 模型推理 Gateway baseUrl 域名（客户端本地，不经 memory-center） */
   private static readonly SUPPLIER_DOMAINS: Record<string, string> = {
@@ -42,11 +37,8 @@ export class HqSkStrategy implements StoSkStrategy {
     if (!forceRefresh) {
       const cached = await getApiKey(HqSkStrategy.CACHE_KEY);
       if (cached) {
-        const sk = await this.decryptCachedSk(cached);
-        if (sk) {
-          logger.info(`[hq-sk] SK decrypted from cache (len=${sk.length})`);
-          return sk;
-        }
+        logger.info(`[hq-sk] SK loaded from cache (len=${cached.length})`);
+        return cached;
       }
     }
 
@@ -59,16 +51,16 @@ export class HqSkStrategy implements StoSkStrategy {
     logger.info('[hq-sk] Fetching SK via memory-center ensure');
     try {
       const ensured = await ensureHqKeyViaMemoryCenter();
-      if (!ensured?.encryptedKey) {
-        logger.warn('[hq-sk] ensure key via memory-center failed: empty encryptedKey');
+      if (!ensured?.apiKey) {
+        logger.warn('[hq-sk] ensure key via memory-center failed: empty apiKey');
         return null;
       }
 
-      await storeApiKey(HqSkStrategy.CACHE_KEY, ensured.encryptedKey);
+      await storeApiKey(HqSkStrategy.CACHE_KEY, ensured.apiKey);
       logger.info(
-        `[hq-sk] encryptedKey stored in cache (len=${ensured.encryptedKey.length}), created=${ensured.created}`,
+        `[hq-sk] apiKey stored in cache (len=${ensured.apiKey.length}), created=${ensured.created}`,
       );
-      return this.decryptSk(ensured.encryptedKey);
+      return ensured.apiKey;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.warn(`[hq-sk] ensure key via memory-center failed: ${message}`);
@@ -133,12 +125,7 @@ export class HqSkStrategy implements StoSkStrategy {
   }
 
   async getDecryptKey(): Promise<string> {
-    const env = await getSsoEnvironment();
-    const key = this.isTestEnvironment(env)
-      ? HqSkStrategy.AES_KEYS.test
-      : HqSkStrategy.AES_KEYS.prod;
-    logger.info(`[hq-sk] getDecryptKey: env=${env}, key=${key.substring(0, 4)}...`);
-    return key;
+    throw new Error('SK decryption is handled by memory-center');
   }
 
   async queryTokenQuotaTier(
@@ -162,28 +149,8 @@ export class HqSkStrategy implements StoSkStrategy {
 
   async clearCache(user: SsoUserInfo): Promise<void> {
     await deleteApiKey(HqSkStrategy.CACHE_KEY);
+    await deleteApiKey(HqSkStrategy.LEGACY_CACHE_KEY);
     logger.info(`[hq-sk] Cache cleared for user=${user.code}`);
-  }
-
-  // ─── 私有方法 ───
-
-  private async decryptSk(encryptedBase64: string): Promise<string> {
-    const key = await this.getDecryptKey();
-    const keyBuffer = Buffer.from(key, 'utf-8');
-    const decipher = crypto.createDecipheriv('aes-128-ecb', keyBuffer, null);
-    let decrypted = decipher.update(encryptedBase64, 'base64', 'utf-8');
-    decrypted += decipher.final('utf-8');
-    return decrypted;
-  }
-
-  /** 读本地缓存：优先按 encryptedKey 解密；兼容旧版明文缓存 */
-  private async decryptCachedSk(cached: string): Promise<string | null> {
-    try {
-      return await this.decryptSk(cached);
-    } catch {
-      logger.info('[hq-sk] Legacy plaintext SK cache hit, will re-encrypt on next fetch');
-      return cached;
-    }
   }
 
   private isTestEnvironment(env?: string | null): boolean {
