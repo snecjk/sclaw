@@ -27,7 +27,7 @@ import { SidebarDeleteConfirmPortal } from '@/components/layout/sidebar-delete-c
 import { Sidebar } from './Sidebar';
 import { TitleBar } from './TitleBar';
 
-function MainCardBody() {
+function MainCardBody({ hideContentHeader }: { hideContentHeader: boolean }) {
   const { isSplitLayout } = useContentHeaderDisplay();
 
   // 三栏与双栏 body 类互斥：cn 合并时 px-[var(--sto-content-pad-x)] 可能压过 px-0，split row 会比 header 窄 ~32–40px
@@ -40,14 +40,20 @@ function MainCardBody() {
   }
 
   return (
-    <div className={stoMainCardBodyClass}>
+    <div
+      className={cn(
+        hideContentHeader
+          ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
+          : stoMainCardBodyClass,
+      )}
+    >
       <Outlet />
     </div>
   );
 }
 
 /** 省区主卡片：三栏时 main 承担水平 inset，保证 Header 与 split row 预览列左缘一致 */
-function ProvincialMainCard() {
+function ProvincialMainCard({ hideContentHeader }: { hideContentHeader: boolean }) {
   const { isSplitLayout } = useContentHeaderDisplay();
 
   return (
@@ -59,10 +65,14 @@ function ProvincialMainCard() {
           : 'flex min-h-0 min-w-0 flex-1 flex-col',
       )}
     >
-      <ContentHeader />
-      <MainCardBody />
+      {!hideContentHeader ? <ContentHeader /> : null}
+      <MainCardBody hideContentHeader={hideContentHeader} />
     </main>
   );
+}
+
+function isSettingsRoute(pathname: string): boolean {
+  return pathname.startsWith('/settings');
 }
 
 export function MainLayout() {
@@ -99,7 +109,27 @@ export function MainLayout() {
     prevSessionKeyRef.current = currentSessionKey;
   }, [pathname, currentSessionKey, switchToAgentMainSession]);
 
+  const onSettingsRoute = isSettingsRoute(pathname);
+
   if (isProvincialSidebar) {
+    if (onSettingsRoute) {
+      return (
+        <div
+          data-app-shell="provincial"
+          data-platform={window.electron?.platform ?? 'unknown'}
+          className="relative flex h-screen flex-col overflow-hidden bg-[#F1F1F3] dark:bg-background"
+        >
+          <AppShellChromeOverlay />
+          <ContentHeaderProvider>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              <Outlet />
+            </div>
+          </ContentHeaderProvider>
+          <SidebarDeleteConfirmPortal />
+        </div>
+      );
+    }
+
     return (
       <div
         data-app-shell="provincial"
@@ -112,7 +142,7 @@ export function MainLayout() {
           <Sidebar />
           <div className={stoMainCardWrapClass(sidebarCollapsed)}>
             <ContentHeaderProvider>
-              <ProvincialMainCard />
+              <ProvincialMainCard hideContentHeader={false} />
             </ContentHeaderProvider>
           </div>
         </div>
@@ -125,8 +155,15 @@ export function MainLayout() {
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--sto-page-bg)] dark:bg-background">
       <TitleBar />
       <div className="flex min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-hidden">
-        <Sidebar />
-        <main className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-y-contain bg-[var(--sto-page-bg)] px-[var(--sto-content-pad-x)] py-5 [overflow-anchor:none] [scrollbar-gutter:stable] dark:bg-background">
+        {!onSettingsRoute ? <Sidebar /> : null}
+        <main
+          className={cn(
+            'min-h-0 min-w-0 flex-1 [overflow-anchor:none] dark:bg-background',
+            onSettingsRoute
+              ? 'flex flex-col overflow-hidden bg-[#F1F1F3] dark:bg-background'
+              : 'overflow-auto overscroll-y-contain bg-[var(--sto-page-bg)] px-[var(--sto-content-pad-x)] py-5 [scrollbar-gutter:stable]',
+          )}
+        >
           <Outlet />
         </main>
       </div>

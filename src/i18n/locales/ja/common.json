@@ -73,6 +73,13 @@
         "sessionRowMenu": "セッション操作",
         "groupRowMenu": "グループ操作"
     },
+    "settings": {
+        "backToHome": "ホームに戻る",
+        "sectionGeneral": "一般",
+        "sectionWorkspace": "ワークスペース",
+        "sectionSystem": "システム",
+        "sectionDeveloper": "開発者"
+    },
     "dataCenterPage": {
         "title": "データセンター",
         "subtitle": "システムデータ表、アップロードファイル、ナレッジベースを一元管理します。",

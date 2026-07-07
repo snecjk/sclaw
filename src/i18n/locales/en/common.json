@@ -73,6 +73,13 @@
         "sessionRowMenu": "Session actions",
         "groupRowMenu": "Group actions"
     },
+    "settings": {
+        "backToHome": "Back to Home",
+        "sectionGeneral": "General",
+        "sectionWorkspace": "Workspace",
+        "sectionSystem": "System",
+        "sectionDeveloper": "Developer"
+    },
     "dataCenterPage": {
         "title": "Data Center",
         "subtitle": "Manage system data tables, uploaded files, and knowledge bases for AI and business workflows.",

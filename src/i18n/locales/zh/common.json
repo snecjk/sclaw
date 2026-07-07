@@ -74,6 +74,13 @@
         "sessionRowMenu": "会话操作菜单",
         "groupRowMenu": "分组操作菜单"
     },
+    "settings": {
+        "backToHome": "返回首页",
+        "sectionGeneral": "通用",
+        "sectionWorkspace": "工作区",
+        "sectionSystem": "系统",
+        "sectionDeveloper": "开发者"
+    },
     "dataCenterPage": {
         "title": "数据中心",
         "subtitle": "集中管理网点系统数据表、本地上传文件与知识库等内容，沉淀可供 AI 在日常分析、问答与任务执行中关联引用的数据资产",
