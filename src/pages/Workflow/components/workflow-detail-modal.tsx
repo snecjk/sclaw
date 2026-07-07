@@ -119,10 +119,6 @@ export function WorkflowDetailModal({
     ? new Set(detail.steps.flatMap((s) => s.skills ?? [])).size
     : 0;
 
-  const autoRunText = `${card.schedule}${
-    mine && !card.enabled ? t('detail.scheduleOffHint') : t('detail.scheduleOnHint')
-  }`;
-
   const runStatusText =
     detail?.monthRunCount != null
       ? t('detail.monthRuns', { count: detail.monthRunCount })
@@ -180,7 +176,11 @@ export function WorkflowDetailModal({
               <Dialog.Title className="text-[18px] font-medium leading-6 text-foreground">
                 {card.name}
               </Dialog.Title>
-              <span className={workflowDetailModalCategoryBadgeClass}>{card.category}</span>
+              {!isMineCard(card) ? (
+                <span className={workflowDetailModalCategoryBadgeClass}>
+                  {card.category}
+                </span>
+              ) : null}
               {mine ? (
                 <WorkflowStatusBadge variant={card.enabled ? 'on' : 'off'}>
                   {card.enabled ? t('detail.scheduleOn') : t('detail.scheduleOff')}
@@ -192,14 +192,6 @@ export function WorkflowDetailModal({
             </div>
 
             <div className={workflowDetailModalBodyPadClass}>
-              <div className={workflowDetailModalInfoRowClass}>
-                <span className={workflowDetailModalInfoLabelClass}>
-                  <Clock className="hidden h-4 w-4" aria-hidden />
-                  {t('detail.autoRun')}
-                </span>
-                <span className="text-foreground">{autoRunText}</span>
-              </div>
-
               <div className={workflowDetailModalInfoRowClass}>
                 <span className={workflowDetailModalInfoLabelClass}>
                   <Package className="hidden h-4 w-4" aria-hidden />

@@ -494,8 +494,8 @@ export function WorkflowDashboard({
           const idx = cards.findIndex((c) => c.id === detailMineCard.id);
           if (idx < 0) return;
           const next = !detailMineCard.enabled;
-          updateCard(idx, { enabled: next, showPausedLabel: !next });
-          setDetailMineCard({ ...detailMineCard, enabled: next, showPausedLabel: !next });
+          updateCard(idx, { enabled: next });
+          setDetailMineCard({ ...detailMineCard, enabled: next });
           toast.success(next ? t('toast.resumed') : t('toast.paused'));
         }}
         onRename={() => {

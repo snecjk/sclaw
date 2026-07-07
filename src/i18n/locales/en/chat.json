@@ -32,7 +32,10 @@
         "searchPrev": "Previous result",
         "searchNext": "Next result",
         "searchClear": "Clear search",
-        "searchClose": "Close search"
+        "searchClose": "Close search",
+        "openPreview": "Open preview",
+        "closePreview": "Close preview",
+        "closeSession": "Close current session"
     },
     "composer": {
         "attachFiles": "Attach files",
@@ -120,6 +123,7 @@
     "messageActions": {
         "copy": "Copy",
         "copyFailed": "Copy failed",
+        "share": "Share to DingTalk",
         "editAndResend": "Edit and send again",
         "editUnavailable": "Edit and resend is not available on this page"
     },
@@ -137,8 +141,8 @@
         "moveUp": "Move up",
         "moveDown": "Move down",
         "fileCount": "{{count}} file(s)",
-    "queueFull": "Queue is full (max {{max}})"
-  },
+        "queueFull": "Queue is full (max {{max}})"
+    },
     "splitting": "Analyzing question...",
     "systemNotice": {
         "label": "System notice",
@@ -160,8 +164,55 @@
         "durationHours": "{{count}} hr",
         "durationHoursHalf": "{{count}}.5 hr",
         "durationHoursMinutes": "{{hours}} hr {{minutes}} min",
+        "defaultName": "Workflow",
+        "backgroundRunningWithId": "Workflow ID: {{workflowId}}",
+        "withId": "Workflow ID: {{workflowId}}",
         "viewArtifact": "View artifact",
         "openArtifactLink": "Open link",
-        "viewWorkflowAction": "View workflow"
+        "viewWorkflowAction": "View workflow",
+        "createScheduledTaskAction": "Create scheduled task"
+    },
+    "artifact": {
+        "typeDocument": "Document",
+        "typeSpreadsheet": "Spreadsheet",
+        "typeImage": "Image",
+        "typeArchive": "Archive",
+        "typeMedia": "Media",
+        "typeFile": "File"
+    },
+    "preview": {
+        "collapsePanel": "Collapse preview",
+        "overflowMenu": "All artifacts",
+        "fullscreen": "Fullscreen",
+        "refresh": "Refresh",
+        "download": "Download",
+        "share": "Share to DingTalk",
+        "openExternal": "Open in browser",
+        "editWorkflow": "Edit workflow",
+        "workflowTab": "Workflow",
+        "emptyHint": "Click a file link in the chat to preview",
+        "emptyHintSub": "Or select an artifact above",
+        "dismissTab": "Close this artifact",
+        "shareDialog": {
+            "artifactTitle": "Share artifact",
+            "artifactDescription": "Share to a DingTalk contact or group",
+            "conversationTitle": "Share conversation",
+            "conversationDescription": "After you confirm, the DingTalk contact picker will open.",
+            "title": "Share to DingTalk",
+            "description": "After you confirm, the DingTalk contact picker will open.",
+            "fieldTitle": "Title",
+            "fieldBody": "Body",
+            "fieldLink": "Link",
+            "localUrlHint": "This link is a local preview URL. Colleagues on the same network may not be able to open it.",
+            "cancel": "Cancel",
+            "confirm": "Share",
+            "uploading": "Uploading…",
+            "tooLongTitle": "Content too long to share",
+            "tooLongDescription": "The text is too long to pre-fill. After you confirm, the full conversation will be copied to the clipboard and the DingTalk picker will open. Paste (⌘V / Ctrl+V) in the message box before sending.",
+            "tooLongConfirm": "Open DingTalk",
+            "tooLongPickerHint": "Paste the copied conversation in the message box (⌘V / Ctrl+V)",
+            "success": "DingTalk contact picker opened",
+            "failed": "Share failed. Please try again later."
+        }
     }
 }

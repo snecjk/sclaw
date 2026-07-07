@@ -31,20 +31,16 @@ export function mapWorkflowSummaryToCardItem(
   t: (key: string) => string,
 ): WorkflowCardItem {
   const listKind = deriveWorkflowListKind(summary);
-  const isDraft = listKind === 'draft';
 
   return {
     id: asWorkflowId(summary.id),
     name: summary.name,
     listKind,
-    schedule: isDraft ? t('card.noScheduleDraft') : t('card.noSchedule'),
     enabled: listKind === 'published',
     description: t('card.noDescription'),
     coverKey: pickCoverKeyFromWorkflowId(summary.id),
     flow: [],
-    isCustom: true,
     neverRun: summary.updatedAt === null,
-    ...(isDraft ? { scheduleMuted: true, showPausedLabel: false } : {}),
   };
 }
 
@@ -89,7 +85,6 @@ export function mapTemplateMineItemToOfficialCard(
     id: item.id,
     name: item.label,
     category: item.category ?? '',
-    schedule: '',
     description: item.description ?? '',
     flow: item.nodes.map((n: Record<string, unknown>) => String(n.label ?? n.type ?? '')),
     coverKey: pickCoverKeyFromWorkflowId(item.id),
@@ -108,13 +103,10 @@ export function mapTemplateMineItemToCardItem(
     id: item.id,
     name: item.label,
     listKind,
-    schedule: t('card.noSchedule'),
     enabled: isSystem,
     description: item.description ?? t('card.noDescription'),
     coverKey: pickCoverKeyFromWorkflowId(item.id),
     flow: item.nodes.map((n: Record<string, unknown>) => String(n.label ?? n.type ?? '')),
-    isCustom: !isSystem,
     neverRun: item.updatedAt === null,
-    ...(isSystem ? {} : { scheduleMuted: true, showPausedLabel: false }),
   };
 }
