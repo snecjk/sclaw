@@ -13,7 +13,7 @@
         "newChat": "New Chat",
         "cronTasks": "Scheduled tasks",
         "myTasks": "My Tasks",
-        "dataCenter": "My Files",
+        "dataCenter": "Data Center",
         "skills": "Skills",
         "workflow": "Workflows",
         "agents": "Agents",
@@ -65,6 +65,18 @@
         "renameGroupSucceeded": "Renamed successfully",
         "sessionRowMenu": "Session actions",
         "groupRowMenu": "Group actions"
+    },
+    "dataCenterPage": {
+        "title": "Data Center",
+        "subtitle": "Manage system data tables, uploaded files, and knowledge bases for AI and business workflows.",
+        "onlineTab": "Online data",
+        "localTab": "Local files",
+        "dataAccessTab": "Data access",
+        "tabAria": "Data type",
+        "customerRelationsTitle": "Customer relations",
+        "customerRelationsDesc": "Core CRM materials including customer profiles, communication records, requirement tracking, and maintenance strategies.",
+        "tokenMissing": "Login token unavailable. Please sign in again.",
+        "linkUnavailable": "Unable to generate access link"
     },
     "actions": {
         "save": "Save",

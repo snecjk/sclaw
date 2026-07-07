@@ -3,7 +3,7 @@
  * 省区布局：展开 260px / 收起 w-0 完全隐藏；折叠钮在侧栏列顶行（无全局顶栏）。
  * 完整布局：展开 260px / 收起 72px 图标轨。
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import {
   Puzzle,
@@ -43,7 +43,7 @@ import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -654,7 +654,7 @@ function SidebarNavLink({
   icon: ReactNode;
   label: string;
   collapsed: boolean;
-  onClick?: () => void;
+  onClick?: (e: MouseEvent<HTMLAnchorElement>) => void;
   isActiveOverride?: boolean;
   badge?: ReactNode;
 }) {
@@ -729,6 +729,9 @@ export function Sidebar() {
 
   const authUser = useAuthStore((s) => s.user);
   const authLogout = useAuthStore((s) => s.logout);
+  const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
+  const isSite =
+    siteDepartmentTypes !== null && isSiteUser(authUser?.categoryCode);
 
   const language = useSettingsStore((s) => s.language);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
@@ -967,6 +970,8 @@ export function Sidebar() {
 
   const [editingSessionKey, setEditingSessionKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editingGroupValue, setEditingGroupValue] = useState('');
   const [groupDialog, setGroupDialog] = useState<SidebarRecentGroupDialogState>({ mode: null });
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
@@ -995,6 +1000,32 @@ export function Sidebar() {
     },
     [recentGroups, t],
   );
+
+  const startRenameRecentGroup = useCallback((groupId: string, name: string) => {
+    setEditingSessionKey(null);
+    setEditingGroupId(groupId);
+    setEditingGroupValue(name);
+  }, []);
+
+  const commitRenameRecentGroup = useCallback(
+    (groupId: string, originalName: string) => {
+      const trimmed = editingGroupValue.trim();
+      setEditingGroupId(null);
+      setEditingGroupValue('');
+
+      if (!trimmed || trimmed === originalName) return;
+
+      if (renameGroup(groupId, trimmed)) {
+        toast.success(t('common:sidebar.renameGroupSucceeded'));
+      }
+    },
+    [editingGroupValue, renameGroup, t],
+  );
+
+  const cancelRenameRecentGroup = useCallback(() => {
+    setEditingGroupId(null);
+    setEditingGroupValue('');
+  }, []);
 
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
 
@@ -1576,11 +1607,12 @@ export function Sidebar() {
     ];
     return all.filter((item) => {
       if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
+      if (item.to === '/data-center' && (siteDepartmentTypes === null || !isSite)) return false;
       if (item.to === '/scheduled-tasks' && getCurrentEnvConfig().isProduction) return false;
       if (item.to === '/cron' && getCurrentEnvConfig().isProduction) return false;
       return true;
     });
-  }, [sidebarVis.primaryMyData, t]);
+  }, [isSite, sidebarVis.primaryMyData, siteDepartmentTypes, t]);
 
   const workspaceNav = [
     { to: '/agents', icon: <Bot className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.agents') },
@@ -1628,7 +1660,7 @@ export function Sidebar() {
       <nav
         className={cn(
           'flex shrink-0 flex-col gap-0.5 overflow-x-hidden pb-2',
-          sidebarCollapsed ? 'px-0 pt-2' : 'px-2 pt-2',
+          sidebarCollapsed ? 'px-0 pt-2' : 'px-2 pt-0',
         )}
       >
         {/* 固定区：新对话、定时任务、技能广场、工作区等 */}
@@ -1719,7 +1751,16 @@ export function Sidebar() {
       icon={item.icon}
       label={item.label}
       collapsed={sidebarCollapsed}
-      onClick={item.to === '/' ? handleHomeClick : undefined}
+      onClick={
+        item.to === '/'
+          ? () => handleHomeClick?.()
+          : item.to === '/data-center'
+            ? (e) => {
+                e.preventDefault();
+                navigate('/data-center');
+              }
+            : undefined
+      }
       isActiveOverride={homeIsActiveOverride}
       badge={item.badge}
     />
@@ -1838,16 +1879,17 @@ export function Sidebar() {
                       isOpen={isGroupOpen}
                       hasUnread={hasGroupUnread}
                       onToggle={() => toggleRecentGroup(section.group.id)}
-                      onRename={() =>
-                        setGroupDialog({
-                          mode: 'rename',
-                          groupId: section.group.id,
-                          defaultName: section.group.name,
-                        })
-                      }
+                      onRename={() => startRenameRecentGroup(section.group.id, section.group.name)}
                       onDissolve={() =>
                         setGroupDialog({ mode: 'dissolve', groupId: section.group.id })
                       }
+                      isEditing={editingGroupId === section.group.id}
+                      editingValue={editingGroupValue}
+                      onEditingValueChange={setEditingGroupValue}
+                      onCommitRename={() =>
+                        commitRenameRecentGroup(section.group.id, section.group.name)
+                      }
+                      onCancelRename={cancelRenameRecentGroup}
                     />
                   </div>
                   {isGroupOpen ? (
@@ -2136,7 +2178,12 @@ export function Sidebar() {
       <SidebarUpdateNotice collapsed={sidebarCollapsed} />
 
       {authUser ? (
-        <div className="shrink-0 bg-[var(--sto-sidebar-bg)] p-2">
+        <div
+          className={cn(
+            'shrink-0 bg-[var(--sto-sidebar-bg)]',
+            sidebarCollapsed ? 'p-2' : 'px-2 py-1',
+          )}
+        >
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -2146,7 +2193,7 @@ export function Sidebar() {
                   sidebarVis.userProfileCard
                     ? sidebarCollapsed
                       ? 'flex-col items-center justify-center gap-0 p-2'
-                      : 'items-center justify-between gap-3 px-2 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.04]'
+                      : 'items-center justify-between gap-3 px-2 py-2 hover:bg-[var(--sto-sidebar-row-hover-bg)] dark:hover:bg-white/[0.04]'
                     : 'items-center justify-center rounded-[8px] p-2 hover:bg-black/[0.02] dark:hover:bg-muted/40',
                 )}
                 title={
@@ -2312,11 +2359,6 @@ export function Sidebar() {
           const id = createGroupAndAssignSession(name, sessionKey);
           if (id) {
             toast.success(t('common:sidebar.groupAdded'));
-          }
-        }}
-        onRenameConfirm={(name, groupId) => {
-          if (renameGroup(groupId, name)) {
-            toast.success(t('common:sidebar.renameGroupSucceeded'));
           }
         }}
         onDissolveConfirm={(groupId) => {

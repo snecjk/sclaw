@@ -274,10 +274,10 @@ export function openExternalUrl(url: string): void {
   void window.electron?.openExternal(url.trim());
 }
 
-/** Resolve bare filenames / artifact names to OSS URL from hydrated workflow card state. */
+/** Resolve bare filenames / artifact names to preview OSS URL from hydrated workflow card state. */
 export function resolveArtifactUrlFromWorkflowStates(
   hint: string,
-  states: Record<string, { result?: { artifacts?: Array<{ name: string; url: string }> } } | undefined>,
+  states: Record<string, { result?: { artifacts?: Array<{ name: string; url: string; previewUrl?: string }> } } | undefined>,
 ): string | null {
   const normalized = hint.trim();
   if (!normalized) return null;
@@ -286,7 +286,7 @@ export function resolveArtifactUrlFromWorkflowStates(
   const basename = safeDecodeURIComponent(normalized.split('/').pop()?.split('?')[0] || normalized);
   for (const state of Object.values(states)) {
     for (const artifact of state?.result?.artifacts ?? []) {
-      const url = artifact.url?.trim();
+      const url = (artifact.previewUrl ?? artifact.url)?.trim();
       if (!url || !isHttpUrl(url)) continue;
       const urlBase = safeDecodeURIComponent(url.split('/').pop()?.split('?')[0] || '');
       if (
@@ -304,7 +304,7 @@ export function resolveArtifactUrlFromWorkflowStates(
 
 export function resolvePreviewLinkTarget(
   href: string,
-  states: Record<string, { result?: { artifacts?: Array<{ name: string; url: string }> } } | undefined>,
+  states: Record<string, { result?: { artifacts?: Array<{ name: string; url: string; previewUrl?: string }> } } | undefined>,
 ): string {
   const raw = normalizeLocalFilePath(
     href.startsWith('preview://') ? href.slice('preview://'.length) : href,
@@ -317,18 +317,23 @@ export function artifactToPreviewFile(artifact: {
   name: string;
   type: string;
   url: string;
+  previewUrl?: string;
+  tempUrl?: string;
 }): AttachedFileMeta {
+  const previewUrl = artifact.previewUrl?.trim() || artifact.url;
+  const downloadUrl = artifact.tempUrl?.trim() || artifact.url;
   const mimeType = resolvePreviewMimeType(
-    inferMimeTypeFromUrl(artifact.url, artifact.type),
-    artifact.url,
+    inferMimeTypeFromUrl(previewUrl, artifact.type),
+    previewUrl,
     artifact.name,
   );
   const fileName = artifact.name && artifact.name !== 'preview' && !artifact.name.startsWith('http')
-    ? (artifact.name.includes('.') ? artifact.name : previewFileNameFromUrl(artifact.url, mimeType))
-    : previewFileNameFromUrl(artifact.url, mimeType);
+    ? (artifact.name.includes('.') ? artifact.name : previewFileNameFromUrl(previewUrl, mimeType))
+    : previewFileNameFromUrl(previewUrl, mimeType);
 
   return {
-    filePath: artifact.url,
+    filePath: previewUrl,
+    downloadUrl: downloadUrl !== previewUrl ? downloadUrl : undefined,
     fileName,
     mimeType,
     fileSize: 0,

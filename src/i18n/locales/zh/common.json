@@ -13,7 +13,7 @@
         "newChat": "新对话",
         "cronTasks": "定时任务",
         "myTasks": "我的任务",
-        "dataCenter": "我的文件",
+        "dataCenter": "数据中心",
         "skills": "技能广场",
         "workflow": "工作流",
         "agents": "智能体",
@@ -66,6 +66,18 @@
         "renameGroupSucceeded": "重命名成功",
         "sessionRowMenu": "会话操作菜单",
         "groupRowMenu": "分组操作菜单"
+    },
+    "dataCenterPage": {
+        "title": "数据中心",
+        "subtitle": "集中管理网点系统数据表、本地上传文件与知识库等内容，沉淀可供 AI 在日常分析、问答与任务执行中关联引用的数据资产",
+        "onlineTab": "线上数据",
+        "localTab": "本地文件",
+        "dataAccessTab": "数据接入",
+        "tabAria": "数据类型",
+        "customerRelationsTitle": "客户关系",
+        "customerRelationsDesc": "汇集客户关系管理核心资料，涵盖客户档案、沟通记录、需求追踪与维护策略",
+        "tokenMissing": "未获取到登录令牌，请重新登录",
+        "linkUnavailable": "无法生成访问链接"
     },
     "actions": {
         "save": "保存",

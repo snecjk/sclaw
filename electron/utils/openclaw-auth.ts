@@ -25,6 +25,7 @@ import {
 import { withConfigLock } from './config-mutex';
 import { resolveStoBaseUrl } from './sto-domain';
 import { getOpenClawConfigDir } from './paths';
+import { RETIRED_PLUGIN_IDS } from '../../shared/retired-skills';
 
 const AUTH_STORE_VERSION = 1;
 const AUTH_PROFILE_FILENAME = 'auth-profiles.json';
@@ -1305,6 +1306,42 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
 
 const DINGTALK_SEND_GUARD_PLUGIN_ID = 'sto-dingtalk-send-guard';
 
+/** Strip retired plugin ids from openclaw.json (skills/plugins removed from the app). */
+export async function removeRetiredPluginsFromOpenClawConfig(): Promise<boolean> {
+  return withConfigLock(async () => {
+    const config = await readOpenClawJson();
+    const plugins = (config.plugins || {}) as Record<string, unknown>;
+    let modified = false;
+
+    const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
+    const filteredAllow = allow.filter((id) => !RETIRED_PLUGIN_IDS.includes(id as typeof RETIRED_PLUGIN_IDS[number]));
+    if (filteredAllow.length !== allow.length) {
+      plugins.allow = filteredAllow;
+      modified = true;
+    }
+
+    const entries = (
+      plugins.entries && typeof plugins.entries === 'object' && !Array.isArray(plugins.entries)
+        ? { ...(plugins.entries as Record<string, unknown>) }
+        : {}
+    );
+    for (const pluginId of RETIRED_PLUGIN_IDS) {
+      if (pluginId in entries) {
+        delete entries[pluginId];
+        modified = true;
+      }
+    }
+
+    if (modified) {
+      plugins.entries = entries;
+      config.plugins = plugins;
+      await writeOpenClawJson(config);
+    }
+
+    return modified;
+  });
+}
+
 /** Always enable local DingTalk send guard (no remote config required). */
 function ensureDingTalkSendGuardPluginConfig(plugins: Record<string, unknown>): boolean {
   const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
@@ -1359,14 +1396,13 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
       'sto-skill-call-monitor',
       'sto-media-understanding',
       DINGTALK_SEND_GUARD_PLUGIN_ID,
-      'sto-distinctive-design-guard',
     ]) {
       if (!allow.includes(pluginId)) {
         allow.push(pluginId);
       }
     }
     // sto-scheduled-task-tool is temporarily disabled; cloud scheduled tasks are not live this release
-    plugins.allow = allow;
+    plugins.allow = allow.filter((id) => !RETIRED_PLUGIN_IDS.includes(id as typeof RETIRED_PLUGIN_IDS[number]));
 
     const entries = (plugins.entries || {}) as Record<string, unknown>;
     entries['sto-dynamic-agent-route'] = {
@@ -1418,14 +1454,9 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
       enabled: true,
       config: {},
     };
-    entries['sto-distinctive-design-guard'] = {
-      enabled: true,
-      config: {
-        enabled: true,
-        enforceRead: true,
-        lintEnabled: true,
-      },
-    };
+    for (const pluginId of RETIRED_PLUGIN_IDS) {
+      delete entries[pluginId];
+    }
     plugins.entries = entries;
     config.plugins = plugins;
 

@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { AlertCircle, RotateCcw } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 
@@ -10,7 +10,7 @@ interface WorkflowDeleteConfirmProps {
   onConfirm: () => void;
 }
 
-/** 删除确认弹窗：警告图标 + 恢复提示 + 取消/确认按钮 */
+/** 删除确认弹窗：警告图标 + 取消/确认按钮 */
 export function WorkflowDeleteConfirm({
   open,
   workflowName,
@@ -31,10 +31,6 @@ export function WorkflowDeleteConfirm({
           <Dialog.Description className="mt-2 text-[13.5px] leading-relaxed text-foreground/80">
             {t('deleteConfirm.message', { name: workflowName })}
           </Dialog.Description>
-          <div className="mt-3 flex items-start gap-1.5 rounded-md bg-success/10 px-[11px] py-2 text-[12.5px] leading-relaxed text-[#0a7d52]">
-            <RotateCcw className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            {t('deleteConfirm.recoverHint')}
-          </div>
           <div className="mt-5 flex justify-end gap-2.5">
             <Button type="button" variant="outline" onClick={onCancel}>
               {t('deleteConfirm.cancel')}

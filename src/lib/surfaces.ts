@@ -977,9 +977,9 @@ export const workflowListCardMoreActionClass = cn(
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
 
-/** 工作流卡片浮动菜单容器 */
+/** 工作流卡片 DropdownMenu 内容壳 — Radix portal，层级高于侧栏 sticky */
 export const workflowListCardMenuClass = cn(
-  'fixed z-[126] w-[200px] rounded-xl border border-border bg-card p-1.5',
+  'z-[10041] w-[200px] rounded-xl border border-border bg-card p-1.5',
   'shadow-[0_8px_40px_rgba(0,0,0,0.16)] dark:shadow-modal',
 );
 
@@ -1339,7 +1339,7 @@ export const sidebarNavExpandedIdleClass = cn(
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
-/** 展开侧栏主导航 active — 底 #EAEAED + Regular（选中仅靠底色，字重与 idle 一致） */
+/** 展开侧栏主导航 active — 底 #DCDCDC + Regular（选中仅靠底色，字重与 idle 一致） */
 export const sidebarNavExpandedActiveClass = cn(
   'h-9 min-h-9 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
   'bg-[var(--sto-sidebar-nav-active-bg)]',
@@ -1388,28 +1388,28 @@ export const sidebarRunningSpinnerClass = 'text-[var(--sto-sidebar-running-spinn
 /** 侧栏未读红点 — 6×6px，destructive */
 export const sidebarUnreadDotClass = 'h-1.5 w-1.5 shrink-0 rounded-full bg-destructive';
 
-/** 最近分组内会话选中底 — MCP paint_8:90700 #DCDCDC */
-export const sidebarRecentSessionActiveClass = 'bg-[#DCDCDC]';
+/** 最近分组内会话选中底 — light #DCDCDC；dark 走 --sto-sidebar-subitem-active-bg */
+export const sidebarRecentSessionActiveClass = 'bg-[var(--sto-sidebar-subitem-active-bg)]';
 
 /** 最近会话/分组下拉 — MCP 140px 菜单容器 */
 export const sidebarRecentMenuContentClass =
   'min-w-[140px] rounded-lg border border-border bg-card p-1 shadow-[0_4px_12px_rgba(0,0,0,0.1)]';
 
-/** 最近会话/分组下拉项 — MCP 132×34, hover #F0F2F5 */
+/** 最近会话/分组下拉项 — MCP 132×34；hover 走 muted，light/dark 自适应 */
 export const sidebarRecentMenuItemClass = cn(
   'flex h-[34px] cursor-pointer select-none items-center gap-1 rounded-md px-2 text-sm leading-[18px] text-foreground outline-none',
-  'focus:bg-[#F0F2F5] data-[highlighted]:bg-[#F0F2F5]',
+  'focus:bg-muted data-[highlighted]:bg-muted data-[state=open]:bg-muted',
 );
 
-/** 最近会话下拉删除项 hover — MCP #FFF2F0 + destructive 字/图标 */
+/** 最近会话下拉删除项 hover — destructive 浅底 + 字/图标 */
 export const sidebarRecentMenuDeleteItemClass = cn(
   sidebarRecentMenuItemClass,
-  'focus:bg-[#FFF2F0] focus:text-destructive data-[highlighted]:bg-[#FFF2F0] data-[highlighted]:text-destructive',
+  'focus:bg-destructive/10 focus:text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive',
   '[&_svg]:text-[var(--sto-sidebar-text-icon)] focus:[&_svg]:text-destructive data-[highlighted]:[&_svg]:text-destructive',
 );
 
-/** 最近分组子菜单分隔 — MCP #F2F3F5（配合 DropdownMenuSeparator） */
-export const sidebarRecentMenuDividerClass = '-mx-1 my-1 h-px bg-[#F2F3F5]';
+/** 最近分组子菜单分隔 — 走 border token，light/dark 自适应 */
+export const sidebarRecentMenuDividerClass = '-mx-1 my-1 h-px bg-border';
 
 /** 分组/最近空态行 — MCP Grey-5 #C9CDD4 */
 export const sidebarRecentEmptyLineClass = cn(

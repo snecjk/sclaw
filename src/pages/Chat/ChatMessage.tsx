@@ -4,7 +4,7 @@
  * with markdown, thinking sections, images, and tool cards.
  */
 import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
-import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, CircleCheck, Share2 } from 'lucide-react';
+import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, CircleCheck } from 'lucide-react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { createPortal } from 'react-dom';
@@ -76,6 +76,7 @@ import { highlightAtMentionsInChildren } from '@/lib/at-mention-highlight';
 import { renderUserMessageMentionNodes } from '@/components/dingtalk/DingTalkMentionTag';
 import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessPanel';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
+import { ShareMessageIcon } from '@/components/icons/ShareMessageIcon';
 import {
   buildConversationShareDialogDraft,
   type DingTalkShareDialogDraft,
@@ -526,9 +527,9 @@ export const ChatMessage = memo(function ChatMessage({
   }, [debugLinks, debugMarkdownSource, text]);
 
   const openConversationShare = useCallback(() => {
-    setShareDraft(buildConversationShareDialogDraft(text, previewFiles, t));
+    setShareDraft(buildConversationShareDialogDraft(text, previewFiles));
     setShareDialogOpen(true);
-  }, [text, previewFiles, t]);
+  }, [text, previewFiles]);
 
   const handleShareCompleted = useCallback(() => {
     toast.success(t('preview.shareDialog.success'));
@@ -999,7 +1000,7 @@ function UserMessageMetaRow({
           aria-label={t('messageActions.share')}
           title={t('messageActions.share')}
         >
-          <Share2 className="h-3 w-3" aria-hidden />
+          <ShareMessageIcon className="h-3 w-3" />
         </Button>
       ) : null}
       <Button
@@ -1069,7 +1070,7 @@ function AssistantMessageMetaRow({
           aria-label={t('messageActions.share')}
           title={t('messageActions.share')}
         >
-          <Share2 className="h-3 w-3" aria-hidden />
+          <ShareMessageIcon className="h-3 w-3" />
         </Button>
       ) : null}
       {timestamp ? (
