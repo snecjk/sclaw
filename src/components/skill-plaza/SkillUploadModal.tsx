@@ -145,7 +145,7 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
               {t('plaza.upload.title', { defaultValue: '上传技能' })}
             </h2>
             <p className="text-xs text-muted-foreground mt-1">
-              {t('plaza.upload.subtitle', { defaultValue: '选择本地技能 ZIP 包导入到技能广场' })}
+              {t('plaza.upload.subtitle', { defaultValue: '拖拽或选择本地文件夹 / .zip 文件上传到我的技能' })}
             </p>
 
             <div className="mt-5">
@@ -162,9 +162,10 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
                     <Upload className="h-4 w-4" />
                     {t('plaza.upload.selectFile', { defaultValue: '选择 ZIP 文件' })}
                   </button>
-                  <p className="text-xs text-muted-foreground mt-3">
-                    {t('plaza.upload.selectHint', { defaultValue: '仅支持 .zip 格式，需包含 SKILL.md' })}
-                  </p>
+                  <ul className="text-xs text-muted-foreground mt-3 space-y-1 text-left">
+                    <li>{t('plaza.upload.requirementSkillMd', { defaultValue: '文件夹或 .zip 需包含 SKILL.md 文件' })}</li>
+                    <li>{t('plaza.upload.requirementYaml', { defaultValue: 'SKILL.md 需含 YAML 格式的 name 与 description' })}</li>
+                  </ul>
                 </div>
               )}
 
