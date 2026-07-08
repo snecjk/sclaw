@@ -23,6 +23,7 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
   const [fileName, setFileName] = useState<string | null>(null);
   const [slug, setSlug] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   // Reset to a fresh state every time the modal opens. Uses React's
   // "adjust state when a prop changes" pattern (setState during render is
@@ -36,6 +37,7 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
       setFileName(null);
       setSlug(null);
       setErrorMsg(null);
+      setDragOver(false);
     }
   }
 
@@ -47,26 +49,81 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
     setErrorMsg(null);
   };
 
-  // Step 1: pick a local .zip via the native file dialog, then enter the
-  // preview/confirm state. Does NOT start uploading until the user confirms.
+  // Enter the preview/confirm step with the given local path. Does NOT start
+  // uploading until the user confirms — required by the preview-confirm step.
+  const enterPreview = (selectedPath: string) => {
+    setFilePath(selectedPath);
+    setFileName(selectedPath.split(/[\\/]/).pop() || selectedPath);
+    setErrorMsg(null);
+    setStatus('preview');
+  };
+
+  // Step 1 (option A): pick a local .zip file OR folder via the native dialog.
+  // `openFile` + `openDirectory` lets the user pick either; the ZIP filter only
+  // restricts files (folders remain selectable).
   const pickFile = async () => {
     try {
       const result = await invokeIpc<{ canceled: boolean; filePaths: string[] }>(
         'dialog:open',
         {
           title: t('plaza.upload.title', { defaultValue: '上传技能' }),
-          properties: ['openFile'],
+          properties: ['openFile', 'openDirectory'],
           filters: [{ name: 'ZIP', extensions: ['zip'] }],
         },
       );
       if (result.canceled || !result.filePaths?.length) return;
-      const selected = result.filePaths[0];
-      setFilePath(selected);
-      setFileName(selected.split(/[\\/]/).pop() || selected);
-      setErrorMsg(null);
-      setStatus('preview');
+      enterPreview(result.filePaths[0]);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
+      setStatus('error');
+    }
+  };
+
+  // Step 1 (option B): drag & drop. Electron (sandbox:false) exposes the real
+  // filesystem path on dropped File objects via the non-standard `path` field,
+  // which works for both files and directories. Probe DataTransferItem first
+  // (folder drops may only surface there), then fall back to the FileList.
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(true);
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    const dt = e.dataTransfer;
+    if (!dt) return;
+    let droppedPath: string | null = null;
+    if (dt.items && dt.items.length) {
+      for (const item of Array.from(dt.items)) {
+        const f = item.getAsFile();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const p = (f as any)?.path;
+        if (typeof p === 'string' && p) {
+          droppedPath = p;
+          break;
+        }
+      }
+    }
+    if (!droppedPath && dt.files && dt.files.length) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const p = (dt.files[0] as any)?.path;
+      if (typeof p === 'string' && p) droppedPath = p;
+    }
+    if (droppedPath) {
+      enterPreview(droppedPath);
+    } else {
+      setErrorMsg(
+        t('plaza.upload.dragFailed', {
+          defaultValue: '无法获取拖入项的路径,请改用"选择文件/文件夹"',
+        }),
+      );
       setStatus('error');
     }
   };
@@ -150,19 +207,33 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
 
             <div className="mt-5">
               {status === 'idle' && (
-                <div className="flex flex-col items-center text-center py-4">
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={cn(
+                    'flex flex-col items-center text-center py-8 px-4 rounded-xl border-2 border-dashed transition-colors',
+                    dragOver ? 'border-primary bg-primary/5' : 'border-border bg-muted/30',
+                  )}
+                >
                   <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
                     <FileArchive className="h-6 w-6 text-muted-foreground" />
                   </div>
+                  <p className="text-sm font-medium text-foreground">
+                    {t('plaza.upload.dragHint', { defaultValue: '拖拽文件夹或 .zip 文件到此处' })}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1 mb-4">
+                    {t('plaza.upload.dragOr', { defaultValue: '或' })}
+                  </p>
                   <button
                     type="button"
                     onClick={pickFile}
                     className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
                   >
                     <Upload className="h-4 w-4" />
-                    {t('plaza.upload.selectFile', { defaultValue: '选择 ZIP 文件' })}
+                    {t('plaza.upload.selectFile', { defaultValue: '选择文件/文件夹' })}
                   </button>
-                  <ul className="text-xs text-muted-foreground mt-3 space-y-1 text-left">
+                  <ul className="text-xs text-muted-foreground mt-4 space-y-1 text-left">
                     <li>{t('plaza.upload.requirementSkillMd', { defaultValue: '文件夹或 .zip 需包含 SKILL.md 文件' })}</li>
                     <li>{t('plaza.upload.requirementYaml', { defaultValue: 'SKILL.md 需含 YAML 格式的 name 与 description' })}</li>
                   </ul>
@@ -175,11 +246,14 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
                     <FileArchive className="h-6 w-6 text-muted-foreground" />
                   </div>
                   <p className="text-xs text-muted-foreground mb-1">
-                    {t('plaza.upload.selectedFile', { defaultValue: '已选择文件' })}
+                    {t('plaza.upload.selectedFile', { defaultValue: '已选择' })}
                   </p>
                   <p className="text-sm font-medium text-foreground break-all">{fileName}</p>
+                  {filePath && (
+                    <p className="text-xs text-muted-foreground mt-1 break-all">{filePath}</p>
+                  )}
                   <p className="text-xs text-muted-foreground mt-2">
-                    {t('plaza.upload.confirmHint', { defaultValue: '确认后将解压并导入到技能广场' })}
+                    {t('plaza.upload.confirmHint', { defaultValue: '确认后导入到技能广场“其他”分类' })}
                   </p>
                   <div className="flex gap-2 mt-5">
                     <button
