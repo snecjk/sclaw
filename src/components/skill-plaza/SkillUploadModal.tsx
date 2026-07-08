@@ -269,7 +269,7 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
                       className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
                     >
                       <FileUp className="h-4 w-4" />
-                      {t('plaza.upload.confirmUpload', { defaultValue: '确认上传' })}
+                      {t('plaza.upload.confirmUpload', { defaultValue: '安装' })}
                     </button>
                   </div>
                 </div>
@@ -279,7 +279,7 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
                 <div className="flex flex-col items-center text-center py-6">
                   <span className="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full mb-3" />
                   <p className="text-sm text-foreground">
-                    {t('plaza.upload.uploading', { defaultValue: '上传中...' })}
+                    {t('plaza.upload.uploading', { defaultValue: '安装...' })}
                   </p>
                 </div>
               )}
@@ -290,7 +290,7 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
                     <CheckCircle2 className="h-6 w-6 text-[#00B54B]" />
                   </div>
                   <p className="text-sm font-medium text-foreground">
-                    {t('plaza.upload.successTitle', { defaultValue: '上传成功' })}
+                    {t('plaza.upload.successTitle', { defaultValue: '安装成功' })}
                   </p>
                   {/* Skill card: icon + name + category tag */}
                   <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg bg-muted/60 w-full justify-center">
@@ -315,7 +315,7 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
                       onClick={resetToIdle}
                       className="inline-flex items-center h-9 px-4 rounded-lg border border-border bg-background text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
                     >
-                      {t('plaza.upload.uploadAnother', { defaultValue: '继续上传' })}
+                      {t('plaza.upload.uploadAnother', { defaultValue: '继续安装' })}
                     </button>
                     <button
                       type="button"
@@ -334,7 +334,7 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
                     <AlertCircle className="h-6 w-6 text-[#E53935]" />
                   </div>
                   <p className="text-sm font-medium text-foreground">
-                    {t('plaza.upload.errorTitle', { defaultValue: '上传失败' })}
+                    {t('plaza.upload.errorTitle', { defaultValue: '安装失败' })}
                   </p>
                   {errorMsg && (
                     <p className="text-xs text-muted-foreground mt-1 break-all">{errorMsg}</p>

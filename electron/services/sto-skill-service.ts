@@ -254,31 +254,50 @@ export class StoSkillService {
       if (fs.existsSync(tmpZipPath)) {
         fs.unlinkSync(tmpZipPath);
       }
-  /**
-   * Upload and install a skill from a local ZIP file.
-   * Extracts the ZIP, reads the slug from SKILL.md frontmatter 
-ame field,
-   * then atomically promotes to the skills directory with a user-upload marker.
-   */
-  async uploadZip(filePath: string): Promise<{ slug: string }> {
-    if (!fs.existsSync(filePath)) {
-      throw new Error(ZIP file not found: );
     }
 
-    // Extract to a temp staging directory
-    const stagingDir = path.join(this.workDir, .tmp-skill-upload-staging-);
+    logger.info(`[StoSkillService] install: ${params.slug} installed to ${path.join(skillsDir, params.slug)}`);
+  }
+
+  /**
+   * Upload and install a skill from a local ZIP file or folder.
+   * Detects the path type: ZIP file -> extract; folder -> copy directly.
+   * Then unifies slug derivation, atomic placement, and marker writing.
+   */
+  async uploadSkill(filePath: string): Promise<{ slug: string }> {
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Path not found: ${filePath}`);
+    }
+
+    const stat = fs.statSync(filePath);
+    const isDirectory = stat.isDirectory();
+
+    // Stage the skill contents into a temp directory
+    const stagingDir = path.join(this.workDir, `.tmp-skill-upload-staging-${Date.now()}`);
     let stagingActive = false;
     try {
       fs.mkdirSync(stagingDir, { recursive: true });
       stagingActive = true;
 
-      const { extractZip } = await import('../utils/zip-extract');
-      await extractZip(filePath, stagingDir);
+      if (isDirectory) {
+        // Folder input: copy contents directly (no extraction)
+        for (const entry of fs.readdirSync(filePath, { withFileTypes: true })) {
+          fs.cpSync(
+            path.join(filePath, entry.name),
+            path.join(stagingDir, entry.name),
+            { recursive: true, force: true },
+          );
+        }
+      } else {
+        // ZIP file input: extract into staging
+        const { extractZip } = await import('../utils/zip-extract');
+        await extractZip(filePath, stagingDir);
+      }
 
-      // Validate the skill package (placeholder — rules TBD with product)
+      // Validate the skill package (placeholder - rules TBD with product)
       this.validateSkillPackage(stagingDir);
 
-      // Find SKILL.md — it may be at the root or inside a single nested folder
+      // Find SKILL.md - it may be at the root or inside a single nested folder
       let skillDir = stagingDir;
       if (!fs.existsSync(path.join(stagingDir, 'SKILL.md'))) {
         const entries = fs.readdirSync(stagingDir, { withFileTypes: true });
@@ -288,21 +307,20 @@ ame field,
         if (nested) {
           skillDir = path.join(stagingDir, nested.name);
         } else {
-          throw new Error('ZIP \u5185\u672a\u627e\u5230 SKILL.md\uff0c\u8bf7\u786e\u8ba4\u538b\u7f29\u5305\u7ed3\u6784\u6b63\u786e');
+          throw new Error('未找到 SKILL.md，请确认压缩包或文件夹结构正确');
         }
       }
 
-      // Read slug from SKILL.md frontmatter 
-ame field
+      // Read slug from SKILL.md frontmatter name field
       const fm = readSkillMdFrontmatter(skillDir);
       const rawName = fm?.name?.trim();
       if (!rawName) {
-        throw new Error('SKILL.md frontmatter \u4e2d\u672a\u627e\u5230 name \u5b57\u6bb5\uff0c\u65e0\u6cd5\u786e\u5b9a\u6280\u80fd\u6807\u8bc6');
+        throw new Error('SKILL.md frontmatter 中未找到 name 字段，无法确定技能标识');
       }
       // Gateway requires name to match /^[a-z0-9-]+$/
       const slug = rawName.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
       if (!slug) {
-        throw new Error(\u4ece SKILL.md name \u5b57\u6bb5\u89e3\u6790 slug \u5931\u8d25: );
+        throw new Error(`从 SKILL.md name 字段解析 slug 失败: ${rawName}`);
       }
 
       // Ensure frontmatter has a Gateway-compatible name
@@ -311,19 +329,20 @@ ame field
         description: fm?.description,
       });
 
-      // Atomically promote staging -> target
+      // Atomically promote the skill directory -> target.
+      // Use skillDir (not stagingDir) so nested-folder structures are hoisted correctly.
       const targetDir = path.join(this.skillsDir, slug);
-      await this.promoteStagedSkillDir(stagingDir, targetDir, true);
+      await this.promoteStagedSkillDir(skillDir, targetDir, true);
       stagingActive = false;
 
-      // Write user-upload marker so the skill shows up in the "\u5176\u4ed6" category
+      // Write user-upload marker so the skill shows up in the 其他 category
       const markerPath = path.join(targetDir, USER_UPLOAD_MARKER_NAME);
       const markerPayload = {
         source: 'user-upload',
         slug,
         uploadedAt: new Date().toISOString(),
       };
-      fs.writeFileSync(markerPath, ${JSON.stringify(markerPayload, null, 2)}\n, 'utf-8');
+      fs.writeFileSync(markerPath, `${JSON.stringify(markerPayload, null, 2)}\n`, 'utf-8');
 
       // Sync to user workspace if applicable
       const userCode = await getCurrentActiveUserCode();
@@ -339,11 +358,11 @@ ame field
         await this.copyDir(targetDir, userTargetDir);
         // Also write marker in user workspace copy
         const userMarkerPath = path.join(userTargetDir, USER_UPLOAD_MARKER_NAME);
-        fs.writeFileSync(userMarkerPath, ${JSON.stringify(markerPayload, null, 2)}\n, 'utf-8');
-        logger.info([StoSkillService] uploadZip:  synced to user workspace );
+        fs.writeFileSync(userMarkerPath, `${JSON.stringify(markerPayload, null, 2)}\n`, 'utf-8');
+        logger.info(`[StoSkillService] uploadSkill: ${slug} synced to user workspace ${userTargetDir}`);
       }
 
-      logger.info([StoSkillService] uploadZip:  installed to );
+      logger.info(`[StoSkillService] uploadSkill: ${slug} installed to ${targetDir}`);
       return { slug };
     } finally {
       if (stagingActive && fs.existsSync(stagingDir)) {
@@ -353,8 +372,8 @@ ame field
   }
 
   /**
-   * Validate a skill package after extraction.
-   * Placeholder — specific validation rules TBD with product team.
+   * Validate a skill package after staging.
+   * Placeholder - specific validation rules TBD with product team.
    * Currently only checks that SKILL.md exists.
    */
   private validateSkillPackage(stagingDir: string): void {
@@ -366,7 +385,7 @@ ame field
       (e) => e.isDirectory() && fs.existsSync(path.join(stagingDir, e.name, 'SKILL.md')),
     );
     if (!hasNestedSkill) {
-      throw new Error('ZIP \u5185\u672a\u627e\u5230 SKILL.md\uff0c\u8bf7\u786e\u8ba4\u538b\u7f29\u5305\u7ed3\u6784\u6b63\u786e');
+      throw new Error('未找到 SKILL.md，请确认压缩包或文件夹结构正确');
     }
   }
 

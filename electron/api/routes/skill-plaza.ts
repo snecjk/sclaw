@@ -159,10 +159,14 @@ export async function handleSkillPlazaRoutes(
         sendJson(res, 400, { success: false, error: 'Missing filePath' });
         return true;
       }
-      const result = await ctx.stoSkillService.uploadZip(filePath);
+      const result = await ctx.stoSkillService.uploadSkill(filePath);
       sendJson(res, 200, { success: true, slug: result.slug });
     } catch (error) {
       const message = String(error);
+      if (message.includes('Path not found')) {
+        sendJson(res, 400, { success: false, error: message, code: 'PATH_NOT_FOUND' });
+        return true;
+      }
       sendJson(res, 500, { success: false, error: message, code: 'UPLOAD_FAILED' });
     }
     return true;
