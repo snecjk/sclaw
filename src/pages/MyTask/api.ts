@@ -56,20 +56,31 @@ export interface WorkflowRunRecord {
   error: string | null;
 }
 
+/** 工作流执行记录分页响应 */
+export interface WorkflowRunsResponse {
+  success: boolean;
+  data: WorkflowRunRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+  traceId?: string;
+}
+
 /**
- * 获取工作流执行记录列表（不分页）
+ * 获取工作流执行记录（按 Tab 状态聚合 + 分页）
+ *
+ * status 为 Tab 级固定值（running/success/failed），后端聚合到底层枚举后过滤；
+ * 不传则返回全部状态。返回 { items, total }，total 为不限条数的总计数。
  */
 export async function fetchWorkflowRuns(
-  params?: { status?: string; keyword?: string },
-): Promise<WorkflowRunRecord[]> {
+  params?: { status?: string; keyword?: string; pageSize?: number },
+): Promise<{ items: WorkflowRunRecord[]; total: number }> {
   const query = new URLSearchParams();
   if (params?.status) query.set('status', params.status);
   if (params?.keyword) query.set('keyword', params.keyword);
+  query.set('pageSize', String(params?.pageSize ?? 99));
   const qs = query.toString();
   const url = `/api/my-tasks/agent/v1/my-workflow-runs${qs ? `?${qs}` : ''}`;
-  const res = await hostApiFetch<{
-    success: boolean;
-    data: WorkflowRunRecord[];
-  }>(url, { method: 'GET' });
-  return res?.data ?? [];
+  const res = await hostApiFetch<WorkflowRunsResponse>(url, { method: 'GET' });
+  return { items: res?.data ?? [], total: res?.total ?? 0 };
 }
