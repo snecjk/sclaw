@@ -84,6 +84,7 @@
   "editor": {
     "editTitle": "Edit workflow",
     "aiCreateTitle": "AI create workflow",
+    "createTitle": "New workflow",
     "openInBrowser": "Open in browser",
     "backAria": "Back to list"
   },
