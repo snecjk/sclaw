@@ -19,6 +19,7 @@ import {
   stoSettingsContentPanelBodyClass,
   stoSettingsContentPanelClass,
   stoSettingsContentPanelWrapClass,
+  stoSettingsContentInnerClass,
 } from '@/lib/surfaces';
 
 export type SettingsSectionId =
@@ -174,7 +175,9 @@ export function SettingsShell({ activeSection, devModeUnlocked, children }: Sett
 
       <div className={stoSettingsContentPanelWrapClass}>
         <div className={stoSettingsContentPanelClass}>
-          <div className={stoSettingsContentPanelBodyClass}>{children}</div>
+          <div className={stoSettingsContentPanelBodyClass}>
+            <div className={stoSettingsContentInnerClass}>{children}</div>
+          </div>
         </div>
       </div>
     </div>

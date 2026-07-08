@@ -989,6 +989,7 @@ export function Sidebar() {
   const [groupDialog, setGroupDialog] = useState<SidebarRecentGroupDialogState>({ mode: null });
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [supportQrOpen, setSupportQrOpen] = useState(false);
 
   const recentGroups = useSidebarRecentGroupsStore((s) => s.groups);
   const sessionGroupByKey = useSidebarRecentGroupsStore((s) => s.sessionGroupByKey);
@@ -2212,7 +2213,15 @@ export function Sidebar() {
                   : 'gap-1',
             )}
           >
-          <DropdownMenu open={accountMenuOpen} onOpenChange={setAccountMenuOpen}>
+          <DropdownMenu
+            open={accountMenuOpen}
+            onOpenChange={(open) => {
+              setAccountMenuOpen(open);
+              if (open) {
+                setSupportQrOpen(false);
+              }
+            }}
+          >
             {sidebarVis.userProfileCard && !sidebarCollapsed ? (
               <div className="flex w-full min-w-0 items-center rounded-[8px] transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.04]">
                 <button
@@ -2238,6 +2247,8 @@ export function Sidebar() {
                     type="button"
                     className={SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS}
                     aria-label={t('common:sidebar.settings')}
+                    onPointerEnter={() => setSupportQrOpen(false)}
+                    onPointerDown={() => setSupportQrOpen(false)}
                   >
                     <SettingsIcon
                       className={sidebarFooterSettingsIconClass}
@@ -2246,7 +2257,15 @@ export function Sidebar() {
                     />
                   </button>
                 </DropdownMenuTrigger>
-                <SidebarSupportQrTooltip />
+                <SidebarSupportQrTooltip
+                  open={supportQrOpen}
+                  onOpenChange={(open) => {
+                    setSupportQrOpen(open);
+                    if (open) {
+                      setAccountMenuOpen(false);
+                    }
+                  }}
+                />
               </div>
             ) : (
               <DropdownMenuTrigger asChild>
@@ -2263,6 +2282,8 @@ export function Sidebar() {
                           SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS,
                         ),
                   )}
+                  onPointerEnter={() => setSupportQrOpen(false)}
+                  onPointerDown={() => setSupportQrOpen(false)}
                   title={
                     sidebarVis.userProfileCard
                       ? isGatewayRunning
@@ -2392,7 +2413,15 @@ export function Sidebar() {
             </DropdownMenuContent>
           </DropdownMenu>
           {!(sidebarVis.userProfileCard && !sidebarCollapsed) ? (
-            <SidebarSupportQrTooltip />
+            <SidebarSupportQrTooltip
+              open={supportQrOpen}
+              onOpenChange={(open) => {
+                setSupportQrOpen(open);
+                if (open) {
+                  setAccountMenuOpen(false);
+                }
+              }}
+            />
           ) : null}
           </div>
         </div>
