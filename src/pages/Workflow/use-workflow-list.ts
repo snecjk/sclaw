@@ -96,7 +96,7 @@ export function useWorkflowList(mineFilter: WorkflowMineFilter): UseWorkflowList
   }, [mineFilter]);
 
   /**
-   * 拉取指定 Tab 的工作流数据（按 lifecycle_status 过滤，最新 100 条）。
+   * 拉取指定 Tab 的工作流数据（按 lifecycle_status 过滤，最新 99 条）。
    * 切换 Tab 时按当前 Tab 触发，各 Tab 独立缓存互不覆盖。
    */
   // FastAPI: GET /agent/v1/my-workflow → memory-center workflow_client.py:list_my_workflows
@@ -112,7 +112,7 @@ export function useWorkflowList(mineFilter: WorkflowMineFilter): UseWorkflowList
         // Electron 透传 query 至 FastAPI，需用 snake_case 与后端 Query 参数对齐
         const params = new URLSearchParams({
           page: '1',
-          page_size: '100',
+          page_size: '99',
           lifecycle_status: LIFECYCLE_STATUS_BY_KIND[filter],
         });
         const mineResponse = await hostApiFetch<MineWorkflowResponse>(
