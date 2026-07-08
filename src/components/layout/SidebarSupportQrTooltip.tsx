@@ -32,14 +32,32 @@ const SUPPORT_QR_TOOLTIP_SURFACE =
 
 type SidebarSupportQrTooltipProps = {
   className?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
-export function SidebarSupportQrTooltip({ className }: SidebarSupportQrTooltipProps) {
+export function SidebarSupportQrTooltip({
+  className,
+  open: openProp,
+  onOpenChange,
+}: SidebarSupportQrTooltipProps) {
   const { t } = useTranslation('common');
   const user = useAuthStore((s) => s.user);
   const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
   const [imgError, setImgError] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+
+  const isControlled = openProp !== undefined;
+  const open = isControlled ? openProp : internalOpen;
+
+  const setOpen = (next: boolean) => {
+    if (isControlled) {
+      onOpenChange?.(next);
+    } else {
+      setInternalOpen(next);
+      onOpenChange?.(next);
+    }
+  };
 
   const qrUrl = useMemo(() => {
     const isSite =
@@ -59,18 +77,18 @@ export function SidebarSupportQrTooltip({ className }: SidebarSupportQrTooltipPr
           )}
           aria-label={t('sidebar.supportGroup.helpAria')}
           aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
         >
           <CircleHelpBoldQuestion className={sidebarFooterSettingsIconClass} />
         </button>
       </TooltipTrigger>
       <TooltipContent
-        side="top"
+        side="right"
         align="end"
-        sideOffset={10}
+        sideOffset={8}
         collisionPadding={16}
-        className={cn(SUPPORT_QR_TOOLTIP_SURFACE, 'w-[368px]')}
+        className={cn(SUPPORT_QR_TOOLTIP_SURFACE, 'w-[368px] pointer-events-auto')}
         onPointerDownOutside={() => setOpen(false)}
+        onEscapeKeyDown={() => setOpen(false)}
       >
         <div className="flex max-h-[calc(100vh-24px)] flex-col items-center gap-3 overflow-y-auto p-5 text-center">
           {imgError ? (
