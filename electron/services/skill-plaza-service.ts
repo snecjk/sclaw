@@ -17,7 +17,7 @@ import {
   isRemoteVersionNewer,
   resolveInstalledVersionForCompare,
 } from '../utils/skill-version';
-import { PREINSTALLED_MARKER_NAME } from './sto-skill-service';
+import { PREINSTALLED_MARKER_NAME, USER_UPLOAD_MARKER_NAME } from './sto-skill-service';
 import { parseSkillFrontmatter, readSkillMdFrontmatter } from '../utils/skill-frontmatter';
 
 // ---------------------------------------------------------------------------
@@ -311,6 +311,15 @@ function isPreinstalledSkill(skillDir: string): boolean {
   }
 }
 
+function isUserUploadedSkill(skillDir: string): boolean {
+  const markerPath = path.join(skillDir, USER_UPLOAD_MARKER_NAME);
+  try {
+    return fs.existsSync(markerPath);
+  } catch {
+    return false;
+  }
+}
+
 function readSkillMdVersion(skillDir: string): string | null {
   const fm = readSkillMdFrontmatter(skillDir);
   return fm?.version ?? null;
@@ -542,7 +551,7 @@ export class SkillPlazaService {
       const skillRootDir = isEnabled ? this.skillsDir : this.getDisabledDir();
       const skillDirPath = path.join(skillRootDir, slug);
 
-      if (!isPreinstalledSkill(skillDirPath)) continue;
+      if (!isPreinstalledSkill(skillDirPath) && !isUserUploadedSkill(skillDirPath)) continue;
 
       const summary = readLocalSkillSummary(skillRootDir, slug);
       if (!summary) continue;
@@ -763,6 +772,7 @@ export class SkillPlazaService {
         // 判断是否为预安装技能（通过 .stoclaw-preinstalled.json marker 文件）
         const skillDirPath = isEnabled ? path.join(this.skillsDir, slug) : path.join(this.getDisabledDir(), slug);
         const isPreinstalled = isPreinstalledSkill(skillDirPath);
+        const isUserUploaded = isUserUploadedSkill(skillDirPath);
         const isOfficeSkill = OFFICE_SKILL_SLUGS.has(slug);
 
         // 分类优先级：办公技能 > 预安装技能（其他）> 按 plaza 权威数据 / 本地元数据
@@ -772,6 +782,9 @@ export class SkillPlazaService {
           finalCategory = OFFICE_CATEGORY_LABEL;
           finalCategoryCode = OFFICE_CATEGORY_SLUG;
         } else if (isPreinstalled) {
+          finalCategory = '其他';
+          finalCategoryCode = 'qita';
+        } else if (isUserUploaded) {
           finalCategory = '其他';
           finalCategoryCode = 'qita';
         } else {
