@@ -74,10 +74,10 @@
         "pickWorkflow": "选择工作流",
         "dingTalkMention": "钉钉通讯录",
         "micComingSoon": "即将上线",
-        "workflowPlaceholder": "搜索工作流模板...",
+        "workflowPlaceholder": "搜索工作流...",
         "workflowLoading": "加载中...",
         "workflowNoResults": "未找到匹配模板",
-        "workflowNoTemplates": "暂无工作流模板",
+        "workflowNoTemplates": "暂无工作流",
         "workflowClear": "清除工作流"
     },
     "streaming": {

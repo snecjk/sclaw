@@ -335,6 +335,8 @@ export function Chat() {
     targetAgentId?: string | null,
     dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[],
     workflowId?: string | null,
+    workflowSource?: string | null,
+    workflowName?: string | null,
   ) => {
     beginSendScroll();
     const { dispatchChatSend } = await import('@/hooks/dispatch-chat-send');
@@ -344,6 +346,8 @@ export function Chat() {
       targetAgentId,
       dingTalkMentions,
       workflowId,
+      workflowSource,
+      workflowName,
       skipQuestionSplit: !!(dingTalkMentions && dingTalkMentions.length > 0),
       onSplittingChange: setSplitting,
     });

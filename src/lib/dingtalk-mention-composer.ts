@@ -10,6 +10,10 @@ export interface MentionComposerSnapshot {
   plainText: string;
   mentions: DingTalkMention[];
   workflowId?: string;
+  /** 工作流名称（与 token 文本一致，供上下文块使用）。 */
+  workflowName?: string;
+  /** 工作流来源：'mine' = 我的工作流-已发布（直接以工作流上下文发送）；缺省 = 模版（走参数表单）。 */
+  workflowSource?: string;
   isEmpty: boolean;
 }
 
@@ -57,6 +61,8 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
   const mentions: DingTalkMention[] = [];
   let plainText = '';
   let workflowId: string | undefined;
+  let workflowName: string | undefined;
+  let workflowSource: string | undefined;
 
   const walk = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -75,9 +81,14 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
     }
 
     if (isWorkflowSpan(node)) {
-      const id = (node as HTMLSpanElement).dataset.workflowId;
-      if (id) workflowId = id;
-      plainText += (node as HTMLSpanElement).textContent ?? '';
+      const span = node as HTMLSpanElement;
+      const id = span.dataset.workflowId;
+      if (id) {
+        workflowId = id;
+        workflowName = span.dataset.workflowName;
+        workflowSource = span.dataset.workflowSource;
+      }
+      plainText += span.textContent ?? '';
       return;
     }
 
@@ -96,6 +107,8 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
     plainText: normalized,
     mentions,
     workflowId,
+    workflowName,
+    workflowSource,
     isEmpty: normalized.trim().length === 0 && mentions.length === 0,
   };
 }
@@ -287,7 +300,11 @@ export function createMentionSpan(mention: DingTalkMention, options?: MentionSpa
   return span;
 }
 
-export function createWorkflowSpan(workflowId: string, name: string): HTMLSpanElement {
+export function createWorkflowSpan(
+  workflowId: string,
+  name: string,
+  source?: string,
+): HTMLSpanElement {
   const span = document.createElement('span');
   span.className = [
     WORKFLOW_SPAN_CLASS,
@@ -297,6 +314,8 @@ export function createWorkflowSpan(workflowId: string, name: string): HTMLSpanEl
   ].join(' ');
   span.contentEditable = 'false';
   span.dataset.workflowId = workflowId;
+  span.dataset.workflowName = name;
+  if (source) span.dataset.workflowSource = source;
   span.textContent = `/${name}`;
   return span;
 }
@@ -343,6 +362,7 @@ export function insertWorkflowSpan(
   root: HTMLElement,
   workflowId: string,
   name: string,
+  source?: string,
 ): void {
   const selection = window.getSelection();
   const snapshot = serializeMentionEditor(root);
@@ -356,7 +376,7 @@ export function insertWorkflowSpan(
     }
   }
 
-  const span = createWorkflowSpan(workflowId, name);
+  const span = createWorkflowSpan(workflowId, name, source);
   const space = document.createTextNode('\u00A0');
 
   // Insert at the end (or at the slash position if found)
