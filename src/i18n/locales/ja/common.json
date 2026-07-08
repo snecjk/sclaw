@@ -20,6 +20,7 @@
         "channels": "チャンネル",
         "dashboard": "ダッシュボード",
         "settings": "設定",
+        "checkUpdates": "更新を確認",
         "devConsole": "開発者コンソール",
         "models": "モデル",
         "deleteSessionConfirm": "セッション \"{{label}}\" を削除してもよろしいですか？",
@@ -44,6 +45,12 @@
         "sessionFailed": "実行失敗",
         "sessionUnread": "未読",
         "compactAccountMenu": "アカウントと設定",
+        "supportGroup": {
+            "title": "STO Claw 製品相談グループ",
+            "hint": "DingTalkでスキャンしてグループに参加し、質問してください",
+            "helpAria": "製品相談グループのQRコードを表示",
+            "loadError": "QRコードの読み込みに失敗しました。後でもう一度お試しください。"
+        },
         "group": "グループ",
         "newGroup": "新規グループ",
         "addToNewGroup": "新規グループに追加",
@@ -65,6 +72,13 @@
         "renameGroupSucceeded": "名前を変更しました",
         "sessionRowMenu": "セッション操作",
         "groupRowMenu": "グループ操作"
+    },
+    "settings": {
+        "backToHome": "ホームに戻る",
+        "sectionGeneral": "一般",
+        "sectionWorkspace": "ワークスペース",
+        "sectionSystem": "システム",
+        "sectionDeveloper": "開発者"
     },
     "dataCenterPage": {
         "title": "データセンター",

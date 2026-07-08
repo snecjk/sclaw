@@ -2,6 +2,7 @@
  * resolveSessionLabel — 会话标题解析（侧栏历史与内容区标题栏共用口径）。
  */
 import type { TFunction } from 'i18next';
+import { stripCronLabelPrefix } from '@/lib/cron-session-display';
 import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
 import type { ChatSession } from '@/stores/chat/types';
 import {
@@ -97,14 +98,21 @@ export function sanitizeGatewaySessionLabels<T extends ChatSession>(
   });
 }
 
+function stripCronLabelForChatHeader(value: string): string {
+  const stripped = stripCronLabelPrefix(value);
+  return stripped || value;
+}
+
 /** 与 Sidebar.getSessionLabel 保持同一解析顺序与 fallback 规则 */
 export function resolveSessionLabel(input: ResolveSessionLabelInput): string {
   const { key, displayName, label, sessionLabels, t } = input;
   const preview = resolveStoredSessionLabel(key, sessionLabels);
-  if (preview && !isCorruptedSessionLabel(preview) && !isPlaceholderSessionLabel(preview)) return preview;
+  if (preview && !isCorruptedSessionLabel(preview) && !isPlaceholderSessionLabel(preview)) {
+    return stripCronLabelForChatHeader(preview);
+  }
   const gatewayLabel = label?.trim();
   if (gatewayLabel && !isCorruptedSessionLabel(gatewayLabel) && !isPlaceholderSessionLabel(gatewayLabel)) {
-    return gatewayLabel;
+    return stripCronLabelForChatHeader(gatewayLabel);
   }
   if (key.endsWith(':main')) {
     const dn = displayName?.trim();

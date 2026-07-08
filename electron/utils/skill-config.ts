@@ -234,13 +234,40 @@ export async function ensureBuiltinSkillsInstalled(): Promise<void> {
 const PREINSTALLED_MANIFEST_NAME = 'preinstalled-manifest.json';
 const PREINSTALLED_MARKER_NAME = '.stoclaw-preinstalled.json';
 
-async function readPreinstalledManifest(): Promise<PreinstalledSkillSpec[]> {
+function resolvePreinstalledManifestPath(): string | null {
     const candidates = [
         join(getResourcesDir(), 'skills', PREINSTALLED_MANIFEST_NAME),
         join(process.cwd(), 'resources', 'skills', PREINSTALLED_MANIFEST_NAME),
+        join(__dirname, '../../resources/skills', PREINSTALLED_MANIFEST_NAME),
     ];
+    return candidates.find((p) => existsSync(p)) || null;
+}
 
-    const manifestPath = candidates.find((p) => existsSync(p));
+/** Slugs declared in resources/skills/preinstalled-manifest.json (sync). */
+export function readPreinstalledManifestSlugs(): Set<string> {
+    const manifestPath = resolvePreinstalledManifestPath();
+    if (!manifestPath) {
+        return new Set();
+    }
+    try {
+        const raw = readFileSync(manifestPath, 'utf-8');
+        const parsed = JSON.parse(raw) as PreinstalledManifest;
+        if (!Array.isArray(parsed.skills)) {
+            return new Set();
+        }
+        return new Set(
+            parsed.skills
+                .map((s) => s.slug?.trim())
+                .filter((slug): slug is string => Boolean(slug)),
+        );
+    } catch (error) {
+        logger.warn('Failed to read preinstalled-skills manifest:', error);
+        return new Set();
+    }
+}
+
+async function readPreinstalledManifest(): Promise<PreinstalledSkillSpec[]> {
+    const manifestPath = resolvePreinstalledManifestPath();
     if (!manifestPath) {
         return [];
     }

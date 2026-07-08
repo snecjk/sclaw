@@ -32,7 +32,10 @@
         "searchPrev": "Previous result",
         "searchNext": "Next result",
         "searchClear": "Clear search",
-        "searchClose": "Close search"
+        "searchClose": "Close search",
+        "openPreview": "Open preview",
+        "closePreview": "Close preview",
+        "closeSession": "Close current session"
     },
     "composer": {
         "attachFiles": "Attach files",
@@ -71,16 +74,23 @@
         "pickWorkflow": "Choose workflow",
         "dingTalkMention": "DingTalk contacts",
         "micComingSoon": "Coming soon",
-        "workflowPlaceholder": "Search workflow templates...",
+        "workflowPlaceholder": "Search workflows...",
         "workflowLoading": "Loading...",
         "workflowNoResults": "No matching templates",
-        "workflowNoTemplates": "No workflow templates",
+        "workflowNoTemplates": "No workflows",
         "workflowClear": "Clear workflow"
     },
     "streaming": {
         "connectingModel": "Connecting to model...",
         "understandingQuestion": "Understanding your question…",
-        "awaitingReply": "Claw will continue after you reply…",
+        "stillExecuting": "Still executing…",
+        "thinkingNow": "Thinking…",
+        "preparingToolInput": "Preparing tool parameters…",
+        "runningTool": "Running tool…",
+        "finalizingReply": "Generating reply…",
+        "queued": "Queued…",
+        "awaitingReply": "Waiting for your reply…",
+        "interrupted": "Interrupted",
         "thinkingProcessTitle": "Thinking process",
         "deepThinkingLabel": "Deep thinking",
         "collapsedSummary": "Thought {{thoughtCount}} times, used {{toolCount}} tools",
@@ -113,6 +123,7 @@
     "messageActions": {
         "copy": "Copy",
         "copyFailed": "Copy failed",
+        "share": "Share to DingTalk",
         "editAndResend": "Edit and send again",
         "editUnavailable": "Edit and resend is not available on this page"
     },
@@ -130,8 +141,8 @@
         "moveUp": "Move up",
         "moveDown": "Move down",
         "fileCount": "{{count}} file(s)",
-    "queueFull": "Queue is full (max {{max}})"
-  },
+        "queueFull": "Queue is full (max {{max}})"
+    },
     "splitting": "Analyzing question...",
     "systemNotice": {
         "label": "System notice",
@@ -153,9 +164,21 @@
         "durationHours": "{{count}} hr",
         "durationHoursHalf": "{{count}}.5 hr",
         "durationHoursMinutes": "{{hours}} hr {{minutes}} min",
+        "defaultName": "Workflow",
+        "backgroundRunningWithId": "Workflow ID: {{workflowId}}",
+        "withId": "Workflow ID: {{workflowId}}",
         "viewArtifact": "View artifact",
         "openArtifactLink": "Open link",
-        "viewWorkflowAction": "View workflow"
+        "viewWorkflowAction": "View workflow",
+        "createScheduledTaskAction": "Create scheduled task"
+    },
+    "artifact": {
+        "typeDocument": "Document",
+        "typeSpreadsheet": "Spreadsheet",
+        "typeImage": "Image",
+        "typeArchive": "Archive",
+        "typeMedia": "Media",
+        "typeFile": "File"
     },
     "preview": {
         "collapsePanel": "Collapse preview",
@@ -172,24 +195,24 @@
         "dismissTab": "Close this artifact",
         "shareDialog": {
             "title": "Share to DingTalk",
-            "description": "Confirm the content, then open the DingTalk recipient picker.",
+            "description": "After you confirm, the DingTalk contact picker will open.",
             "artifactTitle": "Share artifact",
-            "artifactDescription": "Opens the DingTalk picker with a link to this artifact.",
+            "artifactDescription": "Share to a DingTalk contact or group",
             "conversationTitle": "Share conversation",
             "conversationDescription": "Opens the DingTalk picker with the message text and artifact links.",
             "fieldTitle": "Title",
             "fieldBody": "Body",
             "fieldLink": "Link",
-            "localUrlHint": "This link is a local preview URL and may not open for colleagues on other networks.",
+            "localUrlHint": "This link is a local preview URL. Colleagues on the same network may not be able to open it.",
             "cancel": "Cancel",
             "confirm": "Share",
             "uploading": "Preparing…",
-            "success": "DingTalk picker opened",
-            "failed": "Share failed. Please try again.",
-            "tooLongTitle": "Content is too long",
-            "tooLongDescription": "The message exceeds DingTalk’s share limit. The full text will be copied to your clipboard; paste it in DingTalk after picking a recipient.",
-            "tooLongConfirm": "Copy and share",
-            "tooLongPickerHint": "Content copied. Paste it in the DingTalk chat after selecting recipients."
+            "success": "DingTalk contact picker opened",
+            "failed": "Share failed. Please try again later.",
+            "tooLongTitle": "Content too long to share",
+            "tooLongDescription": "The text is too long to pre-fill. After you confirm, the full conversation will be copied to the clipboard and the DingTalk picker will open. Paste (⌘V / Ctrl+V) in the message box before sending.",
+            "tooLongConfirm": "Open DingTalk",
+            "tooLongPickerHint": "Paste the copied conversation in the message box (⌘V / Ctrl+V)"
         }
     }
 }

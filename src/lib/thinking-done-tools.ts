@@ -3,6 +3,7 @@ import { collectToolUpdates } from '@/stores/chat/helpers';
 import { extractToolUse } from '@/pages/Chat/message-utils';
 import type { CachedTurnStreamingTool } from '@/lib/thinking-turn-tools-cache';
 import { readTurnStreamingToolsCache } from '@/lib/thinking-turn-tools-cache';
+import { mergeStreamingToolRecords } from '@/lib/tool-input-merge';
 
 function normalizeCachedTool(tool: CachedTurnStreamingTool): CachedTurnStreamingTool {
   return {
@@ -12,18 +13,6 @@ function normalizeCachedTool(tool: CachedTurnStreamingTool): CachedTurnStreaming
     input: tool.input,
     status: tool.status ?? 'completed',
   };
-}
-
-function dedupeStreamingTools(tools: CachedTurnStreamingTool[]): CachedTurnStreamingTool[] {
-  const seen = new Set<string>();
-  const result: CachedTurnStreamingTool[] = [];
-  for (const tool of tools) {
-    const key = tool.toolCallId || tool.id || tool.name;
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    result.push(normalizeCachedTool(tool));
-  }
-  return result;
 }
 
 /** 从 assistant snapshot 提取 tool_use（Claude loadHistory 后可能只剩 thinking/text） */
@@ -42,7 +31,7 @@ export function extractStreamingToolsFromTurnMessages(
       });
     }
   }
-  return dedupeStreamingTools(tools);
+  return tools;
 }
 
 /** runtime 缓存的 tool_result 行（不进 messages[]）→ 完成态 parse 补工具 */
@@ -62,7 +51,7 @@ export function extractStreamingToolsFromToolResults(
       });
     }
   }
-  return dedupeStreamingTools(tools);
+  return tools;
 }
 
 export interface ResolveDoneTurnStreamingToolsParams {
@@ -73,19 +62,20 @@ export interface ResolveDoneTurnStreamingToolsParams {
 }
 
 /**
- * Claude 完成态工具来源（按优先级）：
- * 1. 模块 cache（流式期间写入）
- * 2. turn assistant snapshot 里的 tool_use
- * 3. 缓存的 tool_result 行
+ * Claude 完成态工具来源：合并 cache + tool_result + assistant tool_use。
+ * input 按质量合并（message tool_use 优先于 cache 占位）。
  */
 export function resolveDoneTurnStreamingTools(
   params: ResolveDoneTurnStreamingToolsParams,
 ): CachedTurnStreamingTool[] {
-  const cached = readTurnStreamingToolsCache(params.turnStableKey, params.aliasKeys ?? []);
-  if (cached.length > 0) return cached;
-
+  const cached = readTurnStreamingToolsCache(params.turnStableKey, params.aliasKeys ?? [])
+    .map(normalizeCachedTool);
+  const fromToolResults = extractStreamingToolsFromToolResults(params.toolResults);
   const fromMessages = extractStreamingToolsFromTurnMessages(params.turnMessages);
-  if (fromMessages.length > 0) return fromMessages;
 
-  return extractStreamingToolsFromToolResults(params.toolResults);
+  const merged = mergeStreamingToolRecords(
+    mergeStreamingToolRecords(cached, fromToolResults),
+    fromMessages,
+  );
+  return merged.map(normalizeCachedTool);
 }

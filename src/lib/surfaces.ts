@@ -10,6 +10,35 @@ export const glassSectionSurface = cn(
   'dark:shadow-[0_4px_28px_rgba(0,0,0,0.22),inset_0_1px_0_hsl(var(--glass-highlight)/0.08)]',
 );
 
+/** 设置页右侧内容区白卡片（MasterGo：8px 圆角、#E5E6EB 描边、白底） */
+export const stoSettingsSectionCardClass = cn(
+  'overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-6',
+  'dark:border-border dark:bg-card',
+);
+
+/** 设置页右侧内容卡片外槽：顶/右/底 8px 留白（MasterGo top:8px） */
+export const stoSettingsContentPanelWrapClass = cn(
+  'flex min-h-0 min-w-0 flex-1 flex-col pt-2 pr-2 pb-2',
+);
+
+/** 设置页右侧内容卡片（MasterGo：18px 圆角、#F7F8FA、0 0 16px rgba(0,0,0,0.01)） */
+export const stoSettingsContentPanelClass = cn(
+  'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[18px] bg-[#F7F8FA]',
+  'shadow-[0_0_16px_0_rgba(0,0,0,0.01)]',
+  'dark:bg-background dark:shadow-none',
+);
+
+/** 设置页右侧内容卡片内滚动区 */
+export const stoSettingsContentPanelBodyClass = cn(
+  'min-h-0 flex-1 overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
+);
+
+/** 设置页右侧内容主列（MasterGo 容器 7361：862×958、left 145px 于卡片内、top 72px、gap 36px） */
+export const stoSettingsContentInnerClass = cn(
+  'mx-auto box-border flex w-full max-w-[862px] flex-col gap-[36px] pt-[72px] pb-10',
+  'px-6 min-[974px]:px-0',
+);
+
 /** Chat assistant bubbles/cards: light = soft white; dark = neutral muted/card（与用户侧主色气泡区分） */
 export const assistantChatCardBg = cn(
   'bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(255,255,255,0.86))]',
@@ -1200,9 +1229,9 @@ export const chatToolCallHeaderBtnClass = cn(
   'text-[13px] leading-5 font-normal text-[#86909C] transition-colors duration-150 hover:text-foreground',
 );
 
-/** 工具/思考内容区：16px icon 列 + 竖线居中（MasterGo 4:2177 divider @ x≈7） */
-export const chatProcessIconRailClass = 'flex w-4 shrink-0 justify-center self-stretch';
-export const chatProcessIconRailLineClass = 'w-px bg-border';
+/** 工具/思考内容区：16px icon 列 + 竖线固定在 icon 中线 */
+export const chatProcessIconRailClass = 'relative w-4 shrink-0 self-stretch';
+export const chatProcessIconRailLineClass = 'absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border';
 /** 竖线列与正文间距 4px（正文起点 16+4=20px，与标题文字对齐） */
 export const chatProcessContentTextWrapClass = 'min-w-0 flex-1 pl-1';
 /** 标题行 chevron/spinner 占位：16px 控件 + gap 4px */

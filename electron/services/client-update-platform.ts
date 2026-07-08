@@ -47,6 +47,8 @@ export type ClientUpdatePolicyData = {
   check_interval_seconds?: number;
   current_version?: string | null;
   platform?: string | null;
+  title?: string | null;
+  changelog?: string | null;
 };
 
 /** 解析失败的详细原因，供 UI 展示具体错误 */
@@ -72,6 +74,25 @@ export type ClientUpdateEventItem = {
   feed_slug?: string | null;
   platform?: string | null;
 };
+
+export type ClientChangelogItem = {
+  semver: string;
+  title?: string | null;
+  changelog?: string | null;
+  published_at?: string | null;
+};
+
+export type ClientChangelogListData = {
+  product?: string;
+  total: number;
+  limit: number;
+  offset: number;
+  items: ClientChangelogItem[];
+};
+
+export type ChangelogListResult =
+  | { ok: true; data: ClientChangelogListData }
+  | { ok: false; reason: ResolveFailureReason };
 
 function jsonAuthHeaders(token: string): Record<string, string> {
   return {
@@ -132,6 +153,65 @@ export async function resolveUpdatePolicy(
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     logger.warn('[client-update] resolve error:', msg);
+    return { ok: false, reason: { httpStatus: 0, exceptionMessage: msg } };
+  }
+}
+
+const CHANGELOG_TIMEOUT_MS = 20_000;
+
+export async function fetchChangelogList(
+  token: string,
+  env: SsoEnvironment,
+  params?: { product?: string; limit?: number; offset?: number },
+): Promise<ChangelogListResult> {
+  const origin = getMemoryCenterApiOrigin(env);
+  const product = params?.product ?? CLIENT_UPDATE_PRODUCT;
+  const limit = params?.limit ?? 10;
+  const offset = params?.offset ?? 0;
+  const qs = new URLSearchParams({
+    product,
+    limit: String(limit),
+    offset: String(offset),
+  });
+  const url = `${origin}/api/v1/client-updates/changelog?${qs.toString()}`;
+  try {
+    const result = await Promise.race([
+      (async () => {
+        const res = await proxyAwareFetch(url, {
+          method: 'GET',
+          headers: buildStoMemoryCenterAuthHeaders(token),
+        });
+        const raw = await res.text();
+        const json = JSON.parse(raw) as ApiOk<ClientChangelogListData>;
+        if (!res.ok) {
+          const msg = json?.errMessage ?? raw.slice(0, 200);
+          logger.warn(`[client-update] changelog HTTP ${res.status}: ${msg}`);
+          return { ok: false, reason: { httpStatus: res.status, serverMessage: msg } } as ChangelogListResult;
+        }
+        if (!json?.success || !json.data) {
+          const msg = json?.errMessage ?? 'success=false or data missing';
+          return { ok: false, reason: { httpStatus: res.status, serverMessage: msg } } as ChangelogListResult;
+        }
+        return { ok: true, data: json.data } as ChangelogListResult;
+      })(),
+      new Promise<ChangelogListResult>((_resolve) =>
+        setTimeout(
+          () =>
+            _resolve({
+              ok: false,
+              reason: {
+                httpStatus: 0,
+                exceptionMessage: `changelog 请求超时（${Math.round(CHANGELOG_TIMEOUT_MS / 1000)}秒未响应）`,
+              },
+            }),
+          CHANGELOG_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+    return result;
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.warn('[client-update] changelog error:', msg);
     return { ok: false, reason: { httpStatus: 0, exceptionMessage: msg } };
   }
 }

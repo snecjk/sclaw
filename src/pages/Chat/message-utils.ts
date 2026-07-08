@@ -709,9 +709,7 @@ export type ThinkingTimelineItem =
   | { type: 'narration'; content: string }
   | { type: 'tool'; index: number; id: string; name: string; input: unknown };
 
-function thinkingTimelineToolKey(tool: { id: string; name: string; input: unknown }): string {
-  return tool.id || `${tool.name}::${JSON.stringify(tool.input ?? null)}`;
-}
+import { thinkingTimelineToolIdentityKey } from '@/lib/tool-input-merge';
 
 /**
  * Ordered thinking + tool_use segments from message content (preserves block order).
@@ -755,11 +753,11 @@ export function extractThinkingTimeline(message: RawMessage | unknown): Thinking
   const capturedToolKeys = new Set(
     items
       .filter((item): item is Extract<ThinkingTimelineItem, { type: 'tool' }> => item.type === 'tool')
-      .map((item) => thinkingTimelineToolKey({ id: item.id, name: item.name, input: item.input })),
+      .map((item) => thinkingTimelineToolIdentityKey({ id: item.id, name: item.name })),
   );
 
   for (const tool of extractToolUse(message)) {
-    const key = thinkingTimelineToolKey(tool);
+    const key = thinkingTimelineToolIdentityKey({ id: tool.id, name: tool.name });
     if (capturedToolKeys.has(key)) continue;
     toolIndex += 1;
     items.push({

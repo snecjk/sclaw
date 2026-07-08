@@ -26,6 +26,10 @@ import {
   chatToolCallShellClass,
 } from '@/lib/surfaces';
 import { maskSensitiveToolInputForDisplay, hasDisplayableToolInput } from '@/pages/Chat/message-utils';
+import { resolveToolInputState } from '@/lib/tool-input-merge';
+import {
+  resolveProcessHeaderLayout,
+} from '@/components/chat/process-rail-layout';
 
 export interface ChatToolCallCardProps {
   /** 原始工具名（用于图标映射） */
@@ -77,6 +81,7 @@ function ToolCallContent({
   status?: 'running' | 'completed' | 'error';
 }) {
   const { t } = useTranslation('chat');
+  const inputState = resolveToolInputState(input, status);
   const hasInput = hasDisplayableToolInput(input);
   const inputText = hasInput ? maskSensitiveToolInputForDisplay(input) : '';
   const { text: displayed, isAnimating } = useTypewriterReveal(inputText, isInputTypewriterActive, {
@@ -120,12 +125,13 @@ function ToolCallContent({
         ) : (
           <pre className={chatToolCallInputPreClass}>{inputText}</pre>
         )
-      ) : (
+      ) : inputState === 'none' ? (
+        <p className={chatToolCallInputPreClass}>{t('streaming.toolNoParams')}</p>
+      ) : inputState === 'unknown' && status === 'running' ? (
         <p className={chatToolCallInputPreClass}>
-          {t('streaming.toolNoParams')}
-          {isAwaitingToolInput ? <ChatProcessLoadingEllipsis /> : null}
+          <ChatProcessLoadingEllipsis />
         </p>
-      )}
+      ) : null}
     </ChatProcessContentRail>
   );
 }
@@ -173,10 +179,18 @@ export function ChatToolCallCard({
     ? resolveChatThinkingProcessToolIcon()
     : resolveChatProcessToolIcon(name);
 
+  const contentRailLayout = resolveProcessHeaderLayout(
+    isThinkingProcessCollapsible
+      ? 'collapsible_chevron_after_icon'
+      : isReadonly
+        ? 'readonly_title'
+        : 'collapsible_chevron_before_icon',
+  );
+
   const toolBody = (
     <ToolCallContent
       input={input}
-      hasLeadingOffset={!isThinkingProcessCollapsible && isRunning}
+      hasLeadingOffset={contentRailLayout.hasLeadingControlBeforeSemanticIcon}
       isInputTypewriterActive={isInputTypewriterActive}
       typewriterResetKey={typewriterResetKey ?? `tool-${name}`}
       onInputRevealComplete={onInputRevealComplete}
@@ -187,7 +201,15 @@ export function ChatToolCallCard({
 
   if (isThinkingProcessCollapsible) {
     return (
-      <div ref={wrapperRef} className={cn(chatToolCallShellClass, className)}>
+      <div
+        ref={wrapperRef}
+        className={cn(
+          chatToolCallShellClass,
+          // 与 ChatProcessBlock 一致：收起时去掉 header/body 间距，避免流式折叠后行间突然多出 gap
+          !thinkingExpanded && 'gap-0',
+          className,
+        )}
+      >
         <button
           type="button"
           className={cn(

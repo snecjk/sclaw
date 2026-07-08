@@ -12,6 +12,8 @@ export const initialChatState: Pick<
   | 'activeRunId'
   | 'streamingText'
   | 'streamingMessage'
+  | 'streamingMessages'
+  | 'streamingToolResults'
   | 'streamingTools'
   | 'pendingFinal'
   | 'lastUserMessageAt'
@@ -33,6 +35,8 @@ export const initialChatState: Pick<
   activeRunId: null,
   streamingText: '',
   streamingMessage: null,
+  streamingMessages: [],
+  streamingToolResults: [],
   streamingTools: [],
   pendingFinal: false,
   lastUserMessageAt: null,

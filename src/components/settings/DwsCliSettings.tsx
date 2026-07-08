@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { glassSectionSurface } from '@/lib/surfaces';
+import { stoSettingsSectionCardClass } from '@/lib/surfaces';
 import {
   fetchDingTalkStatus,
   installDwsCli,
@@ -94,7 +94,7 @@ export function DwsCliSettings() {
   const authenticated = status?.authenticated === true;
 
   return (
-    <section className={glassSectionSurface}>
+    <section className={stoSettingsSectionCardClass}>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-foreground">
