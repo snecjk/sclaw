@@ -15,6 +15,10 @@ export interface DispatchChatSendOptions {
   targetAgentId?: string | null;
   dingTalkMentions?: DingTalkMention[];
   workflowId?: string | null;
+  /** 工作流来源：'mine' = 我的工作流-已发布（以工作流上下文发送，不取模版 schema）。 */
+  workflowSource?: string | null;
+  /** 工作流名称（mine 来源时用于上下文块）。 */
+  workflowName?: string | null;
   /** Skip question:split (e.g. when @mentions are present). */
   skipQuestionSplit?: boolean;
   onSplittingChange?: (splitting: boolean) => void;
@@ -27,6 +31,8 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     targetAgentId,
     dingTalkMentions,
     workflowId,
+    workflowSource,
+    workflowName,
     skipQuestionSplit = false,
     onSplittingChange,
   } = options;
@@ -51,6 +57,26 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
   };
 
   const chatState = useChatStore.getState();
+  const failed = () => Boolean(useChatStore.getState().error);
+
+  // 我的工作流-已发布：与「我的工作流」卡片「立即运行」保持一致，
+  // 直接发送一句「帮我执行 id 为：xxx 的工作流 【名称】」让模型按 workflowId 执行，
+  // 不走模版 schema 取数与参数表单，也不注入额外上下文。
+  if (workflowId && workflowSource === 'mine') {
+    chatState.clearPendingWorkflow();
+    const name = workflowName?.trim() || '';
+    const execText = `帮我执行 id 为：${workflowId} 的工作流 ${name ? `【${name}】` : ''}`.trim();
+    await sendMessage({
+      text: execText,
+      attachments,
+      targetAgentId,
+      dingTalkMentions,
+    });
+    if (failed()) {
+      toast.error('发送失败，请重试');
+    }
+    return;
+  }
 
   // Explicit template pick from picker — fetch schema → send to model.
   if (workflowId) {
@@ -111,8 +137,6 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
       onSplittingChange?.(false);
     }
   }
-
-  const failed = () => Boolean(useChatStore.getState().error);
 
   if (parts && parts.length > 1) {
     await sendMessage({ text: parts[0].context, attachments, targetAgentId, dingTalkMentions });

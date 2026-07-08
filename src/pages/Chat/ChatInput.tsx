@@ -46,7 +46,7 @@ import { WorkflowPicker } from '@/components/workflow/WorkflowPicker';
 
 import { useDingTalkMention } from '@/hooks/useDingTalkMention';
 import { useAuthStore } from '@/stores/auth';
-import { useWorkflowsStore } from '@/stores/workflows';
+
 import type { ActiveMentionTrigger, MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention, MentionSearchItem } from '@/types/dingtalk-mention';
 import { mentionSearchItemToMention } from '@/types/dingtalk-mention';
@@ -84,6 +84,8 @@ interface ChatInputProps {
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
+    workflowSource?: string | null,
+    workflowName?: string | null,
   ) => void;
   onStop?: () => void;
   onQueue?: (
@@ -254,7 +256,6 @@ export function ChatInput({
     installing: dingTalkInstalling,
   } = useDingTalkMention(mentionTrigger);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const { templates, prefetchTemplates } = useWorkflowsStore();
   const composerPlaceholder = disabled && engineType === 'openclaw'
     ? t('composer.gatewayDisconnectedPlaceholder')
     : placeholder?.trim() || t('composer.messagePlaceholder', { agent: currentAgentName });
@@ -355,12 +356,6 @@ export function ChatInput({
       document.removeEventListener('mousedown', handlePointerDown);
     };
   }, [workflowPickerOpen]);
-
-  // Preload top templates so picker and NL "创建工作流" respond quickly.
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    void prefetchTemplates();
-  }, [isAuthenticated, prefetchTemplates]);
 
   const applyDingTalkMention = useCallback((item: MentionSearchItem) => {
     if (!dingTalkTrigger) return;
@@ -526,6 +521,8 @@ export function ChatInput({
     const attachmentsToSend = readyAttachments.length > 0 ? readyAttachments : undefined;
     const mentionsToSend = snapshot.mentions.length > 0 ? snapshot.mentions : undefined;
     const workflowIdToSend = snapshot.workflowId;
+    const workflowSourceToSend = snapshot.workflowSource ?? null;
+    const workflowNameToSend = snapshot.workflowName ?? null;
     console.info('[dingtalk-mention] chat-input: send snapshot', {
       textLength: textToSend.length,
       mentions: snapshot.mentions.map((mention) => ({
@@ -562,7 +559,7 @@ export function ChatInput({
     if (sending && onQueue && !workflowIdToSend) {
       onQueue(textToSend, attachmentsToSend, targetAgentId, mentionsToSend, workflowIdToSend);
     } else {
-      onSend(textToSend, attachmentsToSend, targetAgentId, mentionsToSend, workflowIdToSend);
+      onSend(textToSend, attachmentsToSend, targetAgentId, mentionsToSend, workflowIdToSend, workflowSourceToSend, workflowNameToSend);
     }
     setTargetAgentId(null);
     setPickerOpen(false);
@@ -951,14 +948,11 @@ export function ChatInput({
                 ref={workflowPickerRef}
                 open={workflowPickerOpen}
                 onClose={() => setWorkflowPickerOpen(false)}
-                onSelect={async (id) => {
+                onSelect={async (id, name) => {
                   setWorkflowPickerOpen(false);
                   const { useChatStore } = await import('@/stores/chat');
                   useChatStore.getState().clearPendingWorkflow();
-                  const template = templates.find((w) => w.id === id);
-                  if (template) {
-                    mentionEditorRef.current?.insertWorkflow(id, template.label);
-                  }
+                  mentionEditorRef.current?.insertWorkflow(id, name, 'mine');
                   mentionEditorRef.current?.focus();
                 }}
                 className="absolute left-4 right-4 bottom-full z-50 mb-2"
@@ -1041,14 +1035,11 @@ export function ChatInput({
               ref={workflowPickerRef}
               open={workflowPickerOpen}
               onClose={() => setWorkflowPickerOpen(false)}
-              onSelect={async (id) => {
+              onSelect={async (id, name) => {
                 setWorkflowPickerOpen(false);
                 const { useChatStore } = await import('@/stores/chat');
                 useChatStore.getState().clearPendingWorkflow();
-                const template = templates.find((w) => w.id === id);
-                if (template) {
-                  mentionEditorRef.current?.insertWorkflow(id, template.label);
-                }
+                mentionEditorRef.current?.insertWorkflow(id, name, 'mine');
                 mentionEditorRef.current?.focus();
               }}
               className="absolute left-4 right-4 bottom-full z-50 mb-2"

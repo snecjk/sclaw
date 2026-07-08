@@ -71,10 +71,10 @@
         "pickWorkflow": "Choose workflow",
         "dingTalkMention": "DingTalk contacts",
         "micComingSoon": "Coming soon",
-        "workflowPlaceholder": "Search workflow templates...",
+        "workflowPlaceholder": "Search workflows...",
         "workflowLoading": "Loading...",
         "workflowNoResults": "No matching templates",
-        "workflowNoTemplates": "No workflow templates",
+        "workflowNoTemplates": "No workflows",
         "workflowClear": "Clear workflow"
     },
     "streaming": {

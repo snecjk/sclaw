@@ -54,6 +54,8 @@ export interface HomeMainConversationProps {
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
+    workflowSource?: string | null,
+    workflowName?: string | null,
   ) => void;
 }
 

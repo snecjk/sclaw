@@ -45,7 +45,8 @@ export interface ChatInputBindingsOptions {
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
-    workflowContext?: import('@/stores/chat').WorkflowContextBlock | null,
+    workflowSource?: string | null,
+    workflowName?: string | null,
   ) => void;
   /** 排队消息回调 */
   onQueue: (
@@ -54,7 +55,8 @@ export interface ChatInputBindingsOptions {
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
-    workflowContext?: import('@/stores/chat').WorkflowContextBlock | null,
+    workflowSource?: string | null,
+    workflowName?: string | null,
   ) => void;
   /** ChatInput 变体：default（标准）或 embedded（嵌入式，如首页） */
   variant?: 'default' | 'embedded';
