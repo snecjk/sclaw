@@ -148,9 +148,17 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
     }
 
     if (node instanceof HTMLElement && (isMentionSpan(node) || isWorkflowSpan(node))) {
-      const text = node.textContent ?? '';
+      // 与 serializeMentionEditor 保持一致：mention span 用 `@displayName`
+      // （不含 removable 模式下 × 删除按钮的字符），否则偏移量会与序列化错位。
+      const text = isMentionSpan(node)
+        ? `@${node.dataset.mentionName ?? ''}`
+        : (node.textContent ?? '');
       const next = current + text.length;
-      if (targetOffset <= next) {
+      // span 不可拆分：严格落在 (current, next) 内部才视为非法返回 null。
+      // targetOffset === next 表示"紧贴 span 之后"的合法边界，必须推进 current
+      // 让后续文本节点（如尾随的 ）在 offset 0 处匹配，否则会把紧挨着
+      // 前一个 mention 输入的 @ 映射失败，导致 insertMentionAtTrigger 静默退出。
+      if (targetOffset < next) {
         return null;
       }
       current = next;
