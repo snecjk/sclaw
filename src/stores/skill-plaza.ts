@@ -11,6 +11,7 @@ import {
   uninstallPlazaSkill,
   recordSkillUse,
   toggleSkillEnabled,
+  uploadSkillZip,
   type InstallPlazaSkillOptions,
 } from '@/lib/skill-plaza-api';
 import type {
@@ -48,6 +49,7 @@ interface SkillPlazaState {
   loading: boolean;
   installing: Record<string, boolean>;
   uninstalling: Record<string, boolean>;
+  uploading: boolean;
   error: string | null;
   syncingUserSkills: boolean;
 
@@ -70,6 +72,7 @@ interface SkillPlazaState {
 
   installSkill: (slug: string, options?: InstallPlazaSkillOptions) => Promise<void>;
   uninstallSkill: (slug: string) => Promise<void>;
+  uploadSkill: (filePath: string) => Promise<string>;
   useSkill: (slug: string) => Promise<void>;
   toggleSkill: (slug: string, enabled: boolean) => Promise<void>;
 
@@ -126,6 +129,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
   loading: false,
   installing: {},
   uninstalling: {},
+  uploading: false,
   error: null,
   syncingUserSkills: false,
 
@@ -376,6 +380,19 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
         delete next[slug];
         return { uninstalling: next };
       });
+    }
+  },
+
+  uploadSkill: async (filePath) => {
+    set({ uploading: true });
+    try {
+      const slug = await uploadSkillZip(filePath);
+      set({ plazaStale: true, mineStale: true });
+      // Refresh local skills so the newly uploaded skill appears in the list
+      await get().fetchLocalSkills();
+      return slug;
+    } finally {
+      set({ uploading: false });
     }
   },
 
