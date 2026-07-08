@@ -123,6 +123,7 @@ import {
   sidebarSectionStickyTopTaskClass,
   sidebarSectionStickyTopRecentClass,
   sidebarScrollListClass,
+  sidebarScrollContainerClass,
   sidebarRecentEmptyLineClass,
 } from '@/lib/surfaces';
 import { useSidebarTaskScrollCollapse } from '@/hooks/use-sidebar-task-scroll-collapse';
@@ -1799,10 +1800,7 @@ export function Sidebar() {
 
       <div
         ref={scrollContainerRef}
-        className={cn(
-          'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden',
-          sidebarCollapsed ? 'px-0' : 'px-2',
-        )}
+        className={cn(sidebarScrollContainerClass, sidebarCollapsed ? 'px-0' : 'px-2')}
       >
         {!sidebarCollapsed ? (
           <SidebarCollapsibleSectionLabel

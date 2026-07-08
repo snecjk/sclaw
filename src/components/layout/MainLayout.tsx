@@ -104,7 +104,6 @@ export function MainLayout() {
       <div
         data-app-shell="provincial"
         data-sidebar-collapsed={sidebarCollapsed ? 'true' : 'false'}
-        data-platform={window.electron?.platform ?? 'unknown'}
         className="relative flex h-screen flex-col overflow-hidden bg-[var(--sto-page-bg)]"
       >
         <AppShellChromeOverlay />

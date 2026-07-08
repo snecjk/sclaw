@@ -1331,6 +1331,12 @@ export const sidebarSectionStickyTopRecentClass =
 /** 侧栏滚动列表 — 层级低于 sticky 分区标题 */
 export const sidebarScrollListClass = 'relative z-0';
 
+/** 侧栏中部滚动区（classic 滚动条见 globals.css `html[data-scrollbar-layout=classic]`） */
+export const sidebarScrollContainerClass = cn(
+  'sidebar-scroll-container',
+  'flex min-h-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto overscroll-y-contain',
+);
+
 /** 展开侧栏主导航 idle — 正文 Grey-10 + 图标 Grey-9 */
 export const sidebarNavExpandedIdleClass = cn(
   'h-9 min-h-9 rounded-[8px] px-[10px] font-normal leading-5',
