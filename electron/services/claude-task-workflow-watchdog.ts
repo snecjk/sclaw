@@ -81,17 +81,35 @@ function dedupRecipients(recipients: DingTalkMention[]): DingTalkMention[] {
 /**
  * 选择适合钉钉正文里点击的产物 URL。
  *
- * `resolveWorkflowArtifactUrl` 优先返回 in-app 预览 URL（previewUrl），它可能是
- * StoClaw 内部深链 / localhost，钉钉客户端打不开——表现为「蓝色文字却点不动」。
- * 这里优先取签名 OSS 下载 URL（tempUrl），其次任何 http(s) URL；都不是 http(s)
- * 则返回 null（按纯文本展示，避免生成坏链）。
+ * - HTML 报告：优先 `previewUrl`（在线预览链，浏览器/钉钉可直接渲染）；
+ *   `tempUrl` 是 OSS 签名下载链（attachment），点击会下载 .html 而非预览。
+ * - 其他产物：优先 `tempUrl`（`previewUrl` 部分场景是 StoClaw 内部深链/localhost，
+ *   钉钉打不开——表现为「蓝色文字却点不动」）。
+ *
+ * HTML 判定扫描 `name` 及所有 URL 字段是否含 `.html`/`.htm`：`name` 可能不带
+ * 扩展名，但 `previewUrl` 的 filePath 参数里通常带 `.html`（`...xxx.html&...`）。
+ * 都不是 http(s) 则返回 null（按纯文本展示，避免坏链）。
  */
+function isHtmlArtifact(art: {
+  name?: string;
+  url?: string;
+  previewUrl?: string;
+  tempUrl?: string;
+}): boolean {
+  return [art.name, art.url, art.previewUrl, art.tempUrl].some(
+    (f) => typeof f === 'string' && /\.html?/i.test(f),
+  );
+}
+
 function pickDingTalkArtifactUrl(art: {
+  name?: string;
   url?: string;
   previewUrl?: string;
   tempUrl?: string;
 }): string | null {
-  const candidates = [art.tempUrl, art.url, art.previewUrl];
+  const candidates = isHtmlArtifact(art)
+    ? [art.previewUrl, art.url, art.tempUrl]
+    : [art.tempUrl, art.url, art.previewUrl];
   for (const c of candidates) {
     const v = c?.trim();
     if (v && /^https?:\/\//i.test(v)) return v;
