@@ -10,12 +10,7 @@
     "system": "System",
     "language": "Language",
     "launchAtStartup": "Launch at system startup",
-    "launchAtStartupDesc": "Automatically launch StoClaw when you log in",
-    "preventSystemSleep": "Prevent system sleep",
-    "preventSystemSleepDesc": "While enabled, StoClaw prevents the computer from sleeping automatically while it is running.",
-    "preventSystemSleepTips": "Recommended for scheduled tasks. Keep the lid open and connect to power; sleep or shutdown may prevent normal operation.",
-    "preventSystemSleepToastEnabled": "Enabled: StoClaw will prevent sleep while running",
-    "preventSystemSleepToastDisabled": "Disabled: the computer will sleep according to system settings"
+    "launchAtStartupDesc": "Automatically launch StoClaw when you log in"
   },
   "aiProviders": {
     "title": "AI Providers",
