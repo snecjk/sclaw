@@ -14,7 +14,7 @@ import {
 } from '../../shared/dingtalk-share-text';
 import { markdownToPlainText } from '../../shared/markdown-to-plain-text';
 import { hostApiFetch, uploadFileToTempOSS } from '@/lib/host-api';
-import { isHttpUrl } from '@/lib/preview-url';
+import { inferMimeTypeFromUrl, isHttpUrl } from '@/lib/preview-url';
 import type { AttachedFileMeta } from '@/stores/chat';
 import {
   buildArtifactMetaLine,
@@ -116,8 +116,28 @@ export type DingTalkShareDialogDraft =
       kind: 'conversation';
       textPreview: string;
       fullText: string;
-      files: Array<{ fileName: string; filePath: string }>;
+      files: Array<{ fileName: string; filePath: string; mimeType?: string }>;
     };
+
+export type ConversationShareFileRef = {
+  fileName: string;
+  filePath: string;
+  mimeType?: string;
+};
+
+/** HTTP(S) 产物直链：与复制剪贴板口径一致，拼成 markdown 链接附在分享正文后。 */
+export function buildConversationShareHttpFileLinks(
+  files: ReadonlyArray<ConversationShareFileRef>,
+): string {
+  const lines: string[] = [];
+  for (const file of files) {
+    const filePath = file.filePath.trim();
+    const fileName = file.fileName.trim() || 'file';
+    if (!filePath || !isHttpUrl(filePath)) continue;
+    lines.push(`[${fileName}](${filePath})`);
+  }
+  return lines.join('\n\n');
+}
 
 /** @deprecated Use DingTalkShareDialogDraft */
 export type ArtifactShareDraft = {
@@ -187,6 +207,7 @@ export function buildConversationShareDialogDraft(
     .map((file) => ({
       fileName: file.fileName.trim() || 'file',
       filePath: file.filePath.trim(),
+      mimeType: file.mimeType,
     }));
   const plainText = markdownToPlainText(text.trim());
   return {
@@ -249,7 +270,7 @@ function mergeConversationShareFiles(
 
 async function buildConversationShareText(
   fullText: string,
-  files: Array<{ fileName: string; filePath: string }>,
+  files: Array<ConversationShareFileRef>,
 ): Promise<string> {
   const localFiles = mergeConversationShareFiles(files, fullText);
   const entries: Array<{ localPath: string; shareUrl: string }> = [];
@@ -260,9 +281,14 @@ async function buildConversationShareText(
 
   const pathToUrl = buildSharePathToUrlMap(entries);
   const replaced = replaceConversationFileRefsWithShareUrls(fullText, pathToUrl);
-  const plainText = markdownToPlainText(replaced);
+  let plainText = markdownToPlainText(replaced);
+  const httpLinks = buildConversationShareHttpFileLinks(files);
+  if (httpLinks) {
+    plainText = plainText ? `${plainText}\n\n${httpLinks}` : httpLinks;
+  }
   logDingTalkShare('replace-file-refs', {
     fileCount: entries.length,
+    httpFileCount: files.filter((file) => isHttpUrl(file.filePath.trim())).length,
     originalLength: fullText.length,
     replacedLength: replaced.length,
     plainTextLength: plainText.length,

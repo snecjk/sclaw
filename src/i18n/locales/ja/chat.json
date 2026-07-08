@@ -151,5 +151,40 @@
         "viewArtifact": "成果物を見る",
         "openArtifactLink": "リンクを開く",
         "viewWorkflowAction": "ワークフローを見る"
+    },
+    "preview": {
+        "collapsePanel": "プレビューを閉じる",
+        "overflowMenu": "すべての成果物",
+        "fullscreen": "全画面",
+        "refresh": "更新",
+        "download": "ダウンロード",
+        "share": "钉钉で共有",
+        "openExternal": "ブラウザで開く",
+        "editWorkflow": "ワークフローを編集",
+        "workflowTab": "ワークフロー",
+        "emptyHint": "チャット内のファイルリンクをクリックしてプレビュー",
+        "emptyHintSub": "または上から成果物を選択",
+        "dismissTab": "この成果物を閉じる",
+        "shareDialog": {
+            "title": "钉钉で共有",
+            "description": "内容を確認後、钉钉の送信先選択画面を開きます。",
+            "artifactTitle": "成果物を共有",
+            "artifactDescription": "成果物リンク付きで钉钉の送信先選択画面を開きます。",
+            "conversationTitle": "会話を共有",
+            "conversationDescription": "本文と成果物リンク付きで钉钉の送信先選択画面を開きます。",
+            "fieldTitle": "タイトル",
+            "fieldBody": "本文",
+            "fieldLink": "リンク",
+            "localUrlHint": "このリンクはローカルプレビュー用のため、他のネットワークの同僚は開けない場合があります。",
+            "cancel": "キャンセル",
+            "confirm": "共有する",
+            "uploading": "処理中…",
+            "success": "钉钉の送信先選択画面を開きました",
+            "failed": "共有に失敗しました。しばらくしてから再試行してください。",
+            "tooLongTitle": "共有内容が長すぎます",
+            "tooLongDescription": "钉钉の共有上限を超えています。全文をクリップボードにコピーし、送信先選択後に钉钉で貼り付けてください。",
+            "tooLongConfirm": "コピーして共有",
+            "tooLongPickerHint": "内容をコピーしました。送信先選択後、钉钉のチャットに貼り付けてください。"
+        }
     }
 }

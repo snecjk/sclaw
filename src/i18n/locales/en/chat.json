@@ -156,5 +156,40 @@
         "viewArtifact": "View artifact",
         "openArtifactLink": "Open link",
         "viewWorkflowAction": "View workflow"
+    },
+    "preview": {
+        "collapsePanel": "Collapse preview",
+        "overflowMenu": "All artifacts",
+        "fullscreen": "Fullscreen",
+        "refresh": "Refresh",
+        "download": "Download",
+        "share": "Share to DingTalk",
+        "openExternal": "Open in browser",
+        "editWorkflow": "Edit workflow",
+        "workflowTab": "Workflow",
+        "emptyHint": "Click a file link in the chat to preview",
+        "emptyHintSub": "Or select an artifact above",
+        "dismissTab": "Close this artifact",
+        "shareDialog": {
+            "title": "Share to DingTalk",
+            "description": "Confirm the content, then open the DingTalk recipient picker.",
+            "artifactTitle": "Share artifact",
+            "artifactDescription": "Opens the DingTalk picker with a link to this artifact.",
+            "conversationTitle": "Share conversation",
+            "conversationDescription": "Opens the DingTalk picker with the message text and artifact links.",
+            "fieldTitle": "Title",
+            "fieldBody": "Body",
+            "fieldLink": "Link",
+            "localUrlHint": "This link is a local preview URL and may not open for colleagues on other networks.",
+            "cancel": "Cancel",
+            "confirm": "Share",
+            "uploading": "Preparing…",
+            "success": "DingTalk picker opened",
+            "failed": "Share failed. Please try again.",
+            "tooLongTitle": "Content is too long",
+            "tooLongDescription": "The message exceeds DingTalk’s share limit. The full text will be copied to your clipboard; paste it in DingTalk after picking a recipient.",
+            "tooLongConfirm": "Copy and share",
+            "tooLongPickerHint": "Content copied. Paste it in the DingTalk chat after selecting recipients."
+        }
     }
 }

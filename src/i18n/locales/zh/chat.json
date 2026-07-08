@@ -189,14 +189,23 @@
         "shareDialog": {
             "title": "分享到钉钉",
             "description": "确认分享内容后，将唤起钉钉选人窗口。",
+            "artifactTitle": "分享产物",
+            "artifactDescription": "确认后将唤起钉钉选人窗口，并附带产物链接。",
+            "conversationTitle": "分享对话",
+            "conversationDescription": "确认后将唤起钉钉选人窗口，并附带正文与产物链接。",
             "fieldTitle": "标题",
             "fieldBody": "正文",
             "fieldLink": "链接",
             "localUrlHint": "当前链接为本机预览地址，仅在同一网络内可访问的同事可能无法打开。",
             "cancel": "取消",
             "confirm": "确认分享",
+            "uploading": "处理中…",
             "success": "已唤起钉钉选人窗口",
-            "failed": "分享失败，请稍后重试"
+            "failed": "分享失败，请稍后重试",
+            "tooLongTitle": "分享内容较长",
+            "tooLongDescription": "内容超过钉钉分享长度上限，确认后将完整内容复制到剪贴板，并在钉钉选人中粘贴发送。",
+            "tooLongConfirm": "复制并分享",
+            "tooLongPickerHint": "内容已复制到剪贴板，请在钉钉对话中粘贴发送。"
         }
     }
 }
