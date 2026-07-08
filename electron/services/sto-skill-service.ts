@@ -22,6 +22,8 @@ import { safeRemoveDir } from '../utils/fs-retry';
 
 export const PREINSTALLED_MARKER_NAME = '.stoclaw-preinstalled.json';
 
+export const USER_UPLOAD_MARKER_NAME = '.stoclaw-user-upload.json';
+
 export interface StoSkillSearchParams {
   query?: string;
   limit?: number;
@@ -252,6 +254,119 @@ export class StoSkillService {
       if (fs.existsSync(tmpZipPath)) {
         fs.unlinkSync(tmpZipPath);
       }
+  /**
+   * Upload and install a skill from a local ZIP file.
+   * Extracts the ZIP, reads the slug from SKILL.md frontmatter 
+ame field,
+   * then atomically promotes to the skills directory with a user-upload marker.
+   */
+  async uploadZip(filePath: string): Promise<{ slug: string }> {
+    if (!fs.existsSync(filePath)) {
+      throw new Error(ZIP file not found: );
+    }
+
+    // Extract to a temp staging directory
+    const stagingDir = path.join(this.workDir, .tmp-skill-upload-staging-);
+    let stagingActive = false;
+    try {
+      fs.mkdirSync(stagingDir, { recursive: true });
+      stagingActive = true;
+
+      const { extractZip } = await import('../utils/zip-extract');
+      await extractZip(filePath, stagingDir);
+
+      // Validate the skill package (placeholder — rules TBD with product)
+      this.validateSkillPackage(stagingDir);
+
+      // Find SKILL.md — it may be at the root or inside a single nested folder
+      let skillDir = stagingDir;
+      if (!fs.existsSync(path.join(stagingDir, 'SKILL.md'))) {
+        const entries = fs.readdirSync(stagingDir, { withFileTypes: true });
+        const nested = entries.find(
+          (e) => e.isDirectory() && fs.existsSync(path.join(stagingDir, e.name, 'SKILL.md')),
+        );
+        if (nested) {
+          skillDir = path.join(stagingDir, nested.name);
+        } else {
+          throw new Error('ZIP \u5185\u672a\u627e\u5230 SKILL.md\uff0c\u8bf7\u786e\u8ba4\u538b\u7f29\u5305\u7ed3\u6784\u6b63\u786e');
+        }
+      }
+
+      // Read slug from SKILL.md frontmatter 
+ame field
+      const fm = readSkillMdFrontmatter(skillDir);
+      const rawName = fm?.name?.trim();
+      if (!rawName) {
+        throw new Error('SKILL.md frontmatter \u4e2d\u672a\u627e\u5230 name \u5b57\u6bb5\uff0c\u65e0\u6cd5\u786e\u5b9a\u6280\u80fd\u6807\u8bc6');
+      }
+      // Gateway requires name to match /^[a-z0-9-]+$/
+      const slug = rawName.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      if (!slug) {
+        throw new Error(\u4ece SKILL.md name \u5b57\u6bb5\u89e3\u6790 slug \u5931\u8d25: );
+      }
+
+      // Ensure frontmatter has a Gateway-compatible name
+      this.ensureSkillFrontmatter(skillDir, slug, {
+        name: fm?.name,
+        description: fm?.description,
+      });
+
+      // Atomically promote staging -> target
+      const targetDir = path.join(this.skillsDir, slug);
+      await this.promoteStagedSkillDir(stagingDir, targetDir, true);
+      stagingActive = false;
+
+      // Write user-upload marker so the skill shows up in the "\u5176\u4ed6" category
+      const markerPath = path.join(targetDir, USER_UPLOAD_MARKER_NAME);
+      const markerPayload = {
+        source: 'user-upload',
+        slug,
+        uploadedAt: new Date().toISOString(),
+      };
+      fs.writeFileSync(markerPath, ${JSON.stringify(markerPayload, null, 2)}\n, 'utf-8');
+
+      // Sync to user workspace if applicable
+      const userCode = await getCurrentActiveUserCode();
+      if (userCode) {
+        const userSkillsDir = getOpenClawUserSkillsDir(userCode);
+        if (!fs.existsSync(userSkillsDir)) {
+          fs.mkdirSync(userSkillsDir, { recursive: true });
+        }
+        const userTargetDir = path.join(userSkillsDir, slug);
+        if (fs.existsSync(userTargetDir)) {
+          await safeRemoveDir(userTargetDir, { label: userTargetDir });
+        }
+        await this.copyDir(targetDir, userTargetDir);
+        // Also write marker in user workspace copy
+        const userMarkerPath = path.join(userTargetDir, USER_UPLOAD_MARKER_NAME);
+        fs.writeFileSync(userMarkerPath, ${JSON.stringify(markerPayload, null, 2)}\n, 'utf-8');
+        logger.info([StoSkillService] uploadZip:  synced to user workspace );
+      }
+
+      logger.info([StoSkillService] uploadZip:  installed to );
+      return { slug };
+    } finally {
+      if (stagingActive && fs.existsSync(stagingDir)) {
+        await safeRemoveDir(stagingDir, { label: stagingDir }).catch(() => {});
+      }
+    }
+  }
+
+  /**
+   * Validate a skill package after extraction.
+   * Placeholder — specific validation rules TBD with product team.
+   * Currently only checks that SKILL.md exists.
+   */
+  private validateSkillPackage(stagingDir: string): void {
+    // Check root level
+    if (fs.existsSync(path.join(stagingDir, 'SKILL.md'))) return;
+    // Check single nested folder
+    const entries = fs.readdirSync(stagingDir, { withFileTypes: true });
+    const hasNestedSkill = entries.some(
+      (e) => e.isDirectory() && fs.existsSync(path.join(stagingDir, e.name, 'SKILL.md')),
+    );
+    if (!hasNestedSkill) {
+      throw new Error('ZIP \u5185\u672a\u627e\u5230 SKILL.md\uff0c\u8bf7\u786e\u8ba4\u538b\u7f29\u5305\u7ed3\u6784\u6b63\u786e');
     }
   }
 
