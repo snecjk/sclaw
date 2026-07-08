@@ -28,7 +28,7 @@ export interface WorkflowRunStatusResult {
   /** 最终结果摘要（成功时来自 result.summary/output；失败时为 undefined，错误见 error）。 */
   summary?: string;
   /** 产物列表（含可外链的预览/下载 URL）。 */
-  artifacts: Array<{ name: string; url: string; previewUrl?: string }>;
+  artifacts: Array<{ name: string; url: string; previewUrl?: string; tempUrl?: string }>;
   /** 失败时的错误信息。 */
   error?: string;
   /** 是否已进入终态。 */
@@ -89,6 +89,7 @@ export async function fetchWorkflowRunStatus(runId: string): Promise<WorkflowRun
     name: a.name,
     url: resolveWorkflowArtifactUrl(a),
     previewUrl: a.previewUrl,
+    tempUrl: a.tempUrl,
   }));
 
   return {

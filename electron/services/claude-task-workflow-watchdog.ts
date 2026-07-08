@@ -42,12 +42,6 @@ export interface WorkflowFallbackParams {
 const FALLBACK_MAX_WAIT_MS = 30 * 60 * 1000;
 const FALLBACK_POLL_INTERVAL_MS = 5_000;
 
-const SHORT_RUN_ID_LEN = 8;
-
-function shortRunId(runId: string): string {
-  return runId ? runId.slice(0, SHORT_RUN_ID_LEN) : runId;
-}
-
 /**
  * 进程内「同一工作流 runId 集合只补发一次」去重锁。
  *
@@ -84,36 +78,105 @@ function dedupRecipients(recipients: DingTalkMention[]): DingTalkMention[] {
   return out;
 }
 
-/** 把单个工作流运行结果拼成一段钉钉正文。 */
-function formatRunSection(runId: string, result: WorkflowRunStatusResult): string {
-  const head = `### 工作流 ${shortRunId(runId)}`;
+/**
+ * 选择适合钉钉正文里点击的产物 URL。
+ *
+ * `resolveWorkflowArtifactUrl` 优先返回 in-app 预览 URL（previewUrl），它可能是
+ * StoClaw 内部深链 / localhost，钉钉客户端打不开——表现为「蓝色文字却点不动」。
+ * 这里优先取签名 OSS 下载 URL（tempUrl），其次任何 http(s) URL；都不是 http(s)
+ * 则返回 null（按纯文本展示，避免生成坏链）。
+ */
+function pickDingTalkArtifactUrl(art: {
+  url?: string;
+  previewUrl?: string;
+  tempUrl?: string;
+}): string | null {
+  const candidates = [art.tempUrl, art.url, art.previewUrl];
+  for (const c of candidates) {
+    const v = c?.trim();
+    if (v && /^https?:\/\//i.test(v)) return v;
+  }
+  return null;
+}
 
+/**
+ * 把产物 URL 规范化成纯 ASCII，确保钉钉能稳定识别并自动链接化。
+ *
+ * 工作流产物 URL 的 filePath 常带**原始中文字符**（如
+ * `.../总部结算对账分析_日_20260708_1726.html`）。塞进消息后钉钉对非 ASCII
+ * 的处理不稳定：偶发整条链接被吞（只剩空 bullet）或丢链只留 label 文本。
+ *
+ * `encodeURI` 只编码非 ASCII 与 `[` `]` 等会破坏 markdown 的字符，**保留**已存在的
+ * `%XX` 转义（不会二次编码），因此对已经是 percent-encoded 的 URL 也是幂等安全的。
+ */
+function encodeArtifactUrl(url: string): string {
+  try {
+    return encodeURI(url);
+  } catch {
+    return url;
+  }
+}
+
+/** 产物展示名：去掉换行/制表符，trim 后为空则回退到「(未命名产物)」。 */
+function sanitizeArtifactLabel(label: string): string {
+  const cleaned = label.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned || '(未命名产物)';
+}
+
+/**
+ * 把单个工作流运行结果拼成一段钉钉正文。
+ *
+ * 按用户要求：**不输出工作流 id / runId**，只发最终产物（+ 摘要/失败原因）。
+ * 非终态无最终产物——发一句不含 id 的提示「任务仍在执行中，请关注 StoClaw。」
+ * （任务标题由 `buildFallbackBody` 的 intro 提供）。
+ */
+function formatRunSection(result: WorkflowRunStatusResult): string {
   if (!result.terminal) {
-    return `${head}\n\n仍在运行中，请到 StoClaw 查看最新状态。`;
+    return '任务仍在执行中，请关注 StoClaw。';
   }
 
   if (result.status === 'completed') {
-    const summary = result.summary?.trim() || '(无摘要)';
-    const lines = [head, '', summary];
+    const lines: string[] = [];
+    const summary = result.summary?.trim();
+    if (summary) lines.push(summary);
+
     const arts = result.artifacts;
     if (arts.length > 0) {
-      lines.push('', '**产物：**');
+      if (lines.length > 0) lines.push('');
+      lines.push('**产物：**');
       for (const a of arts) {
-        const label = a.name || a.url || '(未命名产物)';
-        lines.push(a.url ? `- [${label}](${a.url})` : `- ${label}`);
+        const url = pickDingTalkArtifactUrl(a);
+        const label = sanitizeArtifactLabel(a.name || a.url || '(未命名产物)');
+        if (url) {
+          // 不用 `[label](url)` markdown 链接语法：产物 URL 常含中文 filePath，
+          // 钉钉对其链接解析偶发失败（吞链接 → 空 bullet，或丢链只留 label 文本）。
+          // 改用「label：裸URL」——钉钉 text / markdown 都会自动识别 http(s)
+          // 并生成可点击链接，label 也永远不空。
+          lines.push(`- ${label}：${encodeArtifactUrl(url)}`);
+        } else {
+          lines.push(`- ${label}`);
+        }
       }
     }
+
+    if (lines.length === 0) return '';
     return lines.join('\n');
   }
 
   // failed / timeout / unknown(terminal)
   const reason = result.error?.trim() || result.status || '未成功完成';
-  return `${head}\n\n未成功完成：${reason}`;
+  return `未成功完成：${reason}`;
 }
 
-function buildFallbackBody(taskName: string, runs: Array<{ runId: string; result: WorkflowRunStatusResult }>): string {
+function buildFallbackBody(
+  taskName: string,
+  runs: Array<{ runId: string; result: WorkflowRunStatusResult }>,
+): string {
   const intro = `【定时任务·工作流结果】${taskName}`;
-  const sections = runs.map((r) => formatRunSection(r.runId, r.result));
+  const sections = runs
+    .map((r) => formatRunSection(r.result))
+    .filter((s) => s.length > 0);
+  if (sections.length === 0) return '';
   return [intro, '', ...sections].join('\n');
 }
 
@@ -236,6 +299,15 @@ export async function sendWorkflowResultFallback(params: WorkflowFallbackParams)
 
     const title = `【定时任务】${taskName}`;
     const body = buildFallbackBody(taskName, results);
+
+    // 所有 run 都既无摘要也无产物（罕见）——没有可投递内容就不发，避免空消息。
+    if (!body) {
+      logger.info(
+        `[WorkflowWatchdog] no deliverable result (all runs empty); skip fallback task=${taskName}`,
+      );
+      activeFallbacks.set(fingerprint, { running: false, sent: true, startedAt: Date.now() });
+      return;
+    }
 
     let okCount = 0;
     for (const recipient of recipients) {
