@@ -31,6 +31,8 @@ export function RecordStatusNav({ activeStatus, counts, onStatusChange }: Record
         {RECORD_STATUS_TABS.map((tab) => {
           const isActive = activeStatus === tab.value;
           const count = counts[tab.value];
+          // 数量 >= 99 时显示「99+」，避免大数字撑破徽标布局
+          const displayCount = count >= 99 ? '99+' : count;
           return (
             <button
               key={tab.value}
@@ -40,7 +42,7 @@ export function RecordStatusNav({ activeStatus, counts, onStatusChange }: Record
               className={workflowListSubnavClass(isActive)}
             >
               <span>{t(tab.i18nKey)}</span>
-              <span className={workflowListSubnavCountClass(isActive)}>{count}</span>
+              <span className={workflowListSubnavCountClass(isActive)}>{displayCount}</span>
             </button>
           );
         })}

@@ -152,7 +152,6 @@ export default function MyTask() {
 
   // ── 执行记录 Store ──
   const {
-    recordsLoading,
     recordStatus,
     recordSearch,
     fetchRecords,
@@ -162,9 +161,10 @@ export default function MyTask() {
 
   const recordCounts = useMyTaskStore(useShallow(selectRecordCounts));
   const currentRecords = useMyTaskStore(useShallow(selectCurrentRecords));
-  // 后端执行记录接口不分页，固定截断到最新 100 条；命中上限时在底部给出提示
-  const fetchedRecordsTotal = useMyTaskStore((state) => state.records.length);
-  const showRecordsCappedHint = !recordsLoading && fetchedRecordsTotal >= 100;
+  // 各 Tab 独立请求后端，命中 pageSize 上限时在底部给出提示
+  const currentTab = useMyTaskStore((state) => state.recordsByStatus[state.recordStatus]);
+  const currentTabLoading = currentTab.loading;
+  const showRecordsCappedHint = !currentTabLoading && currentTab.total > 99;
 
   // ── 页面级状态 ──
   const [activeView, setActiveView] = useState<TaskView>('tasks');
@@ -202,27 +202,25 @@ export default function MyTask() {
       });
   }, [fetchJobs]);
 
-  // ── 切换到执行记录 Tab 时加载 ──
+  // ── 切换到执行记录 Tab 时串行加载 3 个状态桶 ──
   useEffect(() => {
     if (activeView === 'records') {
-      fetchRecords();
+      fetchRecords('running')
+        .then(() => fetchRecords('success'))
+        .then(() => fetchRecords('failed'))
+        .catch(() => {});
     }
   }, [activeView, fetchRecords]);
 
-  // ── 低频轮询：任务视图下到点后端会推进 nextRunAt，需及时拉取以重启倒计时；
-  //     执行记录视图下刷新以反映最新执行状态。两者共用一个计时器，按当前视图分发。
+  // ── 任务视图轮询：到点后端会推进 nextRunAt，需及时拉取以重启倒计时。
   //     仅在页面可见时轮询；切回可见时立即补一次，避免长时间隐藏后数据陈旧 ──
   useEffect(() => {
     let timer: number | null = null;
     const POLL_INTERVAL = 60_000;
     const poll = async () => {
       try {
-        if (document.visibilityState === 'visible') {
-          if (activeView === 'tasks') {
-            await fetchJobs();
-          } else {
-            await fetchRecords();
-          }
+        if (document.visibilityState === 'visible' && activeView === 'tasks') {
+          await fetchJobs();
         }
       } catch {
         // 轮询失败静默忽略，下一轮重试
@@ -242,7 +240,7 @@ export default function MyTask() {
       if (timer) window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [activeView, fetchJobs, fetchRecords]);
+  }, [activeView, fetchJobs]);
 
   // ── 任务视图模型列表 ──
   const safeJobs = useMemo(() => (Array.isArray(jobs) ? jobs : []), [jobs]);
@@ -496,7 +494,10 @@ export default function MyTask() {
             <RecordStatusNav
               activeStatus={recordStatus}
               counts={recordCounts}
-              onStatusChange={setRecordStatus}
+              onStatusChange={(status) => {
+                setRecordStatus(status);
+                fetchRecords(status).catch(() => {});
+              }}
             />
           )}
 
@@ -544,7 +545,7 @@ export default function MyTask() {
           {/* ── 执行记录视图 ── */}
           {!isTasksView && (
             <section aria-label={t('myTask.recordView.aria')}>
-              {recordsLoading ? (
+              {currentTabLoading ? (
                 <div className="flex items-center justify-center py-20">
                   <LoadingSpinner size="lg" />
                 </div>
