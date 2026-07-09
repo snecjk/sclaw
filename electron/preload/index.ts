@@ -2,7 +2,7 @@
  * Preload Script
  * Exposes safe APIs to the renderer process via contextBridge
  */
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 /**
  * IPC renderer methods exposed to the renderer process
@@ -318,6 +318,14 @@ const electronAPI = {
    * Build environment identifier (development | test | staging | production)
    */
   appEnv: (import.meta.env.VITE_APP_ENV as string) || 'production',
+
+  /**
+   * Resolve the real filesystem path for a dropped/picked File.
+   * `File.path` was removed in Electron 36+; `webUtils.getPathForFile` is the
+   * supported replacement. Required for drag & drop of files/folders, since
+   * the renderer has `nodeIntegration: false` and cannot read paths itself.
+   */
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
 };
 
 // Expose the API to the renderer process

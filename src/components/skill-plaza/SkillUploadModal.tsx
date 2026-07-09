@@ -79,10 +79,12 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
     }
   };
 
-  // Step 1 (option B): drag & drop. Electron (sandbox:false) exposes the real
-  // filesystem path on dropped File objects via the non-standard `path` field,
-  // which works for both files and directories. Probe DataTransferItem first
-  // (folder drops may only surface there), then fall back to the FileList.
+  // Step 1 (option B): drag & drop. Electron removed the non-standard
+  // `File.path` field in v36+; paths must be resolved via `webUtils.getPathForFile`,
+  // which the preload exposes as `window.electron.getPathForFile` (the renderer
+  // runs with nodeIntegration:false and cannot read paths itself). Works for
+  // both files and directories — probe DataTransferItem first (folder drops
+  // may only surface there), then fall back to the FileList.
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -100,21 +102,32 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
     const dt = e.dataTransfer;
     if (!dt) return;
     let droppedPath: string | null = null;
+    // Resolve a real path from a File using the preload-exposed webUtils.
+    const pathOf = (f: File | null | undefined): string | null => {
+      if (!f) return null;
+      try {
+        const p = window.electron.getPathForFile(f);
+        return typeof p === 'string' && p ? p : null;
+      } catch {
+        return null;
+      }
+    };
+    // Probe DataTransferItemList first (folder drops may only surface here).
+    // Access items synchronously during the drop event — Chromium clears
+    // the list once the event loop yields.
     if (dt.items && dt.items.length) {
       for (const item of Array.from(dt.items)) {
-        const f = item.getAsFile();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const p = (f as any)?.path;
-        if (typeof p === 'string' && p) {
+        if (item.kind !== 'file') continue;
+        const p = pathOf(item.getAsFile());
+        if (p) {
           droppedPath = p;
           break;
         }
       }
     }
     if (!droppedPath && dt.files && dt.files.length) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const p = (dt.files[0] as any)?.path;
-      if (typeof p === 'string' && p) droppedPath = p;
+      const p = pathOf(dt.files[0]);
+      if (p) droppedPath = p;
     }
     if (droppedPath) {
       enterPreview(droppedPath);
@@ -209,14 +222,21 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
 
             <div className="mt-5">
               {status === 'idle' && (
-                <button
-                  type="button"
+                <div
+                  role="button"
+                  tabIndex={0}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   onClick={pickFile}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      pickFile();
+                    }
+                  }}
                   className={cn(
-                    'flex flex-col items-center text-center w-full py-10 px-4 rounded-xl border transition-colors cursor-pointer focus:outline-none',
+                    'flex flex-col items-center text-center w-full py-10 px-4 rounded-xl border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     dragOver
                       ? 'border-[#00B54B] bg-[#00B54B]/10'
                       : 'border-[#C9CDD4] bg-[#FAFBFC] hover:border-[#00B54B] hover:bg-[#00B54B]/5',
@@ -226,9 +246,13 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
                     <FileArchive className="h-6 w-6 text-muted-foreground" />
                   </div>
                   <p className="text-sm font-medium text-foreground">
-                    {t('plaza.upload.dragHint', { defaultValue: '点击或拖拽文件夹、.zip 文件到此处' })}
+                    {t('plaza.upload.dragHint', { defaultValue: '点击文件夹、.zip 文件到此处' })}
                   </p>
-                </button>
+                  <ul className="text-xs text-muted-foreground mt-4 space-y-1 text-left">
+                    {/*<li>{t('plaza.upload.requirementSkillMd', { defaultValue: '文件夹或 .zip 需包含 SKILL.md 文件' })}</li>*/}
+                    {/*<li>{t('plaza.upload.requirementYaml', { defaultValue: 'SKILL.md 需含 YAML 格式的 name 与 description' })}</li>*/}
+                  </ul>
+                </div>
               )}
 
               {status === 'preview' && (
@@ -277,12 +301,18 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
 
               {status === 'success' && (
                 <div className="flex flex-col items-center text-center py-4">
-                  <div className="w-12 h-12 rounded-full bg-[#DCF5E2] flex items-center justify-center mb-3">
-                    <CheckCircle2 className="h-6 w-6 text-[#00B54B]" />
+                  {/* Success banner: check icon + title on #E6FFEA panel */}
+                  <div
+                    className="w-full rounded-xl px-4 py-5 flex flex-col items-center"
+                    style={{ background: '#E6FFEA' }}
+                  >
+                    <div className="w-12 h-12 rounded-full bg-[#DCF5E2] flex items-center justify-center mb-3">
+                      <CheckCircle2 className="h-6 w-6 text-[#00B54B]" />
+                    </div>
+                    <p className="text-sm font-medium text-foreground">
+                      {t('plaza.upload.successTitle', { defaultValue: '安装成功' })}
+                    </p>
                   </div>
-                  <p className="text-sm font-medium text-foreground">
-                    {t('plaza.upload.successTitle', { defaultValue: '安装成功' })}
-                  </p>
                   {/* Skill card: icon + name + category tag */}
                   <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg bg-muted/60 w-full justify-center">
                     <div className="w-7 h-7 rounded flex items-center justify-center bg-background border border-border flex-shrink-0">
@@ -300,18 +330,18 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
                   <p className="text-xs text-muted-foreground mt-2">
                     {t('plaza.upload.successHint', { defaultValue: '关闭后可在技能广场列表查看' })}
                   </p>
-                  <div className="flex gap-2 mt-5">
+                  <div className="flex gap-2 mt-5 w-full">
                     <button
                       type="button"
                       onClick={resetToIdle}
-                      className="inline-flex items-center h-9 px-4 rounded-lg border border-border bg-background text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
+                      className="flex-1 inline-flex items-center justify-center h-9 px-4 rounded-lg border border-border bg-background text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
                     >
                       {t('plaza.upload.uploadAnother', { defaultValue: '继续安装' })}
                     </button>
                     <button
                       type="button"
                       onClick={handleViewSkill}
-                      className="inline-flex items-center h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                      className="flex-1 inline-flex items-center justify-center h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
                     >
                       {t('plaza.upload.viewSkill', { defaultValue: '查看技能' })}
                     </button>
