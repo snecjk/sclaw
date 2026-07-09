@@ -2661,6 +2661,33 @@ function mimeToExt(mimeType: string): string {
 
 const OUTBOUND_DIR = join(getOpenClawConfigDir(), 'media', 'outbound');
 
+async function getDirectorySize(dirPath: string): Promise<number> {
+  const fsP = await import('fs/promises');
+  let total = 0;
+  const entries = await fsP.readdir(dirPath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    try {
+      const entryPath = join(dirPath, entry.name);
+      if (entry.isSymbolicLink()) continue;
+
+      if (entry.isDirectory()) {
+        total += await getDirectorySize(entryPath);
+        continue;
+      }
+
+      if (entry.isFile()) {
+        const stat = await fsP.stat(entryPath);
+        total += stat.size;
+      }
+    } catch {
+      // Ignore entries that disappear or cannot be read while measuring.
+    }
+  }
+
+  return total;
+}
+
 /**
  * Generate a preview data URL for image files.
  * Resizes large images while preserving aspect ratio (only constrain the
@@ -2694,6 +2721,22 @@ async function generateImagePreview(filePath: string, mimeType: string): Promise
  * Stage files to ~/.stoclaw/openclaw/media/outbound/ for gateway access
  */
 function registerFileHandlers(): void {
+  // Lightweight stat: returns file size, or recursive content size for directories.
+  ipcMain.handle('file:stat', async (_, filePath: string) => {
+    try {
+      const fsP = await import('fs/promises');
+      const s = await fsP.stat(filePath);
+      const isDirectory = s.isDirectory();
+      return {
+        size: isDirectory ? await getDirectorySize(filePath) : s.size,
+        isDirectory,
+        isFile: s.isFile(),
+      };
+    } catch {
+      return { size: 0, isDirectory: false, isFile: false };
+    }
+  });
+
   // Stage files from real disk paths (used with dialog:open)
   ipcMain.handle('file:stage', async (_, filePaths: string[]) => {
     const fsP = await import('fs/promises');

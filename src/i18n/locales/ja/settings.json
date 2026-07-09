@@ -10,12 +10,7 @@
     "system": "システム",
     "language": "言語",
     "launchAtStartup": "システム起動時に自動起動",
-    "launchAtStartupDesc": "ログイン時に StoClaw を自動的に起動します",
-    "preventSystemSleep": "PC のスリープを防止",
-    "preventSystemSleepDesc": "有効にすると、StoClaw 実行中は PC が自動的にスリープしなくなります。",
-    "preventSystemSleepTips": "定期タスク利用時は有効化を推奨します。フタは開け、電源に接続してください。フタ閉じやシャットダウン後は正常動作を保証できません。",
-    "preventSystemSleepToastEnabled": "有効：StoClaw 実行中はスリープを防止します",
-    "preventSystemSleepToastDisabled": "無効：PC はシステム設定どおりスリープします"
+    "launchAtStartupDesc": "ログイン時に StoClaw を自動的に起動します"
   },
   "aiProviders": {
     "title": "AI プロバイダー",
