@@ -200,6 +200,7 @@
     "description": "保持 S Claw 最新",
     "loading": "加载中…",
     "currentVersionLabel": "当前版本",
+    "latestBadge": "最新",
     "currentVersionLine": "当前版本 v{{version}}",
     "cardHint": "开启自动更新后，更新将自动下载并安装，已是最新版本时会显示提示。",
     "downloadingLabel": "新版本v{{version}}下载中...",

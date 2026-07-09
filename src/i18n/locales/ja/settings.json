@@ -199,6 +199,7 @@
     "description": "StoClaw を最新に保つ",
     "loading": "読み込み中…",
     "currentVersionLabel": "現在のバージョン",
+    "latestBadge": "最新",
     "currentVersionLine": "現在のバージョン v{{version}}",
     "cardHint": "自動更新を有効にすると、更新は自動的にダウンロードおよびインストールされます。最新版の場合はここに表示されます。",
     "downloadingLabel": "新バージョンv{{version}}をダウンロード中...",
