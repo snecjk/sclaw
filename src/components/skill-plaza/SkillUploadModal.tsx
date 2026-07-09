@@ -1,11 +1,20 @@
 import { useState } from 'react';
-import { X, CheckCircle2, AlertCircle, FileArchive, FileUp } from 'lucide-react';
+import { X, AlertCircle, FileArchive, FileUp } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { invokeIpc } from '@/lib/api-client';
+import { hostApiFetch } from '@/lib/host-api';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import type { SkillSummary } from '@/types/skill-plaza';
+
+function formatFileSize(bytes: number): string {
+  if (!bytes || bytes <= 0) return '-';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
 
 interface SkillUploadModalProps {
   open: boolean;
@@ -21,6 +30,7 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [filePath, setFilePath] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [fileSize, setFileSize] = useState<number>(0);
   const [slug, setSlug] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -35,6 +45,7 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
       setStatus('idle');
       setFilePath(null);
       setFileName(null);
+      setFileSize(0);
       setSlug(null);
       setErrorMsg(null);
       setDragOver(false);
@@ -45,6 +56,7 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
     setStatus('idle');
     setFilePath(null);
     setFileName(null);
+    setFileSize(0);
     setSlug(null);
     setErrorMsg(null);
   };
@@ -56,6 +68,26 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
     setFileName(selectedPath.split(/[\\/]/).pop() || selectedPath);
     setErrorMsg(null);
     setStatus('preview');
+    // Fetch file size via /api/files/thumbnails (returns fileSize from fs.stat).
+    // Best-effort: the success card shows '-' if the size cannot be read.
+    void (async () => {
+      try {
+        const res = await hostApiFetch<Record<string, { preview: string | null; fileSize: number }>>(
+          '/api/files/thumbnails',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              paths: [{ filePath: selectedPath, mimeType: 'application/zip' }],
+            }),
+          },
+        );
+        const size = res?.[selectedPath]?.fileSize;
+        if (typeof size === 'number') setFileSize(size);
+      } catch {
+        // ignore
+      }
+    })();
   };
 
   // Step 1 (option A): pick a local .zip file OR folder via the native dialog.
@@ -168,22 +200,6 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
     ? mySkills.find((s) => s.slug === slug)
     : undefined;
   const skillTitle = uploadedSkill?.title || slug || '';
-  const skillCategoryCode = uploadedSkill?.categoryCode;
-
-  const renderSkillIcon = () => {
-    if (uploadedSkill?.icon) {
-      return (
-        <span
-          dangerouslySetInnerHTML={{
-            __html: uploadedSkill.icon
-              .replace(/width="[^"]*"/, 'width="20"')
-              .replace(/height="[^"]*"/, 'height="20"'),
-          }}
-        />
-      );
-    }
-    return <span className="text-lg">📦</span>;
-  };
 
   return (
     <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
@@ -301,31 +317,19 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
 
               {status === 'success' && (
                 <div className="flex flex-col items-center text-center py-4">
-                  {/* Success banner: check icon + title on #E6FFEA panel */}
-                  <div
-                    className="w-full rounded-xl px-4 py-5 flex flex-col items-center"
-                    style={{ background: '#E6FFEA' }}
-                  >
-                    <div className="w-12 h-12 rounded-full bg-[#DCF5E2] flex items-center justify-center mb-3">
-                      <CheckCircle2 className="h-6 w-6 text-[#00B54B]" />
+                  {/* Compact upload-success card: file name + size only */}
+                  <div className="w-full flex items-center gap-3 rounded-xl border border-[#E6FFEA] bg-[#F5FCF6] px-4 py-3">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-[#DCF5E2] flex-shrink-0">
+                      <FileArchive className="h-4 w-4 text-[#00B54B]" />
                     </div>
-                    <p className="text-sm font-medium text-foreground">
-                      {t('plaza.upload.successTitle', { defaultValue: '安装成功' })}
-                    </p>
-                  </div>
-                  {/* Skill card: icon + name + category tag */}
-                  <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg bg-muted/60 w-full justify-center">
-                    <div className="w-7 h-7 rounded flex items-center justify-center bg-background border border-border flex-shrink-0">
-                      {renderSkillIcon()}
+                    <div className="min-w-0 flex-1 text-left">
+                      <p className="text-sm font-medium text-foreground break-all line-clamp-1">
+                        {fileName || skillTitle}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {formatFileSize(fileSize)}
+                      </p>
                     </div>
-                    <span className="text-sm font-medium text-foreground break-all line-clamp-1">
-                      {skillTitle}
-                    </span>
-                    {skillCategoryCode && (
-                      <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium bg-[#F0F4FF] text-[#4760FE] flex-shrink-0">
-                        {t(`plaza.category.${skillCategoryCode}`, { defaultValue: skillCategoryCode })}
-                      </span>
-                    )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
                     {t('plaza.upload.successHint', { defaultValue: '关闭后可在技能广场列表查看' })}
