@@ -25,8 +25,17 @@ const updateSettingsSwitchClass =
   'data-[state=checked]:bg-[#00B42A] dark:data-[state=checked]:bg-[#00B42A]';
 
 const updateAvailableBadgeClass = cn(
-  'inline-flex shrink-0 items-center rounded-[4px] px-2 py-0.5',
-  'bg-[rgba(255,111,0,0.12)] text-[12px] font-normal leading-none text-[var(--sto-brand-6)]',
+  'inline-flex shrink-0 items-center justify-center',
+  'h-[26px] rounded-[8px] px-2 py-1.5',
+  'bg-[#FFF1E8] text-[12px] font-normal leading-none text-[var(--sto-brand-6)]',
+  'whitespace-nowrap',
+);
+
+const updateLatestBadgeClass = cn(
+  'inline-flex shrink-0 items-center justify-center',
+  'h-[26px] min-w-[40px] rounded-[8px] px-2 py-1.5',
+  'bg-[#E7F3EB] text-[12px] font-normal leading-none text-[#00B42A]',
+  'whitespace-nowrap',
 );
 
 /** MasterGo：主操作按钮 — 深色实心、无图标、胶囊形 */
@@ -181,6 +190,7 @@ export function UpdateSettings() {
   const downloadingVersion = updateInfo?.version;
   const showProgress = status === 'downloading' && progress;
   const showUpdateAvailableBadge = UPDATE_PENDING_BADGE_STATUSES.includes(status);
+  const showLatestBadge = status === 'not-available';
 
   return (
     <div className="space-y-4">
@@ -195,6 +205,10 @@ export function UpdateSettings() {
               {showUpdateAvailableBadge ? (
                 <span className={updateAvailableBadgeClass}>
                   {t('updates.sidebar.newVersionTitle')}
+                </span>
+              ) : showLatestBadge ? (
+                <span className={updateLatestBadgeClass}>
+                  {t('updates.latestBadge')}
                 </span>
               ) : null}
             </div>

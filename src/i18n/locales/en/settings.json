@@ -195,6 +195,7 @@
     "description": "Keep StoClaw up to date",
     "loading": "Loading…",
     "currentVersionLabel": "Current version",
+    "latestBadge": "Latest",
     "currentVersionLine": "Current version v{{version}}",
     "cardHint": "With auto-update enabled, updates will be downloaded and installed automatically. A prompt will appear when you're already on the latest version.",
     "downloadingLabel": "Downloading v{{version}}...",

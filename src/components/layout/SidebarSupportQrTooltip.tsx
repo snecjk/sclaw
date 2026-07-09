@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -59,14 +59,28 @@ export function SidebarSupportQrTooltip({
     }
   };
 
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      setOpen(false);
+    }
+  };
+
+  const handleToggle = () => {
+    setOpen(!open);
+  };
+
   const qrUrl = useMemo(() => {
     const isSite =
       siteDepartmentTypes !== null && isSiteUser(user?.categoryCode);
     return resolveSupportGroupQrUrl(isSite);
   }, [siteDepartmentTypes, user?.categoryCode]);
 
+  useEffect(() => {
+    setImgError(false);
+  }, [qrUrl]);
+
   return (
-    <Tooltip open={open} onOpenChange={setOpen}>
+    <Tooltip open={open} onOpenChange={handleOpenChange}>
       <TooltipTrigger asChild>
         <button
           type="button"
@@ -77,6 +91,7 @@ export function SidebarSupportQrTooltip({
           )}
           aria-label={t('sidebar.supportGroup.helpAria')}
           aria-expanded={open}
+          onClick={handleToggle}
         >
           <CircleHelpBoldQuestion className={sidebarFooterSettingsIconClass} />
         </button>
@@ -86,11 +101,11 @@ export function SidebarSupportQrTooltip({
         align="end"
         sideOffset={8}
         collisionPadding={16}
-        className={cn(SUPPORT_QR_TOOLTIP_SURFACE, 'w-[368px] pointer-events-auto')}
+        className={cn(SUPPORT_QR_TOOLTIP_SURFACE, 'pointer-events-auto')}
         onPointerDownOutside={() => setOpen(false)}
         onEscapeKeyDown={() => setOpen(false)}
       >
-        <div className="flex max-h-[calc(100vh-24px)] flex-col items-center gap-3 overflow-y-auto p-5 text-center">
+        <div className="flex max-h-[calc(100vh-24px)] items-center justify-center overflow-y-auto p-3">
           {imgError ? (
             <p className="px-2 py-4 text-sm leading-5 text-muted-foreground">
               {t('sidebar.supportGroup.loadError')}
@@ -105,14 +120,6 @@ export function SidebarSupportQrTooltip({
               onError={() => setImgError(true)}
             />
           )}
-          <div className="space-y-1">
-            <p className="text-sm font-semibold leading-5 text-foreground">
-              {t('sidebar.supportGroup.title')}
-            </p>
-            <p className="text-xs leading-5 text-muted-foreground">
-              {t('sidebar.supportGroup.hint')}
-            </p>
-          </div>
         </div>
       </TooltipContent>
     </Tooltip>
