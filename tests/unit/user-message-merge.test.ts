@@ -3,11 +3,14 @@ import type { RawMessage } from '@/stores/chat/types';
 import { WORKFLOW_SESSION_HINT_MARKER } from '@/lib/workflow-session-hint';
 import {
   dedupeRedundantUserMessages,
+  dropSyntheticSkillSessionLabelUsers,
   ensureOpeningUserMessageFirst,
   isSameUserMessage,
   mergeOptimisticUserIntoHistory,
   recoverInitialUserFromSessionLabel,
 } from '@/stores/chat/user-message-merge';
+import { restoreSkillMetaOnMessages } from '@/lib/skill-message-meta-cache';
+import { appendSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
 
 describe('user-message-merge', () => {
   it('does not append optimistic user when history already has matching text', () => {
@@ -432,5 +435,79 @@ describe('user-message-merge', () => {
 
     expect(merged[0]?._skillMeta).toEqual({ slug: 'outlet-freight', title: '网点出库运费' });
     expect(merged[0]?.content).toBe('查网点432100的');
+  });
+
+  it('does not recover session-label user when a skill-tagged opening turn already exists', () => {
+    const enriched = [
+      {
+        id: 'history-user',
+        role: 'user',
+        content: '查网点432100的',
+        timestamp: 1710000001,
+        _skillMeta: { slug: 'waybill-quote', title: '网点面单报价' },
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '好的',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = recoverInitialUserFromSessionLabel(
+      enriched,
+      'agent:main:session-1',
+      { 'agent:main:session-1': '网点面单报价' },
+    );
+
+    expect(merged.filter((message) => message.role === 'user')).toHaveLength(1);
+  });
+
+  it('dedupes synthetic session-label user rows after skill history restore', () => {
+    const messages = [
+      {
+        id: 'session-label-user-agent:main:session-1',
+        role: 'user',
+        content: '查网点432100的',
+        timestamp: 1710000000,
+      },
+      {
+        id: 'history-user',
+        role: 'user',
+        content: '查网点432100的',
+        timestamp: 1710000001,
+        _skillMeta: { slug: 'waybill-quote', title: '网点面单报价' },
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '好的',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const deduped = dedupeRedundantUserMessages(messages, null);
+    const cleaned = dropSyntheticSkillSessionLabelUsers(deduped);
+
+    expect(cleaned.filter((message) => message.role === 'user')).toHaveLength(1);
+    expect(cleaned[0]?._skillMeta).toEqual({ slug: 'waybill-quote', title: '网点面单报价' });
+    expect(cleaned[0]?.content).toBe('查网点432100的');
+  });
+
+  it('keeps only the skill tag for skill-only refresh when gateway stored the title', () => {
+    const skill = { slug: 'outlet-fee', title: '网点出港派费' };
+    const history = restoreSkillMetaOnMessages(
+      [{
+        id: 'history-user',
+        role: 'user',
+        content: appendSkillTranscriptMarker(skill.title, skill),
+        timestamp: 1710000001,
+      }],
+      'agent:main:session-1',
+      skill.title,
+    );
+
+    expect(history[0]?._skillMeta).toEqual(skill);
+    expect(history[0]?.content).toBe('');
   });
 });

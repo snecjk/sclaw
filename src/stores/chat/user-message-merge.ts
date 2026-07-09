@@ -184,6 +184,25 @@ function summarizeUserMessage(message: RawMessage): Record<string, unknown> {
   };
 }
 
+function isRedundantSkillUserDuplicate(first: RawMessage, second: RawMessage): boolean {
+  if (first.role !== 'user' || second.role !== 'user') return false;
+  if (first.id?.startsWith('session-label-user-') || second.id?.startsWith('session-label-user-')) {
+    return false;
+  }
+
+  if (!first._skillMeta || !second._skillMeta) return false;
+  if (first._skillMeta.slug !== second._skillMeta.slug) return false;
+
+  const firstDisplay = normalizeUserMessageForPairing(first.content);
+  const secondDisplay = normalizeUserMessageForPairing(second.content);
+  if (firstDisplay && firstDisplay === secondDisplay) return true;
+
+  const title = first._skillMeta.title.trim();
+  if (!firstDisplay && secondDisplay === title) return true;
+  if (!secondDisplay && firstDisplay === title) return true;
+  return false;
+}
+
 /** Drop later copies of the same user turn (optimistic + server, or double insert). */
 export function dedupeRedundantUserMessages(
   messages: RawMessage[],
@@ -231,7 +250,24 @@ export function dedupeRedundantUserMessages(
       // user message was dropped, the two assistant replies merged into one turn,
       // and only the latest reply rendered.
       if (j === i + 1) {
+        if (first.id?.startsWith('session-label-user-') && second._skillMeta) {
+          drop.add(i);
+          if (first.id) droppedIds.push(first.id);
+          break;
+        }
+        if (second.id?.startsWith('session-label-user-') && first._skillMeta) {
+          patchKeptUser(i, second);
+          drop.add(j);
+          if (second.id) droppedIds.push(second.id);
+          continue;
+        }
         if (isSameUserMessage(second, first, refAt) || isSameUserMessage(first, second, refAt)) {
+          patchKeptUser(i, second);
+          drop.add(j);
+          if (second.id) droppedIds.push(second.id);
+          continue;
+        }
+        if (isRedundantSkillUserDuplicate(first, second)) {
           patchKeptUser(i, second);
           drop.add(j);
           if (second.id) droppedIds.push(second.id);
@@ -367,10 +403,28 @@ function resolveOpeningSessionLabel(
 
 function historyHasOpeningUserTurn(messages: RawMessage[], openingLabel: string | undefined): boolean {
   if (!openingLabel) return false;
-  return messages.some((message) => (
-    message.role === 'user'
-    && normalizeUserMessageForDisplay(getMessageText(message.content)) === openingLabel
-  ));
+  return messages.some((message) => {
+    if (message.role !== 'user') return false;
+    const display = normalizeUserMessageForDisplay(getMessageText(message.content));
+    if (message._skillMeta) {
+      if (!display) return message._skillMeta.title === openingLabel;
+      return display === openingLabel || message._skillMeta.title === openingLabel;
+    }
+    return display === openingLabel;
+  });
+}
+
+function historyHasSkillUserTurn(messages: RawMessage[]): boolean {
+  return messages.some((message) => message.role === 'user' && Boolean(message._skillMeta));
+}
+
+/** Drop synthetic session-label user rows when a real skill-tagged user turn already exists. */
+export function dropSyntheticSkillSessionLabelUsers(messages: RawMessage[]): RawMessage[] {
+  if (!historyHasSkillUserTurn(messages)) return messages;
+  return messages.filter((message) => {
+    if (message.role !== 'user') return true;
+    return !message.id?.startsWith('session-label-user-');
+  });
 }
 
 /** Reconstruct the opening user turn from a stored session title when history omits it. */
@@ -380,6 +434,7 @@ export function recoverInitialUserFromSessionLabel(
   sessionLabels: Record<string, string>,
   gatewayLabel?: string,
 ): RawMessage[] {
+  if (historyHasSkillUserTurn(enrichedMessages)) return enrichedMessages;
   const label = resolveOpeningSessionLabel(sessionKey, sessionLabels, gatewayLabel);
   if (!label || historyHasOpeningUserTurn(enrichedMessages, label)) return enrichedMessages;
   return insertOptimisticUserMessage(enrichedMessages, {
@@ -403,10 +458,7 @@ export function ensureOpeningUserMessageFirst(
     working = recoverInitialUserFromSessionLabel(working, sessionKey, sessionLabels, gatewayLabel);
   }
 
-  const visibleUsers = working.filter((message) => (
-    message.role === 'user'
-    && normalizeUserMessageForDisplay(getMessageText(message.content)).length > 0
-  ));
+  const visibleUsers = working.filter((message) => hasVisibleUserMessageContent(message));
   if (visibleUsers.length === 0) return working;
 
   let openingUser = visibleUsers.reduce((earliest, message) => (

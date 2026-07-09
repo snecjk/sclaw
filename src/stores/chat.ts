@@ -92,10 +92,17 @@ import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, sanitizeG
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
 import { resolveSkillGatewayText } from '@/lib/skill-gateway-text';
+import {
+  forgetSkillMessageMetaForSession,
+  rememberSkillMessageMeta,
+  restoreSkillMetaOnMessages,
+} from '@/lib/skill-message-meta-cache';
+import { appendSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { traceChatSession } from '../../shared/chat-session-trace';
 import {
   dedupeRedundantUserMessages,
+  dropSyntheticSkillSessionLabelUsers,
   isSameUserMessage,
   mergeOptimisticUserIntoHistory,
   normalizeUserMessageText,
@@ -1714,6 +1721,7 @@ export const useChatStore = create<ChatState>()(
     }
 
     rememberOptimisticDeletedSessionKey(key);
+    forgetSkillMessageMetaForSession(key);
     const additionalSuppressKeys = (options?.additionalSuppressKeys ?? [])
       .map((suppressKey) => suppressKey.trim())
       .filter((suppressKey) => suppressKey && suppressKey !== key);
@@ -1993,6 +2001,7 @@ export const useChatStore = create<ChatState>()(
       finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
       finalMessages = ensureWorkflowCardsInMessages(finalMessages, targetSessionKey, getMessageText);
       const gatewaySessionLabel = get().sessions.find((session) => session.key === targetSessionKey)?.label;
+      finalMessages = restoreSkillMetaOnMessages(finalMessages, targetSessionKey, gatewaySessionLabel);
       finalMessages = recoverInitialUserFromSessionLabel(
         finalMessages,
         targetSessionKey,
@@ -2008,6 +2017,7 @@ export const useChatStore = create<ChatState>()(
       finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null, {
         sessionKey: targetSessionKey,
       });
+      finalMessages = dropSyntheticSkillSessionLabelUsers(finalMessages);
       traceLoadHistoryUserReconciliation({
         sessionKey: targetSessionKey,
         userMessageAt: userMsgAt,
@@ -2431,6 +2441,9 @@ export const useChatStore = create<ChatState>()(
     }
 
     const messageWithContext = appendWorkflowContext(textForGateway, workflowContext);
+    const gatewayMessage = skillMeta
+      ? appendSkillTranscriptMarker(messageWithContext, skillMeta)
+      : messageWithContext;
     const displayText = skillMeta
       ? userDisplayText
       : stripWorkflowSessionHintForDisplay(
@@ -2476,6 +2489,9 @@ export const useChatStore = create<ChatState>()(
         filePath: a.stagedPath,
       })),
     };
+    if (skillMeta && userMsg.id) {
+      rememberSkillMessageMeta(currentSessionKey, userMsg.id, displayText, skillMeta, nowMs);
+    }
     traceChatSession({
       phase: 'merge-optimistic',
       action: 'optimistic-insert',
@@ -2486,7 +2502,7 @@ export const useChatStore = create<ChatState>()(
       reason: 'sendMessage',
       detail: {
         displayLen: displayText.length,
-        gatewayLen: messageWithContext.length,
+        gatewayLen: gatewayMessage.length,
         idempotencyKey: userMsg.id,
       },
     });
@@ -2629,7 +2645,7 @@ export const useChatStore = create<ChatState>()(
             body: JSON.stringify({
               sessionKey: currentSessionKey,
               // message: messageWithContext || 'Process the attached file(s).',
-              message: messageWithContext || '',
+              message: gatewayMessage || '',
               deliver: false,
               idempotencyKey,
               engineType: currentSessionEngineType,
@@ -2647,7 +2663,7 @@ export const useChatStore = create<ChatState>()(
           'chat.send',
           {
             sessionKey: currentSessionKey,
-            message: messageWithContext,
+            message: gatewayMessage,
             deliver: false,
             idempotencyKey,
             engineType: currentSessionEngineType,

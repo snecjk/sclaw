@@ -61,6 +61,8 @@ function cleanUserText(text: string): string {
   const cleaned = text
     // Remove OpenClaw system event lines (Exec completed/failed, cron, etc.)
     .replace(GATEWAY_SYSTEM_EVENT_LINE, '')
+    // Remove Gateway-injected "Sender (untrusted metadata): ```json...```" block
+    .replace(/^Sender\s*\([^)]*\):\s*```[a-z]*\n[\s\S]*?```\s*/im, '')
     // Remove [media attached: path (mime) | path] references
     .replace(/\s*\[media attached:[^\]]*\]/g, '')
     // Remove [message_id: uuid]
