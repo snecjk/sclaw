@@ -337,6 +337,7 @@ export function Chat() {
     workflowId?: string | null,
     workflowSource?: string | null,
     workflowName?: string | null,
+    skillMeta?: import('@/types/skill-meta').SkillMeta,
   ) => {
     beginSendScroll();
     const { dispatchChatSend } = await import('@/hooks/dispatch-chat-send');
@@ -348,6 +349,7 @@ export function Chat() {
       workflowId,
       workflowSource,
       workflowName,
+      skillMeta,
       skipQuestionSplit: !!(dingTalkMentions && dingTalkMentions.length > 0),
       onSplittingChange: setSplitting,
     });
@@ -359,9 +361,10 @@ export function Chat() {
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
+    skillMeta?: import('@/types/skill-meta').SkillMeta,
   ) => {
     const { currentSessionKey } = useChatStore.getState();
-    useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, dingTalkMentions, workflowId);
+    useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, dingTalkMentions, workflowId, skillMeta);
   }, []);
 
   // Stop: suppress the auto-send that the abort's sending→false would otherwise trigger,

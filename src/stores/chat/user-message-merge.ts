@@ -47,6 +47,48 @@ function displayTextMatches(a: RawMessage, b: RawMessage): boolean {
   return aText.length > 0 && aText === bText && attachmentsMatch(a, b);
 }
 
+function hasSkillUserMeta(message: RawMessage): boolean {
+  return message.role === 'user' && Boolean(message._skillMeta);
+}
+
+/** User bubble is visible when there is display text and/or a skill tag. */
+export function hasVisibleUserMessageContent(message: RawMessage): boolean {
+  if (message.role !== 'user') return false;
+  if (hasSkillUserMeta(message)) return true;
+  return normalizeUserMessageForDisplay(getMessageText(message.content)).length > 0;
+}
+
+function patchSkillUserMessageFromOptimistic(
+  serverMessage: RawMessage,
+  optimistic: RawMessage,
+): RawMessage {
+  return {
+    ...serverMessage,
+    _skillMeta: optimistic._skillMeta ?? serverMessage._skillMeta,
+    // Keep UI display text only — never surface Gateway defaultPrompt in the bubble.
+    content: optimistic.content ?? '',
+  };
+}
+
+function applyOptimisticSkillDisplay(
+  enrichedMessages: RawMessage[],
+  optimistic: RawMessage | undefined,
+  historyEcho: RawMessage,
+  refAt: number,
+): RawMessage[] {
+  if (!optimistic?._skillMeta) return enrichedMessages;
+  return enrichedMessages.map((message) => {
+    if (message.role !== 'user') return message;
+    if (message.id && historyEcho.id && message.id === historyEcho.id) {
+      return patchSkillUserMessageFromOptimistic(message, optimistic);
+    }
+    if (isSameUserMessage(message, optimistic, refAt)) {
+      return patchSkillUserMessageFromOptimistic(message, optimistic);
+    }
+    return message;
+  });
+}
+
 function isNearUserSend(message: RawMessage, userMessageAt: number): boolean {
   if (message.role !== 'user' || !userMessageAt) return false;
   const ts = typeof message.timestamp === 'number' ? toMs(message.timestamp) : NaN;
@@ -76,6 +118,16 @@ export function isSameUserMessage(
   const optimisticMs = typeof optimistic.timestamp === 'number' ? toMs(optimistic.timestamp) : userMessageAt;
   const hasCandidateTime = Number.isFinite(candidateMs);
   const referenceMs = Number.isFinite(optimisticMs) ? optimisticMs : userMessageAt;
+
+  if (optimistic._skillMeta) {
+    if (candidate.id && optimistic.id && candidate.id === optimistic.id) return true;
+    if (hasCandidateTime && Number.isFinite(referenceMs)) {
+      if (Math.abs(candidateMs - referenceMs) < OPTIMISTIC_SEND_WINDOW_MS) return true;
+    }
+    if (userMessageAt > 0 && hasCandidateTime && Math.abs(candidateMs - userMessageAt) < SERVER_ECHO_WINDOW_MS) {
+      return true;
+    }
+  }
 
   if (hasCandidateTime && Number.isFinite(referenceMs)) {
     if (Math.abs(candidateMs - referenceMs) < OPTIMISTIC_SEND_WINDOW_MS) {
@@ -225,10 +277,7 @@ export function dedupeRedundantUserMessages(
 }
 
 function historyHasVisibleUserMessage(messages: RawMessage[]): boolean {
-  return messages.some((message) => (
-    message.role === 'user'
-    && normalizeUserMessageForDisplay(getMessageText(message.content)).length > 0
-  ));
+  return messages.some((message) => hasVisibleUserMessageContent(message));
 }
 
 function findRecoverableUserMessage(
@@ -260,7 +309,7 @@ function findRecoverableUserMessage(
   ];
   for (const candidate of candidates) {
     const display = normalizeUserMessageForDisplay(getMessageText(candidate.content));
-    if (!display) continue;
+    if (!display && !candidate._skillMeta) continue;
     const refAt = userMessageAt ?? (candidate.timestamp ? toMs(candidate.timestamp) : 0);
     if (findHistoryUserEcho(enrichedMessages, candidate, refAt)) continue;
     if (enrichedMessages.some((message) => message.role === 'user' && displayTextMatches(message, candidate))) {
@@ -409,6 +458,7 @@ export function mergeOptimisticUserIntoHistory(
   );
 
   if (hasRecentUser && historyEcho) {
+    const merged = applyOptimisticSkillDisplay(enrichedMessages, optimistic, historyEcho, refAt);
     traceChatSession({
       phase: 'merge-optimistic',
       action: 'use-history-user',
@@ -418,7 +468,7 @@ export function mergeOptimisticUserIntoHistory(
       optimisticId: optimistic?.id,
       matchedHistoryUserId: historyEcho.id,
       messageCountBefore: enrichedMessages.length,
-      messageCountAfter: enrichedMessages.length,
+      messageCountAfter: merged.length,
       reason: optimistic?.id && historyEcho.id && optimistic.id === historyEcho.id
         ? 'id-match'
         : 'display-or-time-match',
@@ -427,7 +477,7 @@ export function mergeOptimisticUserIntoHistory(
         historyUser: summarizeUserMessage(historyEcho),
       },
     });
-    return enrichedMessages;
+    return merged;
   }
 
   if (!hasRecentUser && shouldPreserveOptimistic && optimistic) {

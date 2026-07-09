@@ -1,5 +1,6 @@
 import type { WorkflowExecutionState } from '@/types/workflow';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
 
 export interface SendMessageOptions {
   text: string;
@@ -16,6 +17,8 @@ export interface SendMessageOptions {
   runId?: string | null;
   /** Hidden workflow schema context injected into the user message for AI guidance */
   workflowContext?: WorkflowContextBlock | null;
+  /** Skill plaza context — UI tag + Gateway defaultPrompt injection */
+  skillMeta?: SkillMeta;
 }
 
 /** Hidden context block describing a workflow for AI parameter guidance */
@@ -59,6 +62,8 @@ export interface RawMessage {
   isError?: boolean;
   /** Local-only: file metadata for user-uploaded attachments (not sent to/from Gateway) */
   _attachedFiles?: AttachedFileMeta[];
+  /** Local-only: skill plaza tag metadata for user message bubble rendering */
+  _skillMeta?: SkillMeta;
 }
 
 /** Content block inside a message */

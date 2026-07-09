@@ -88,8 +88,9 @@ export function Home() {
     [cleanupEmptySession]
   );
 
-  // Handle skill-plaza "Use" navigation with ?q= prompt and ?workflowId= template pick
+  // Handle skill-plaza "Use" (?skill=) and legacy ?q= / ?workflowId= deep links
   const [searchParams, setSearchParams] = useSearchParams();
+  const [seedSkillSlug] = useState(() => searchParams.get('skill')?.trim() || undefined);
   // searchParams.get() is already percent-decoded; decodeURIComponent again throws
   // URIError when the prompt contains a literal '%' (e.g. "完成率50%").
   const seedText = searchParams.get('q')?.trim() || undefined;
@@ -99,14 +100,23 @@ export function Home() {
   const hasAutoSentRef = useRef(false);
 
   useEffect(() => {
-    if (!seedText || hasAutoSentRef.current) return;
+    if (!seedSkillSlug) return;
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('skill');
+      return next;
+    }, { replace: true });
+  }, [seedSkillSlug, setSearchParams]);
+
+  useEffect(() => {
+    if (!seedText || seedSkillSlug || hasAutoSentRef.current) return;
     if (gatewayStatus.state !== 'running') return;
 
     hasAutoSentRef.current = true;
     // Clear q and workflowId from URL so refresh doesn't re-trigger
     setSearchParams({}, { replace: true });
     handleHubSend(seedText, undefined, undefined, undefined, seedWorkflowId);
-  }, [seedText, seedWorkflowId, gatewayStatus.state, handleHubSend, setSearchParams]);
+  }, [seedText, seedSkillSlug, seedWorkflowId, gatewayStatus.state, handleHubSend, setSearchParams]);
 
   // Wait for site-department-types before choosing HQ vs site homepage.
   if (isAuthenticated && siteDepartmentTypes === null) {
@@ -117,7 +127,7 @@ export function Home() {
   if (isSite) {
     return (
       <>
-        <HomeSiteSurface seedText={seedText} />
+        <HomeSiteSurface seedText={seedText} seedSkillSlug={seedSkillSlug} />
         <TaskCreateModal
           open={nlModalOpen}
           onClose={closeNlModal}
@@ -138,7 +148,7 @@ export function Home() {
               : 'mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-2 sm:px-2',
           )}
         >
-          <HomeAgentHubSurface seedText={seedText} />
+          <HomeAgentHubSurface seedText={seedText} seedSkillSlug={seedSkillSlug} />
         </div>
         <TaskCreateModal
           open={nlModalOpen}
@@ -171,6 +181,7 @@ export function Home() {
             <HomeMainConversation
               className="min-h-0 flex-1"
               seedText={seedText}
+              seedSkillSlug={seedSkillSlug}
               onSend={handleHubSend}
             />
           ) : (
@@ -184,7 +195,7 @@ export function Home() {
         </div>
         {!showConversation ? (
           <div className={homeHubFooterShellClass}>
-            <HomeComposer seedText={seedText} onSend={handleHubSend} />
+            <HomeComposer seedText={seedText} seedSkillSlug={seedSkillSlug} onSend={handleHubSend} />
           </div>
         ) : null}
       </div>

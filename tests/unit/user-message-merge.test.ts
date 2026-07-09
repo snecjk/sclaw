@@ -317,4 +317,64 @@ describe('user-message-merge', () => {
     expect(merged[0]?.content).toBe('客户异常监控 创建工作流');
     expect(merged[1]?.role).toBe('assistant');
   });
+
+  it('inserts skill-only optimistic user when history has not caught up', () => {
+    const optimistic = {
+      id: 'local-skill-user',
+      role: 'user',
+      content: '',
+      timestamp: 1710000000,
+      _skillMeta: { slug: 'outlet-quote', title: '网点一客一议报价' },
+    } as RawMessage;
+    const enriched = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '连接模型中...',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = mergeOptimisticUserIntoHistory(enriched, [optimistic], {
+      userMessageAt: 1710000000000,
+      sending: true,
+    });
+
+    expect(merged).toHaveLength(2);
+    expect(merged[0]?._skillMeta).toEqual({ slug: 'outlet-quote', title: '网点一客一议报价' });
+    expect(merged[0]?.content).toBe('');
+  });
+
+  it('preserves skill tag and hides defaultPrompt when history echoes the user turn', () => {
+    const optimistic = {
+      id: 'local-skill-user',
+      role: 'user',
+      content: '',
+      timestamp: 1710000000,
+      _skillMeta: { slug: 'outlet-quote', title: '网点一客一议报价' },
+    } as RawMessage;
+    const enriched = [
+      {
+        id: 'local-skill-user',
+        role: 'user',
+        content: '请帮我完成网点一客一议报价流程',
+        timestamp: 1710000001,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '连接模型中...',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = mergeOptimisticUserIntoHistory(enriched, [optimistic], {
+      userMessageAt: 1710000000000,
+      sending: true,
+    });
+
+    expect(merged[0]?._skillMeta).toEqual({ slug: 'outlet-quote', title: '网点一客一议报价' });
+    expect(merged[0]?.content).toBe('');
+    expect(merged[1]?.role).toBe('assistant');
+  });
 });

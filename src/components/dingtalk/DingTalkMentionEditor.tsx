@@ -12,16 +12,19 @@ import {
   detectActiveMentionTrigger,
   insertAtTriggerCharacter,
   insertMentionAtTrigger,
+  insertSkillSpan,
   insertWorkflowSpan,
   MENTION_SPAN_SELECTOR,
   removeMentionBeforeCaret,
   removeMentionSpan,
+  removeSkillSpan,
   serializeMentionEditor,
   setMentionEditorMentions,
   setMentionEditorPlainText,
   type ActiveMentionTrigger,
   type MentionComposerSnapshot,
 } from '@/lib/dingtalk-mention-composer';
+import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
 
 export interface DingTalkMentionEditorHandle {
   focus: () => void;
@@ -31,6 +34,8 @@ export interface DingTalkMentionEditorHandle {
   setMentions: (mentions: DingTalkMention[]) => void;
   insertMention: (mention: DingTalkMention, trigger: ActiveMentionTrigger) => void;
   insertWorkflow: (workflowId: string, name: string, source?: string) => void;
+  insertSkill: (slug: string, title: string) => void;
+  removeSkill: () => void;
   /** 插入 `@` 并打开钉钉 mention 选择（与手动输入 `@` 等价） */
   openMentionPicker: () => void;
 }
@@ -47,6 +52,8 @@ interface DingTalkMentionEditorProps {
   onCompositionStart?: () => void;
   onCompositionEnd?: () => void;
   seedText?: string;
+  /** 技能广场「使用」：预填技能标签（仅 title 可见） */
+  seedSkillSlug?: string;
   /** 为 @ 标签显示删除按钮（用于定时任务发送对象等场景） */
   removableMentions?: boolean;
 }
@@ -65,12 +72,14 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       onCompositionStart,
       onCompositionEnd,
       seedText,
+      seedSkillSlug,
       removableMentions = false,
     },
     ref,
   ) {
     const editorRef = useRef<HTMLDivElement>(null);
     const seedAppliedRef = useRef(false);
+    const skillSeedAppliedRef = useRef(false);
     const isComposingRef = useRef(false);
 
     const syncTriggerRafRef = useRef<number | null>(null);
@@ -144,6 +153,20 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         resizeEditor();
         syncFromDom();
       },
+      insertSkill: (slug, title) => {
+        const root = editorRef.current;
+        if (!root) return;
+        insertSkillSpan(root, slug, title);
+        resizeEditor();
+        syncFromDom();
+      },
+      removeSkill: () => {
+        const root = editorRef.current;
+        if (!root) return;
+        removeSkillSpan(root);
+        resizeEditor();
+        syncFromDom();
+      },
       openMentionPicker: () => {
         const root = editorRef.current;
         if (!root) return;
@@ -179,6 +202,29 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         syncFromDom();
       }
     }, [resizeEditor, seedText, syncFromDom]);
+
+    useEffect(() => {
+      const slug = seedSkillSlug?.trim();
+      const root = editorRef.current;
+      if (!root) return;
+
+      if (slug) {
+        if (skillSeedAppliedRef.current) return;
+        skillSeedAppliedRef.current = true;
+        const { title } = resolveSkillFromPlaza(slug);
+        insertSkillSpan(root, slug, title);
+        resizeEditor();
+        syncFromDom();
+        return;
+      }
+
+      if (skillSeedAppliedRef.current) {
+        skillSeedAppliedRef.current = false;
+        removeSkillSpan(root);
+        resizeEditor();
+        syncFromDom();
+      }
+    }, [resizeEditor, seedSkillSlug, syncFromDom]);
 
     const handleInput = useCallback(() => {
       resizeEditor();

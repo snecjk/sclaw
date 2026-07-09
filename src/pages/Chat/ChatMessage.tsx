@@ -74,6 +74,7 @@ import {
 } from '@/components/chat/artifact-product-card';
 import { highlightAtMentionsInChildren } from '@/lib/at-mention-highlight';
 import { renderUserMessageMentionNodes } from '@/components/dingtalk/DingTalkMentionTag';
+import { SkillMessageTag } from '@/components/skill-plaza/SkillMessageTag';
 import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessPanel';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import { ShareMessageIcon } from '@/components/icons/ShareMessageIcon';
@@ -147,7 +148,9 @@ export const ChatMessage = memo(function ChatMessage({
   const isSystem = role === 'system';
   const isToolResult = role === 'toolresult' || role === 'tool_result';
   const text = extractText(message);
+  const skillMeta = message._skillMeta;
   const hasText = text.trim().length > 0;
+  const showUserSkillBubble = isUser && Boolean(skillMeta);
   const [systemExpanded, setSystemExpanded] = useState(false);
   const images = extractImages(message);
   const tools = extractToolUse(message);
@@ -488,12 +491,13 @@ export const ChatMessage = memo(function ChatMessage({
   });
   /** 用户参数摘要卡由同轮最后一条助手消息统一展示 meta，避免出现在「参数已确认」上方 */
   const showUserMessageMeta =
-    hasText
+    (hasText || Boolean(skillMeta))
     && !showUserParamsFold
     && !(isLastUserInTurn && currentUserTurnIncomplete);
 
   if (
     !hasText
+    && !skillMeta
     && !showThinkingPanel
     && images.length === 0
     && visibleTools.length === 0
@@ -736,10 +740,11 @@ export const ChatMessage = memo(function ChatMessage({
         ) : null}
 
         {/* Main text bubble */}
-        {!showUserParamsFold && !showAssistantParamsPanel && (isUser ? hasText : showAssistantTextBubble) ? (
+        {!showUserParamsFold && !showAssistantParamsPanel && (isUser ? (hasText || showUserSkillBubble) : showAssistantTextBubble) ? (
           isUser ? (
             <MessageBubble
               text={text}
+              skillMeta={skillMeta}
               isUser={isUser}
               isStreaming={isStreaming}
               onPreviewFile={onPreviewFile}
@@ -1116,6 +1121,7 @@ function previewUrlTransform(url: string): string {
 
 function MessageBubble({
   text,
+  skillMeta,
   isUser,
   isStreaming,
   replyStreamKey = 'assistant-reply',
@@ -1124,6 +1130,7 @@ function MessageBubble({
   workflowGuidanceShell = false,
 }: {
   text: string;
+  skillMeta?: { slug: string; title: string };
   isUser: boolean;
   isStreaming: boolean;
   /** 流式正文打字机 reset key（message id） */
@@ -1212,7 +1219,9 @@ function MessageBubble({
     >
       {isUser ? (
         <p className="whitespace-pre-wrap break-words break-all text-sm font-normal leading-5 text-foreground">
-          {renderUserMessageMentionNodes(text)}
+          {skillMeta ? <SkillMessageTag title={skillMeta.title} /> : null}
+          {skillMeta && text.trim().length > 0 ? '\u00A0' : null}
+          {text.trim().length > 0 ? renderUserMessageMentionNodes(text) : null}
         </p>
       ) : (
         <div

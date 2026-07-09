@@ -45,10 +45,10 @@ import { DingTalkMentionPopover } from '@/components/dingtalk/DingTalkMentionPop
 import { WorkflowPicker } from '@/components/workflow/WorkflowPicker';
 
 import { useDingTalkMention } from '@/hooks/useDingTalkMention';
-import { useAuthStore } from '@/stores/auth';
 
 import type { ActiveMentionTrigger, MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention, MentionSearchItem } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
 import { mentionSearchItemToMention } from '@/types/dingtalk-mention';
 
 // ── Types ────────────────────────────────────────────────────────
@@ -86,6 +86,7 @@ interface ChatInputProps {
     workflowId?: string | null,
     workflowSource?: string | null,
     workflowName?: string | null,
+    skillMeta?: SkillMeta,
   ) => void;
   onStop?: () => void;
   onQueue?: (
@@ -94,6 +95,7 @@ interface ChatInputProps {
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
+    skillMeta?: SkillMeta,
   ) => void;
   disabled?: boolean;
   sending?: boolean;
@@ -105,6 +107,8 @@ interface ChatInputProps {
   variant?: 'default' | 'embedded';
   /** One-time seed into the textarea (e.g. task subitem default prompt). */
   seedText?: string;
+  /** 技能广场「使用」：预填技能标签 */
+  seedSkillSlug?: string;
   /** User-message text selected for editing and sending again. */
   editDraft?: {
     text: string;
@@ -193,6 +197,7 @@ export function ChatInput({
   statusTone = 'warning',
   variant = 'default',
   seedText,
+  seedSkillSlug,
   editDraft = null,
   onEditDraftApplied,
   placeholder,
@@ -255,7 +260,6 @@ export function ChatInput({
     install: installDingTalkMention,
     installing: dingTalkInstalling,
   } = useDingTalkMention(mentionTrigger);
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const composerPlaceholder = disabled && engineType === 'openclaw'
     ? t('composer.gatewayDisconnectedPlaceholder')
     : placeholder?.trim() || t('composer.messagePlaceholder', { agent: currentAgentName });
@@ -507,17 +511,23 @@ export function ChatInput({
 
   const allReady = attachments.length === 0 || attachments.every(a => a.status === 'ready');
   const hasFailedAttachments = attachments.some((a) => a.status === 'error');
-  const canSend = ((!composerSnapshot.isEmpty && composerSnapshot.plainText.trim().length > 0) || attachments.length > 0)
+  const canSend = ((!composerSnapshot.isEmpty && composerSnapshot.plainText.trim().length > 0)
+    || composerSnapshot.skill != null
+    || attachments.length > 0)
     && allReady
     && !disabled;
   const canStop = sending && !disabled && !!onStop;
 
   const handleSend = useCallback(() => {
-    if (!canSend) return;
     const readyAttachments = attachments.filter(a => a.status === 'ready');
     // Read DOM snapshot directly — React state can lag one frame behind the editor.
     const snapshot = mentionEditorRef.current?.getSnapshot() ?? composerSnapshot;
+    const skillMetaToSend = snapshot.skill ?? composerSnapshot.skill;
     const textToSend = snapshot.plainText.trim();
+    const canSendNow = (textToSend.length > 0 || skillMetaToSend != null || readyAttachments.length > 0)
+      && allReady
+      && !disabled;
+    if (!canSendNow) return;
     const attachmentsToSend = readyAttachments.length > 0 ? readyAttachments : undefined;
     const mentionsToSend = snapshot.mentions.length > 0 ? snapshot.mentions : undefined;
     const workflowIdToSend = snapshot.workflowId;
@@ -534,6 +544,7 @@ export function ChatInput({
       })),
       attachmentCount: readyAttachments.length,
       hasWorkflowId: Boolean(workflowIdToSend),
+      hasSkill: Boolean(skillMetaToSend),
       queued: Boolean(sending && onQueue && !workflowIdToSend),
     });
     logDingTalkMentionClient('[dingtalk-mention] chat-input: send snapshot', {
@@ -549,6 +560,8 @@ export function ChatInput({
       targetAgentId: targetAgentId ?? null,
       attachmentCount: readyAttachments.length,
       hasWorkflowId: Boolean(workflowIdToSend),
+      hasSkill: Boolean(skillMetaToSend),
+      skillSlug: skillMetaToSend?.slug ?? null,
       queued: Boolean(sending && onQueue && !workflowIdToSend),
     });
     mentionEditorRef.current?.clear();
@@ -557,15 +570,15 @@ export function ChatInput({
     // When AI is responding and queue callback is available, add to queue instead of sending directly
     // but only if no workflow is selected (workflow creation flow needs direct send)
     if (sending && onQueue && !workflowIdToSend) {
-      onQueue(textToSend, attachmentsToSend, targetAgentId, mentionsToSend, workflowIdToSend);
+      onQueue(textToSend, attachmentsToSend, targetAgentId, mentionsToSend, workflowIdToSend, skillMetaToSend);
     } else {
-      onSend(textToSend, attachmentsToSend, targetAgentId, mentionsToSend, workflowIdToSend, workflowSourceToSend, workflowNameToSend);
+      onSend(textToSend, attachmentsToSend, targetAgentId, mentionsToSend, workflowIdToSend, workflowSourceToSend, workflowNameToSend, skillMetaToSend);
     }
     setTargetAgentId(null);
     setPickerOpen(false);
     setWorkflowPickerOpen(false);
     closeDingTalkMention();
-  }, [attachments, canSend, closeDingTalkMention, composerSnapshot, onQueue, onSend, sending, targetAgentId]);
+  }, [allReady, attachments, closeDingTalkMention, composerSnapshot, disabled, onQueue, onSend, sending, targetAgentId]);
 
   const handleStop = useCallback(() => {
     if (!canStop) return;
@@ -808,6 +821,7 @@ export function ChatInput({
                 placeholder={composerPlaceholder}
                 disabled={disabled}
                 seedText={seedText}
+                seedSkillSlug={seedSkillSlug}
                 onSnapshotChange={setComposerSnapshot}
                 onTriggerChange={setMentionTrigger}
                 onKeyDown={handleKeyDown}

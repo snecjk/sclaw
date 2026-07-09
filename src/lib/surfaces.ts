@@ -1093,6 +1093,15 @@ export const workflowDetailModalSkillTagClass = cn(
   'text-[var(--sto-wf-cover-purple-icon)]',
 );
 
+/** 技能广场「使用」：输入框 token / 用户气泡标签（Brand-1 + Brand-6） */
+export const skillComposerTagClass = cn(
+  'skill-token',
+  'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium align-middle',
+  'bg-[rgba(249,115,22,0.12)] text-[#ff6700]',
+);
+
+export const skillMessageTagClass = skillComposerTagClass;
+
 /** 详情弹窗更多菜单（浮动下拉菜单容器） */
 export const workflowDetailModalMenuClass = cn(
   'absolute right-0 top-full z-10 mt-1.5 min-w-[160px] rounded-xl border border-border bg-card p-1.5',

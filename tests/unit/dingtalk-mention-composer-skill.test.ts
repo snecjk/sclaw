@@ -33,4 +33,15 @@ describe('dingtalk-mention-composer skill token', () => {
     expect(span.dataset.skillTitle).toBe('技能名称');
     expect(span.querySelector('.skill-token-label')?.textContent).toBe('技能名称');
   });
+
+  it('serializes skill token when class token is missing but data-skill-slug remains', () => {
+    const root = document.createElement('div');
+    const span = createSkillSpan('hq-settlement', '总部结算对账');
+    span.classList.remove('skill-token');
+    root.appendChild(span);
+
+    const snapshot = serializeMentionEditor(root);
+    expect(snapshot.skill).toEqual({ slug: 'hq-settlement', title: '总部结算对账' });
+    expect(snapshot.isEmpty).toBe(false);
+  });
 });
