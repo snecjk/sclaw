@@ -135,6 +135,7 @@ const electronAPI = {
         'log:getDir',
         'log:listFiles',
         // File staging & media
+        'file:stat',
         'file:stage',
         'file:stageBuffer',
         'media:getThumbnails',

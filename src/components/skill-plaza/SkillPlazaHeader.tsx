@@ -4,7 +4,11 @@ import { stoPageTitleClass } from '@/lib/surfaces';
 import { useState } from 'react';
 import { SkillUploadModal } from './SkillUploadModal';
 
-export function SkillPlazaHeader() {
+interface SkillPlazaHeaderProps {
+  onUploadSuccess?: () => void;
+}
+
+export function SkillPlazaHeader({ onUploadSuccess }: SkillPlazaHeaderProps) {
   const { t } = useTranslation('skills');
   const [uploadOpen, setUploadOpen] = useState(false);
 
@@ -47,7 +51,11 @@ export function SkillPlazaHeader() {
         </button>
       </div>
 
-      <SkillUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
+      <SkillUploadModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onUploadSuccess={onUploadSuccess}
+      />
     </div>
   );
 }

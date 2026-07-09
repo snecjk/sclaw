@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { X, CheckCircle2, AlertCircle, FileArchive, FileUp } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, FileArchive, FileText } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { invokeIpc } from '@/lib/api-client';
-import { hostApiFetch } from '@/lib/host-api';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import type { SkillSummary } from '@/types/skill-plaza';
@@ -19,11 +18,12 @@ function formatFileSize(bytes: number): string {
 interface SkillUploadModalProps {
   open: boolean;
   onClose: () => void;
+  onUploadSuccess?: () => void;
 }
 
 type UploadStatus = 'idle' | 'preview' | 'uploading' | 'success' | 'error';
 
-export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
+export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUploadModalProps) {
   const { t } = useTranslation('skills');
   const uploadSkill = useSkillPlazaStore((s) => s.uploadSkill);
   const mySkills = useSkillPlazaStore((s) => s.mySkills);
@@ -46,7 +46,6 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
       setFilePath(null);
       setFileName(null);
       setFileSize(0);
-      setSlug(null);
       setErrorMsg(null);
       setDragOver(false);
     }
@@ -57,7 +56,6 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
     setFilePath(null);
     setFileName(null);
     setFileSize(0);
-    setSlug(null);
     setErrorMsg(null);
   };
 
@@ -66,24 +64,15 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
  const enterPreview = (selectedPath: string) => {
    setFilePath(selectedPath);
    setFileName(selectedPath.split(/[\\/]/).pop() || selectedPath);
+   setFileSize(0);
    setErrorMsg(null);
    setStatus('preview');
-    // Fetch file size via /api/files/thumbnails (returns fileSize from fs.stat).
+    // Fetch file size via file:stat IPC (returns size from fs.stat directly).
     // Best-effort: the preview card shows '-' if the size cannot be read.
     void (async () => {
       try {
-        const res = await hostApiFetch<Record<string, { preview: string | null; fileSize: number }>>(
-          '/api/files/thumbnails',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              paths: [{ filePath: selectedPath, mimeType: 'application/zip' }],
-            }),
-          },
-        );
-        const size = res?.[selectedPath]?.fileSize;
-        if (typeof size === 'number') setFileSize(size);
+        const stat = await invokeIpc<{ size: number; isDirectory: boolean; isFile: boolean }>('file:stat', selectedPath);
+        if (typeof stat?.size === 'number') setFileSize(stat.size);
       } catch {
         // ignore
       }
@@ -179,9 +168,9 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
     setStatus('uploading');
     setErrorMsg(null);
     try {
-      const resultSlug = await uploadSkill(filePath);
-      setSlug(resultSlug);
-      setStatus('success');
+      await uploadSkill(filePath);
+      onClose();
+      onUploadSuccess?.();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
       setStatus('error');
@@ -189,11 +178,6 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
   };
 
   // "查看技能": jump to the "我的技能" tab where the uploaded skill appears.
-  const handleViewSkill = () => {
-    useSkillPlazaStore.getState().setActiveTab('mine');
-    onClose();
-  };
-
   // The store refreshes mySkills after upload, so look up the skill by slug
   // to enrich the success card (icon / title / category tag).
   const uploadedSkill: SkillSummary | undefined = slug
@@ -246,7 +230,7 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
             <h2 className="text-base font-semibold text-foreground pr-8">
               {t('plaza.upload.title', { defaultValue: '上传技能' })}
             </h2>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs leading-5 text-[#98A2B3] mt-2">
               {t('plaza.upload.subtitle', { defaultValue: '· 文件夹或.zip需要包含SKILL.MD文件' })}
               <br />
               {t('plaza.upload.subtitle', { defaultValue: '· .MD文件需要包含YAML格式的技能名和描述'})}
@@ -288,35 +272,28 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
               )}
 
               {status === 'preview' && (
-                <div className="flex flex-col items-center text-center py-4">
-                  {/* Compact file card: file name + size only */}
-                  <div className="w-full flex items-center gap-3 rounded-xl border border-[#E6FFEA] bg-[#F5FCF6] px-4 py-3">
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-[#DCF5E2] flex-shrink-0">
-                      <FileArchive className="h-4 w-4 text-[#00B54B]" />
-                    </div>
-                    <div className="min-w-0 flex-1 text-left">
-                      <p className="text-sm font-medium text-foreground break-all line-clamp-1">
+                <div className="flex flex-col">
+                  <button
+                    type="button"
+                    onClick={pickFile}
+                    className="w-full text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E] rounded-xl"
+                  >
+                    <div className="min-h-[176px] rounded-2xl border-2 border-dashed border-[#22C55E] bg-[#E9FFEC] px-5 py-6 flex flex-col items-center justify-center">
+                      <FileText className="h-10 w-10 text-[#8B96A3]" strokeWidth={1.8} />
+                      <p className="mt-6 max-w-full text-xl leading-7 font-normal text-foreground break-all line-clamp-2 tracking-normal">
                         {fileName}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="mt-3 text-2xl leading-8 font-normal text-[#8B96A3] tracking-normal">
                         {formatFileSize(fileSize)}
                       </p>
                     </div>
-                  </div>
-                  <div className="flex gap-2 mt-5">
-                    <button
-                      type="button"
-                      onClick={pickFile}
-                      className="inline-flex items-center h-9 px-4 rounded-lg border border-border bg-background text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
-                    >
-                      {t('plaza.upload.reselect', { defaultValue: '重新选择' })}
-                    </button>
+                  </button>
+                  <div className="mt-5">
                     <button
                       type="button"
                       onClick={confirmUpload}
-                      className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                      className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-[#E4E7EC] bg-white px-6 text-base leading-6 font-semibold text-foreground shadow-sm transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E]"
                     >
-                      <FileUp className="h-4 w-4" />
                       {t('plaza.upload.confirmUpload', { defaultValue: '安装' })}
                     </button>
                   </div>
@@ -384,8 +361,8 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
 
               {status === 'error' && (
                 <div className="flex flex-col items-center text-center py-4">
-                  <div className="w-12 h-12 rounded-full bg-[#FFE9E9] flex items-center justify-center mb-3">
-                    <AlertCircle className="h-6 w-6 text-[#E53935]" />
+                  <div className="w-12 h-12 rounded-full bg-[#FA3C3C]/10 flex items-center justify-center mb-3">
+                    <AlertCircle className="h-6 w-6 text-[#FA3C3C]" />
                   </div>
                   <p className="text-sm font-medium text-foreground">
                     {t('plaza.upload.errorTitle', { defaultValue: '安装失败' })}
