@@ -1,10 +1,16 @@
 import { useState } from 'react';
-import { X, CheckCircle2, AlertCircle, FileArchive, FileText } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, FileArchive, FileText, FolderOpen } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { invokeIpc } from '@/lib/api-client';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import type { SkillSummary } from '@/types/skill-plaza';
 
 function formatFileSize(bytes: number): string {
@@ -93,16 +99,15 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     })();
  };
 
-  // Step 1 (option A): pick a local .zip file OR folder via the native dialog.
-  // `openFile` + `openDirectory` lets the user pick either; the ZIP filter only
-  // restricts files (folders remain selectable).
+  // Step 1 (option A): pick a local .zip file or SKILL.md file.
+  // Windows/Linux native dialogs cannot combine openFile and openDirectory.
   const pickFile = async () => {
     try {
       const result = await invokeIpc<{ canceled: boolean; filePaths: string[] }>(
         'dialog:open',
         {
-          title: t('plaza.upload.title', { defaultValue: '上传技能' }),
-          properties: ['openFile', 'openDirectory'],
+          title: t('plaza.upload.title', { defaultValue: 'Upload Skill' }),
+          properties: ['openFile'],
           filters: [{ name: 'Skill Package', extensions: ['zip', 'md'] }],
         },
       );
@@ -114,7 +119,25 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     }
   };
 
-  // Step 1 (option B): drag & drop. Electron removed the non-standard
+  // Step 1 (option B): pick a local skill folder.
+  const pickFolder = async () => {
+    try {
+      const result = await invokeIpc<{ canceled: boolean; filePaths: string[] }>(
+        'dialog:open',
+        {
+          title: t('plaza.upload.title', { defaultValue: 'Upload Skill' }),
+          properties: ['openDirectory'],
+        },
+      );
+      if (result.canceled || !result.filePaths?.length) return;
+      await enterPreview(result.filePaths[0]);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+      setStatus('error');
+    }
+  };
+
+  // Step 1 (option C): drag & drop. Electron removed the non-standard
   // `File.path` field in v36+; paths must be resolved via `webUtils.getPathForFile`,
   // which the preload exposes as `window.electron.getPathForFile` (the renderer
   // runs with nodeIntegration:false and cannot read paths itself). Works for
@@ -252,26 +275,21 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
 
             <div className="mt-5">
               {status === 'idle' && (
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  onClick={pickFile}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      pickFile();
-                    }
-                  }}
-                  className={cn(
-                    'flex flex-col items-center text-center w-full py-10 px-4 rounded-xl border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      className={cn(
+                        'flex flex-col items-center text-center w-full py-10 px-4 rounded-xl border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E]',
                     dragOver
                       ? 'border-[#00B54B] bg-[#00B54B]/10'
                       : 'border-[#C9CDD4] bg-[#FAFBFC] hover:border-[#00B54B] hover:bg-[#00B54B]/5',
-                  )}
-                >
+                      )}
+                    >
                   <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
                     <FileArchive className="h-6 w-6 text-muted-foreground" />
                   </div>
@@ -282,7 +300,19 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     {/*<li>{t('plaza.upload.requirementSkillMd', { defaultValue: '文件夹或 .zip 需包含 SKILL.md 文件' })}</li>*/}
                     {/*<li>{t('plaza.upload.requirementYaml', { defaultValue: 'SKILL.md 需含 YAML 格式的 name 与 description' })}</li>*/}
                   </ul>
-                </div>
+                    </div>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center" className="z-[60] min-w-[164px]">
+                    <DropdownMenuItem onSelect={pickFile} className="gap-2">
+                      <FileArchive className="h-4 w-4" />
+                      {t('plaza.upload.chooseFile', { defaultValue: '选择文件' })}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={pickFolder} className="gap-2">
+                      <FolderOpen className="h-4 w-4" />
+                      {t('plaza.upload.chooseFolder', { defaultValue: '选择文件夹' })}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
               {status === 'idle' && uploadWarning && (
                 <div className="mt-4 rounded-lg bg-[#E89F0C] px-4 py-3 text-sm font-semibold text-white shadow-sm flex items-center justify-center gap-2">
