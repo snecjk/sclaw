@@ -15,6 +15,7 @@ import {
   insertMentionAtTrigger,
   insertSkillSpan,
   insertWorkflowSpan,
+  consumeSkillTriggerText,
   MENTION_SPAN_SELECTOR,
   removeMentionBeforeCaret,
   removeMentionSpan,
@@ -38,6 +39,7 @@ export interface DingTalkMentionEditorHandle {
   insertMention: (mention: DingTalkMention, trigger: ActiveMentionTrigger) => void;
   insertWorkflow: (workflowId: string, name: string, source?: string) => void;
   insertSkill: (slug: string, title: string) => void;
+  consumeSkillInlineTrigger: (query?: string) => boolean;
   removeSkill: () => void;
   /** 插入 `@` 并打开钉钉 mention 选择（与手动输入 `@` 等价） */
   openMentionPicker: () => void;
@@ -167,6 +169,16 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         insertSkillSpan(root, slug, title);
         resizeEditor();
         syncFromDom();
+      },
+      consumeSkillInlineTrigger: (query) => {
+        const root = editorRef.current;
+        if (!root) return false;
+        const consumed = consumeSkillTriggerText(root, query);
+        if (consumed) {
+          resizeEditor();
+          syncFromDom();
+        }
+        return consumed;
       },
       removeSkill: () => {
         const root = editorRef.current;

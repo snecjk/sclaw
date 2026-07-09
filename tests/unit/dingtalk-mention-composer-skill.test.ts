@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createSkillSpan,
+  consumeSkillTriggerText,
   insertSkillSpan,
   serializeMentionEditor,
 } from '@/lib/dingtalk-mention-composer';
@@ -43,5 +44,16 @@ describe('dingtalk-mention-composer skill token', () => {
     const snapshot = serializeMentionEditor(root);
     expect(snapshot.skill).toEqual({ slug: 'hq-settlement', title: '总部结算对账' });
     expect(snapshot.isEmpty).toBe(false);
+  });
+
+  it('insertSkill after consuming inline trigger has no asterisk residue in plainText', () => {
+    const root = document.createElement('div');
+    root.appendChild(document.createTextNode('*异常'));
+    consumeSkillTriggerText(root);
+    insertSkillSpan(root, 'hq-settlement', '总部结算对账');
+
+    const snapshot = serializeMentionEditor(root);
+    expect(snapshot.skill).toEqual({ slug: 'hq-settlement', title: '总部结算对账' });
+    expect(snapshot.plainText).not.toContain('*');
   });
 });

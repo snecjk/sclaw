@@ -1102,6 +1102,23 @@ export const skillComposerTagClass = cn(
 
 export const skillMessageTagClass = skillComposerTagClass;
 
+/** Composer 技能 Picker 浮层容器（glass + 圆角，对齐 WorkflowPicker） */
+export const skillPickerShellClass = cn(
+  'absolute left-0 bottom-full z-50 mb-2 w-80 overflow-hidden rounded-2xl border border-glass-border glass p-2',
+);
+
+/** 技能 Picker 列表区：最多可见 5 行 + 内部滚动 */
+export const skillPickerListClass = 'max-h-[260px] overflow-y-auto';
+
+/** 技能 Picker 列表行 */
+export const skillPickerRowClass = cn(
+  'flex w-full items-start gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors',
+  'hover:bg-black/5 dark:hover:bg-white/5',
+);
+
+/** 技能 Picker 搜索命中高亮（Brand-6） */
+export const skillPickerHighlightClass = 'text-[#FF6F00]';
+
 /** 详情弹窗更多菜单（浮动下拉菜单容器） */
 export const workflowDetailModalMenuClass = cn(
   'absolute right-0 top-full z-10 mt-1.5 min-w-[160px] rounded-xl border border-border bg-card p-1.5',

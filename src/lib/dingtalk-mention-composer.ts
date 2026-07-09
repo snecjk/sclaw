@@ -159,6 +159,38 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
   };
 }
 
+/** 从 plainText 提取 `*` 之后的内联筛选关键词（composer 技能 Picker inline 模式）。 */
+export function extractSkillInlineQuery(plainText: string): string {
+  const idx = plainText.lastIndexOf('*');
+  if (idx === -1) return '';
+  return plainText.slice(idx + 1);
+}
+
+/** plainText 中是否包含技能 inline 触发符 `*`。 */
+export function hasSkillInlineTrigger(plainText: string): boolean {
+  return plainText.includes('*');
+}
+
+/**
+ * 移除 editor 中 `*` 及其后的内联筛选文本（选中技能或取消 inline Picker 时调用）。
+ * @param explicitQuery 选中技能时传入当前 filter，避免误删 `*` 之后用户已输入的正文
+ * @returns 是否成功移除
+ */
+export function consumeSkillTriggerText(root: HTMLElement, explicitQuery?: string): boolean {
+  const plainText = serializeMentionEditor(root).plainText;
+  const startIdx = plainText.lastIndexOf('*');
+  if (startIdx === -1) return false;
+
+  const query = explicitQuery ?? extractSkillInlineQuery(plainText);
+  const endIdx = startIdx + 1 + query.length;
+
+  const range = buildRangeFromPlainTextOffsets(root, startIdx, endIdx);
+  if (!range) return false;
+
+  range.deleteContents();
+  return true;
+}
+
 function collectTextBeforeCaret(root: HTMLElement, range: Range): string {
   const preRange = document.createRange();
   preRange.selectNodeContents(root);
