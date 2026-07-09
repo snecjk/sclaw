@@ -1,6 +1,6 @@
 {
   "title": "設定",
-  "subtitle": "StoClaw の体験をカスタマイズ",
+  "subtitle": "S Claw の体験をカスタマイズ",
   "appearance": {
     "title": "通用",
     "description": "外観とスタイルをカスタマイズ",
@@ -10,7 +10,12 @@
     "system": "システム",
     "language": "言語",
     "launchAtStartup": "システム起動時に自動起動",
-    "launchAtStartupDesc": "ログイン時に StoClaw を自動的に起動します"
+    "launchAtStartupDesc": "ログイン時に S Claw を自動的に起動します",
+    "preventSystemSleep": "PC のスリープを防止",
+    "preventSystemSleepDesc": "有効にすると、S Claw 実行中は PC が自動的にスリープしなくなります。",
+    "preventSystemSleepTips": "定期タスク利用時は有効化を推奨します。フタは開け、電源に接続してください。フタ閉じやシャットダウン後は正常動作を保証できません。",
+    "preventSystemSleepToastEnabled": "有効：S Claw 実行中はスリープを防止します",
+    "preventSystemSleepToastDisabled": "無効：PC はシステム設定どおりスリープします"
   },
   "aiProviders": {
     "title": "AI プロバイダー",
@@ -37,7 +42,7 @@
     "notRequired": "不要",
     "empty": {
       "title": "プロバイダーが構成されていません",
-      "desc": "StoClaw の使用を開始するには AI プロバイダーを追加してください",
+      "desc": "S Claw の使用を開始するには AI プロバイダーを追加してください",
       "cta": "最初のプロバイダーを追加"
     },
     "dialog": {
@@ -60,7 +65,7 @@
       "protocol": "プロトコル",
       "advancedConfig": "詳細設定",
       "userAgent": "User-Agent",
-      "userAgentPlaceholder": "StoClaw/1.0",
+      "userAgentPlaceholder": "S Claw/1.0",
       "fallbackModels": "フォールバックモデル",
       "fallbackProviders": "別プロバイダーへのフォールバック",
       "fallbackModelIds": "同一プロバイダーのフォールバックモデル ID",
@@ -145,7 +150,7 @@
     "appLogs": "アプリケーションログ",
     "openFolder": "フォルダーを開く",
     "autoStart": "ゲートウェイ自動起動",
-    "autoStartDesc": "StoClaw 起動時にゲートウェイを自動起動",
+    "autoStartDesc": "S Claw 起動時にゲートウェイを自動起動",
     "proxyTitle": "プロキシ",
     "proxyDesc": "Electron と Gateway の通信をローカルプロキシ経由にします。",
     "proxyServer": "プロキシサーバー",
@@ -190,8 +195,8 @@
   },
   "updates": {
     "title": "アップデート",
-    "subtitle": "Sto Claw を最新に保ち、より安定で安全な機能をお使いください",
-    "description": "StoClaw を最新に保つ",
+    "subtitle": "S Claw を最新に保ち、より安定で安全な機能をお使いください",
+    "description": "S Claw を最新に保つ",
     "loading": "読み込み中…",
     "currentVersionLabel": "現在のバージョン",
     "latestBadge": "最新",
@@ -339,7 +344,7 @@
   },
   "about": {
     "title": "バージョン情報",
-    "appName": "StoClaw",
+    "appName": "S Claw",
     "tagline": "グラフィカル AI アシスタント",
     "basedOn": "OpenClaw ベース",
     "version": "バージョン {{version}}",
