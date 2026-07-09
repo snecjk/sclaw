@@ -34,6 +34,8 @@
     "tokenBalance": {
         "title": "Token 余额",
         "apply": "余额申请",
+        "applying": "加载中...",
+        "applyFailed": "获取申请链接失败，请稍后重试",
         "available": "可用额度",
         "total": "总额度",
         "loading": "正在加载 Token 余额...",

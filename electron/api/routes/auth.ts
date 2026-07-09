@@ -20,7 +20,7 @@ import { removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-au
 import { getStoPolicyReportApiHost } from '../../../shared/env-config';
 import { computeCrmWeekReportSurfaceAllowed } from '../../../shared/crm-week-report-policy';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
-import { loadSiteDepartmentTypes, loadClawInferenceRuntimeConfig, clearInferenceRuntimeConfigCache } from '../../services/sto-apollo-config-service';
+import { loadSiteDepartmentTypes, loadClawInferenceRuntimeConfig, clearInferenceRuntimeConfigCache, fetchHqBalanceApplyUrl, DEFAULT_HQ_BALANCE_APPLY_URL } from '../../services/sto-apollo-config-service';
 import { getClientSiteAccessService } from '../../services/client-site-access-service';
 import type { ClientSiteAccessCheckResult } from '../../../shared/client-site-access';
 import { syncClaudeDefaultContext } from '../../services/claude-context-sync';
@@ -292,6 +292,18 @@ export async function handleAuthRoutes(
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  // GET /api/auth/hq-balance-apply-url — 非网点余额申请外链（实时拉 Apollo）
+  if (url.pathname === '/api/auth/hq-balance-apply-url' && req.method === 'GET') {
+    try {
+      const result = await fetchHqBalanceApplyUrl();
+      sendJson(res, 200, { success: true, ...result });
+    } catch (error) {
+      logger.warn('[auth] HQ balance apply url fetch failed:', error);
+      sendJson(res, 200, { success: true, url: DEFAULT_HQ_BALANCE_APPLY_URL, source: 'fallback' });
     }
     return true;
   }

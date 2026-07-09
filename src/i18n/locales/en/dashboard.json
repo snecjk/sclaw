@@ -34,6 +34,8 @@
     "tokenBalance": {
         "title": "Token Balance",
         "apply": "Apply for Balance",
+        "applying": "Loading...",
+        "applyFailed": "Failed to load apply link. Please try again later.",
         "available": "Available",
         "total": "Total Quota",
         "loading": "Loading token balance...",

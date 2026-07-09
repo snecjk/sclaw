@@ -219,3 +219,38 @@ export function clearInferenceRuntimeConfigCache(): void {
   hqInferencePortalDomain = null;
   siteInferencePortalDomain = null;
 }
+
+const HQ_BALANCE_APPLY_URL_KEY = 'claw.hq.balance.apply.url';
+
+/** 非网点余额申请外链兜底 */
+export const DEFAULT_HQ_BALANCE_APPLY_URL = 'https://devops-new.sto.cn/personMainInfo';
+
+function normalizeBalanceApplyUrl(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const withoutTrailingSlash = trimmed.replace(/\/+$/, '');
+  const withScheme = /^https?:\/\//i.test(withoutTrailingSlash)
+    ? withoutTrailingSlash
+    : `https://${withoutTrailingSlash}`;
+  if (!/^https:\/\//i.test(withScheme)) {
+    return null;
+  }
+  return withScheme;
+}
+
+/** 实时拉取非网点余额申请外链（不经内存缓存）。 */
+export async function fetchHqBalanceApplyUrl(): Promise<{
+  url: string;
+  source: 'apollo' | 'fallback';
+}> {
+  const value = await fetchApolloConfigValue(HQ_BALANCE_APPLY_URL_KEY);
+  const normalized = normalizeBalanceApplyUrl(value);
+  if (normalized) {
+    logger.info(`[ApolloConfig] HQ balance apply url fetched: ${normalized}`);
+    return { url: normalized, source: 'apollo' };
+  }
+  logger.info(`[ApolloConfig] HQ balance apply url fallback: ${DEFAULT_HQ_BALANCE_APPLY_URL}`);
+  return { url: DEFAULT_HQ_BALANCE_APPLY_URL, source: 'fallback' };
+}

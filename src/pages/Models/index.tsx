@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import {
   ChevronLeft,
   ChevronRight,
@@ -25,9 +26,6 @@ import {
   type UsageHistoryEntry,
   type UsageWindow,
 } from './usage-history';
-
-/** 非网点余额申请外链 */
-const HQ_BALANCE_APPLY_URL = 'https://devops-new.sto.cn/personMainInfo';
 
 const DEFAULT_USAGE_FETCH_MAX_ATTEMPTS = 2;
 const WINDOWS_USAGE_FETCH_MAX_ATTEMPTS = 3;
@@ -60,6 +58,7 @@ export function Models() {
     spend: 0,
     maxBudget: 0,
   });
+  const [balanceApplyLoading, setBalanceApplyLoading] = useState(false);
 
   type FetchState = {
     status: 'idle' | 'loading' | 'done';
@@ -249,6 +248,29 @@ export function Models() {
         : 'text-muted-foreground hover:bg-primary/[0.06] hover:text-foreground',
     );
 
+  const handleBalanceApplyClick = async () => {
+    if (balanceApplyLoading) return;
+    trackUiEvent('models.token_balance_apply_clicked');
+    setBalanceApplyLoading(true);
+    try {
+      const result = await hostApiFetch<{ url?: string; source?: string }>(
+        '/api/auth/hq-balance-apply-url',
+      );
+      const url = result.url?.trim();
+      if (!url) {
+        throw new Error('未获取到申请链接');
+      }
+      trackUiEvent('models.token_balance_apply_opened', { source: result.source ?? 'unknown' });
+      await window.electron.openExternal(url);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      trackUiEvent('models.token_balance_apply_failed', { error: message });
+      toast.error(t('dashboard:tokenBalance.applyFailed', '获取申请链接失败，请稍后重试'));
+    } finally {
+      setBalanceApplyLoading(false);
+    }
+  };
+
   return (
     <div className={cn(stoMainInnerShell, 'flex flex-col gap-8 pb-10')}>
       <header className="shrink-0 border-b border-border pb-6">
@@ -283,11 +305,13 @@ export function Models() {
                 size="sm"
                 className="h-8 rounded-md border-border bg-transparent px-3 text-[13px] hover:bg-primary/[0.06]"
                 onClick={() => {
-                  trackUiEvent('models.token_balance_apply_clicked');
-                  void window.electron.openExternal(HQ_BALANCE_APPLY_URL);
+                  void handleBalanceApplyClick();
                 }}
+                disabled={balanceApplyLoading}
               >
-                {t('dashboard:tokenBalance.apply', '余额申请')}
+                {balanceApplyLoading
+                  ? t('dashboard:tokenBalance.applying', '加载中...')
+                  : t('dashboard:tokenBalance.apply', '余额申请')}
               </Button>
             ) : null}
           </div>
