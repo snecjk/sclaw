@@ -1,10 +1,9 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { modalPrimarySubmitButtonClass } from '@/lib/surfaces';
+import { ReleaseChangelogMarkdown } from '@/components/settings/update/ReleaseChangelogMarkdown';
+import updateContentHero from '@/assets/update-content-hero.png';
 
 interface UpdateContentModalProps {
   open: boolean;
@@ -14,87 +13,24 @@ interface UpdateContentModalProps {
   onClose: () => void;
 }
 
-function UpdateRocketIllustration() {
-  return (
-    <svg
-      viewBox="0 0 320 160"
-      className="mx-auto h-[140px] w-full max-w-[280px] text-[var(--sto-grey-10,#1D2129)]"
-      aria-hidden
-    >
-      <circle cx="260" cy="36" r="2" fill="currentColor" opacity="0.35" />
-      <circle cx="278" cy="52" r="1.5" fill="currentColor" opacity="0.25" />
-      <circle cx="248" cy="58" r="1.5" fill="currentColor" opacity="0.2" />
-      <path
-        d="M40 120 L160 72 L280 120"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M160 72 L160 118"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M148 118 Q160 108 172 118"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <path
-        d="M160 72 L132 48 L160 58 L188 48 Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M148 58 L112 72 L132 78"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M172 58 L208 72 L188 78"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M152 78 L160 98 L168 78"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M156 98 Q160 108 164 98"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <path
-        d="M72 96 Q96 88 120 96"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        opacity="0.5"
-      />
-      <path
-        d="M200 96 Q224 88 248 96"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        opacity="0.5"
-      />
-    </svg>
-  );
-}
+const updateModalBtnTextClass =
+  "font-['PingFang_SC'] text-[14px] font-medium leading-[18px] tracking-normal";
+
+const updateModalCloseBtnClass = cn(
+  'inline-flex h-[34px] min-w-[60px] shrink-0 flex-row items-center justify-center rounded-[12px] box-border whitespace-nowrap',
+  'border border-[#E5E6EB] bg-white px-4 py-2',
+  updateModalBtnTextClass,
+  'text-[#1D2129]',
+  'hover:bg-[#FAFBFC] dark:border-border dark:bg-card dark:hover:bg-muted/40',
+);
+
+const updateModalChangelogBtnClass = cn(
+  'inline-flex h-[34px] min-w-[116px] shrink-0 flex-row items-center justify-center rounded-[12px] box-border whitespace-nowrap',
+  'bg-[#1D2129] px-4 py-2',
+  updateModalBtnTextClass,
+  'text-white',
+  'hover:bg-[#1D2129]/90 dark:bg-foreground dark:hover:bg-foreground/90',
+);
 
 export function UpdateContentModal({
   open,
@@ -107,6 +43,9 @@ export function UpdateContentModal({
   const navigate = useNavigate();
   const displayVersion = version?.trim() || '—';
   const notes = releaseNotes?.trim() || '';
+  const modalTitle = t('updates.modal.title', { version: displayVersion });
+  const releaseTitle = title?.trim() || '';
+  const showReleaseTitle = Boolean(releaseTitle && releaseTitle !== modalTitle);
 
   useEffect(() => {
     if (!open) return;
@@ -126,13 +65,13 @@ export function UpdateContentModal({
 
   return (
     <div
-      className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[10050] flex flex-row items-center justify-center gap-[10px] bg-[rgba(0,0,0,0.5)] p-[10px]"
       onClick={onClose}
       role="presentation"
     >
       <div
         className={cn(
-          'relative flex w-full max-w-[480px] flex-col overflow-hidden rounded-2xl bg-white shadow-xl',
+          'relative flex h-[412px] w-[400px] max-w-full flex-col overflow-hidden rounded-[12px] bg-white p-0',
           'dark:bg-card',
         )}
         onClick={(event) => event.stopPropagation()}
@@ -140,52 +79,45 @@ export function UpdateContentModal({
         aria-modal="true"
         aria-labelledby="update-content-modal-title"
       >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-black/[0.04] hover:text-foreground dark:hover:bg-white/[0.06]"
-          aria-label={t('updates.modal.close')}
-        >
-          <X className="h-4 w-4" />
-        </button>
-
-        <div className="bg-[linear-gradient(180deg,#FAFBFC_0%,#FFFFFF_100%)] px-6 pb-2 pt-8 dark:bg-muted/30">
-          <UpdateRocketIllustration />
+        <div className="shrink-0 px-3 pt-3">
+          <div className="flex h-[180px] w-full items-center justify-center overflow-hidden bg-[#E9F2FA] dark:bg-muted/30">
+            <img
+              src={updateContentHero}
+              alt=""
+              className="h-full w-full object-contain"
+            />
+          </div>
         </div>
 
-        <div className="flex flex-col gap-5 px-6 pb-6 pt-4">
+        <div className="flex min-h-0 flex-1 flex-col px-3 pb-3 pt-4">
           <h2
             id="update-content-modal-title"
-            className="text-center text-lg font-semibold text-foreground"
+            className="shrink-0 text-[16px] font-bold leading-snug text-[#1D2129] dark:text-foreground"
           >
-            {t('updates.modal.title', { version: displayVersion })}
+            {modalTitle}
           </h2>
 
-          {notes && title?.trim() ? (
-            <p className="-mt-2 text-center text-sm text-[#86909C]">{title.trim()}</p>
+          {showReleaseTitle ? (
+            <p className="mt-1 shrink-0 text-[13px] text-[#86909C]">{releaseTitle}</p>
           ) : null}
 
-          {notes ? (
-            <div className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--sto-grey-9,#4E5969)] dark:text-muted-foreground">
-              {notes}
-            </div>
-          ) : (
-            <p className="text-center text-sm text-[#86909C] dark:text-muted-foreground">
-              {t('updates.modal.noReleaseNotes')}
-            </p>
-          )}
+          <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
+            {notes ? (
+              <ReleaseChangelogMarkdown content={notes} />
+            ) : (
+              <p className="text-[13px] text-[#86909C] dark:text-muted-foreground">
+                {t('updates.modal.noReleaseNotes')}
+              </p>
+            )}
+          </div>
 
-          <div className="flex items-center justify-end gap-3 pt-1">
-            <Button type="button" variant="outline" onClick={onClose} className="h-10 px-5">
+          <div className="mt-4 flex shrink-0 items-center justify-end gap-3">
+            <button type="button" onClick={onClose} className={updateModalCloseBtnClass}>
               {t('updates.modal.close')}
-            </Button>
-            <Button
-              type="button"
-              onClick={handleViewChangelog}
-              className={cn('h-10 px-5', modalPrimarySubmitButtonClass)}
-            >
+            </button>
+            <button type="button" onClick={handleViewChangelog} className={updateModalChangelogBtnClass}>
               {t('updates.modal.viewChangelog')}
-            </Button>
+            </button>
           </div>
         </div>
       </div>

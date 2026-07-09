@@ -1,13 +1,13 @@
-import { useState, useEffect, forwardRef } from 'react';
+import { useState, useEffect, useMemo, forwardRef, useRef } from 'react';
 import { Search, Workflow } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import { useWorkflowsStore } from '@/stores/workflows';
+import { useMyPublishedWorkflows } from './use-my-published-workflows';
 
 interface WorkflowPickerProps {
   open: boolean;
   onClose: () => void;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, name: string) => void;
   className?: string;
 }
 
@@ -16,7 +16,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
     const { t } = useTranslation('chat');
     const [query, setQuery] = useState('');
 
-    const { templates, loading, loadTemplates } = useWorkflowsStore();
+    const { workflows, loading, refetch } = useMyPublishedWorkflows();
 
     useEffect(() => {
       if (!open) {
@@ -26,20 +26,24 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
       return undefined;
     }, [open]);
 
+    // 仅在 picker 打开瞬间兜底重拉一次，避免「空列表 + loading 落定」形成自激重拉死循环。
+    const prevOpenRef = useRef(false);
     useEffect(() => {
-      if (!open) return undefined;
+      if (open && !prevOpenRef.current) {
+        void refetch();
+      }
+      prevOpenRef.current = open;
+    }, [open, refetch]);
 
-      const trimmed = query.trim();
-      const timer = window.setTimeout(() => {
-        if (trimmed) {
-          void loadTemplates(trimmed, { force: true, catalog: false });
-        } else {
-          void loadTemplates('', { force: true, catalog: true });
-        }
-      }, trimmed ? 300 : 0);
-
-      return () => window.clearTimeout(timer);
-    }, [open, query, loadTemplates]);
+    const filtered = useMemo(() => {
+      const trimmed = query.trim().toLowerCase();
+      if (!trimmed) return workflows;
+      return workflows.filter(
+        (w) =>
+          w.name.toLowerCase().includes(trimmed) ||
+          w.description.toLowerCase().includes(trimmed),
+      );
+    }, [workflows, query]);
 
     if (!open) return null;
 
@@ -67,15 +71,15 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
           {loading && (
             <div className="px-3 py-2 text-[12px] text-muted-foreground">{t('composer.workflowLoading')}</div>
           )}
-          {!loading && templates.length === 0 && (
+          {!loading && filtered.length === 0 && (
             <div className="px-3 py-2 text-[12px] text-muted-foreground">{t('composer.workflowNoTemplates')}</div>
           )}
-          {!loading && templates.map((template) => (
+          {!loading && filtered.map((workflow) => (
             <button
-              key={template.id}
+              key={workflow.id}
               type="button"
               onClick={() => {
-                onSelect(template.id);
+                onSelect(workflow.id, workflow.name);
                 onClose();
               }}
               className={cn(
@@ -85,9 +89,9 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
             >
               <span className="text-lg shrink-0 mt-0.5"><Workflow className="h-4 w-4 text-muted-foreground" /></span>
               <div className="min-w-0">
-                <div className="text-[13px] font-medium text-foreground truncate">{template.label}</div>
-                {template.description && (
-                  <div className="text-[11px] text-muted-foreground truncate mt-0.5">{template.description}</div>
+                <div className="text-[13px] font-medium text-foreground truncate">{workflow.name}</div>
+                {workflow.description && (
+                  <div className="text-[11px] text-muted-foreground truncate mt-0.5">{workflow.description}</div>
                 )}
               </div>
             </button>

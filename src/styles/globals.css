@@ -303,7 +303,7 @@
    * 侧栏收起时主卡片顶到窗口左缘：ContentHeader + 三栏 split row 共用 pad-start，
    * 与侧栏列 SidebarProvincialChromeRow 的 pl-20 一致，避免红绿灯遮住展开钮与会话标题。
    */
-  [data-app-shell='provincial'][data-sidebar-collapsed='true'][data-platform='darwin'] {
+  :root[data-platform='darwin'] [data-app-shell='provincial'][data-sidebar-collapsed='true'] {
     --sto-chrome-traffic-light-pad: 5rem;
     --sto-content-header-pad-start: max(var(--sto-content-pad-x), var(--sto-chrome-traffic-light-pad));
   }
@@ -439,6 +439,14 @@
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
+}
+
+/**
+ * 侧栏列表：classic 滚动条（Win / mac「始终显示」）预留 gutter，避免列表宽度随滚动条出现跳动。
+ * overlay 滚动条（mac 默认）不占布局宽度，无需处理。
+ */
+html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
+  scrollbar-gutter: stable;
 }
 
 ::-webkit-scrollbar-track {

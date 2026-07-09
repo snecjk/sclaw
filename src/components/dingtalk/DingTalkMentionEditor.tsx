@@ -49,7 +49,7 @@ export interface DingTalkMentionEditorHandle {
   setPlainText: (text: string) => void;
   setMentions: (mentions: DingTalkMention[]) => void;
   insertMention: (mention: DingTalkMention, trigger: ActiveMentionTrigger) => void;
-  insertWorkflow: (workflowId: string, name: string) => void;
+  insertWorkflow: (workflowId: string, name: string, source?: string) => void;
   /** 插入 `@` 并打开钉钉 mention 选择（与手动输入 `@` 等价） */
   openMentionPicker: () => void;
 }
@@ -156,10 +156,10 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         syncFromDom();
         onTriggerChange?.(null);
       },
-      insertWorkflow: (workflowId, name) => {
+      insertWorkflow: (workflowId, name, source) => {
         const root = editorRef.current;
         if (!root) return;
-        insertWorkflowSpan(root, workflowId, name);
+        insertWorkflowSpan(root, workflowId, name, source);
         resizeEditor();
         syncFromDom();
       },

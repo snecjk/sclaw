@@ -7,18 +7,12 @@ import {
   Sun,
   Moon,
   Monitor,
-  RefreshCw,
   ExternalLink,
   Copy,
   FileText,
-  Settings2,
-  Bot,
-  Cpu,
-  Network,
-  Activity,
-  Terminal,
+  RefreshCw,
 } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { Agents } from '../Agents';
 import { Models } from '../Models';
 import { Channels } from '../Channels';
@@ -30,9 +24,11 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings';
 import { useGatewayStore } from '@/stores/gateway';
-import { useUpdateStore } from '@/stores/update';
+import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { UpdateSettings } from '@/components/settings/UpdateSettings';
+import { UpdateChangelogPanel } from '@/components/settings/update/UpdateChangelogPanel';
 import { DwsCliSettings } from '@/components/settings/DwsCliSettings';
+import { SettingsShell, type SettingsSectionId } from '@/components/settings/SettingsShell';
 import {
   getGatewayWsDiagnosticEnabled,
   invokeIpc,
@@ -50,8 +46,7 @@ import { useTranslation } from 'react-i18next';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { hostApiFetch } from '@/lib/host-api';
 import { cn } from '@/lib/utils';
-import { glassSectionSurface, stoMainInnerShell } from '@/lib/surfaces';
-import { getCurrentEnvConfig } from '../../../shared/env-config';
+import { stoSettingsSectionCardClass } from '@/lib/surfaces';
 
 const proxyFieldInputClassName = cn(
   'h-10 rounded-md font-mono text-[13px]',
@@ -100,10 +95,6 @@ export function Settings() {
     setProxyHttpsServer,
     setProxyAllServer,
     setProxyBypassRules,
-    autoCheckUpdate,
-    setAutoCheckUpdate,
-    autoDownloadUpdate,
-    setAutoDownloadUpdate,
     devModeUnlocked,
     setDevModeUnlocked,
     telemetryEnabled,
@@ -111,8 +102,10 @@ export function Settings() {
   } = useSettingsStore();
 
   const { status: gatewayStatus, restart: restartGateway } = useGatewayStore();
-  const currentVersion = useUpdateStore((state) => state.currentVersion);
-  const updateSetAutoDownload = useUpdateStore((state) => state.setAutoDownload);
+  const authUser = useAuthStore((s) => s.user);
+  const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
+  const isSite =
+    siteDepartmentTypes !== null && isSiteUser(authUser?.categoryCode);
   const [controlUiInfo, setControlUiInfo] = useState<ControlUiInfo | null>(null);
   const [openclawCliCommand, setOpenclawCliCommand] = useState('');
   const [openclawCliError, setOpenclawCliError] = useState<string | null>(null);
@@ -469,8 +462,7 @@ export function Settings() {
   };
 
   const location = useLocation();
-  const navigate = useNavigate();
-  const activeSection = location.pathname.startsWith('/settings/agents') ? 'agents'
+  const activeSection: SettingsSectionId = location.pathname.startsWith('/settings/agents') ? 'agents'
     : location.pathname.startsWith('/settings/models') ? 'models'
     : location.pathname.startsWith('/settings/channels') ? 'channels'
     : location.pathname.startsWith('/settings/gateway') ? 'gateway'
@@ -488,118 +480,23 @@ export function Settings() {
     );
   };
 
-  const navBtnClass = (active: boolean) =>
-    cn(
-      'flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all text-left w-full',
-      active
-        ? 'bg-primary/[0.1] text-foreground border border-border'
-        : 'text-muted-foreground hover:bg-primary/[0.06] hover:text-foreground border border-transparent',
-    );
-
   return (
-    <div className="flex w-full gap-4">
-      {/* Left sub-navigation */}
-      <nav className="w-44 shrink-0 pt-1">
-        <div className="flex flex-col gap-5">
-
-          {/* 通用 */}
-          <div>
-            <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/55">
-              通用
-            </p>
-            <div className="flex flex-col gap-0.5">
-              <button type="button" onClick={() => navigate('/settings')} className={navBtnClass(activeSection === 'general')}>
-                <Settings2 className="h-4 w-4 shrink-0" strokeWidth={2} />
-                {t('appearance.title')}
-              </button>
-            </div>
-          </div>
-
-          {/* 工作区 */}
-          <div>
-            <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/55">
-              工作区
-            </p>
-            <div className="flex flex-col gap-0.5">
-              {([
-                { id: 'agents', path: '/settings/agents', label: t('common:sidebar.agents'), icon: Bot },
-                { id: 'models', path: '/settings/models', label: t('common:sidebar.models'), icon: Cpu },
-                { id: 'channels', path: '/settings/channels', label: t('common:sidebar.channels'), icon: Network },
-              ] as const).map(item => {
-                const Icon = item.icon;
-                return (
-                  <button key={item.id} type="button" onClick={() => navigate(item.path)} className={navBtnClass(activeSection === item.id)}>
-                    <Icon className="h-4 w-4 shrink-0" strokeWidth={2} />
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 系统 */}
-          <div>
-            <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/55">
-              系统
-            </p>
-            <div className="flex flex-col gap-0.5">
-              {([
-                { id: 'gateway', path: '/settings/gateway', label: t('gateway.title'), icon: Activity },
-                { id: 'updates', path: '/settings/updates', label: t('updates.title'), icon: RefreshCw },
-              ] as const).map(item => {
-                const Icon = item.icon;
-                return (
-                  <button key={item.id} type="button" onClick={() => navigate(item.path)} className={navBtnClass(activeSection === item.id)}>
-                    <Icon className="h-4 w-4 shrink-0" strokeWidth={2} />
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 开发者 */}
-          {devModeUnlocked && (
-            <div>
-              <p className="mb-1 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/55">
-                开发者
-              </p>
-              <div className="flex flex-col gap-0.5">
-                <button type="button" onClick={() => navigate('/settings/developer')} className={navBtnClass(activeSection === 'developer')}>
-                  <Terminal className="h-4 w-4 shrink-0" strokeWidth={2} />
-                  {t('developer.title')}
-                </button>
-              </div>
-            </div>
-          )}
-
-        </div>
-      </nav>
-
-      {/* Right content */}
-      <div className="flex-1 min-w-0">
+    <SettingsShell activeSection={activeSection} devModeUnlocked={devModeUnlocked}>
         {activeSection === 'agents' && <Agents />}
         {activeSection === 'models' && <Models />}
         {activeSection === 'channels' && <Channels />}
         {activeSection === 'general' && (
-    <div className={cn(stoMainInnerShell, 'flex flex-col gap-8 pb-10')}>
-      <header className="shrink-0 border-b border-border pb-6">
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-primary/[0.08] text-primary shadow-[0_8px_24px_rgba(255,111,0,0.10)]">
-            <Settings2 className="h-5 w-5" strokeWidth={2} />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-[1.65rem]">
-              {t('title')}
-            </h1>
-            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-              {t('subtitle')}
-            </p>
-          </div>
-        </div>
+    <>
+      <header className="shrink-0">
+        <h1 className="text-[20px] font-bold leading-tight text-[#1D2129] dark:text-foreground">
+          {t('title')}
+        </h1>
+        <p className="mt-2 text-[14px] font-normal leading-relaxed text-[#86909C] dark:text-muted-foreground">
+          {t('subtitle')}
+        </p>
       </header>
       <div className="flex flex-col gap-6">
-          <section className={glassSectionSurface}>
+          <section className={stoSettingsSectionCardClass}>
             <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
               {t('appearance.title')}
             </h2>
@@ -689,14 +586,14 @@ export function Settings() {
             </div>
           </section>
       </div>
-    </div>
+    </>
         )}
 
         {/* Gateway section */}
         {activeSection === 'gateway' && (
-    <div className={cn(stoMainInnerShell, 'flex flex-col gap-8 pb-10')}>
+    <>
       <div className="flex flex-col gap-6">
-          <section className={glassSectionSurface}>
+          <section className={stoSettingsSectionCardClass}>
             <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
               {t('gateway.title')}
             </h2>
@@ -776,45 +673,49 @@ export function Settings() {
               </div>
 
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-[15px] font-medium text-foreground">{t('advanced.devMode')}</Label>
-                  <p className="text-[13px] text-muted-foreground mt-1">
-                    {t('advanced.devModeDesc')}
-                  </p>
+              {!isSite && (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-[15px] font-medium text-foreground">{t('advanced.devMode')}</Label>
+                    <p className="text-[13px] text-muted-foreground mt-1">
+                      {t('advanced.devModeDesc')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={devModeUnlocked}
+                    onCheckedChange={setDevModeUnlocked}
+                  />
                 </div>
-                <Switch
-                  checked={devModeUnlocked}
-                  onCheckedChange={setDevModeUnlocked}
-                />
-              </div>
+              )}
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-[15px] font-medium text-foreground">{t('advanced.telemetry')}</Label>
-                  <p className="text-[13px] text-muted-foreground mt-1">
-                    {t('advanced.telemetryDesc')}
-                  </p>
+              {!isSite && (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-[15px] font-medium text-foreground">{t('advanced.telemetry')}</Label>
+                    <p className="text-[13px] text-muted-foreground mt-1">
+                      {t('advanced.telemetryDesc')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={telemetryEnabled}
+                    onCheckedChange={setTelemetryEnabled}
+                  />
                 </div>
-                <Switch
-                  checked={telemetryEnabled}
-                  onCheckedChange={setTelemetryEnabled}
-                />
-              </div>
+              )}
 
             </div>
           </section>
 
           <DwsCliSettings />
       </div>
-    </div>
+    </>
         )}
 
         {/* Developer section */}
         {activeSection === 'developer' && devModeUnlocked && (
-    <div className={cn(stoMainInnerShell, 'flex flex-col gap-8 pb-10')}>
+    <>
       <div className="flex flex-col gap-6">
-            <section className={glassSectionSurface}>
+            <section className={stoSettingsSectionCardClass}>
                 <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
                   {t('developer.title')}
                 </h2>
@@ -1189,88 +1090,26 @@ export function Settings() {
                 </div>
             </section>
       </div>
-    </div>
+    </>
         )}
 
         {/* Updates section */}
         {activeSection === 'updates' && (
-    <div className={cn(stoMainInnerShell, 'flex flex-col gap-8 pb-10')}>
-      <div className="flex flex-col gap-6">
-          <section className={glassSectionSurface}>
-            <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
-              {t('updates.title')}
-            </h2>
-            <div className="space-y-6">
-              <UpdateSettings />
+    <>
+      <header className="shrink-0">
+        <h1 className="text-[20px] font-bold leading-tight text-[#1D2129] dark:text-foreground">
+          {t('updates.title')}
+        </h1>
+        <p className="mt-2 text-[14px] font-normal leading-relaxed text-[#86909C] dark:text-muted-foreground">
+          {t('updates.subtitle')}
+        </p>
+      </header>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-[15px] font-medium text-foreground">{t('updates.autoCheck')}</Label>
-                  <p className="text-[13px] text-muted-foreground mt-1">
-                    {t('updates.autoCheckDesc')}
-                  </p>
-                </div>
-                <Switch
-                  checked={autoCheckUpdate}
-                  onCheckedChange={setAutoCheckUpdate}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-[15px] font-medium text-foreground">{t('updates.autoDownload')}</Label>
-                  <p className="text-[13px] text-muted-foreground mt-1">
-                    {t('updates.autoDownloadDesc')}
-                  </p>
-                </div>
-                <Switch
-                  checked={autoDownloadUpdate}
-                  onCheckedChange={(value) => {
-                    setAutoDownloadUpdate(value);
-                    updateSetAutoDownload(value);
-                  }}
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className={glassSectionSurface}>
-            <h2 className="mb-5 text-lg font-semibold tracking-tight text-foreground">
-              {t('about.title')}
-            </h2>
-            <div className="space-y-3 text-[14px] text-muted-foreground">
-              <p>
-                <strong className="text-foreground font-semibold">{t('about.appName')}</strong> - {t('about.tagline')}
-              </p>
-              <p>{t('about.basedOn')}</p>
-              <p>{t('about.version', { version: currentVersion })}</p>
-              {!getCurrentEnvConfig().isProduction && (
-                <p className="flex items-center gap-2">
-                  <span className="text-foreground/70">{t('about.environment', { defaultValue: '环境' })}:</span>
-                  <span
-                    className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-bold leading-none text-white"
-                    style={{ backgroundColor: getCurrentEnvConfig().badgeColor }}
-                  >
-                    {getCurrentEnvConfig().displayLabel}
-                  </span>
-                </p>
-              )}
-              <div className="flex gap-4 pt-3">
-                <Button
-                  variant="link"
-                  className="h-auto p-0 text-[14px] text-link hover:opacity-90 font-medium"
-                  onClick={() => window.electron.openExternal('https://www.sto.cn')}
-                >
-                  {t('about.docs')}
-                </Button>
-              </div>
-            </div>
-          </section>
-      </div>
-    </div>
+      <UpdateSettings />
+      <UpdateChangelogPanel />
+    </>
         )}
-      </div>
-    </div>
+    </SettingsShell>
   );
 }
 

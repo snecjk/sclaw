@@ -120,6 +120,10 @@ export function isCurrentUserTurnIncomplete(options: {
   sessionMessages: RawMessage[];
   sending: boolean;
   lastUserMessageAt: number | null;
+  /** Gateway 仍在整理工具结果 / 等待下一段输出 */
+  pendingFinal?: boolean;
+  /** 仍有活跃 run，整轮未 terminal */
+  activeRunId?: string | null;
   workflowCardStates: Record<string, { status?: string } | undefined>;
   hasPendingWorkflowSchema: boolean;
   sessionKey?: string;
@@ -128,12 +132,14 @@ export function isCurrentUserTurnIncomplete(options: {
     sessionMessages,
     sending,
     lastUserMessageAt,
+    pendingFinal = false,
+    activeRunId = null,
     workflowCardStates,
     hasPendingWorkflowSchema,
     sessionKey,
   } = options;
 
-  if (sending || lastUserMessageAt != null) return true;
+  if (sending || lastUserMessageAt != null || pendingFinal || activeRunId != null) return true;
 
   const lastUserIdx = findLastUserMessageIndex(sessionMessages);
   if (lastUserIdx < 0) return false;

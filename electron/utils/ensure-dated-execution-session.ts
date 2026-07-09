@@ -172,7 +172,7 @@ export function buildFirstTriggeredCronSessionPlaceholders(
     const name = jobNamesById.get(jobId);
     items.push({
       key: sessionKey,
-      label: name ? `Cron: ${name}` : sessionKey,
+      label: name ? `${name}` : sessionKey,
       displayName: name,
       updatedAt: atMs,
     });

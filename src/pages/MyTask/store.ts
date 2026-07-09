@@ -68,14 +68,22 @@ function mapToExecutionRecord(run: WorkflowRunRecord): ExecutionRecord {
 
 // ──── Store 定义 ────
 
+/** 单个 Tab 的数据桶 */
+interface TabData {
+  /** 该状态下的执行记录（映射后，已按时间倒序） */
+  items: ExecutionRecord[];
+  /** 不限条数的总计数（用于 Tab 角标） */
+  total: number;
+  /** 该桶加载状态 */
+  loading: boolean;
+  /** 该桶错误信息 */
+  error: string | null;
+}
+
 interface MyTaskState {
   // ── 执行记录数据 ──
-  /** 当前的执行记录（映射后） */
-  records: ExecutionRecord[];
-  /** 加载状态 */
-  recordsLoading: boolean;
-  /** 错误信息 */
-  recordsError: string | null;
+  /** 按 Tab 分桶存储 */
+  recordsByStatus: Record<RecordStatus, TabData>;
 
   // ── 执行记录筛选状态 ──
   /** 当前选中的执行状态 Tab */
@@ -88,8 +96,8 @@ interface MyTaskState {
   workflowOptions: WorkflowOption[];
 
   // ── Actions ──
-  /** 从 API 拉取工作流执行记录 */
-  fetchRecords: () => Promise<void>;
+  /** 从 API 拉取指定 Tab 的工作流执行记录 */
+  fetchRecords: (status: RecordStatus) => Promise<void>;
   /** 从 API 拉取工作流列表 */
   fetchWorkflows: () => Promise<void>;
   /** 切换状态 Tab */
@@ -99,62 +107,61 @@ interface MyTaskState {
 }
 
 /**
- * 派生：按 recordSearch 过滤后的记录列表
- */
-export function selectFilteredRecords(state: MyTaskState): ExecutionRecord[] {
-  let result = state.records;
-
-  // 按搜索关键词筛选（本地兜底）
-  if (state.recordSearch.trim()) {
-    const q = state.recordSearch.trim().toLowerCase();
-    result = result.filter((r) => r.taskName.toLowerCase().includes(q));
-  }
-
-  return result;
-}
-
-/**
- * 派生：各状态计数（随 search 联动）
- * 用于 RecordStatusNav 显示各状态的数量
+ * 派生：各状态计数（直接取各桶的 total，随后端聚合结果联动）
  */
 export function selectRecordCounts(state: MyTaskState): StatusCounts {
-  const filtered = selectFilteredRecords(state);
-  const counts: StatusCounts = { running: 0, success: 0, failed: 0 };
-  for (const r of filtered) {
-    counts[r.status]++;
-  }
-  return counts;
+  return {
+    running: state.recordsByStatus.running.total,
+    success: state.recordsByStatus.success.total,
+    failed: state.recordsByStatus.failed.total,
+  };
 }
 
 /**
  * 派生：当前 Tab 状态下的记录列表
- * 在 filteredRecords 基础上再按 status 过滤
+ * 取当前桶的 items，按搜索关键词做本地兜底过滤
  */
 export function selectCurrentRecords(state: MyTaskState): ExecutionRecord[] {
-  const filtered = selectFilteredRecords(state);
-  return filtered.filter((r) => r.status === state.recordStatus);
+  const tab = state.recordsByStatus[state.recordStatus];
+  if (!state.recordSearch.trim()) return tab.items;
+  const q = state.recordSearch.trim().toLowerCase();
+  return tab.items.filter((r) => r.taskName.toLowerCase().includes(q));
 }
 
 export const useMyTaskStore = create<MyTaskState>((set) => ({
-  records: [],
-  recordsLoading: false,
-  recordsError: null,
+  recordsByStatus: {
+    running: { items: [], total: 0, loading: false, error: null },
+    success: { items: [], total: 0, loading: false, error: null },
+    failed: { items: [], total: 0, loading: false, error: null },
+  },
 
   recordStatus: 'running',
   recordSearch: '',
 
   workflowOptions: [],
 
-  fetchRecords: async () => {
-    set({ recordsLoading: true, recordsError: null });
+  fetchRecords: async (status) => {
+    set((s) => ({
+      recordsByStatus: {
+        ...s.recordsByStatus,
+        [status]: { ...s.recordsByStatus[status], loading: true, error: null },
+      },
+    }));
     try {
-      const runs = await fetchWorkflowRuns();
-      set({
-        records: runs.map(mapToExecutionRecord),
-        recordsLoading: false,
-      });
+      const { items, total } = await fetchWorkflowRuns({ status, pageSize: 99 });
+      set((s) => ({
+        recordsByStatus: {
+          ...s.recordsByStatus,
+          [status]: { items: items.map(mapToExecutionRecord), total, loading: false, error: null },
+        },
+      }));
     } catch (err) {
-      set({ recordsError: String(err), recordsLoading: false });
+      set((s) => ({
+        recordsByStatus: {
+          ...s.recordsByStatus,
+          [status]: { ...s.recordsByStatus[status], loading: false, error: String(err) },
+        },
+      }));
     }
   },
 
