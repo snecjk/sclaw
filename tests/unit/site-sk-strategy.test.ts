@@ -6,6 +6,16 @@ const mocks = vi.hoisted(() => ({
   getApiKey: vi.fn(),
   storeApiKey: vi.fn(),
   deleteApiKey: vi.fn(),
+  hasSiteInferencePortalDomainCached: vi.fn().mockReturnValue(true),
+  loadSiteInferencePortalDomain: vi.fn().mockResolvedValue(undefined),
+  resolveSiteInferencePortalDomain: vi.fn(
+    (env?: string | null) =>
+      ['test', 'pre-release', 'daily', 'daily-external', 'local'].some((e) =>
+        (env ?? '').toLowerCase().includes(e),
+      )
+        ? 'https://devops-llmgatewayleague-test.sto.cn'
+        : 'https://devops-llmgatewayleague.sto.cn',
+  ),
 }));
 
 vi.mock('@electron/services/sto-site-memory-api-service', () => ({
@@ -21,6 +31,12 @@ vi.mock('@electron/utils/secure-storage', () => ({
 
 vi.mock('@electron/utils/auth-store', () => ({
   getSsoEnvironment: vi.fn().mockResolvedValue('production'),
+}));
+
+vi.mock('@electron/services/sto-apollo-config-service', () => ({
+  hasSiteInferencePortalDomainCached: mocks.hasSiteInferencePortalDomainCached,
+  loadSiteInferencePortalDomain: mocks.loadSiteInferencePortalDomain,
+  resolveSiteInferencePortalDomain: mocks.resolveSiteInferencePortalDomain,
 }));
 
 import { SiteSkStrategy } from '@electron/services/sto-site-sk-strategy';
@@ -55,6 +71,7 @@ describe('SiteSkStrategy', () => {
     mocks.getApiKey.mockResolvedValue(null);
     mocks.storeApiKey.mockResolvedValue(undefined);
     mocks.deleteApiKey.mockResolvedValue(undefined);
+    mocks.hasSiteInferencePortalDomainCached.mockReturnValue(true);
   });
 
   it('getUserSk stores and returns plaintext apiKey from memory-center', async () => {
@@ -113,5 +130,26 @@ describe('SiteSkStrategy', () => {
     await expect(strategy.getInferenceHeaders(siteUser)).resolves.toEqual({
       secret: expectedSecret,
     });
+  });
+
+  it('getSupplierDomain returns fallback llmgatewayleague prod domain', async () => {
+    const domain = await strategy.getSupplierDomain();
+    expect(domain).toBe('https://devops-llmgatewayleague.sto.cn');
+  });
+
+  it('getSupplierDomain returns test league portal for local SSO environment', async () => {
+    const { getSsoEnvironment } = await import('@electron/utils/auth-store');
+    vi.mocked(getSsoEnvironment).mockResolvedValueOnce('local');
+
+    const domain = await strategy.getSupplierDomain();
+    expect(domain).toBe('https://devops-llmgatewayleague-test.sto.cn');
+  });
+
+  it('getSupplierDomain loads Apollo config when cache is empty', async () => {
+    mocks.hasSiteInferencePortalDomainCached.mockReturnValueOnce(false);
+
+    await strategy.getSupplierDomain();
+
+    expect(mocks.loadSiteInferencePortalDomain).toHaveBeenCalled();
   });
 });

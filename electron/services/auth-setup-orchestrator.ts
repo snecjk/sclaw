@@ -219,6 +219,13 @@ async function runSetup(
     logger.warn(`${logPrefix} STO plugins config failed:`, err);
   }
 
+  try {
+    const { loadClawInferenceRuntimeConfig } = await import('./sto-apollo-config-service');
+    await loadClawInferenceRuntimeConfig();
+  } catch (err) {
+    logger.warn(`${logPrefix} Inference runtime Apollo config load failed:`, err);
+  }
+
   // ===== 登录后静默获取用户 SK（强制走主租户全链路，不读旧 tenant 缓存） =====
   try {
     const { getUserSk, clearUserSk } = await import('./user-sk-service');

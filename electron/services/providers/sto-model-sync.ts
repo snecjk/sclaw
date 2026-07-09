@@ -190,6 +190,9 @@ export class StoModelSyncService {
       const models = await strategy.getUserModels(authState.user);
       remoteModels = (models ?? []).map((id) => ({ id, name: id }));
       supplierDomain = await strategy.getSupplierDomain();
+      logger.info(
+        `[sto-sync] Inference portal domain applied: domain=${supplierDomain}, baseUrl=${supplierDomain}/v1`,
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.warn(`[sto-sync] Failed to fetch remote models or domain via strategy: ${message}`);

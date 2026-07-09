@@ -10,6 +10,16 @@ const mocks = vi.hoisted(() => ({
   getHqInferenceProductCode: vi.fn().mockReturnValue('enterprise-Intelligence'),
   hasHqInferenceProductCodeCached: vi.fn().mockReturnValue(true),
   loadHqInferenceProductCode: vi.fn().mockResolvedValue(undefined),
+  hasHqInferencePortalDomainCached: vi.fn().mockReturnValue(true),
+  loadHqInferencePortalDomain: vi.fn().mockResolvedValue(undefined),
+  resolveHqInferencePortalDomain: vi.fn(
+    (env?: string | null) =>
+      ['test', 'pre-release', 'daily', 'daily-external', 'local'].some((e) =>
+        (env ?? '').toLowerCase().includes(e),
+      )
+        ? 'https://devops-llmgatewayportal-test.sto.cn'
+        : 'https://devops-llmgatewayportal.sto.cn',
+  ),
 }));
 
 vi.mock('@electron/services/sto-hq-memory-api-service', () => ({
@@ -36,6 +46,9 @@ vi.mock('@electron/services/sto-apollo-config-service', () => ({
   getHqInferenceProductCode: mocks.getHqInferenceProductCode,
   hasHqInferenceProductCodeCached: mocks.hasHqInferenceProductCodeCached,
   loadHqInferenceProductCode: mocks.loadHqInferenceProductCode,
+  hasHqInferencePortalDomainCached: mocks.hasHqInferencePortalDomainCached,
+  loadHqInferencePortalDomain: mocks.loadHqInferencePortalDomain,
+  resolveHqInferencePortalDomain: mocks.resolveHqInferencePortalDomain,
 }));
 
 import { HqSkStrategy } from '@electron/services/sto-hq-sk-strategy';
@@ -72,6 +85,7 @@ describe('HqSkStrategy', () => {
     mocks.deleteApiKey.mockResolvedValue(undefined);
     mocks.getHqInferenceProductCode.mockReturnValue('enterprise-Intelligence');
     mocks.hasHqInferenceProductCodeCached.mockReturnValue(true);
+    mocks.hasHqInferencePortalDomainCached.mockReturnValue(true);
   });
 
   it('getUserSk stores and returns plaintext apiKey from memory-center', async () => {
@@ -112,7 +126,24 @@ describe('HqSkStrategy', () => {
     await expect(strategy.getDecryptKey()).rejects.toThrow('memory-center');
   });
 
-  it('getSupplierDomain returns hardcoded llmgatewayportal prod domain', async () => {
+  it('getSupplierDomain returns Apollo portal domain when cached', async () => {
+    mocks.resolveHqInferencePortalDomain.mockReturnValueOnce('https://apollo-portal.sto.cn');
+
+    const domain = await strategy.getSupplierDomain();
+
+    expect(domain).toBe('https://apollo-portal.sto.cn');
+    expect(mocks.loadHqInferencePortalDomain).not.toHaveBeenCalled();
+  });
+
+  it('getSupplierDomain loads Apollo config when cache is empty', async () => {
+    mocks.hasHqInferencePortalDomainCached.mockReturnValueOnce(false);
+
+    await strategy.getSupplierDomain();
+
+    expect(mocks.loadHqInferencePortalDomain).toHaveBeenCalled();
+  });
+
+  it('getSupplierDomain returns fallback llmgatewayportal prod domain', async () => {
     const domain = await strategy.getSupplierDomain();
     expect(domain).toBe('https://devops-llmgatewayportal.sto.cn');
   });

@@ -20,7 +20,7 @@ import { removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-au
 import { getStoPolicyReportApiHost } from '../../../shared/env-config';
 import { computeCrmWeekReportSurfaceAllowed } from '../../../shared/crm-week-report-policy';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
-import { loadSiteDepartmentTypes, loadHqInferenceProductCode } from '../../services/sto-apollo-config-service';
+import { loadSiteDepartmentTypes, loadClawInferenceRuntimeConfig, clearInferenceRuntimeConfigCache } from '../../services/sto-apollo-config-service';
 import { getClientSiteAccessService } from '../../services/client-site-access-service';
 import type { ClientSiteAccessCheckResult } from '../../../shared/client-site-access';
 import { syncClaudeDefaultContext } from '../../services/claude-context-sync';
@@ -33,6 +33,14 @@ import { resolveAuthMode } from '../../services/sto-auth-mode';
 const ssoLoginManager = new SsoLoginManager();
 
 const CLIENT_SITE_ACCESS_DENIED_MESSAGE = '您的所属组织无权使用 StoClaw';
+
+async function loadInferenceRuntimeConfigBeforeSetup(): Promise<void> {
+  try {
+    await loadClawInferenceRuntimeConfig();
+  } catch (err) {
+    logger.warn('[auth] Inference runtime config load before setup failed:', err);
+  }
+}
 
 function toAccessCheckPayload(result: ClientSiteAccessCheckResult) {
   const clientCode = result.clientCode;
@@ -79,10 +87,6 @@ function schedulePostLoginBackgroundWork(user: SsoUserInfo, ctx: HostApiContext)
 
     void loadSiteDepartmentTypes().catch((err) =>
       logger.warn('Post-login site department types load failed:', err),
-    );
-
-    void loadHqInferenceProductCode().catch((err) =>
-      logger.warn('Post-login HQ inference product code load failed:', err),
     );
 
     try {
@@ -197,6 +201,8 @@ export async function handleAuthRoutes(
         stoSyncService.setGatewayManager(ctx.gatewayManager);
       }
 
+      await loadInferenceRuntimeConfigBeforeSetup();
+
       let setupResult: AuthenticatedSetupResult | undefined;
       try {
         setupResult = await runAuthenticatedSetup({
@@ -248,6 +254,7 @@ export async function handleAuthRoutes(
       }
 
       await clearAuthUser();
+      clearInferenceRuntimeConfigCache();
       void removeSsoAuthFromOpenClaw();
       void removeStoDynamicRoutePluginFromOpenClaw().catch((err) =>
         logger.warn('STO dynamic route plugin cleanup on logout failed:', err),
@@ -264,6 +271,7 @@ export async function handleAuthRoutes(
 
       // Always clear local auth even if SSO signOut fails
       await clearAuthUser().catch(() => {});
+      clearInferenceRuntimeConfigCache();
       void removeSsoAuthFromOpenClaw();
       void removeStoDynamicRoutePluginFromOpenClaw().catch(() => {});
 
@@ -372,6 +380,8 @@ export async function handleAuthRoutes(
         stoSyncService.setGatewayManager(ctx.gatewayManager);
       }
 
+      await loadInferenceRuntimeConfigBeforeSetup();
+
       let setupResult: AuthenticatedSetupResult | undefined;
       try {
         setupResult = await runAuthenticatedSetup({
@@ -461,6 +471,8 @@ export async function handleAuthRoutes(
         stoSyncService.setGatewayManager(ctx.gatewayManager);
       }
 
+      await loadInferenceRuntimeConfigBeforeSetup();
+
       let setupResult: AuthenticatedSetupResult | undefined;
       try {
         setupResult = await runAuthenticatedSetup({
@@ -504,6 +516,8 @@ export async function handleAuthRoutes(
       if (ctx.gatewayManager) {
         stoSyncService.setGatewayManager(ctx.gatewayManager);
       }
+
+      await loadInferenceRuntimeConfigBeforeSetup();
 
       let setupResult: AuthenticatedSetupResult | undefined;
       try {

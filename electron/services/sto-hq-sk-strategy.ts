@@ -2,7 +2,7 @@
  * 非网点 SK 策略实现（memory-center 代理）
  *
  * Key 确保 / 详情 / 模型列表 / 套餐档位 / 额度扩容 UI：经 memory-center 代理供应商 openapi。
- * 模型推理域名：客户端本地 SUPPLIER_DOMAINS，不经 memory-center 管理。
+ * 模型推理域名：优先 Apollo `claw.hq.inference.portal.domain`，登录后拉取；兜底为本地 SUPPLIER_DOMAINS。
  */
 
 import type { StoSkStrategy } from './sto-sk-strategy';
@@ -17,18 +17,19 @@ import {
   fetchHqTokenQuotaTiersViaMemoryCenter,
   StoHqMemoryApiError,
 } from './sto-hq-memory-api-service';
-import { getHqInferenceProductCode, hasHqInferenceProductCodeCached, loadHqInferenceProductCode } from './sto-apollo-config-service';
+import {
+  getHqInferenceProductCode,
+  hasHqInferenceProductCodeCached,
+  loadHqInferencePortalDomain,
+  loadHqInferenceProductCode,
+  hasHqInferencePortalDomainCached,
+  resolveHqInferencePortalDomain,
+} from './sto-apollo-config-service';
 
 export class HqSkStrategy implements StoSkStrategy {
   private static readonly CACHE_KEY = 'sto-sk-v2';
   /** @deprecated 旧版密文缓存键，仅用于迁移清理 */
   private static readonly LEGACY_CACHE_KEY = 'sto';
-
-  /** 模型推理 Gateway baseUrl 域名（客户端本地，不经 memory-center） */
-  private static readonly SUPPLIER_DOMAINS: Record<string, string> = {
-    prod: 'https://devops-llmgatewayportal.sto.cn',
-    test: 'https://devops-llmgatewayportal-test.sto.cn',
-  };
 
   // ─── 公开接口实现 ───
 
@@ -117,11 +118,14 @@ export class HqSkStrategy implements StoSkStrategy {
   }
 
   async getSupplierDomain(): Promise<string> {
+    if (!hasHqInferencePortalDomainCached()) {
+      await loadHqInferencePortalDomain();
+    }
     const env = await getSsoEnvironment();
-    const domain = this.isTestEnvironment(env)
-      ? HqSkStrategy.SUPPLIER_DOMAINS.test
-      : HqSkStrategy.SUPPLIER_DOMAINS.prod;
-    logger.info(`[hq-sk] getSupplierDomain (local inference): env=${env}, domain=${domain}`);
+    const domain = resolveHqInferencePortalDomain(env);
+    logger.info(
+      `[hq-sk] getSupplierDomain: env=${env}, domain=${domain}, apollo=${hasHqInferencePortalDomainCached()}`,
+    );
     return domain;
   }
 
@@ -166,13 +170,6 @@ export class HqSkStrategy implements StoSkStrategy {
     await deleteApiKey(HqSkStrategy.CACHE_KEY);
     await deleteApiKey(HqSkStrategy.LEGACY_CACHE_KEY);
     logger.info(`[hq-sk] Cache cleared for user=${user.code}`);
-  }
-
-  private isTestEnvironment(env?: string | null): boolean {
-    const normalized = env?.trim().toLowerCase() || '';
-    return ['test', 'pre-release', 'daily', 'daily-external', 'local'].some(
-      (e) => normalized.includes(e),
-    );
   }
 }
 

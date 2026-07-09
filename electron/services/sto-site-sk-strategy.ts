@@ -2,7 +2,7 @@
  * 网点 SK 策略实现（memory-center 代理）
  *
  * Key 确保 / 额度扩容：经 memory-center 代理供应商 openapi 接口。
- * 模型推理域名：客户端本地 SUPPLIER_DOMAINS，不经 memory-center 管理。
+ * 模型推理域名：优先 Apollo `claw.site.inference.portal.domain`，登录后拉取；兜底为本地 SUPPLIER_DOMAINS。
  */
 
 import type { StoSkStrategy } from './sto-sk-strategy';
@@ -15,6 +15,11 @@ import crypto from 'crypto';
 import {
   ensureSiteKeyViaMemoryCenter,
 } from './sto-site-memory-api-service';
+import {
+  hasSiteInferencePortalDomainCached,
+  loadSiteInferencePortalDomain,
+  resolveSiteInferencePortalDomain,
+} from './sto-apollo-config-service';
 
 export class SiteSkStrategy implements StoSkStrategy {
   /** @deprecated 旧版全局 SK 缓存键，仅用于迁移清理 */
@@ -22,15 +27,6 @@ export class SiteSkStrategy implements StoSkStrategy {
   /** @deprecated 旧版按用户密文缓存前缀，仅用于迁移清理 */
   private static readonly LEGACY_SK_CACHE_KEY_PREFIX = 'sto-site-sk:';
   private static readonly SK_CACHE_KEY_PREFIX = 'sto-site-sk-v2:';
-
-  /**
-   * 模型推理 Gateway baseUrl 域名（客户端本地，不经 memory-center）
-   * 与 sto-model-sync 中 ProviderAccount.baseUrl 一致
-   */
-  private static readonly SUPPLIER_DOMAINS: Record<string, string> = {
-    prod: 'https://devops-llmgatewayleague.sto.cn',
-    test: 'https://devops-llmgatewayleague-test.sto.cn',
-  };
 
   async getUserSk(user: SsoUserInfo, forceRefresh: boolean): Promise<string | null> {
     logger.info(`[site-sk] getUserSk called, userCode=${user.code}, forceRefresh=${forceRefresh}`);
@@ -91,11 +87,14 @@ export class SiteSkStrategy implements StoSkStrategy {
   }
 
   async getSupplierDomain(): Promise<string> {
+    if (!hasSiteInferencePortalDomainCached()) {
+      await loadSiteInferencePortalDomain();
+    }
     const env = await getSsoEnvironment();
-    const domain = this.isTestEnvironment(env)
-      ? SiteSkStrategy.SUPPLIER_DOMAINS.test
-      : SiteSkStrategy.SUPPLIER_DOMAINS.prod;
-    logger.info(`[site-sk] getSupplierDomain (local inference): env=${env}, domain=${domain}`);
+    const domain = resolveSiteInferencePortalDomain(env);
+    logger.info(
+      `[site-sk] getSupplierDomain: env=${env}, domain=${domain}, apollo=${hasSiteInferencePortalDomainCached()}`,
+    );
     return domain;
   }
 
@@ -184,13 +183,6 @@ export class SiteSkStrategy implements StoSkStrategy {
     if (user.code !== tenantCode) {
       await deleteApiKey(this.legacySkCacheKey(user.code, user.code));
     }
-  }
-
-  private isTestEnvironment(env?: string | null): boolean {
-    const normalized = env?.trim().toLowerCase() || '';
-    return ['test', 'pre-release', 'daily', 'daily-external', 'local'].some(
-      (e) => normalized.includes(e),
-    );
   }
 }
 
