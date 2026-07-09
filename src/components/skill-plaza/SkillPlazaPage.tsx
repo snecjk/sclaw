@@ -117,7 +117,7 @@ export function SkillPlazaPage() {
     <div className="flex h-full min-h-0 flex-col">
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-6">
       {showUploadSuccess && (
-        <div className="pointer-events-none absolute left-1/2 top-3 z-50 -translate-x-1/2">
+        <div className="pointer-events-none absolute left-1/2 top-6 z-50 -translate-x-1/2">
           <div className="inline-flex items-center gap-2 rounded-md bg-[#00B54B] px-4 py-2 text-sm font-semibold text-white shadow-lg">
             <CheckCircle2 className="h-4 w-4 text-white" />
             <span>{t('plaza.upload.successTitle', { defaultValue: '安装成功' })}</span>
