@@ -137,6 +137,7 @@ const electronAPI = {
         'log:listFiles',
         // File staging & media
         'file:stat',
+        'file:validateSkillUpload',
         'file:stage',
         'file:stageBuffer',
         'media:getThumbnails',

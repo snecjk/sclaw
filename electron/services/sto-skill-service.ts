@@ -288,6 +288,8 @@ export class StoSkillService {
             { recursive: true, force: true },
           );
         }
+      } else if (path.basename(filePath).toLowerCase() === 'skill.md') {
+        fs.copyFileSync(filePath, path.join(stagingDir, 'SKILL.md'));
       } else {
         // ZIP file input: extract into staging
         const { extractZip } = await import('../utils/zip-extract');

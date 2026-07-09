@@ -2688,6 +2688,37 @@ async function getDirectorySize(dirPath: string): Promise<number> {
   return total;
 }
 
+async function skillUploadHasSkillMd(candidatePath: string): Promise<boolean> {
+  const fsP = await import('fs/promises');
+  const stat = await fsP.stat(candidatePath);
+
+  if (stat.isFile()) {
+    return basename(candidatePath).toLowerCase() === 'skill.md';
+  }
+
+  if (!stat.isDirectory()) return false;
+
+  try {
+    await fsP.access(join(candidatePath, 'SKILL.md'));
+    return true;
+  } catch {
+    // Continue with one-level nested folder check below.
+  }
+
+  const entries = await fsP.readdir(candidatePath, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    try {
+      await fsP.access(join(candidatePath, entry.name, 'SKILL.md'));
+      return true;
+    } catch {
+      // Continue searching.
+    }
+  }
+
+  return false;
+}
+
 /**
  * Generate a preview data URL for image files.
  * Resizes large images while preserving aspect ratio (only constrain the
@@ -2734,6 +2765,41 @@ function registerFileHandlers(): void {
       };
     } catch {
       return { size: 0, isDirectory: false, isFile: false };
+    }
+  });
+
+  ipcMain.handle('file:validateSkillUpload', async (_, filePath: string) => {
+    const fsP = await import('fs/promises');
+    try {
+      const stat = await fsP.stat(filePath);
+      const isDirectory = stat.isDirectory();
+      const isFile = stat.isFile();
+      const ext = extname(filePath).toLowerCase();
+
+      if (isFile && basename(filePath).toLowerCase() === 'skill.md') {
+        return { valid: true, isDirectory, isFile };
+      }
+
+      if (isDirectory) {
+        return { valid: await skillUploadHasSkillMd(filePath), isDirectory, isFile };
+      }
+
+      if (isFile && ext === '.zip') {
+        const os = await import('os');
+        const { extractZip } = await import('../utils/zip-extract');
+        const stagingDir = join(os.tmpdir(), `stoclaw-skill-upload-validate-${Date.now()}-${crypto.randomUUID()}`);
+        try {
+          await fsP.mkdir(stagingDir, { recursive: true });
+          await extractZip(filePath, stagingDir);
+          return { valid: await skillUploadHasSkillMd(stagingDir), isDirectory, isFile };
+        } finally {
+          await fsP.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+        }
+      }
+
+      return { valid: false, isDirectory, isFile };
+    } catch {
+      return { valid: false, isDirectory: false, isFile: false };
     }
   });
 

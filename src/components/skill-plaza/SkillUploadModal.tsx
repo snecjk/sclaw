@@ -33,6 +33,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
   const [fileSize, setFileSize] = useState<number>(0);
   const [slug, setSlug] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
   // Reset to a fresh state every time the modal opens. Uses React's
@@ -47,6 +48,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
       setFileName(null);
       setFileSize(0);
       setErrorMsg(null);
+      setUploadWarning(null);
       setDragOver(false);
     }
   }
@@ -57,15 +59,27 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     setFileName(null);
     setFileSize(0);
     setErrorMsg(null);
+    setUploadWarning(null);
   };
 
   // Enter the preview/confirm step with the given local path. Does NOT start
   // uploading until the user confirms — required by the preview-confirm step.
- const enterPreview = (selectedPath: string) => {
+ const enterPreview = async (selectedPath: string) => {
+   const validation = await invokeIpc<{ valid: boolean }>('file:validateSkillUpload', selectedPath);
+   if (!validation?.valid) {
+     setStatus('idle');
+     setFilePath(null);
+     setFileName(null);
+     setFileSize(0);
+     setErrorMsg(null);
+     setUploadWarning('请选择 .zip 文件或 SKILL.md 文件');
+     return;
+   }
    setFilePath(selectedPath);
    setFileName(selectedPath.split(/[\\/]/).pop() || selectedPath);
    setFileSize(0);
    setErrorMsg(null);
+   setUploadWarning(null);
    setStatus('preview');
     // Fetch file size via file:stat IPC (returns size from fs.stat directly).
     // Best-effort: the preview card shows '-' if the size cannot be read.
@@ -89,11 +103,11 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
         {
           title: t('plaza.upload.title', { defaultValue: '上传技能' }),
           properties: ['openFile', 'openDirectory'],
-          filters: [{ name: 'ZIP', extensions: ['zip'] }],
+          filters: [{ name: 'Skill Package', extensions: ['zip', 'md'] }],
         },
       );
       if (result.canceled || !result.filePaths?.length) return;
-      enterPreview(result.filePaths[0]);
+      await enterPreview(result.filePaths[0]);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
       setStatus('error');
@@ -151,7 +165,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
       if (p) droppedPath = p;
     }
     if (droppedPath) {
-      enterPreview(droppedPath);
+      void enterPreview(droppedPath);
     } else {
       setErrorMsg(
         t('plaza.upload.dragFailed', {
@@ -268,6 +282,12 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     {/*<li>{t('plaza.upload.requirementSkillMd', { defaultValue: '文件夹或 .zip 需包含 SKILL.md 文件' })}</li>*/}
                     {/*<li>{t('plaza.upload.requirementYaml', { defaultValue: 'SKILL.md 需含 YAML 格式的 name 与 description' })}</li>*/}
                   </ul>
+                </div>
+              )}
+              {status === 'idle' && uploadWarning && (
+                <div className="mt-4 rounded-lg bg-[#E89F0C] px-4 py-3 text-sm font-semibold text-white shadow-sm flex items-center justify-center gap-2">
+                  <AlertCircle className="h-4 w-4 fill-white/20 text-white" />
+                  <span>{uploadWarning}</span>
                 </div>
               )}
 
