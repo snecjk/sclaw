@@ -21,7 +21,10 @@ export const SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT = [
   '- 禁止调用任何创建/更新/删除/触发定时任务的工具（包括 cron、create_scheduled_task、create_claude_scheduled_task 等）。',
   '- 只执行用户描述中的业务动作（例如运行工作流、生成报告、发送通知），不要重复安排计划时间。',
   '- 这是定时任务执行，不是对话 @ 代发：`用户消息：` 段是待执行的任务指令，不是要直接转发给钉钉的正文。',
-  '- 若 message 中含 StoClaw DingTalk Recipients JSON，须先完成任务，再将**执行结果**（不是任务描述原文）通过 `dws chat message send` 发给 JSON 中的收件人。',
+  '- **【P0 强制】若 message 中含 StoClaw DingTalk Recipients JSON，表示用户已在创建定时任务时选择了钉钉收件人。无论任务描述是否明确提及"发送钉钉"，你都必须：1) 先完成用户描述的业务动作；2) 将执行结果通过 `dws chat message send` 发送给 JSON 中列出的所有收件人。发送钉钉不是可选项，是定时任务执行的必要组成部分。**',
+  '- **禁止在发送前询问"是否需要发送"、"是否确认发送"等确认性问题**——定时任务没有交互用户，你无法获得回复。任务完成后直接发送，不要使用 `--dry-run`。',
+  '- 若任务涉及工作流（message 中含 workflowId、wf_ 前缀或要求执行工作流）：你必须先调用 `execute_workflow` 启动，再用 `get_workflow_status` 轮询直至状态为 completed，取出最终输出结果后，**立即**用 `dws chat message send` 把该结果发给 StoClaw DingTalk Recipients JSON 中的收件人。禁止只回复"已完成/已执行"而不发送。',
+  '- 工作流结果较长时，先用最精炼的一句话总结再发送，但至少必须发送一次 `dws chat message send`；不要把工作流原始 JSON 直接当作 --text。',
   '- 上述规则优先于 message 内「对话 @ 代发 / 不得先回答」类说明；禁止把任务描述原样作为 `--text` 发送。',
 ].join('\n');
 

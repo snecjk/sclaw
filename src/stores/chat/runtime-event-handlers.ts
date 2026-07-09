@@ -8,7 +8,6 @@ import {
   getMessageText,
   getToolCallFilePath,
   hasErrorRecoveryTimer,
-  hasNonToolAssistantContent,
   isSessionLockErrorMessage,
   isToolOnlyMessage,
   isToolResultRole,
@@ -16,9 +15,47 @@ import {
   setErrorRecoveryTimer,
   upsertToolStatuses,
 } from './helpers';
+import { resolveAssistantFinalTerminalState } from './run-completion';
 import type { AttachedFileMeta, RawMessage } from './types';
 import type { ChatGet, ChatSet } from './store-api';
 import { dedupeRedundantUserMessages } from './user-message-merge';
+
+const STREAMING_MESSAGE_BUFFER_LIMIT = 80;
+
+function isAssistantStreamMessage(message: unknown): message is RawMessage {
+  if (!message || typeof message !== 'object') return false;
+  const role = (message as RawMessage).role;
+  return role === 'assistant' || role === undefined;
+}
+
+function appendStreamingAssistantSnapshot(messages: RawMessage[], message: unknown): RawMessage[] {
+  if (!isAssistantStreamMessage(message)) return messages;
+  const next = { ...message, role: 'assistant' as const };
+  if (next.id) {
+    const index = messages.findIndex((item) => item.id === next.id);
+    if (index >= 0) {
+      const updated = [...messages];
+      updated[index] = next;
+      return updated.slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+    }
+  }
+  return [...messages, next].slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+}
+
+function appendStreamingToolResultSnapshot(messages: RawMessage[], message: RawMessage): RawMessage[] {
+  const key = message.toolCallId || message.id || message.toolName;
+  if (key) {
+    const index = messages.findIndex(
+      (item) => (item.toolCallId || item.id || item.toolName) === key,
+    );
+    if (index >= 0) {
+      const updated = [...messages];
+      updated[index] = message;
+      return updated.slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+    }
+  }
+  return [...messages, message].slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+}
 
 export function handleRuntimeEventState(
   set: ChatSet,
@@ -53,6 +90,7 @@ export function handleRuntimeEventState(
               }
               return event.message ?? s.streamingMessage;
             })(),
+            streamingMessages: appendStreamingAssistantSnapshot(s.streamingMessages, event.message),
             streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
           }));
           break;
@@ -92,48 +130,33 @@ export function handleRuntimeEventState(
                 });
                 for (const ref of mediaRefs) toolFiles.push(makeAttachedFile(ref));
               }
-              set((s) => {
-                // Snapshot the current streaming assistant message (thinking + tool_use) into
-                // messages[] before clearing it. The Gateway does NOT send separate 'final'
-                // events for intermediate tool-use turns — it only sends deltas and then the
-                // tool result. Without snapshotting here, the intermediate thinking+tool steps
-                // would be overwritten by the next turn's deltas and never appear in the UI.
-                const currentStream = s.streamingMessage as RawMessage | null;
-                const snapshotMsgs: RawMessage[] = [];
-                if (currentStream) {
-                  const streamRole = currentStream.role;
-                  if (streamRole === 'assistant' || streamRole === undefined) {
-                    // Use message's own id if available, otherwise derive a stable one from runId
-                    const snapId = currentStream.id
-                      || `${runId || 'run'}-turn-${s.messages.length}`;
-                    if (!s.messages.some(m => m.id === snapId)) {
-                      snapshotMsgs.push({
-                        ...(currentStream as RawMessage),
-                        role: 'assistant',
-                        id: snapId,
-                      });
-                    }
-                  }
-                }
-                return {
-                  messages: snapshotMsgs.length > 0 ? [...s.messages, ...snapshotMsgs] : s.messages,
-                  streamingText: '',
-                  streamingMessage: null,
-                  pendingFinal: true,
-                  pendingToolImages: toolFiles.length > 0
-                    ? [...s.pendingToolImages, ...toolFiles]
-                    : s.pendingToolImages,
-                  streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
-                };
-              });
+              set((s) => ({
+                streamingText: '',
+                streamingMessage: null,
+                streamingToolResults: appendStreamingToolResultSnapshot(s.streamingToolResults, finalMsg),
+                pendingFinal: true,
+                pendingToolImages: toolFiles.length > 0
+                  ? [...s.pendingToolImages, ...toolFiles]
+                  : s.pendingToolImages,
+                streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
+              }));
               break;
             }
             const toolOnly = isToolOnlyMessage(finalMsg);
-            const hasOutput = hasNonToolAssistantContent(finalMsg);
+            const session = get().sessions.find((item) => item.key === get().currentSessionKey);
+            const currentEngineType = session?.engineType;
+            const { isTerminalOutput } = resolveAssistantFinalTerminalState(
+              currentEngineType,
+              get().sending,
+              event.phase,
+              finalMsg,
+            );
             const msgId = finalMsg.id || (toolOnly ? `run-${runId}-tool-${Date.now()}` : `run-${runId}`);
             set((s) => {
               const nextTools = updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools;
-              const streamingTools = hasOutput ? [] : nextTools;
+              const streamingTools = isTerminalOutput ? [] : nextTools;
+              const streamingMessages = isTerminalOutput ? [] : s.streamingMessages;
+              const streamingToolResults = isTerminalOutput ? [] : s.streamingToolResults;
 
               // Attach any images collected from preceding tool results
               const pendingImgs = s.pendingToolImages;
@@ -153,17 +176,21 @@ export function handleRuntimeEventState(
                 return toolOnly ? {
                   streamingText: '',
                   streamingMessage: null,
+                  streamingMessages,
+                  streamingToolResults,
                   pendingFinal: true,
                   streamingTools,
                   ...clearPendingImages,
                 } : {
                   streamingText: '',
                   streamingMessage: null,
-                  sending: hasOutput ? false : s.sending,
-                  activeRunId: hasOutput ? null : s.activeRunId,
-                  pendingFinal: hasOutput ? false : true,
+                  streamingMessages,
+                  streamingToolResults,
+                  sending: isTerminalOutput ? false : s.sending,
+                  activeRunId: isTerminalOutput ? null : s.activeRunId,
+                  pendingFinal: isTerminalOutput ? false : true,
                   streamingTools,
-                  lastUserMessageAt: hasOutput ? null : s.lastUserMessageAt,
+                  lastUserMessageAt: isTerminalOutput ? null : s.lastUserMessageAt,
                   ...clearPendingImages,
                 };
               }
@@ -176,6 +203,8 @@ export function handleRuntimeEventState(
                 messages: nextMessages,
                 streamingText: '',
                 streamingMessage: null,
+                streamingMessages,
+                streamingToolResults,
                 pendingFinal: true,
                 streamingTools,
                 ...clearPendingImages,
@@ -183,17 +212,19 @@ export function handleRuntimeEventState(
                 messages: nextMessages,
                 streamingText: '',
                 streamingMessage: null,
-                sending: hasOutput ? false : s.sending,
-                activeRunId: hasOutput ? null : s.activeRunId,
-                pendingFinal: hasOutput ? false : true,
+                streamingMessages,
+                streamingToolResults,
+                sending: isTerminalOutput ? false : s.sending,
+                activeRunId: isTerminalOutput ? null : s.activeRunId,
+                pendingFinal: isTerminalOutput ? false : true,
                 streamingTools,
-                lastUserMessageAt: hasOutput ? null : s.lastUserMessageAt,
+                lastUserMessageAt: isTerminalOutput ? null : s.lastUserMessageAt,
                 ...clearPendingImages,
               };
             });
             // After the final response, quietly reload history to surface all intermediate
             // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
-            if (hasOutput && !toolOnly) {
+            if (isTerminalOutput && !toolOnly) {
               clearHistoryPoll();
               void get().loadHistory(true);
             }
@@ -228,6 +259,8 @@ export function handleRuntimeEventState(
             error: errorMsg,
             streamingText: '',
             streamingMessage: null,
+            streamingMessages: [],
+            streamingToolResults: [],
             streamingTools: [],
             pendingFinal: false,
             pendingToolImages: [],
@@ -271,6 +304,8 @@ export function handleRuntimeEventState(
             activeRunId: null,
             streamingText: '',
             streamingMessage: null,
+            streamingMessages: [],
+            streamingToolResults: [],
             streamingTools: [],
             pendingFinal: false,
             lastUserMessageAt: null,
@@ -288,6 +323,7 @@ export function handleRuntimeEventState(
             const updates = collectToolUpdates(event.message, 'delta');
             set((s) => ({
               streamingMessage: event.message ?? s.streamingMessage,
+              streamingMessages: appendStreamingAssistantSnapshot(s.streamingMessages, event.message),
               streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
             }));
           }

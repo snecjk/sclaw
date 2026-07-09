@@ -39,6 +39,19 @@ describe('thinking-turn-tools-cache', () => {
     expect(readTurnStreamingToolsCache(legacyKey, [userKey])).toHaveLength(1);
     expect(readTurnStreamingToolsCache(legacyKey)).toHaveLength(0);
   });
+
+  it('merges input when writing cache twice for same toolCallId', () => {
+    const key = 'turn-merge-input';
+    writeTurnStreamingToolsCache(key, [
+      { toolCallId: 'toolu_1', name: 'Bash', status: 'running' },
+    ]);
+    writeTurnStreamingToolsCache(key, [
+      { toolCallId: 'toolu_1', name: 'Bash', input: { command: 'pwd' }, status: 'completed' },
+    ]);
+    const tools = readTurnStreamingToolsCache(key);
+    expect(tools).toHaveLength(1);
+    expect(tools[0]?.input).toEqual({ command: 'pwd' });
+  });
 });
 
 describe('resolveTurnChronologicalEntries', () => {

@@ -9,13 +9,7 @@ import {
   Puzzle,
   Clock,
   Settings as SettingsIcon,
-  LogOut,
   ChevronRight,
-  Globe,
-  Check,
-  Sun,
-  Moon,
-  Monitor,
   Bookmark,
   ClipboardList,
   MessageSquarePlus,
@@ -24,13 +18,13 @@ import {
   Radio,
   ChevronDown,
   Workflow,
+  Check,
   Database,
 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropdownMenuSub,
   DropdownMenuSubTrigger,
@@ -48,6 +42,7 @@ import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unrea
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
+import { SidebarSupportQrTooltip } from '@/components/layout/SidebarSupportQrTooltip';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { SidebarRecentSessionRow } from '@/components/layout/sidebar-recent-session-row';
 import { SidebarRecentGroupRow } from '@/components/layout/sidebar-recent-group-row';
@@ -123,6 +118,7 @@ import {
   sidebarSectionStickyTopTaskClass,
   sidebarSectionStickyTopRecentClass,
   sidebarScrollListClass,
+  sidebarScrollContainerClass,
   sidebarRecentEmptyLineClass,
 } from '@/lib/surfaces';
 import { useSidebarTaskScrollCollapse } from '@/hooks/use-sidebar-task-scroll-collapse';
@@ -143,11 +139,24 @@ const INITIAL_NOW_MS = Date.now();
 const SIDEBAR_COLLAPSED_TOOLTIP_SURFACE =
   '!bg-popover text-popover-foreground shadow-md backdrop-blur-none border-border';
 
-/** Footer account dropdown — panel and row hover (design spec). */
-const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS = 'w-48 rounded-[12px] border-0 shadow-lg';
-const SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS = 'rounded-[12px] border-0 shadow-lg';
+/** Footer account dropdown — MasterGo: 160×186 卡片 + 34px 行高菜单项 */
+const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS =
+  'w-[160px] min-w-[160px] max-w-[160px] rounded-[12px] border border-[#E5E6EB] bg-white p-0 py-2 shadow-lg dark:border-border dark:bg-card';
+const SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS =
+  'min-w-[160px] rounded-[12px] border border-[#E5E6EB] bg-white p-1 shadow-lg dark:border-border dark:bg-card';
+const SIDEBAR_ACCOUNT_MENU_ITEM_CLASS =
+  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[14px] leading-[18px] text-[#1D2129] dark:text-foreground';
+const SIDEBAR_ACCOUNT_MENU_LOGOUT_CLASS =
+  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[14px] font-bold leading-[18px] text-[#1D2129] dark:text-foreground';
 const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
   'hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7] dark:hover:bg-muted dark:focus:bg-muted dark:data-[highlighted]:bg-muted dark:data-[state=open]:bg-muted';
+const SIDEBAR_ACCOUNT_MENU_DIVIDER_CLASS = 'mx-6 my-0 h-px bg-[#E5E6EB] dark:bg-border';
+/** 设置齿轮：点击/展开时圆形 #E5E6EB 底 */
+const SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS = cn(
+  'flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors',
+  'hover:bg-[#E5E6EB] dark:hover:bg-muted',
+  'data-[state=open]:bg-[#E5E6EB] dark:data-[state=open]:bg-muted',
+);
 const SIDEBAR_BUCKET_INITIAL_LIMIT = 60;
 const SIDEBAR_BUCKET_LOAD_MORE_COUNT = 60;
 const SIDEBAR_COLLAPSED_SESSION_LIMIT = 40;
@@ -900,6 +909,8 @@ export function Sidebar() {
               activeRunId: state.activeRunId,
               streamingText: state.streamingText,
               streamingMessage: state.streamingMessage,
+              streamingMessages: state.streamingMessages,
+              streamingToolResults: state.streamingToolResults,
               streamingTools: state.streamingTools,
               pendingFinal: state.pendingFinal,
               lastUserMessageAt: state.lastUserMessageAt,
@@ -913,6 +924,8 @@ export function Sidebar() {
               activeRunId: null,
               streamingText: '',
               streamingMessage: null,
+              streamingMessages: [],
+              streamingToolResults: [],
               streamingTools: [],
               pendingFinal: false,
               lastUserMessageAt: null,
@@ -931,6 +944,8 @@ export function Sidebar() {
             sending: false,
             streamingText: '',
             streamingMessage: null,
+            streamingMessages: [],
+            streamingToolResults: [],
             streamingTools: [],
             activeRunId: null,
             error: null,
@@ -974,6 +989,8 @@ export function Sidebar() {
   const [editingGroupValue, setEditingGroupValue] = useState('');
   const [groupDialog, setGroupDialog] = useState<SidebarRecentGroupDialogState>({ mode: null });
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [supportQrOpen, setSupportQrOpen] = useState(false);
 
   const recentGroups = useSidebarRecentGroupsStore((s) => s.groups);
   const sessionGroupByKey = useSidebarRecentGroupsStore((s) => s.sessionGroupByKey);
@@ -1682,6 +1699,8 @@ export function Sidebar() {
           activeRunId,
           streamingText,
           streamingMessage,
+          streamingMessages,
+          streamingToolResults,
           streamingTools,
           pendingFinal,
           lastUserMessageAt,
@@ -1698,6 +1717,8 @@ export function Sidebar() {
               activeRunId,
               streamingText,
               streamingMessage,
+              streamingMessages,
+              streamingToolResults,
               streamingTools,
               pendingFinal,
               lastUserMessageAt,
@@ -1711,6 +1732,8 @@ export function Sidebar() {
               activeRunId: null,
               streamingText: '',
               streamingMessage: null,
+              streamingMessages: [],
+              streamingToolResults: [],
               streamingTools: [],
               pendingFinal: false,
               lastUserMessageAt: null,
@@ -1729,6 +1752,8 @@ export function Sidebar() {
             sending: false,
             streamingText: '',
             streamingMessage: null,
+            streamingMessages: [],
+            streamingToolResults: [],
             streamingTools: [],
             activeRunId: null,
             error: null,
@@ -1799,10 +1824,7 @@ export function Sidebar() {
 
       <div
         ref={scrollContainerRef}
-        className={cn(
-          'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden',
-          sidebarCollapsed ? 'px-0' : 'px-2',
-        )}
+        className={cn(sidebarScrollContainerClass, sidebarCollapsed ? 'px-0' : 'px-2')}
       >
         {!sidebarCollapsed ? (
           <SidebarCollapsibleSectionLabel
@@ -2178,67 +2200,110 @@ export function Sidebar() {
       <SidebarUpdateNotice collapsed={sidebarCollapsed} />
 
       {authUser ? (
-        <div
-          className={cn(
-            'shrink-0 bg-[var(--sto-sidebar-bg)]',
-            sidebarCollapsed ? 'p-2' : 'px-2 py-1',
-          )}
-        >
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className={cn(
-                  'flex w-full text-left transition-colors',
-                  sidebarVis.userProfileCard
-                    ? sidebarCollapsed
-                      ? 'flex-col items-center justify-center gap-0 p-2'
-                      : 'items-center justify-between gap-3 px-2 py-2 hover:bg-[var(--sto-sidebar-row-hover-bg)] dark:hover:bg-white/[0.04]'
-                    : 'items-center justify-center rounded-[8px] p-2 hover:bg-black/[0.02] dark:hover:bg-muted/40',
-                )}
-                title={
-                  sidebarVis.userProfileCard
-                    ? isGatewayRunning
+        <div className="shrink-0 bg-[var(--sto-sidebar-bg)] p-2">
+          <div
+            className={cn(
+              'flex items-center',
+              sidebarVis.userProfileCard && sidebarCollapsed
+                ? 'flex-col gap-1'
+                : sidebarVis.userProfileCard
+                  ? 'w-full'
+                  : 'gap-1',
+            )}
+          >
+          <DropdownMenu
+            open={accountMenuOpen}
+            onOpenChange={(open) => {
+              setAccountMenuOpen(open);
+              if (open) {
+                setSupportQrOpen(false);
+              }
+            }}
+          >
+            {sidebarVis.userProfileCard && !sidebarCollapsed ? (
+              <div className="flex w-full min-w-0 items-center rounded-[8px] transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.04]">
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 flex-col gap-0.5 px-2 py-3 text-left"
+                  title={
+                    isGatewayRunning
                       ? t('common:status.connected')
                       : t('common:status.disconnected')
-                    : `${t('common:sidebar.compactAccountMenu')} — ${isGatewayRunning ? t('common:status.connected') : t('common:status.disconnected')}`
-                }
-                aria-label={sidebarVis.userProfileCard ? undefined : t('common:sidebar.compactAccountMenu')}
-              >
-                {sidebarVis.userProfileCard ? (
-                  <>
-                    {sidebarCollapsed ? (
-                      <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-[8px] border border-[var(--sto-sidebar-border)] bg-white text-[13px] font-semibold text-[var(--sto-brand-6)] dark:bg-card">
-                        {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
-                      </span>
-                    ) : (
-                      <>
-                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className={sidebarFooterNameClass}>
-                            {authUser.realName?.trim() || authUser.userName}
-                          </span>
-                          {authUser.companyName?.trim() ? (
-                            <span className={sidebarFooterMetaClass}>
-                              {authUser.companyName.trim()}
-                            </span>
-                          ) : null}
-                        </div>
-                        <SettingsIcon
-                          className={sidebarFooterSettingsIconClass}
-                          strokeWidth={1.5}
-                          aria-hidden
-                        />
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <SettingsIcon className={sidebarFooterSettingsIconClass} strokeWidth={1.75} aria-hidden />
-                )}
-              </button>
-            </DropdownMenuTrigger>
+                  }
+                >
+                  <span className={sidebarFooterNameClass}>
+                    {authUser.realName?.trim() || authUser.userName}
+                  </span>
+                  {authUser.companyName?.trim() ? (
+                    <span className={sidebarFooterMetaClass}>
+                      {authUser.companyName.trim()}
+                    </span>
+                  ) : null}
+                </button>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className={SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS}
+                    aria-label={t('common:sidebar.settings')}
+                    onPointerEnter={() => setSupportQrOpen(false)}
+                    onPointerDown={() => setSupportQrOpen(false)}
+                  >
+                    <SettingsIcon
+                      className={sidebarFooterSettingsIconClass}
+                      strokeWidth={1.5}
+                      aria-hidden
+                    />
+                  </button>
+                </DropdownMenuTrigger>
+                <SidebarSupportQrTooltip
+                  open={supportQrOpen}
+                  onOpenChange={(open) => {
+                    setSupportQrOpen(open);
+                    if (open) {
+                      setAccountMenuOpen(false);
+                    }
+                  }}
+                />
+              </div>
+            ) : (
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    'flex min-w-0 text-left transition-colors',
+                    sidebarVis.userProfileCard
+                      ? sidebarCollapsed
+                        ? 'w-full flex-col items-center justify-center gap-0 p-2 hover:bg-black/[0.02] dark:hover:bg-white/[0.04]'
+                        : 'min-w-0 flex-1 items-center justify-between gap-3 px-2 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.04]'
+                      : cn(
+                          'w-full items-center justify-center',
+                          SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS,
+                        ),
+                  )}
+                  onPointerEnter={() => setSupportQrOpen(false)}
+                  onPointerDown={() => setSupportQrOpen(false)}
+                  title={
+                    sidebarVis.userProfileCard
+                      ? isGatewayRunning
+                        ? t('common:status.connected')
+                        : t('common:status.disconnected')
+                      : `${t('common:sidebar.compactAccountMenu')} — ${isGatewayRunning ? t('common:status.connected') : t('common:status.disconnected')}`
+                  }
+                  aria-label={sidebarVis.userProfileCard ? undefined : t('common:sidebar.compactAccountMenu')}
+                >
+                  {sidebarVis.userProfileCard ? (
+                    <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-[8px] border border-[var(--sto-sidebar-border)] bg-white text-[13px] font-semibold text-[var(--sto-brand-6)] dark:bg-card">
+                      {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
+                    </span>
+                  ) : (
+                    <SettingsIcon className={sidebarFooterSettingsIconClass} strokeWidth={1.75} aria-hidden />
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+            )}
             <DropdownMenuContent
-              side="right"
-              align="end"
+              side="top"
+              align="center"
               sideOffset={8}
               className={SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS}
             >
@@ -2273,24 +2338,31 @@ export function Sidebar() {
               <DropdownMenuSeparator /> */}
               <DropdownMenuItem
                 onClick={() => navigate('/settings')}
-                className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+                className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
               >
-                <SettingsIcon className="h-4 w-4 shrink-0" strokeWidth={2} />
                 {t('common:sidebar.settings')}
               </DropdownMenuItem>
 
+              <DropdownMenuItem
+                onClick={() => navigate('/settings/updates')}
+                className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+              >
+                {t('common:sidebar.checkUpdates')}
+              </DropdownMenuItem>
+
               <DropdownMenuSub>
-                <DropdownMenuSubTrigger className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}>
-                  <Globe className="h-4 w-4 shrink-0" strokeWidth={2} />
+                <DropdownMenuSubTrigger
+                  className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
+                >
                   <span className="flex-1">{t('settings:appearance.language')}</span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" strokeWidth={2} />
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C]" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent sideOffset={4} className={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}>
                   {SUPPORTED_LANGUAGES.map((lang) => (
                     <DropdownMenuItem
                       key={lang.code}
                       onClick={() => setLanguage(lang.code)}
-                      className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+                      className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
                     >
                       {language === lang.code ? (
                         <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
@@ -2304,23 +2376,18 @@ export function Sidebar() {
               </DropdownMenuSub>
 
               <DropdownMenuSub>
-                <DropdownMenuSubTrigger className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}>
-                  {theme === 'light' ? (
-                    <Sun className="h-4 w-4 shrink-0" strokeWidth={2} />
-                  ) : theme === 'dark' ? (
-                    <Moon className="h-4 w-4 shrink-0" strokeWidth={2} />
-                  ) : (
-                    <Monitor className="h-4 w-4 shrink-0" strokeWidth={2} />
-                  )}
+                <DropdownMenuSubTrigger
+                  className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
+                >
                   <span className="flex-1">{t('settings:appearance.theme')}</span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" strokeWidth={2} />
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C]" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent sideOffset={4} className={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}>
                   {(['light', 'dark', 'system'] as const).map((t_value) => (
                     <DropdownMenuItem
                       key={t_value}
                       onClick={() => setTheme(t_value)}
-                      className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+                      className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
                     >
                       {theme === t_value ? (
                         <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
@@ -2333,20 +2400,28 @@ export function Sidebar() {
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
 
-              <DropdownMenuSeparator />
+              <div className={SIDEBAR_ACCOUNT_MENU_DIVIDER_CLASS} aria-hidden="true" />
 
               <DropdownMenuItem
                 onClick={() => setShowLogoutConfirm(true)}
-                className={cn(
-                  'gap-2 text-destructive focus:text-destructive',
-                  SIDEBAR_ACCOUNT_MENU_ITEM_HOVER,
-                )}
+                className={cn(SIDEBAR_ACCOUNT_MENU_LOGOUT_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
               >
-                <LogOut className="h-4 w-4 shrink-0" strokeWidth={2} />
                 {t('auth:logout.button')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {!(sidebarVis.userProfileCard && !sidebarCollapsed) ? (
+            <SidebarSupportQrTooltip
+              open={supportQrOpen}
+              onOpenChange={(open) => {
+                setSupportQrOpen(open);
+                if (open) {
+                  setAccountMenuOpen(false);
+                }
+              }}
+            />
+          ) : null}
+          </div>
         </div>
       ) : null}
         </>

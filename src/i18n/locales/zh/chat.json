@@ -74,23 +74,29 @@
         "pickWorkflow": "选择工作流",
         "dingTalkMention": "钉钉通讯录",
         "micComingSoon": "即将上线",
-        "workflowPlaceholder": "搜索工作流模板...",
+        "workflowPlaceholder": "搜索工作流...",
         "workflowLoading": "加载中...",
         "workflowNoResults": "未找到匹配模板",
-        "workflowNoTemplates": "暂无工作流模板",
+        "workflowNoTemplates": "暂无工作流",
         "workflowClear": "清除工作流"
     },
     "streaming": {
         "connectingModel": "连接模型中...",
         "understandingQuestion": "正在理解你的问题…",
         "stillExecuting": "仍在执行（写文件中…）",
-        "awaitingReply": "Claw将在你回复后继续工作…",
+        "thinkingNow": "正在思考…",
+        "preparingToolInput": "正在准备工具参数…",
+        "runningTool": "正在调用工具…",
+        "finalizingReply": "正在生成回复…",
+        "queued": "已加入队列…",
+        "awaitingReply": "等待你的回复…",
+        "interrupted": "已中断",
         "thinkingProcessTitle": "思考过程",
         "deepThinkingLabel": "深度思考",
         "collapsedSummary": "思考 {{thoughtCount}} 次，使用 {{toolCount}} 个工具",
         "collapsedSummaryThoughtsOnly": "思考 {{thoughtCount}} 次",
         "collapsedSummaryToolsOnly": "使用 {{toolCount}} 个工具",
-        "invokeToolLabel": "调用工具 – {{toolName}}",
+        "invokeToolLabel": "调用工具-{{toolName}}",
         "toolNoParams": "无参数",
         "paramsConfirmedLabel": "参数已确认",
         "toolCallLabel": "工具调用 {{index}}",
@@ -117,6 +123,7 @@
     "messageActions": {
         "copy": "复制",
         "copyFailed": "复制失败",
+        "share": "分享到钉钉",
         "editAndResend": "编辑再次发送",
         "editUnavailable": "当前页面暂不支持编辑再次发送"
     },
@@ -189,14 +196,23 @@
         "shareDialog": {
             "title": "分享到钉钉",
             "description": "确认分享内容后，将唤起钉钉选人窗口。",
+            "artifactTitle": "分享产物",
+            "artifactDescription": "分享至钉钉联系人或钉钉群",
+            "conversationTitle": "分享对话",
+            "conversationDescription": "确认后将唤起钉钉选人窗口，并附带正文与产物链接。",
             "fieldTitle": "标题",
             "fieldBody": "正文",
             "fieldLink": "链接",
             "localUrlHint": "当前链接为本机预览地址，仅在同一网络内可访问的同事可能无法打开。",
             "cancel": "取消",
             "confirm": "确认分享",
+            "uploading": "处理中…",
             "success": "已唤起钉钉选人窗口",
-            "failed": "分享失败，请稍后重试"
+            "failed": "分享失败，请稍后重试",
+            "tooLongTitle": "分享内容过长",
+            "tooLongDescription": "字符太长，无法预填分享内容。确认后将完整会话正文复制到剪贴板，并唤起钉钉选人窗口；请在消息输入框粘贴（⌘V / Ctrl+V）后发送。",
+            "tooLongConfirm": "唤起钉钉",
+            "tooLongPickerHint": "请在消息输入框粘贴已复制的会话正文（⌘V / Ctrl+V）"
         }
     }
 }

@@ -4,11 +4,19 @@ import { buildDingTalkMentionSystemContext } from '../../../../shared/dingtalk-m
 import {
   buildDwsChatMessageSendAgentCommandExample,
   fixDwsChatMessageSendToolParams,
+  parseDwsChatMessageSendShellCommandArgs,
 } from '../../../../shared/dws-send-text';
 import {
   evaluateDingTalkSendGuard,
   handleDingTalkSendGuardAfter,
+  isDwsChatMessageSendDryRun,
+  isSuccessfulDwsChatMessageSendResult,
 } from './dingtalk-send-guard';
+import {
+  checkDwsSendDedup,
+  dwsSendRecipientKey,
+  recordDwsSent,
+} from '../../../../electron/utils/dws-send-dedup';
 import {
   clearDingTalkMentionPending,
   readDingTalkMentionPending,
@@ -37,6 +45,30 @@ function readCommand(params: Record<string, unknown> | undefined): string {
     if (typeof value === 'string' && value.trim()) return value;
   }
   return '';
+}
+
+/**
+ * 从 `dws chat message send` 命令解析 (收件人 key, 归一化正文)。
+ * 正文经 parseDwsChatMessageSendShellCommandArgs 的归一化（含代发说明底栏），
+ * 与兜底发送路径构造的正文一致，保证两条路径的去重指纹可比。
+ * 非 dws send 命令或缺失收件人/正文时返回 null。
+ */
+function parseDwsSendRecipientAndText(
+  command: string,
+): { recipientKey: string; text: string } | null {
+  const argv = parseDwsChatMessageSendShellCommandArgs(command);
+  if (!argv || argv.length < 4) return null;
+  let recipientKey: string | null = null;
+  let text = '';
+  for (let i = 0; i < argv.length - 1; i += 1) {
+    const flag = argv[i];
+    const next = argv[i + 1];
+    if (flag === '--user') recipientKey = dwsSendRecipientKey('user', next);
+    else if (flag === '--group') recipientKey = dwsSendRecipientKey('group', next);
+    else if (flag === '--text') text = next;
+  }
+  if (!recipientKey || !text) return null;
+  return { recipientKey, text };
 }
 
 function buildDingTalkSendFormatExample(): string {
@@ -133,6 +165,29 @@ const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
               }
 
               const fixedParams = fixDwsChatMessageSendToolParams(params);
+              const effectiveParams = fixedParams ?? params;
+              const commandText = readCommand(effectiveParams);
+
+              if (commandText && !isDwsChatMessageSendDryRun(commandText)) {
+                const fp = parseDwsSendRecipientAndText(commandText);
+                if (fp) {
+                  const dedup = checkDwsSendDedup(fp.recipientKey, fp.text);
+                  if (dedup.recent) {
+                    logger.info(
+                      '[dingtalk-mention] claude-runtime: blocked duplicate dws send (same recipient+text within TTL)',
+                      { sessionKey },
+                    );
+                    return {
+                      hookSpecificOutput: {
+                        hookEventName: 'PreToolUse',
+                        permissionDecision: 'deny',
+                        permissionDecisionReason: dedup.reason,
+                      },
+                    };
+                  }
+                }
+              }
+
               if (fixedParams) {
                 logger.debug('[dingtalk-mention] claude-runtime: normalized dws send --text');
                 return {
@@ -155,13 +210,27 @@ const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
             async (input) => {
               if (input.hook_event_name !== 'PostToolUse') return {};
 
+              const params = asRecord(input.tool_input);
+              const commandText = readCommand(params);
+
               handleDingTalkSendGuardAfter({
                 toolName: input.tool_name,
-                params: asRecord(input.tool_input),
+                params,
                 sessionKey,
                 toolCallId: input.tool_use_id,
                 result: input.tool_response,
               });
+
+              if (
+                commandText
+                && !isDwsChatMessageSendDryRun(commandText)
+                && isSuccessfulDwsChatMessageSendResult(undefined, input.tool_response)
+              ) {
+                const fp = parseDwsSendRecipientAndText(commandText);
+                if (fp) {
+                  recordDwsSent(fp.recipientKey, fp.text);
+                }
+              }
 
               return {};
             },

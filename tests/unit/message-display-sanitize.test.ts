@@ -38,6 +38,21 @@ describe('message display sanitize', () => {
     expect(extractText({ role: 'User', content: input })).toBe('hello');
   });
 
+  it('preserves trailing commas inside fenced sql blocks', () => {
+    const input = '```sql\nCREATE TABLE t (\n  `id` BIGINT NOT NULL,\n  `name` VARCHAR(64)\n);\n```';
+    expect(stripDwsSendMetadataForDisplay(input)).toBe(input);
+  });
+
+  it('preserves trailing commas inside inline code', () => {
+    const input = 'Run `SELECT a, FROM t` to test';
+    expect(stripDwsSendMetadataForDisplay(input)).toBe(input);
+  });
+
+  it('still strips trailing comma before newline in plain prose', () => {
+    const input = '已发送给 **李峥**，\n下一条消息';
+    expect(stripDwsSendMetadataForDisplay(input)).toBe('已发送给 **李峥**\n下一条消息');
+  });
+
   it('strips task id from thinking timeline process messages', () => {
     const input =
       '✅ 已将《月》这首诗发送给 **李峥**, 任务 ID: qxWlh4mus0ApRwHKyj0IGVw2W6zQndUjMAnhnNpvaj8=';

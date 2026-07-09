@@ -1,4 +1,5 @@
 import type { RawMessage } from '@/stores/chat';
+import { mergeStreamingToolRecords } from '@/lib/tool-input-merge';
 
 /** parse / UI 补工具用的 streamingTools 形态 */
 export type CachedTurnStreamingTool = {
@@ -38,9 +39,13 @@ export function writeTurnStreamingToolsCache(
 ): void {
   if (!turnStableKey || streamingTools.length === 0) return;
   const prev = turnToolsCache.get(turnStableKey) ?? emptyEntry();
+  const merged = mergeStreamingToolRecords(
+    prev.streamingTools,
+    streamingTools.map(normalizeStreamingTool),
+  );
   turnToolsCache.set(turnStableKey, {
     ...prev,
-    streamingTools: streamingTools.map(normalizeStreamingTool),
+    streamingTools: merged,
     updatedAt: Date.now(),
   });
 }
