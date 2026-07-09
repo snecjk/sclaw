@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, AlertCircle, FileArchive, FileUp } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, FileArchive, FileUp } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { invokeIpc } from '@/lib/api-client';
@@ -63,13 +63,13 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
 
   // Enter the preview/confirm step with the given local path. Does NOT start
   // uploading until the user confirms — required by the preview-confirm step.
-  const enterPreview = (selectedPath: string) => {
-    setFilePath(selectedPath);
-    setFileName(selectedPath.split(/[\\/]/).pop() || selectedPath);
-    setErrorMsg(null);
-    setStatus('preview');
+ const enterPreview = (selectedPath: string) => {
+   setFilePath(selectedPath);
+   setFileName(selectedPath.split(/[\\/]/).pop() || selectedPath);
+   setErrorMsg(null);
+   setStatus('preview');
     // Fetch file size via /api/files/thumbnails (returns fileSize from fs.stat).
-    // Best-effort: the success card shows '-' if the size cannot be read.
+    // Best-effort: the preview card shows '-' if the size cannot be read.
     void (async () => {
       try {
         const res = await hostApiFetch<Record<string, { preview: string | null; fileSize: number }>>(
@@ -88,7 +88,7 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
         // ignore
       }
     })();
-  };
+ };
 
   // Step 1 (option A): pick a local .zip file OR folder via the native dialog.
   // `openFile` + `openDirectory` lets the user pick either; the ZIP filter only
@@ -200,6 +200,22 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
     ? mySkills.find((s) => s.slug === slug)
     : undefined;
   const skillTitle = uploadedSkill?.title || slug || '';
+  const skillCategoryCode = uploadedSkill?.categoryCode;
+
+  const renderSkillIcon = () => {
+    if (uploadedSkill?.icon) {
+      return (
+        <span
+          dangerouslySetInnerHTML={{
+            __html: uploadedSkill.icon
+              .replace(/width="[^"]*"/, 'width="20"')
+              .replace(/height="[^"]*"/, 'height="20"'),
+          }}
+        />
+      );
+    }
+    return <span className="text-lg">📦</span>;
+  };
 
   return (
     <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
@@ -273,19 +289,20 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
 
               {status === 'preview' && (
                 <div className="flex flex-col items-center text-center py-4">
-                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
-                    <FileArchive className="h-6 w-6 text-muted-foreground" />
+                  {/* Compact file card: file name + size only */}
+                  <div className="w-full flex items-center gap-3 rounded-xl border border-[#E6FFEA] bg-[#F5FCF6] px-4 py-3">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-[#DCF5E2] flex-shrink-0">
+                      <FileArchive className="h-4 w-4 text-[#00B54B]" />
+                    </div>
+                    <div className="min-w-0 flex-1 text-left">
+                      <p className="text-sm font-medium text-foreground break-all line-clamp-1">
+                        {fileName}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {formatFileSize(fileSize)}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground mb-1">
-                    {t('plaza.upload.selectedFile', { defaultValue: '已选择' })}
-                  </p>
-                  <p className="text-sm font-medium text-foreground break-all">{fileName}</p>
-                  {filePath && (
-                    <p className="text-xs text-muted-foreground mt-1 break-all">{filePath}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {t('plaza.upload.confirmHint', { defaultValue: '确认后导入到技能广场“其他”分类' })}
-                  </p>
                   <div className="flex gap-2 mt-5">
                     <button
                       type="button"
@@ -317,19 +334,31 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
 
               {status === 'success' && (
                 <div className="flex flex-col items-center text-center py-4">
-                  {/* Compact upload-success card: file name + size only */}
-                  <div className="w-full flex items-center gap-3 rounded-xl border border-[#E6FFEA] bg-[#F5FCF6] px-4 py-3">
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-[#DCF5E2] flex-shrink-0">
-                      <FileArchive className="h-4 w-4 text-[#00B54B]" />
+                  {/* Success banner: check icon + title on #E6FFEA panel */}
+                  <div
+                    className="w-full rounded-xl px-4 py-5 flex flex-col items-center"
+                    style={{ background: '#E6FFEA' }}
+                  >
+                    <div className="w-12 h-12 rounded-full bg-[#DCF5E2] flex items-center justify-center mb-3">
+                      <CheckCircle2 className="h-6 w-6 text-[#00B54B]" />
                     </div>
-                    <div className="min-w-0 flex-1 text-left">
-                      <p className="text-sm font-medium text-foreground break-all line-clamp-1">
-                        {fileName || skillTitle}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {formatFileSize(fileSize)}
-                      </p>
+                    <p className="text-sm font-medium text-foreground">
+                      {t('plaza.upload.successTitle', { defaultValue: '安装成功' })}
+                    </p>
+                  </div>
+                  {/* Skill card: icon + name + category tag */}
+                  <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg bg-muted/60 w-full justify-center">
+                    <div className="w-7 h-7 rounded flex items-center justify-center bg-background border border-border flex-shrink-0">
+                      {renderSkillIcon()}
                     </div>
+                    <span className="text-sm font-medium text-foreground break-all line-clamp-1">
+                      {skillTitle}
+                    </span>
+                    {skillCategoryCode && (
+                      <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium bg-[#F0F4FF] text-[#4760FE] flex-shrink-0">
+                        {t(`plaza.category.${skillCategoryCode}`, { defaultValue: skillCategoryCode })}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
                     {t('plaza.upload.successHint', { defaultValue: '关闭后可在技能广场列表查看' })}
