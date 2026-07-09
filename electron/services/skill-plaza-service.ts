@@ -748,7 +748,7 @@ export class SkillPlazaService {
       const skillRootDir = isEnabled ? this.skillsDir : this.getDisabledDir();
       const skillDirPath = path.join(skillRootDir, slug);
 
-      if (!isPreinstalledSkill(skillDirPath) && !isUserUploadedSkill(skillDirPath)) continue;
+      if (!isPreinstalledSkill(skillDirPath)) continue;
 
       const summary = readLocalSkillSummary(skillRootDir, slug);
       if (!summary) continue;

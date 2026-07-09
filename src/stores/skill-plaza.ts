@@ -14,7 +14,7 @@ import {
   uploadSkillZip,
   type InstallPlazaSkillOptions,
 } from '@/lib/skill-plaza-api';
-import { applyMineCategoryFallback } from '@/lib/skill-plaza-category';
+import { applyMineCategoryFallback, MINE_FALLBACK_CATEGORY_CODE } from '@/lib/skill-plaza-category';
 import type {
   SkillSummary,
   CategoryDef,
@@ -367,7 +367,14 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     set({ uploading: true });
     try {
       const slug = await uploadSkillZip(filePath);
-      set({ plazaStale: true, mineStale: true });
+      set({
+        activeTab: 'mine',
+        activeCategory: MINE_FALLBACK_CATEGORY_CODE,
+        searchQuery: '',
+        page: 1,
+        plazaStale: true,
+        mineStale: true,
+      });
       // Refresh local skills so the newly uploaded skill appears in the list
       await get().fetchLocalSkills();
       return slug;
