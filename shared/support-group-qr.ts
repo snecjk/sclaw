@@ -1,5 +1,5 @@
-import siteQrUrl from '../src/assets/support/site_dd.jpg';
-import hqQrUrl from '../src/assets/support/hq_dd.jpg';
+import siteQrUrl from '../src/assets/support/site.jpg';
+import hqQrUrl from '../src/assets/support/hq.jpg';
 
 /** 网点用户钉钉产品咨询群二维码（本地静态资源） */
 export const SUPPORT_GROUP_QR_URL_SITE = siteQrUrl;
