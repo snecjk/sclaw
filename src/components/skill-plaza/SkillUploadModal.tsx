@@ -202,7 +202,9 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
               {t('plaza.upload.title', { defaultValue: '上传技能' })}
             </h2>
             <p className="text-xs text-muted-foreground mt-1">
-              {t('plaza.upload.subtitle', { defaultValue: '拖拽或选择本地文件夹 / .zip 文件上传到我的技能' })}
+              {t('plaza.upload.subtitle', { defaultValue: '· 文件夹或.zip需要包含SKILL.MD文件' })}
+              <br />
+              {t('plaza.upload.subtitle', { defaultValue: '· .MD文件需要包含YAML格式的技能名和描述'})}
             </p>
 
             <div className="mt-5">
