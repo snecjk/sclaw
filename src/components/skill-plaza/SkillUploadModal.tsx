@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Upload, CheckCircle2, AlertCircle, FileArchive, FileUp } from 'lucide-react';
+import { X, CheckCircle2, AlertCircle, FileArchive, FileUp } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { invokeIpc } from '@/lib/api-client';
@@ -209,37 +209,26 @@ export function SkillUploadModal({ open, onClose }: SkillUploadModalProps) {
 
             <div className="mt-5">
               {status === 'idle' && (
-                <div
+                <button
+                  type="button"
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
+                  onClick={pickFile}
                   className={cn(
-                    'flex flex-col items-center text-center py-8 px-4 rounded-xl border-2 border-dashed transition-colors',
-                    dragOver ? 'border-primary bg-primary/5' : 'border-border bg-muted/30',
+                    'flex flex-col items-center text-center w-full py-10 px-4 rounded-xl border transition-colors cursor-pointer focus:outline-none',
+                    dragOver
+                      ? 'border-[#00B54B] bg-[#00B54B]/10'
+                      : 'border-[#C9CDD4] bg-[#FAFBFC] hover:border-[#00B54B] hover:bg-[#00B54B]/5',
                   )}
                 >
                   <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
                     <FileArchive className="h-6 w-6 text-muted-foreground" />
                   </div>
                   <p className="text-sm font-medium text-foreground">
-                    {t('plaza.upload.dragHint', { defaultValue: '拖拽文件夹或 .zip 文件到此处' })}
+                    {t('plaza.upload.dragHint', { defaultValue: '点击或拖拽文件夹、.zip 文件到此处' })}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1 mb-4">
-                    {t('plaza.upload.dragOr', { defaultValue: '或' })}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={pickFile}
-                    className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-                  >
-                    <Upload className="h-4 w-4" />
-                    {t('plaza.upload.selectFile', { defaultValue: '选择文件/文件夹' })}
-                  </button>
-                  <ul className="text-xs text-muted-foreground mt-4 space-y-1 text-left">
-                    <li>{t('plaza.upload.requirementSkillMd', { defaultValue: '文件夹或 .zip 需包含 SKILL.md 文件' })}</li>
-                    <li>{t('plaza.upload.requirementYaml', { defaultValue: 'SKILL.md 需含 YAML 格式的 name 与 description' })}</li>
-                  </ul>
-                </div>
+                </button>
               )}
 
               {status === 'preview' && (
