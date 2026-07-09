@@ -195,6 +195,14 @@ export function dedupeRedundantUserMessages(
   const refAt = userMessageAt ?? 0;
   const drop = new Set<number>();
   const droppedIds: string[] = [];
+  const patches = new Map<number, RawMessage>();
+
+  const patchKeptUser = (keptIndex: number, droppedMessage: RawMessage) => {
+    if (!droppedMessage._skillMeta) return;
+    const kept = patches.get(keptIndex) ?? messages[keptIndex];
+    if (!kept || kept.role !== 'user') return;
+    patches.set(keptIndex, patchSkillUserMessageFromOptimistic(kept, droppedMessage));
+  };
 
   for (let i = 0; i < messages.length; i += 1) {
     if (drop.has(i)) continue;
@@ -224,6 +232,7 @@ export function dedupeRedundantUserMessages(
       // and only the latest reply rendered.
       if (j === i + 1) {
         if (isSameUserMessage(second, first, refAt) || isSameUserMessage(first, second, refAt)) {
+          patchKeptUser(i, second);
           drop.add(j);
           if (second.id) droppedIds.push(second.id);
           continue;
@@ -231,6 +240,7 @@ export function dedupeRedundantUserMessages(
         const firstText = normalizeUserMessageText(first.content);
         const secondText = normalizeUserMessageText(second.content);
         if (firstText && firstText === secondText && attachmentsMatch(first, second)) {
+          patchKeptUser(i, second);
           drop.add(j);
           if (second.id) droppedIds.push(second.id);
         }
@@ -246,6 +256,7 @@ export function dedupeRedundantUserMessages(
         // Only drop the in-flight optimistic copy; never drop a later real user
         // turn that happens to reuse the same visible text.
         if (firstOptimistic && !secondOptimistic) {
+          patchKeptUser(j, first);
           drop.add(i);
           if (first.id) droppedIds.push(first.id);
           break;
@@ -273,7 +284,9 @@ export function dedupeRedundantUserMessages(
     },
   });
 
-  return messages.filter((_, index) => !drop.has(index));
+  return messages
+    .map((message, index) => patches.get(index) ?? message)
+    .filter((_, index) => !drop.has(index));
 }
 
 function historyHasVisibleUserMessage(messages: RawMessage[]): boolean {
@@ -424,6 +437,17 @@ export function ensureOpeningUserMessageFirst(
   return patched.sort((left, right) => toMs(left.timestamp) - toMs(right.timestamp));
 }
 
+function findSkillOptimisticForPatch(
+  currentMessages: RawMessage[],
+  cachedOptimistic?: RawMessage | null,
+): RawMessage | undefined {
+  const candidates = [
+    ...(cachedOptimistic?.role === 'user' && cachedOptimistic._skillMeta ? [cachedOptimistic] : []),
+    ...currentMessages.filter((message) => message.role === 'user' && message._skillMeta),
+  ];
+  return candidates[candidates.length - 1];
+}
+
 export function mergeOptimisticUserIntoHistory(
   enrichedMessages: RawMessage[],
   currentMessages: RawMessage[],
@@ -437,6 +461,14 @@ export function mergeOptimisticUserIntoHistory(
 ): RawMessage[] {
   const { userMessageAt, sending, sessionKey, cachedOptimistic } = options;
   if (!userMessageAt && historyHasVisibleUserMessage(enrichedMessages)) {
+    const optimistic = findSkillOptimisticForPatch(currentMessages, cachedOptimistic);
+    if (optimistic?._skillMeta) {
+      const refAt = optimistic.timestamp ? toMs(optimistic.timestamp) : 0;
+      const historyEcho = findHistoryUserEcho(enrichedMessages, optimistic, refAt);
+      if (historyEcho) {
+        return applyOptimisticSkillDisplay(enrichedMessages, optimistic, historyEcho, refAt);
+      }
+    }
     return enrichedMessages;
   }
 

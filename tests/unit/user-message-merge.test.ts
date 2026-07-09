@@ -377,4 +377,60 @@ describe('user-message-merge', () => {
     expect(merged[0]?.content).toBe('');
     expect(merged[1]?.role).toBe('assistant');
   });
+
+  it('preserves skill tag when deduping adjacent optimistic and gateway user messages', () => {
+    const messages = [
+      {
+        id: 'history-user',
+        role: 'user',
+        content: '请帮我完成网点出库运费流程',
+        timestamp: 1710000001,
+      },
+      {
+        id: 'local-skill-user',
+        role: 'user',
+        content: '查网点432100的',
+        timestamp: 1710000000,
+        _skillMeta: { slug: 'outlet-freight', title: '网点出库运费' },
+      },
+    ] as RawMessage[];
+
+    const deduped = dedupeRedundantUserMessages(messages, 1710000000000);
+
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0]?._skillMeta).toEqual({ slug: 'outlet-freight', title: '网点出库运费' });
+    expect(deduped[0]?.content).toBe('查网点432100的');
+  });
+
+  it('patches skill display after send completes when lastUserMessageAt was cleared', () => {
+    const optimistic = {
+      id: 'local-skill-user',
+      role: 'user',
+      content: '查网点432100的',
+      timestamp: 1710000000,
+      _skillMeta: { slug: 'outlet-freight', title: '网点出库运费' },
+    } as RawMessage;
+    const enriched = [
+      {
+        id: 'history-user',
+        role: 'user',
+        content: '请帮我完成网点出库运费流程\n\n查网点432100的',
+        timestamp: 1710000001,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '好的',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = mergeOptimisticUserIntoHistory(enriched, [optimistic], {
+      userMessageAt: null,
+      sending: false,
+    });
+
+    expect(merged[0]?._skillMeta).toEqual({ slug: 'outlet-freight', title: '网点出库运费' });
+    expect(merged[0]?.content).toBe('查网点432100的');
+  });
 });

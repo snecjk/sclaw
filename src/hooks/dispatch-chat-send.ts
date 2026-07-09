@@ -107,8 +107,6 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     '@/hooks/use-workflow-send'
   );
 
-  const failed = () => Boolean(useChatStore.getState().error);
-
   // Skill sends: skip question:split so the optimistic user bubble appears immediately.
   if (skillMeta) {
     await sendMessage({ text, attachments, targetAgentId, dingTalkMentions, skillMeta });

@@ -51,6 +51,13 @@ function readSkillFromSpan(span: HTMLSpanElement): SkillMeta | null {
   return { slug, title };
 }
 
+export function readSkillMetaFromEditorRoot(root: HTMLElement): SkillMeta | undefined {
+  const skillSpan = root.querySelector(SKILL_SPAN_SELECTOR)
+    ?? root.querySelector('span[data-skill-slug]');
+  if (!(skillSpan instanceof HTMLSpanElement)) return undefined;
+  return readSkillFromSpan(skillSpan) ?? undefined;
+}
+
 function readMentionFromSpan(span: HTMLSpanElement): DingTalkMention | null {
   const type = span.dataset.mentionType;
   const displayName = span.dataset.mentionName ?? span.textContent?.replace(/^@/, '') ?? '';
@@ -147,7 +154,6 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
     workflowId,
     workflowName,
     workflowSource,
-    isEmpty: normalized.trim().length === 0 && mentions.length === 0,
     skill,
     isEmpty: normalized.trim().length === 0 && mentions.length === 0 && !skill,
   };

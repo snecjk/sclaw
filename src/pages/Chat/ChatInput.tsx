@@ -522,7 +522,9 @@ export function ChatInput({
     const readyAttachments = attachments.filter(a => a.status === 'ready');
     // Read DOM snapshot directly — React state can lag one frame behind the editor.
     const snapshot = mentionEditorRef.current?.getSnapshot() ?? composerSnapshot;
-    const skillMetaToSend = snapshot.skill ?? composerSnapshot.skill;
+    const skillMetaToSend = snapshot.skill
+      ?? composerSnapshot.skill
+      ?? mentionEditorRef.current?.readSkillMeta();
     const textToSend = snapshot.plainText.trim();
     const canSendNow = (textToSend.length > 0 || skillMetaToSend != null || readyAttachments.length > 0)
       && allReady

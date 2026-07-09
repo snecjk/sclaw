@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { cn } from '@/lib/utils';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
 import {
   clearMentionEditor,
   detectActiveMentionTrigger,
@@ -18,6 +19,7 @@ import {
   removeMentionBeforeCaret,
   removeMentionSpan,
   removeSkillSpan,
+  readSkillMetaFromEditorRoot,
   serializeMentionEditor,
   setMentionEditorMentions,
   setMentionEditorPlainText,
@@ -30,6 +32,7 @@ export interface DingTalkMentionEditorHandle {
   focus: () => void;
   clear: () => void;
   getSnapshot: () => MentionComposerSnapshot;
+  readSkillMeta: () => SkillMeta | undefined;
   setPlainText: (text: string) => void;
   setMentions: (mentions: DingTalkMention[]) => void;
   insertMention: (mention: DingTalkMention, trigger: ActiveMentionTrigger) => void;
@@ -122,6 +125,11 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         const root = editorRef.current;
         if (!root) return { plainText: '', mentions: [], isEmpty: true };
         return serializeMentionEditor(root);
+      },
+      readSkillMeta: () => {
+        const root = editorRef.current;
+        if (!root) return undefined;
+        return readSkillMetaFromEditorRoot(root);
       },
       setPlainText: (text) => {
         const root = editorRef.current;
