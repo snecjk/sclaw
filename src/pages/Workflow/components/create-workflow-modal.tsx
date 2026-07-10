@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -6,9 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { fetchDictionaryItemsByTypeCode } from '@/lib/dictionary-api';
 import {
   createWorkflowStudio,
   getWorkflowStudioTemplate,
@@ -16,7 +14,6 @@ import {
 import { buildWizardTemplateSeed, type WizardGraphSeed } from '@/lib/workflow-template-seed';
 import {
   createWorkflowModalBodyClass,
-  createWorkflowModalCategorySelectClass,
   createWorkflowModalCloseClass,
   createWorkflowModalConfirmButtonClass,
   createWorkflowModalContentClass,
@@ -35,9 +32,7 @@ import {
 import { cn } from '@/lib/utils';
 import {
   BLANK_TEMPLATE_LABEL,
-  buildFallbackWorkflowCategoryOptions,
   type CreateWorkflowWizardData,
-  type WorkflowCategoryOption,
 } from '@/pages/Workflow/components/create-workflow-wizard-types';
 
 /** 设计稿描述字段上限（MasterGo 8:79172） */
@@ -89,26 +84,6 @@ function CreateWorkflowModalContent({
   }));
   const [isCreating, setIsCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [categoryOptions, setCategoryOptions] = useState<WorkflowCategoryOption[]>(
-    buildFallbackWorkflowCategoryOptions(),
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void fetchDictionaryItemsByTypeCode('workflow_category', 0)
-      .then((items) => {
-        if (cancelled || items.length === 0) return;
-        setCategoryOptions(items.map((item) => ({ value: item.value, label: item.name })));
-      })
-      .catch(() => {
-        // 字典加载失败时保留硬编码兜底
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const patchData = (patch: Partial<CreateWorkflowWizardData>) => {
     setFormData((prev) => ({ ...prev, ...patch }));
@@ -221,26 +196,6 @@ function CreateWorkflowModalContent({
               })}
             </span>
           </div>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="create-wf-category" className={createWorkflowModalFieldLabelClass}>
-            {t('createModal.categoryLabel')}
-          </label>
-          <Select
-            id="create-wf-category"
-            className={createWorkflowModalCategorySelectClass}
-            value={formData.category}
-            disabled={isCreating}
-            onChange={(e) => patchData({ category: e.target.value })}
-          >
-            <option value="">{t('createModal.categoryPlaceholder')}</option>
-            {categoryOptions.map((cat) => (
-              <option key={cat.value} value={cat.value}>
-                {cat.label}
-              </option>
-            ))}
-          </Select>
         </div>
       </div>
 
