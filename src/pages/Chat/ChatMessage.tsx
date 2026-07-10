@@ -559,7 +559,7 @@ export const ChatMessage = memo(function ChatMessage({
       debugLinks.length > 0 ? debugLinks.join('\n') : '(none)',
     ].join('\n');
     try {
-      await navigator.clipboard.writeText(snapshot);
+      await writeCopyShareTextToClipboard({ text: snapshot });
       toast.success('已复制渲染调试快照');
     } catch {
       toast.error('复制失败，请重试');
@@ -998,7 +998,7 @@ function UserMessageMetaRow({
 
   const copyContent = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      await writeCopyShareTextToClipboard({ text });
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch (error) {

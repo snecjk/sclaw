@@ -134,4 +134,21 @@ describe('gateway supervisor process cleanup', () => {
     );
     expect(mockCreateServer).toHaveBeenCalled();
   });
+
+  it('parses pgrep output for gateway child processes on unix', async () => {
+    setPlatform('darwin');
+    mockExec.mockImplementation((cmd: string, _opts: object, cb: (err: Error | null, stdout: string) => void) => {
+      if (cmd.includes('pgrep -P 72786')) {
+        cb(null, '72927\n83681\n');
+        return {} as never;
+      }
+      cb(null, '');
+      return {} as never;
+    });
+
+    const { listGatewayChildProcessIds } = await import('@electron/gateway/supervisor');
+    const pids = await listGatewayChildProcessIds(72786);
+
+    expect(pids).toEqual([72927, 83681]);
+  });
 });
