@@ -17,7 +17,10 @@ import { getSetting } from '../../utils/store';
 import {
   dedupeRecentMentionRows,
   extractConversationRows,
+  extractListAllPagination,
+  mapListAllConversationItem,
   mapUnreadConversationItem,
+  sortConversationsByLastMsg,
   type RecentMentionRow,
 } from '../../../shared/dingtalk-recent-mentions';
 
@@ -101,6 +104,27 @@ function mapUserItem(raw: unknown): MentionSearchItem | null {
   };
 }
 
+function mapAisearchPersonItem(raw: unknown): MentionSearchItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as Record<string, unknown>;
+  const id = pickString(record, ['userId', 'userid', 'id']);
+  const title = pickString(record, ['title', 'author']);
+  if (!id || !title) return null;
+
+  const meta = record.meta;
+  const metaRecord = meta && typeof meta === 'object' ? meta as Record<string, unknown> : null;
+  const position = pickString(metaRecord ?? {}, ['position'])
+    ?? pickString(record, ['snippet']);
+  return {
+    type: 'user',
+    id,
+    title,
+    subtitle: buildUserSubtitle(position, null),
+    avatar: resolvePublicAvatarUrl(record),
+    corpId: pickString(record, ['corpId', 'corp_id']) ?? null,
+  };
+}
+
 function mapGroupItem(raw: unknown): MentionSearchItem | null {
   if (!raw || typeof raw !== 'object') return null;
   const record = raw as Record<string, unknown>;
@@ -170,11 +194,49 @@ function matchesMentionQuery(title: string, query: string): boolean {
   return title.toLowerCase().includes(keyword);
 }
 
+/** 从「公司-姓名」里取短名，用于名称命中判断。 */
+function personDisplayName(title: string): string {
+  const idx = title.lastIndexOf('-');
+  if (idx >= 0 && idx < title.length - 1) {
+    const shortName = title.slice(idx + 1).trim();
+    if (shortName) return shortName;
+  }
+  return title;
+}
+
+/** 名称命中：全称或短名包含关键字（不含岗位/部门副标题）。 */
+function matchesMentionUserName(item: MentionSearchItem, query: string): boolean {
+  if (matchesMentionQuery(item.title, query)) return true;
+  return matchesMentionQuery(personDisplayName(item.title), query);
+}
+
 /** 联系人：姓名或部门/职位副标题须包含关键字（与群名过滤一致）。 */
 function matchesMentionUserQuery(item: MentionSearchItem, query: string): boolean {
-  if (matchesMentionQuery(item.title, query)) return true;
+  if (matchesMentionUserName(item, query)) return true;
   if (item.subtitle && matchesMentionQuery(item.subtitle, query)) return true;
   return false;
+}
+
+/** 含拉丁字母时视为拼音检索，aisearch 结果不过滤。 */
+function isLatinMentionQuery(query: string): boolean {
+  return /[a-zA-Z]/.test(query);
+}
+
+async function searchUsersViaAisearch(query: string, limit: number): Promise<MentionSearchItem[]> {
+  const result = await runDws(
+    ['aisearch', 'person', '--keyword', query, '--dimension', 'name', '--format', 'json'],
+    8_000,
+  );
+  if (!result.ok) return [];
+  const rows = extractDwsRows(result.data);
+  const mapped = rows
+    .map(mapAisearchPersonItem)
+    .filter((item): item is MentionSearchItem => item !== null);
+  // 中文词（如「财务」）aisearch 也会按岗位召回；非拼音时只保留名称命中
+  const filtered = isLatinMentionQuery(query)
+    ? mapped
+    : mapped.filter((item) => matchesMentionUserName(item, query));
+  return filtered.slice(0, limit);
 }
 
 async function searchUsersViaContact(query: string, limit: number): Promise<MentionSearchItem[]> {
@@ -188,6 +250,31 @@ async function searchUsersViaContact(query: string, limit: number): Promise<Ment
     .map(mapUserItem)
     .filter((item): item is MentionSearchItem => item !== null)
     .slice(0, limit);
+}
+
+/**
+ * 三路结果统一去重排序：
+ * contact 名称命中 → 群 → aisearch（垫底，含拼音）。
+ * contact 仅岗位/副标题命中不参与，避免「财务」岗刷屏。
+ */
+function mergeMentionSearchResults(
+  contactItems: MentionSearchItem[],
+  groupItems: MentionSearchItem[],
+  aisearchItems: MentionSearchItem[],
+  query: string,
+  limit: number,
+): MentionSearchItem[] {
+  const contactNameMatched = contactItems.filter((item) => matchesMentionUserName(item, query));
+  const seen = new Set<string>();
+  const items: MentionSearchItem[] = [];
+  for (const item of [...contactNameMatched, ...groupItems, ...aisearchItems]) {
+    const key = `${item.type}:${item.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push(item);
+    if (items.length >= limit) break;
+  }
+  return items;
 }
 
 async function enrichUserDetails(items: MentionSearchItem[]): Promise<MentionSearchItem[]> {
@@ -229,13 +316,6 @@ async function enrichUserDetails(items: MentionSearchItem[]): Promise<MentionSea
       subtitle: buildUserSubtitle(position, detail.dept) ?? item.subtitle,
     };
   });
-}
-
-async function searchUsers(query: string, limit: number): Promise<MentionSearchItem[]> {
-  const enriched = await enrichUserDetails(await searchUsersViaContact(query, limit));
-  return enriched
-    .filter((item) => matchesMentionUserQuery(item, query))
-    .slice(0, limit);
 }
 
 async function searchConversations(query: string, limit: number): Promise<MentionSearchItem[]> {
@@ -280,6 +360,38 @@ async function enrichRecentSingleChatUsers(items: MentionSearchItem[]): Promise<
   return enriched.filter((item) => item.type !== 'user' || !!item.id.trim());
 }
 
+async function listRecentMentionsFromListAll(
+  limit: number,
+  cursor?: string,
+): Promise<{ items: MentionSearchItem[]; hasMore: boolean; nextCursor: string | null } | null> {
+  const args = [
+    'chat', 'list-all-conversations',
+    '--limit', String(Math.min(Math.max(limit, 1), 100)),
+    '--format', 'json',
+  ];
+  const trimmedCursor = cursor?.trim();
+  if (trimmedCursor) {
+    args.push('--cursor', trimmedCursor);
+  }
+
+  const result = await runDws(args, 8_000);
+  if (!result.ok) return null;
+
+  const sortedRows = sortConversationsByLastMsg(extractConversationRows(result.data));
+  const mapped = dedupeRecentMentionRows(
+    sortedRows
+      .map(mapListAllConversationItem)
+      .filter((item): item is RecentMentionRow => item !== null),
+  );
+  const items = await enrichRecentSingleChatUsers(mapped.map(toMentionSearchItem));
+  const pagination = extractListAllPagination(result.data);
+  return {
+    items,
+    hasMore: pagination.hasMore,
+    nextCursor: pagination.nextCursor,
+  };
+}
+
 async function listRecentMentionsFromUnread(
   limit: number,
   cursor?: string,
@@ -310,10 +422,13 @@ async function listRecentMentionsFromUnread(
   };
 }
 
+/** 优先最近会话（list-all）；旧版 dws 无该命令时回退未读会话。 */
 async function listRecentMentions(
   limit: number,
   cursor?: string,
 ): Promise<{ items: MentionSearchItem[]; hasMore: boolean; nextCursor: string | null }> {
+  const fromListAll = await listRecentMentionsFromListAll(limit, cursor);
+  if (fromListAll) return fromListAll;
   return listRecentMentionsFromUnread(limit, cursor);
 }
 
@@ -445,21 +560,23 @@ export async function handleDingTalkRoutes(
       return true;
     }
 
-    const [users, groups] = await Promise.all([
-      types.includes('user') ? searchUsers(query, limit) : Promise.resolve([]),
+    const wantUsers = types.includes('user');
+    const wantGroups = types.includes('conversation');
+    const [fromContact, fromGroups, fromAisearch] = await Promise.all([
+      wantUsers ? searchUsersViaContact(query, limit) : Promise.resolve([]),
       // chat search keyword 较宽松，结果在 searchConversations 内按 title 二次过滤
-      types.includes('conversation') ? searchConversations(query, limit) : Promise.resolve([]),
+      wantGroups ? searchConversations(query, limit) : Promise.resolve([]),
+      wantUsers ? searchUsersViaAisearch(query, limit) : Promise.resolve([]),
     ]);
 
-    const seen = new Set<string>();
-    const items: MentionSearchItem[] = [];
-    for (const item of [...users, ...groups]) {
-      const key = `${item.type}:${item.id}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      items.push(item);
-      if (items.length >= limit) break;
-    }
+    const merged = mergeMentionSearchResults(
+      fromContact,
+      fromGroups,
+      fromAisearch,
+      query,
+      limit,
+    );
+    const items = await enrichUserDetails(merged);
 
     sendJson(res, 200, { items });
     return true;
