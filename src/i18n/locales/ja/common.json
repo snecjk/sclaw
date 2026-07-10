@@ -46,7 +46,7 @@
         "sessionUnread": "未読",
         "compactAccountMenu": "アカウントと設定",
         "supportGroup": {
-            "title": "STO Claw 製品相談グループ",
+            "title": "S Claw 製品相談グループ",
             "hint": "DingTalkでスキャンしてグループに参加し、質問してください",
             "helpAria": "製品相談グループのQRコードを表示",
             "loadError": "QRコードの読み込みに失敗しました。後でもう一度お試しください。"

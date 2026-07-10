@@ -86,6 +86,7 @@
   "editor": {
     "editTitle": "编辑工作流",
     "aiCreateTitle": "AI 创建工作流",
+    "createTitle": "新建工作流",
     "openInBrowser": "在浏览器打开",
     "backAria": "返回列表"
   },

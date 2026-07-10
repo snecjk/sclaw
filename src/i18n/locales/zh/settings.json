@@ -10,12 +10,7 @@
     "system": "跟随系统",
     "language": "语言",
     "launchAtStartup": "开机自动启动",
-    "launchAtStartupDesc": "登录系统后自动启动 S Claw",
-    "preventSystemSleep": "阻止电脑睡眠",
-    "preventSystemSleepDesc": "开启后，S Claw 运行期间将阻止电脑自动进入睡眠。",
-    "preventSystemSleepTips": "使用定时任务时建议开启。请勿合盖，并连接电源；合盖或关机后无法保证正常运行。",
-    "preventSystemSleepToastEnabled": "已开启：S Claw 运行期间将阻止电脑睡眠",
-    "preventSystemSleepToastDisabled": "已关闭：电脑将按系统设置正常睡眠"
+    "launchAtStartupDesc": "登录系统后自动启动 S Claw"
   },
   "aiProviders": {
     "title": "AI 模型提供商",
@@ -196,10 +191,11 @@
   },
   "updates": {
     "title": "更新",
-    "subtitle": "保持 Sto Claw 更新，体验更稳定和安全的功能",
+    "subtitle": "保持 S Claw 更新，体验更稳定和安全的功能",
     "description": "保持 S Claw 最新",
     "loading": "加载中…",
     "currentVersionLabel": "当前版本",
+    "latestBadge": "最新",
     "currentVersionLine": "当前版本 v{{version}}",
     "cardHint": "开启自动更新后，更新将自动下载并安装，已是最新版本时会显示提示。",
     "downloadingLabel": "新版本v{{version}}下载中...",
