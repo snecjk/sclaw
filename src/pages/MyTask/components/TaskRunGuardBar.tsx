@@ -4,11 +4,14 @@
 
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { useSettingsStore } from '@/stores/settings';
 import { cn } from '@/lib/utils';
-import { glassSectionSurface } from '@/lib/surfaces';
+import {
+  myTaskCardDescriptionClass,
+  myTaskCardTitleClass,
+  myTaskRunGuardBarShellClass,
+} from '@/lib/surfaces';
+import { WorkflowScheduleToggle } from '@/pages/Workflow/components/workflow-schedule-toggle';
 
 export function TaskRunGuardBar() {
   const { t } = useTranslation('tasks');
@@ -17,23 +20,22 @@ export function TaskRunGuardBar() {
 
   return (
     <section
-      className={cn(glassSectionSurface, 'mb-4 py-4')}
+      className={cn(myTaskRunGuardBarShellClass, 'mb-4 shrink-0')}
       aria-label={t('myTask.runGuard.aria')}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <Label className="text-[15px] font-medium text-foreground/80">
-            {t('myTask.runGuard.preventSleep')}
-          </Label>
-          <p className="mt-1 text-[13px] text-muted-foreground">
+          <p className={myTaskCardTitleClass}>{t('myTask.runGuard.preventSleep')}</p>
+          <p className={cn(myTaskCardDescriptionClass, 'mt-1 line-clamp-none')}>
             {t('myTask.runGuard.preventSleepDesc')}
           </p>
-          <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground/80">
+          <p className={cn(myTaskCardDescriptionClass, 'mt-1.5 line-clamp-none text-muted-foreground/80')}>
             {t('myTask.runGuard.preventSleepTips')}
           </p>
         </div>
-        <Switch
+        <WorkflowScheduleToggle
           checked={preventSystemSleep}
+          aria-label={t('myTask.runGuard.preventSleep')}
           onCheckedChange={(value) => {
             setPreventSystemSleep(value);
             toast.success(
@@ -42,7 +44,6 @@ export function TaskRunGuardBar() {
                 : t('myTask.runGuard.toastDisabled'),
             );
           }}
-          className="shrink-0"
         />
       </div>
     </section>
