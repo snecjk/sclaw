@@ -123,6 +123,12 @@
     "messageActions": {
         "copy": "复制",
         "copyFailed": "复制失败",
+        "copySplitHint": "分别复制正文或文件",
+        "copyText": "复制正文",
+        "copyTextSuccess": "正文已复制",
+        "copyFiles": "复制文件（{{count}}）",
+        "copyFilesSuccess": "文件已复制（{{count}} 个）",
+        "copyFilesFailed": "文件复制失败",
         "share": "分享到钉钉",
         "editAndResend": "编辑再次发送",
         "editUnavailable": "当前页面暂不支持编辑再次发送"
@@ -178,7 +184,14 @@
         "typeImage": "图片",
         "typeArchive": "压缩包",
         "typeMedia": "媒体",
-        "typeFile": "文件"
+        "typeFile": "文件",
+        "preview": "预览",
+        "openFileLocation": "打开所在文件夹",
+        "copyFile": "复制文件",
+        "copyLink": "复制链接",
+        "copyLinkSuccess": "链接已复制",
+        "moreActions": "更多操作",
+        "actionFailed": "操作失败"
     },
     "preview": {
         "collapsePanel": "收起预览区",

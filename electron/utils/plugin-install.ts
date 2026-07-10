@@ -8,11 +8,28 @@
 import { app } from 'electron';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { existsSync, cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, readdirSync, realpathSync } from 'node:fs';
+import {
+  existsSync,
+  cpSync,
+  mkdirSync,
+  rmSync,
+  readFileSync,
+  writeFileSync,
+  readdirSync,
+  realpathSync,
+  symlinkSync,
+  readlinkSync,
+  lstatSync,
+} from 'node:fs';
 import { cp as cpAsync, mkdir as mkdirAsync, rm as rmAsync } from 'node:fs/promises';
 import { join } from 'node:path';
 import { logger } from './logger';
-import { getOpenClawConfigDir, getBundledPluginSourceCandidates, getOpenClawNodeModulesPath } from './paths';
+import {
+  getOpenClawConfigDir,
+  getOpenClawDir,
+  getBundledPluginSourceCandidates,
+  getOpenClawNodeModulesPath,
+} from './paths';
 
 function isAsarPath(filePath: string): boolean {
   return /\.asar([\\/]|$)/.test(filePath);
@@ -63,6 +80,40 @@ function copyPluginDir(sourceDir: string, targetDir: string): void {
     return;
   }
   cpSync(fsPath(sourceDir), fsPath(targetDir), { recursive: true, dereference: true });
+}
+
+function joinNodeModulePackage(root: string, packageName: string): string {
+  return join(root, ...packageName.split('/'));
+}
+
+/** cpSync cannot extract trees from inside .asar; use asar-aware read/write instead. */
+function copyPathFromSource(sourcePath: string, destPath: string): void {
+  if (!existsSync(fsPath(sourcePath))) {
+    throw new Error(`ENOENT: source missing at ${sourcePath}`);
+  }
+
+  let sourceStat;
+  try {
+    sourceStat = lstatSync(fsPath(sourcePath));
+  } catch (error) {
+    throw error;
+  }
+
+  if (sourceStat.isDirectory()) {
+    if (existsSync(fsPath(destPath))) {
+      rmSync(fsPath(destPath), { recursive: true, force: true });
+    }
+    if (isAsarPath(sourcePath)) {
+      copyDirFromAsar(sourcePath, destPath);
+      return;
+    }
+    mkdirSync(fsPath(path.dirname(destPath)), { recursive: true });
+    cpSync(fsPath(sourcePath), fsPath(destPath), { recursive: true, dereference: true });
+    return;
+  }
+
+  mkdirSync(fsPath(path.dirname(destPath)), { recursive: true });
+  writeFileSync(fsPath(destPath), readFileSync(sourcePath));
 }
 
 function asErrnoException(error: unknown): NodeJS.ErrnoException | null {
@@ -209,6 +260,9 @@ const PLUGIN_NPM_NAMES: Record<string, string> = {
   'openclaw-weixin': '@tencent-weixin/openclaw-weixin',
 };
 
+/** npm channel plugins copied to ~/.stoclaw; need openclaw peer + bundled runtime deps. */
+const CHANNEL_NPM_PLUGIN_DIR_NAMES = new Set(Object.keys(PLUGIN_NPM_NAMES));
+
 // ── Local plugin directory mapping ───────────────────────────────────────────
 // Maps plugin dir names to their source directory under sto-plugin/.
 
@@ -257,6 +311,10 @@ function pluginRuntimeDepNodeModuleRoots(): string[] {
     join(process.cwd(), 'node_modules'),
     join(app.getAppPath(), 'node_modules'),
   ];
+  if (app.isPackaged) {
+    roots.push(join(process.resourcesPath, 'node_modules'));
+    roots.push(join(getOpenClawDir(), 'node_modules'));
+  }
   const openclawNodeModules = getOpenClawNodeModulesPath();
   if (openclawNodeModules) {
     const delimiter = process.platform === 'win32' ? ';' : ':';
@@ -264,7 +322,7 @@ function pluginRuntimeDepNodeModuleRoots(): string[] {
       if (entry.trim()) roots.push(entry.trim());
     }
   }
-  return roots;
+  return [...new Set(roots)];
 }
 
 function copyPluginRuntimeDeps(pluginDirName: string, pluginDir: string): void {
@@ -276,16 +334,15 @@ function copyPluginRuntimeDeps(pluginDirName: string, pluginDir: string): void {
   mkdirSync(fsPath(outputNM), { recursive: true });
 
   for (const depName of depNames) {
-    const dest = join(outputNM, depName);
+    const dest = joinNodeModulePackage(outputNM, depName);
     if (existsSync(fsPath(join(dest, 'package.json')))) continue;
 
     let copied = false;
     for (const root of nodeModuleRoots) {
-      const src = join(root, depName);
-      if (!existsSync(fsPath(src))) continue;
+      const src = joinNodeModulePackage(root, depName);
+      if (!existsSync(fsPath(join(src, 'package.json'))) && !existsSync(fsPath(src))) continue;
       try {
-        mkdirSync(fsPath(path.dirname(dest)), { recursive: true });
-        cpSync(fsPath(src), fsPath(dest), { recursive: true, dereference: true });
+        copyPathFromSource(src, dest);
         copied = true;
         logger.info(`[plugin] Copied runtime dep ${depName} for ${pluginDirName}`);
         break;
@@ -365,6 +422,296 @@ function pluginBundledContentMatches(
   return true;
 }
 
+function readPluginDependencies(targetDir: string): Record<string, string> {
+  try {
+    const pkg = JSON.parse(readFileSync(fsPath(join(targetDir, 'package.json')), 'utf-8')) as {
+      dependencies?: Record<string, string>;
+    };
+    return pkg.dependencies || {};
+  } catch {
+    return {};
+  }
+}
+
+/** True when installed satisfies common npm ranges (^ / ~ / exact). */
+function dependencyVersionSatisfied(installed: string, range: string): boolean {
+  const trimmed = range.trim();
+  if (!trimmed || trimmed === '*' || trimmed === 'latest') return true;
+
+  if (trimmed.startsWith('^')) {
+    const base = trimmed.slice(1);
+    const baseMajor = parseInt(base.split(/[.+-]/)[0] ?? '', 10) || 0;
+    const installedMajor = parseInt(installed.split(/[.+-]/)[0] ?? '', 10) || 0;
+    if (installedMajor !== baseMajor) return false;
+    return comparePluginVersions(installed, base) >= 0;
+  }
+
+  if (trimmed.startsWith('~')) {
+    const base = trimmed.slice(1);
+    const baseParts = base.split(/[.+-]/).map((part) => parseInt(part, 10) || 0);
+    const installedParts = installed.split(/[.+-]/).map((part) => parseInt(part, 10) || 0);
+    if (installedParts[0] !== baseParts[0] || installedParts[1] !== baseParts[1]) return false;
+    return comparePluginVersions(installed, base) >= 0;
+  }
+
+  return comparePluginVersions(installed, trimmed) >= 0;
+}
+
+function channelPluginDepNodeModuleRoots(pluginDirName: string, bundledSource?: string): string[] {
+  const roots: string[] = [];
+
+  if (bundledSource) {
+    roots.push(join(bundledSource, 'node_modules'));
+  }
+  for (const candidate of getBundledPluginSourceCandidates(pluginDirName)) {
+    roots.push(join(candidate, 'node_modules'));
+  }
+
+  roots.push(join(getOpenClawDir(), 'node_modules'));
+  const openclawNodeModules = getOpenClawNodeModulesPath();
+  if (openclawNodeModules) {
+    const delimiter = process.platform === 'win32' ? ';' : ':';
+    for (const entry of openclawNodeModules.split(delimiter)) {
+      if (entry.trim()) roots.push(entry.trim());
+    }
+  }
+
+  if (!app.isPackaged) {
+    roots.push(join(process.cwd(), 'build', 'openclaw-plugins', pluginDirName, 'node_modules'));
+    const npmName = PLUGIN_NPM_NAMES[pluginDirName];
+    if (npmName) {
+      roots.push(join(process.cwd(), 'node_modules', ...npmName.split('/'), 'node_modules'));
+    }
+    roots.push(join(process.cwd(), 'node_modules'));
+  }
+
+  return [...new Set(roots.filter((root) => existsSync(fsPath(root))))];
+}
+
+function openClawSymlinkType(targetPath: string): 'dir' | 'file' | 'junction' {
+  if (targetPath.endsWith('.asar')) return 'file';
+  if (process.platform === 'win32') return 'junction';
+  return 'dir';
+}
+
+/** Shared materialized openclaw package for packaged ASAR hosts (one copy for all channel plugins). */
+function getOpenClawMaterializedPeerDir(): string {
+  return join(getOpenClawConfigDir(), 'runtime', 'openclaw');
+}
+
+/**
+ * Dist chunks import many packages from openclaw/node_modules (not just tslog).
+ * Validate a representative set so incomplete materializations are refreshed.
+ */
+const OPENCLAW_PEER_RUNTIME_SENTINELS = ['tslog', 'json5', 'chalk'] as const;
+
+function openClawPeerLinkIsValid(linkPath: string, expectedTarget: string): boolean {
+  if (!existsSync(fsPath(linkPath))) return false;
+  try {
+    const stat = lstatSync(fsPath(linkPath));
+    if (!stat.isSymbolicLink()) return false;
+    const target = readlinkSync(fsPath(linkPath));
+    const resolved = path.isAbsolute(target) ? target : path.resolve(path.dirname(linkPath), target);
+    const expected = fsPath(expectedTarget);
+    return fsPath(resolved) === expected || realpathSync(fsPath(resolved)) === realpathSync(expected);
+  } catch {
+    return false;
+  }
+}
+
+function openClawMaterializedPackageHasRuntimeDeps(openclawPkgPath: string): boolean {
+  return OPENCLAW_PEER_RUNTIME_SENTINELS.every((depName) =>
+    existsSync(fsPath(join(openclawPkgPath, 'node_modules', depName, 'package.json'))),
+  );
+}
+
+function openClawPeerCoreLayoutPresent(openclawPkgPath: string): boolean {
+  return existsSync(fsPath(join(openclawPkgPath, 'package.json')))
+    && existsSync(fsPath(join(openclawPkgPath, 'openclaw.mjs')))
+    && existsSync(fsPath(join(openclawPkgPath, 'dist/plugin-sdk/channel-config-schema.js')));
+}
+
+function openClawPeerPackageIsValid(openclawPkgPath: string, openclawRoot: string): boolean {
+  if (!existsSync(fsPath(openclawPkgPath))) return false;
+
+  const expectedLinkTarget = openclawRoot.endsWith('.asar')
+    ? getOpenClawMaterializedPeerDir()
+    : openclawRoot;
+
+  try {
+    const stat = lstatSync(fsPath(openclawPkgPath));
+    if (stat.isSymbolicLink()) {
+      if (!openClawPeerLinkIsValid(openclawPkgPath, expectedLinkTarget)) return false;
+      // Symlink to a materialized runtime must still resolve a complete package.
+      if (openclawRoot.endsWith('.asar')) {
+        return openClawPeerCoreLayoutPresent(expectedLinkTarget)
+          && openClawMaterializedPackageHasRuntimeDeps(expectedLinkTarget);
+      }
+      return true;
+    }
+    if (!stat.isDirectory()) return false;
+  } catch {
+    return false;
+  }
+
+  // Real directory peer (legacy in-plugin materialize / incomplete copy).
+  if (!openClawPeerCoreLayoutPresent(openclawPkgPath)) return false;
+  return openClawMaterializedPackageHasRuntimeDeps(openclawPkgPath);
+}
+
+function materializeOpenClawPeerFromAsar(openclawAsar: string, destRoot: string): void {
+  if (existsSync(fsPath(destRoot))) {
+    rmSync(fsPath(destRoot), { recursive: true, force: true });
+  }
+  mkdirSync(fsPath(destRoot), { recursive: true });
+  for (const rel of ['package.json', 'openclaw.mjs'] as const) {
+    const src = join(openclawAsar, rel);
+    if (existsSync(fsPath(src))) {
+      writeFileSync(fsPath(join(destRoot, rel)), readFileSync(src));
+    }
+  }
+  const distSrc = join(openclawAsar, 'dist');
+  if (existsSync(fsPath(distSrc))) {
+    copyDirFromAsar(distSrc, join(destRoot, 'dist'));
+  }
+  // Dist chunks import the full runtime graph (tslog, json5, chalk, ...), not a single package.
+  const nodeModulesSrc = join(openclawAsar, 'node_modules');
+  if (existsSync(fsPath(nodeModulesSrc))) {
+    copyDirFromAsar(nodeModulesSrc, join(destRoot, 'node_modules'));
+  }
+}
+
+function ensureSharedOpenClawMaterializedPeer(openclawAsar: string): string {
+  const sharedDir = getOpenClawMaterializedPeerDir();
+  const runtimeVersion = readPluginVersion(join(openclawAsar, 'package.json'));
+  const installedVersion = readPluginVersion(join(sharedDir, 'package.json'));
+  const complete = openClawPeerCoreLayoutPresent(sharedDir)
+    && openClawMaterializedPackageHasRuntimeDeps(sharedDir)
+    && (!runtimeVersion || installedVersion === runtimeVersion);
+
+  if (complete) return sharedDir;
+
+  materializeOpenClawPeerFromAsar(openclawAsar, sharedDir);
+  if (!openClawMaterializedPackageHasRuntimeDeps(sharedDir)) {
+    throw new Error(
+      `Materialized openclaw peer missing runtime deps (${OPENCLAW_PEER_RUNTIME_SENTINELS.join(', ')}) at ${sharedDir}`,
+    );
+  }
+  logger.info(`[plugin] Materialized shared openclaw runtime at ${sharedDir} from ${openclawAsar}`);
+  return sharedDir;
+}
+
+function linkOpenClawPeerIntoPlugin(pluginDir: string, openclawTarget: string): void {
+  const targetNM = join(pluginDir, 'node_modules');
+  const openclawPkgPath = join(targetNM, 'openclaw');
+  mkdirSync(fsPath(targetNM), { recursive: true });
+
+  if (openClawPeerLinkIsValid(openclawPkgPath, openclawTarget)) return;
+
+  if (existsSync(fsPath(openclawPkgPath))) {
+    rmSync(fsPath(openclawPkgPath), { recursive: true, force: true });
+  }
+
+  symlinkSync(openclawTarget, fsPath(openclawPkgPath), openClawSymlinkType(openclawTarget));
+  logger.info(`[plugin] Linked openclaw peer dep into ${pluginDir} -> ${openclawTarget}`);
+}
+
+/** Channel plugins live outside the openclaw tree; they must resolve openclaw/* locally. */
+export function channelPluginRuntimeLayoutComplete(pluginDirName: string, targetDir: string): boolean {
+  if (!CHANNEL_NPM_PLUGIN_DIR_NAMES.has(pluginDirName)) return true;
+  if (!existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) return false;
+
+  const openclawRoot = getOpenClawDir();
+  const openclawPkgPath = join(targetDir, 'node_modules', 'openclaw');
+  if (!openClawPeerPackageIsValid(openclawPkgPath, openclawRoot)) return false;
+
+  for (const [depName, depRange] of Object.entries(readPluginDependencies(targetDir))) {
+    if (depName === 'openclaw') continue;
+    const depPkgJson = join(joinNodeModulePackage(join(targetDir, 'node_modules'), depName), 'package.json');
+    const installedVersion = readPluginVersion(depPkgJson);
+    if (!installedVersion || !dependencyVersionSatisfied(installedVersion, depRange)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function copyChannelPluginDependency(
+  depName: string,
+  depRange: string,
+  targetNM: string,
+  roots: readonly string[],
+): void {
+  const dest = joinNodeModulePackage(targetNM, depName);
+  const installedVersion = readPluginVersion(join(dest, 'package.json'));
+  if (installedVersion && dependencyVersionSatisfied(installedVersion, depRange)) {
+    return;
+  }
+
+  if (existsSync(fsPath(dest))) {
+    rmSync(fsPath(dest), { recursive: true, force: true });
+  }
+
+  for (const root of roots) {
+    const src = joinNodeModulePackage(root, depName);
+    const srcVersion = readPluginVersion(join(src, 'package.json'));
+    if (!srcVersion || !dependencyVersionSatisfied(srcVersion, depRange)) continue;
+    try {
+      copyPathFromSource(src, dest);
+      logger.info(`[plugin] Copied channel runtime dep ${depName}@${srcVersion} from ${src}`);
+      return;
+    } catch (error) {
+      logger.warn(`[plugin] Failed to copy ${depName} from ${src}:`, error);
+    }
+  }
+
+  logger.warn(`[plugin] Channel runtime dep ${depName} (${depRange}) not found in bundled/openclaw roots`);
+}
+
+function ensureChannelPluginRuntimeLayout(pluginDirName: string, sourceDir?: string): void {
+  if (!CHANNEL_NPM_PLUGIN_DIR_NAMES.has(pluginDirName)) return;
+
+  const targetDir = join(getOpenClawConfigDir(), 'extensions', pluginDirName);
+  if (!existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) return;
+
+  ensureOpenClawPeerIntoPlugin(targetDir);
+
+  const resolvedSource = sourceDir
+    ?? pickPluginSourceDir(pluginDirName, getBundledPluginSourceCandidates(pluginDirName));
+  const depRoots = channelPluginDepNodeModuleRoots(pluginDirName, resolvedSource);
+  const targetNM = join(targetDir, 'node_modules');
+  mkdirSync(fsPath(targetNM), { recursive: true });
+
+  for (const [depName, depRange] of Object.entries(readPluginDependencies(targetDir))) {
+    if (depName === 'openclaw') continue;
+    copyChannelPluginDependency(depName, depRange, targetNM, depRoots);
+  }
+}
+
+function ensureOpenClawPeerIntoPlugin(pluginDir: string): void {
+  const openclawRoot = getOpenClawDir();
+  if (!existsSync(fsPath(join(openclawRoot, 'package.json')))) {
+    logger.warn(`[plugin] Cannot install openclaw peer dep; package root missing at ${openclawRoot}`);
+    return;
+  }
+
+  const openclawPkgPath = join(pluginDir, 'node_modules', 'openclaw');
+  if (openClawPeerPackageIsValid(openclawPkgPath, openclawRoot)) {
+    return;
+  }
+
+  try {
+    if (openclawRoot.endsWith('.asar')) {
+      const sharedDir = ensureSharedOpenClawMaterializedPeer(openclawRoot);
+      linkOpenClawPeerIntoPlugin(pluginDir, sharedDir);
+      return;
+    }
+    linkOpenClawPeerIntoPlugin(pluginDir, openclawRoot);
+  } catch (error) {
+    logger.warn(`[plugin] Failed to install openclaw peer dep into ${pluginDir}:`, error);
+  }
+}
+
 function shouldRefreshInstalledPlugin(
   pluginDirName: string,
   sourceDir: string,
@@ -374,6 +721,7 @@ function shouldRefreshInstalledPlugin(
 ): boolean {
   if (!sourceVersion || !installedVersion) return false;
   if (sourceVersion !== installedVersion) return true;
+  if (!channelPluginRuntimeLayoutComplete(pluginDirName, targetDir)) return true;
   return !pluginBundledContentMatches(pluginDirName, sourceDir, targetDir);
 }
 
@@ -473,7 +821,7 @@ function ensureStoDynamicRouteSharedFiles(targetDir: string): void {
   );
 }
 
-function afterStoPluginInstall(pluginDirName: string): void {
+function afterStoPluginInstall(pluginDirName: string, sourceDir?: string): void {
   if (pluginDirName === 'sto-workflow-tool') {
     ensureStoToolkitLibraryInstalled();
   }
@@ -483,6 +831,7 @@ function afterStoPluginInstall(pluginDirName: string): void {
   if (PLUGIN_RUNTIME_DEPS[pluginDirName]) {
     ensurePluginRuntimeDeps(pluginDirName);
   }
+  ensureChannelPluginRuntimeLayout(pluginDirName, sourceDir);
 }
 
 // ── Version helper ───────────────────────────────────────────────────────────
@@ -669,12 +1018,15 @@ export function ensurePluginInstalled(
     const installedVersion = readPluginVersion(targetPkgJson);
     const sourceVersion = readPluginVersion(join(sourceDir, 'package.json'));
     if (!shouldRefreshInstalledPlugin(pluginDirName, sourceDir, targetDir, installedVersion, sourceVersion)) {
-      afterStoPluginInstall(pluginDirName);
+      afterStoPluginInstall(pluginDirName, sourceDir);
       return { installed: true }; // same version/content or unable to compare
     }
     if (sourceVersion && installedVersion && sourceVersion === installedVersion) {
+      const refreshReason = !channelPluginRuntimeLayoutComplete(pluginDirName, targetDir)
+        ? 'runtime layout incomplete'
+        : 'bundled content changed';
       logger.info(
-        `[plugin] Refreshing ${pluginLabel} plugin: bundled content changed (version ${installedVersion})`,
+        `[plugin] Refreshing ${pluginLabel} plugin: ${refreshReason} (version ${installedVersion})`,
       );
     } else {
       // Version differs — fall through to overwrite install
@@ -699,7 +1051,7 @@ export function ensurePluginInstalled(
           return { installed: false, warning: `Failed to install ${pluginLabel} plugin mirror (manifest missing).` };
         }
         fixupPluginManifest(targetDir);
-        afterStoPluginInstall(pluginDirName);
+        afterStoPluginInstall(pluginDirName, sourceDir);
         logger.info(`Installed ${pluginLabel} plugin from bundled mirror: ${sourceDir}`);
         return { installed: true };
       } catch (error) {
@@ -748,6 +1100,7 @@ export function ensurePluginInstalled(
             copyPluginFromNodeModules(npmPkgPath, targetDir, npmName);
             fixupPluginManifest(targetDir);
             if (existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) {
+              afterStoPluginInstall(pluginDirName, npmPkgPath);
               return { installed: true };
             }
           } catch (err) {
@@ -765,6 +1118,7 @@ export function ensurePluginInstalled(
             );
           }
         } else if (existsSync(fsPath(targetManifest))) {
+          afterStoPluginInstall(pluginDirName, npmPkgPath);
           return { installed: true }; // same version, already installed
         }
       }
@@ -796,7 +1150,7 @@ export function ensurePluginInstalled(
               });
               fixupPluginManifest(targetDir);
               if (existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) {
-                afterStoPluginInstall(pluginDirName);
+                afterStoPluginInstall(pluginDirName, localSourceDir);
                 return { installed: true };
               }
             } catch (err) {
@@ -806,7 +1160,7 @@ export function ensurePluginInstalled(
               );
             }
           } else if (existsSync(fsPath(targetManifest))) {
-            afterStoPluginInstall(pluginDirName);
+            afterStoPluginInstall(pluginDirName, localSourceDir);
             return { installed: true }; // same version, already installed
           }
         }
@@ -947,16 +1301,22 @@ async function ensurePluginInstalledAsync(
   }
 
   if (existsSync(fsPath(targetManifest))) {
-    if (!sourceDir) return { installed: true };
-    const installedVersion = readPluginVersion(targetPkgJson);
-    const sourceVersion = readPluginVersion(join(sourceDir, 'package.json'));
-    if (!shouldRefreshInstalledPlugin(pluginDirName, sourceDir, targetDir, installedVersion, sourceVersion)) {
+    if (!sourceDir) {
       afterStoPluginInstall(pluginDirName);
       return { installed: true };
     }
+    const installedVersion = readPluginVersion(targetPkgJson);
+    const sourceVersion = readPluginVersion(join(sourceDir, 'package.json'));
+    if (!shouldRefreshInstalledPlugin(pluginDirName, sourceDir, targetDir, installedVersion, sourceVersion)) {
+      afterStoPluginInstall(pluginDirName, sourceDir);
+      return { installed: true };
+    }
     if (sourceVersion && installedVersion && sourceVersion === installedVersion) {
+      const refreshReason = !channelPluginRuntimeLayoutComplete(pluginDirName, targetDir)
+        ? 'runtime layout incomplete'
+        : 'bundled content changed';
       logger.info(
-        `[plugin] Refreshing ${pluginLabel} plugin: bundled content changed (version ${installedVersion})`,
+        `[plugin] Refreshing ${pluginLabel} plugin: ${refreshReason} (version ${installedVersion})`,
       );
     } else {
       logger.info(
@@ -989,7 +1349,7 @@ async function ensurePluginInstalledAsync(
         return { installed: false, warning: `Failed to install ${pluginLabel} plugin mirror (manifest missing).` };
       }
       fixupPluginManifest(targetDir);
-      afterStoPluginInstall(pluginDirName);
+      afterStoPluginInstall(pluginDirName, sourceDir);
       logger.info(`Installed ${pluginLabel} plugin from bundled mirror (async): ${sourceDir}`);
       return { installed: true };
     } catch (error) {
@@ -1060,7 +1420,6 @@ export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
   for (const { dirName, label } of pluginSpecs) {
     try {
       const result = await ensurePluginInstalledAsync(dirName, buildCandidateSources(dirName), label);
-      afterStoPluginInstall(dirName);
       if (result.warning) {
         logger.warn(`[plugin] ${label}: ${result.warning}`);
       }

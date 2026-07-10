@@ -12,6 +12,7 @@ import {
   detectActiveMentionTrigger,
   insertAtTriggerCharacter,
   insertMentionAtTrigger,
+  insertPlainTextAtCaret,
   insertWorkflowSpan,
   MENTION_SPAN_SELECTOR,
   removeMentionBeforeCaret,
@@ -28,6 +29,7 @@ export interface DingTalkMentionEditorHandle {
   clear: () => void;
   getSnapshot: () => MentionComposerSnapshot;
   setPlainText: (text: string) => void;
+  insertPlainText: (text: string) => void;
   setMentions: (mentions: DingTalkMention[]) => void;
   insertMention: (mention: DingTalkMention, trigger: ActiveMentionTrigger) => void;
   insertWorkflow: (workflowId: string, name: string, source?: string) => void;
@@ -121,6 +123,13 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         setMentionEditorPlainText(root, text);
         resizeEditor();
         syncFromDom();
+      },
+      insertPlainText: (text) => {
+        const root = editorRef.current;
+        if (!root) return;
+        insertPlainTextAtCaret(root, text);
+        resizeEditor();
+        syncFromDom(false);
       },
       setMentions: (mentions) => {
         const root = editorRef.current;
