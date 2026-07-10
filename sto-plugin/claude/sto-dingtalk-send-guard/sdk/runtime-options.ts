@@ -2,6 +2,10 @@ import type { HookCallbackMatcher, HookEvent } from '@anthropic-ai/claude-agent-
 import { appendDingTalkAgentSendDisclaimer } from '../../../../shared/dingtalk-disclaimer';
 import { buildDingTalkMentionSystemContext } from '../../../../shared/dingtalk-mention-context';
 import {
+  DINGTALK_ORAL_SEND_PROMPT,
+  looksLikeDingTalkOralSendIntent,
+} from '../../../../shared/dingtalk-oral-send-prompt';
+import {
   buildDwsChatMessageSendAgentCommandExample,
   fixDwsChatMessageSendToolParams,
   parseDwsChatMessageSendShellCommandArgs,
@@ -31,7 +35,10 @@ export interface ClaudeRuntimeOptions {
 interface ClaudeRuntimeExtension {
   id: string;
   buildHooks?(sessionKey: string): Partial<Record<HookEvent, HookCallbackMatcher[]>> | undefined;
-  buildSystemPromptAppend?(sessionKey: string): Promise<string | undefined>;
+  buildSystemPromptAppend?(
+    sessionKey: string,
+    userPrompt?: string,
+  ): Promise<string | undefined>;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -107,25 +114,37 @@ function mergeHooks(
 const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
   id: 'sto-dingtalk-send-guard',
 
-  async buildSystemPromptAppend(sessionKey: string): Promise<string | undefined> {
+  async buildSystemPromptAppend(
+    sessionKey: string,
+    userPrompt?: string,
+  ): Promise<string | undefined> {
     const pendingMentions = await readDingTalkMentionPending(sessionKey);
-    if (!pendingMentions) {
-      logger.debug('[dingtalk-mention] claude-runtime: no pending mentions', { sessionKey });
-      return undefined;
+    if (pendingMentions) {
+      logger.info('[dingtalk-mention] claude-runtime: pending mentions found', {
+        sessionKey,
+        mentionCount: pendingMentions.mentions.length,
+        sendFileIntent: Boolean(pendingMentions.sendFileIntent),
+        attachedFileCount: pendingMentions.attachedFiles?.length ?? 0,
+      });
+
+      await clearDingTalkMentionPending(sessionKey);
+      return buildDingTalkMentionSystemContext(pendingMentions.mentions, {
+        sendFileIntent: pendingMentions.sendFileIntent,
+        attachedFiles: pendingMentions.attachedFiles,
+      });
     }
 
-    logger.info('[dingtalk-mention] claude-runtime: pending mentions found', {
-      sessionKey,
-      mentionCount: pendingMentions.mentions.length,
-      sendFileIntent: Boolean(pendingMentions.sendFileIntent),
-      attachedFileCount: pendingMentions.attachedFiles?.length ?? 0,
-    });
+    logger.debug('[dingtalk-mention] claude-runtime: no pending mentions', { sessionKey });
 
-    await clearDingTalkMentionPending(sessionKey);
-    return buildDingTalkMentionSystemContext(pendingMentions.mentions, {
-      sendFileIntent: pendingMentions.sendFileIntent,
-      attachedFiles: pendingMentions.attachedFiles,
-    });
+    // 无 @ 时：口头点名发送 → 注入 dws 规则（Claude 路径无 share_to_dingtalk）
+    if (looksLikeDingTalkOralSendIntent(userPrompt)) {
+      logger.info('[dingtalk-mention] claude-runtime: oral send intent, inject dws rules', {
+        sessionKey,
+      });
+      return DINGTALK_ORAL_SEND_PROMPT;
+    }
+
+    return undefined;
   },
 
   buildHooks(sessionKey: string) {
@@ -247,6 +266,7 @@ const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
 
 export async function buildStoDingTalkSendGuardClaudeRuntimeOptions(
   sessionKey: string,
+  userPrompt?: string,
 ): Promise<ClaudeRuntimeOptions> {
   const hooks: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {};
   const promptBlocks: string[] = [];
@@ -254,7 +274,7 @@ export async function buildStoDingTalkSendGuardClaudeRuntimeOptions(
   for (const extension of claudeRuntimeExtensions) {
     mergeHooks(hooks, extension.buildHooks?.(sessionKey));
 
-    const promptBlock = await extension.buildSystemPromptAppend?.(sessionKey);
+    const promptBlock = await extension.buildSystemPromptAppend?.(sessionKey, userPrompt);
     if (promptBlock?.trim()) {
       promptBlocks.push(promptBlock.trim());
     }

@@ -17,6 +17,16 @@ export const DINGTALK_SHARE_TOOL_PROMPT = [
   '- 本工具会唤起 PC 钉钉选人窗口并预填正文；不支持在移动端钉钉使用。',
 ].join('\n');
 
+/** Host-side heuristic: only inject share tool prompt when the turn looks like a DingTalk picker/share request. */
+const DINGTALK_SHARE_INTENT_RE =
+  /分享到钉钉|发到钉钉|钉钉里选|钉钉选人|share_to_dingtalk|share to dingtalk|发给同事选|选人发送|唤起钉钉/i;
+
+export function looksLikeDingTalkShareIntent(text: string | undefined | null): boolean {
+  const trimmed = text?.trim();
+  if (!trimmed) return false;
+  return DINGTALK_SHARE_INTENT_RE.test(trimmed);
+}
+
 export type ShareToDingTalkToolParams = {
   text?: string;
   url?: string;
