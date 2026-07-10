@@ -268,7 +268,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     'flex flex-col items-center text-center w-full py-10 px-4 rounded-xl border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E]',
                     dragOver
                       ? 'border-[#00B54B] bg-[#00B54B]/10'
-                      : 'border-[#C9CDD4] bg-[#FAFBFC] hover:border-[#00B54B] hover:bg-[#00B54B]/5 dark:border-white/10 dark:bg-[#1f2325] dark:hover:border-[#00B54B] dark:hover:bg-[#00B54B]/5',
+                      : 'border-[#C9CDD4] bg-[#FAFBFC] hover:border-[#00B54B] hover:bg-[#00B54B]/5 dark:border-[#343A40] dark:bg-[#1f2325] dark:hover:border-[#46515A] dark:hover:bg-[#1f2325]',
                   )}
                 >
                   <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
