@@ -947,6 +947,7 @@ async function startClaudeQuery(
   options?: {
     additionalDirectories?: string[];
     eventSink?: ClaudeEventSink | null;
+    systemPromptAppend?: string;
   },
 ): Promise<{ success: boolean; result?: { runId: string }; error?: string }> {
   try {
@@ -980,9 +981,13 @@ async function startClaudeQuery(
     claudeRuntimeResults.delete(sessionKey);
     await sanitizeClaudeSettingsEnv();
     const historyBridgeAppend = await consumePendingHistoryBridgeAppend(sessionKey);
-    const systemPromptAppend = [runtimeOptions.systemPromptAppend, historyBridgeAppend]
+    const systemPromptAppend = [runtimeOptions.systemPromptAppend, options?.systemPromptAppend, historyBridgeAppend]
       .filter(Boolean)
       .join('\n\n');
+    logger.info('[mem0][prompt][claude] final systemPromptAppend', {
+      sessionKey,
+      systemPromptAppend: systemPromptAppend || '(none)',
+    });
     const queryBaseOptions = {
       cwd,
       env: await buildClaudeEnvForAccount(launchSelection.accountId),
@@ -1133,7 +1138,10 @@ export const claudeAdapter: EngineAdapter = {
   },
 
   async sendMessage(ctx: EngineAdapterContext, params) {
-    return startClaudeQuery(params.sessionKey, params.message, { eventSink: ctx.gatewayManager });
+    return startClaudeQuery(params.sessionKey, params.message, {
+      eventSink: ctx.gatewayManager,
+      systemPromptAppend: params.systemPromptAppend,
+    });
   },
 
   async sendMessageWithMedia(ctx, params) {
@@ -1144,7 +1152,11 @@ export const claudeAdapter: EngineAdapter = {
     }
     const additionalDirectories = getAdditionalDirectories(cwd, params.media ?? []);
     const prompt = await buildClaudeUserMessage(params.message, params.media ?? []);
-    return startClaudeQuery(params.sessionKey, toClaudePromptStream(prompt), { additionalDirectories, eventSink: ctx.gatewayManager });
+    return startClaudeQuery(params.sessionKey, toClaudePromptStream(prompt), {
+      additionalDirectories,
+      eventSink: ctx.gatewayManager,
+      systemPromptAppend: params.systemPromptAppend,
+    });
   },
 
   async abortRun(_ctx, params) {

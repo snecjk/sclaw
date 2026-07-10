@@ -142,6 +142,48 @@ export function getDataDir(): string {
 }
 
 /**
+ * Get StoClaw local mem0 base directory.
+ */
+export function getMem0BaseDir(): string {
+  return join(getDataDir(), 'mem0');
+}
+
+/**
+ * Get StoClaw local mem0 history SQLite path.
+ */
+export function getMem0HistoryDbPath(): string {
+  return join(getMem0BaseDir(), 'history.db');
+}
+
+/**
+ * Get StoClaw local mem0 config snapshot path.
+ */
+export function getMem0ConfigPath(): string {
+  return join(getMem0BaseDir(), 'config.json');
+}
+
+/**
+ * Get StoClaw local mem0 sync queue path.
+ */
+export function getMem0QueuePath(): string {
+  return join(getMem0BaseDir(), 'queue.json');
+}
+
+/**
+ * Get StoClaw local mem0 vector cache directory.
+ */
+export function getMem0VectorCacheDir(): string {
+  return join(getMem0BaseDir(), 'vector-cache');
+}
+
+/**
+ * Get StoClaw local mem0 persisted user id path.
+ */
+export function getMem0UserIdPath(): string {
+  return join(getMem0BaseDir(), 'user-id.txt');
+}
+
+/**
  * Get StoClaw-managed Claude scheduled tasks directory.
  */
 export function getClaudeScheduledTasksDir(): string {

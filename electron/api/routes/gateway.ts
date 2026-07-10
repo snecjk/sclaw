@@ -142,6 +142,7 @@ export async function handleGatewayRoutes(
         message: string;
         deliver?: boolean;
         idempotencyKey: string;
+        systemPromptAppend?: string;
         engineType?: AgentEngineType;
         dingTalkMentions?: Array<{
           type: 'user' | 'group';
@@ -167,6 +168,7 @@ export async function handleGatewayRoutes(
           message: body.message,
           deliver: body.deliver,
           idempotencyKey: body.idempotencyKey,
+          systemPromptAppend: body.systemPromptAppend,
         },
       );
       if (!result.success) {
@@ -206,6 +208,7 @@ export async function handleGatewayRoutes(
         message: string;
         deliver?: boolean;
         idempotencyKey: string;
+        systemPromptAppend?: string;
         engineType?: AgentEngineType;
         media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
         dingTalkMentions?: Array<{
@@ -244,6 +247,7 @@ export async function handleGatewayRoutes(
             message: body.message,
             deliver: body.deliver,
             idempotencyKey: body.idempotencyKey,
+            systemPromptAppend: body.systemPromptAppend,
             media: body.media,
           },
         );

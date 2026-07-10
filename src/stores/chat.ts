@@ -89,6 +89,7 @@ import {
 import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, normalizeDerivedSessionLabel } from '@/lib/workflow-session-hint';
 import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, sanitizeGatewaySessionLabels, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
+import { stripAgentMemoryContextForDisplay } from '@/lib/agent-memory';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { traceChatSession } from '../../shared/chat-session-trace';
 import {
@@ -110,6 +111,36 @@ import {
 } from './chat/run-completion';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
+
+function stripAgentMemoryFromHistoryMessage(message: RawMessage): RawMessage {
+  if (message.role !== 'user') {
+    return message;
+  }
+
+  if (typeof message.content === 'string') {
+    const stripped = stripAgentMemoryContextForDisplay(message.content);
+    return stripped === message.content ? message : { ...message, content: stripped };
+  }
+
+  if (!Array.isArray(message.content)) {
+    return message;
+  }
+
+  let changed = false;
+  const content = message.content.map((block) => {
+    if (block.type !== 'text' || typeof block.text !== 'string') {
+      return block;
+    }
+    const stripped = stripAgentMemoryContextForDisplay(block.text);
+    if (stripped === block.text) {
+      return block;
+    }
+    changed = true;
+    return { ...block, text: stripped };
+  });
+
+  return changed ? { ...message, content } : message;
+}
 
 export type {
   AttachedFileMeta,
@@ -835,19 +866,22 @@ function handleBackgroundSessionEvent(
       }
 
       const toolOnly = isToolOnlyMessage(finalMsg);
+      const currentState = useChatStore.getState();
+      const currentRuntime = getSessionRuntimeState(currentState.runtimeBySessionKey, sessionKey);
+      const currentEngineType = resolveEngineTypeForSession(
+        currentState.sessions,
+        sessionKey,
+        getAgentIdFromSessionKey(sessionKey),
+      );
+      const { isTerminalOutput } = resolveAssistantFinalTerminalState(
+        currentEngineType,
+        currentRuntime.sending,
+        event.phase,
+        finalMsg,
+      );
+      const userTextForMemory = getMessageText(currentRuntime.optimisticUserMessage?.content).trim();
+      const assistantTextForMemory = getMessageText(finalMsg.content).trim();
       set((s) => {
-        const engineType = resolveEngineTypeForSession(
-          s.sessions,
-          sessionKey,
-          getAgentIdFromSessionKey(sessionKey),
-        );
-        const runtime = getSessionRuntimeState(s.runtimeBySessionKey, sessionKey);
-        const { isTerminalOutput } = resolveAssistantFinalTerminalState(
-          engineType,
-          runtime.sending,
-          event.phase,
-          finalMsg,
-        );
         const next = patchSessionRuntimeState(s, sessionKey, (currentRuntime) => ({
           sending: isTerminalOutput ? false : currentRuntime.sending,
           activeRunId: isTerminalOutput ? null : currentRuntime.activeRunId,
@@ -857,6 +891,7 @@ function handleBackgroundSessionEvent(
           pendingFinal: isTerminalOutput ? false : true,
           pendingToolImages: isTerminalOutput ? [] : currentRuntime.pendingToolImages,
           lastUserMessageAt: isTerminalOutput ? null : currentRuntime.lastUserMessageAt,
+          optimisticUserMessage: isTerminalOutput ? null : currentRuntime.optimisticUserMessage,
           error: null,
         }));
         if (isTerminalOutput) {
@@ -870,6 +905,20 @@ function handleBackgroundSessionEvent(
         }
         return next;
       });
+      if (isTerminalOutput && !toolOnly) {
+        if (userTextForMemory && assistantTextForMemory) {
+          void (async () => {
+            const { captureAgentMemoryTurn } = await import('@/lib/agent-memory');
+            await captureAgentMemoryTurn({
+              userMessage: userTextForMemory,
+              assistantMessage: assistantTextForMemory,
+              agentId: getAgentIdFromSessionKey(sessionKey),
+              runId: runId || undefined,
+              sessionKey,
+            });
+          })();
+        }
+      }
       if (toolOnly) break;
       break;
     }
@@ -1199,12 +1248,26 @@ function hasAssistantTextOutput(message: RawMessage | undefined): boolean {
 function finalizeMessagesFromHistoryLoad(
   get: () => ChatState,
   set: (partial: Partial<ChatState> | ((state: ChatState) => Partial<ChatState>)) => void,
+  options?: {
+    agentId?: string | null;
+    runId?: string | null;
+    sessionKey?: string | null;
+  },
 ): void {
-  const sessionKey = get().currentSessionKey;
+  const sessionKey = options?.sessionKey ?? get().currentSessionKey;
   let patched = patchLastAssistantWithWorkflowForm(get().messages, getMessageText);
   patched = ensureWorkflowCardsInMessages(patched, sessionKey, getMessageText);
   if (patched !== get().messages) set({ messages: patched });
   ensureWorkflowParameterFormInjected(getMessageText);
+  const finalMessages = patched !== get().messages ? patched : get().messages;
+  void (async () => {
+    const { captureAgentMemoryFromMessages } = await import('@/lib/agent-memory');
+    await captureAgentMemoryFromMessages(finalMessages, {
+      agentId: options?.agentId ?? get().currentAgentId,
+      runId: options?.runId,
+      sessionKey,
+    });
+  })();
 }
 
 function touchLastChatEventAt(
@@ -2097,6 +2160,7 @@ export const useChatStore = create<ChatState>()(
       }
       finalMessages = formRecovery.messages;
       finalMessages = patchLastAssistantWithWorkflowForm(finalMessages, getMessageText, { rawMessages });
+      finalMessages = finalMessages.map(stripAgentMemoryFromHistoryMessage);
 
       set({
         messages: finalMessages,
@@ -2398,6 +2462,11 @@ export const useChatStore = create<ChatState>()(
     if (!trimmed && (!attachments || attachments.length === 0)) return;
 
     // Inject hidden workflow context / session hint for AI guidance
+    const {
+      maybeAppendAgentMemoryContext,
+      maybeBuildAgentMemoryContextText,
+      stripAgentMemoryContextForDisplay,
+    } = await import('@/lib/agent-memory');
     const { appendWorkflowContext, stripWorkflowContextForDisplay } = await import('@/lib/workflow-context');
     const {
       buildWorkflowSessionHint,
@@ -2459,12 +2528,31 @@ export const useChatStore = create<ChatState>()(
       }
     }
 
-    
+    const memoryLookupOptions = {
+      query: trimmed,
+      agentId: targetAgentId ?? get().currentAgentId,
+      runId: _runId,
+    };
+    const claudeMemorySystemPrompt = currentSessionEngineType === 'claude'
+      ? await maybeBuildAgentMemoryContextText(textForGateway, memoryLookupOptions)
+      : undefined;
+    if (currentSessionEngineType !== 'claude') {
+      textForGateway = await maybeAppendAgentMemoryContext(textForGateway, memoryLookupOptions);
+    }
+
     const messageWithContext = appendWorkflowContext(textForGateway, workflowContext);
     const displayText = stripWorkflowSessionHintForDisplay(
-      stripWorkflowContextForDisplay(messageWithContext),
+      stripAgentMemoryContextForDisplay(
+        stripWorkflowContextForDisplay(messageWithContext),
+      ),
     );
-    
+
+    if (currentSessionEngineType === 'claude') {
+      console.info('[mem0][prompt][claude] final user prompt:\n%s', messageWithContext);
+      console.info('[mem0][prompt][claude] memory system prompt append:\n%s', claudeMemorySystemPrompt || '(none)');
+    } else {
+      console.info('[mem0][prompt][openclaw] final user prompt:\n%s', messageWithContext);
+    }
 
     const quotaCheck = await checkDailyTokenQuota();
     if (quotaCheck) {
@@ -2656,6 +2744,7 @@ export const useChatStore = create<ChatState>()(
               message: messageWithContext || '',
               deliver: false,
               idempotencyKey,
+              systemPromptAppend: claudeMemorySystemPrompt,
               engineType: currentSessionEngineType,
               media: attachments.map((a) => ({
                 filePath: a.stagedPath,
@@ -2674,6 +2763,7 @@ export const useChatStore = create<ChatState>()(
             message: messageWithContext,
             deliver: false,
             idempotencyKey,
+            systemPromptAppend: claudeMemorySystemPrompt,
             engineType: currentSessionEngineType,
             ...dingTalkRpcExtras,
             // NOTE: workflowId/runId are not forwarded to Gateway chat.send yet
@@ -3020,7 +3110,11 @@ export const useChatStore = create<ChatState>()(
             }));
             clearHistoryPoll();
             void get().loadHistory(true, true).then(() => {
-              finalizeMessagesFromHistoryLoad(get, set);
+              finalizeMessagesFromHistoryLoad(get, set, {
+                agentId: get().currentAgentId,
+                runId: runId || undefined,
+                sessionKey: get().currentSessionKey,
+              });
             });
             break;
           }
@@ -3153,12 +3247,16 @@ export const useChatStore = create<ChatState>()(
           }
           // After the final response, quietly reload history to surface all intermediate
           // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
-          if (isTerminalOutput && !toolOnly) {
-            clearHistoryPoll();
-            void get().loadHistory(true, true).then(() => {
-              finalizeMessagesFromHistoryLoad(get, set);
-            });
-          }
+            if (isTerminalOutput && !toolOnly) {
+              clearHistoryPoll();
+              void get().loadHistory(true, true).then(() => {
+                finalizeMessagesFromHistoryLoad(get, set, {
+                  agentId: get().currentAgentId,
+                  runId: runId || undefined,
+                  sessionKey: get().currentSessionKey,
+                });
+              });
+            }
         } else {
           // No message in final event - reload history to get complete data
           set({ streamingText: '', streamingMessage: null, pendingFinal: true });
@@ -3360,6 +3458,9 @@ export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null
   if (targetKey === state.currentSessionKey) {
     finalizeMessagesFromHistoryLoad(() => useChatStore.getState(), (partial) => {
       useChatStore.setState(partial);
+    }, {
+      agentId: getAgentIdFromSessionKey(targetKey),
+      sessionKey: targetKey,
     });
   }
 }

@@ -1,5 +1,6 @@
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
+import { stripAgentMemoryContextForDisplay } from '@/lib/agent-memory';
 import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, normalizeDerivedSessionLabel } from '@/lib/workflow-session-hint';
 import { buildSessionLabelDerivationOptions, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { mergeLocalWorkflowTurnsFromCurrent } from '@/lib/workflow-local-turn';
@@ -39,6 +40,36 @@ import {
   mergeHistoryMessageSources,
   mergeHistoryWhenShrunk,
 } from './history-merge';
+
+function stripAgentMemoryFromHistoryMessage(message: RawMessage): RawMessage {
+  if (message.role !== 'user') {
+    return message;
+  }
+
+  if (typeof message.content === 'string') {
+    const stripped = stripAgentMemoryContextForDisplay(message.content);
+    return stripped === message.content ? message : { ...message, content: stripped };
+  }
+
+  if (!Array.isArray(message.content)) {
+    return message;
+  }
+
+  let changed = false;
+  const content = message.content.map((block) => {
+    if (block.type !== 'text' || typeof block.text !== 'string') {
+      return block;
+    }
+    const stripped = stripAgentMemoryContextForDisplay(block.text);
+    if (stripped === block.text) {
+      return block;
+    }
+    changed = true;
+    return { ...block, text: stripped };
+  });
+
+  return changed ? { ...message, content } : message;
+}
 
 async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
   if (!isCronSessionKey(sessionKey) && !isCronDatedSessionKey(sessionKey)) return [];
@@ -153,6 +184,7 @@ export function createHistoryActions(
         });
         if (formRecovery.deferSet) return;
         finalMessages = formRecovery.messages;
+        finalMessages = finalMessages.map(stripAgentMemoryFromHistoryMessage);
 
         set({ messages: finalMessages, thinkingLevel, loading: false });
 

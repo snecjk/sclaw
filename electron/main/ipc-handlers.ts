@@ -70,6 +70,7 @@ import {
 import { validateApiKeyWithProvider } from '../services/providers/provider-validation';
 import { appUpdater } from './updater';
 import { registerHostApiProxyHandlers } from './ipc/host-api-proxy';
+import { registerAgentMemoryHandlers } from './ipc/agent-memory';
 import { registerPreviewHttpFetchHandlers } from './ipc/preview-http-fetch';
 import { registerWorkflowStreamHandlers } from './ipc/workflow-stream-proxy';
 import { getWorkflowExecutionTracker } from './services/workflow-execution-tracker';
@@ -99,6 +100,7 @@ export function registerIpcHandlers(
 
   // Host API proxy handlers
   registerHostApiProxyHandlers();
+  registerAgentMemoryHandlers();
   registerPreviewHttpFetchHandlers();
   registerWorkflowStreamHandlers();
 
@@ -1315,6 +1317,7 @@ function registerGatewayHandlers(
           message?: string;
           deliver?: boolean;
           idempotencyKey?: string;
+          systemPromptAppend?: string;
           engineType?: AgentEngineType;
         };
         const adapter = await getAdapterForSession(body.sessionKey ?? '', parseEngineType(body.engineType));
@@ -1325,6 +1328,7 @@ function registerGatewayHandlers(
             message: body.message ?? '',
             deliver: body.deliver,
             idempotencyKey: body.idempotencyKey ?? crypto.randomUUID(),
+            systemPromptAppend: body.systemPromptAppend,
           },
         );
         if (!result.success) {
