@@ -268,7 +268,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     'flex flex-col items-center text-center w-full py-10 px-4 rounded-xl border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E]',
                     dragOver
                       ? 'border-[#00B54B] bg-[#00B54B]/10'
-                      : 'border-[#C9CDD4] bg-[#FAFBFC] hover:border-[#00B54B] hover:bg-[#00B54B]/5',
+                      : 'border-[#C9CDD4] bg-[#FAFBFC] hover:border-[#00B54B] hover:bg-[#00B54B]/5 dark:border-white/10 dark:bg-[#1f2325] dark:hover:border-[#00B54B] dark:hover:bg-[#00B54B]/5',
                   )}
                 >
                   <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
@@ -400,7 +400,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     <button
                       type="button"
                       onClick={onClose}
-                      className="inline-flex items-center h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                      className="inline-flex items-center h-9 px-4 rounded-lg bg-[#FA3C3C] text-white text-sm font-medium hover:bg-[#E63535] transition-colors"
                     >
                       {t('plaza.upload.close', { defaultValue: '关闭' })}
                     </button>
