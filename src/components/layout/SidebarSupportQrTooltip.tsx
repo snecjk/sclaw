@@ -1,6 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { isSiteUser, useAuthStore } from '@/stores/auth';
 import { sidebarFooterSettingsIconClass } from '@/lib/surfaces';
@@ -27,7 +31,7 @@ function CircleHelpBoldQuestion({ className }: { className?: string }) {
 }
 
 const SUPPORT_QR_SIZE_PX = 320;
-const SUPPORT_QR_TOOLTIP_SURFACE =
+const SUPPORT_QR_PANEL_SURFACE =
   '!bg-white dark:!bg-popover text-popover-foreground shadow-lg backdrop-blur-none border border-border !px-0 !py-0 !max-w-none overflow-visible rounded-xl';
 
 type SidebarSupportQrTooltipProps = {
@@ -65,9 +69,13 @@ export function SidebarSupportQrTooltip({
     return resolveSupportGroupQrUrl(isSite);
   }, [siteDepartmentTypes, user?.categoryCode]);
 
+  useEffect(() => {
+    setImgError(false);
+  }, [qrUrl]);
+
   return (
-    <Tooltip open={open} onOpenChange={setOpen}>
-      <TooltipTrigger asChild>
+    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenuTrigger asChild>
         <button
           type="button"
           className={cn(
@@ -80,17 +88,19 @@ export function SidebarSupportQrTooltip({
         >
           <CircleHelpBoldQuestion className={sidebarFooterSettingsIconClass} />
         </button>
-      </TooltipTrigger>
-      <TooltipContent
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
         side="right"
         align="end"
         sideOffset={8}
         collisionPadding={16}
-        className={cn(SUPPORT_QR_TOOLTIP_SURFACE, 'w-[368px] pointer-events-auto')}
-        onPointerDownOutside={() => setOpen(false)}
-        onEscapeKeyDown={() => setOpen(false)}
+        className={cn(
+          SUPPORT_QR_PANEL_SURFACE,
+          'z-[60000] max-h-[calc(100vh-24px)] min-w-0 border p-0',
+        )}
+        onCloseAutoFocus={(event) => event.preventDefault()}
       >
-        <div className="flex max-h-[calc(100vh-24px)] flex-col items-center gap-3 overflow-y-auto p-5 text-center">
+        <div className="flex max-h-[calc(100vh-24px)] items-center justify-center overflow-y-auto p-3">
           {imgError ? (
             <p className="px-2 py-4 text-sm leading-5 text-muted-foreground">
               {t('sidebar.supportGroup.loadError')}
@@ -105,16 +115,8 @@ export function SidebarSupportQrTooltip({
               onError={() => setImgError(true)}
             />
           )}
-          <div className="space-y-1">
-            <p className="text-sm font-semibold leading-5 text-foreground">
-              {t('sidebar.supportGroup.title')}
-            </p>
-            <p className="text-xs leading-5 text-muted-foreground">
-              {t('sidebar.supportGroup.hint')}
-            </p>
-          </div>
         </div>
-      </TooltipContent>
-    </Tooltip>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

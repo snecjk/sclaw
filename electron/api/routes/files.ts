@@ -8,6 +8,7 @@ import { getOpenClawConfigDir } from '../../utils/paths';
 import { resolveWorkspaceFilePath } from '../../utils/artifact-path';
 import { existsSync } from 'node:fs';
 import { uploadOssFile } from '../../utils/oss-temp-upload';
+import { writeTextToSystemClipboard, writeFilesToSystemClipboard } from '../../utils/clipboard-rich-write';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -332,6 +333,32 @@ export async function handleFileRoutes(
         return true;
       }
       sendJson(res, 200, { success: true, savedPath: result.filePath });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/clipboard/write-text' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ text: string }>(req);
+      writeTextToSystemClipboard(body.text ?? '');
+      sendJson(res, 200, { success: true });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/clipboard/write-files' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{
+        files: Array<{ filePath: string; fileName: string; mimeType?: string }>;
+      }>(req);
+      const result = await writeFilesToSystemClipboard(
+        Array.isArray(body.files) ? body.files : [],
+      );
+      sendJson(res, 200, { success: true, copiedFileCount: result.copiedFileCount });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

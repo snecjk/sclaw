@@ -2,7 +2,7 @@
     "gatewayNotRunning": "ゲートウェイが停止中",
     "gatewayRequired": "チャットを利用するには OpenClaw ゲートウェイが実行されている必要があります。自動的に起動するか、設定から起動できます。",
     "welcome": {
-        "title": "StoClaw チャット",
+        "title": "S Claw チャット",
         "subtitle": "お手伝いできることはありますか？",
         "askQuestions": "タスク対応",
         "askQuestionsDesc": "タスク指向の依頼に対応します",
@@ -123,6 +123,12 @@
     "messageActions": {
         "copy": "コピー",
         "copyFailed": "コピーに失敗しました",
+        "copySplitHint": "本文またはファイルを個別にコピー",
+        "copyText": "本文をコピー",
+        "copyTextSuccess": "本文をコピーしました",
+        "copyFiles": "ファイルをコピー（{{count}}）",
+        "copyFilesSuccess": "ファイルをコピーしました（{{count}} 件）",
+        "copyFilesFailed": "ファイルのコピーに失敗しました",
         "share": "钉钉で共有",
         "editAndResend": "編集して再送信",
         "editUnavailable": "このページでは編集して再送信を利用できません"
@@ -178,7 +184,14 @@
         "typeImage": "画像",
         "typeArchive": "アーカイブ",
         "typeMedia": "メディア",
-        "typeFile": "ファイル"
+        "typeFile": "ファイル",
+        "preview": "プレビュー",
+        "openFileLocation": "フォルダーを開く",
+        "copyFile": "ファイルをコピー",
+        "copyLink": "リンクをコピー",
+        "copyLinkSuccess": "リンクをコピーしました",
+        "moreActions": "その他の操作",
+        "actionFailed": "操作に失敗しました"
     },
     "preview": {
         "collapsePanel": "プレビューを閉じる",

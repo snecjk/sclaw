@@ -52,6 +52,7 @@ import { TaskEmptyState } from './components/TaskEmptyState';
 import { RecordStatusNav } from './components/RecordStatusNav';
 import { RecordItem } from './components/RecordItem';
 import { RecordDetailModal } from './components/RecordDetailModal';
+import { TaskRunGuardBar } from './components/TaskRunGuardBar';
 
 // ──── 工具函数 ────
 
@@ -504,6 +505,7 @@ export default function MyTask() {
           {/* ── 定时任务视图 ── */}
           {isTasksView && (
             <section aria-label={t('myTask.taskView.aria')} className="flex-1 flex flex-col">
+              <TaskRunGuardBar />
               {jobsLoading && safeJobs.length === 0 ? (
                 <div className="flex items-center justify-center py-20">
                   <LoadingSpinner size="lg" />
