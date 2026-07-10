@@ -41,6 +41,37 @@ interface MentionSearchItem {
 }
 
 const RECENT_MENTION_PAGE_SIZE = 10;
+const DWS_STATUS_CACHE_TTL_MS = 180_000;
+
+type DwsInstalledStatus = Awaited<ReturnType<typeof dwsCheckInstalled>>;
+
+let installedStatusCache: { value: DwsInstalledStatus; expiresAt: number } | null = null;
+let authStatusCache: { value: boolean; expiresAt: number } | null = null;
+
+function invalidateDwsStatusCache(): void {
+  installedStatusCache = null;
+  authStatusCache = null;
+}
+
+async function getCachedDwsInstalled(): Promise<DwsInstalledStatus> {
+  const now = Date.now();
+  if (installedStatusCache && installedStatusCache.expiresAt > now) {
+    return installedStatusCache.value;
+  }
+  const value = await dwsCheckInstalled();
+  installedStatusCache = { value, expiresAt: now + DWS_STATUS_CACHE_TTL_MS };
+  return value;
+}
+
+async function getCachedDwsAuthenticated(): Promise<boolean> {
+  const now = Date.now();
+  if (authStatusCache && authStatusCache.expiresAt > now) {
+    return authStatusCache.value;
+  }
+  const value = await isDwsAuthenticated();
+  authStatusCache = { value, expiresAt: now + DWS_STATUS_CACHE_TTL_MS };
+  return value;
+}
 
 function extractDwsRows(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
@@ -470,7 +501,7 @@ export async function handleDingTalkRoutes(
       return true;
     }
 
-    const installed = await dwsCheckInstalled();
+    const installed = await getCachedDwsInstalled();
     if (!installed.installed) {
       sendJson(res, 503, { success: false, error: 'dws is not installed', needsInstall: true });
       return true;
@@ -483,7 +514,8 @@ export async function handleDingTalkRoutes(
         sendJson(res, 500, { success: false, error: result.error || 'DingTalk login failed' });
         return true;
       }
-      const authenticated = await isDwsAuthenticated();
+      invalidateDwsStatusCache();
+      const authenticated = await getCachedDwsAuthenticated();
       sendJson(res, 200, { success: true, authenticated });
       return true;
     } catch (error) {
@@ -506,6 +538,7 @@ export async function handleDingTalkRoutes(
         });
         return true;
       }
+      invalidateDwsStatusCache();
       await promptGatewayRestartAfterDwsInstall(_ctx.gatewayManager, _ctx.mainWindow, result);
       sendJson(res, 200, {
         success: true,
@@ -521,8 +554,8 @@ export async function handleDingTalkRoutes(
   }
 
   if (url.pathname === '/api/dingtalk/status' && req.method === 'GET') {
-    const installed = await dwsCheckInstalled();
-    const authenticated = installed.installed ? await isDwsAuthenticated() : false;
+    const installed = await getCachedDwsInstalled();
+    const authenticated = installed.installed ? await getCachedDwsAuthenticated() : false;
     sendJson(res, 200, {
       installed: installed.installed,
       version: installed.version ?? null,
@@ -541,13 +574,13 @@ export async function handleDingTalkRoutes(
       ? body.types.map((t) => (t === 'group' ? 'conversation' : t))
       : ['user', 'conversation'];
 
-    const installed = await dwsCheckInstalled();
+    const installed = await getCachedDwsInstalled();
     if (!installed.installed) {
       sendJson(res, 200, { items: [], needsInstall: true, needsAuth: false });
       return true;
     }
 
-    const authenticated = await isDwsAuthenticated();
+    const authenticated = await getCachedDwsAuthenticated();
     if (!authenticated) {
       sendJson(res, 200, { items: [], needsInstall: false, needsAuth: true });
       return true;
@@ -562,10 +595,12 @@ export async function handleDingTalkRoutes(
 
     const wantUsers = types.includes('user');
     const wantGroups = types.includes('conversation');
+    // 拼音/拉丁检索：aisearch 已覆盖人名，跳过 contact + chat 以减少 dws 进程
+    const latinQuery = isLatinMentionQuery(query);
     const [fromContact, fromGroups, fromAisearch] = await Promise.all([
-      wantUsers ? searchUsersViaContact(query, limit) : Promise.resolve([]),
+      wantUsers && !latinQuery ? searchUsersViaContact(query, limit) : Promise.resolve([]),
       // chat search keyword 较宽松，结果在 searchConversations 内按 title 二次过滤
-      wantGroups ? searchConversations(query, limit) : Promise.resolve([]),
+      wantGroups && !latinQuery ? searchConversations(query, limit) : Promise.resolve([]),
       wantUsers ? searchUsersViaAisearch(query, limit) : Promise.resolve([]),
     ]);
 
