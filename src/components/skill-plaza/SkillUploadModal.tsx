@@ -265,7 +265,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     }
                   }}
                   className={cn(
-                    'flex flex-col items-center text-center w-full py-10 px-4 rounded-xl border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E]',
+                    'flex flex-col items-center text-center w-full py-10 px-4 rounded-xl border-2 border-dashed transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E]',
                     dragOver
                       ? 'border-[#00B54B] bg-[#00B54B]/10'
                       : 'border-[#C9CDD4] bg-[#FAFBFC] hover:border-[#00B54B] hover:bg-[#00B54B]/5 dark:border-[#343A40] dark:bg-[#1f2325] dark:hover:border-[#46515A] dark:hover:bg-[#1f2325]',
@@ -297,7 +297,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     onClick={pickFile}
                     className="w-full text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E] rounded-xl"
                   >
-                    <div className="min-h-[176px] rounded-2xl border-2 border-dashed border-[#22C55E] bg-[#E9FFEC] px-5 py-6 flex flex-col items-center justify-center">
+                    <div className="min-h-[176px] rounded-2xl border-2 border-dashed border-[#22C55E] bg-[#E9FFEC] px-5 py-6 flex flex-col items-center justify-center transition-colors dark:border-[#343A40] dark:bg-[#1f2325] dark:hover:border-[#46515A]">
                       <FileText className="h-10 w-10 text-[#8B96A3]" strokeWidth={1.8} />
                       <p className="mt-6 max-w-full text-xl leading-7 font-normal text-foreground break-all line-clamp-2 tracking-normal">
                         {fileName}
@@ -311,7 +311,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     <button
                       type="button"
                       onClick={confirmUpload}
-                      className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-[#E4E7EC] bg-white px-6 text-base leading-6 font-semibold text-foreground shadow-sm transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E]"
+                      className="inline-flex h-12 w-full items-center justify-center rounded-xl border border-[#E4E7EC] bg-white px-6 text-base leading-6 font-semibold text-foreground shadow-sm transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E] dark:border-[#343A40] dark:bg-[#1f2325] dark:hover:border-[#46515A] dark:hover:bg-[#252A2E]"
                     >
                       {t('plaza.upload.confirmUpload', { defaultValue: '安装' })}
                     </button>
