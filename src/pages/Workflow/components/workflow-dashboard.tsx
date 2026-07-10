@@ -131,8 +131,8 @@ export function WorkflowDashboard({
     return list;
   })();
 
-  /** 后端「我的工作流」按 Tab 各取最新 100 条；命中上限时在底部给出提示 */
-  const showMineCappedHint = !mineLoading && !error && cards.length >= 100;
+  /** 后端「我的工作流」按 Tab 各取最新 99 条；命中上限时在底部给出提示，Tab 角标显示 99+ */
+  const showMineCappedHint = !mineLoading && !error && cards.length >= 99;
 
   /** 官方推荐：先按分类筛选，再在分类下按名称搜索 */
   const filteredOfficial = (() => {
@@ -328,7 +328,7 @@ export function WorkflowDashboard({
                 >
                   <span>{t(`filter.${key}`)}</span>
                   <span className={workflowListSubnavCountClass(mineFilter === key)}>
-                    {mineSearchCounts[key]}
+                    {mineSearchCounts[key] >= 99 ? '99+' : mineSearchCounts[key]}
                   </span>
                 </button>
               ))}
@@ -494,8 +494,8 @@ export function WorkflowDashboard({
           const idx = cards.findIndex((c) => c.id === detailMineCard.id);
           if (idx < 0) return;
           const next = !detailMineCard.enabled;
-          updateCard(idx, { enabled: next, showPausedLabel: !next });
-          setDetailMineCard({ ...detailMineCard, enabled: next, showPausedLabel: !next });
+          updateCard(idx, { enabled: next });
+          setDetailMineCard({ ...detailMineCard, enabled: next });
           toast.success(next ? t('toast.resumed') : t('toast.paused'));
         }}
         onRename={() => {

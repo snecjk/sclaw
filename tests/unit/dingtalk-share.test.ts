@@ -10,6 +10,7 @@ import {
   buildArtifactShareDialogDraft,
   buildArtifactShareDraft,
   buildConversationShareDialogDraft,
+  buildConversationShareHttpFileLinks,
   isDingTalkShareContentTooLong,
   truncateConversationPreview,
 } from '../../src/lib/dingtalk-share';
@@ -144,6 +145,37 @@ describe('buildConversationShareDialogDraft', () => {
       expect(draft.textPreview).not.toContain('[链接]');
       expect(draft.textPreview).toContain('产物');
     }
+  });
+
+  it('keeps conversation preview as summary text only while retaining files for share', () => {
+    const draft = buildConversationShareDialogDraft(
+      '报告已生成。',
+      [{
+        fileName: '客户异常监控报告_20260707.html',
+        filePath: 'https://baseinfo-chatbotapi.sto.cn/api/agentrun/artifact/preview?filePath=demo.html',
+        mimeType: 'text/html',
+        fileSize: 0,
+        preview: null,
+      }],
+    );
+    expect(draft.kind).toBe('conversation');
+    if (draft.kind === 'conversation') {
+      expect(draft.textPreview).toBe('报告已生成。');
+      expect(draft.textPreview).not.toContain('客户异常监控报告_20260707');
+      expect(draft.files).toHaveLength(1);
+    }
+  });
+});
+
+describe('buildConversationShareHttpFileLinks', () => {
+  it('builds markdown links for http artifact files', () => {
+    const links = buildConversationShareHttpFileLinks([{
+      fileName: '客户异常监控报告_20260707',
+      filePath: 'https://baseinfo-chatbotapi.sto.cn/api/agentrun/artifact/preview?filePath=demo.html',
+    }]);
+    expect(links).toBe(
+      '[客户异常监控报告_20260707](https://baseinfo-chatbotapi.sto.cn/api/agentrun/artifact/preview?filePath=demo.html)',
+    );
   });
 });
 

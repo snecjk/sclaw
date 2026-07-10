@@ -4,6 +4,7 @@ import {
   buildDingTalkMentionRpcExtras,
   ensureChatSendMessageWithDingTalkMentions,
   hasResolvedDingTalkMentions,
+  parseDingTalkRecipientsFromText,
   stripDingTalkMentionContextForDisplay,
 } from '../../shared/dingtalk-mention-context';
 
@@ -80,5 +81,27 @@ describe('dingtalk mention context', () => {
       filePath: '/tmp/a.png',
       mimeType: 'image/png',
     }])).toEqual({ dingTalkMentions: mentions });
+  });
+
+  it('parses recipients from a stored prompt template', () => {
+    const wrapped = appendDingTalkMentionContext('执行工作流', [
+      { type: 'user', displayName: '李峥', userId: 'uid-2' },
+      { type: 'group', displayName: '自研 Claw', openConversationId: 'cid-1' },
+    ]);
+    const parsed = parseDingTalkRecipientsFromText(wrapped);
+    expect(parsed).toEqual([
+      { type: 'user', displayName: '李峥', userId: 'uid-2' },
+      { type: 'group', displayName: '自研 Claw', openConversationId: 'cid-1' },
+    ]);
+  });
+
+  it('returns null when no recipient block is present', () => {
+    expect(parseDingTalkRecipientsFromText('普通任务，无收件人')).toBeNull();
+    expect(parseDingTalkRecipientsFromText('')).toBeNull();
+  });
+
+  it('returns null when the json block is malformed', () => {
+    const text = '[STOCLAW:DINGTALK_RECIPIENTS:v1]\n```json\n{not valid json\n```\n用户消息：\nhi';
+    expect(parseDingTalkRecipientsFromText(text)).toBeNull();
   });
 });

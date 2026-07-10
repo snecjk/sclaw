@@ -1,7 +1,7 @@
 {
     "steps": {
         "welcome": {
-            "title": "Welcome to StoClaw",
+            "title": "Welcome to S Claw",
             "description": "Your AI assistant is ready to be configured"
         },
         "runtime": {
@@ -18,12 +18,12 @@
         },
         "complete": {
             "title": "All Set!",
-            "description": "StoClaw is ready to use"
+            "description": "S Claw is ready to use"
         }
     },
     "welcome": {
-        "title": "Welcome to StoClaw",
-        "description": "StoClaw is a graphical interface for OpenClaw, making it easy to use AI assistants across your favorite messaging platforms.",
+        "title": "Welcome to S Claw",
+        "description": "S Claw is a graphical interface for OpenClaw, making it easy to use AI assistants across your favorite messaging platforms.",
         "features": {
             "noCommand": "Zero command-line required",
             "modernUI": "Modern, beautiful interface",

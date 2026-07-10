@@ -333,7 +333,13 @@ const PLUGIN_CONTENT_SYNC_FILES: Record<string, readonly string[]> = {
     'index.ts',
     'dingtalk-send-guard.ts',
   ],
+  'sto-dynamic-agent-route': [
+    'index.ts',
+    'shared/retired-skills.ts',
+  ],
 };
+
+const STO_DYNAMIC_ROUTE_RETIRED_SKILLS_REL = 'shared/retired-skills.ts';
 
 function hashFileContent(filePath: string): string | null {
   try {
@@ -434,9 +440,45 @@ function ensureStoToolkitLibraryInstalled(): void {
   }
 }
 
+function resolveRetiredSkillsSourcePaths(pluginDirName: string): string[] {
+  const candidates = [
+    join(process.cwd(), 'shared', 'retired-skills.ts'),
+    join(app.getAppPath(), 'shared', 'retired-skills.ts'),
+    join(process.cwd(), 'sto-plugin', 'openclaw', pluginDirName, STO_DYNAMIC_ROUTE_RETIRED_SKILLS_REL),
+    join(app.getAppPath(), 'sto-plugin', 'openclaw', pluginDirName, STO_DYNAMIC_ROUTE_RETIRED_SKILLS_REL),
+  ];
+  const bundled = pickPluginSourceDir(pluginDirName, buildCandidateSources(pluginDirName));
+  if (bundled) {
+    candidates.unshift(join(bundled, STO_DYNAMIC_ROUTE_RETIRED_SKILLS_REL));
+  }
+  return candidates;
+}
+
+function ensureStoDynamicRouteSharedFiles(targetDir: string): void {
+  const dest = join(targetDir, STO_DYNAMIC_ROUTE_RETIRED_SKILLS_REL);
+  if (existsSync(fsPath(dest))) return;
+
+  for (const source of resolveRetiredSkillsSourcePaths('sto-dynamic-agent-route')) {
+    if (!existsSync(fsPath(source))) continue;
+    mkdirSync(fsPath(join(targetDir, 'shared')), { recursive: true });
+    cpSync(fsPath(source), fsPath(dest), { force: true });
+    logger.info(
+      `[plugin] Backfilled sto-dynamic-agent-route ${STO_DYNAMIC_ROUTE_RETIRED_SKILLS_REL} from ${source}`,
+    );
+    return;
+  }
+
+  logger.warn(
+    `[plugin] Missing sto-dynamic-agent-route ${STO_DYNAMIC_ROUTE_RETIRED_SKILLS_REL}; plugin may fail to load`,
+  );
+}
+
 function afterStoPluginInstall(pluginDirName: string): void {
   if (pluginDirName === 'sto-workflow-tool') {
     ensureStoToolkitLibraryInstalled();
+  }
+  if (pluginDirName === 'sto-dynamic-agent-route') {
+    ensureStoDynamicRouteSharedFiles(join(getOpenClawConfigDir(), 'extensions', pluginDirName));
   }
   if (PLUGIN_RUNTIME_DEPS[pluginDirName]) {
     ensurePluginRuntimeDeps(pluginDirName);

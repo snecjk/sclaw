@@ -162,6 +162,8 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
           messages: [],
           streamingText: '',
           streamingMessage: null,
+          streamingMessages: [],
+          streamingToolResults: [],
           streamingTools: [],
           activeRunId: null,
           error: null,
@@ -215,6 +217,8 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
         error: null,
         streamingText: '',
         streamingMessage: null,
+        streamingMessages: [],
+        streamingToolResults: [],
         streamingTools: [],
         pendingFinal: false,
         lastUserMessageAt: nowMs,
@@ -378,7 +382,16 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       clearHistoryPoll();
       clearErrorRecoveryTimer();
       const { currentSessionKey } = get();
-      set({ sending: false, streamingText: '', streamingMessage: null, pendingFinal: false, lastUserMessageAt: null, pendingToolImages: [] });
+      set({
+        sending: false,
+        streamingText: '',
+        streamingMessage: null,
+        streamingMessages: [],
+        streamingToolResults: [],
+        pendingFinal: false,
+        lastUserMessageAt: null,
+        pendingToolImages: [],
+      });
       set({ streamingTools: [] });
 
       try {

@@ -23,10 +23,11 @@ import {
   isMessageInCurrentUserTurn,
   isTurnDisplayAssistantMessage,
 } from '@/pages/Chat/chat-turn-meta';
+import { canShowAssistantTurnMeta, resolveCurrentTurnLifecycleForMeta } from '@/pages/Chat/turn-lifecycle';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
-import { extractText, extractPlainTextFromContent, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, extractDisplayFileNameHints, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm, useLocalPathExistence, resolvePreviewCandidate, unwrapPreviewablePathMarkdown, findWorkflowParamsSummaryAfterIntro } from './message-utils';
+import { extractText, extractPlainTextFromContent, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, extractDisplayFileNameHints, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm, useLocalPathExistence, resolvePreviewCandidate, unwrapPreviewablePathMarkdown, findWorkflowParamsSummaryAfterIntro, isWorkflowStartAssistantBoilerplate, resolveAssistantCopyShareContent, formatAssistantCopyShareClipboardText } from './message-utils';
 import {
   ensureWorkflowParameterFormHandler,
   ensureWorkflowParameterFormInjected,
@@ -83,11 +84,6 @@ import {
 
 const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
 
-/** B4：助手侧启动 boilerplate，折叠行替代长文案 */
-function isWorkflowStartAssistantBoilerplate(content: string): boolean {
-  return /^参数已确认[，,].*工作流已在后台启动/.test(content.trim());
-}
-
 interface ChatMessageProps {
   message: RawMessage;
   showThinking: boolean;
@@ -118,6 +114,8 @@ const HOVER_REVEAL_CLASS = 'opacity-0 transition-opacity duration-200 group-hove
 
 const MESSAGE_META_ICON_BUTTON_CLASS =
   'h-auto w-auto min-h-0 min-w-0 shrink-0 rounded-none border-0 bg-transparent p-0.5 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground';
+
+const MESSAGE_META_SHARE_ICON_CLASS = 'h-3.5 w-3.5';
 
 interface ExtractedImage { url?: string; data?: string; mimeType: string; }
 
@@ -379,10 +377,35 @@ export const ChatMessage = memo(function ChatMessage({
   const assistantBubbleText =
     showAssistantParamsFold && isWorkflowStartAssistantBoilerplate(text) ? '' : text;
   const showAssistantTextBubble = assistantBubbleText.trim().length > 0;
+  const assistantCopyShareContent = useMemo(
+    () => {
+      if (isUser) {
+        return { text: text.trim(), files: previewFiles };
+      }
+      return resolveAssistantCopyShareContent({
+        text,
+        assistantBubbleText,
+        workflowCard,
+        workflowCardStates,
+        sessionKey,
+        previewFiles,
+      });
+    },
+    [isUser, text, assistantBubbleText, workflowCard, workflowCardStates, sessionKey, previewFiles],
+  );
+  const assistantCopyShareText = useMemo(
+    () => formatAssistantCopyShareClipboardText(
+      assistantCopyShareContent.text,
+      assistantCopyShareContent.files,
+    ),
+    [assistantCopyShareContent],
+  );
   const showUserParamsFold = isUser && hasText && isWorkflowParamsUserText(text);
 
   const sending = useChatStore((s) => s.sending);
   const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
+  const pendingFinal = useChatStore((s) => s.pendingFinal);
+  const activeRunId = useChatStore((s) => s.activeRunId);
   const isLastAssistantInTurn = !isUser && (
     isTurnDisplayReply || isTurnDisplayAssistantMessage(message, sessionMessages)
   );
@@ -397,24 +420,72 @@ export const ChatMessage = memo(function ChatMessage({
         sessionMessages,
         sending,
         lastUserMessageAt,
+        pendingFinal,
+        activeRunId,
         workflowCardStates,
         hasPendingWorkflowSchema: pendingWorkflow?.schema != null,
         sessionKey,
       }),
-    [sessionMessages, sending, lastUserMessageAt, workflowCardStates, pendingWorkflow?.schema, sessionKey],
+    [
+      sessionMessages,
+      sending,
+      lastUserMessageAt,
+      pendingFinal,
+      activeRunId,
+      workflowCardStates,
+      pendingWorkflow?.schema,
+      sessionKey,
+    ],
   );
-  const isAssistantTurnIncomplete =
-    isLastAssistantInTurn
-    && isInCurrentUserTurn
-    && (isStreaming || isAwaitingUserToContinue || currentUserTurnIncomplete);
+  /** 工作流 / 填表阻塞（不含 sending 等 runtime 字段，供 TurnLifecycle 分层） */
+  const hasWorkflowBlockers = useMemo(
+    () =>
+      isCurrentUserTurnIncomplete({
+        sessionMessages,
+        sending: false,
+        lastUserMessageAt: null,
+        pendingFinal: false,
+        activeRunId: null,
+        workflowCardStates,
+        hasPendingWorkflowSchema: pendingWorkflow?.schema != null,
+        sessionKey,
+      }),
+    [sessionMessages, workflowCardStates, pendingWorkflow?.schema, sessionKey],
+  );
+  const turnLifecycle = useMemo(
+    () =>
+      resolveCurrentTurnLifecycleForMeta({
+        sending,
+        pendingFinal,
+        lastUserMessageAt,
+        activeRunId,
+        isStreaming,
+        isAwaitingUserToContinue,
+        hasWorkflowBlockers,
+        runId: activeRunId,
+      }),
+    [
+      sending,
+      pendingFinal,
+      lastUserMessageAt,
+      activeRunId,
+      isStreaming,
+      isAwaitingUserToContinue,
+      hasWorkflowBlockers,
+    ],
+  );
   const hasAssistantMetaContent =
     showAssistantTextBubble
     || workflowCard !== null
     || previewFiles.length > 0
     || showAssistantParamsFold;
-  /** 每轮助手回复结束后，在产物/正文下方常态展示复制 + 时间 */
-  const showAssistantMessageMeta =
-    hasAssistantMetaContent && isLastAssistantInTurn && !isAssistantTurnIncomplete;
+  /** 每轮助手回复结束后，在产物/正文下方常态展示复制 + 时间（TurnLifecycle.canShowMeta） */
+  const showAssistantMessageMeta = canShowAssistantTurnMeta({
+    hasAssistantMetaContent,
+    isLastAssistantInTurn,
+    isInCurrentUserTurn,
+    lifecycle: turnLifecycle,
+  });
   /** 用户参数摘要卡由同轮最后一条助手消息统一展示 meta，避免出现在「参数已确认」上方 */
   const showUserMessageMeta =
     hasText
@@ -476,9 +547,12 @@ export const ChatMessage = memo(function ChatMessage({
   }, [debugLinks, debugMarkdownSource, text]);
 
   const openConversationShare = useCallback(() => {
-    setShareDraft(buildConversationShareDialogDraft(text, previewFiles));
+    setShareDraft(buildConversationShareDialogDraft(
+      assistantCopyShareContent.text,
+      assistantCopyShareContent.files,
+    ));
     setShareDialogOpen(true);
-  }, [text, previewFiles]);
+  }, [assistantCopyShareContent]);
 
   const handleShareCompleted = useCallback(() => {
     toast.success(t('preview.shareDialog.success'));
@@ -793,7 +867,7 @@ export const ChatMessage = memo(function ChatMessage({
         {/* 助手消息：复制 + 分享 + 时间 — 置于正文/工作流/产物等全部内容之后 */}
         {!isUser && showAssistantMessageMeta ? (
           <AssistantMessageMetaRow
-            text={text}
+            text={assistantCopyShareText}
             timestamp={message.timestamp}
             onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
             onShare={openConversationShare}
@@ -949,7 +1023,7 @@ function UserMessageMetaRow({
           aria-label={t('messageActions.share')}
           title={t('messageActions.share')}
         >
-          <ShareMessageIcon className="h-3 w-3" />
+          <ShareMessageIcon className={MESSAGE_META_SHARE_ICON_CLASS} />
         </Button>
       ) : null}
       <Button
@@ -1019,7 +1093,7 @@ function AssistantMessageMetaRow({
           aria-label={t('messageActions.share')}
           title={t('messageActions.share')}
         >
-          <ShareMessageIcon className="h-3 w-3" />
+          <ShareMessageIcon className={MESSAGE_META_SHARE_ICON_CLASS} />
         </Button>
       ) : null}
       {timestamp ? (

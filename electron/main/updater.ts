@@ -23,9 +23,11 @@ import * as os from 'node:os';
 const execFile = promisify(execFileCb);
 import {
   resolveUpdatePolicy,
+  fetchChangelogList,
   sendClientUpdateEventsFireAndForget,
   writePendingInstallReport,
   getMemoryCenterApiOrigin,
+  type ChangelogListResult,
   type ResolveFailureReason,
 } from '../services/client-update-platform';
 import { getCurrentEnvConfig } from '../../shared/env-config';
@@ -146,6 +148,10 @@ export class AppUpdater extends EventEmitter {
   private _currentChannel = '';
   /** 最近一次 resolve API 的 URL（用于诊断日志）。 */
   private _lastResolveUrl = '';
+
+  /** Release ticket title/changelog from last successful resolve (memory-center). */
+  private _resolveTitle: string | null = null;
+  private _resolveChangelog: string | null = null;
 
   /** Delay (in seconds) before auto-installing a downloaded update. */
   private static readonly AUTO_INSTALL_DELAY_SECONDS = 5;
@@ -289,6 +295,9 @@ export class AppUpdater extends EventEmitter {
     const checkIntervalSec = clampCheckIntervalSec(data.check_interval_seconds);
     this.nextCheckIntervalMs = checkIntervalSec * 1000;
 
+    this._resolveTitle = (data.title || '').trim() || null;
+    this._resolveChangelog = (data.changelog || '').trim() || null;
+
     this.lastFeedSlug = data.feed_slug ?? null;
 
     if (!data.update_offered) {
@@ -336,6 +345,28 @@ export class AppUpdater extends EventEmitter {
 
   getStatus(): UpdateStatus {
     return this.status;
+  }
+
+  /** Merge memory-center resolve notes into electron-updater UpdateInfo for renderer. */
+  private mergeUpdateInfo(info: UpdateInfo): UpdateInfo {
+    const releaseNotes =
+      this._resolveChangelog
+      ?? (typeof info.releaseNotes === 'string' ? info.releaseNotes : null)
+      ?? null;
+    return {
+      ...info,
+      releaseNotes,
+      ...(this._resolveTitle ? { title: this._resolveTitle } : {}),
+    } as UpdateInfo;
+  }
+
+  async fetchChangelogList(limit = 10, offset = 0): Promise<ChangelogListResult> {
+    const token = await getStoToken();
+    if (!token) {
+      return { ok: false, reason: { httpStatus: 401, serverMessage: '未登录' } };
+    }
+    const env = await getSsoEnvironment();
+    return fetchChangelogList(token, env, { limit, offset });
   }
 
   /**
@@ -430,7 +461,7 @@ export class AppUpdater extends EventEmitter {
         // 必须在这里手动 arm 下载保护，否则周期 check 干扰 + idle 看门狗都不会生效。
         this.beginDownloadProtection();
       }
-      this.updateStatus({ status: 'available', info, policyBlocked: false });
+      this.updateStatus({ status: 'available', info: this.mergeUpdateInfo(info), policyBlocked: false });
       this.emit('update-available', info);
     });
 
@@ -476,7 +507,7 @@ export class AppUpdater extends EventEmitter {
           },
         ]);
       });
-      this.updateStatus({ status: 'downloaded', info: event });
+      this.updateStatus({ status: 'downloaded', info: this.mergeUpdateInfo(event) });
       this.emit('update-downloaded', event);
 
       // 仅当用户在 settings 里开启了 "自动更新" 时，才下载完后自动启动 5 秒安装倒计时。
@@ -1292,6 +1323,10 @@ export function registerUpdateHandlers(
   ipcMain.handle('update:cancelAutoInstall', () => {
     updater.cancelAutoInstall();
     return { success: true };
+  });
+
+  ipcMain.handle('update:changelog-list', async (_, opts?: { limit?: number; offset?: number }) => {
+    return updater.fetchChangelogList(opts?.limit ?? 10, opts?.offset ?? 0);
   });
 
   void updater.syncPeriodicCheckFromSettings();

@@ -30,7 +30,15 @@ export function useHomeChatEntrySend() {
   );
 
   const handleHubSend = useCallback(
-    async (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, _dingTalkMentions?: DingTalkMention[], workflowId?: string | null) => {
+    async (
+      text: string,
+      attachments?: FileAttachment[],
+      targetAgentId?: string | null,
+      _dingTalkMentions?: DingTalkMention[],
+      workflowId?: string | null,
+      workflowSource?: string | null,
+      workflowName?: string | null,
+    ) => {
       const { currentAgentId, currentSessionKey, sessions } = useChatStore.getState();
       const currentSession = sessions.find((session) => session.key === currentSessionKey);
       const targetEngineType = targetAgentId
@@ -50,7 +58,7 @@ export function useHomeChatEntrySend() {
       }
 
       const { dispatchChatSend } = await import('@/hooks/dispatch-chat-send');
-      await dispatchChatSend({ text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId });
+      await dispatchChatSend({ text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId, workflowSource, workflowName });
       if (useChatStore.getState().error) {
         toast.error(t('assistant.sendFailed'));
       }

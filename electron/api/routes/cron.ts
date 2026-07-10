@@ -901,7 +901,7 @@ export async function handleCronRoutes(
         const jobsRaw = await readFile(jobsFile, 'utf8');
         const jobsData = JSON.parse(jobsRaw) as { jobs?: Array<{ id: string; name?: string }> };
         const name = jobsData.jobs?.find((job) => job.id === body.id)?.name?.trim();
-        if (name) jobLabel = `Cron: ${name}`;
+        if (name) jobLabel = `${name}`;
       } catch {
         // ignore
       }

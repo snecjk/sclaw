@@ -98,7 +98,7 @@ function computeInitialValues(
         ? cronToScheduleValue(initialValues.schedule)
         : defaultScheduleValue(),
       recipients: [] as DingTalkMention[],
-      engineType: 'openclaw' as TaskEngineType,
+      engineType: 'claude' as TaskEngineType,
       selectedWorkflow: initialValues.workflowCode || '',
     };
   }
@@ -108,7 +108,7 @@ function computeInitialValues(
     instructions: '',
     schedule: defaultScheduleValue(),
     recipients: [] as DingTalkMention[],
-    engineType: 'openclaw' as TaskEngineType,
+    engineType: 'claude' as TaskEngineType,
     selectedWorkflow: '',
   };
 }
@@ -322,7 +322,8 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
             {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
 
-          <div className="flex flex-col gap-2">
+          {/* 执行引擎已固定为 Claude，暂时隐藏选择器 */}
+          {/* <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.engineLabel')}</label>
             <select
               value={engineType}
@@ -344,7 +345,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                   ? t('myTask.createModal.engineClaudeHint')
                   : t('myTask.createModal.engineOpenclawHint')}
             </p>
-          </div>
+          </div> */}
 
           <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.workflowLabel')}</label>

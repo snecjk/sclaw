@@ -1,0 +1,36 @@
+{
+  "description": "Claude streaming: tool_use arrives before input_json_delta completes",
+  "assistantMessageEarly": {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "tool_use",
+        "id": "toolu_placeholder_1",
+        "name": "Bash",
+        "input": {}
+      }
+    ]
+  },
+  "assistantMessageFinal": {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "tool_use",
+        "id": "toolu_placeholder_1",
+        "name": "Bash",
+        "input": { "command": "curl wttr.in/Shanghai" }
+      }
+    ]
+  },
+  "cachePlaceholder": {
+    "toolCallId": "toolu_placeholder_1",
+    "name": "Bash",
+    "status": "completed"
+  },
+  "toolResultFinal": {
+    "role": "toolresult",
+    "toolCallId": "toolu_placeholder_1",
+    "toolName": "Bash",
+    "content": "HTTP/1.1 200 OK"
+  }
+}

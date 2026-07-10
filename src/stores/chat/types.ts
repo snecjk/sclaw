@@ -118,6 +118,8 @@ export interface ToolStatus {
   toolCallId?: string;
   name: string;
   status: 'running' | 'completed' | 'error';
+  /** Anthropic tool_use / OpenAI arguments；可被后续事件补全 */
+  input?: unknown;
   durationMs?: number;
   summary?: string;
   updatedAt: number;
@@ -135,6 +137,10 @@ export interface SessionRuntimeState {
   activeRunId: string | null;
   streamingText: string;
   streamingMessage: unknown | null;
+  /** Live assistant snapshots seen during the active turn, in arrival order. */
+  streamingMessages: RawMessage[];
+  /** Live tool result messages seen during the active turn, in arrival order. */
+  streamingToolResults: RawMessage[];
   streamingTools: ToolStatus[];
   pendingFinal: boolean;
   lastUserMessageAt: number | null;
@@ -159,6 +165,10 @@ export interface ChatState {
   activeRunId: string | null;
   streamingText: string;
   streamingMessage: unknown | null;
+  /** Live assistant snapshots seen during the active turn, in arrival order. */
+  streamingMessages: RawMessage[];
+  /** Live tool result messages seen during the active turn, in arrival order. */
+  streamingToolResults: RawMessage[];
   streamingTools: ToolStatus[];
   pendingFinal: boolean;
   /** Timestamp (ms) of the last gateway chat event; used for stale-run UI hints. */

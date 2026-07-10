@@ -29,6 +29,8 @@ export type ParsedThinkingTurn = {
   finalReplyText: string | null;
 };
 
+export const INTERRUPTED_PHASE_TEXT_KEY = 'phase-text-interrupted';
+
 /** 开场白 phase-text 固定 key，避免流式 eventIndex 变化导致 React remount 跳动 */
 export const OPENING_PHASE_TEXT_KEY = 'phase-text-opening';
 
@@ -52,4 +54,6 @@ export type ParseThinkingTurnLayoutOptions = {
   precedingUserText?: string | null;
   /** session 原始顺序的 assistant + tool_result；完成态从 tool_result 恢复工具 */
   chronologicalEntries?: TurnTimelineEntry[];
+  /** 用户 Stop 后标记本回合已中断（Phase 6） */
+  wasInterrupted?: boolean;
 };

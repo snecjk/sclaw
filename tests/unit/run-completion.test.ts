@@ -1,93 +1,42 @@
 import { describe, expect, it } from 'vitest';
+import { resolveAssistantFinalTerminalState } from '@/stores/chat/run-completion';
 import type { RawMessage } from '@/stores/chat/types';
-import {
-  isClaudeRuntimeResultDone,
-  resolveAssistantFinalTerminalState,
-  shouldAutoCompleteClaudeFromHistory,
-} from '@/stores/chat/run-completion';
 
-describe('run-completion', () => {
-  it('treats Claude intermediate assistant final as non-terminal while sending', () => {
-    const finalMsg = {
-      id: 'a1',
-      role: 'assistant',
-      content: '让我先查一下…',
-    } as RawMessage;
+const textFinalMsg: RawMessage = {
+  role: 'assistant',
+  content: [{ type: 'text', text: 'Here is the summary.' }],
+};
 
-    const { isAgenticRunFragment, isTerminalOutput } = resolveAssistantFinalTerminalState(
-      'claude',
-      true,
-      undefined,
-      finalMsg,
-    );
-
-    expect(isAgenticRunFragment).toBe(true);
-    expect(isTerminalOutput).toBe(false);
-  });
-
-  it('treats OpenClaw intermediate assistant final as non-terminal while sending', () => {
-    const finalMsg = {
-      id: 'a1',
-      role: 'assistant',
-      content: '让我通过 curl 查一下…',
-    } as RawMessage;
-
-    const { isAgenticRunFragment, isTerminalOutput } = resolveAssistantFinalTerminalState(
-      'openclaw',
-      true,
-      undefined,
-      finalMsg,
-    );
-
-    expect(isAgenticRunFragment).toBe(true);
-    expect(isTerminalOutput).toBe(false);
-  });
-
-  it('treats agentic terminal final as terminal when agent.completed phase is present', () => {
-    const finalMsg = {
-      id: 'a2',
-      role: 'assistant',
-      content: '报告已生成完毕',
-    } as RawMessage;
-
-    const { isTerminalOutput } = resolveAssistantFinalTerminalState(
+describe('resolveAssistantFinalTerminalState', () => {
+  it('OpenClaw never terminal while sending (waits for agent.completed)', () => {
+    const result = resolveAssistantFinalTerminalState(
       'openclaw',
       true,
       'completed',
-      finalMsg,
+      textFinalMsg,
     );
-
-    expect(isTerminalOutput).toBe(true);
+    expect(result.isTerminalOutput).toBe(false);
+    expect(result.isAgenticRunFragment).toBe(true);
   });
 
-  it('does not auto-complete Claude from history until runtime is done', () => {
-    expect(shouldAutoCompleteClaudeFromHistory(
+  it('Claude intermediate final without completed phase is non-terminal while sending', () => {
+    const result = resolveAssistantFinalTerminalState(
       'claude',
-      { isRunning: true, runtimeResult: null },
       true,
-    )).toBe(false);
+      undefined,
+      textFinalMsg,
+    );
+    expect(result.isTerminalOutput).toBe(false);
+    expect(result.isAgenticRunFragment).toBe(true);
+  });
 
-    expect(shouldAutoCompleteClaudeFromHistory(
+  it('Claude terminal when not sending', () => {
+    const result = resolveAssistantFinalTerminalState(
       'claude',
-      {
-        isRunning: false,
-        runtimeResult: { type: 'result', subtype: 'success' },
-      },
-      true,
-    )).toBe(true);
-  });
-
-  it('does not auto-complete OpenClaw from history (Claude-only path)', () => {
-    expect(shouldAutoCompleteClaudeFromHistory(
-      'openclaw',
-      { isRunning: false, runtimeResult: null },
-      true,
-    )).toBe(false);
-  });
-
-  it('recognizes Claude runtime result completion', () => {
-    expect(isClaudeRuntimeResultDone({ type: 'result', subtype: 'success' })).toBe(true);
-    expect(isClaudeRuntimeResultDone({ type: 'result', isError: true })).toBe(true);
-    expect(isClaudeRuntimeResultDone(null)).toBe(false);
+      false,
+      'completed',
+      textFinalMsg,
+    );
+    expect(result.isTerminalOutput).toBe(true);
   });
 });
