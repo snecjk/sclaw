@@ -114,8 +114,8 @@ export function resolveDwsChatMessageSendFileProtocolInText(commandText: string)
 
   return [
     '[StoClaw 安全策略] 钉钉正文禁止含 `file://` 本地路径（钉钉打不开，定时任务【P0 本地产物上钉盘】已要求先上钉盘）。',
-    '请先用 `dws drive upload --file <本地路径（去掉 file:// 前缀）> --space-id <newCSpaceIdIM> -y --format json` 上传钉盘，',
-    '从返回 JSON 取 `docUrl`，用「文件名：docUrl」裸 URL 替换正文中的 `file://` 链接后再 `dws chat message send`；',
+    '请先用 `dws drive upload --file <本地路径（去掉 file:// 前缀）> -y --format json` 上传钉盘（不需要 `--space-id`，直接使用发送人默认钉盘空间），',
+    '从返回 JSON 取 `docUrl`，用「文件名：docUrl」裸 URL 替换正文中的 `file://` 链接（**直接使用 docUrl 原始值，禁止对 URL 做任何编码**）后再 `dws chat message send`；',
     '若上传失败则移除该产物链接，只发纯文字总结。',
   ].join('');
 }
@@ -292,7 +292,7 @@ export function evaluateDingTalkSendGuard(input: {
     const seconds = Math.max(1, Math.ceil(rate.retryAfterMs / 1000));
     return {
       allowed: false,
-      reason: `[StoClaw 安全策略] 钉钉${categoryLabel(category)}消息发送过于频繁，请 ${seconds} 秒后再试（每 20 秒最多 1 条${categoryLabel(category)}消息）。`,
+      reason: `[StoClaw 安全策略] 钉钉${categoryLabel(category)}消息发送过于频繁，请 ${seconds} 秒后再试（每 20 秒最多 1 条${categoryLabel(category)}消息）。这是频控、不是权限拒绝——你被允许发送。请等待约 ${seconds} 秒后用原命令重试，不要放弃、不要让用户手动发送。`,
     };
   }
 

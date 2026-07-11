@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   appendDingTalkMentionContext,
   buildDingTalkMentionRpcExtras,
+  buildDingTalkMentionSystemContext,
+  buildDingTalkMentionSystemContextForScheduledTask,
   ensureChatSendMessageWithDingTalkMentions,
   hasResolvedDingTalkMentions,
   parseDingTalkRecipientsFromText,
@@ -131,5 +133,56 @@ describe('dingtalk mention context', () => {
   it('returns null when the json block is malformed', () => {
     const text = '[STOCLAW:DINGTALK_RECIPIENTS:v1]\n```json\n{not valid json\n```\n用户消息：\nhi';
     expect(parseDingTalkRecipientsFromText(text)).toBeNull();
+  });
+});
+
+describe('dingtalk mention context scenario split', () => {
+  const mentions = [{ type: 'user' as const, displayName: '李峥', userId: 'uid-2' }];
+
+  it('chat builder keeps the "explicit intent required" rule and read-history guidance', () => {
+    const ctx = buildDingTalkMentionSystemContext(mentions);
+    expect(ctx).toContain('不等于要求发送');
+    expect(ctx).toContain('dws chat message list-direct --user <userId>');
+    expect(ctx).toContain('不要回头追问');
+  });
+
+  it('scheduled-task builder makes send mandatory and drops read-history guidance', () => {
+    const ctx = buildDingTalkMentionSystemContextForScheduledTask(mentions);
+    expect(ctx).toContain('必须发送');
+    expect(ctx).toContain('发送不是可选项');
+    expect(ctx).toContain('指定即必发');
+    // 定时任务版去掉对话 @ 的"需明确意图"与"读历史/总结"段
+    expect(ctx).not.toContain('不等于要求发送');
+    expect(ctx).not.toContain('list-direct');
+    expect(ctx).not.toContain('不要回头追问');
+    // 收件人 JSON 块与发送格式规则仍共用
+    expect(ctx).toContain('dws chat message send --user uid-2');
+    expect(ctx).toContain('发起即计');
+    expect(ctx).toContain('代发说明');
+  });
+
+  it('appendDingTalkMentionContext selects builder by scenario', () => {
+    const st = appendDingTalkMentionContext('执行工作流', mentions, { scenario: 'scheduled-task' });
+    expect(st).toContain('指定即必发');
+    expect(st).not.toContain('不等于要求发送');
+    expect(st).toContain('用户消息：\n执行工作流');
+
+    // 默认（不传 scenario）走 chat 版
+    const chat = appendDingTalkMentionContext('总结一下', mentions);
+    expect(chat).toContain('不等于要求发送');
+    expect(chat).not.toContain('指定即必发');
+  });
+
+  it('scheduled-task scenario still wraps files workflow context', () => {
+    const files = [{
+      fileName: 'config.js',
+      filePath: '/tmp/config.js',
+      mimeType: 'text/javascript',
+    }];
+    const ctx = appendDingTalkMentionContext('执行工作流', [
+      { type: 'group' as const, displayName: '自研 Claw', openConversationId: 'cid-1' },
+    ], { scenario: 'scheduled-task', sendFileIntent: true, attachedFiles: files });
+    expect(ctx).toContain('指定即必发');
+    expect(ctx).toContain('钉盘流程');
   });
 });

@@ -657,7 +657,8 @@ function buildCronDescription(
 }
 
 function buildCronMessage(message: string, mentions?: DingTalkMention[]): string {
-  return prepareDingTalkAgentTurnMessage(message, mentions);
+  // OpenClaw 引擎定时任务同样为必发语义，传 scheduled-task 走必发版收件人块。
+  return prepareDingTalkAgentTurnMessage(message, mentions, { scenario: 'scheduled-task' });
 }
 
 export async function handleCronRoutes(

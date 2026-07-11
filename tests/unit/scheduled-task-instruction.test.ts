@@ -76,7 +76,7 @@ describe('scheduled-task-instruction', () => {
   it('documents the local-artifact-to-dingtalk-drive flow in the P0 instruction', () => {
     expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('【P0 本地产物上钉盘】');
     expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('dws drive upload');
-    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('newCSpaceIdIM');
+    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('不需要 `--space-id`');
     expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('docUrl');
     expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('禁止把 `file://` 路径写进钉钉正文');
   });

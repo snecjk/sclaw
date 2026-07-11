@@ -22,6 +22,18 @@ import {
 
 const TAG = 'sto-dingtalk-send-guard';
 
+/**
+ * 追加到每条拦截 reason 末尾的反绕路口条。
+ *
+ * 背景：模型在 `dws chat message send` 被 send-guard 拦截后，偶发把 `deny + reason`
+ * 误判成「Bash 这条路被堵、换条路绕过去」，转而用 Python / 其他语言脚本间接调 dws。
+ * 但安全策略是在执行前校验命令文本，绕路调用既不会被放行、也增加排障难度。reason
+ * 本身已写明正确重试格式，这里再显式堵住「换语言/换工具绕路」的思路，提示模型
+ * 「按 reason 直接用 Bash 重试」。
+ */
+const NO_BYPASS_HINT =
+  '若被本策略拦截，请按 reason 中给出的格式直接用 Bash 重试 `dws chat message send`；禁止改用 Python / 其他语言脚本 / `subprocess` / 其他工具间接调用 dws 绕过（安全策略在执行前校验命令文本，绕路不会被放行）。';
+
 function pickToolResult(event: Record<string, unknown>): unknown {
   for (const key of ['result', 'output', 'response', 'stdout', 'aggregated', 'text', 'body', 'data']) {
     if (key in event && event[key] != null) return event[key];
@@ -97,7 +109,7 @@ export default definePluginEntry({
           api.logger.warn?.(`[${TAG}] blocked tool=${event.toolName}: ${decision.reason}`);
           return {
             block: true,
-            blockReason: decision.reason,
+            blockReason: `${decision.reason} ${NO_BYPASS_HINT}`,
           };
         }
         if (decision.category) {

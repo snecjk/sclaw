@@ -335,7 +335,8 @@ export default function MyTask() {
             }
             const promptTemplate = prepareDingTalkAgentTurnMessage(
               input.message,
-              input.dingTalkMentions
+              input.dingTalkMentions,
+              { scenario: 'scheduled-task' },
             );
             await updateJob(editingJob.id, {
               engineType: 'claude',
@@ -373,7 +374,8 @@ export default function MyTask() {
             }
             const promptTemplate = prepareDingTalkAgentTurnMessage(
               input.message,
-              input.dingTalkMentions
+              input.dingTalkMentions,
+              { scenario: 'scheduled-task' },
             );
             await createJob({
               engineType: 'claude',
