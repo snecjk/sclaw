@@ -37,3 +37,33 @@ describe('buildWindowsHDrop', () => {
     expect(decoded.endsWith('\0\0')).toBe(true);
   });
 });
+
+describe('buildSetClipboardLiteralPathScript', () => {
+  it('builds a CLM-safe Set-Clipboard command for one or more paths', async () => {
+    const mod = await import('../../electron/utils/windows-clipboard-files');
+    expect(mod.buildSetClipboardLiteralPathScript([
+      'C:\\Users\\admin\\report.html',
+    ])).toBe("Set-Clipboard -LiteralPath @('C:\\Users\\admin\\report.html')");
+
+    expect(mod.buildSetClipboardLiteralPathScript([
+      'C:\\tmp\\a.html',
+      "C:\\tmp\\b's file.pdf",
+    ])).toBe("Set-Clipboard -LiteralPath @('C:\\tmp\\a.html','C:\\tmp\\b''s file.pdf')");
+  });
+
+  it('encodes PowerShell commands as UTF-16LE base64 for Unicode paths', async () => {
+    const mod = await import('../../electron/utils/windows-clipboard-files');
+    const script = mod.buildSetClipboardLiteralPathScript([
+      'C:\\Users\\admin\\.claw-output\\客户异常监控20260710.html',
+    ]);
+    const encoded = mod.encodePowerShellCommand(script);
+    expect(encoded).toBe(Buffer.from(script, 'utf16le').toString('base64'));
+  });
+});
+
+describe('writeWindowsFilePathsToClipboard', () => {
+  it('exports a Windows clipboard writer entry point', async () => {
+    const mod = await import('../../electron/utils/windows-clipboard-files');
+    expect(typeof mod.writeWindowsFilePathsToClipboard).toBe('function');
+  });
+});

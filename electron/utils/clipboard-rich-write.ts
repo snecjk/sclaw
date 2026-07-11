@@ -5,7 +5,9 @@ import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { basename, join, normalize } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
+import { expandPath } from './paths';
 import { resolveWorkspaceFilePath } from './artifact-path';
+import { writeWindowsFilePathsToClipboard } from './windows-clipboard-files';
 
 function escapeXml(value: string): string {
   return value
@@ -67,7 +69,7 @@ function clearClipboardBestEffort(): void {
   }
 }
 
-function writeNativeFilePathsToClipboard(filePaths: string[]): void {
+async function writeNativeFilePathsToClipboard(filePaths: string[]): Promise<void> {
   const normalizedPaths = filePaths
     .map((path) => normalizeNativeClipboardPath(path))
     .filter(Boolean);
@@ -79,12 +81,9 @@ function writeNativeFilePathsToClipboard(filePaths: string[]): void {
   }
 
   if (process.platform === 'win32') {
-    clipboard.writeBuffer('CF_HDROP', buildWindowsHDrop(normalizedPaths));
-    try {
-      clipboard.writeBuffer('Preferred DropEffect', Buffer.from([0x01, 0x00, 0x00, 0x00]));
-    } catch {
-      // Optional format; HDROP alone is enough for Explorer paste.
-    }
+    // Electron writeBuffer('CF_HDROP') registers a custom format — Explorer won't paste it.
+    // Use Win32 SetClipboardData (koffi) with Set-Clipboard PowerShell fallback.
+    await writeWindowsFilePathsToClipboard(normalizedPaths);
     return;
   }
 
@@ -103,6 +102,7 @@ function normalizeClipboardFilePath(filePath: string): string {
   if (!path) return '';
   if (path.startsWith('preview://')) path = path.slice('preview://'.length);
   if (path.startsWith('artifact://')) path = path.slice('artifact://'.length);
+  if (path.startsWith('~')) path = expandPath(path);
   return path;
 }
 
@@ -229,6 +229,6 @@ export async function writeFilesToSystemClipboard(
   }
 
   clearClipboardBestEffort();
-  writeNativeFilePathsToClipboard(resolvedPaths);
+  await writeNativeFilePathsToClipboard(resolvedPaths);
   return { copiedFileCount: resolvedPaths.length };
 }

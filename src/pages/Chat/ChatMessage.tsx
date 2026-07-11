@@ -11,12 +11,6 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
 import { ChatProcessLoadingEllipsis } from '@/components/chat/chat-process-loading-ellipsis';
 import { useTypewriterReveal } from '@/hooks/use-typewriter-reveal';
@@ -53,7 +47,7 @@ import {
   isWorkflowStartAssistantBoilerplate,
   resolveAssistantCopyShareContent,
 } from './message-utils';
-import { writeCopyShareFilesToClipboard, writeCopyShareTextToClipboard } from '@/lib/copy-share-clipboard';
+import { writeCopyShareTextToClipboard } from '@/lib/copy-share-clipboard';
 import {
   ensureWorkflowParameterFormHandler,
   ensureWorkflowParameterFormInjected,
@@ -1074,24 +1068,15 @@ function AssistantMessageMetaRow({
   onShare?: () => void;
 }) {
   const { t } = useTranslation('chat');
-  const [copiedMode, setCopiedMode] = useState<'text' | 'files' | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const hasCopyableText = copyShareContent.text.trim().length > 0;
-  const copyableFiles = copyShareContent.files.filter((file) => file.filePath?.trim());
-  const hasCopyableFiles = copyableFiles.length > 0;
-  const copyLayout = hasCopyableText && hasCopyableFiles
-    ? 'both'
-    : hasCopyableText
-      ? 'text'
-      : hasCopyableFiles
-        ? 'files'
-        : 'none';
 
   const copyText = useCallback(async () => {
     try {
       await writeCopyShareTextToClipboard({ text: copyShareContent.text });
-      setCopiedMode('text');
-      setTimeout(() => setCopiedMode(null), 2000);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
       toast.success(t('messageActions.copyTextSuccess'));
     } catch (error) {
       console.error('[ChatMessage] Failed to copy assistant text:', error);
@@ -1099,97 +1084,27 @@ function AssistantMessageMetaRow({
     }
   }, [copyShareContent.text, t]);
 
-  const copyFiles = useCallback(async () => {
-    try {
-      const count = await writeCopyShareFilesToClipboard({ files: copyableFiles });
-      setCopiedMode('files');
-      setTimeout(() => setCopiedMode(null), 2000);
-      toast.success(t('messageActions.copyFilesSuccess', { count }));
-    } catch (error) {
-      console.error('[ChatMessage] Failed to copy assistant files:', error);
-      toast.error(t('messageActions.copyFilesFailed'));
-    }
-  }, [copyableFiles, t]);
-
   const copyTitle = onCopyDebugSnapshot
     ? '单击复制内容，双击复制调试快照'
-    : copyLayout === 'both'
-      ? t('messageActions.copySplitHint')
-      : t('messageActions.copy');
+    : t('messageActions.copy');
 
-  const copyButtonIcon = copiedMode
+  const copyButtonIcon = copied
     ? <Check className="h-3 w-3 text-green-500" aria-hidden />
     : <Copy className="h-3 w-3" aria-hidden />;
 
-  if (copyLayout === 'none') {
-    return (
-      <div className="flex select-none items-center gap-2">
-        {onShare ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={MESSAGE_META_ICON_BUTTON_CLASS}
-            onClick={onShare}
-            aria-label={t('messageActions.share')}
-            title={t('messageActions.share')}
-          >
-            <ShareMessageIcon className={MESSAGE_META_SHARE_ICON_CLASS} />
-          </Button>
-        ) : null}
-        {timestamp ? (
-          <span className="text-xs text-muted-foreground">
-            {formatTimestamp(timestamp)}
-          </span>
-        ) : null}
-      </div>
-    );
-  }
-
   return (
     <div className="flex select-none items-center gap-2">
-      {copyLayout === 'both' ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={MESSAGE_META_ICON_BUTTON_CLASS}
-              aria-label={t('messageActions.copy')}
-              title={copyTitle}
-            >
-              {copyButtonIcon}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-44">
-            <DropdownMenuItem
-              onClick={() => {
-                void copyText();
-              }}
-            >
-              {t('messageActions.copyText')}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                void copyFiles();
-              }}
-            >
-              {t('messageActions.copyFiles', { count: copyableFiles.length })}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : (
+      {hasCopyableText ? (
         <Button
           type="button"
           variant="ghost"
           size="icon"
           className={MESSAGE_META_ICON_BUTTON_CLASS}
           onClick={() => {
-            void (copyLayout === 'files' ? copyFiles() : copyText());
+            void copyText();
           }}
           onDoubleClick={() => {
-            if (!onCopyDebugSnapshot || copyLayout === 'files') return;
+            if (!onCopyDebugSnapshot) return;
             void onCopyDebugSnapshot();
           }}
           aria-label={t('messageActions.copy')}
@@ -1197,7 +1112,7 @@ function AssistantMessageMetaRow({
         >
           {copyButtonIcon}
         </Button>
-      )}
+      ) : null}
       {onShare ? (
         <Button
           type="button"
