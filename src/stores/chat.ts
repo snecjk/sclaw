@@ -2338,6 +2338,11 @@ export const useChatStore = create<ChatState>()(
       if (shouldAutoCompleteFromHistory) {
         clearHistoryPoll();
         useSessionUnreadStore.getState().markSessionRead(targetSessionKey);
+        // This history-poll path completes Claude runs whose gateway
+        // agent.completed event was missed, so the
+        // finalizeOpenClawRunAfterAgentCompleted dispatch never fires for them.
+        // Capture the run id before clearing runtime state and precipitate here.
+        const completionRunId = getSessionRuntimeState(get().runtimeBySessionKey, targetSessionKey).activeRunId ?? undefined;
         set((s) => patchSessionRuntimeState(s, targetSessionKey, {
           sending: false,
           activeRunId: null,
@@ -2350,6 +2355,12 @@ export const useChatStore = create<ChatState>()(
           pendingToolImages: [],
           error: null,
         }));
+        refreshAgentExecutionHistory({
+          agentId: getAgentIdFromSessionKey(targetSessionKey),
+          runId: completionRunId,
+          sessionKey: targetSessionKey,
+          engineType: activeEngineType,
+        });
       } else if (hasRecentAssistantActivity && !pendingFinal && isSendingNow) {
         set((s) => patchSessionRuntimeState(s, targetSessionKey, { pendingFinal: true }));
       }
@@ -3474,7 +3485,7 @@ export const useChatStore = create<ChatState>()(
 }));
 
 /** OpenClaw has no Claude-style runtimeResult; agent.completed is the terminal signal. */
-export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null): void {
+export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null, runId?: string | null): void {
   const state = useChatStore.getState();
   const targetKey = sessionKey ?? state.currentSessionKey;
   const engineType = resolveEngineTypeForSession(state.sessions, targetKey, state.currentAgentId);
@@ -3483,6 +3494,13 @@ export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null
   // fragments (see resolveAssistantFinalTerminalState), so they rely on this
   // path to clear sending. Without it the spinner stays stuck after the run.
   if (engineType !== 'openclaw' && engineType !== 'claude') return;
+
+  // Agentic 'final' chat events lack phase=completed, so their
+  // isTerminalOutput gate never fires refreshAgentExecutionHistory. This
+  // agent.completed path is the real terminal point — capture the run id
+  // before clearing runtime state and dispatch execution-memory precipitation.
+  const resolvedRunId = runId ?? state.activeRunId ?? undefined;
+  const agentId = getAgentIdFromSessionKey(targetKey);
 
   clearHistoryPoll();
   useChatStore.setState((prev) => patchSessionRuntimeState(prev, targetKey, {
@@ -3497,11 +3515,12 @@ export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null
     pendingToolImages: [],
     error: null,
   }));
+  refreshAgentExecutionHistory({ agentId, runId: resolvedRunId, sessionKey: targetKey, engineType });
   if (targetKey === state.currentSessionKey) {
     finalizeMessagesFromHistoryLoad(() => useChatStore.getState(), (partial) => {
       useChatStore.setState(partial);
     }, {
-      agentId: getAgentIdFromSessionKey(targetKey),
+      agentId,
       sessionKey: targetKey,
     });
   }

@@ -269,7 +269,7 @@ async function completeRunAfterAgentCompleted(
     return;
   }
 
-  finalizeOpenClawRunAfterAgentCompleted(sessionKey);
+  finalizeOpenClawRunAfterAgentCompleted(sessionKey, completionRunId);
 }
 
 function handleGatewayNotification(notification: { method?: string; params?: Record<string, unknown> } | undefined): void {
