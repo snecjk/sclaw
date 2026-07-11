@@ -16,6 +16,7 @@ import {
   shouldSkipRawPathToolText,
 } from '../../../shared/preview-raw-path';
 import type { AttachedFileMeta, ChatSession, ContentBlock, RawMessage, ToolStatus } from './types';
+import { mergeToolInput, parseOpenAiArguments, parseToolBlockInput } from '@/lib/tool-input-merge';
 
 // Module-level timestamp tracking the last chat event received.
 // Used by the safety timeout to avoid false-positive "no response" errors
@@ -795,6 +796,7 @@ function extractToolUseUpdates(message: unknown): ToolStatus[] {
         id: block.id || block.name,
         toolCallId: block.id,
         name: block.name,
+        input: parseToolBlockInput(block as unknown as Record<string, unknown>),
         status: 'running',
         updatedAt: Date.now(),
       });
@@ -814,6 +816,7 @@ function extractToolUseUpdates(message: unknown): ToolStatus[] {
           id,
           toolCallId: typeof tc.id === 'string' ? tc.id : undefined,
           name,
+          input: parseOpenAiArguments(fn.arguments),
           status: 'running',
           updatedAt: Date.now(),
         });
@@ -898,10 +901,12 @@ function upsertToolStatuses(current: ToolStatus[], updates: ToolStatus[]): ToolS
       continue;
     }
     const existing = next[index];
+    const { input: incomingInput, ...restUpdate } = update;
     next[index] = {
       ...existing,
-      ...update,
+      ...restUpdate,
       name: update.name || existing.name,
+      input: mergeToolInput(existing.input, incomingInput),
       status: mergeToolStatus(existing.status, update.status),
       durationMs: update.durationMs ?? existing.durationMs,
       summary: update.summary ?? existing.summary,

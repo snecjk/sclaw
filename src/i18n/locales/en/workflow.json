@@ -34,7 +34,7 @@
     "emptyInstalled": "No installed workflows",
     "neverUpdated": "Not updated yet",
     "updatedAt": "Updated {{time}}",
-    "cappedHint": "So many workflows! Showing the latest 100 workflows."
+    "cappedHint": "So many workflows! Showing the latest 99 workflows."
   },
   "card": {
     "flow": "Workflow nodes",
@@ -44,8 +44,6 @@
     "preview": "Preview",
     "install": "Install",
     "tryRun": "Try run",
-    "customTag": "Custom",
-    "systemTag": "System",
     "pausedLabel": "· Paused",
     "statusSuccess": "Success",
     "statusPaused": "Paused",
@@ -54,18 +52,13 @@
     "rename": "Rename",
     "share": "Share workflow",
     "delete": "Delete workflow",
-    "noSchedule": "No schedule",
-    "noScheduleDraft": "Schedule not set",
     "createFromTemplate": "Create from template",
     "noDescription": "No description"
   },
   "detail": {
     "close": "Close",
-    "autoRun": "Schedule",
     "scheduleOn": "On",
     "scheduleOff": "Paused",
-    "scheduleOnHint": ", or run manually anytime",
-    "scheduleOffHint": " (paused; you can still run manually)",
     "produces": "Output",
     "producesFallback": "Reports and detail lists (exportable)",
     "runDuration": "Run duration",
@@ -91,6 +84,7 @@
   "editor": {
     "editTitle": "Edit workflow",
     "aiCreateTitle": "AI create workflow",
+    "createTitle": "New workflow",
     "openInBrowser": "Open in browser",
     "backAria": "Back to list"
   },

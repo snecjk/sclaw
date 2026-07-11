@@ -18,18 +18,12 @@ export interface WorkflowCardItem {
   name: string;
   /** 列表二级筛选归属：published / draft，由 API lifecycleStatus 推导 */
   listKind: WorkflowMineListKind;
-  schedule: string;
   enabled: boolean;
   description: string;
   coverKey: WorkflowCoverKey;
   flow: string[];
-  isCustom?: boolean;
-  /** 来自 API 的模板 ID，用于与官方推荐列表比对以区分「系统 / 自建」 */
+  /** 来自 API 的模板 ID（可选，仅作数据透传，不再用于区分「系统 / 自建」） */
   templateId?: string | null;
-  /** 排期行显示「已暂停」警告 */
-  showPausedLabel?: boolean;
-  /** 排期文案弱化（已暂停态） */
-  scheduleMuted?: boolean;
   /** 从未运行过（meta 无绿点） */
   neverRun?: boolean;
 }
@@ -39,7 +33,6 @@ export interface OfficialWorkflowCard {
   id: string;
   name: string;
   category: string;
-  schedule: string;
   description: string;
   flow: string[];
   coverKey: WorkflowCoverKey;

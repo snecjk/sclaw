@@ -104,6 +104,57 @@ export function messageHasDingTalkRecipientContext(message: string): boolean {
     || message.includes('## StoClaw DingTalk Recipients');
 }
 
+/**
+ * Parse the recipient JSON block injected by `buildDingTalkMentionSystemContext`
+ * back into `DingTalkMention[]`. Used by the Claude scheduled-task worker's
+ * timeout watchdog to recover recipients from a stored `promptTemplate` without
+ * a separate recipients field on the definition.
+ *
+ * Returns `null` when no recipient block is found or the JSON is malformed.
+ */
+export function parseDingTalkRecipientsFromText(text: string): DingTalkMention[] | null {
+  if (!text || !messageHasDingTalkRecipientContext(text)) return null;
+
+  const markerIdx = text.indexOf(DINGTALK_RECIPIENTS_MARKER);
+  const searchFrom = markerIdx >= 0 ? markerIdx + DINGTALK_RECIPIENTS_MARKER.length : 0;
+  const fenceStart = text.indexOf('```json', searchFrom);
+  if (fenceStart < 0) return null;
+  const jsonStart = fenceStart + '```json'.length;
+  const fenceEnd = text.indexOf('```', jsonStart);
+  if (fenceEnd < 0) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text.slice(jsonStart, fenceEnd).trim());
+  } catch {
+    return null;
+  }
+
+  const recipients = (parsed as { recipients?: unknown }).recipients;
+  if (!Array.isArray(recipients)) return null;
+
+  const result: DingTalkMention[] = [];
+  for (const raw of recipients) {
+    if (!raw || typeof raw !== 'object') continue;
+    const record = raw as Record<string, unknown>;
+    const type = record.type === 'group' ? 'group' : 'user';
+    const displayName = typeof record.displayName === 'string' ? record.displayName : '';
+    const mention: DingTalkMention = { type, displayName };
+    if (typeof record.userId === 'string' && record.userId.trim()) {
+      mention.userId = record.userId.trim();
+    }
+    if (typeof record.openConversationId === 'string' && record.openConversationId.trim()) {
+      mention.openConversationId = record.openConversationId.trim();
+    }
+    // Skip entries without a usable target id.
+    if (type === 'user' && !mention.userId) continue;
+    if (type === 'group' && !mention.openConversationId) continue;
+    result.push(mention);
+  }
+
+  return result.length > 0 ? result : null;
+}
+
 /** Strip injected DingTalk recipient blocks for chat UI display. */
 export function stripDingTalkMentionContextForDisplay(message: string): string {
   if (!messageHasDingTalkRecipientContext(message)) return message;

@@ -14,7 +14,6 @@ import {
   enrichWithCachedImages,
   enrichWithToolResultFiles,
   getMessageText,
-  hasNonToolAssistantContent,
   isToolResultRole,
   loadMissingPreviews,
   toMs,
@@ -272,23 +271,8 @@ export function createHistoryActions(
           }
         }
 
-        // If pendingFinal, check whether the AI produced a final text response.
-        if (pendingFinal || get().pendingFinal) {
-          const recentAssistant = [...filteredMessages].reverse().find((msg) => {
-            if (msg.role !== 'assistant') return false;
-            if (!hasNonToolAssistantContent(msg)) return false;
-            return isAfterUserMsg(msg);
-          });
-          if (recentAssistant) {
-            clearHistoryPoll();
-            set({
-              sending: false,
-              activeRunId: null,
-              pendingFinal: false,
-              lastUserMessageAt: null,
-            });
-          }
-        }
+        // 禁止仅凭 history 中出现 assistant 非工具文本就清 sending（§2.1）。
+        // OpenClaw 终态走 agent.completed；Claude 走 shouldAutoCompleteClaudeFromHistory。
       };
 
       try {

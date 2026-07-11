@@ -23,10 +23,31 @@ import {
   isMessageInCurrentUserTurn,
   isTurnDisplayAssistantMessage,
 } from '@/pages/Chat/chat-turn-meta';
+import { canShowAssistantTurnMeta, resolveCurrentTurnLifecycleForMeta } from '@/pages/Chat/turn-lifecycle';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
-import { extractText, extractPlainTextFromContent, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, extractDisplayFileNameHints, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm, useLocalPathExistence, resolvePreviewCandidate, unwrapPreviewablePathMarkdown, findWorkflowParamsSummaryAfterIntro } from './message-utils';
+import {
+  extractText,
+  extractPlainTextFromContent,
+  extractImages,
+  extractToolUse,
+  extractThinkingTimeline,
+  formatTimestamp,
+  extractPreviewableRefs,
+  extractDisplayFileNameHints,
+  isPreviewableFile,
+  PREVIEWABLE_FILE_EXTS,
+  extractWorkflowCard,
+  extractParameterForm,
+  useLocalPathExistence,
+  resolvePreviewCandidate,
+  unwrapPreviewablePathMarkdown,
+  findWorkflowParamsSummaryAfterIntro,
+  isWorkflowStartAssistantBoilerplate,
+  resolveAssistantCopyShareContent,
+} from './message-utils';
+import { writeCopyShareTextToClipboard } from '@/lib/copy-share-clipboard';
 import {
   ensureWorkflowParameterFormHandler,
   ensureWorkflowParameterFormInjected,
@@ -71,6 +92,7 @@ import {
   buildArtifactMetaLine,
   formatArtifactFileSize,
 } from '@/components/chat/artifact-product-card';
+import { buildArtifactCardMenuItems } from '@/lib/artifact-card-menu';
 import { highlightAtMentionsInChildren } from '@/lib/at-mention-highlight';
 import { renderUserMessageMentionNodes } from '@/components/dingtalk/DingTalkMentionTag';
 import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessPanel';
@@ -82,11 +104,6 @@ import {
 } from '@/lib/dingtalk-share';
 
 const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
-
-/** B4：助手侧启动 boilerplate，折叠行替代长文案 */
-function isWorkflowStartAssistantBoilerplate(content: string): boolean {
-  return /^参数已确认[，,].*工作流已在后台启动/.test(content.trim());
-}
 
 interface ChatMessageProps {
   message: RawMessage;
@@ -118,6 +135,8 @@ const HOVER_REVEAL_CLASS = 'opacity-0 transition-opacity duration-200 group-hove
 
 const MESSAGE_META_ICON_BUTTON_CLASS =
   'h-auto w-auto min-h-0 min-w-0 shrink-0 rounded-none border-0 bg-transparent p-0.5 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground';
+
+const MESSAGE_META_SHARE_ICON_CLASS = 'h-3.5 w-3.5';
 
 interface ExtractedImage { url?: string; data?: string; mimeType: string; }
 
@@ -379,10 +398,28 @@ export const ChatMessage = memo(function ChatMessage({
   const assistantBubbleText =
     showAssistantParamsFold && isWorkflowStartAssistantBoilerplate(text) ? '' : text;
   const showAssistantTextBubble = assistantBubbleText.trim().length > 0;
+  const assistantCopyShareContent = useMemo(
+    () => {
+      if (isUser) {
+        return { text: text.trim(), files: previewFiles };
+      }
+      return resolveAssistantCopyShareContent({
+        text,
+        assistantBubbleText,
+        workflowCard,
+        workflowCardStates,
+        sessionKey,
+        previewFiles,
+      });
+    },
+    [isUser, text, assistantBubbleText, workflowCard, workflowCardStates, sessionKey, previewFiles],
+  );
   const showUserParamsFold = isUser && hasText && isWorkflowParamsUserText(text);
 
   const sending = useChatStore((s) => s.sending);
   const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
+  const pendingFinal = useChatStore((s) => s.pendingFinal);
+  const activeRunId = useChatStore((s) => s.activeRunId);
   const isLastAssistantInTurn = !isUser && (
     isTurnDisplayReply || isTurnDisplayAssistantMessage(message, sessionMessages)
   );
@@ -397,24 +434,72 @@ export const ChatMessage = memo(function ChatMessage({
         sessionMessages,
         sending,
         lastUserMessageAt,
+        pendingFinal,
+        activeRunId,
         workflowCardStates,
         hasPendingWorkflowSchema: pendingWorkflow?.schema != null,
         sessionKey,
       }),
-    [sessionMessages, sending, lastUserMessageAt, workflowCardStates, pendingWorkflow?.schema, sessionKey],
+    [
+      sessionMessages,
+      sending,
+      lastUserMessageAt,
+      pendingFinal,
+      activeRunId,
+      workflowCardStates,
+      pendingWorkflow?.schema,
+      sessionKey,
+    ],
   );
-  const isAssistantTurnIncomplete =
-    isLastAssistantInTurn
-    && isInCurrentUserTurn
-    && (isStreaming || isAwaitingUserToContinue || currentUserTurnIncomplete);
+  /** 工作流 / 填表阻塞（不含 sending 等 runtime 字段，供 TurnLifecycle 分层） */
+  const hasWorkflowBlockers = useMemo(
+    () =>
+      isCurrentUserTurnIncomplete({
+        sessionMessages,
+        sending: false,
+        lastUserMessageAt: null,
+        pendingFinal: false,
+        activeRunId: null,
+        workflowCardStates,
+        hasPendingWorkflowSchema: pendingWorkflow?.schema != null,
+        sessionKey,
+      }),
+    [sessionMessages, workflowCardStates, pendingWorkflow?.schema, sessionKey],
+  );
+  const turnLifecycle = useMemo(
+    () =>
+      resolveCurrentTurnLifecycleForMeta({
+        sending,
+        pendingFinal,
+        lastUserMessageAt,
+        activeRunId,
+        isStreaming,
+        isAwaitingUserToContinue,
+        hasWorkflowBlockers,
+        runId: activeRunId,
+      }),
+    [
+      sending,
+      pendingFinal,
+      lastUserMessageAt,
+      activeRunId,
+      isStreaming,
+      isAwaitingUserToContinue,
+      hasWorkflowBlockers,
+    ],
+  );
   const hasAssistantMetaContent =
     showAssistantTextBubble
     || workflowCard !== null
     || previewFiles.length > 0
     || showAssistantParamsFold;
-  /** 每轮助手回复结束后，在产物/正文下方常态展示复制 + 时间 */
-  const showAssistantMessageMeta =
-    hasAssistantMetaContent && isLastAssistantInTurn && !isAssistantTurnIncomplete;
+  /** 每轮助手回复结束后，在产物/正文下方常态展示复制 + 时间（TurnLifecycle.canShowMeta） */
+  const showAssistantMessageMeta = canShowAssistantTurnMeta({
+    hasAssistantMetaContent,
+    isLastAssistantInTurn,
+    isInCurrentUserTurn,
+    lifecycle: turnLifecycle,
+  });
   /** 用户参数摘要卡由同轮最后一条助手消息统一展示 meta，避免出现在「参数已确认」上方 */
   const showUserMessageMeta =
     hasText
@@ -468,7 +553,7 @@ export const ChatMessage = memo(function ChatMessage({
       debugLinks.length > 0 ? debugLinks.join('\n') : '(none)',
     ].join('\n');
     try {
-      await navigator.clipboard.writeText(snapshot);
+      await writeCopyShareTextToClipboard({ text: snapshot });
       toast.success('已复制渲染调试快照');
     } catch {
       toast.error('复制失败，请重试');
@@ -476,9 +561,12 @@ export const ChatMessage = memo(function ChatMessage({
   }, [debugLinks, debugMarkdownSource, text]);
 
   const openConversationShare = useCallback(() => {
-    setShareDraft(buildConversationShareDialogDraft(text, previewFiles));
+    setShareDraft(buildConversationShareDialogDraft(
+      assistantCopyShareContent.text,
+      assistantCopyShareContent.files,
+    ));
     setShareDialogOpen(true);
-  }, [text, previewFiles]);
+  }, [assistantCopyShareContent]);
 
   const handleShareCompleted = useCallback(() => {
     toast.success(t('preview.shareDialog.success'));
@@ -793,7 +881,7 @@ export const ChatMessage = memo(function ChatMessage({
         {/* 助手消息：复制 + 分享 + 时间 — 置于正文/工作流/产物等全部内容之后 */}
         {!isUser && showAssistantMessageMeta ? (
           <AssistantMessageMetaRow
-            text={text}
+            copyShareContent={assistantCopyShareContent}
             timestamp={message.timestamp}
             onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
             onShare={openConversationShare}
@@ -904,7 +992,7 @@ function UserMessageMetaRow({
 
   const copyContent = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      await writeCopyShareTextToClipboard({ text });
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch (error) {
@@ -949,7 +1037,7 @@ function UserMessageMetaRow({
           aria-label={t('messageActions.share')}
           title={t('messageActions.share')}
         >
-          <ShareMessageIcon className="h-3 w-3" />
+          <ShareMessageIcon className={MESSAGE_META_SHARE_ICON_CLASS} />
         </Button>
       ) : null}
       <Button
@@ -969,12 +1057,12 @@ function UserMessageMetaRow({
 
 /** 助手消息底栏：复制 + 分享 + 时间，常态展示于正文下方 */
 function AssistantMessageMetaRow({
-  text,
+  copyShareContent,
   timestamp,
   onCopyDebugSnapshot,
   onShare,
 }: {
-  text: string;
+  copyShareContent: { text: string; files: AttachedFileMeta[] };
   timestamp?: number;
   onCopyDebugSnapshot?: () => Promise<void> | void;
   onShare?: () => void;
@@ -982,33 +1070,49 @@ function AssistantMessageMetaRow({
   const { t } = useTranslation('chat');
   const [copied, setCopied] = useState(false);
 
-  const copyContent = useCallback(() => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [text]);
+  const hasCopyableText = copyShareContent.text.trim().length > 0;
+
+  const copyText = useCallback(async () => {
+    try {
+      await writeCopyShareTextToClipboard({ text: copyShareContent.text });
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast.success(t('messageActions.copyTextSuccess'));
+    } catch (error) {
+      console.error('[ChatMessage] Failed to copy assistant text:', error);
+      toast.error(t('messageActions.copyFailed'));
+    }
+  }, [copyShareContent.text, t]);
 
   const copyTitle = onCopyDebugSnapshot
     ? '单击复制内容，双击复制调试快照'
     : t('messageActions.copy');
 
+  const copyButtonIcon = copied
+    ? <Check className="h-3 w-3 text-green-500" aria-hidden />
+    : <Copy className="h-3 w-3" aria-hidden />;
+
   return (
     <div className="flex select-none items-center gap-2">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className={MESSAGE_META_ICON_BUTTON_CLASS}
-        onClick={copyContent}
-        onDoubleClick={() => {
-          if (!onCopyDebugSnapshot) return;
-          void onCopyDebugSnapshot();
-        }}
-        aria-label={t('messageActions.copy')}
-        title={copyTitle}
-      >
-        {copied ? <Check className="h-3 w-3 text-green-500" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
-      </Button>
+      {hasCopyableText ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={MESSAGE_META_ICON_BUTTON_CLASS}
+          onClick={() => {
+            void copyText();
+          }}
+          onDoubleClick={() => {
+            if (!onCopyDebugSnapshot) return;
+            void onCopyDebugSnapshot();
+          }}
+          aria-label={t('messageActions.copy')}
+          title={copyTitle}
+        >
+          {copyButtonIcon}
+        </Button>
+      ) : null}
       {onShare ? (
         <Button
           type="button"
@@ -1019,7 +1123,7 @@ function AssistantMessageMetaRow({
           aria-label={t('messageActions.share')}
           title={t('messageActions.share')}
         >
-          <ShareMessageIcon className="h-3 w-3" />
+          <ShareMessageIcon className={MESSAGE_META_SHARE_ICON_CLASS} />
         </Button>
       ) : null}
       {timestamp ? (
@@ -1416,14 +1520,21 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
       isPreviewable,
       hasOnPreviewFile: !!onPreviewFile,
     });
-    if (onPreviewFile && isPreviewable) {
+    if (onPreviewFile) {
       onPreviewFile(file);
-    } else if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
+      return;
+    }
+    if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
       openExternalUrl(file.filePath);
     } else if (file.filePath) {
       invokeIpc('shell:openPath', file.filePath);
     }
   }, [file, onPreviewFile, isPreviewable]);
+
+  const menuItems = useMemo(
+    () => buildArtifactCardMenuItems(file, t),
+    [file, t],
+  );
 
   const metaLine = buildArtifactMetaLine({
     fileName: file.fileName,
@@ -1438,6 +1549,7 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
       title={file.fileName}
       metaLine={metaLine}
       onAction={handleOpen}
+      menuItems={menuItems}
     />
   );
 }

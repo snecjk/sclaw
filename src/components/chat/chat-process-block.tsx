@@ -17,6 +17,7 @@ import {
   chatProcessTitleRowClass,
   chatToolCallShellClass,
 } from '@/lib/surfaces';
+import { resolveProcessHeaderLayout } from '@/components/chat/process-rail-layout';
 
 export interface ChatProcessContentRailProps {
   /** 标题行 icon 前有 chevron/spinner 时，竖线列与 semantic icon 对齐 */
@@ -130,7 +131,17 @@ export function ChatProcessBlock({
 
   const body =
     children != null ? (
-      <ChatProcessContentRail hasLeadingOffset={!collapsible && isRunning}>
+      <ChatProcessContentRail
+        hasLeadingOffset={
+          resolveProcessHeaderLayout(
+            collapsible
+              ? 'collapsible_chevron_after_icon'
+              : isRunning
+                ? 'running_spinner_before_icon'
+                : 'readonly_title',
+          ).hasLeadingControlBeforeSemanticIcon
+        }
+      >
         {children}
       </ChatProcessContentRail>
     ) : null;

@@ -1,3 +1,4 @@
+import { stripCronLabelPrefix } from '@/lib/cron-session-display';
 import { normalizeUserMessageForDisplay } from '@/lib/user-message-display';
 import { resolveStoredSessionLabel } from '@/lib/session-label';
 import {
@@ -293,11 +294,11 @@ function resolveOpeningSessionLabel(
 ): string | undefined {
   const stored = resolveStoredSessionLabel(sessionKey, sessionLabels)?.trim();
   if (stored && !isCorruptedSessionLabel(stored) && !isPlaceholderSessionLabel(stored)) {
-    return stored;
+    return stripCronLabelPrefix(stored) || stored;
   }
   const label = gatewayLabel?.trim();
   if (label && !isCorruptedSessionLabel(label) && !isPlaceholderSessionLabel(label)) {
-    return label;
+    return stripCronLabelPrefix(label) || label;
   }
   return undefined;
 }

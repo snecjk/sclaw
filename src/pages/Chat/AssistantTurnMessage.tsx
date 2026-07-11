@@ -1,5 +1,5 @@
-import { memo, useMemo } from 'react';
-import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
+import { memo, useEffect, useMemo, useState } from 'react';
+import type { RawMessage, AttachedFileMeta, ToolStatus } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
 import { useChatSessionEngineType } from '@/hooks/use-chat-session-engine-type';
 import { ChatMessage } from './ChatMessage';
@@ -17,6 +17,7 @@ import {
   writeTurnStreamingToolsCache,
 } from '@/lib/thinking-turn-tools-cache';
 import { resolveDoneTurnStreamingTools } from '@/lib/thinking-done-tools';
+import { consumeTurnInterrupted } from '@/lib/turn-interrupt-marker';
 import { migrateTurnDisplayCache } from '@/pages/Chat/thinking/segment-merge';
 import {
   extractDingTalkSentPreviews,
@@ -33,21 +34,46 @@ import {
 } from './message-utils';
 import { DingTalkSentPreview } from './DingTalkSentPreview';
 import { ThinkingTurnProcess, type ConnectingLabelKey } from './ThinkingProcessPanel';
+import { resolveTurnProcessStatus } from '@/pages/Chat/thinking/turn-process-status';
+import { processSegmentsCoverText } from '@/pages/Chat/thinking/text-ownership';
+import {
+  isLikelyPlanningNarration,
+  isLikelyUserClarificationReply,
+} from '@/pages/Chat/thinking/classify-text';
 
-type StreamingTool = {
+type StreamingTool = ToolStatus;
+
+type BakedStreamingToolLike = {
   id?: string;
   toolCallId?: string;
   name: string;
-  status: 'running' | 'completed' | 'error';
+  status?: 'running' | 'completed' | 'error';
   input?: unknown;
   durationMs?: number;
   summary?: string;
+  updatedAt?: number;
 };
+
+function normalizeBakedStreamingTools(tools: readonly BakedStreamingToolLike[]): ToolStatus[] {
+  const now = Date.now();
+  return tools.map((tool, index) => ({
+    id: tool.id,
+    toolCallId: tool.toolCallId,
+    name: tool.name,
+    status: tool.status ?? 'completed',
+    input: tool.input,
+    durationMs: tool.durationMs,
+    summary: tool.summary,
+    updatedAt: tool.updatedAt ?? now + index,
+  }));
+}
 
 export interface ActiveTurnStream {
   streamMessage: RawMessage | null;
   streamText: string;
   streamingTools: StreamingTool[];
+  streamingMessages: RawMessage[];
+  streamingToolResults: RawMessage[];
   isConnecting: boolean;
   isProcessing: boolean;
   isStillExecuting?: boolean;
@@ -74,12 +100,13 @@ function collectActiveTurnStreamSources(
   precedingUserMessage: RawMessage | null,
   activeStream: ActiveTurnStream,
 ): RawMessage[] {
-  return collectTurnAssistantSources(
+  const sources = collectTurnAssistantSources(
     sessionMessages,
-    turnMessages,
+    [...turnMessages, ...activeStream.streamingMessages],
     precedingUserMessage,
     activeStream.streamMessage,
   );
+  return sources;
 }
 
 export const AssistantTurnMessage = memo(function AssistantTurnMessage({
@@ -101,6 +128,15 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
   const isStreaming = !!activeStream;
   const streamingTools = activeStream?.streamingTools ?? [];
+  const streamingToolResults = activeStream?.streamingToolResults ?? [];
+
+  const [wasInterrupted, setWasInterrupted] = useState(false);
+  useEffect(() => {
+    if (!turnStableKey) return;
+    if (consumeTurnInterrupted(turnStableKey)) {
+      setWasInterrupted(true);
+    }
+  }, [turnStableKey]);
 
   if (turnStableKey && turnStableKey !== 'active-turn') {
     migrateTurnDisplayCache('active-turn', turnStableKey);
@@ -144,29 +180,39 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   const chronologicalEntries = useMemo(() => {
     const cachedToolResults = cachedToolResultsForTurn;
     const toolResults =
-      cachedToolResults.length > 0 ? cachedToolResults : turnToolResults;
+      cachedToolResults.length > 0
+        ? cachedToolResults
+        : [...turnToolResults, ...streamingToolResults];
     return resolveTurnChronologicalEntries(
       sessionMessages,
       precedingUserMessage,
       turnMessages,
       toolResults,
     );
-  }, [sessionMessages, precedingUserMessage, turnMessages, turnToolResults, cachedToolResultsForTurn]);
+  }, [
+    sessionMessages,
+    precedingUserMessage,
+    turnMessages,
+    turnToolResults,
+    streamingToolResults,
+    cachedToolResultsForTurn,
+  ]);
 
-  const bakedStreamingTools = useMemo(() => {
+  const bakedStreamingTools = useMemo((): ToolStatus[] => {
     if (isStreaming && streamingTools.length > 0) return streamingTools;
-    if (engineType === 'claude') {
-      return resolveDoneTurnStreamingTools({
-        turnStableKey,
-        aliasKeys: turnCacheAliasKeys,
-        turnMessages,
-        toolResults:
-          cachedToolResultsForTurn.length > 0
-            ? cachedToolResultsForTurn
-            : turnToolResults,
-      });
-    }
-    return readTurnStreamingToolsCache(turnStableKey, turnCacheAliasKeys);
+    const doneTools =
+      engineType === 'claude'
+        ? resolveDoneTurnStreamingTools({
+            turnStableKey,
+            aliasKeys: turnCacheAliasKeys,
+            turnMessages,
+            toolResults:
+              cachedToolResultsForTurn.length > 0
+                ? cachedToolResultsForTurn
+                : turnToolResults,
+          })
+        : readTurnStreamingToolsCache(turnStableKey, turnCacheAliasKeys);
+    return normalizeBakedStreamingTools(doneTools);
   }, [
     turnStableKey,
     turnCacheAliasKeys,
@@ -209,6 +255,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
               chronologicalEntries.length > 0 ? chronologicalEntries : undefined,
             precedingUserText,
             engineProfile: engineType,
+            wasInterrupted,
           })
         : { segments: [], finalReplyText: null },
     [
@@ -219,6 +266,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       chronologicalEntries,
       precedingUserText,
       engineType,
+      wasInterrupted,
     ],
   );
 
@@ -246,8 +294,26 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
     if (isStreaming) return null;
 
+    if (fromHistory) {
+      const fallbackText = extractText(fromHistory).trim();
+
+      const coveredByThinking = processSegmentsCoverText(
+        thinkingLayout.segments,
+        fallbackText,
+      );
+
+      // 工具前旁白已在思考区展示时，不再重复生成正文气泡；参数追问正文优先
+      if (
+        coveredByThinking
+        && isLikelyPlanningNarration(fallbackText)
+        && !isLikelyUserClarificationReply(fallbackText)
+      ) {
+        return null;
+      }
+    }
+
     return fromHistory;
-  }, [turnMessages, streamSources, isStreaming, thinkingLayout.finalReplyText]);
+  }, [turnMessages, streamSources, isStreaming, thinkingLayout.finalReplyText, thinkingLayout.segments]);
 
   const preambleMessages = useMemo(() => {
     if (!replyMessage) return [];
@@ -380,6 +446,31 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     replyDisplayHasText,
   ]);
 
+  const processStatus = useMemo(
+    () =>
+      resolveTurnProcessStatus({
+        isLiveStream:
+          isStreaming || isConnecting || isProcessing || isStillExecuting,
+        isConnecting,
+        isProcessing,
+        isStillExecuting,
+        streamingTools: bakedStreamingTools,
+        hasProcessSegments:
+          thinkingSegmentsForDisplay.length > 0 || bakedStreamingTools.length > 0,
+        hasFinalReplyStreaming:
+          isStreaming && replyDisplayHasText,
+      }),
+    [
+      isStreaming,
+      isConnecting,
+      isProcessing,
+      isStillExecuting,
+      bakedStreamingTools,
+      thinkingSegmentsForDisplay.length,
+      replyDisplayHasText,
+    ],
+  );
+
   if (!showThinkingPanel && !replyDisplayHasText && !hasDingTalkSentPreview && !hasPreambleMessages && !chatDisplayHasWorkflowCard) {
     return null;
   }
@@ -395,6 +486,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       streamingTools={bakedStreamingTools}
       hasFinalReply={hasThinkingFinalReply}
       connectingLabelKey={connectingLabelKey}
+      processStatus={processStatus}
     />
   ) : null;
 

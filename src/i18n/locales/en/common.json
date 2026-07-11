@@ -20,6 +20,7 @@
         "channels": "Channels",
         "dashboard": "Dashboard",
         "settings": "Settings",
+        "checkUpdates": "Check for Updates",
         "devConsole": "Developer Console",
         "models": "Models",
         "deleteSessionConfirm": "Are you sure you want to delete session \"{{label}}\"?",
@@ -44,6 +45,12 @@
         "sessionFailed": "Run failed",
         "sessionUnread": "Unread",
         "compactAccountMenu": "Account and settings",
+        "supportGroup": {
+            "title": "S Claw Product Support Group",
+            "hint": "Scan with DingTalk to join and ask questions",
+            "helpAria": "View product support group QR code",
+            "loadError": "Failed to load QR code. Please try again later."
+        },
         "group": "Group",
         "newGroup": "New group",
         "addToNewGroup": "Add to new group",
@@ -65,6 +72,13 @@
         "renameGroupSucceeded": "Renamed successfully",
         "sessionRowMenu": "Session actions",
         "groupRowMenu": "Group actions"
+    },
+    "settings": {
+        "backToHome": "Back to Home",
+        "sectionGeneral": "General",
+        "sectionWorkspace": "Workspace",
+        "sectionSystem": "System",
+        "sectionDeveloper": "Developer"
     },
     "dataCenterPage": {
         "title": "Data Center",

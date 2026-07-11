@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -6,20 +6,14 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { LoadingSpinner } from '@/components/common/LoadingSpinner';
-import { fetchDictionaryItemsByTypeCode } from '@/lib/dictionary-api';
 import {
   createWorkflowStudio,
   getWorkflowStudioTemplate,
-  listWorkflowStudioTemplates,
-  type WorkflowStudioTemplate,
 } from '@/lib/workflow-studio-api';
-import { buildTemplatePreview, buildWizardTemplateSeed } from '@/lib/workflow-template-seed';
+import { buildWizardTemplateSeed, type WizardGraphSeed } from '@/lib/workflow-template-seed';
 import {
   createWorkflowModalBodyClass,
-  createWorkflowModalCategorySelectClass,
   createWorkflowModalCloseClass,
   createWorkflowModalConfirmButtonClass,
   createWorkflowModalContentClass,
@@ -38,9 +32,7 @@ import {
 import { cn } from '@/lib/utils';
 import {
   BLANK_TEMPLATE_LABEL,
-  buildFallbackWorkflowCategoryOptions,
   type CreateWorkflowWizardData,
-  type WorkflowCategoryOption,
 } from '@/pages/Workflow/components/create-workflow-wizard-types';
 
 /** 设计稿描述字段上限（MasterGo 8:79172） */
@@ -55,50 +47,6 @@ const INITIAL_DATA: CreateWorkflowWizardData = {
   nodes: [],
   edges: [],
 };
-
-async function loadWizardSeed(
-  templateId: string,
-  templates: WorkflowStudioTemplate[],
-): Promise<Pick<CreateWorkflowWizardData, 'templateId' | 'templateLabel' | 'nodes' | 'edges' | 'description'>> {
-  if (templateId === 'blank') {
-    const summary = templates.find((t) => t.id === 'blank') ?? {
-      id: 'blank',
-      label: BLANK_TEMPLATE_LABEL,
-      nodes: [],
-      edges: [],
-    };
-    const seed = buildTemplatePreview(summary);
-    return {
-      templateId: 'blank',
-      templateLabel: summary.label ?? BLANK_TEMPLATE_LABEL,
-      ...seed,
-      description: summary.description ?? '',
-    };
-  }
-
-  const listed = templates.find((t) => t.id === templateId);
-  try {
-    const detail = await getWorkflowStudioTemplate(templateId);
-    const seed = buildWizardTemplateSeed(detail);
-    return {
-      templateId: detail.id,
-      templateLabel: detail.label,
-      ...seed,
-      description: detail.description ?? '',
-    };
-  } catch {
-    if (listed) {
-      const seed = buildTemplatePreview(listed);
-      return {
-        templateId: listed.id,
-        templateLabel: listed.label,
-        ...seed,
-        description: listed.description ?? '',
-      };
-    }
-    throw new Error(`模板 ${templateId} 不存在或无法加载`);
-  }
-}
 
 export interface CreateWorkflowModalInitialValues {
   /** 预填模板 id（深链 `/workflow/new?templateId=`） */
@@ -119,7 +67,6 @@ export interface CreateWorkflowModalProps {
 interface CreateWorkflowModalContentProps {
   initialTemplateId: string;
   initialName: string;
-  onClose: () => void;
 }
 
 /**
@@ -128,85 +75,46 @@ interface CreateWorkflowModalContentProps {
 function CreateWorkflowModalContent({
   initialTemplateId,
   initialName,
-  onClose,
 }: CreateWorkflowModalContentProps) {
   const { t } = useTranslation('workflow');
   const navigate = useNavigate();
-  const [formData, setFormData] = useState<CreateWorkflowWizardData>(INITIAL_DATA);
+  const [formData, setFormData] = useState<CreateWorkflowWizardData>(() => ({
+    ...INITIAL_DATA,
+    name: initialName,
+  }));
   const [isCreating, setIsCreating] = useState(false);
-  const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [categoryOptions, setCategoryOptions] = useState<WorkflowCategoryOption[]>(
-    buildFallbackWorkflowCategoryOptions(),
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void fetchDictionaryItemsByTypeCode('workflow_category', 0)
-      .then((items) => {
-        if (cancelled || items.length === 0) return;
-        setCategoryOptions(items.map((item) => ({ value: item.value, label: item.name })));
-      })
-      .catch(() => {
-        // 字典加载失败时保留硬编码兜底
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void listWorkflowStudioTemplates()
-      .then(async (templates) => {
-        if (cancelled) return;
-        const seed = await loadWizardSeed(initialTemplateId, templates);
-        if (cancelled) return;
-        const seededDescription = (seed.description ?? '').slice(0, DESCRIPTION_MAX_LENGTH);
-        setFormData({
-          ...INITIAL_DATA,
-          ...seed,
-          description: seededDescription,
-          name: initialName,
-        });
-        setIsLoadingTemplates(false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : t('createModal.templateLoadFailed');
-        setErrorMessage(message);
-        setIsLoadingTemplates(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [initialTemplateId, initialName, t]);
 
   const patchData = (patch: Partial<CreateWorkflowWizardData>) => {
     setFormData((prev) => ({ ...prev, ...patch }));
   };
 
-  const canConfirm = formData.name.trim().length > 0 && !isCreating && !isLoadingTemplates;
+  const canConfirm = formData.name.trim().length > 0 && !isCreating;
 
   const handleConfirm = async () => {
     if (!canConfirm) return;
     setIsCreating(true);
     setErrorMessage(null);
     try {
+      // 模板详情延迟到确认时按需加载：blank 直接用空画布，非 blank 才取模板节点/边
+      let seed: WizardGraphSeed = { nodes: [], edges: [] };
+      if (initialTemplateId !== 'blank') {
+        try {
+          seed = buildWizardTemplateSeed(await getWorkflowStudioTemplate(initialTemplateId));
+        } catch {
+          // 模板详情加载失败时退化为空白画布
+        }
+      }
       const created = await createWorkflowStudio({
-        templateId: formData.templateId,
+        templateId: initialTemplateId,
         name: formData.name.trim(),
         description: formData.description.trim() || undefined,
         category: formData.category,
-        nodes: formData.nodes,
-        edges: formData.edges,
+        nodes: seed.nodes,
+        edges: seed.edges,
       });
       toast.success(t('createModal.created'));
-      onClose();
+      // 路由跳转会让弹窗随 WorkflowNewRoute 卸载，无需调 onClose（避免与返回列表的 navigate 竞争）
       navigate(`/workflow/${encodeURIComponent(created.id)}`, { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : t('createModal.createFailed');
@@ -252,71 +160,43 @@ function CreateWorkflowModalContent({
           </div>
         ) : null}
 
-        {isLoadingTemplates ? (
-          <div className="flex justify-center py-6">
-            <LoadingSpinner />
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="create-wf-name" className={createWorkflowModalFieldLabelClass}>
+            <span className="text-destructive">*</span>
+            {t('createModal.nameLabel')}
+          </label>
+          <Input
+            id="create-wf-name"
+            className={createWorkflowModalNameInputClass}
+            value={formData.name}
+            placeholder={t('createModal.namePlaceholder')}
+            disabled={isCreating}
+            onChange={(e) => patchData({ name: e.target.value })}
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="create-wf-description" className={createWorkflowModalFieldLabelClass}>
+            {t('createModal.descriptionLabel')}
+          </label>
+          <div className={createWorkflowModalDescriptionWrapClass}>
+            <Textarea
+              id="create-wf-description"
+              className={createWorkflowModalDescriptionInputClass}
+              value={formData.description}
+              placeholder={t('createModal.descriptionPlaceholder')}
+              maxLength={DESCRIPTION_MAX_LENGTH}
+              disabled={isCreating}
+              onChange={(e) => patchData({ description: e.target.value })}
+            />
+            <span className={createWorkflowModalDescriptionCounterClass} aria-hidden>
+              {t('createModal.descriptionCounter', {
+                count: descriptionLength,
+                max: DESCRIPTION_MAX_LENGTH,
+              })}
+            </span>
           </div>
-        ) : (
-          <>
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="create-wf-name" className={createWorkflowModalFieldLabelClass}>
-                <span className="text-destructive">*</span>
-                {t('createModal.nameLabel')}
-              </label>
-              <Input
-                id="create-wf-name"
-                className={createWorkflowModalNameInputClass}
-                value={formData.name}
-                placeholder={t('createModal.namePlaceholder')}
-                disabled={isCreating}
-                onChange={(e) => patchData({ name: e.target.value })}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="create-wf-description" className={createWorkflowModalFieldLabelClass}>
-                {t('createModal.descriptionLabel')}
-              </label>
-              <div className={createWorkflowModalDescriptionWrapClass}>
-                <Textarea
-                  id="create-wf-description"
-                  className={createWorkflowModalDescriptionInputClass}
-                  value={formData.description}
-                  placeholder={t('createModal.descriptionPlaceholder')}
-                  maxLength={DESCRIPTION_MAX_LENGTH}
-                  disabled={isCreating}
-                  onChange={(e) => patchData({ description: e.target.value })}
-                />
-                <span className={createWorkflowModalDescriptionCounterClass} aria-hidden>
-                  {t('createModal.descriptionCounter', {
-                    count: descriptionLength,
-                    max: DESCRIPTION_MAX_LENGTH,
-                  })}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="create-wf-category" className={createWorkflowModalFieldLabelClass}>
-                {t('createModal.categoryLabel')}
-              </label>
-              <Select
-                id="create-wf-category"
-                className={createWorkflowModalCategorySelectClass}
-                value={formData.category}
-                disabled={isCreating}
-                onChange={(e) => patchData({ category: e.target.value })}
-              >
-                <option value="">{t('createModal.categoryPlaceholder')}</option>
-                {categoryOptions.map((cat) => (
-                  <option key={cat.value} value={cat.value}>
-                    {cat.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          </>
-        )}
+        </div>
       </div>
 
       <footer className={createWorkflowModalFooterClass}>
@@ -372,7 +252,6 @@ export function CreateWorkflowModal({
               key={contentKey}
               initialTemplateId={initialTemplateId}
               initialName={initialName}
-              onClose={onClose}
             />
           </Dialog.Content>
         ) : null}

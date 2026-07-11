@@ -10,6 +10,10 @@ export interface MentionComposerSnapshot {
   plainText: string;
   mentions: DingTalkMention[];
   workflowId?: string;
+  /** 工作流名称（与 token 文本一致，供上下文块使用）。 */
+  workflowName?: string;
+  /** 工作流来源：'mine' = 我的工作流-已发布（直接以工作流上下文发送）；缺省 = 模版（走参数表单）。 */
+  workflowSource?: string;
   isEmpty: boolean;
 }
 
@@ -57,6 +61,8 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
   const mentions: DingTalkMention[] = [];
   let plainText = '';
   let workflowId: string | undefined;
+  let workflowName: string | undefined;
+  let workflowSource: string | undefined;
 
   const walk = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -75,9 +81,14 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
     }
 
     if (isWorkflowSpan(node)) {
-      const id = (node as HTMLSpanElement).dataset.workflowId;
-      if (id) workflowId = id;
-      plainText += (node as HTMLSpanElement).textContent ?? '';
+      const span = node as HTMLSpanElement;
+      const id = span.dataset.workflowId;
+      if (id) {
+        workflowId = id;
+        workflowName = span.dataset.workflowName;
+        workflowSource = span.dataset.workflowSource;
+      }
+      plainText += span.textContent ?? '';
       return;
     }
 
@@ -96,6 +107,8 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
     plainText: normalized,
     mentions,
     workflowId,
+    workflowName,
+    workflowSource,
     isEmpty: normalized.trim().length === 0 && mentions.length === 0,
   };
 }
@@ -135,9 +148,17 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
     }
 
     if (node instanceof HTMLElement && (isMentionSpan(node) || isWorkflowSpan(node))) {
-      const text = node.textContent ?? '';
+      // 与 serializeMentionEditor 保持一致：mention span 用 `@displayName`
+      // （不含 removable 模式下 × 删除按钮的字符），否则偏移量会与序列化错位。
+      const text = isMentionSpan(node)
+        ? `@${node.dataset.mentionName ?? ''}`
+        : (node.textContent ?? '');
       const next = current + text.length;
-      if (targetOffset <= next) {
+      // span 不可拆分：严格落在 (current, next) 内部才视为非法返回 null。
+      // targetOffset === next 表示"紧贴 span 之后"的合法边界，必须推进 current
+      // 让后续文本节点（如尾随的 ）在 offset 0 处匹配，否则会把紧挨着
+      // 前一个 mention 输入的 @ 映射失败，导致 insertMentionAtTrigger 静默退出。
+      if (targetOffset < next) {
         return null;
       }
       current = next;
@@ -287,7 +308,11 @@ export function createMentionSpan(mention: DingTalkMention, options?: MentionSpa
   return span;
 }
 
-export function createWorkflowSpan(workflowId: string, name: string): HTMLSpanElement {
+export function createWorkflowSpan(
+  workflowId: string,
+  name: string,
+  source?: string,
+): HTMLSpanElement {
   const span = document.createElement('span');
   span.className = [
     WORKFLOW_SPAN_CLASS,
@@ -297,6 +322,8 @@ export function createWorkflowSpan(workflowId: string, name: string): HTMLSpanEl
   ].join(' ');
   span.contentEditable = 'false';
   span.dataset.workflowId = workflowId;
+  span.dataset.workflowName = name;
+  if (source) span.dataset.workflowSource = source;
   span.textContent = `/${name}`;
   return span;
 }
@@ -343,6 +370,7 @@ export function insertWorkflowSpan(
   root: HTMLElement,
   workflowId: string,
   name: string,
+  source?: string,
 ): void {
   const selection = window.getSelection();
   const snapshot = serializeMentionEditor(root);
@@ -356,7 +384,7 @@ export function insertWorkflowSpan(
     }
   }
 
-  const span = createWorkflowSpan(workflowId, name);
+  const span = createWorkflowSpan(workflowId, name, source);
   const space = document.createTextNode('\u00A0');
 
   // Insert at the end (or at the slash position if found)
@@ -422,6 +450,24 @@ export function clearMentionEditor(root: HTMLElement): void {
 
 export function setMentionEditorPlainText(root: HTMLElement, text: string): void {
   root.textContent = text;
+}
+
+export function insertPlainTextAtCaret(root: HTMLElement, text: string): void {
+  if (!text) return;
+  root.focus();
+  const selection = window.getSelection();
+  if (!selection) {
+    setMentionEditorPlainText(root, text);
+    return;
+  }
+  if (selection.rangeCount === 0) {
+    const range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+  document.execCommand('insertText', false, text);
 }
 
 export function setMentionEditorMentions(

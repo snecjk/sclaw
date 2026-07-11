@@ -28,8 +28,12 @@ import {
 } from '@/lib/thinking-timeline-active';
 import { useSkillsStore } from '@/stores/skills';
 import type { ToolStatus } from '@/stores/chat/types';
-import { hasDisplayableToolInput, type ThinkingTimelineItem } from '@/pages/Chat/message-utils';
-import { OPENING_PHASE_TEXT_KEY } from '@/pages/Chat/thinking/types';
+import {
+  hasDisplayableToolInput,
+  maskDwsSensitiveIdsForDisplay,
+  type ThinkingTimelineItem,
+} from '@/pages/Chat/message-utils';
+import { OPENING_PHASE_TEXT_KEY, INTERRUPTED_PHASE_TEXT_KEY } from '@/pages/Chat/thinking/types';
 import { PhaseTextBlock } from '@/pages/Chat/thinking/phase-text-block';
 import {
   mergeAdjacentOrphanedThinkingAndToolGroups,
@@ -44,6 +48,12 @@ import {
   writeGlobalStableSegments,
   writeGlobalStableTimeline,
 } from '@/pages/Chat/thinking/segment-merge';
+import { isChronologicallyOrderedLayout } from '@/pages/Chat/thinking/done-segment-normalize';
+import {
+  resolveProcessStatusLabelKey,
+  shouldShowProcessStatusLoading,
+  type TurnProcessStatus,
+} from '@/pages/Chat/thinking/turn-process-status';
 import {
   rebalanceThinkingTimelineForDisplay,
   buildThinkingGroupSummaryLabel,
@@ -294,14 +304,6 @@ function TimelineBody({
   );
 
   const runningTool = streamingTools.find((tool) => tool.status === 'running');
-  const lastTimelineItem = mergedTimeline.at(-1);
-  const showOrganizingToolResults =
-    !isConnecting
-    && !runningTool
-    && (isProcessing
-      || (isLiveStream
-        && lastTimelineItem?.type === 'tool'
-        && (!enableProcessTypewriter || sequentialIndex === null)));
 
   const level2Collapsible = isLiveStream && !readonlyExpanded;
 
@@ -313,7 +315,10 @@ function TimelineBody({
         if (!reveal.isVisible) return null;
 
         if (item.type === 'thinking') {
-          const thinkingContent = resolveSkillNamesInThinking(item.content, skills);
+          // 深度思考面板不走 extractThinking/cleanThinkingText，展示前需单独脱敏
+          const thinkingContent = maskDwsSensitiveIdsForDisplay(
+            resolveSkillNamesInThinking(item.content, skills),
+          );
           const collapse = resolveTimelineBlockCollapseState(
             i,
             mergedTimeline.length,
@@ -374,18 +379,6 @@ function TimelineBody({
           />
         );
       })}
-
-      {isConnecting ? (
-        <ChatProcessLoadingIndicator label={t(`streaming.${connectingLabelKey}`)} />
-      ) : null}
-
-      {showOrganizingToolResults ? (
-        <ChatProcessLoadingIndicator label={t('streaming.processingTitle')} />
-      ) : null}
-
-      {isStillExecuting && !isConnecting && !runningTool && !showOrganizingToolResults ? (
-        <ChatProcessLoadingIndicator label={t('streaming.stillExecuting')} />
-      ) : null}
     </div>
   );
 }
@@ -472,6 +465,21 @@ function useStableThinkingSegments(
 
     // 完成态以解析器 segment 结构为准，仅按 key 单调合并 timeline，避免流式双摘要缓存残留
     if (!isLiveStream) {
+      const cachedByKey = new Map(cached.map((segment) => [segment.key, segment]));
+      const reconciled = segments.map((segment) => {
+        const previous = cachedByKey.get(segment.key);
+        return previous ? mergeTurnSegmentMonotonic(previous, segment) : segment;
+      });
+      relocateInterruptPhaseBetweenAdjacentToolGroups(reconciled);
+      mergeAdjacentOrphanedThinkingAndToolGroups(reconciled);
+      pruneDuplicateToolOnlyGroups(reconciled);
+      cacheRef.current = reconciled;
+      writeGlobalStableSegments(turnStableKey, reconciled);
+      return reconciled;
+    }
+
+    // live：解析器产出交替结构时以 incoming 为准，避免 cache append 把 phase-text 堆到末尾
+    if (isLiveStream && isChronologicallyOrderedLayout(segments)) {
       const cachedByKey = new Map(cached.map((segment) => [segment.key, segment]));
       const reconciled = segments.map((segment) => {
         const previous = cachedByKey.get(segment.key);
@@ -616,6 +624,8 @@ export interface ThinkingTurnProcessProps {
   streamingTools?: StreamingTool[];
   hasFinalReply?: boolean;
   connectingLabelKey?: ConnectingLabelKey;
+  /** 统一过程 loading 状态（§4.3 TurnProcessStatus） */
+  processStatus?: TurnProcessStatus;
   className?: string;
 }
 
@@ -630,8 +640,10 @@ export function ThinkingTurnProcess({
   streamingTools = [],
   hasFinalReply = false,
   connectingLabelKey = 'understandingQuestion',
+  processStatus = 'idle',
   className,
 }: ThinkingTurnProcessProps) {
+  const { t } = useTranslation('chat');
   const wasLiveStreamRef = useRef(false);
   const typewriterLockedRef = useRef(false);
   const [enableProcessTypewriter, setEnableProcessTypewriter] = useState(false);
@@ -692,11 +704,23 @@ export function ThinkingTurnProcess({
   if (!hasContent && !isStreaming) return null;
 
   const lastSegmentIndex = segments.length - 1;
+  const statusLabelKey = resolveProcessStatusLabelKey(processStatus, connectingLabelKey);
+  const showStatusLoading = isLiveStream && shouldShowProcessStatusLoading(processStatus);
 
   return (
     <div className={cn(thinkingPanelRootClass, thinkingProcessSegmentStackClass, className)}>
       {displaySegments.map((segment, index) => {
         if (segment.kind === 'phase-text') {
+          if (segment.key === INTERRUPTED_PHASE_TEXT_KEY) {
+            return (
+              <p
+                key={segment.key}
+                className="text-sm leading-5 text-muted-foreground"
+              >
+                {t('streaming.interrupted')}
+              </p>
+            );
+          }
           const isStreamingPhaseText = isLiveStream && index === lastSegmentIndex;
           return (
             <PhaseTextBlock
@@ -725,8 +749,8 @@ export function ThinkingTurnProcess({
         );
       })}
 
-      {isLiveStream && displaySegments.length === 0 && (isConnecting || isProcessing || isStillExecuting) ? (
-        <ConnectingModelIndicator labelKey={connectingLabelKey} />
+      {showStatusLoading && statusLabelKey ? (
+        <ChatProcessLoadingIndicator label={t(statusLabelKey)} />
       ) : null}
     </div>
   );

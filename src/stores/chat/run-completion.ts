@@ -50,6 +50,12 @@ export function resolveAssistantFinalTerminalState(
   eventPhase: unknown,
   finalMsg: RawMessage,
 ): { isAgenticRunFragment: boolean; isTerminalOutput: boolean } {
+  // OpenClaw 整轮 terminal 只认 agent.completed（finalizeOpenClawRunAfterAgentCompleted）；
+  // 中间 assistant final 即使带正文也只是 fragment，不能清 sending / 不能 defer 成完成态。
+  if (engineType === 'openclaw' && sending) {
+    return { isAgenticRunFragment: true, isTerminalOutput: false };
+  }
+
   // Multi-step agentic runs emit many assistant 'final' events before the run
   // truly ends. While sending=true and agent.completed has not arrived, treat
   // these as non-terminal for BOTH Claude and OpenClaw.

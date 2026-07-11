@@ -34,7 +34,9 @@ import {
   mergeSessionLastActivity,
   sanitizeSessionDisplayField,
   setLastChatEventAt,
-  enrichWithToolResultFiles, enrichWithCachedImages, extractMediaRefs, makeAttachedFile, getMessageText, isToolResultRole, extractImagesAsAttachedFiles, getToolCallFilePath
+  enrichWithToolResultFiles, enrichWithCachedImages, extractMediaRefs, makeAttachedFile, getMessageText, isToolResultRole, extractImagesAsAttachedFiles, getToolCallFilePath,
+  collectToolUpdates,
+  upsertToolStatuses,
 } from './chat/helpers';
 import {
   resolveClaudeGroupNameFromSession,
@@ -59,7 +61,6 @@ import {
   type ChatState,
   type ContentBlock,
   type RawMessage,
-  type ToolStatus,
   type SessionRuntimeState,
 } from './chat/types';
 import type { WorkflowExecutionState } from '@/types/workflow';
@@ -579,6 +580,8 @@ function createIdleSessionRuntimeState(): SessionRuntimeState {
     activeRunId: null,
     streamingText: '',
     streamingMessage: null,
+    streamingMessages: [],
+    streamingToolResults: [],
     streamingTools: [],
     pendingFinal: false,
     lastUserMessageAt: null,
@@ -595,6 +598,8 @@ function runtimePatchFromSessionRuntime(runtime: SessionRuntimeState): Pick<
   | 'activeRunId'
   | 'streamingText'
   | 'streamingMessage'
+  | 'streamingMessages'
+  | 'streamingToolResults'
   | 'streamingTools'
   | 'pendingFinal'
   | 'lastUserMessageAt'
@@ -607,6 +612,8 @@ function runtimePatchFromSessionRuntime(runtime: SessionRuntimeState): Pick<
     activeRunId: runtime.activeRunId,
     streamingText: runtime.streamingText,
     streamingMessage: runtime.streamingMessage,
+    streamingMessages: runtime.streamingMessages,
+    streamingToolResults: runtime.streamingToolResults,
     streamingTools: runtime.streamingTools,
     pendingFinal: runtime.pendingFinal,
     lastUserMessageAt: runtime.lastUserMessageAt,
@@ -622,6 +629,8 @@ function captureTopLevelRuntime(state: Pick<
   | 'activeRunId'
   | 'streamingText'
   | 'streamingMessage'
+  | 'streamingMessages'
+  | 'streamingToolResults'
   | 'streamingTools'
   | 'pendingFinal'
   | 'lastUserMessageAt'
@@ -634,6 +643,8 @@ function captureTopLevelRuntime(state: Pick<
     activeRunId: state.activeRunId,
     streamingText: state.streamingText,
     streamingMessage: state.streamingMessage,
+    streamingMessages: state.streamingMessages,
+    streamingToolResults: state.streamingToolResults,
     streamingTools: state.streamingTools,
     pendingFinal: state.pendingFinal,
     lastUserMessageAt: state.lastUserMessageAt,
@@ -720,6 +731,8 @@ function buildSessionSwitchPatch(
     | 'activeRunId'
     | 'streamingText'
     | 'streamingMessage'
+    | 'streamingMessages'
+    | 'streamingToolResults'
     | 'streamingTools'
     | 'pendingFinal'
     | 'lastUserMessageAt'
@@ -799,6 +812,7 @@ function handleBackgroundSessionEvent(
           }
           return event.message ?? runtime.streamingMessage;
         })(),
+        streamingMessages: appendStreamingAssistantSnapshot(runtime.streamingMessages, event.message),
         streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
       })));
       break;
@@ -845,6 +859,7 @@ function handleBackgroundSessionEvent(
             pendingFinal: true,
             streamingText: '',
             streamingMessage: null,
+            streamingToolResults: appendStreamingToolResultSnapshot(runtime.streamingToolResults, finalMsg),
             pendingToolImages: toolFiles.length > 0
               ? [...runtime.pendingToolImages, ...toolFiles]
               : runtime.pendingToolImages,
@@ -890,6 +905,8 @@ function handleBackgroundSessionEvent(
           activeRunId: isTerminalOutput ? null : currentRuntime.activeRunId,
           streamingText: '',
           streamingMessage: null,
+          streamingMessages: isTerminalOutput ? [] : currentRuntime.streamingMessages,
+          streamingToolResults: isTerminalOutput ? [] : currentRuntime.streamingToolResults,
           streamingTools: isTerminalOutput ? [] : (updates.length > 0 ? upsertToolStatuses(currentRuntime.streamingTools, updates) : currentRuntime.streamingTools),
           pendingFinal: isTerminalOutput ? false : true,
           pendingToolImages: isTerminalOutput ? [] : currentRuntime.pendingToolImages,
@@ -931,6 +948,8 @@ function handleBackgroundSessionEvent(
         activeRunId: null,
         streamingText: '',
         streamingMessage: null,
+        streamingMessages: [],
+        streamingToolResults: [],
         streamingTools: [],
         pendingFinal: false,
         lastUserMessageAt: null,
@@ -946,6 +965,8 @@ function handleBackgroundSessionEvent(
         activeRunId: null,
         streamingText: '',
         streamingMessage: null,
+        streamingMessages: [],
+        streamingToolResults: [],
         streamingTools: [],
         pendingFinal: false,
         lastUserMessageAt: null,
@@ -960,6 +981,7 @@ function handleBackgroundSessionEvent(
         const updates = collectToolUpdates(event.message, 'delta');
         set((s) => patchSessionRuntimeState(s, sessionKey, (runtime) => ({
           streamingMessage: event.message ?? runtime.streamingMessage,
+          streamingMessages: appendStreamingAssistantSnapshot(runtime.streamingMessages, event.message),
           streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
         })));
       }
@@ -1022,188 +1044,10 @@ function isToolOnlyMessage(message: RawMessage | undefined): boolean {
 }
 
 
-function extractTextFromContent(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-  const parts: string[] = [];
-  for (const block of content as ContentBlock[]) {
-    if (block.type === 'text' && block.text) {
-      parts.push(block.text);
-    }
-  }
-  return parts.join('\n');
-}
-
 /** Append workflow parameter_form to assistant final when schema is pending. */
 function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
   return appendWorkflowParameterFormToMessage(message, getMessageText, { allowLivePending: true })
     ?? message;
-}
-
-
-function summarizeToolOutput(text: string): string | undefined {
-  const trimmed = text.trim();
-  if (!trimmed) return undefined;
-  const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (lines.length === 0) return undefined;
-  const summaryLines = lines.slice(0, 2);
-  let summary = summaryLines.join(' / ');
-  if (summary.length > 160) {
-    summary = `${summary.slice(0, 157)}...`;
-  }
-  return summary;
-}
-
-function normalizeToolStatus(rawStatus: unknown, fallback: 'running' | 'completed'): ToolStatus['status'] {
-  const status = typeof rawStatus === 'string' ? rawStatus.toLowerCase() : '';
-  if (status === 'error' || status === 'failed') return 'error';
-  if (status === 'completed' || status === 'success' || status === 'done') return 'completed';
-  return fallback;
-}
-
-function parseDurationMs(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  const parsed = typeof value === 'string' ? Number(value) : NaN;
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function extractToolUseUpdates(message: unknown): ToolStatus[] {
-  if (!message || typeof message !== 'object') return [];
-  const msg = message as Record<string, unknown>;
-  const updates: ToolStatus[] = [];
-
-  // Path 1: Anthropic/normalized format — tool blocks inside content array
-  const content = msg.content;
-  if (Array.isArray(content)) {
-    for (const block of content as ContentBlock[]) {
-      if ((block.type !== 'tool_use' && block.type !== 'toolCall') || !block.name) continue;
-      updates.push({
-        id: block.id || block.name,
-        toolCallId: block.id,
-        name: block.name,
-        status: 'running',
-        updatedAt: Date.now(),
-      });
-    }
-  }
-
-  // Path 2: OpenAI format — tool_calls array on the message itself
-  if (updates.length === 0) {
-    const toolCalls = msg.tool_calls ?? msg.toolCalls;
-    if (Array.isArray(toolCalls)) {
-      for (const tc of toolCalls as Array<Record<string, unknown>>) {
-        const fn = (tc.function ?? tc) as Record<string, unknown>;
-        const name = typeof fn.name === 'string' ? fn.name : '';
-        if (!name) continue;
-        const id = typeof tc.id === 'string' ? tc.id : name;
-        updates.push({
-          id,
-          toolCallId: typeof tc.id === 'string' ? tc.id : undefined,
-          name,
-          status: 'running',
-          updatedAt: Date.now(),
-        });
-      }
-    }
-  }
-
-  return updates;
-}
-
-function extractToolResultBlocks(message: unknown, eventState: string): ToolStatus[] {
-  if (!message || typeof message !== 'object') return [];
-  const msg = message as Record<string, unknown>;
-  const content = msg.content;
-  if (!Array.isArray(content)) return [];
-
-  const updates: ToolStatus[] = [];
-  for (const block of content as ContentBlock[]) {
-    if (block.type !== 'tool_result' && block.type !== 'toolResult') continue;
-    const outputText = extractTextFromContent(block.content ?? block.text ?? '');
-    const summary = summarizeToolOutput(outputText);
-    updates.push({
-      id: block.id || block.name || 'tool',
-      toolCallId: block.id,
-      name: block.name || block.id || 'tool',
-      status: normalizeToolStatus(undefined, eventState === 'delta' ? 'running' : 'completed'),
-      summary,
-      updatedAt: Date.now(),
-    });
-  }
-
-  return updates;
-}
-
-function extractToolResultUpdate(message: unknown, eventState: string): ToolStatus | null {
-  if (!message || typeof message !== 'object') return null;
-  const msg = message as Record<string, unknown>;
-  const role = typeof msg.role === 'string' ? msg.role.toLowerCase() : '';
-  if (!isToolResultRole(role)) return null;
-
-  const toolName = typeof msg.toolName === 'string' ? msg.toolName : (typeof msg.name === 'string' ? msg.name : '');
-  const toolCallId = typeof msg.toolCallId === 'string' ? msg.toolCallId : undefined;
-  const details = (msg.details && typeof msg.details === 'object') ? msg.details as Record<string, unknown> : undefined;
-  const rawStatus = (msg.status ?? details?.status);
-  const fallback = eventState === 'delta' ? 'running' : 'completed';
-  const status = normalizeToolStatus(rawStatus, fallback);
-  const durationMs = parseDurationMs(details?.durationMs ?? details?.duration ?? (msg as Record<string, unknown>).durationMs);
-
-  const outputText = (details && typeof details.aggregated === 'string')
-    ? details.aggregated
-    : extractTextFromContent(msg.content);
-  const summary = summarizeToolOutput(outputText) ?? summarizeToolOutput(String(details?.error ?? msg.error ?? ''));
-
-  const name = toolName || toolCallId || 'tool';
-  const id = toolCallId || name;
-
-  return {
-    id,
-    toolCallId,
-    name,
-    status,
-    durationMs,
-    summary,
-    updatedAt: Date.now(),
-  };
-}
-
-function mergeToolStatus(existing: ToolStatus['status'], incoming: ToolStatus['status']): ToolStatus['status'] {
-  const order: Record<ToolStatus['status'], number> = { running: 0, completed: 1, error: 2 };
-  return order[incoming] >= order[existing] ? incoming : existing;
-}
-
-function upsertToolStatuses(current: ToolStatus[], updates: ToolStatus[]): ToolStatus[] {
-  if (updates.length === 0) return current;
-  const next = [...current];
-  for (const update of updates) {
-    const key = update.toolCallId || update.id || update.name;
-    if (!key) continue;
-    const index = next.findIndex((tool) => (tool.toolCallId || tool.id || tool.name) === key);
-    if (index === -1) {
-      next.push(update);
-      continue;
-    }
-    const existing = next[index];
-    next[index] = {
-      ...existing,
-      ...update,
-      name: update.name || existing.name,
-      status: mergeToolStatus(existing.status, update.status),
-      durationMs: update.durationMs ?? existing.durationMs,
-      summary: update.summary ?? existing.summary,
-      updatedAt: update.updatedAt || existing.updatedAt,
-    };
-  }
-  return next;
-}
-
-function collectToolUpdates(message: unknown, eventState: string): ToolStatus[] {
-  const updates: ToolStatus[] = [];
-  const toolResultUpdate = extractToolResultUpdate(message, eventState);
-  if (toolResultUpdate) updates.push(toolResultUpdate);
-  updates.push(...extractToolResultBlocks(message, eventState));
-  updates.push(...extractToolUseUpdates(message));
-  return updates;
 }
 
 function hasNonToolAssistantContent(message: RawMessage | undefined): boolean {
@@ -1272,6 +1116,110 @@ function touchLastChatEventAt(
   set({ lastChatEventAt: now });
 }
 
+const STREAMING_MESSAGE_BUFFER_LIMIT = 80;
+
+function isAssistantStreamMessage(message: unknown): message is RawMessage {
+  if (!message || typeof message !== 'object') return false;
+  const role = (message as RawMessage).role;
+  return role === 'assistant' || role === undefined;
+}
+
+function normalizeAssistantStreamMessage(message: RawMessage): RawMessage {
+  return {
+    ...message,
+    role: 'assistant',
+  };
+}
+
+function extractThinkingTextForStream(message: RawMessage | undefined): string {
+  if (!message || !Array.isArray(message.content)) return '';
+  return (message.content as ContentBlock[])
+    .map((block) => {
+      if (block.type === 'thinking') return block.thinking ?? block.text ?? '';
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+function textLooksLikeSameStreamSnapshot(previous: string, next: string): boolean {
+  const a = previous.trim();
+  const b = next.trim();
+  if (!a || !b) return false;
+  return a === b || a.startsWith(b) || b.startsWith(a);
+}
+
+function toolUpdatesLookLikeSameStreamSnapshot(previous: RawMessage, next: RawMessage): boolean {
+  const prevTools = collectToolUpdates(previous, 'delta');
+  const nextTools = collectToolUpdates(next, 'delta');
+  if (prevTools.length === 0 || nextTools.length === 0) return false;
+  if (prevTools.length !== nextTools.length) return false;
+  return prevTools.every((tool, index) => {
+    const other = nextTools[index];
+    if (!other) return false;
+    const toolKey = tool.toolCallId || tool.id;
+    const otherKey = other.toolCallId || other.id;
+    return Boolean(toolKey && otherKey && toolKey === otherKey);
+  });
+}
+
+function shouldReplaceStreamingSnapshot(previous: RawMessage | undefined, next: RawMessage): boolean {
+  if (!previous) return false;
+  if (previous.id && next.id && previous.id === next.id) return true;
+
+  const previousText = getMessageText(previous.content);
+  const nextText = getMessageText(next.content);
+  if (textLooksLikeSameStreamSnapshot(previousText, nextText)) return true;
+
+  const previousThinking = extractThinkingTextForStream(previous);
+  const nextThinking = extractThinkingTextForStream(next);
+  if (textLooksLikeSameStreamSnapshot(previousThinking, nextThinking)) return true;
+
+  return toolUpdatesLookLikeSameStreamSnapshot(previous, next);
+}
+
+function appendStreamingAssistantSnapshot(
+  messages: RawMessage[],
+  message: unknown,
+): RawMessage[] {
+  if (!isAssistantStreamMessage(message)) return messages;
+  const next = normalizeAssistantStreamMessage(message);
+  if (next.id) {
+    const index = messages.findIndex((item) => item.id === next.id);
+    if (index >= 0) {
+      const updated = [...messages];
+      updated[index] = next;
+      return updated.slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+    }
+  }
+
+  const last = messages[messages.length - 1];
+  if (shouldReplaceStreamingSnapshot(last, next)) {
+    return [...messages.slice(0, -1), next].slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+  }
+
+  return [...messages, next].slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+}
+
+function appendStreamingToolResultSnapshot(
+  messages: RawMessage[],
+  message: RawMessage,
+): RawMessage[] {
+  const key = message.toolCallId || message.id || message.toolName;
+  if (key) {
+    const index = messages.findIndex((item) =>
+      (item.toolCallId || item.id || item.toolName) === key,
+    );
+    if (index >= 0) {
+      const updated = [...messages];
+      updated[index] = message;
+      return updated.slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+    }
+  }
+  return [...messages, message].slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+}
+
 // ── Store ────────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>()(
@@ -1286,6 +1234,8 @@ export const useChatStore = create<ChatState>()(
   activeRunId: null,
   streamingText: '',
   streamingMessage: null,
+  streamingMessages: [],
+  streamingToolResults: [],
   streamingTools: [],
   pendingFinal: false,
   lastChatEventAt: 0,
@@ -1859,6 +1809,8 @@ export const useChatStore = create<ChatState>()(
         messages: [],
         streamingText: '',
         streamingMessage: null,
+        streamingMessages: [],
+        streamingToolResults: [],
         streamingTools: [],
         activeRunId: null,
         error: null,
@@ -1956,6 +1908,8 @@ export const useChatStore = create<ChatState>()(
         sending: false,
         streamingText: '',
         streamingMessage: null,
+        streamingMessages: [],
+        streamingToolResults: [],
         streamingTools: [],
         activeRunId: null,
         error: null,
@@ -2351,6 +2305,8 @@ export const useChatStore = create<ChatState>()(
           optimisticUserMessage: null,
           streamingText: '',
           streamingMessage: null,
+          streamingMessages: [],
+          streamingToolResults: [],
           streamingTools: [],
           pendingToolImages: [],
           error: null,
@@ -2643,6 +2599,8 @@ export const useChatStore = create<ChatState>()(
       error: null,
       streamingText: '',
       streamingMessage: null,
+      streamingMessages: [],
+      streamingToolResults: [],
       streamingTools: [],
       pendingFinal: false,
       lastUserMessageAt: nowMs,
@@ -2653,6 +2611,8 @@ export const useChatStore = create<ChatState>()(
       activeRunId: null,
       streamingText: '',
       streamingMessage: null,
+      streamingMessages: [],
+      streamingToolResults: [],
       streamingTools: [],
       pendingFinal: false,
       lastUserMessageAt: nowMs,
@@ -2839,13 +2799,25 @@ export const useChatStore = create<ChatState>()(
     clearHistoryPoll();
     clearErrorRecoveryTimer();
     const { currentSessionKey } = get();
-    set({ sending: false, streamingText: '', streamingMessage: null, pendingFinal: false, lastUserMessageAt: null, optimisticUserMessage: null, pendingToolImages: [] });
+    set({
+      sending: false,
+      streamingText: '',
+      streamingMessage: null,
+      streamingMessages: [],
+      streamingToolResults: [],
+      pendingFinal: false,
+      lastUserMessageAt: null,
+      optimisticUserMessage: null,
+      pendingToolImages: [],
+    });
     set({ streamingTools: [] });
     set((s) => patchSessionRuntimeState(s, currentSessionKey, {
       sending: false,
       activeRunId: null,
       streamingText: '',
       streamingMessage: null,
+      streamingMessages: [],
+      streamingToolResults: [],
       streamingTools: [],
       pendingFinal: false,
       lastUserMessageAt: null,
@@ -3004,6 +2976,7 @@ export const useChatStore = create<ChatState>()(
             }
             return event.message ?? s.streamingMessage;
           })(),
+          streamingMessages: appendStreamingAssistantSnapshot(s.streamingMessages, event.message),
           streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
         }));
         break;
@@ -3021,7 +2994,7 @@ export const useChatStore = create<ChatState>()(
               applyWorkflowSchemaReady((schemaEnvelope.data ?? {}) as WorkflowSchemaReadyData);
             }
 
-            // Snapshot streaming assistant turn before handling tool result.
+            // Resolve file path from the active assistant tool call before clearing it.
             const currentStreamForPath = get().streamingMessage as RawMessage | null;
             const matchedPath = (currentStreamForPath && finalMsg.toolCallId)
               ? getToolCallFilePath(currentStreamForPath, finalMsg.toolCallId)
@@ -3047,37 +3020,16 @@ export const useChatStore = create<ChatState>()(
               });
               for (const ref of mediaRefs) toolFiles.push(makeAttachedFile(ref));
             }
-            set((s) => {
-              const currentStream = s.streamingMessage as RawMessage | null;
-              const snapshotMsgs: RawMessage[] = [];
-              if (currentStream) {
-                const streamRole = currentStream.role;
-                if (streamRole === 'assistant' || streamRole === undefined) {
-                  const snapId = currentStream.id
-                    || `${runId || 'run'}-turn-${s.messages.length}`;
-                  if (!s.messages.some(m => m.id === snapId)) {
-                    snapshotMsgs.push({
-                      ...(currentStream as RawMessage),
-                      role: 'assistant',
-                      id: snapId,
-                      _attachedFiles: toolFiles.length > 0
-                        ? [...((currentStream as RawMessage)._attachedFiles || []), ...toolFiles]
-                        : (currentStream as RawMessage)._attachedFiles,
-                    });
-                  }
-                }
-              }
-              return {
-                messages: snapshotMsgs.length > 0 ? [...s.messages, ...snapshotMsgs] : s.messages,
-                streamingText: '',
-                streamingMessage: null,
-                pendingFinal: true,
-                pendingToolImages: toolFiles.length > 0
-                  ? [...s.pendingToolImages, ...toolFiles]
-                  : s.pendingToolImages,
-                streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
-              };
-            });
+            set((s) => ({
+              streamingText: '',
+              streamingMessage: null,
+              streamingToolResults: appendStreamingToolResultSnapshot(s.streamingToolResults, finalMsg),
+              pendingFinal: true,
+              pendingToolImages: toolFiles.length > 0
+                ? [...s.pendingToolImages, ...toolFiles]
+                : s.pendingToolImages,
+              streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
+            }));
             void (async () => {
               const sessionKey = get().currentSessionKey;
               const agentId = get().currentAgentId;
@@ -3129,6 +3081,8 @@ export const useChatStore = create<ChatState>()(
             set(() => ({
               streamingText: '',
               streamingMessage: null,
+              streamingMessages: [],
+              streamingToolResults: [],
               streamingTools: [],
               pendingToolImages: [],
               sending: false,
@@ -3163,6 +3117,8 @@ export const useChatStore = create<ChatState>()(
           set((s) => {
             const nextTools = updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools;
             const streamingTools = isTerminalOutput ? [] : nextTools;
+            const streamingMessages = isTerminalOutput ? [] : s.streamingMessages;
+            const streamingToolResults = isTerminalOutput ? [] : s.streamingToolResults;
 
             // Attach any images collected from preceding tool results
             const pendingImgs = s.pendingToolImages;
@@ -3211,6 +3167,8 @@ export const useChatStore = create<ChatState>()(
                   messages: updatedMessages,
                   streamingText: '',
                   streamingMessage: null,
+                  streamingMessages,
+                  streamingToolResults,
                   pendingFinal: true,
                   streamingTools,
                   ...clearPendingImages,
@@ -3218,6 +3176,8 @@ export const useChatStore = create<ChatState>()(
                   messages: updatedMessages,
                   streamingText: '',
                   streamingMessage: null,
+                  streamingMessages,
+                  streamingToolResults,
                   sending: isTerminalOutput ? false : s.sending,
                   activeRunId: isTerminalOutput ? null : s.activeRunId,
                   pendingFinal: isTerminalOutput ? false : true,
@@ -3228,12 +3188,16 @@ export const useChatStore = create<ChatState>()(
               return toolOnly ? {
                 streamingText: '',
                 streamingMessage: null,
+                streamingMessages,
+                streamingToolResults,
                 pendingFinal: true,
                 streamingTools,
                 ...clearPendingImages,
               } : {
                 streamingText: '',
                 streamingMessage: null,
+                streamingMessages,
+                streamingToolResults,
                 sending: isTerminalOutput ? false : s.sending,
                 activeRunId: isTerminalOutput ? null : s.activeRunId,
                 pendingFinal: isTerminalOutput ? false : true,
@@ -3245,6 +3209,8 @@ export const useChatStore = create<ChatState>()(
               return {
                 streamingText: '',
                 streamingMessage: null,
+                streamingMessages: [],
+                streamingToolResults: [],
                 sending: false,
                 activeRunId: null,
                 pendingFinal: false,
@@ -3256,6 +3222,8 @@ export const useChatStore = create<ChatState>()(
               messages: [...s.messages, msgWithImages],
               streamingText: '',
               streamingMessage: null,
+              streamingMessages,
+              streamingToolResults,
               pendingFinal: true,
               streamingTools,
               ...clearPendingImages,
@@ -3263,6 +3231,8 @@ export const useChatStore = create<ChatState>()(
               messages: [...s.messages, msgWithImages],
               streamingText: '',
               streamingMessage: null,
+              streamingMessages,
+              streamingToolResults,
               sending: isTerminalOutput ? false : s.sending,
               activeRunId: isTerminalOutput ? null : s.activeRunId,
               pendingFinal: isTerminalOutput ? false : true,
@@ -3340,6 +3310,8 @@ export const useChatStore = create<ChatState>()(
           error: errorMsg,
           streamingText: '',
           streamingMessage: null,
+          streamingMessages: [],
+          streamingToolResults: [],
           streamingTools: [],
           pendingFinal: false,
           pendingToolImages: [],
@@ -3382,6 +3354,8 @@ export const useChatStore = create<ChatState>()(
           activeRunId: null,
           streamingText: '',
           streamingMessage: null,
+          streamingMessages: [],
+          streamingToolResults: [],
           streamingTools: [],
           pendingFinal: false,
           lastUserMessageAt: null,
@@ -3399,6 +3373,7 @@ export const useChatStore = create<ChatState>()(
           const updates = collectToolUpdates(event.message, 'delta');
           set((s) => ({
             streamingMessage: event.message ?? s.streamingMessage,
+            streamingMessages: appendStreamingAssistantSnapshot(s.streamingMessages, event.message),
             streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
           }));
         }
@@ -3511,6 +3486,8 @@ export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null
     optimisticUserMessage: null,
     streamingText: '',
     streamingMessage: null,
+    streamingMessages: [],
+    streamingToolResults: [],
     streamingTools: [],
     pendingToolImages: [],
     error: null,

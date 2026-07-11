@@ -107,3 +107,32 @@ export function collectConversationFileRefsFromText(
   }
   return results;
 }
+
+/**
+ * Remove local file URLs from copy/share text; keep markdown labels and HTTP links.
+ * Local files are copied separately as clipboard blobs or uploaded for share.
+ */
+export function sanitizeLocalFileRefsForCopy(text: string): string {
+  if (!text.trim()) return text;
+
+  let result = text.replace(
+    /\[([^\]]*)\]\((file:\/\/[^)\s]+)\)/g,
+    '$1',
+  );
+  result = result.replace(
+    /\[([^\]]*)\]\((preview:\/\/[^)\s]+)\)/g,
+    '$1',
+  );
+  result = result.replace(
+    /\[([^\]]*)\]\((artifact:\/\/[^)\s]+)\)/g,
+    '$1',
+  );
+
+  const fileUrlRegex = createFileUrlInTextRegex();
+  result = result.replace(fileUrlRegex, (_match, captured: string) => {
+    const localPath = localPathFromFileUrlCapture(captured);
+    return localPath.split(/[/\\]/).pop() || '';
+  });
+
+  return result.replace(/\n{3,}/g, '\n\n').trim();
+}

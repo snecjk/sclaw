@@ -2,15 +2,7 @@ import type { ThinkingTimelineItem, ThinkingTurnSegment } from '@/pages/Chat/thi
 import { OPENING_PHASE_TEXT_KEY } from '@/pages/Chat/thinking/types';
 import { groupHasTool } from '@/pages/Chat/thinking/batch-segments';
 
-function thinkingTimelineToolKey(tool: { id: string; name: string; input: unknown }): string {
-  const inputKey =
-    tool.input === null || tool.input === undefined
-      ? ''
-      : typeof tool.input === 'string'
-        ? tool.input
-        : JSON.stringify(tool.input);
-  return `${tool.name}::${tool.id}::${inputKey}`;
-}
+import { thinkingTimelineToolIdentityKey } from '@/lib/tool-input-merge';
 
 function hasAdjacentToolGroupsWithoutPhase(segments: ThinkingTurnSegment[]): boolean {
   for (let index = 0; index < segments.length - 1; index += 1) {
@@ -104,7 +96,7 @@ export function pruneDuplicateToolOnlyGroups(segments: ThinkingTurnSegment[]): v
 
     const toolsOnly = !segment.timeline.some((item) => item.type === 'thinking');
     const duplicateOnly =
-      tools.every((tool) => seenToolKeys.has(thinkingTimelineToolKey(tool)))
+      tools.every((tool) => seenToolKeys.has(thinkingTimelineToolIdentityKey(tool)))
       || (toolsOnly && tools.every((tool) => seenToolNames.has(tool.name)));
     if (duplicateOnly) {
       segments.splice(index, 1);
@@ -113,7 +105,7 @@ export function pruneDuplicateToolOnlyGroups(segments: ThinkingTurnSegment[]): v
     }
 
     for (const tool of tools) {
-      seenToolKeys.add(thinkingTimelineToolKey(tool));
+      seenToolKeys.add(thinkingTimelineToolIdentityKey(tool));
       seenToolNames.add(tool.name);
     }
   }

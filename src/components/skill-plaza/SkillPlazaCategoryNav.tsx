@@ -1,51 +1,26 @@
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { cn } from '@/lib/utils';
+import { computeMineCategoryCounts } from '@/lib/skill-plaza-category';
 import { useMemo } from 'react';
 
 export function SkillPlazaCategoryNav() {
-  const { categories, categoryCounts, activeCategory, setActiveCategory, activeTab, mySkills, plazaSkills, searchQuery, plazaSkillMetaMap } = useSkillPlazaStore();
+  const { categories, categoryCounts, activeCategory, setActiveCategory, activeTab, mySkills, searchQuery, plazaSkillMetaMap, plazaSkills } = useSkillPlazaStore();
 
-  // Recompute counts from the actually displayed skills when search is active,
-  // because backend categoryCounts may reflect the full unfiltered set.
+  // Plaza tab: trust backend categoryCounts (computed from the full search scope).
+  // Mine tab: derive counts from the enriched local list so UI stays in sync with search.
   const displayCounts = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
+    if (activeTab !== 'mine') return categoryCounts;
 
-    // Determine the skill list that is actually being displayed
-    const sourceSkills = activeTab === 'mine' ? mySkills : plazaSkills;
+    const query = searchQuery.trim().toLowerCase();
     const filtered = query
-      ? sourceSkills.filter((s) =>
+      ? mySkills.filter((s) =>
           s.title.toLowerCase().includes(query) ||
           s.description?.toLowerCase().includes(query)
         )
-      : sourceSkills;
+      : mySkills;
 
-    // When no search query, use backend counts for 'all' tab to preserve accuracy
-    if (!query && activeTab !== 'mine') return categoryCounts;
-
-    const counts: Record<string, number> = {};
-    // Total count under empty string key (matching backend convention)
-    counts[''] = filtered.length;
-
-    for (const skill of filtered) {
-      // Prefer skill.categoryCode; fallback to plaza meta cache for accurate categorization
-      let code = skill.categoryCode;
-      if (!code) {
-        const meta = plazaSkillMetaMap[skill.slug];
-        if (meta) {
-          code = meta.categoryCode;
-          if (!code && meta.category) {
-            const cat = categories.find((c) => c.label === meta.category);
-            if (cat) code = cat.slug;
-          }
-        }
-      }
-      if (code) {
-        counts[code] = (counts[code] || 0) + 1;
-      }
-    }
-
-    return counts;
-  }, [activeTab, categoryCounts, mySkills, plazaSkills, searchQuery, plazaSkillMetaMap, categories]);
+    return computeMineCategoryCounts(filtered, categories, plazaSkillMetaMap, plazaSkills);
+  }, [activeTab, categoryCounts, mySkills, searchQuery, categories, plazaSkillMetaMap, plazaSkills]);
 
   return (
     <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 my-2.5 mx-0 p-0" aria-label="技能分类">

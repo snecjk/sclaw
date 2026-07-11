@@ -19,6 +19,8 @@ const STALE_EXECUTION_TICK_MS = 5_000;
 function hasStreamPayload(
   streamMsg: { content?: unknown } | null,
   streamText: string,
+  streamingMessages: RawMessage[],
+  streamingToolResults: RawMessage[],
   streamingTools: StreamingTool[],
   showThinking: boolean,
 ): boolean {
@@ -28,13 +30,20 @@ function hasStreamPayload(
   const hasStreamTools = streamMsg ? extractToolUse(streamMsg).length > 0 : false;
   const hasStreamImages = streamMsg ? extractImages(streamMsg).length > 0 : false;
   const hasStreamToolStatus = streamingTools.length > 0;
-  return hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasStreamToolStatus;
+  return hasStreamText
+    || hasStreamThinking
+    || hasStreamTools
+    || hasStreamImages
+    || hasStreamToolStatus
+    || streamingMessages.length > 0
+    || streamingToolResults.length > 0;
 }
 
 /** 仍在增量输出的流式内容（不含仅 completed 的 streamingTools） */
 function hasActiveStreamContent(
   streamMsg: { content?: unknown } | null,
   streamText: string,
+  streamingMessages: RawMessage[],
   streamingTools: StreamingTool[],
   showThinking: boolean,
 ): boolean {
@@ -44,7 +53,12 @@ function hasActiveStreamContent(
   const hasStreamTools = streamMsg ? extractToolUse(streamMsg).length > 0 : false;
   const hasStreamImages = streamMsg ? extractImages(streamMsg).length > 0 : false;
   const hasRunningStreamTool = streamingTools.some((tool) => tool.status === 'running');
-  return hasStreamText || hasStreamThinking || hasStreamTools || hasStreamImages || hasRunningStreamTool;
+  return hasStreamText
+    || hasStreamThinking
+    || hasStreamTools
+    || hasStreamImages
+    || hasRunningStreamTool
+    || streamingMessages.length > 0;
 }
 
 export function useChatDisplay(params: {
@@ -55,9 +69,22 @@ export function useChatDisplay(params: {
   lastChatEventAt: number;
   streamMsg: { role?: string; content?: unknown; timestamp?: number; id?: string } | null;
   streamText: string;
+  streamingMessages: RawMessage[];
+  streamingToolResults: RawMessage[];
   streamingTools: StreamingTool[];
 }) {
-  const { messages, sending, pendingFinal, showThinking, lastChatEventAt, streamMsg, streamText, streamingTools } = params;
+  const {
+    messages,
+    sending,
+    pendingFinal,
+    showThinking,
+    lastChatEventAt,
+    streamMsg,
+    streamText,
+    streamingMessages,
+    streamingToolResults,
+    streamingTools,
+  } = params;
   const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
 
   const [, staleTick] = useState(0);
@@ -69,8 +96,21 @@ export function useChatDisplay(params: {
 
   const displayItems = useMemo(() => buildChatDisplayItems(messages), [messages]);
 
-  const hasAnyStreamContent = hasStreamPayload(streamMsg, streamText, streamingTools, showThinking);
-  const hasLiveStreamContent = hasActiveStreamContent(streamMsg, streamText, streamingTools, showThinking);
+  const hasAnyStreamContent = hasStreamPayload(
+    streamMsg,
+    streamText,
+    streamingMessages,
+    streamingToolResults,
+    streamingTools,
+    showThinking,
+  );
+  const hasLiveStreamContent = hasActiveStreamContent(
+    streamMsg,
+    streamText,
+    streamingMessages,
+    streamingTools,
+    showThinking,
+  );
   const shouldRenderStreaming = sending && hasAnyStreamContent;
 
   const isStillExecuting = useMemo(() => {
@@ -107,6 +147,8 @@ export function useChatDisplay(params: {
       streamMessage,
       streamText,
       streamingTools,
+      streamingMessages,
+      streamingToolResults,
       isConnecting: !pendingFinal && !hasAnyStreamContent && !isStillExecuting,
       isProcessing: pendingFinal && sending && !hasLiveStreamContent,
       isStillExecuting,
@@ -162,6 +204,8 @@ export function useChatDisplay(params: {
     showThinking,
     streamMsg,
     streamText,
+    streamingMessages,
+    streamingToolResults,
     streamingTools,
     isStillExecuting,
     lastUserMessageAt,

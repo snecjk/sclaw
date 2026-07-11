@@ -203,7 +203,9 @@ export function inferMimeTypeFromPath(pathOrUrl: string): string {
 /** Infer MIME type from artifact type hint and/or URL/path extension. */
 export function inferMimeTypeFromUrl(url: string, typeHint?: string | null): string {
   const hint = typeHint?.toLowerCase().trim();
-  if (hint === 'html' || hint === 'text/html') return 'text/html';
+  if (hint === 'html' || hint === 'text/html' || hint === 'html_report' || hint === 'html-report') {
+    return 'text/html';
+  }
   if (hint === 'pdf' || hint === 'application/pdf') return 'application/pdf';
   if (hint === 'json' || hint === 'application/json') return 'application/json';
   if (hint === 'markdown' || hint === 'text/markdown') return 'text/markdown';
@@ -236,8 +238,58 @@ export function isPreviewableRemoteUrl(url: string, _typeHint?: string | null): 
   return isStoCompanyUrl(url);
 }
 
+/** Query params that carry the real artifact path on proxy preview URLs (e.g. agentrun/artifact/preview). */
+const ARTIFACT_PATH_QUERY_KEYS = ['filePath', 'path', 'file', 'filename'] as const;
+
+const GENERIC_PREVIEW_PATH_SEGMENTS = new Set(['preview', 'download', 'file', 'artifact', 'output']);
+
+function basenameFromArtifactPreviewUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    for (const key of ARTIFACT_PATH_QUERY_KEYS) {
+      const value = parsed.searchParams.get(key)?.trim();
+      if (value) return previewBasename(value);
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+function mimeTypeDefaultExtension(mimeType?: string): string {
+  if (mimeType === 'text/html') return 'html';
+  if (mimeType === 'application/json') return 'json';
+  if (mimeType === 'text/markdown') return 'md';
+  if (mimeType === 'application/pdf') return 'pdf';
+  if (mimeType === 'text/csv') return 'csv';
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return 'xlsx';
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx';
+  return '';
+}
+
+function appendExtensionIfMissing(label: string, mimeType?: string): string {
+  if (!label || label.includes('.')) return label;
+  const ext = mimeTypeDefaultExtension(mimeType);
+  return ext ? `${label}.${ext}` : label;
+}
+
+function resolveArtifactPreviewFileName(
+  artifactName: string,
+  previewUrl: string,
+  mimeType: string,
+): string {
+  const name = artifactName?.trim() ?? '';
+  if (name && name !== 'preview' && !name.startsWith('http')) {
+    return appendExtensionIfMissing(name, mimeType);
+  }
+  return previewFileNameFromUrl(previewUrl, mimeType);
+}
+
 /** Display label for a http(s) URL used in markdown links / file cards. */
 export function previewHttpUrlLabel(url: string): string {
+  const fromQuery = basenameFromArtifactPreviewUrl(url);
+  if (fromQuery) return fromQuery;
+
   try {
     const parsed = new URL(url);
     const segment = parsed.pathname.split('/').filter(Boolean).pop();
@@ -251,8 +303,11 @@ export function previewHttpUrlLabel(url: string): string {
 export function previewFileNameFromUrl(url: string, mimeType?: string): string {
   const fromUrl = previewHttpUrlLabel(url);
   if (fromUrl && fromUrl !== url && fromUrl.includes('.')) return fromUrl;
-  if (mimeType === 'text/html') return `${fromUrl || 'page'}.html`;
-  if (mimeType === 'application/json') return `${fromUrl || 'data'}.json`;
+  if (fromUrl && !GENERIC_PREVIEW_PATH_SEGMENTS.has(fromUrl.toLowerCase())) {
+    return appendExtensionIfMissing(fromUrl, mimeType);
+  }
+  const ext = mimeTypeDefaultExtension(mimeType);
+  if (ext) return `${fromUrl || 'preview'}.${ext}`;
   return fromUrl || 'preview';
 }
 
@@ -327,9 +382,7 @@ export function artifactToPreviewFile(artifact: {
     previewUrl,
     artifact.name,
   );
-  const fileName = artifact.name && artifact.name !== 'preview' && !artifact.name.startsWith('http')
-    ? (artifact.name.includes('.') ? artifact.name : previewFileNameFromUrl(previewUrl, mimeType))
-    : previewFileNameFromUrl(previewUrl, mimeType);
+  const fileName = resolveArtifactPreviewFileName(artifact.name, previewUrl, mimeType);
 
   return {
     filePath: previewUrl,

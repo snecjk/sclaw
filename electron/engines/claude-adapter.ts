@@ -825,6 +825,12 @@ export async function consumeClaudeQuery(
       }
       if ((message.type === 'user' || message.type === 'assistant') && 'message' in message) {
         if (message.type === 'user' && shouldHideClaudeUserMessage(message, (message as { message?: unknown }).message)) {
+          // Hidden user messages carry tool_result blocks (e.g. the scheduled-task
+          // worker reads the dws send result here to set dingtalkAlreadySent). The
+          // `continue` below skips the tail onMessage call, so surface the message
+          // to observers first — otherwise the worker's dws-result detection is dead
+          // code and the workflow fallback re-sends dingtalk the agent already sent.
+          await onMessage?.(message);
           const workflowToolResult = extractWorkflowToolResult((message as { message?: unknown }).message);
           if (workflowToolResult) {
             const nextEntry = {
@@ -947,6 +953,8 @@ async function startClaudeQuery(
   options?: {
     additionalDirectories?: string[];
     eventSink?: ClaudeEventSink | null;
+    /** 本轮用户原文，用于口头钉钉发送等按需注入。 */
+    userPrompt?: string;
     systemPromptAppend?: string;
   },
 ): Promise<{ success: boolean; result?: { runId: string }; error?: string }> {
@@ -976,7 +984,7 @@ async function startClaudeQuery(
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();
     const pathToClaudeCodeExecutable = getBundledClaudeExecutablePath();
-    const runtimeOptions = await buildClaudeRuntimeOptions(sessionKey);
+    const runtimeOptions = await buildClaudeRuntimeOptions(sessionKey, options?.userPrompt);
     const pluginPaths = await listClaudeBridgePluginPaths();
     claudeRuntimeResults.delete(sessionKey);
     await sanitizeClaudeSettingsEnv();
@@ -1140,6 +1148,7 @@ export const claudeAdapter: EngineAdapter = {
   async sendMessage(ctx: EngineAdapterContext, params) {
     return startClaudeQuery(params.sessionKey, params.message, {
       eventSink: ctx.gatewayManager,
+      userPrompt: params.message,
       systemPromptAppend: params.systemPromptAppend,
     });
   },
@@ -1155,6 +1164,7 @@ export const claudeAdapter: EngineAdapter = {
     return startClaudeQuery(params.sessionKey, toClaudePromptStream(prompt), {
       additionalDirectories,
       eventSink: ctx.gatewayManager,
+      userPrompt: params.message,
       systemPromptAppend: params.systemPromptAppend,
     });
   },

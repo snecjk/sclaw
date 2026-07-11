@@ -14,6 +14,7 @@ export {
   findLastTextEventIndex,
   isLikelyDeliverableReply,
   isLikelyPlanningNarration,
+  isLikelyUserClarificationReply,
   shouldPromoteTextToFinalReply,
 } from '@/pages/Chat/thinking/classify-text';
 
