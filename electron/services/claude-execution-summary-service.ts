@@ -156,7 +156,7 @@ function extractAssistantText(message: Record<string, unknown>): string {
   return '';
 }
 
-function parseJsonObjectFromText(text: string): Record<string, unknown> {
+function parseJsonObjectFromText(text: string): ExecutionExperienceSummary {
   const trimmed = text.trim();
   if (!trimmed) {
     return { shouldStore: false, reason: 'empty_model_response' };
@@ -166,7 +166,7 @@ function parseJsonObjectFromText(text: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(candidate);
     return parsed && typeof parsed === 'object'
-      ? parsed as Record<string, unknown>
+      ? parsed as ExecutionExperienceSummary
       : { shouldStore: false, reason: 'model_response_not_object' };
   } catch {
     const start = candidate.indexOf('{');
@@ -175,7 +175,7 @@ function parseJsonObjectFromText(text: string): Record<string, unknown> {
       try {
         const parsed = JSON.parse(candidate.slice(start, end + 1));
         return parsed && typeof parsed === 'object'
-          ? parsed as Record<string, unknown>
+          ? parsed as ExecutionExperienceSummary
           : { shouldStore: false, reason: 'model_response_not_object' };
       } catch {
         // Fall through to structured failure below.
@@ -189,6 +189,42 @@ function parseJsonObjectFromText(text: string): Record<string, unknown> {
   };
 }
 
+export interface ExecutionExperiencePathItem {
+  /** 具体命令/工具调用串（如 sai-cli market customer-profit-loss search --params '{...}'）。 */
+  command?: string;
+  /** 使用/不使用的理由。 */
+  reason?: string;
+}
+
+/**
+ * 执行经验摘要的强类型契约，与 buildSummaryPrompt 要求模型输出的 JSON 对齐。
+ * 用于校验模型返回、并供 formatExecutionMemoryText 序列化为可检索/可注入的文本。
+ */
+export interface ExecutionExperienceSummary {
+  shouldStore?: boolean;
+  reason?: string;
+  /** 任务类型一句话描述（用于匹配与展示）。 */
+  intent?: string;
+  /** 适用条件：何时复用本经验。 */
+  applicableWhen?: string[];
+  /** 下次同类任务可直接执行的目标命令（1条或按顺序多条，含参数模板/占位符）。
+   *  注入后模型应优先直接执行，而非重走探索。 */
+  directCommand?: ExecutionExperiencePathItem[];
+  /** 探索过程（discover/help/技能触发等一次性摸索步骤）。
+   *  仅当 directCommand 失效或命令可能变更时才需要，已知目标时跳过。 */
+  discoveryPath?: ExecutionExperiencePathItem[];
+  /** 避坑路径：不推荐的命令 + 理由。 */
+  avoidPath?: ExecutionExperiencePathItem[];
+  /** 参数模式：字段名 → 如何从用户问题提取/取值规则。 */
+  parameterPattern?: Record<string, string>;
+  /** 必须遵守的约束（如不可复用历史数值、日期不可硬编码）。 */
+  constraints?: string[];
+  /** 置信度 0-1。 */
+  confidence?: number;
+  /** 解析失败时保留原始模型输出片段。 */
+  raw?: string;
+}
+
 function buildSummaryPrompt(input: Record<string, unknown>): string {
   return [
     '请分析下面这轮 Agent 执行记录，输出 JSON：',
@@ -198,18 +234,72 @@ function buildSummaryPrompt(input: Record<string, unknown>): string {
     'JSON 格式：',
     '{',
     '  "shouldStore": true,',
-    '  "intent": "类似任务类型",',
-    '  "taskSignature": "稳定的任务签名",',
-    '  "applicableWhen": ["适用条件"],',
-    '  "successfulPath": [{"toolName": "工具名", "reason": "为什么应该用"}],',
-    '  "avoidPath": [{"toolName": "工具名", "reason": "为什么不推荐"}],',
-    '  "parameterPattern": {"date": "从用户问题中提取日期"},',
-    '  "constraints": ["不要复用历史具体数值，必须重新查询"],',
+    '  "intent": "任务类型的一句话描述（用于匹配同类任务）",',
+    '  "applicableWhen": ["复用本经验的适用条件"],',
+    '  "directCommand": [{"command": "下次可直接执行的目标命令串（含参数占位符）", "reason": "为什么这是命中目标、可直接复用的命令"}],',
+    '  "discoveryPath": [{"command": "探索性命令（如 discover/help/技能触发）", "reason": "为什么需要这一步"}],',
+    '  "avoidPath": [{"command": "具体命令或工具", "reason": "为什么不推荐"}],',
+    '  "parameterPattern": {"字段名": "如何从用户问题提取/取值规则，可多字段"},',
+    '  "constraints": ["必须遵守的约束，如：已知目标命令时直接执行 directCommand、跳过 discoveryPath；不可复用历史具体数值必须重新查询；日期以系统当前为基准不可硬编码"],',
     '  "confidence": 0.7',
     '}',
     '',
+    '要求：',
+    '1. directCommand 是真正命中目标、下次同类任务可直接复用的命令（含参数模板/占位符），不要把 discover/help/技能触发这类探索性步骤放进来。',
+    '2. discoveryPath 放探索过程（discover/help/技能触发等），仅在不确定或命令变更时才需要；已知目标命令时应跳过。',
+    '3. directCommand/avoidPath 的 command 必须是具体命令串（含参数），不要只写工具类别名（如不要只写 Bash）。',
     '如果不值得沉淀，输出：{"shouldStore": false, "reason": "原因"}',
   ].join('\n');
+}
+
+/**
+ * 把摘要序列化为可被 mem0 检索/注入的执行经验文本。
+ * 核心可操作信息（命令、参数、避坑）前置，避免注入端截断时丢失。
+ */
+export function formatExecutionMemoryText(exp: ExecutionExperienceSummary): string {
+  const lines: string[] = [];
+  const intent = typeof exp.intent === 'string' ? exp.intent.trim() : '';
+  if (intent) lines.push(`执行经验：${intent}`);
+  // 顶部引导语：让模型下次优先直接执行目标命令，而非重走探索老路。
+  lines.push('已知目标命令时直接执行下方"直接执行"，探索路径仅在不确定/命令变更时使用。');
+
+  const pathLines = (items: ExecutionExperiencePathItem[] | undefined, header: string): void => {
+    const steps = (items ?? []).filter((s) => s && typeof s.command === 'string' && s.command.trim());
+    if (!steps.length) return;
+    lines.push(header);
+    for (const step of steps) {
+      const cmd = step.command!.trim();
+      const reason = typeof step.reason === 'string' ? step.reason.trim() : '';
+      lines.push(`  - ${cmd}${reason ? `（${reason}）` : ''}`);
+    }
+  };
+  // 目标命令最前最醒目：下次同类任务直接执行。
+  pathLines(exp.directCommand, '直接执行：');
+  // 参数模式紧随，便于直接执行时填参。
+  if (exp.parameterPattern && typeof exp.parameterPattern === 'object') {
+    const entries = Object.entries(exp.parameterPattern).filter(([, v]) => typeof v === 'string' && v.trim());
+    if (entries.length) {
+      lines.push('参数模式：');
+      for (const [k, v] of entries) lines.push(`  - ${k}：${(v as string).trim()}`);
+    }
+  }
+  pathLines(exp.avoidPath, '避免：');
+  // 探索过程次之，明确标注"仅不确定/命令变更时"，避免模型重走老路。
+  pathLines(exp.discoveryPath, '探索路径（仅不确定/命令变更时，否则跳过）：');
+
+  const when = (exp.applicableWhen ?? []).filter((c) => typeof c === 'string' && c.trim()) as string[];
+  if (when.length) lines.push(`适用：${when.map((c) => c.trim()).join('；')}`);
+
+  const constraints = (exp.constraints ?? []).filter((c) => typeof c === 'string' && c.trim()) as string[];
+  if (constraints.length) {
+    lines.push(`约束：${constraints.map((c) => c.trim()).join('；')}`);
+  } else {
+    // 模型未给约束时兜底，保留原有安全约束。
+    lines.push('约束：涉及数据、报表、状态时必须重新调用工具查询。');
+  }
+
+  if (lines.length === 0) lines.push('执行经验：可复用工具执行路径');
+  return lines.join('\n');
 }
 
 const SUMMARY_SYSTEM_PROMPT = [
@@ -222,7 +312,7 @@ const SUMMARY_SYSTEM_PROMPT = [
 ].join('\n');
 
 export class ClaudeExecutionSummaryService {
-  async summarize(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async summarize(input: Record<string, unknown>): Promise<ExecutionExperienceSummary> {
     const agentId = typeof input.agentId === 'string' && input.agentId.trim()
       ? input.agentId.trim()
       : 'main';
@@ -242,8 +332,13 @@ export class ClaudeExecutionSummaryService {
     });
 
     return await withClaudeConfigDirEnv(getClaudeConfigDir(), async () => {
+      const prompt = buildSummaryPrompt(input)
+      logger.debug('[execution-memory][claude] summarize prompt', {
+        queryId,
+        prompt,
+      });
       const query = sdk.query({
-        prompt: buildSummaryPrompt(input),
+        prompt: prompt,
         options: {
           cwd,
           env: await buildClaudeEnvForAccount(launch.accountId),
@@ -287,6 +382,11 @@ export class ClaudeExecutionSummaryService {
         logger.warn('[execution-memory][claude] summarize timeout', { queryId });
         return { shouldStore: false, reason: 'claude_summary_timeout' };
       }
+
+      logger.debug('[execution-memory][claude] summarize assistant text', {
+        queryId,
+        assistantText,
+      });
 
       const parsed = parseJsonObjectFromText(assistantText);
       logger.info('[execution-memory][claude] summarize done', {

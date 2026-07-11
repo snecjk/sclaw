@@ -2424,15 +2424,14 @@ export const useChatStore = create<ChatState>()(
 
     // Inject hidden workflow context / session hint for AI guidance
     const {
-      maybeAppendAgentMemoryContext,
-      maybeBuildAgentMemoryContextText,
+      appendAgentMemoryContextBlock,
       stripAgentMemoryContextForDisplay,
     } = await import('@/lib/agent-memory');
     const {
       appendAgentExecutionMemoryContext,
-      maybeBuildAgentExecutionMemoryContextText,
       stripAgentExecutionMemoryContextForDisplay,
     } = await import('@/lib/agent-execution-memory');
+    const { buildAgentMemoryContextBlocks } = await import('@/lib/agent-memory-context');
     const { appendWorkflowContext, stripWorkflowContextForDisplay } = await import('@/lib/workflow-context');
     const {
       buildWorkflowSessionHint,
@@ -2494,33 +2493,20 @@ export const useChatStore = create<ChatState>()(
       }
     }
 
-    const memoryLookupOptions = {
-      query: trimmed,
+    // 一次 mem0 检索同时取「偏好」+「执行经验」两类记忆，按 memoryScope 路由到各自 block，
+    // 替代原先偏好/执行各查一次的两次检索。统一跨 run（仅 agentId）：执行经验需跨 run 复用，
+    // 偏好随之也跨 run（由相关性排序取 top）。
+    const memoryBlocks = await buildAgentMemoryContextBlocks(trimmed, {
       agentId: targetAgentId ?? get().currentAgentId,
-      runId: _runId,
-    };
-    // Execution experience must be reusable across runs.  runId remains
-    // useful for ordinary conversational memory, but is deliberately not
-    // passed to this lookup because it would filter out historical runs.
-    const executionMemoryLookupOptions = {
-      agentId: targetAgentId ?? get().currentAgentId,
-    };
-    const claudeUserMemorySystemPrompt = currentSessionEngineType === 'claude'
-      ? await maybeBuildAgentMemoryContextText(textForGateway, memoryLookupOptions)
+    });
+    const claudeMemorySystemPrompt = currentSessionEngineType === 'claude'
+      ? [memoryBlocks.preference, memoryBlocks.execution]
+          .filter((context): context is string => Boolean(context))
+          .join('\n\n') || undefined
       : undefined;
-    const claudeExecutionMemorySystemPrompt = currentSessionEngineType === 'claude'
-      ? await maybeBuildAgentExecutionMemoryContextText(trimmed, executionMemoryLookupOptions)
-      : undefined;
-    const claudeMemorySystemPrompt = [claudeUserMemorySystemPrompt, claudeExecutionMemorySystemPrompt]
-      .filter((context): context is string => Boolean(context))
-      .join('\n\n') || undefined;
     if (currentSessionEngineType !== 'claude') {
-      textForGateway = await maybeAppendAgentMemoryContext(textForGateway, memoryLookupOptions);
-      const executionContext = await maybeBuildAgentExecutionMemoryContextText(
-        trimmed,
-        executionMemoryLookupOptions,
-      );
-      textForGateway = appendAgentExecutionMemoryContext(textForGateway, executionContext);
+      textForGateway = appendAgentMemoryContextBlock(textForGateway, memoryBlocks.preference);
+      textForGateway = appendAgentExecutionMemoryContext(textForGateway, memoryBlocks.execution);
     }
 
     const messageWithContext = appendWorkflowContext(textForGateway, workflowContext);

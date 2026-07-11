@@ -1,20 +1,11 @@
 import { invokeIpc } from '@/lib/api-client';
 
 const AGENT_MEMORY_CONTEXT_MARKER = '<!-- StoClaw-Agent-Memory -->';
-const MAX_MEMORY_ITEMS = 5;
-const MAX_MEMORY_TEXT_LENGTH = 240;
 
 type AgentMemoryBootstrap = {
   bootstrap?: {
     userId?: string;
   } | null;
-};
-
-type AgentMemorySearchResult = {
-  id?: string;
-  memory?: string;
-  score?: number;
-  metadata?: Record<string, unknown>;
 };
 
 type MemoryMessageLike = {
@@ -29,28 +20,14 @@ type RetrievedMemoryItem = {
   score?: number;
 };
 
-type AgentMemoryLookupOptions = {
-  query?: string;
-  agentId?: string | null;
-  runId?: string | null;
-  topK?: number;
-};
-
 let initializePromise: Promise<AgentMemoryBootstrap | null> | null = null;
 const capturedTurnKeys = new Set<string>();
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
-function truncateMemoryText(value: string, maxLength = MAX_MEMORY_TEXT_LENGTH): string {
-  const normalized = normalizeWhitespace(value);
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-  return `${normalized.slice(0, maxLength - 1).trimEnd()}...`;
-}
 
-function shouldRetrieveMemories(query: string): boolean {
+export function shouldRetrieveMemories(query: string): boolean {
   const normalized = normalizeWhitespace(query);
   if (!normalized) {
     return false;
@@ -59,33 +36,6 @@ function shouldRetrieveMemories(query: string): boolean {
     return true;
   }
   return /[\u4e00-\u9fff]{2,}/.test(normalized);
-}
-
-function normalizeMemorySearchResults(payload: unknown): RetrievedMemoryItem[] {
-  const results = Array.isArray((payload as { results?: unknown[] } | null)?.results)
-    ? (payload as { results: AgentMemorySearchResult[] }).results
-    : [];
-  const normalized: RetrievedMemoryItem[] = [];
-  for (const item of results) {
-      const rawMemory =
-        (typeof item.memory === 'string' && item.memory)
-        || (typeof item.metadata?.memory === 'string' && item.metadata.memory)
-        || (typeof item.metadata?.data === 'string' && item.metadata.data)
-        || '';
-      const memory = truncateMemoryText(rawMemory);
-      if (!memory) {
-        continue;
-      }
-      normalized.push({
-        id: item.id,
-        memory,
-        score: typeof item.score === 'number' ? item.score : undefined,
-      });
-      if (normalized.length >= MAX_MEMORY_ITEMS) {
-        break;
-      }
-  }
-  return normalized;
 }
 
 async function ensureAgentMemoryInitialized(): Promise<AgentMemoryBootstrap | null> {
@@ -144,57 +94,12 @@ export function buildAgentMemoryContextText(items: RetrievedMemoryItem[]): strin
   ].join('\n');
 }
 
-export function appendAgentMemoryContext(text: string, items: RetrievedMemoryItem[]): string {
-  if (items.length === 0 || messageHasAgentMemoryContext(text)) {
+/** 追加已构建好的偏好记忆 block 字符串（与 appendAgentExecutionMemoryContext 对齐，供合并检索复用）。 */
+export function appendAgentMemoryContextBlock(text: string, block: string | undefined): string {
+  if (!block || messageHasAgentMemoryContext(text)) {
     return text;
   }
-  return `${text}\n\n${buildAgentMemoryContextText(items)}`;
-}
-
-async function lookupAgentMemories(
-  text: string,
-  options?: AgentMemoryLookupOptions,
-): Promise<RetrievedMemoryItem[]> {
-  const query = normalizeWhitespace(options?.query || text);
-  if (!shouldRetrieveMemories(query)) {
-    return [];
-  }
-
-  try {
-    const userId = await resolveAgentMemoryUserId();
-    const payload = await invokeIpc<{ results?: AgentMemorySearchResult[] }>(
-      'agent-memory:mem0-search',
-      query,
-      {
-        userId,
-        agentId: options?.agentId ?? undefined,
-        runId: options?.runId ?? undefined,
-        topK: options?.topK ?? MAX_MEMORY_ITEMS,
-      },
-    );
-    return normalizeMemorySearchResults(payload);
-  } catch (error) {
-    console.warn('[agent-memory] retrieval failed:', error);
-    return [];
-  }
-}
-export async function maybeBuildAgentMemoryContextText(
-  text: string,
-  options?: AgentMemoryLookupOptions,
-): Promise<string | undefined> {
-  const memories = await lookupAgentMemories(text, options);
-  if (memories.length === 0) {
-    return undefined;
-  }
-  return buildAgentMemoryContextText(memories);
-}
-
-export async function maybeAppendAgentMemoryContext(
-  text: string,
-  options?: AgentMemoryLookupOptions,
-): Promise<string> {
-  const memories = await lookupAgentMemories(text, options);
-  return appendAgentMemoryContext(text, memories);
+  return `${text}\n\n${block}`;
 }
 
 export function coerceMemoryMessageText(content: unknown): string {

@@ -242,13 +242,18 @@ class StoMemoryCenterVectorStoreProvider implements VectorStore {
     logger.info('[mem0][vector] insert start', {
       count: ids.length,
       vectorDimension: vectors[0]?.length ?? 0,
+      memoryScopes: payloads.map((p) => p?.memoryScope).filter(Boolean),
     });
     const records = ids.map((id, index) => ({
       recordId: id,
       collectionName: this.collectionName,
       vector: vectors[index] || [],
       content: String(payloads[index]?.data ?? ''),
-      memoryType: String(payloads[index]?.memory_type ?? 'memory'),
+      // mem0 SDK 不设 memory_type（payloads 里无该字段），默认 'memory'。
+      // 用 metadata.memoryScope 把记忆类型显式标到可服务端检索的 memory_type 字段：
+      //   memoryScope='execution' → 'execution'，'preference' → 'preference'，无则 'memory'。
+      // 使 memoryTypes 过滤可区分"执行经验/普通偏好"两类，不必 fetch 全部再后过滤。
+      memoryType: payloads[index]?.memoryScope ? String(payloads[index].memoryScope) : String(payloads[index]?.memory_type ?? 'memory'),
       agentId: typeof payloads[index]?.agent_id === 'string' ? payloads[index].agent_id : undefined,
       runId: typeof payloads[index]?.run_id === 'string' ? payloads[index].run_id : undefined,
       source: 'mem0',

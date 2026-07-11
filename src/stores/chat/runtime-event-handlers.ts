@@ -1,3 +1,16 @@
+// =============================================================================
+// ⚠️ DEAD CODE — handleRuntimeEventState 当前未被 live store 调用，请勿在此继续开发。
+// =============================================================================
+// 本文件属于「并行重构版」chat store 链路（root: ./internal.ts），该链路从未接入
+// live useChatStore（见 src/stores/chat.ts 内联 store）。因此 handleRuntimeEventState
+// 及其内部逻辑运行时不会执行。
+//
+// 执行记忆沉淀（refreshAgentExecutionHistory）的 live 派发点已改到：
+//   - chat.ts → finalizeOpenClawRunAfterAgentCompleted（openclaw + claude 的 agent.completed）
+//   - chat.ts → loadHistory 内 Claude history-poll 兜底完成分支
+// 如需调整执行记忆沉淀逻辑，请改上述 live 路径，不要改本文件。
+// =============================================================================
+
 import {
   clearErrorRecoveryTimer,
   clearHistoryPoll,
@@ -19,7 +32,9 @@ import { resolveAssistantFinalTerminalState } from './run-completion';
 import type { AttachedFileMeta, RawMessage } from './types';
 import type { ChatGet, ChatSet } from './store-api';
 import { dedupeRedundantUserMessages } from './user-message-merge';
-import { refreshAgentExecutionHistory } from '@/lib/agent-execution-memory';
+// 死代码：本链路未接入 live store，refreshAgentExecutionHistory 的派发已迁移到
+// chat.ts 的 finalizeOpenClawRunAfterAgentCompleted 与 history-poll 兜底分支。
+// import { refreshAgentExecutionHistory } from '@/lib/agent-execution-memory';
 
 const STREAMING_MESSAGE_BUFFER_LIMIT = 80;
 
@@ -227,24 +242,29 @@ export function handleRuntimeEventState(
             // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
             if (isTerminalOutput && !toolOnly) {
               clearHistoryPoll();
-              const sessionKey = get().currentSessionKey;
-              refreshAgentExecutionHistory({
-                agentId: get().currentAgentId,
-                runId: runId || undefined,
-                sessionKey,
-                engineType: get().sessions.find((session) => session.key === sessionKey)?.engineType,
-              });
+              // 死代码：refresh 已注释，sessionKey 仅被其使用，一并注释避免未用变量。
+              // const sessionKey = get().currentSessionKey;
+              // 死代码：执行记忆沉淀派发已迁移至 chat.ts 的
+              // finalizeOpenClawRunAfterAgentCompleted / history-poll 兜底分支。
+              // refreshAgentExecutionHistory({
+              //   agentId: get().currentAgentId,
+              //   runId: runId || undefined,
+              //   sessionKey,
+              //   engineType: get().sessions.find((session) => session.key === sessionKey)?.engineType,
+              // });
               void get().loadHistory(true);
             }
           } else {
             // No message in final event - reload history to get complete data
             set({ streamingText: '', streamingMessage: null, pendingFinal: true });
-            refreshAgentExecutionHistory({
-              agentId: get().currentAgentId,
-              runId: runId || undefined,
-              sessionKey: get().currentSessionKey,
-              engineType: get().sessions.find((session) => session.key === get().currentSessionKey)?.engineType,
-            });
+            // 死代码：执行记忆沉淀派发已迁移至 chat.ts 的
+            // finalizeOpenClawRunAfterAgentCompleted / history-poll 兜底分支。
+            // refreshAgentExecutionHistory({
+            //   agentId: get().currentAgentId,
+            //   runId: runId || undefined,
+            //   sessionKey: get().currentSessionKey,
+            //   engineType: get().sessions.find((session) => session.key === get().currentSessionKey)?.engineType,
+            // });
             get().loadHistory();
           }
           break;

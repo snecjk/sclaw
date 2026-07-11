@@ -6,7 +6,7 @@ import { mem0Service } from './mem0-service';
 import { stoMemoryCenterEmbedder } from './sto-memory-center-embedder';
 import { stoMemoryCenterLlm } from './sto-memory-center-llm';
 import { stoMemoryCenterVectorStore } from './sto-memory-center-vector-store';
-import { claudeExecutionSummaryService } from './claude-execution-summary-service';
+import { claudeExecutionSummaryService, type ExecutionExperienceSummary } from './claude-execution-summary-service';
 
 export interface AgentMemoryIndexDraft {
   recordId: string;
@@ -162,7 +162,7 @@ export class AgentMemoryOrchestrator {
     return await stoMemoryCenterLlm.createChatCompletion(payload);
   }
 
-  async summarizeExecutionExperience(input: Record<string, unknown>) {
+  async summarizeExecutionExperience(input: Record<string, unknown>): Promise<ExecutionExperienceSummary> {
     return await claudeExecutionSummaryService.summarize(input);
   }
 }
