@@ -18,6 +18,7 @@ import {
   ArtifactProductCard,
   buildArtifactMetaLine,
 } from '@/components/chat/artifact-product-card';
+import { buildArtifactCardMenuItems } from '@/lib/artifact-card-menu';
 import { getExecutionByRunId } from '@/stores/workflow-memory';
 import { hydrateWorkflowRun } from '@/lib/workflow-run-hydration';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
@@ -299,7 +300,8 @@ export function WorkflowCard({
             mimeType: primaryArtifact.type || 'application/octet-stream',
             t,
           })}
-          actionLabel={shouldShowPreviewAction ? t('workflow.viewArtifact') : t('workflow.openArtifactLink')}
+          actionLabel={shouldShowPreviewAction ? t('artifact.preview') : t('workflow.openArtifactLink')}
+          menuItems={buildArtifactCardMenuItems(artifactToPreviewFile(primaryArtifact), t)}
           onAction={() => {
             if (canOpenArtifactPreview) {
               onPreviewArtifact!(artifactToPreviewFile(previewableArtifact!));

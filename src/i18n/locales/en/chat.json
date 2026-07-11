@@ -123,6 +123,12 @@
     "messageActions": {
         "copy": "Copy",
         "copyFailed": "Copy failed",
+        "copySplitHint": "Copy text or files separately",
+        "copyText": "Copy text",
+        "copyTextSuccess": "Text copied",
+        "copyFiles": "Copy files ({{count}})",
+        "copyFilesSuccess": "Files copied ({{count}})",
+        "copyFilesFailed": "Failed to copy files",
         "share": "Share to DingTalk",
         "editAndResend": "Edit and send again",
         "editUnavailable": "Edit and resend is not available on this page"
@@ -178,7 +184,14 @@
         "typeImage": "Image",
         "typeArchive": "Archive",
         "typeMedia": "Media",
-        "typeFile": "File"
+        "typeFile": "File",
+        "preview": "Preview",
+        "openFileLocation": "Show in folder",
+        "copyFile": "Copy file",
+        "copyLink": "Copy link",
+        "copyLinkSuccess": "Link copied",
+        "moreActions": "More actions",
+        "actionFailed": "Action failed"
     },
     "preview": {
         "collapsePanel": "Collapse preview",
