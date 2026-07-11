@@ -83,6 +83,7 @@ import {
   type AppRequest,
   type AppResponse,
 } from './ipc/request-helpers';
+import { GatewayManager } from '@electron/gateway/manager';
 
 /**
  * Register all IPC handlers
@@ -100,7 +101,7 @@ export function registerIpcHandlers(
 
   // Host API proxy handlers
   registerHostApiProxyHandlers();
-  registerAgentMemoryHandlers();
+  registerAgentMemoryHandlers(gatewayManager);
   registerPreviewHttpFetchHandlers();
   registerWorkflowStreamHandlers();
 

@@ -42,7 +42,6 @@ const capturedTurnKeys = new Set<string>();
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
-
 function truncateMemoryText(value: string, maxLength = MAX_MEMORY_TEXT_LENGTH): string {
   const normalized = normalizeWhitespace(value);
   if (normalized.length <= maxLength) {
@@ -101,7 +100,7 @@ async function ensureAgentMemoryInitialized(): Promise<AgentMemoryBootstrap | nu
   return await initializePromise;
 }
 
-async function resolveAgentMemoryUserId(): Promise<string | undefined> {
+export async function resolveAgentMemoryUserId(): Promise<string | undefined> {
   const initialized = await ensureAgentMemoryInitialized();
   const userId = initialized?.bootstrap?.userId;
   return typeof userId === 'string' && userId.trim() ? userId.trim() : undefined;
@@ -119,7 +118,10 @@ export function stripAgentMemoryContextForDisplay(message: string): string {
   const startIdx = message.indexOf(AGENT_MEMORY_CONTEXT_MARKER);
   const endIdx = message.lastIndexOf(AGENT_MEMORY_CONTEXT_MARKER);
   if (startIdx >= 0 && endIdx > startIdx) {
-    return message.slice(endIdx + AGENT_MEMORY_CONTEXT_MARKER.length).trim();
+    return [
+      message.slice(0, startIdx).trim(),
+      message.slice(endIdx + AGENT_MEMORY_CONTEXT_MARKER.length).trim(),
+    ].filter(Boolean).join('\n\n');
   }
   return message.slice(0, startIdx).trim();
 }
@@ -176,7 +178,6 @@ async function lookupAgentMemories(
     return [];
   }
 }
-
 export async function maybeBuildAgentMemoryContextText(
   text: string,
   options?: AgentMemoryLookupOptions,
@@ -280,72 +281,27 @@ export async function captureAgentMemoryTurn(input: {
   capturedTurnKeys.add(captureKey);
 
   try {
-    const userId = await resolveAgentMemoryUserId();
+    console.info('[memory-capture] conversation.dispatch', {
+      kind: 'conversation_memory',
+      runId: input.runId ?? null,
+      sessionKey: input.sessionKey ?? null,
+      agentId: input.agentId ?? null,
+      userLength: userMessage.length,
+      assistantLength: assistantMessage.length,
+    });
     await invokeIpc(
-      'agent-memory:add',
-      [
-        { role: 'user', content: userMessage },
-        { role: 'assistant', content: assistantMessage },
-      ],
+      'agent-memory:capture-conversation',
       {
-        userId,
+        userMessage,
+        assistantMessage,
         agentId: input.agentId ?? undefined,
         runId: input.runId ?? undefined,
-        infer: true,
-        metadata: {
-          source: 'sto-claw-chat',
-          sessionKey: input.sessionKey ?? undefined,
-        },
+        sessionKey: input.sessionKey ?? undefined,
       },
     );
   } catch (error) {
     capturedTurnKeys.delete(captureKey);
-    console.warn('[agent-memory] capture failed:', error);
+    console.warn('[memory-capture] conversation.dispatch_failed', { runId: input.runId ?? null, sessionKey: input.sessionKey ?? null, error: String(error) });
   }
 }
 
-export async function captureAgentMemoryFromMessages(
-  messages: MemoryMessageLike[],
-  input?: {
-    agentId?: string | null;
-    runId?: string | null;
-    sessionKey?: string | null;
-  },
-): Promise<void> {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const assistant = messages[index];
-    if (assistant.role !== 'assistant') {
-      continue;
-    }
-    const assistantMessage = coerceMemoryMessageText(assistant.content);
-    if (!assistantMessage) {
-      continue;
-    }
-    const userMessage = assistant.id
-      ? findLatestUserMessageBeforeAssistant(messages, assistant.id)
-      : (() => {
-          for (let userIndex = index - 1; userIndex >= 0; userIndex -= 1) {
-            const candidate = messages[userIndex];
-            if (candidate.role !== 'user') {
-              continue;
-            }
-            const text = coerceMemoryMessageText(candidate.content);
-            if (text) {
-              return text;
-            }
-          }
-          return '';
-        })();
-    if (!userMessage) {
-      continue;
-    }
-    await captureAgentMemoryTurn({
-      userMessage,
-      assistantMessage,
-      agentId: input?.agentId,
-      runId: input?.runId,
-      sessionKey: input?.sessionKey,
-    });
-    return;
-  }
-}

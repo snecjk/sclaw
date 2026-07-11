@@ -19,6 +19,7 @@ import {
 import type { AttachedFileMeta, RawMessage } from './types';
 import type { ChatGet, ChatSet } from './store-api';
 import { dedupeRedundantUserMessages } from './user-message-merge';
+import { refreshAgentExecutionHistory } from '@/lib/agent-execution-memory';
 
 export function handleRuntimeEventState(
   set: ChatSet,
@@ -195,11 +196,24 @@ export function handleRuntimeEventState(
             // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
             if (hasOutput && !toolOnly) {
               clearHistoryPoll();
+              const sessionKey = get().currentSessionKey;
+              refreshAgentExecutionHistory({
+                agentId: get().currentAgentId,
+                runId: runId || undefined,
+                sessionKey,
+                engineType: get().sessions.find((session) => session.key === sessionKey)?.engineType,
+              });
               void get().loadHistory(true);
             }
           } else {
             // No message in final event - reload history to get complete data
             set({ streamingText: '', streamingMessage: null, pendingFinal: true });
+            refreshAgentExecutionHistory({
+              agentId: get().currentAgentId,
+              runId: runId || undefined,
+              sessionKey: get().currentSessionKey,
+              engineType: get().sessions.find((session) => session.key === get().currentSessionKey)?.engineType,
+            });
             get().loadHistory();
           }
           break;

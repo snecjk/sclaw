@@ -1,9 +1,12 @@
 import type { IpcMainInvokeEvent } from 'electron';
 import { ipcMain } from 'electron';
+import type { GatewayManager } from '../../gateway/manager';
 
 import { agentMemoryOrchestrator } from '../../services/agent-memory-orchestrator';
+import { memoryCaptureService, type ConversationMemoryInput, type MemoryHistoryRefreshInput } from '../../services/memory-capture-service';
 
-export function registerAgentMemoryHandlers(): void {
+export function registerAgentMemoryHandlers(gatewayManager: GatewayManager): void {
+  void memoryCaptureService.recover(gatewayManager).catch(() => undefined);
   ipcMain.handle('agent-memory:initialize', async () => {
     return await agentMemoryOrchestrator.initialize();
   });
@@ -94,4 +97,29 @@ export function registerAgentMemoryHandlers(): void {
   ipcMain.handle('agent-memory:mem0-reset', async () => {
     return await agentMemoryOrchestrator.resetMemories();
   });
+
+  ipcMain.handle(
+    'agent-memory:summarize-execution-experience',
+    async (_event: IpcMainInvokeEvent, input: Record<string, unknown>) => {
+      return await agentMemoryOrchestrator.summarizeExecutionExperience(
+        input && typeof input === 'object' ? input : {},
+      );
+    },
+  );
+
+  ipcMain.handle(
+    'agent-memory:capture-conversation',
+    async (_event: IpcMainInvokeEvent, input: ConversationMemoryInput) => {
+      await memoryCaptureService.enqueueConversation(input);
+      return { accepted: true };
+    },
+  );
+
+  ipcMain.handle(
+    'execution-memory:refresh-history',
+    async (_event: IpcMainInvokeEvent, input: MemoryHistoryRefreshInput) => {
+      void memoryCaptureService.refreshExecutionHistory(input, gatewayManager).catch(() => undefined);
+      return { accepted: true };
+    },
+  );
 }

@@ -109,6 +109,9 @@ import {
   resolveAssistantFinalTerminalState,
   shouldAutoCompleteClaudeFromHistory,
 } from './chat/run-completion';
+import {
+  refreshAgentExecutionHistory,
+} from '@/lib/agent-execution-memory';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 
@@ -1259,15 +1262,6 @@ function finalizeMessagesFromHistoryLoad(
   patched = ensureWorkflowCardsInMessages(patched, sessionKey, getMessageText);
   if (patched !== get().messages) set({ messages: patched });
   ensureWorkflowParameterFormInjected(getMessageText);
-  const finalMessages = patched !== get().messages ? patched : get().messages;
-  void (async () => {
-    const { captureAgentMemoryFromMessages } = await import('@/lib/agent-memory');
-    await captureAgentMemoryFromMessages(finalMessages, {
-      agentId: options?.agentId ?? get().currentAgentId,
-      runId: options?.runId,
-      sessionKey,
-    });
-  })();
 }
 
 function touchLastChatEventAt(
@@ -2467,6 +2461,11 @@ export const useChatStore = create<ChatState>()(
       maybeBuildAgentMemoryContextText,
       stripAgentMemoryContextForDisplay,
     } = await import('@/lib/agent-memory');
+    const {
+      appendAgentExecutionMemoryContext,
+      maybeBuildAgentExecutionMemoryContextText,
+      stripAgentExecutionMemoryContextForDisplay,
+    } = await import('@/lib/agent-execution-memory');
     const { appendWorkflowContext, stripWorkflowContextForDisplay } = await import('@/lib/workflow-context');
     const {
       buildWorkflowSessionHint,
@@ -2533,17 +2532,36 @@ export const useChatStore = create<ChatState>()(
       agentId: targetAgentId ?? get().currentAgentId,
       runId: _runId,
     };
-    const claudeMemorySystemPrompt = currentSessionEngineType === 'claude'
+    // Execution experience must be reusable across runs.  runId remains
+    // useful for ordinary conversational memory, but is deliberately not
+    // passed to this lookup because it would filter out historical runs.
+    const executionMemoryLookupOptions = {
+      agentId: targetAgentId ?? get().currentAgentId,
+    };
+    const claudeUserMemorySystemPrompt = currentSessionEngineType === 'claude'
       ? await maybeBuildAgentMemoryContextText(textForGateway, memoryLookupOptions)
       : undefined;
+    const claudeExecutionMemorySystemPrompt = currentSessionEngineType === 'claude'
+      ? await maybeBuildAgentExecutionMemoryContextText(trimmed, executionMemoryLookupOptions)
+      : undefined;
+    const claudeMemorySystemPrompt = [claudeUserMemorySystemPrompt, claudeExecutionMemorySystemPrompt]
+      .filter((context): context is string => Boolean(context))
+      .join('\n\n') || undefined;
     if (currentSessionEngineType !== 'claude') {
       textForGateway = await maybeAppendAgentMemoryContext(textForGateway, memoryLookupOptions);
+      const executionContext = await maybeBuildAgentExecutionMemoryContextText(
+        trimmed,
+        executionMemoryLookupOptions,
+      );
+      textForGateway = appendAgentExecutionMemoryContext(textForGateway, executionContext);
     }
 
     const messageWithContext = appendWorkflowContext(textForGateway, workflowContext);
     const displayText = stripWorkflowSessionHintForDisplay(
       stripAgentMemoryContextForDisplay(
-        stripWorkflowContextForDisplay(messageWithContext),
+        stripAgentExecutionMemoryContextForDisplay(
+          stripWorkflowContextForDisplay(messageWithContext),
+        ),
       ),
     );
 
@@ -3109,11 +3127,18 @@ export const useChatStore = create<ChatState>()(
               optimisticUserMessage: null,
             }));
             clearHistoryPoll();
+            const sessionKey = get().currentSessionKey;
+            refreshAgentExecutionHistory({
+              agentId: get().currentAgentId,
+              runId: runId || undefined,
+              sessionKey,
+              engineType: currentEngineType,
+            });
             void get().loadHistory(true, true).then(() => {
               finalizeMessagesFromHistoryLoad(get, set, {
                 agentId: get().currentAgentId,
                 runId: runId || undefined,
-                sessionKey: get().currentSessionKey,
+                sessionKey,
               });
             });
             break;
@@ -3249,17 +3274,34 @@ export const useChatStore = create<ChatState>()(
           // tool-use turns (thinking + tool blocks) from the Gateway's authoritative record.
             if (isTerminalOutput && !toolOnly) {
               clearHistoryPoll();
+              const sessionKey = get().currentSessionKey;
+              refreshAgentExecutionHistory({
+                agentId: get().currentAgentId,
+                runId: runId || undefined,
+                sessionKey,
+                engineType: currentEngineType,
+              });
               void get().loadHistory(true, true).then(() => {
                 finalizeMessagesFromHistoryLoad(get, set, {
                   agentId: get().currentAgentId,
                   runId: runId || undefined,
-                  sessionKey: get().currentSessionKey,
+                  sessionKey,
                 });
               });
             }
         } else {
           // No message in final event - reload history to get complete data
           set({ streamingText: '', streamingMessage: null, pendingFinal: true });
+          refreshAgentExecutionHistory({
+            agentId: get().currentAgentId,
+            runId: runId || undefined,
+            sessionKey: get().currentSessionKey,
+            engineType: resolveEngineTypeForSession(
+              get().sessions,
+              get().currentSessionKey,
+              get().currentAgentId,
+            ),
+          });
           get().loadHistory();
         }
         break;
