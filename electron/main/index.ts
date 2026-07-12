@@ -44,7 +44,7 @@ import { createSignalQuitHandler } from './signal-quit';
 import { acquireProcessInstanceFileLock } from './process-instance-lock';
 import { getSetting } from '../utils/store';
 import { getCurrentEnvConfig } from '../../shared/env-config';
-import { log } from 'node:console';
+import { getSqliteDatabaseInfo, initializeSqliteDatabase } from '../db';
 
 _ts('static imports loaded');
 
@@ -398,6 +398,12 @@ async function createMainWindow(): Promise<BrowserWindow> {
  */
 async function initialize(): Promise<void> {
   _ts('initialize() start');
+
+  initializeSqliteDatabase();
+  const sqliteInfo = getSqliteDatabaseInfo();
+  console.info(
+    `[sqlite] initialized file=${sqliteInfo.filePath} journal=${sqliteInfo.journalMode} foreignKeys=${sqliteInfo.foreignKeysEnabled}`,
+  );
 
   // Create the main window as early as possible.
   // Window shows immediately with dark background (see createWindow).
