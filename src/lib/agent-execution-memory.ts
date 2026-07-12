@@ -6,7 +6,9 @@ const MARKER = '<!-- StoClaw-Agent-Execution-Memory -->';
 
 type Item = ExecutionMemoryItem;
 export type InjectedExecutionMemory = { memoryId: string; memory: string };
-const pendingInjectedMemoriesBySession = new Map<string, InjectedExecutionMemory[]>();
+const PENDING_MEMORY_TTL_MS = 20 * 60 * 1000;
+const PENDING_MEMORY_MAX_ENTRIES = 100;
+const pendingInjectedMemoriesBySession = new Map<string, { memories: InjectedExecutionMemory[]; createdAt: number }>();
 function log(level: 'info' | 'warn', message: string, data?: Record<string, unknown>): void {
   console[level](message, data);
   void hostApiFetch('/api/logs/client', { method: 'POST', body: JSON.stringify({ level, message, data }) }).catch(() => undefined);
@@ -16,7 +18,8 @@ function log(level: 'info' | 'warn', message: string, data?: Record<string, unkn
 export function rememberInjectedExecutionMemories(sessionKey: string | null | undefined, memories: InjectedExecutionMemory[]): void {
   const key = sessionKey?.trim();
   if (!key) return;
-  pendingInjectedMemoriesBySession.set(key, memories);
+  prunePendingInjectedMemories();
+  pendingInjectedMemoriesBySession.set(key, { memories, createdAt: Date.now() });
   log('info', '[memory-capture] execution.context_recorded', { sessionKey: key, memoryIds: memories.map((item) => item.memoryId), count: memories.length });
 }
 
@@ -24,12 +27,25 @@ export function refreshAgentExecutionHistory(input: { agentId?: string | null; r
   const runId = input.runId?.trim();
   const sessionKey = input.sessionKey?.trim();
   if (!runId || !sessionKey) { log('warn', '[memory-capture] execution.dispatch_skipped', { reason: 'missing_run_or_session', runId: input.runId ?? null, sessionKey: input.sessionKey ?? null }); return; }
-  const injected = pendingInjectedMemoriesBySession.get(sessionKey) ?? [];
+  prunePendingInjectedMemories();
+  const injected = pendingInjectedMemoriesBySession.get(sessionKey)?.memories ?? [];
   pendingInjectedMemoriesBySession.delete(sessionKey);
   log('info', '[memory-capture] execution.dispatch', { kind: 'execution_experience', runId, sessionKey, agentId: input.agentId ?? null, engineType: input.engineType ?? null, injectedMemoryIds: injected.map((item) => item.memoryId) });
   void invokeIpc('execution-memory:bind-injected-memories', { runId, sessionKey, agentId: input.agentId?.trim() || undefined, memories: injected })
     .then(() => invokeIpc('execution-memory:refresh-history', { runId, sessionKey, agentId: input.agentId?.trim() || undefined, engineType: input.engineType?.trim() || undefined }))
     .catch((error) => log('warn', '[memory-capture] execution.dispatch_failed', { runId, sessionKey, error: String(error) }));
+}
+
+function prunePendingInjectedMemories(): void {
+  const cutoff = Date.now() - PENDING_MEMORY_TTL_MS;
+  for (const [sessionKey, binding] of pendingInjectedMemoriesBySession) {
+    if (binding.createdAt < cutoff) pendingInjectedMemoriesBySession.delete(sessionKey);
+  }
+  while (pendingInjectedMemoriesBySession.size >= PENDING_MEMORY_MAX_ENTRIES) {
+    const oldest = pendingInjectedMemoriesBySession.keys().next().value;
+    if (!oldest) break;
+    pendingInjectedMemoriesBySession.delete(oldest);
+  }
 }
 
 export function buildAgentExecutionMemoryContextText(items: Item[]): string {

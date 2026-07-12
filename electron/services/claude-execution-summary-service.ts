@@ -238,6 +238,7 @@ export interface ExecutionExperienceCandidateAssessment {
 }
 
 function buildSummaryPrompt(input: Record<string, unknown>): string {
+  const hasInjectedExperiences = Array.isArray(input.injectedExperiences) && input.injectedExperiences.length > 0;
   return [
     '请分析下面这轮 Agent 执行记录，输出 JSON：',
     '',
@@ -254,16 +255,37 @@ function buildSummaryPrompt(input: Record<string, unknown>): string {
     '  "parameterPattern": {"字段名": "如何从用户问题提取/取值规则，可多字段"},',
     '  "constraints": ["必须遵守的约束，如：已知目标命令时直接执行 directCommand、跳过 discoveryPath；不可复用历史具体数值必须重新查询；日期以系统当前为基准不可硬编码"],',
     '  "confidence": 0.7',
-    '  "candidateAssessments": [{"memoryId": "仅从输入 injectedExperiences 复制", "decision": "supersedes|still_valid|irrelevant_to_run|uncertain", "sameIntent": true, "oldPathAttempted": true, "oldPathFailed": true, "newPathSucceeded": true, "reason": "基于工具调用结果的简短依据"}]',
+    ...(hasInjectedExperiences ? ['  "candidateAssessments": [{"memoryId": "仅从输入 injectedExperiences 复制", "decision": "supersedes|still_valid|irrelevant_to_run|uncertain", "sameIntent": true, "oldPathAttempted": true, "oldPathFailed": true, "newPathSucceeded": true, "reason": "基于工具调用结果的简短依据"}]'] : []),
     '}',
     '',
     '要求：',
     '1. directCommand 是真正命中目标、下次同类任务可直接复用的命令（含参数模板/占位符），不要把 discover/help/技能触发这类探索性步骤放进来。',
     '2. discoveryPath 放探索过程（discover/help/技能触发等），仅在不确定或命令变更时才需要；已知目标命令时应跳过。',
     '3. directCommand/avoidPath 的 command 必须是具体命令串（含参数），不要只写工具类别名（如不要只写 Bash）。',
-    '4. injectedExperiences 是本轮实际注入给模型的旧经验。只有旧路径已在本轮实际尝试且失败、并且新路径已成功完成同一目标时，才可输出 decision=supersedes。未使用或与本轮无关时必须输出 irrelevant_to_run 或 uncertain，绝不能输出 supersedes。没有工具证据时输出 uncertain。',
+    ...(hasInjectedExperiences ? ['4. injectedExperiences 是本轮实际注入给模型的旧经验。只有旧路径已在本轮实际尝试且失败、并且新路径已成功完成同一目标时，才可输出 decision=supersedes。未使用或与本轮无关时必须输出 irrelevant_to_run 或 uncertain，绝不能输出 supersedes。没有工具证据时输出 uncertain。'] : []),
     '如果不值得沉淀，输出：{"shouldStore": false, "reason": "原因"}',
   ].join('\n');
+}
+
+/**
+ * 从本模块 formatExecutionMemoryText 生成的文本中读取「直接执行」命令。
+ * 解析与格式化放在同一模块，避免 memory-capture 与文本格式形成隐式跨文件契约。
+ */
+export function extractDirectExecutionCommands(memoryText: string): string[] {
+  const lines = memoryText.split(/\r?\n/);
+  const commands: string[] = [];
+  let inDirectSection = false;
+  for (const line of lines) {
+    if (line.trim() === '直接执行：') { inDirectSection = true; continue; }
+    if (!inDirectSection) continue;
+    if (/^(参数模式|避免|探索路径（仅不确定\/命令变更时，否则跳过）|适用|约束)：/.test(line.trim())) break;
+    const match = line.match(/^\s*-\s+(.+)$/);
+    if (!match) continue;
+    const command = match[1].split('（')[0].trim();
+    // 只有“程序 + 子命令”才足以认定为一条可替代路径；单独的 sai-cli/Bash 过于宽泛。
+    if (command.split(/\s+/).filter(Boolean).length >= 2) commands.push(command);
+  }
+  return commands;
 }
 
 /**

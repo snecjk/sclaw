@@ -6,7 +6,7 @@ import { logger } from '../utils/logger';
 import { getAdapterForSession } from '../engines/manager';
 import type { AgentEngineType } from '../engines/types';
 import { parseExecutionTurnFromHistory } from '../engines/execution-snapshot';
-import { formatExecutionMemoryText } from './claude-execution-summary-service';
+import { extractDirectExecutionCommands, formatExecutionMemoryText, type ExecutionExperienceCandidateAssessment, type ExecutionExperienceSummary } from './claude-execution-summary-service';
 
 type RefreshInput = { runId?: string | null; sessionKey?: string | null; agentId?: string | null; engineType?: string | null };
 type ConversationInput = RefreshInput & { userMessage: string; assistantMessage: string };
@@ -30,7 +30,7 @@ function trace(level: 'info' | 'warn', event: string, fields: LogFields): void {
 
 class MemoryCaptureService {
   private running = new Set<string>();
-  private injectedMemoriesByRun = new Map<string, InjectedExecutionMemory[]>();
+  private injectedMemoriesByRun = new Map<string, { memories: InjectedExecutionMemory[]; createdAt: number }>();
 
   bindInjectedExecutionMemories(input: { runId?: string; memories?: Array<{ memoryId?: string; memory?: string }> }): void {
     const runId = input.runId?.trim();
@@ -38,7 +38,8 @@ class MemoryCaptureService {
     const memories = (input.memories ?? [])
       .filter((item): item is { memoryId: string; memory: string } => typeof item?.memoryId === 'string' && item.memoryId.trim().length > 0 && typeof item.memory === 'string' && item.memory.trim().length > 0)
       .map((item) => ({ memoryId: item.memoryId.trim(), memory: item.memory.trim().slice(0, 1200) }));
-    this.injectedMemoriesByRun.set(runId, memories);
+    this.pruneInjectedMemoryBindings();
+    this.injectedMemoriesByRun.set(runId, { memories, createdAt: Date.now() });
     trace('info', 'execution.context.bound', { runId, memoryIds: memories.map((item) => item.memoryId), count: memories.length });
   }
 
@@ -102,7 +103,8 @@ class MemoryCaptureService {
         return;
       }
       trace('info', 'execution.history.ready', { jobId: id, runId: sourceId, messageCount: snapshot.messageCount, toolCount: snapshot.tools.length, userLength: snapshot.userMessage.length, assistantLength: snapshot.assistantMessage.length });
-      const injected = this.injectedMemoriesByRun.get(sourceId) ?? [];
+      this.pruneInjectedMemoryBindings();
+      const injected = this.injectedMemoriesByRun.get(sourceId)?.memories ?? [];
       this.injectedMemoriesByRun.delete(sourceId);
       const payload: ExecutionMemoryPayload = { ...snapshot, _executionMemory: { injected } };
       trace('info', 'execution.history.context_merged', { jobId: id, runId: sourceId, injectedMemoryIds: injected.map((item) => item.memoryId), count: injected.length });
@@ -180,7 +182,10 @@ class MemoryCaptureService {
           });
       } else {
         const injected = payload._executionMemory?.injected ?? [];
-        const exp = await agentMemoryOrchestrator.summarizeExecutionExperience({ userTask: payload.userMessage, finalAnswerSummary: payload.assistantMessage, tools: payload.tools, injectedExperiences: injected, agentId: job.agent_id || undefined, engineType: job.engine_type || undefined });
+        const summaryInput: Record<string, unknown> = { userTask: payload.userMessage, finalAnswerSummary: payload.assistantMessage, tools: payload.tools, agentId: job.agent_id || undefined, engineType: job.engine_type || undefined };
+        if (injected.length > 0) summaryInput.injectedExperiences = injected;
+        const exp = await agentMemoryOrchestrator.summarizeExecutionExperience(summaryInput);
+        exp.candidateAssessments = normalizeCandidateAssessments(exp.candidateAssessments);
         trace('info', 'execution.summary.completed', {
           jobId: id,
           shouldStore: exp.shouldStore === true,
@@ -234,6 +239,18 @@ class MemoryCaptureService {
     trace(again ? 'warn' : 'warn', again ? 'job.retry_wait' : 'job.failed', { jobId: id, retryCount: count, retryInMs: again ? count * 30000 : null, error: String(error).slice(0, 500) });
     if (again) { const timer = setTimeout(retry, count * 30000); timer.unref?.(); }
   }
+
+  private pruneInjectedMemoryBindings(): void {
+    const cutoff = Date.now() - 20 * 60 * 1000;
+    for (const [runId, binding] of this.injectedMemoriesByRun) {
+      if (binding.createdAt < cutoff) this.injectedMemoriesByRun.delete(runId);
+    }
+    while (this.injectedMemoriesByRun.size >= 100) {
+      const oldest = this.injectedMemoriesByRun.keys().next().value;
+      if (!oldest) break;
+      this.injectedMemoriesByRun.delete(oldest);
+    }
+  }
 }
 
 function extractMemoryId(result: unknown): string | undefined {
@@ -253,18 +270,37 @@ function extractMemoryId(result: unknown): string | undefined {
   return visit(result);
 }
 
-function resolveDeleteCandidates(exp: import('./claude-execution-summary-service').ExecutionExperienceSummary, injected: InjectedExecutionMemory[], tools: unknown[]): string[] {
+function normalizeCandidateAssessments(value: unknown): ExecutionExperienceCandidateAssessment[] {
+  if (!Array.isArray(value)) return [];
+  const decisions = new Set<ExecutionExperienceCandidateAssessment['decision']>(['supersedes', 'still_valid', 'irrelevant_to_run', 'uncertain']);
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const record = item as Record<string, unknown>;
+    if (typeof record.memoryId !== 'string' || !record.memoryId.trim() || typeof record.decision !== 'string' || !decisions.has(record.decision as ExecutionExperienceCandidateAssessment['decision'])) return [];
+    return [{
+      memoryId: record.memoryId.trim(),
+      decision: record.decision as ExecutionExperienceCandidateAssessment['decision'],
+      reason: typeof record.reason === 'string' ? record.reason.slice(0, 500) : undefined,
+      sameIntent: record.sameIntent === true,
+      oldPathAttempted: record.oldPathAttempted === true,
+      oldPathFailed: record.oldPathFailed === true,
+      newPathSucceeded: record.newPathSucceeded === true,
+    }];
+  });
+}
+
+function resolveDeleteCandidates(exp: ExecutionExperienceSummary, injected: InjectedExecutionMemory[], tools: unknown[]): string[] {
   const injectedById = new Map(injected.map((item) => [item.memoryId, item]));
   const hasSuccess = tools.some((tool) => tool && typeof tool === 'object' && (tool as Record<string, unknown>).status === 'completed');
   const candidates: string[] = [];
   for (const assessment of exp.candidateAssessments ?? []) {
     const old = injectedById.get(assessment.memoryId);
     if (!old || assessment.decision !== 'supersedes' || assessment.sameIntent !== true || assessment.oldPathAttempted !== true || assessment.oldPathFailed !== true || assessment.newPathSucceeded !== true || !hasSuccess) continue;
-    const directCommands = [...old.memory.matchAll(/^\s*-\s+(.+)$/gm)].map((match) => match[1].split('（')[0].trim()).filter(Boolean);
+    const directCommands = extractDirectExecutionCommands(old.memory);
     const oldPathFailed = tools.some((tool) => {
       if (!tool || typeof tool !== 'object') return false;
       const record = tool as Record<string, unknown>;
-      return record.status === 'error' && typeof record.command === 'string' && directCommands.some((command) => record.command === command || record.command.includes(command) || command.includes(record.command));
+      return record.status === 'error' && typeof record.command === 'string' && directCommands.some((command) => record.command === command || record.command.startsWith(`${command} `));
     });
     if (oldPathFailed) candidates.push(old.memoryId);
   }
