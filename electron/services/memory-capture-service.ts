@@ -7,15 +7,10 @@ import { getAdapterForSession } from '../engines/manager';
 import type { AgentEngineType } from '../engines/types';
 import { parseExecutionTurnFromHistory } from '../engines/execution-snapshot';
 import { formatExecutionMemoryText } from './claude-execution-summary-service';
-import { extractActiveExecutionMemories } from '../../shared/execution-memory-filter';
 
 type RefreshInput = { runId?: string | null; sessionKey?: string | null; agentId?: string | null; engineType?: string | null };
 type ConversationInput = RefreshInput & { userMessage: string; assistantMessage: string };
 const now = () => new Date().toISOString();
-// 去重预检相似度阈值：userTask 与既有执行类记忆的向量相似度 >= 此值则视为"模式已沉淀过"，
-// 跳过昂贵的 summarize（claw 端只有 agent 接口，每次 ~40s）。STO 后端返回余弦相似度，
-// 0.85 取近重复档；可按 execution.dedup 日志里的真实 topScore 校准。
-const DEDUP_SIMILARITY_THRESHOLD = 0.85;
 type LogFields = Record<string, unknown>;
 
 function trace(level: 'info' | 'warn', event: string, fields: LogFields): void {
@@ -132,34 +127,6 @@ class MemoryCaptureService {
             metadata: { source: 'sto-claw-chat', memoryScope: 'preference', sessionKey: job.session_key || undefined }
           });
       } else {
-        // 门控 A：去重预检。用 userTask 走与注入端相同的 mem0 检索路径（searchMemories），
-        // 再用共享函数 extractActiveExecutionMemories 按 memoryScope==='execution' 过滤——
-        // 不能用 memoryTypes 过滤：execution 记忆的 memory_type 字段并非 'tool_routing_experience'
-        //（那只是 metadata 子标签），memoryTypes 会匹配不到。若已有高相似度 active 记忆，
-        // 说明该模式已沉淀过，跳过昂贵的 summarize。
-        // 注：dedup 是优化型门控，检索失败时 fail-open（降级直接 summarize），不阻断沉淀。
-        const userTaskQuery = String(payload.userMessage ?? '').trim();
-        if (userTaskQuery) {
-          try {
-            const memResult = await agentMemoryOrchestrator.searchMemories(userTaskQuery, {
-              userId: bootstrap.userId,
-              agentId: job.agent_id || undefined,
-              topK: 8,
-            });
-            const existing = extractActiveExecutionMemories(memResult);
-            const dup = existing.find((it) => typeof it.score === 'number' && it.score >= DEDUP_SIMILARITY_THRESHOLD);
-            const topScore = existing.reduce((m, it) => typeof it.score === 'number' && it.score > m ? it.score : m, 0);
-            trace('info', 'execution.dedup', { jobId: id, topScore, threshold: DEDUP_SIMILARITY_THRESHOLD, skip: Boolean(dup) });
-            if (dup) {
-              const reason = 'pattern_already_captured';
-              await db.updateTable('memory_capture_jobs').set({ status: 'skipped', skip_reason: reason, completed_at: now(), updated_at: now() }).where('id', '=', id).execute();
-              trace('info', 'job.skipped', { jobId: id, kind: job.memory_kind, reason, topScore: dup.score });
-              return;
-            }
-          } catch (dedupError) {
-            trace('warn', 'execution.dedup.error', { jobId: id, error: String(dedupError).slice(0, 200) });
-          }
-        }
         const exp = await agentMemoryOrchestrator.summarizeExecutionExperience({ userTask: payload.userMessage, finalAnswerSummary: payload.assistantMessage, tools: payload.tools, agentId: job.agent_id || undefined, engineType: job.engine_type || undefined });
         if (exp.shouldStore !== true) { const reason = String(exp.reason || 'summarizer_rejected'); await db.updateTable('memory_capture_jobs').set({ status: 'skipped', skip_reason: reason, completed_at: now(), updated_at: now() }).where('id', '=', id).execute(); trace('info', 'job.skipped', { jobId: id, kind: job.memory_kind, reason }); return; }
         // 把 directCommand(可直接执行的目标命令)/discoveryPath(探索)/parameterPattern/
