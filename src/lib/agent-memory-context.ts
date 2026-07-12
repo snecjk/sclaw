@@ -3,7 +3,13 @@ import { resolveAgentMemoryUserId, shouldRetrieveMemories, buildAgentMemoryConte
 import { buildAgentExecutionMemoryContextText } from '@/lib/agent-execution-memory';
 import { extractActiveExecutionMemories, extractPreferenceMemories } from '../../shared/execution-memory-filter';
 
-export type AgentMemoryContextBlocks = { preference?: string; execution?: string };
+export type InjectedExecutionMemory = { memoryId: string; memory: string };
+export type AgentMemoryContextBlocks = {
+  preference?: string;
+  execution?: string;
+  /** 仅包含最终进入 prompt 的执行经验，供回合结束后的经验替换判定使用。 */
+  injectedExecutionMemories: InjectedExecutionMemory[];
+};
 
 // 与各 block 原先的截断/上限对齐：偏好 5 条 ×240 字，执行 3 条 ×1000 字。
 const PREF_MAX_ITEMS = 5;
@@ -34,7 +40,7 @@ export async function buildAgentMemoryContextBlocks(
   options?: { agentId?: string | null; topK?: number },
 ): Promise<AgentMemoryContextBlocks> {
   const query = text.replace(/\s+/g, ' ').trim();
-  if (!shouldRetrieveMemories(query)) return {};
+  if (!shouldRetrieveMemories(query)) return { injectedExecutionMemories: [] };
   try {
     const userId = await resolveAgentMemoryUserId();
     const payload = await invokeIpc<unknown>(
@@ -51,9 +57,12 @@ export async function buildAgentMemoryContextBlocks(
     return {
       preference: prefItems.length > 0 ? buildAgentMemoryContextText(prefItems) : undefined,
       execution: execItems.length > 0 ? buildAgentExecutionMemoryContextText(execItems) : undefined,
+      injectedExecutionMemories: execItems
+        .filter((item): item is typeof item & { id: string } => typeof item.id === 'string' && item.id.length > 0)
+        .map((item) => ({ memoryId: item.id, memory: item.memory })),
     };
   } catch (error) {
     console.warn('[agent-memory] context blocks retrieval failed:', error);
-    return {};
+    return { injectedExecutionMemories: [] };
   }
 }

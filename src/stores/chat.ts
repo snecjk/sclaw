@@ -2429,6 +2429,7 @@ export const useChatStore = create<ChatState>()(
     } = await import('@/lib/agent-memory');
     const {
       appendAgentExecutionMemoryContext,
+      rememberInjectedExecutionMemories,
       stripAgentExecutionMemoryContextForDisplay,
     } = await import('@/lib/agent-execution-memory');
     const { buildAgentMemoryContextBlocks } = await import('@/lib/agent-memory-context');
@@ -2499,6 +2500,7 @@ export const useChatStore = create<ChatState>()(
     const memoryBlocks = await buildAgentMemoryContextBlocks(trimmed, {
       agentId: targetAgentId ?? get().currentAgentId,
     });
+    rememberInjectedExecutionMemories(currentSessionKey, memoryBlocks.injectedExecutionMemories);
     const claudeMemorySystemPrompt = currentSessionEngineType === 'claude'
       ? [memoryBlocks.preference, memoryBlocks.execution]
           .filter((context): context is string => Boolean(context))

@@ -116,6 +116,19 @@ export function registerAgentMemoryHandlers(gatewayManager: GatewayManager): voi
   );
 
   ipcMain.handle(
+    'execution-memory:bind-injected-memories',
+    async (_event: IpcMainInvokeEvent, input: {
+      runId?: string;
+      sessionKey?: string;
+      agentId?: string;
+      memories?: Array<{ memoryId?: string; memory?: string }>;
+    }) => {
+      memoryCaptureService.bindInjectedExecutionMemories(input ?? {});
+      return { accepted: true };
+    },
+  );
+
+  ipcMain.handle(
     'execution-memory:refresh-history',
     async (_event: IpcMainInvokeEvent, input: MemoryHistoryRefreshInput) => {
       void memoryCaptureService.refreshExecutionHistory(input, gatewayManager).catch(() => undefined);

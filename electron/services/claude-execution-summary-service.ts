@@ -223,6 +223,18 @@ export interface ExecutionExperienceSummary {
   confidence?: number;
   /** 解析失败时保留原始模型输出片段。 */
   raw?: string;
+  /** 对本轮实际注入经验的判断；仅作为服务端替换旧路径的建议。 */
+  candidateAssessments?: ExecutionExperienceCandidateAssessment[];
+}
+
+export interface ExecutionExperienceCandidateAssessment {
+  memoryId: string;
+  decision: 'supersedes' | 'still_valid' | 'irrelevant_to_run' | 'uncertain';
+  reason?: string;
+  sameIntent?: boolean;
+  oldPathAttempted?: boolean;
+  oldPathFailed?: boolean;
+  newPathSucceeded?: boolean;
 }
 
 function buildSummaryPrompt(input: Record<string, unknown>): string {
@@ -242,12 +254,14 @@ function buildSummaryPrompt(input: Record<string, unknown>): string {
     '  "parameterPattern": {"字段名": "如何从用户问题提取/取值规则，可多字段"},',
     '  "constraints": ["必须遵守的约束，如：已知目标命令时直接执行 directCommand、跳过 discoveryPath；不可复用历史具体数值必须重新查询；日期以系统当前为基准不可硬编码"],',
     '  "confidence": 0.7',
+    '  "candidateAssessments": [{"memoryId": "仅从输入 injectedExperiences 复制", "decision": "supersedes|still_valid|irrelevant_to_run|uncertain", "sameIntent": true, "oldPathAttempted": true, "oldPathFailed": true, "newPathSucceeded": true, "reason": "基于工具调用结果的简短依据"}]',
     '}',
     '',
     '要求：',
     '1. directCommand 是真正命中目标、下次同类任务可直接复用的命令（含参数模板/占位符），不要把 discover/help/技能触发这类探索性步骤放进来。',
     '2. discoveryPath 放探索过程（discover/help/技能触发等），仅在不确定或命令变更时才需要；已知目标命令时应跳过。',
     '3. directCommand/avoidPath 的 command 必须是具体命令串（含参数），不要只写工具类别名（如不要只写 Bash）。',
+    '4. injectedExperiences 是本轮实际注入给模型的旧经验。只有旧路径已在本轮实际尝试且失败、并且新路径已成功完成同一目标时，才可输出 decision=supersedes。未使用或与本轮无关时必须输出 irrelevant_to_run 或 uncertain，绝不能输出 supersedes。没有工具证据时输出 uncertain。',
     '如果不值得沉淀，输出：{"shouldStore": false, "reason": "原因"}',
   ].join('\n');
 }

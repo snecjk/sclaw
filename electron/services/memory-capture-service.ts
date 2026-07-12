@@ -12,6 +12,17 @@ type RefreshInput = { runId?: string | null; sessionKey?: string | null; agentId
 type ConversationInput = RefreshInput & { userMessage: string; assistantMessage: string };
 const now = () => new Date().toISOString();
 type LogFields = Record<string, unknown>;
+type InjectedExecutionMemory = { memoryId: string; memory: string };
+type ExecutionMemoryPayload = Record<string, unknown> & {
+  _executionMemory?: {
+    injected?: InjectedExecutionMemory[];
+    summary?: unknown;
+    newMemoryId?: string;
+    deleteCandidates?: string[];
+    deletedMemoryIds?: string[];
+    cleanupPending?: boolean;
+  };
+};
 
 function trace(level: 'info' | 'warn', event: string, fields: LogFields): void {
   logger[level](`[memory-capture] ${event} ${JSON.stringify(fields)}`);
@@ -19,6 +30,17 @@ function trace(level: 'info' | 'warn', event: string, fields: LogFields): void {
 
 class MemoryCaptureService {
   private running = new Set<string>();
+  private injectedMemoriesByRun = new Map<string, InjectedExecutionMemory[]>();
+
+  bindInjectedExecutionMemories(input: { runId?: string; memories?: Array<{ memoryId?: string; memory?: string }> }): void {
+    const runId = input.runId?.trim();
+    if (!runId) { trace('warn', 'execution.context.bind_skipped', { reason: 'missing_run_id' }); return; }
+    const memories = (input.memories ?? [])
+      .filter((item): item is { memoryId: string; memory: string } => typeof item?.memoryId === 'string' && item.memoryId.trim().length > 0 && typeof item.memory === 'string' && item.memory.trim().length > 0)
+      .map((item) => ({ memoryId: item.memoryId.trim(), memory: item.memory.trim().slice(0, 1200) }));
+    this.injectedMemoriesByRun.set(runId, memories);
+    trace('info', 'execution.context.bound', { runId, memoryIds: memories.map((item) => item.memoryId), count: memories.length });
+  }
 
   async enqueueConversation(input: ConversationInput): Promise<void> {
     const user = input.userMessage.trim(); const assistant = input.assistantMessage.trim();
@@ -80,7 +102,11 @@ class MemoryCaptureService {
         return;
       }
       trace('info', 'execution.history.ready', { jobId: id, runId: sourceId, messageCount: snapshot.messageCount, toolCount: snapshot.tools.length, userLength: snapshot.userMessage.length, assistantLength: snapshot.assistantMessage.length });
-      await getKyselyDatabase().updateTable('memory_capture_jobs').set({ payload_json: JSON.stringify(snapshot), status: 'ready', updated_at: now() }).where('id', '=', id).execute();
+      const injected = this.injectedMemoriesByRun.get(sourceId) ?? [];
+      this.injectedMemoriesByRun.delete(sourceId);
+      const payload: ExecutionMemoryPayload = { ...snapshot, _executionMemory: { injected } };
+      trace('info', 'execution.history.context_merged', { jobId: id, runId: sourceId, injectedMemoryIds: injected.map((item) => item.memoryId), count: injected.length });
+      await getKyselyDatabase().updateTable('memory_capture_jobs').set({ payload_json: JSON.stringify(payload), status: 'ready', updated_at: now() }).where('id', '=', id).execute();
       void this.process(id);
     } catch (error) { await this.retry(id, error, () => this.refreshExecutionHistory(input, gateway)); }
   }
@@ -97,6 +123,32 @@ class MemoryCaptureService {
         void this.process(job.id);
       }
     }
+    const completed = await db.selectFrom('memory_capture_jobs').selectAll().where('status', '=', 'stored').where('memory_kind', '=', 'execution_experience').execute();
+    for (const job of completed) await this.recoverPendingExecutionDeletes(job);
+  }
+
+  private async recoverPendingExecutionDeletes(job: { id: string; payload_json: string; memory_id: string | null }): Promise<void> {
+    let payload: ExecutionMemoryPayload;
+    try { payload = JSON.parse(job.payload_json) as ExecutionMemoryPayload; } catch { return; }
+    const lifecycle = payload._executionMemory;
+    if (!lifecycle?.cleanupPending || !Array.isArray(lifecycle.deleteCandidates)) return;
+    const deleted = new Set(lifecycle.deletedMemoryIds ?? []);
+    const pending = lifecycle.deleteCandidates.filter((memoryId) => typeof memoryId === 'string' && memoryId && !deleted.has(memoryId));
+    if (!pending.length) return;
+    trace('info', 'execution.memory.cleanup_recovery_start', { jobId: job.id, newMemoryId: lifecycle.newMemoryId ?? job.memory_id, pendingMemoryIds: pending });
+    for (const memoryId of pending) {
+      try {
+        await agentMemoryOrchestrator.deleteMemory(memoryId);
+        deleted.add(memoryId);
+        trace('info', 'execution.memory.cleanup_recovery_deleted', { jobId: job.id, memoryId, newMemoryId: lifecycle.newMemoryId ?? job.memory_id });
+      } catch (error) {
+        trace('warn', 'execution.memory.cleanup_recovery_failed', { jobId: job.id, memoryId, error: String(error).slice(0, 500) });
+      }
+    }
+    lifecycle.deletedMemoryIds = [...deleted];
+    lifecycle.cleanupPending = lifecycle.deleteCandidates.some((memoryId) => !deleted.has(memoryId));
+    await getKyselyDatabase().updateTable('memory_capture_jobs').set({ payload_json: JSON.stringify(payload), updated_at: now() }).where('id', '=', job.id).execute();
+    trace('info', 'execution.memory.cleanup_recovery_done', { jobId: job.id, cleanupPending: lifecycle.cleanupPending, deletedMemoryIds: lifecycle.deletedMemoryIds });
   }
 
   private async insert(kind: 'conversation_memory' | 'execution_experience', sourceId: string, input: RefreshInput, payload: unknown): Promise<void> {
@@ -114,7 +166,7 @@ class MemoryCaptureService {
       if (!job || !['ready', 'summarizing'].includes(job.status)) { trace('info', 'job.process.skip', { jobId: id, reason: job ? `status_${job.status}` : 'not_found' }); return; }
       trace('info', 'job.process.start', { jobId: id, kind: job.memory_kind, sourceId: job.source_id, retryCount: job.retry_count });
       await db.updateTable('memory_capture_jobs').set({ status: 'summarizing', updated_at: now() }).where('id', '=', id).execute();
-      const payload = JSON.parse(job.payload_json) as Record<string, unknown>;
+      const payload = JSON.parse(job.payload_json) as ExecutionMemoryPayload;
       const bootstrap = await agentMemoryOrchestrator.getBootstrap();
       if (job.memory_kind === 'conversation_memory') {
         await agentMemoryOrchestrator.addMemories(
@@ -127,13 +179,21 @@ class MemoryCaptureService {
             metadata: { source: 'sto-claw-chat', memoryScope: 'preference', sessionKey: job.session_key || undefined }
           });
       } else {
-        const exp = await agentMemoryOrchestrator.summarizeExecutionExperience({ userTask: payload.userMessage, finalAnswerSummary: payload.assistantMessage, tools: payload.tools, agentId: job.agent_id || undefined, engineType: job.engine_type || undefined });
+        const injected = payload._executionMemory?.injected ?? [];
+        const exp = await agentMemoryOrchestrator.summarizeExecutionExperience({ userTask: payload.userMessage, finalAnswerSummary: payload.assistantMessage, tools: payload.tools, injectedExperiences: injected, agentId: job.agent_id || undefined, engineType: job.engine_type || undefined });
+        trace('info', 'execution.summary.completed', {
+          jobId: id,
+          shouldStore: exp.shouldStore === true,
+          assessmentCount: exp.candidateAssessments?.length ?? 0,
+          injectedMemoryIds: injected.map((item) => item.memoryId),
+          candidateDecisions: (exp.candidateAssessments ?? []).map((item) => ({ memoryId: item.memoryId, decision: item.decision, sameIntent: item.sameIntent, oldPathAttempted: item.oldPathAttempted, oldPathFailed: item.oldPathFailed, newPathSucceeded: item.newPathSucceeded })),
+        });
         if (exp.shouldStore !== true) { const reason = String(exp.reason || 'summarizer_rejected'); await db.updateTable('memory_capture_jobs').set({ status: 'skipped', skip_reason: reason, completed_at: now(), updated_at: now() }).where('id', '=', id).execute(); trace('info', 'job.skipped', { jobId: id, kind: job.memory_kind, reason }); return; }
         // 把 directCommand(可直接执行的目标命令)/discoveryPath(探索)/parameterPattern/
         // avoidPath/applicableWhen/constraints 全部序列化进存储文本，使检索注入时未来
         // 查询能直接拿到"下次直接执行什么命令"，而非重走探索老路。
         const text = formatExecutionMemoryText(exp);
-        await agentMemoryOrchestrator.addMemories(
+        const addResult = await agentMemoryOrchestrator.addMemories(
           [{ role: 'user', content: text }],
           {
             userId: bootstrap.userId,
@@ -142,6 +202,25 @@ class MemoryCaptureService {
             infer: false,
             metadata: { source: 'sto-claw-execution', memoryScope: 'execution', memoryType: 'tool_routing_experience', confidence: exp.confidence, status: 'active', sessionKey: job.session_key || undefined }
           });
+        const newMemoryId = extractMemoryId(addResult);
+        const deleteCandidates = resolveDeleteCandidates(exp, injected, Array.isArray(payload.tools) ? payload.tools : []);
+        payload._executionMemory = { ...payload._executionMemory, summary: exp, newMemoryId, deleteCandidates, deletedMemoryIds: payload._executionMemory?.deletedMemoryIds ?? [], cleanupPending: deleteCandidates.length > 0 };
+        await db.updateTable('memory_capture_jobs').set({ payload_json: JSON.stringify(payload), memory_id: newMemoryId ?? null, updated_at: now() }).where('id', '=', id).execute();
+        trace('info', 'execution.memory.added', { jobId: id, newMemoryId: newMemoryId ?? null, deleteCandidates, candidateCount: deleteCandidates.length });
+        for (const memoryId of deleteCandidates) {
+          try {
+            await agentMemoryOrchestrator.deleteMemory(memoryId);
+            payload._executionMemory.deletedMemoryIds = [...new Set([...(payload._executionMemory.deletedMemoryIds ?? []), memoryId])];
+            await db.updateTable('memory_capture_jobs').set({ payload_json: JSON.stringify(payload), updated_at: now() }).where('id', '=', id).execute();
+            trace('info', 'execution.memory.deleted_superseded', { jobId: id, memoryId, newMemoryId: newMemoryId ?? null });
+          } catch (error) {
+            trace('warn', 'execution.memory.delete_failed', { jobId: id, memoryId, newMemoryId: newMemoryId ?? null, error: String(error).slice(0, 500) });
+          }
+        }
+        const deleted = new Set(payload._executionMemory.deletedMemoryIds ?? []);
+        payload._executionMemory.cleanupPending = deleteCandidates.some((memoryId) => !deleted.has(memoryId));
+        await db.updateTable('memory_capture_jobs').set({ payload_json: JSON.stringify(payload), updated_at: now() }).where('id', '=', id).execute();
+        trace('info', 'execution.memory.lifecycle_applied', { jobId: id, newMemoryId: newMemoryId ?? null, deletedMemoryIds: [...deleted], cleanupPending: payload._executionMemory.cleanupPending });
       }
       await db.updateTable('memory_capture_jobs').set({ status: 'stored', completed_at: now(), updated_at: now() }).where('id', '=', id).execute();
       trace('info', 'job.stored', { jobId: id, kind: job.memory_kind, sourceId: job.source_id });
@@ -155,6 +234,41 @@ class MemoryCaptureService {
     trace(again ? 'warn' : 'warn', again ? 'job.retry_wait' : 'job.failed', { jobId: id, retryCount: count, retryInMs: again ? count * 30000 : null, error: String(error).slice(0, 500) });
     if (again) { const timer = setTimeout(retry, count * 30000); timer.unref?.(); }
   }
+}
+
+function extractMemoryId(result: unknown): string | undefined {
+  const visit = (value: unknown): string | undefined => {
+    if (Array.isArray(value)) {
+      for (const item of value) { const found = visit(item); if (found) return found; }
+      return undefined;
+    }
+    if (!value || typeof value !== 'object') return undefined;
+    const record = value as Record<string, unknown>;
+    for (const key of ['id', 'memory_id', 'memoryId']) {
+      if (typeof record[key] === 'string' && record[key].trim()) return record[key].trim();
+    }
+    for (const key of ['results', 'memories', 'data']) { const found = visit(record[key]); if (found) return found; }
+    return undefined;
+  };
+  return visit(result);
+}
+
+function resolveDeleteCandidates(exp: import('./claude-execution-summary-service').ExecutionExperienceSummary, injected: InjectedExecutionMemory[], tools: unknown[]): string[] {
+  const injectedById = new Map(injected.map((item) => [item.memoryId, item]));
+  const hasSuccess = tools.some((tool) => tool && typeof tool === 'object' && (tool as Record<string, unknown>).status === 'completed');
+  const candidates: string[] = [];
+  for (const assessment of exp.candidateAssessments ?? []) {
+    const old = injectedById.get(assessment.memoryId);
+    if (!old || assessment.decision !== 'supersedes' || assessment.sameIntent !== true || assessment.oldPathAttempted !== true || assessment.oldPathFailed !== true || assessment.newPathSucceeded !== true || !hasSuccess) continue;
+    const directCommands = [...old.memory.matchAll(/^\s*-\s+(.+)$/gm)].map((match) => match[1].split('（')[0].trim()).filter(Boolean);
+    const oldPathFailed = tools.some((tool) => {
+      if (!tool || typeof tool !== 'object') return false;
+      const record = tool as Record<string, unknown>;
+      return record.status === 'error' && typeof record.command === 'string' && directCommands.some((command) => record.command === command || record.command.includes(command) || command.includes(record.command));
+    });
+    if (oldPathFailed) candidates.push(old.memoryId);
+  }
+  return [...new Set(candidates)];
 }
 
 export const memoryCaptureService = new MemoryCaptureService();
