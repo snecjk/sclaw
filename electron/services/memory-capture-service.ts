@@ -122,7 +122,15 @@ class MemoryCaptureService {
       const payload = JSON.parse(job.payload_json) as Record<string, unknown>;
       const bootstrap = await agentMemoryOrchestrator.getBootstrap();
       if (job.memory_kind === 'conversation_memory') {
-        await agentMemoryOrchestrator.addMemories([{ role: 'user', content: String(payload.userMessage) }, { role: 'assistant', content: String(payload.assistantMessage) }], { userId: bootstrap.userId, agentId: job.agent_id || undefined, runId: job.source_id, infer: true, metadata: { source: 'sto-claw-chat', memoryScope: 'preference', sessionKey: job.session_key || undefined } });
+        await agentMemoryOrchestrator.addMemories(
+          [{ role: 'user', content: String(payload.userMessage) }, { role: 'assistant', content: String(payload.assistantMessage) }],
+          {
+            userId: bootstrap.userId,
+            agentId: job.agent_id || undefined,
+            runId: job.source_id,
+            infer: true,
+            metadata: { source: 'sto-claw-chat', memoryScope: 'preference', sessionKey: job.session_key || undefined }
+          });
       } else {
         // 门控 A：去重预检。用 userTask 走与注入端相同的 mem0 检索路径（searchMemories），
         // 再用共享函数 extractActiveExecutionMemories 按 memoryScope==='execution' 过滤——
@@ -158,7 +166,15 @@ class MemoryCaptureService {
         // avoidPath/applicableWhen/constraints 全部序列化进存储文本，使检索注入时未来
         // 查询能直接拿到"下次直接执行什么命令"，而非重走探索老路。
         const text = formatExecutionMemoryText(exp);
-        await agentMemoryOrchestrator.addMemories([{ role: 'user', content: text }], { userId: bootstrap.userId, agentId: job.agent_id || undefined, runId: job.source_id, infer: false, metadata: { source: 'sto-claw-execution', memoryScope: 'execution', memoryType: 'tool_routing_experience', confidence: exp.confidence, status: 'active', sessionKey: job.session_key || undefined } });
+        await agentMemoryOrchestrator.addMemories(
+          [{ role: 'user', content: text }],
+          {
+            userId: bootstrap.userId,
+            agentId: job.agent_id || undefined,
+            runId: job.source_id,
+            infer: false,
+            metadata: { source: 'sto-claw-execution', memoryScope: 'execution', memoryType: 'tool_routing_experience', confidence: exp.confidence, status: 'active', sessionKey: job.session_key || undefined }
+          });
       }
       await db.updateTable('memory_capture_jobs').set({ status: 'stored', completed_at: now(), updated_at: now() }).where('id', '=', id).execute();
       trace('info', 'job.stored', { jobId: id, kind: job.memory_kind, sourceId: job.source_id });
