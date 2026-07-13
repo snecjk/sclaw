@@ -1,0 +1,58 @@
+/**
+ * Toolbar portaled to document.body — escapes Electron iframe native layer + drag-region.
+ */
+import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
+import {
+  closeSclawBrowser,
+  openSclawBrowserInSystemBrowser,
+} from '@/lib/open-sclaw-browser';
+import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
+import { useSclawBrowserHostBounds } from './use-sclaw-browser-host-bounds';
+import './sclaw-browser-overlay.css';
+
+export function SclawBrowserToolbarPortal() {
+  const { t } = useTranslation('common');
+  const session = useSclawBrowserOverlayStore((s) => s.session);
+  const bounds = useSclawBrowserHostBounds(session !== null);
+
+  if (!session || !bounds) return null;
+
+  return createPortal(
+    <header
+      className="sclaw-browser-toolbar sclaw-browser-toolbar--portal no-drag"
+      style={{
+        top: bounds.top,
+        left: bounds.left,
+        width: bounds.width,
+      }}
+      aria-label={session.title}
+    >
+      <div className="sclaw-browser-toolbar__start">
+        <button
+          type="button"
+          className="sclaw-browser-toolbar__back no-drag"
+          onClick={closeSclawBrowser}
+          aria-label={t('moreApps.back', { defaultValue: '返回' })}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {t('moreApps.back', { defaultValue: '返回' })}
+        </button>
+        <span className="sclaw-browser-toolbar__title">{session.title}</span>
+      </div>
+      <button
+        type="button"
+        className="sclaw-browser-toolbar__external no-drag"
+        onClick={openSclawBrowserInSystemBrowser}
+      >
+        {t('moreApps.openInSystemBrowser', { defaultValue: '在系统浏览器打开' })}
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+    </header>,
+    document.body,
+  );
+}

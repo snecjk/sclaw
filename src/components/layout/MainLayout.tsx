@@ -24,9 +24,11 @@ import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { useSettingsStore } from '@/stores/settings';
 import { SidebarDeleteConfirmPortal } from '@/components/layout/sidebar-delete-confirm-portal';
+import { SclawBrowserHost } from '@/components/sclaw-browser/SclawBrowserHost';
 import { Sidebar } from './Sidebar';
 import { TitleBar } from './TitleBar';
 
+/** Scrollable page body inside provincial main card (overlay is mounted on `<main>`). */
 function MainCardBody({ hideContentHeader }: { hideContentHeader: boolean }) {
   const { isSplitLayout } = useContentHeaderDisplay();
 
@@ -60,6 +62,7 @@ function ProvincialMainCard({ hideContentHeader }: { hideContentHeader: boolean 
     <main
       className={cn(
         stoMainCardShellClass,
+        'relative',
         isSplitLayout
           ? cn(stoSplitShellInsetsClass, stoSplitUnifiedMainClass)
           : 'flex min-h-0 min-w-0 flex-1 flex-col',
@@ -67,6 +70,7 @@ function ProvincialMainCard({ hideContentHeader }: { hideContentHeader: boolean 
     >
       {!hideContentHeader ? <ContentHeader /> : null}
       <MainCardBody hideContentHeader={hideContentHeader} />
+      <SclawBrowserHost />
     </main>
   );
 }
@@ -121,8 +125,9 @@ export function MainLayout() {
         >
           <AppShellChromeOverlay />
           <ContentHeaderProvider>
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               <Outlet />
+              <SclawBrowserHost />
             </div>
           </ContentHeaderProvider>
           <SidebarDeleteConfirmPortal />
@@ -157,13 +162,14 @@ export function MainLayout() {
         {!onSettingsRoute ? <Sidebar /> : null}
         <main
           className={cn(
-            'min-h-0 min-w-0 flex-1 [overflow-anchor:none] dark:bg-background',
+            'relative min-h-0 min-w-0 flex-1 [overflow-anchor:none] dark:bg-background',
             onSettingsRoute
               ? 'flex flex-col overflow-hidden bg-[#F1F1F3] dark:bg-background'
               : 'overflow-auto overscroll-y-contain bg-[var(--sto-page-bg)] px-[var(--sto-content-pad-x)] py-5 [scrollbar-gutter:stable]',
           )}
         >
           <Outlet />
+          <SclawBrowserHost />
         </main>
       </div>
       <SidebarDeleteConfirmPortal />

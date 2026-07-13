@@ -4,7 +4,7 @@
  */
 import { create } from 'zustand';
 import type { AppItem, MoreAppsTab, MoreAppsSortMode, MarketCategory } from '@/types/more-apps';
-import { BUILTIN_APPS } from '@/components/more-apps/builtin-apps';
+import { VISIBLE_BUILTIN_APPS } from '@/components/more-apps/builtin-apps';
 
 const STORAGE_KEY_EXTERNAL = 'stoclaw:more-apps:external';
 const STORAGE_KEY_INSTALLED = 'stoclaw:more-apps:installed';
@@ -86,9 +86,6 @@ interface MoreAppsState {
   installedIds: string[];
   favoriteIds: string[];
 
-  // Drill (iframe view)
-  drilledApp: AppItem | null;
-
   // Modal
   addModalOpen: boolean;
 
@@ -107,8 +104,6 @@ interface MoreAppsState {
   isAppInstalled: (id: string) => boolean;
   toggleFavorite: (id: string) => void;
   isAppFavorite: (id: string) => boolean;
-  drillToApp: (app: AppItem) => void;
-  drillBack: () => void;
 }
 
 export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
@@ -118,12 +113,10 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
   marketCategory: 'featured',
   heroSlideIndex: 0,
 
-  builtinApps: BUILTIN_APPS,
+  builtinApps: VISIBLE_BUILTIN_APPS,
   externalApps: loadExternalApps(),
   installedIds: loadInstalled(),
   favoriteIds: loadFavorites(),
-
-  drilledApp: null,
 
   addModalOpen: false,
 
@@ -171,15 +164,11 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
     saveInstalled(updatedInstalled);
     const updatedFavorites = get().favoriteIds.filter((x) => x !== id);
     saveFavorites(updatedFavorites);
-    set({ 
+    set({
       externalApps: updated,
       installedIds: updatedInstalled,
       favoriteIds: updatedFavorites,
     });
-    // If currently drilling into this app, go back
-    if (get().drilledApp?.id === id) {
-      set({ drilledApp: null });
-    }
   },
 
   installApp: (id) => {
@@ -217,7 +206,4 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
   isAppFavorite: (id) => {
     return get().favoriteIds.indexOf(id) !== -1;
   },
-
-  drillToApp: (app) => set({ drilledApp: app }),
-  drillBack: () => set({ drilledApp: null }),
 }));

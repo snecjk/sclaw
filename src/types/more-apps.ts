@@ -19,12 +19,14 @@ export interface AppItem {
   url: string;
   /** Icon key (for builtin) or icon SVG string (for external) */
   iconKey?: string;
+  /** Remote icon URL — takes precedence over iconKey when set */
+  iconUrl?: string;
   /** Color tone for the gradient icon background */
   tone?: AppTone;
-  /** Category label for grouping */
+  /** Category label for the "应用广场" tab filter */
   category?: string;
-  /** Market category id for the "应用广场" tab filter */
-  marketCategory?: string;
+  /** Hide from market / installed lists without removing config */
+  hidden?: boolean;
   /** Whether this is a builtin or user-added external app */
   kind: AppKind;
   /** Whether the app is currently installed */
@@ -49,4 +51,5 @@ export type MoreAppsTab = 'market' | 'installed';
 
 export type MoreAppsSortMode = 'default' | 'name';
 
-export type MarketCategory = 'featured' | 'operations' | 'finance' | 'org';
+/** Market tab filter id — `featured` shows all visible apps; otherwise matches `category` */
+export type MarketCategory = 'featured' | (string & {});
