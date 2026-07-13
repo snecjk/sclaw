@@ -43,6 +43,7 @@ export async function buildAgentMemoryContextBlocks(
   if (!shouldRetrieveMemories(query)) return { injectedExecutionMemories: [] };
   try {
     const userId = await resolveAgentMemoryUserId();
+    if (!userId) return { injectedExecutionMemories: [] };
     const payload = await invokeIpc<unknown>(
       'agent-memory:mem0-search',
       query,

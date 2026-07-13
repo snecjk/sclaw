@@ -2510,18 +2510,14 @@ export const useChatStore = create<ChatState>()(
     }
 
     const messageWithContext = appendWorkflowContext(textForGateway, workflowContext);
+
+    console.info('[chat-message]\n', messageWithContext);
+
     const displayText = stripWorkflowSessionHintForDisplay(
       stripAgentMemoryContextsForDisplay(
         stripWorkflowContextForDisplay(messageWithContext),
       ),
     );
-
-    if (currentSessionEngineType === 'claude') {
-      console.info('[mem0][prompt][claude] final user prompt:\n%s', messageWithContext);
-      console.info('[mem0][prompt][claude] memory system prompt append:\n%s', claudeMemorySystemPrompt || '(none)');
-    } else {
-      console.info('[mem0][prompt][openclaw] final user prompt:\n%s', messageWithContext);
-    }
 
     const quotaCheck = await checkDailyTokenQuota();
     if (quotaCheck) {

@@ -7,6 +7,7 @@ import {
 
 type AgentMemoryBootstrap = {
   bootstrap?: {
+    enabled?: boolean;
     userId?: string;
   } | null;
 };
@@ -55,6 +56,9 @@ async function ensureAgentMemoryInitialized(): Promise<AgentMemoryBootstrap | nu
 
 export async function resolveAgentMemoryUserId(): Promise<string | undefined> {
   const initialized = await ensureAgentMemoryInitialized();
+  if (initialized?.bootstrap?.enabled !== true) {
+    return undefined;
+  }
   const userId = initialized?.bootstrap?.userId;
   return typeof userId === 'string' && userId.trim() ? userId.trim() : undefined;
 }

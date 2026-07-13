@@ -992,10 +992,7 @@ async function startClaudeQuery(
     const systemPromptAppend = [runtimeOptions.systemPromptAppend, options?.systemPromptAppend, historyBridgeAppend]
       .filter(Boolean)
       .join('\n\n');
-    logger.info('[mem0][prompt][claude] final systemPromptAppend', {
-      sessionKey,
-      systemPromptAppend: systemPromptAppend || '(none)',
-    });
+    logger.info(`[claude-adapter][prompt] final systemPromptAppend: sessionKey=${sessionKey}, systemPromptAppend=\n${systemPromptAppend || '(none)'}`);
     const queryBaseOptions = {
       cwd,
       env: await buildClaudeEnvForAccount(launchSelection.accountId),

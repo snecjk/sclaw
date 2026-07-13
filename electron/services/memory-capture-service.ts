@@ -170,6 +170,11 @@ class MemoryCaptureService {
       await db.updateTable('memory_capture_jobs').set({ status: 'summarizing', updated_at: now() }).where('id', '=', id).execute();
       const payload = JSON.parse(job.payload_json) as ExecutionMemoryPayload;
       const bootstrap = await agentMemoryOrchestrator.getBootstrap();
+      if (!bootstrap.enabled) {
+        await db.updateTable('memory_capture_jobs').set({ status: 'skipped', skip_reason: 'agent_memory_disabled', completed_at: now(), updated_at: now() }).where('id', '=', id).execute();
+        trace('info', 'job.skipped', { jobId: id, kind: job.memory_kind, reason: 'agent_memory_disabled' });
+        return;
+      }
       if (job.memory_kind === 'conversation_memory') {
         await agentMemoryOrchestrator.addMemories(
           [{ role: 'user', content: String(payload.userMessage) }, { role: 'assistant', content: String(payload.assistantMessage) }],

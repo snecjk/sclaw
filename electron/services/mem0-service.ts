@@ -134,6 +134,20 @@ export class Mem0Service {
       sdkReason: sdk.reason,
     });
     this.sdkStatus = { available: Boolean(sdk.module?.Memory), reason: sdk.reason };
+    if (bootstrap?.enabled === false) {
+      logger.info('[mem0] initialize skipped: disabled by server rollout', {
+        userId: bootstrap.userId,
+      });
+      return {
+        ready: false,
+        storageReady: true,
+        sdkAvailable: Boolean(sdk.module?.Memory),
+        mode: 'phase1-remote-orchestrated',
+        paths,
+        bootstrap,
+        sdkReason: 'Agent Memory is disabled for the current user',
+      };
+    }
     if (sdk.module?.Memory && sdk.module.EmbedderFactory && sdk.module.LLMFactory && sdk.module.VectorStoreFactory) {
       logger.info('[mem0] patch factories start');
       patchMem0Factories(sdk.module as unknown as Parameters<typeof patchMem0Factories>[0]);
@@ -191,6 +205,9 @@ export class Mem0Service {
       await this.initialize();
     }
     if (!this.memoryClient) {
+      if (this.bootstrapCache?.enabled === false) {
+        throw new Error('Agent Memory is disabled for the current user');
+      }
       logger.error('[mem0] getClient failed', { sdkReason: this.sdkStatus.reason });
       throw new Error(this.sdkStatus.reason || 'Mem0 client is not initialized');
     }
