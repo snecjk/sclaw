@@ -5,7 +5,7 @@
 import { memo } from 'react';
 import { Heart } from 'lucide-react';
 import type { AppItem } from '@/types/more-apps';
-import { getAppIcon } from './app-icons';
+import { AppIcon } from './AppIcon';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 
@@ -82,12 +82,7 @@ function AppCardImpl({
     >
       {/* Top row: icon + title + actions */}
       <div className="more-apps-card__top">
-        <span
-          className={cn('app-icon app-icon--md', `app-icon--tone-${app.tone || 'gray'}`)}
-          dangerouslySetInnerHTML={{
-            __html: getAppIcon(app.iconKey),
-          }}
-        />
+        <AppIcon iconKey={app.iconKey} iconUrl={app.iconUrl} tone={app.tone} size="md" />
         <div className="more-apps-card__head">
           <h3 className="more-apps-card__title">{app.name}</h3>
           {isMineTab && isExternal && (

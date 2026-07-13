@@ -20,9 +20,10 @@ import {
 import { AppCard } from './AppCard';
 import { AddExternalAppModal } from './AddExternalAppModal';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { getAppIcon } from './app-icons';
+import { AppIcon } from './AppIcon';
 import type { AppItem } from '@/types/more-apps';
 import { MARKET_CATEGORIES, MARKET_HERO_SLIDES } from './builtin-apps';
+import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
 
 const HERO_CAROUSEL_INTERVAL = 5000;
 
@@ -35,17 +36,13 @@ export function MoreAppsPage() {
     heroSlideIndex,
     builtinApps,
     externalApps,
-    installedIds,
     favoriteIds,
-    drilledApp,
     setActiveTab,
     setSearchQuery,
     setMarketCategory,
     setHeroSlideIndex,
     openAddModal,
     removeExternalApp,
-    drillToApp,
-    drillBack,
     installApp,
     toggleFavorite,
     isAppInstalled,
@@ -64,7 +61,7 @@ export function MoreAppsPage() {
   const marketApps = useMemo(() => {
     let apps = allApps.filter((a) => !a.external);
     if (marketCategory !== 'featured') {
-      apps = apps.filter((a) => a.marketCategory === marketCategory);
+      apps = apps.filter((a) => a.category === marketCategory);
     }
     const q = searchQuery.trim().toLowerCase();
     if (q) {
@@ -77,10 +74,10 @@ export function MoreAppsPage() {
     return apps;
   }, [allApps, marketCategory, searchQuery]);
 
-  // Installed apps (based on installedIds)
+  // My apps: external apps + favorited builtin apps only
   const installedApps = useMemo(() => {
-    return allApps.filter((a) => installedIds.includes(a.id) || a.external);
-  }, [allApps, installedIds]);
+    return allApps.filter((a) => a.external || favoriteIds.includes(a.id));
+  }, [allApps, favoriteIds]);
 
   // Filter installed apps by search
   const filteredInstalledApps = useMemo(() => {
@@ -99,10 +96,6 @@ export function MoreAppsPage() {
   );
 
   const installedAppCount = installedApps.length;
-
-  const featuredApps = useMemo(() => {
-    return allApps.filter((a) => a.recommended).slice(0, 4);
-  }, [allApps]);
 
   // Hero carousel auto-rotate
   useEffect(() => {
@@ -124,10 +117,11 @@ export function MoreAppsPage() {
   }, [activeTab, heroSlideIndex, setHeroSlideIndex]);
 
   const handleOpenApp = useCallback((app: AppItem) => {
+    if (!app.url?.trim()) return;
     if (!isAppInstalled(app.id)) {
       installApp(app.id);
     }
-    window.open(app.url, '_blank', 'noopener,noreferrer');
+    openInSclawBrowser({ url: app.url, title: app.name });
   }, [installApp, isAppInstalled]);
 
   const handleDelete = useCallback((app: AppItem) => {
@@ -144,51 +138,6 @@ export function MoreAppsPage() {
   const handleToggleFavorite = useCallback((id: string) => {
     toggleFavorite(id);
   }, [toggleFavorite]);
-
-  // ── Drilled (iframe) view ────────────────────────────────────
-  if (drilledApp) {
-    return (
-      <div className={cn(stoMainInnerShell, 'flex h-full flex-col py-4')}>
-        {/* Drill toolbar */}
-        <div className="more-apps-drill__nav">
-          <div className="more-apps-drill__nav-start">
-            <button
-              onClick={drillBack}
-              className="more-apps-drill__back"
-              aria-label={t('moreApps.back', { defaultValue: '返回' })}
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              {t('moreApps.back', { defaultValue: '返回' })}
-            </button>
-            <span className="more-apps-drill__crumb">{drilledApp.name}</span>
-          </div>
-          <a
-            href={drilledApp.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="more-apps-drill__external"
-          >
-            {t('moreApps.openExternal', { defaultValue: '在新窗口打开' })}
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </a>
-        </div>
-        {/* Iframe container */}
-        <div className="min-h-0 flex-1 overflow-hidden rounded-[18px] bg-[#F7F8FA] shadow-[0_0_16px_0_rgba(0,0,0,0.01)]">
-          <iframe
-            src={drilledApp.url}
-            title={drilledApp.name}
-            className="h-full w-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"
-            referrerPolicy="no-referrer"
-          />
-        </div>
-      </div>
-    );
-  }
 
   // ── Market Tab View ──────────────────────────────────────────
   const renderMarketView = () => {
@@ -219,10 +168,7 @@ export function MoreAppsPage() {
                     <div className="app-market__hero-inner">
                       <div className="app-market__hero-copy">
                         <div className="app-market__hero-head">
-                          <span
-                            className={cn('app-icon app-icon--lg', `app-icon--tone-${slideApp.tone || 'gray'}`)}
-                            dangerouslySetInnerHTML={{ __html: getAppIcon(slideApp.iconKey) }}
-                          />
+                          <AppIcon iconKey={slideApp.iconKey} iconUrl={slideApp.iconUrl} tone={slideApp.tone} size="lg" />
                           <div className="app-market__hero-text">
                             <h3 className="app-market__hero-title">
                               <span className="app-market__hero-title-main">{slideApp.name}</span>
@@ -241,10 +187,7 @@ export function MoreAppsPage() {
                         <div className="app-market__hero-card">
                           <div className="app-market__hero-preview">
                             <div className="app-market__hero-preview-head">
-                              <span
-                                className={cn('app-icon app-icon--sm', `app-icon--tone-${slideApp.tone || 'gray'}`)}
-                                dangerouslySetInnerHTML={{ __html: getAppIcon(slideApp.iconKey) }}
-                              />
+                              <AppIcon iconKey={slideApp.iconKey} iconUrl={slideApp.iconUrl} tone={slideApp.tone} size="sm" />
                               <div className="app-market__hero-preview-meta">
                                 <strong className="app-market__hero-preview-title">{slideApp.name}</strong>
                                 <span className="app-market__hero-preview-tag">{t('moreApps.official', { defaultValue: '官方应用' })}</span>
@@ -315,10 +258,7 @@ export function MoreAppsPage() {
                   onClick={() => handleOpenApp(app)}
                 >
                   <div className="app-market__row-main">
-                    <span
-                      className={cn('app-icon app-icon--lg', `app-icon--tone-${app.tone || 'gray'}`)}
-                      dangerouslySetInnerHTML={{ __html: getAppIcon(app.iconKey) }}
-                    />
+                    <AppIcon iconKey={app.iconKey} iconUrl={app.iconUrl} tone={app.tone} size="lg" />
                     <div className="app-market__row-body">
                       <h4 className="app-market__row-title">{app.name}</h4>
                       <p className="app-market__row-desc">{app.description}</p>
@@ -353,64 +293,8 @@ export function MoreAppsPage() {
 
   // ── Installed Tab View ───────────────────────────────────────
   const renderInstalledView = () => {
-    // Featured section (recommended apps)
-    const renderFeatured = () => {
-      if (searchQuery || featuredApps.length === 0) return null;
-      return (
-        <section className="more-apps-section">
-          <div className="app-plaza-recommended">
-            <div className="app-plaza-recommended__head">
-              <div>
-                <h2 className="app-plaza-recommended__title">{t('moreApps.recommended', { defaultValue: '官方推荐' })}</h2>
-                <p className="app-plaza-recommended__lead">{t('moreApps.recommendedLead', { defaultValue: '编辑精选 · 高频经营场景 · 一键安装' })}</p>
-              </div>
-              <button
-                type="button"
-                className="app-plaza-recommended__more"
-                data-tab-jump="market"
-                onClick={() => setActiveTab('market')}
-              >
-                {t('moreApps.viewAll', { defaultValue: '浏览更多' })}
-              </button>
-            </div>
-            <div className="app-plaza-featured__scroll">
-              {featuredApps.map((app) => {
-                const installed = isAppInstalled(app.id);
-                return (
-                  <article key={app.id} className="app-plaza-featured__card">
-                    <span
-                      className={cn('app-icon app-icon--md', `app-icon--tone-${app.tone || 'gray'}`)}
-                      dangerouslySetInnerHTML={{ __html: getAppIcon(app.iconKey) }}
-                    />
-                    <div className="app-plaza-featured__body">
-                      {app.badge && <span className="app-plaza-featured__badge">{app.badge}</span>}
-                      <h3 className="app-plaza-featured__title">{app.name}</h3>
-                      <p className="app-plaza-featured__desc">{app.description}</p>
-                      <div className="app-plaza-featured__foot">
-                        <span className="app-plaza-featured__status">{t('moreApps.official', { defaultValue: '官方应用' })}</span>
-                        <button
-                          type="button"
-                          className={cn('app-plaza-featured__cta', installed && 'app-plaza-featured__cta--open')}
-                          onClick={() => handleOpenApp(app)}
-                        >
-                          {installed ? t('moreApps.open', { defaultValue: '打开' }) : t('moreApps.install', { defaultValue: '打开' })}
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-      );
-    };
-
     return (
       <div className="more-apps-main">
-        {renderFeatured()}
-        
-        {/* Grid */}
         {filteredInstalledApps.length > 0 ? (
           <section className="more-apps-section">
             <div className="more-apps-grid">
@@ -419,7 +303,7 @@ export function MoreAppsPage() {
                   key={app.id}
                   app={app}
                   isMineTab={true}
-                  isInstalled={isAppInstalled(app.id)}
+                  isInstalled
                   isFavorite={isAppFavorite(app.id)}
                   onOpen={handleOpenApp}
                   onInstall={installApp}
@@ -433,7 +317,7 @@ export function MoreAppsPage() {
           <div className="more-apps-empty">
             {searchQuery
               ? t('moreApps.emptySearch', { defaultValue: '未找到匹配的应用，试试其他关键词' })
-              : t('moreApps.emptyInstalled', { defaultValue: '还没有安装应用，去应用市场看看' })}
+              : t('moreApps.emptyInstalled', { defaultValue: '还没有收藏或安装应用，去应用广场看看' })}
           </div>
         )}
       </div>

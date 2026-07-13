@@ -35,6 +35,7 @@ import { SidebarUpdateNotice } from '@/components/layout/sidebar-update-notice';
 import { useSettingsStore } from '@/stores/settings';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { closeSclawBrowser, isSclawBrowserOpen } from '@/lib/open-sclaw-browser';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAuthStore, isSiteUser } from '@/stores/auth';
@@ -746,6 +747,12 @@ export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const isOnHome = location.pathname === '/';
+
+  const handleSidebarPointerDownCapture = useCallback(() => {
+    if (isSclawBrowserOpen()) {
+      closeSclawBrowser();
+    }
+  }, []);
 
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
@@ -1678,6 +1685,7 @@ export function Sidebar() {
             ),
       )}
       aria-hidden={isProvincialFullyHidden}
+      onPointerDownCapture={handleSidebarPointerDownCapture}
     >
       {!isProvincialFullyHidden ? (
         <>

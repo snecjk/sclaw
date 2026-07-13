@@ -8,11 +8,11 @@ export const BUILTIN_APPS: AppItem[] = [
     id: 'org-relation',
     name: '客户关系',
     description: '维护客户归属、店铺与电子面单等客户关系基础资料',
-    url: 'customer-relation.html',
+    url: 'https://www.baidu.com?useStoToken=1',
     iconKey: 'org-relation',
+    iconUrl: '',
     tone: 'blue',
-    category: '客户管理',
-    marketCategory: 'org',
+    category: '组织管理',
     kind: 'builtin',
     official: true,
     recommended: true,
@@ -26,9 +26,9 @@ export const BUILTIN_APPS: AppItem[] = [
     description: '维护客户运费与加收费报价，支持首续重、均重、件量阶梯等计费模版',
     url: 'customer-quote.html',
     iconKey: 'customer-quote',
+    iconUrl: '',
     tone: 'orange',
-    category: '客户管理',
-    marketCategory: 'operations',
+    category: '经营管理',
     kind: 'builtin',
     official: true,
     recommended: true,
@@ -41,9 +41,9 @@ export const BUILTIN_APPS: AppItem[] = [
     description: '按运单查询与重算客户运费账单，支持单号计费与汇总账单查看',
     url: 'customer-freight.html',
     iconKey: 'customer-freight',
+    iconUrl: '',
     tone: 'orange',
-    category: '客户管理',
-    marketCategory: 'operations',
+    category: '经营管理',
     kind: 'builtin',
     official: true,
     recommended: true,
@@ -57,55 +57,74 @@ export const BUILTIN_APPS: AppItem[] = [
     description: '录入与分摊网点运营成本，追踪预算执行与成本趋势',
     url: 'outlet-cost-mgmt.html',
     iconKey: 'cost-mgmt',
+    iconUrl: '',
     tone: 'green',
-    category: '成本管理',
-    marketCategory: 'operations',
+    category: '经营管理',
     kind: 'builtin',
     official: true,
     recommended: true,
     recent: '昨天 16:30',
     order: 3,
   },
-  {
-    id: 'report-maker',
-    name: '制表',
-    description: '按经营模板快速制表，支持批量导出 Excel 报表',
-    url: 'report-processing.html',
-    iconKey: 'report-maker',
-    tone: 'purple',
-    category: '报表工具',
-    marketCategory: 'operations',
-    kind: 'builtin',
-    official: true,
-    recommended: true,
-    badge: '新品',
-    recent: '昨天 14:10',
-    order: 4,
-  },
-  {
-    id: 'api-transfer',
-    name: 'API 传输',
-    description: '管理网点业务系统数据接口，统一接入供技能、工作流和 AI 分析使用',
-    url: 'data-access.html',
-    iconKey: 'api-transfer',
-    tone: 'blue',
-    category: '数据工具',
-    marketCategory: 'operations',
-    kind: 'builtin',
-    official: true,
-    recommended: true,
-    recent: '今天 11:00',
-    order: 5,
-  },
+  // {
+  //   id: 'report-maker',
+  //   name: '制表',
+  //   description: '按经营模板快速制表，支持批量导出 Excel 报表',
+  //   url: 'report-processing.html',
+  //   iconKey: 'report-maker',
+  //   iconUrl: '',
+  //   tone: 'purple',
+  //   category: '经营管理',
+  //   kind: 'builtin',
+  //   official: true,
+  //   recommended: true,
+  //   badge: '新品',
+  //   recent: '昨天 14:10',
+  //   order: 4,
+  //   hidden: true,
+  // },
+  // {
+  //   id: 'api-transfer',
+  //   name: 'API 传输',
+  //   description: '管理网点业务系统数据接口，统一接入供技能、工作流和 AI 分析使用',
+  //   url: 'data-access.html',
+  //   iconKey: 'api-transfer',
+  //   iconUrl: '',
+  //   tone: 'blue',
+  //   category: '经营管理',
+  //   kind: 'builtin',
+  //   official: true,
+  //   recommended: true,
+  //   recent: '今天 11:00',
+  //   order: 5,
+  //   hidden: true,
+  // },
 ];
 
-/** Market categories for the "应用广场" tab */
-export const MARKET_CATEGORIES = [
-  { id: 'featured', label: '精选' },
-  { id: 'operations', label: '经营管理' },
-  { id: 'finance', label: '财务管理' },
-  { id: 'org', label: '组织管理' },
-] as const;
+/** Visible builtin apps (excludes hidden entries) */
+export const VISIBLE_BUILTIN_APPS = BUILTIN_APPS.filter((a) => !a.hidden);
+
+export interface MarketCategoryItem {
+  id: string;
+  label: string;
+}
+
+/** Derive market tab categories from visible builtin apps; first tab is 精选 (all apps). */
+export function buildMarketCategories(apps: AppItem[]): MarketCategoryItem[] {
+  const labels = [
+    ...new Set(
+      apps
+        .filter((a) => !a.hidden && a.category)
+        .map((a) => a.category as string),
+    ),
+  ];
+  return [
+    { id: 'featured', label: '精选' },
+    ...labels.map((label) => ({ id: label, label })),
+  ];
+}
+
+export const MARKET_CATEGORIES = buildMarketCategories(BUILTIN_APPS);
 
 /** Hero carousel slides for the "应用广场" tab */
 export const MARKET_HERO_SLIDES = [
