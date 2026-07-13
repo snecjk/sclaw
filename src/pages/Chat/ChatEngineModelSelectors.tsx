@@ -18,6 +18,7 @@ import {
   getWorkspaceDefaultModelId,
   isConcreteModelId,
   normalizeModelIdForChat,
+  resolveChatSelectedModelId,
   resolveChatToolbarModelId,
   resolveProviderRawModelId,
   upsertSessionModel,
@@ -370,11 +371,11 @@ export function ChatModelSelector({
   useEffect(() => {
     if (modelSaving) return;
     if (currentSessionKey === DEFAULT_SESSION_KEY && currentEngineType !== 'claude') {
-      const pending = normalizeModelIdForChat(pendingNewSessionModel);
-      setSelectedModelId(pending || workspaceDefaultModelId || '');
+      const hint = pendingNewSessionModel?.trim() || workspaceDefaultModelId || '';
+      setSelectedModelId(resolveChatSelectedModelId(modelOptions, hint) || hint || '');
       return;
     }
-    const resolved = currentEngineType === 'claude'
+    const toolbarHint = currentEngineType === 'claude'
       ? resolveClaudeToolbarModelId({
         currentSessionKey,
         sessionModel: currentSession?.model,
@@ -388,7 +389,8 @@ export function ChatModelSelector({
         workspaceDefaultModel: workspaceDefaultModelId,
         stoCatalogModelIds,
       });
-    setSelectedModelId(resolved || '');
+    const hint = currentSession?.model?.trim() || toolbarHint;
+    setSelectedModelId(resolveChatSelectedModelId(modelOptions, hint) || toolbarHint || '');
   }, [
     currentSessionKey,
     currentEngineType,
@@ -399,10 +401,11 @@ export function ChatModelSelector({
     currentAgent?.inheritedModel,
     workspaceDefaultModelId,
     stoCatalogModelIds,
+    modelOptions,
   ]);
 
   const selectedModel = useMemo(
-    () => modelOptions.find((option) => option.normalizedId === selectedModelId),
+    () => modelOptions.find((option) => option.modelId === selectedModelId),
     [modelOptions, selectedModelId],
   );
   const claudeModelConfigured = isConcreteModelId(currentAgent?.modelDisplay);
@@ -412,17 +415,14 @@ export function ChatModelSelector({
       ? (workspaceDefaultModelId || t('toolbar.modelNotConfigured'))
       : (workspaceDefaultModelId || t('toolbar.currentModel')));
 
-  const handleModelSwitch = async (normalizedId: string) => {
-    if (!currentSessionKey || normalizedId === selectedModelId) return;
-    const option = modelOptions.find((item) => item.normalizedId === normalizedId);
-    const rawModelId = option?.modelId ?? normalizedId;
-    setSelectedModelId(normalizedId);
+  const handleModelSwitch = async (rawModelId: string) => {
+    if (!currentSessionKey || rawModelId === selectedModelId) return;
+    const option = modelOptions.find((item) => item.modelId === rawModelId);
 
     if (currentSessionKey === DEFAULT_SESSION_KEY) {
       useChatStore.getState().setPendingNewSessionModel(rawModelId);
       setModelSaving(true);
       try {
-        let persistedModel = rawModelId;
         if (currentEngineType === 'claude' && currentAgentId) {
           const result = await hostApiFetch<{
             snapshot?: { agents?: Array<{ id: string; modelDisplay?: string }> };
@@ -433,18 +433,28 @@ export function ChatModelSelector({
               accountId: option?.accountId,
             }),
           });
-          persistedModel = result.snapshot?.agents?.find((agent) => agent.id === currentAgentId)?.modelDisplay?.trim()
-            || rawModelId;
           await fetchAgents();
+          const persistedModel = result.snapshot?.agents?.find((agent) => agent.id === currentAgentId)?.modelDisplay?.trim()
+            || rawModelId;
+          useChatStore.setState((state) => ({
+            sessions: upsertSessionModel(
+              state.sessions,
+              currentSessionKey,
+              persistedModel,
+              { engineType: currentEngineType, label: '新对话' },
+            ),
+          }));
+        } else {
+          useChatStore.setState((state) => ({
+            sessions: upsertSessionModel(
+              state.sessions,
+              currentSessionKey,
+              rawModelId,
+              { engineType: currentEngineType, label: '新对话' },
+            ),
+          }));
         }
-        useChatStore.setState((state) => ({
-          sessions: upsertSessionModel(
-            state.sessions,
-            currentSessionKey,
-            persistedModel,
-            { engineType: currentEngineType, label: '新对话' },
-          ),
-        }));
+        setSelectedModelId(rawModelId);
       } catch (err) {
         toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));
         const resolved = currentEngineType === 'claude'
@@ -460,7 +470,7 @@ export function ChatModelSelector({
             workspaceDefaultModel: workspaceDefaultModelId,
             stoCatalogModelIds,
           });
-        setSelectedModelId(resolved || '');
+        setSelectedModelId(resolveChatSelectedModelId(modelOptions, resolved) || resolved || '');
       } finally {
         setModelSaving(false);
       }
@@ -469,9 +479,8 @@ export function ChatModelSelector({
 
     setModelSaving(true);
     try {
-      let persistedModel = rawModelId;
       if (currentEngineType === 'claude' && currentAgentId) {
-        persistedModel = await applyClaudeSessionModel({
+        await applyClaudeSessionModel({
           currentSessionKey,
           modelId: rawModelId,
           option,
@@ -486,10 +495,10 @@ export function ChatModelSelector({
           currentAgentId,
         };
         try {
-          persistedModel = await applyOpenClawSessionModel(sessionParams);
+          await applyOpenClawSessionModel(sessionParams);
         } catch (err) {
           if (isModelNotAllowedError(err) && isStoBuiltinModelOption(option)) {
-            persistedModel = await repairStoCatalogAndRetrySessionModel(sessionParams);
+            await repairStoCatalogAndRetrySessionModel(sessionParams);
           } else {
             throw err;
           }
@@ -499,10 +508,11 @@ export function ChatModelSelector({
         sessions: upsertSessionModel(
           state.sessions,
           currentSessionKey,
-          persistedModel || rawModelId,
+          rawModelId,
           { engineType: currentEngineType, label: '新对话' },
         ),
       }));
+      setSelectedModelId(rawModelId);
     } catch (err) {
       toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));
       const resolved = currentEngineType === 'claude'
@@ -519,7 +529,7 @@ export function ChatModelSelector({
           workspaceDefaultModel: workspaceDefaultModelId,
           stoCatalogModelIds,
         });
-      setSelectedModelId(resolved || '');
+      setSelectedModelId(resolveChatSelectedModelId(modelOptions, resolved) || resolved || '');
     } finally {
       setModelSaving(false);
     }
@@ -541,8 +551,8 @@ export function ChatModelSelector({
         modelOptions.map((option) => (
           <DropdownMenuItem
             key={option.key}
-            className={cn('flex items-center gap-2', option.normalizedId === selectedModelId && 'bg-primary/8 font-medium')}
-            onSelect={() => void handleModelSwitch(option.normalizedId)}
+            className={cn('flex items-center gap-2', option.modelId === selectedModelId && 'bg-primary/8 font-medium')}
+            onSelect={() => void handleModelSwitch(option.modelId)}
           >
             <span className="min-w-0 flex-1 truncate text-[13px]">{option.displayName}</span>
             <span className={cn(

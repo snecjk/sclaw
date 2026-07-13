@@ -19,18 +19,27 @@ export async function qualifyChatModelRef(
 
   const customModels = (account.metadata?.customModels as string[] | undefined) ?? [];
   if (customModels.length > 0) {
+    const exactMatch = customModels.find((catalogId) => catalogId === trimmed);
+    if (exactMatch) {
+      return `${providerKey}/${exactMatch}`;
+    }
+
+    const qualifiedMatch = customModels.find((catalogId) => trimmed.endsWith(`/${catalogId}`));
+    if (qualifiedMatch) {
+      return `${providerKey}/${qualifiedMatch}`;
+    }
+
     const bare = trimmed.includes('/')
       ? trimmed.slice(trimmed.lastIndexOf('/') + 1)
       : trimmed;
-    const catalogMatch = customModels.find((catalogId) => {
-      if (catalogId === trimmed) return true;
+    const bareMatch = customModels.find((catalogId) => {
       const catalogBare = catalogId.includes('/')
         ? catalogId.slice(catalogId.lastIndexOf('/') + 1)
         : catalogId;
       return catalogBare === bare;
     });
-    if (catalogMatch) {
-      return `${providerKey}/${catalogMatch}`;
+    if (bareMatch) {
+      return `${providerKey}/${bareMatch}`;
     }
   }
 

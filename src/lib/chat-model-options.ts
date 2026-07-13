@@ -14,6 +14,16 @@ export function normalizeModelIdForChat(raw: string | undefined | null): string 
   return lastSlash >= 0 ? trimmed.slice(lastSlash + 1) : trimmed;
 }
 
+/** True when a catalog id and user hint refer to the same catalog entry. */
+export function catalogModelIdsMatch(hint: string, catalogId: string): boolean {
+  const trimmedHint = hint.trim();
+  const trimmedCatalog = catalogId.trim();
+  if (!trimmedHint || !trimmedCatalog) return false;
+  if (trimmedHint === trimmedCatalog) return true;
+  if (trimmedHint.endsWith(`/${trimmedCatalog}`)) return true;
+  return false;
+}
+
 export function isConcreteModelId(raw: string | undefined | null): boolean {
   const normalized = normalizeModelIdForChat(raw);
   return Boolean(normalized) && normalized.toLowerCase() !== 'not configured';
@@ -97,9 +107,12 @@ export function resolveProviderRawModelId(
     ];
     for (const catalogId of candidates) {
       if (HIDDEN_PROVIDER_IDS.has(catalogId)) continue;
-      if (catalogId === trimmed) {
+      if (catalogModelIdsMatch(trimmed, catalogId)) {
         return { modelId: catalogId, accountId: account.id };
       }
+    }
+    for (const catalogId of candidates) {
+      if (HIDDEN_PROVIDER_IDS.has(catalogId)) continue;
       if (normalizeModelIdForChat(catalogId) === normalizeModelIdForChat(trimmed)) {
         return { modelId: catalogId, accountId: account.id };
       }
@@ -215,7 +228,7 @@ export interface ChatModelOption {
   modelId: string;        // ← 原始值（含前缀），用于发给 Gateway / backend
   normalizedId: string;   // ← 截断后的值，用于匹配 selectedModelId
   accountId: string;
-  displayName: string;    // ← 截断后的值，UI 展示更干净
+  displayName: string;    // ← 与 Models 页一致的完整模型 ID（UI 展示）
   subLabel: string;
   /** true = STO 内置等 */
   isBuiltin: boolean;
@@ -237,7 +250,7 @@ export function buildChatModelOptions(providerItems: ProviderListItem[]): ChatMo
           modelId: rawModelId,
           normalizedId,
           accountId: account.id,
-          displayName: normalizedId,
+          displayName: rawModelId,
           subLabel,
           isBuiltin,
         });
@@ -258,4 +271,29 @@ export function buildChatModelOptions(providerItems: ProviderListItem[]): ChatMo
     }
   }
   return options;
+}
+
+/** Map session / toolbar hint to raw catalog modelId for unique dropdown selection. */
+export function resolveChatSelectedModelId(
+  options: ChatModelOption[],
+  modelHint: string | undefined | null,
+): string {
+  const trimmed = modelHint?.trim();
+  if (!trimmed) return '';
+
+  const exact = options.find((option) => catalogModelIdsMatch(trimmed, option.modelId));
+  if (exact) return exact.modelId;
+
+  const normalized = normalizeModelIdForChat(trimmed);
+  if (!normalized) return '';
+
+  const matches = options.filter((option) => option.normalizedId === normalized);
+  if (matches.length === 1) return matches[0].modelId;
+  if (matches.length > 1) {
+    const qualified = matches.find((option) => trimmed.endsWith(`/${option.modelId}`));
+    if (qualified) return qualified.modelId;
+    return matches[0].modelId;
+  }
+
+  return trimmed;
 }

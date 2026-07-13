@@ -118,10 +118,12 @@ export async function applyWorkspaceDefaultToNewSession(
   const userChosenModel = existingSession?.model?.trim();
   if (userChosenModel) {
     try {
+      const resolved = resolveProviderRawModelId(accounts, userChosenModel, fallbackAccountId);
+      if (!resolved) return;
       const persisted = await persistSessionModelToGateway({
         sessionKey: trimmedKey,
-        model: userChosenModel,
-        accountId: fallbackAccountId,
+        model: resolved.modelId,
+        accountId: resolved.accountId,
         agentId,
         engineType,
       });
@@ -129,7 +131,7 @@ export async function applyWorkspaceDefaultToNewSession(
         useChatStore.setState((state) => ({
           sessions: state.sessions.map((session) => (
             session.key === trimmedKey
-              ? { ...session, model: persisted }
+              ? { ...session, model: resolved.modelId }
               : session
           )),
         }));
