@@ -27,6 +27,7 @@ describe('sto-dingtalk-send-guard before_prompt_build', () => {
       id: 'sto-dingtalk-send-guard',
       name: '钉钉发送防护',
       logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn() },
+      registerTool: vi.fn(),
       on: vi.fn((hookName: string, handler: HookHandler) => {
         hooks[hookName] = handler;
       }),
@@ -76,5 +77,73 @@ describe('sto-dingtalk-send-guard before_prompt_build', () => {
 
     expect(result).toBeUndefined();
     expect(clearDingTalkMentionPending).not.toHaveBeenCalled();
+  });
+
+  it('injects share_to_dingtalk prompt only for share-intent turns without @ recipients', async () => {
+    readDingTalkMentionPending.mockResolvedValue(null);
+
+    const api = buildApi();
+    register.register(api as unknown as OpenClawPluginApi);
+
+    const result = await hooks.before_prompt_build(
+      { prompt: '把这段内容分享到钉钉', messages: [] },
+      { agentId: 'agent-1', sessionKey: 'sess-share', trigger: 'user' },
+    );
+
+    expect(result?.appendSystemContext).toContain('share_to_dingtalk');
+    expect(result?.appendSystemContext).not.toContain(DINGTALK_RECIPIENTS_MARKER);
+  });
+
+  it('injects oral dws send rules for named recipient without @', async () => {
+    readDingTalkMentionPending.mockResolvedValue(null);
+
+    const api = buildApi();
+    register.register(api as unknown as OpenClawPluginApi);
+
+    const result = await hooks.before_prompt_build(
+      { prompt: '发一条上海明天的天气给文鹏', messages: [] },
+      { agentId: 'agent-1', sessionKey: 'sess-oral', trigger: 'user' },
+    );
+
+    expect(result?.appendSystemContext).toContain('钉钉口头发送');
+    expect(result?.appendSystemContext).toContain('dws contact user search');
+    expect(result?.appendSystemContext).toContain('禁止**调用 `share_to_dingtalk`');
+    expect(result?.appendSystemContext).not.toContain('钉钉分享内置工具');
+  });
+
+  it('prefers oral dws rules over share picker when both patterns could match', async () => {
+    readDingTalkMentionPending.mockResolvedValue(null);
+
+    const api = buildApi();
+    register.register(api as unknown as OpenClawPluginApi);
+
+    const result = await hooks.before_prompt_build(
+      { prompt: '把天气发给文鹏', messages: [] },
+      { agentId: 'agent-1', sessionKey: 'sess-oral-share', trigger: 'user' },
+    );
+
+    expect(result?.appendSystemContext).toContain('钉钉口头发送');
+    expect(result?.appendSystemContext).not.toContain('钉钉分享内置工具');
+  });
+
+  it('does not inject share prompt when @ recipients are pending', async () => {
+    readDingTalkMentionPending.mockResolvedValue({
+      sessionKey: 'sess-1',
+      mentions: [{ type: 'user', displayName: '张三', userId: 'u-001' }],
+      userText: '分享到钉钉',
+      writtenAt: Date.now(),
+    });
+    clearDingTalkMentionPending.mockResolvedValue(undefined);
+
+    const api = buildApi();
+    register.register(api as unknown as OpenClawPluginApi);
+
+    const result = await hooks.before_prompt_build(
+      { prompt: '分享到钉钉', messages: [] },
+      { agentId: 'agent-1', sessionKey: 'sess-1', trigger: 'user' },
+    );
+
+    expect(result?.appendSystemContext).toContain(DINGTALK_RECIPIENTS_MARKER);
+    expect(result?.appendSystemContext).not.toContain('share_to_dingtalk');
   });
 });
