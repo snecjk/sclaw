@@ -1,6 +1,9 @@
 import { invokeIpc } from '@/lib/api-client';
-
-const AGENT_MEMORY_CONTEXT_MARKER = '<!-- StoClaw-Agent-Memory -->';
+import {
+  AGENT_MEMORY_CONTEXT_MARKER,
+  stripAgentMemoryContextByMarker,
+  stripAgentMemoryContextsForDisplay,
+} from '@/lib/agent-memory-display';
 
 type AgentMemoryBootstrap = {
   bootstrap?: {
@@ -61,19 +64,7 @@ export function messageHasAgentMemoryContext(message: string): boolean {
 }
 
 export function stripAgentMemoryContextForDisplay(message: string): string {
-  if (!messageHasAgentMemoryContext(message)) {
-    return message;
-  }
-
-  const startIdx = message.indexOf(AGENT_MEMORY_CONTEXT_MARKER);
-  const endIdx = message.lastIndexOf(AGENT_MEMORY_CONTEXT_MARKER);
-  if (startIdx >= 0 && endIdx > startIdx) {
-    return [
-      message.slice(0, startIdx).trim(),
-      message.slice(endIdx + AGENT_MEMORY_CONTEXT_MARKER.length).trim(),
-    ].filter(Boolean).join('\n\n');
-  }
-  return message.slice(0, startIdx).trim();
+  return stripAgentMemoryContextByMarker(message, AGENT_MEMORY_CONTEXT_MARKER);
 }
 
 export function buildAgentMemoryContextText(items: RetrievedMemoryItem[]): string {
@@ -157,7 +148,7 @@ export async function captureAgentMemoryTurn(input: {
   runId?: string | null;
   sessionKey?: string | null;
 }): Promise<void> {
-  const userMessage = normalizeWhitespace(stripAgentMemoryContextForDisplay(input.userMessage));
+  const userMessage = normalizeWhitespace(stripAgentMemoryContextsForDisplay(input.userMessage));
   const assistantMessage = normalizeWhitespace(input.assistantMessage);
   if (!userMessage || !assistantMessage) {
     return;

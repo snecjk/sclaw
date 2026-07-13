@@ -24,7 +24,11 @@ export interface AgentMemoryIndexRecordInput {
   collectionName?: string;
   memoryType?: string;
   occurredAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  userId?: string;
   agentId?: string;
+  runId?: string;
   sessionId?: string;
   turnId?: string;
   source?: string;
@@ -38,10 +42,14 @@ export interface AgentMemorySearchResultItem {
   content: string;
   memoryType?: string;
   source?: string;
+  userId?: string | null;
+  appId?: string | null;
   agentId?: string | null;
   runId?: string | null;
   sessionId?: string | null;
   turnId?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
   occurredAt?: string | null;
   metadata?: Record<string, unknown>;
 }

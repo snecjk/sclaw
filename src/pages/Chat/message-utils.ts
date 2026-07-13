@@ -8,7 +8,7 @@ import { hostApiFetch } from '@/lib/host-api';
 import { tracePreviewExtract } from '@/lib/preview-extract-trace';
 import { useChatStore } from '@/stores/chat';
 import { sessionHasWorkflowExecution } from '@/stores/workflow-memory';
-import { stripAgentMemoryContextForDisplay } from '@/lib/agent-memory';
+import { stripAgentMemoryContextsForDisplay } from '@/lib/agent-memory-display';
 import { buildWorkflowFormConfig, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import {
   PARAM_FORM_MARKER_REGEX,
@@ -80,7 +80,7 @@ function cleanUserText(text: string): string {
   return stripDingTalkMentionContextForDisplay(
     stripWorkflowCompleteForDisplay(
       stripWorkflowSessionHintForDisplay(
-        stripAgentMemoryContextForDisplay(
+        stripAgentMemoryContextsForDisplay(
           stripWorkflowContextForDisplay(
             stripCronTriggerTextForDisplay(cleaned),
           ),

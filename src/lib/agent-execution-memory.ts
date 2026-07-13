@@ -1,8 +1,12 @@
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
+import {
+  AGENT_EXECUTION_MEMORY_CONTEXT_MARKER,
+  stripAgentMemoryContextByMarker,
+} from '@/lib/agent-memory-display';
 import { type ExecutionMemoryItem } from '../../shared/execution-memory-filter';
 
-const MARKER = '<!-- StoClaw-Agent-Execution-Memory -->';
+const MARKER = AGENT_EXECUTION_MEMORY_CONTEXT_MARKER;
 
 type Item = ExecutionMemoryItem;
 export type InjectedExecutionMemory = { memoryId: string; memory: string };
@@ -53,6 +57,5 @@ export function buildAgentExecutionMemoryContextText(items: Item[]): string {
 }
 export function appendAgentExecutionMemoryContext(text: string, context: string | undefined): string { return !context || text.includes(MARKER) ? text : `${text}\n\n${context}`; }
 export function stripAgentExecutionMemoryContextForDisplay(message: string): string {
-  const start = message.indexOf(MARKER); const end = message.lastIndexOf(MARKER);
-  return start < 0 ? message : end > start ? `${message.slice(0, start)}${message.slice(end + MARKER.length)}`.trim() : message.slice(0, start).trim();
+  return stripAgentMemoryContextByMarker(message, MARKER);
 }

@@ -12,7 +12,10 @@ import type {
   VectorStoreResult,
 } from 'mem0ai/oss';
 
-import { agentMemoryRemoteService } from './agent-memory-remote-service';
+import {
+  agentMemoryRemoteService,
+  type AgentMemorySearchResultItem,
+} from './agent-memory-remote-service';
 import { logger } from '../utils/logger';
 
 const MEM0_CUSTOM_LLM_PROVIDER = 'sto_memory_center_llm';
@@ -244,23 +247,31 @@ class StoMemoryCenterVectorStoreProvider implements VectorStore {
       vectorDimension: vectors[0]?.length ?? 0,
       memoryScopes: payloads.map((p) => p?.memoryScope).filter(Boolean),
     });
-    const records = ids.map((id, index) => ({
-      recordId: id,
-      collectionName: this.collectionName,
-      vector: vectors[index] || [],
-      content: String(payloads[index]?.data ?? ''),
-      // mem0 SDK 不设 memory_type（payloads 里无该字段），默认 'memory'。
-      // 用 metadata.memoryScope 把记忆类型显式标到可服务端检索的 memory_type 字段：
-      //   memoryScope='execution' → 'execution'，'preference' → 'preference'，无则 'memory'。
-      // 使 memoryTypes 过滤可区分"执行经验/普通偏好"两类，不必 fetch 全部再后过滤。
-      memoryType: payloads[index]?.memoryScope ? String(payloads[index].memoryScope) : String(payloads[index]?.memory_type ?? 'memory'),
-      agentId: typeof payloads[index]?.agent_id === 'string' ? payloads[index].agent_id : undefined,
-      runId: typeof payloads[index]?.run_id === 'string' ? payloads[index].run_id : undefined,
-      source: 'mem0',
-      metadata: {
-        payload: payloads[index] || {},
-      },
-    }));
+    const records = ids.map((id, index) => {
+      const payload = this.normalizePayload(payloads[index] || {});
+      return {
+        recordId: id,
+        collectionName: this.collectionName,
+        vector: vectors[index] || [],
+        content: String(payload.data ?? ''),
+        // mem0 SDK 不设 memory_type（payloads 里无该字段），默认 'memory'。
+        // 用 metadata.memoryScope 把记忆类型显式标到可服务端检索的 memory_type 字段：
+        //   memoryScope='execution' → 'execution'，'preference' → 'preference'，无则 'memory'。
+        // 使 memoryTypes 过滤可区分"执行经验/普通偏好"两类，不必 fetch 全部再后过滤。
+        memoryType: payload.memoryScope ? String(payload.memoryScope) : String(payload.memory_type ?? 'memory'),
+        userId: typeof payload.user_id === 'string' ? payload.user_id : undefined,
+        appId: typeof payload.app_id === 'string' ? payload.app_id : undefined,
+        agentId: typeof payload.agent_id === 'string' ? payload.agent_id : undefined,
+        runId: typeof payload.run_id === 'string' ? payload.run_id : undefined,
+        sessionId: this.readString(payload, 'session_id', 'sessionId', 'sessionKey'),
+        turnId: this.readString(payload, 'turn_id', 'turnId'),
+        occurredAt: this.readString(payload, 'occurred_at', 'occurredAt'),
+        createdAt: this.readString(payload, 'created_at', 'createdAt'),
+        updatedAt: this.readString(payload, 'updated_at', 'updatedAt'),
+        source: this.readString(payload, 'source') ?? 'mem0',
+        metadata: this.compactMetadata(payload),
+      };
+    });
     await agentMemoryRemoteService.upsertVectors(records);
     await this.upsertCache(ids, payloads);
     logger.info('[mem0][vector] insert success', { count: ids.length });
@@ -281,15 +292,12 @@ class StoMemoryCenterVectorStoreProvider implements VectorStore {
     });
     const cache = await this.readCache();
     const results = response.items.map((item) => {
-      const metadataPayload = item.metadata?.payload;
       const cachedPayload = cache.records[item.recordId]?.payload;
       const payload = this.normalizePayload(
-        (metadataPayload && typeof metadataPayload === 'object' ? metadataPayload as Record<string, unknown> : null)
+        // 兼容迁移前远端记录；新记录由紧凑字段恢复成 mem0 payload。
+        (item.metadata?.payload && typeof item.metadata.payload === 'object' ? item.metadata.payload as Record<string, unknown> : null)
         ?? cachedPayload
-        ?? {
-          data: item.content,
-          memory_type: item.memoryType,
-        },
+        ?? this.rehydratePayload(item),
       );
       return {
         id: item.recordId,
@@ -431,6 +439,45 @@ class StoMemoryCenterVectorStoreProvider implements VectorStore {
       agent_id: payload.agent_id ?? payload.agentId,
       run_id: payload.run_id ?? payload.runId,
     };
+  }
+
+  /** 仅持久化业务扩展字段，避免把 mem0 原始 payload（尤其 data）嵌入 metadata。 */
+  private compactMetadata(payload: Record<string, unknown>): Record<string, unknown> {
+    const metadata: Record<string, unknown> = {};
+    for (const key of ['memoryType', 'confidence', 'status']) {
+      if (payload[key] !== undefined) {
+        metadata[key] = payload[key];
+      }
+    }
+    return metadata;
+  }
+
+  /** 将服务端紧凑检索项还原为 mem0 VectorStore 所需 payload。 */
+  private rehydratePayload(item: AgentMemorySearchResultItem): Record<string, unknown> {
+    return this.normalizePayload({
+      ...(item.metadata || {}),
+      data: item.content,
+      memoryScope: item.memoryType,
+      user_id: item.userId,
+      app_id: item.appId,
+      agent_id: item.agentId,
+      run_id: item.runId,
+      sessionKey: item.sessionId,
+      turn_id: item.turnId,
+      source: item.source,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      occurredAt: item.occurredAt,
+    });
+  }
+
+  private readString(payload: Record<string, unknown>, ...keys: string[]): string | undefined {
+    for (const key of keys) {
+      if (typeof payload[key] === 'string' && payload[key].trim()) {
+        return payload[key];
+      }
+    }
+    return undefined;
   }
 
   private matchesFilters(payload: Record<string, unknown>, filters?: SearchFilters): boolean {

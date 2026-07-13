@@ -1,21 +1,38 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  appendAgentMemoryContext,
+  appendAgentMemoryContextBlock,
   buildAgentMemoryContextText,
   coerceMemoryMessageText,
   findLatestUserMessageBeforeAssistant,
   stripAgentMemoryContextForDisplay,
 } from '@/lib/agent-memory';
+import {
+  buildAgentExecutionMemoryContextText,
+  stripAgentExecutionMemoryContextForDisplay,
+} from '@/lib/agent-execution-memory';
+import { stripAgentMemoryContextsForDisplay } from '@/lib/agent-memory-display';
+import { normalizeUserMessageForDisplay } from '@/lib/user-message-display';
 
 describe('agent-memory helpers', () => {
   it('strips injected memory context for display', () => {
-    const withContext = appendAgentMemoryContext('原始问题', [
+    const withContext = appendAgentMemoryContextBlock('原始问题', buildAgentMemoryContextText([
       { memory: '用户偏好中文回答', score: 0.98 },
-    ]);
+    ]));
 
     expect(withContext).toContain('StoClaw-Agent-Memory');
     expect(stripAgentMemoryContextForDisplay(withContext)).toBe('原始问题');
+  });
+
+  it('strips execution memory context from gateway user-message echoes', () => {
+    const withContext = [
+      '一周单量数据情况',
+      buildAgentExecutionMemoryContextText([{ memory: '执行 sai-cli 查询', score: 0.532 }]),
+    ].join('\n\n');
+
+    expect(stripAgentExecutionMemoryContextForDisplay(withContext)).toBe('一周单量数据情况');
+    expect(stripAgentMemoryContextsForDisplay(withContext)).toBe('一周单量数据情况');
+    expect(normalizeUserMessageForDisplay(withContext)).toBe('一周单量数据情况');
   });
 
   it('formats memory context with ranked items', () => {

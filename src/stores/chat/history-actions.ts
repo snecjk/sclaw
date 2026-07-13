@@ -1,6 +1,6 @@
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
-import { stripAgentMemoryContextForDisplay } from '@/lib/agent-memory';
+import { stripAgentMemoryContextsForDisplay } from '@/lib/agent-memory-display';
 import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, normalizeDerivedSessionLabel } from '@/lib/workflow-session-hint';
 import { buildSessionLabelDerivationOptions, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { mergeLocalWorkflowTurnsFromCurrent } from '@/lib/workflow-local-turn';
@@ -10,7 +10,6 @@ import {
 } from './parameter-form-recovery';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
 import {
-  clearHistoryPoll,
   enrichWithCachedImages,
   enrichWithToolResultFiles,
   getMessageText,
@@ -46,7 +45,7 @@ function stripAgentMemoryFromHistoryMessage(message: RawMessage): RawMessage {
   }
 
   if (typeof message.content === 'string') {
-    const stripped = stripAgentMemoryContextForDisplay(message.content);
+    const stripped = stripAgentMemoryContextsForDisplay(message.content);
     return stripped === message.content ? message : { ...message, content: stripped };
   }
 
@@ -59,7 +58,7 @@ function stripAgentMemoryFromHistoryMessage(message: RawMessage): RawMessage {
     if (block.type !== 'text' || typeof block.text !== 'string') {
       return block;
     }
-    const stripped = stripAgentMemoryContextForDisplay(block.text);
+    const stripped = stripAgentMemoryContextsForDisplay(block.text);
     if (stripped === block.text) {
       return block;
     }

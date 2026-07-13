@@ -90,7 +90,7 @@ import {
 import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, normalizeDerivedSessionLabel } from '@/lib/workflow-session-hint';
 import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, sanitizeGatewaySessionLabels, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
-import { stripAgentMemoryContextForDisplay } from '@/lib/agent-memory';
+import { stripAgentMemoryContextsForDisplay } from '@/lib/agent-memory-display';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { traceChatSession } from '../../shared/chat-session-trace';
 import {
@@ -122,7 +122,7 @@ function stripAgentMemoryFromHistoryMessage(message: RawMessage): RawMessage {
   }
 
   if (typeof message.content === 'string') {
-    const stripped = stripAgentMemoryContextForDisplay(message.content);
+    const stripped = stripAgentMemoryContextsForDisplay(message.content);
     return stripped === message.content ? message : { ...message, content: stripped };
   }
 
@@ -135,7 +135,7 @@ function stripAgentMemoryFromHistoryMessage(message: RawMessage): RawMessage {
     if (block.type !== 'text' || typeof block.text !== 'string') {
       return block;
     }
-    const stripped = stripAgentMemoryContextForDisplay(block.text);
+    const stripped = stripAgentMemoryContextsForDisplay(block.text);
     if (stripped === block.text) {
       return block;
     }
@@ -2425,12 +2425,10 @@ export const useChatStore = create<ChatState>()(
     // Inject hidden workflow context / session hint for AI guidance
     const {
       appendAgentMemoryContextBlock,
-      stripAgentMemoryContextForDisplay,
     } = await import('@/lib/agent-memory');
     const {
       appendAgentExecutionMemoryContext,
       rememberInjectedExecutionMemories,
-      stripAgentExecutionMemoryContextForDisplay,
     } = await import('@/lib/agent-execution-memory');
     const { buildAgentMemoryContextBlocks } = await import('@/lib/agent-memory-context');
     const { appendWorkflowContext, stripWorkflowContextForDisplay } = await import('@/lib/workflow-context');
@@ -2513,10 +2511,8 @@ export const useChatStore = create<ChatState>()(
 
     const messageWithContext = appendWorkflowContext(textForGateway, workflowContext);
     const displayText = stripWorkflowSessionHintForDisplay(
-      stripAgentMemoryContextForDisplay(
-        stripAgentExecutionMemoryContextForDisplay(
-          stripWorkflowContextForDisplay(messageWithContext),
-        ),
+      stripAgentMemoryContextsForDisplay(
+        stripWorkflowContextForDisplay(messageWithContext),
       ),
     );
 

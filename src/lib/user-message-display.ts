@@ -4,7 +4,7 @@
  */
 import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
 import { stripDingTalkMentionContextForDisplay } from '@/lib/dingtalk-mention-context';
-import { stripAgentMemoryContextForDisplay } from '@/lib/agent-memory';
+import { stripAgentMemoryContextsForDisplay } from '@/lib/agent-memory-display';
 import { stripWorkflowCompleteForDisplay, stripWorkflowContextForDisplay } from '@/lib/workflow-context';
 import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
 
@@ -29,7 +29,7 @@ export function normalizeUserMessageForDisplay(text: string): string {
   const stripped = stripDingTalkMentionContextForDisplay(
     stripWorkflowCompleteForDisplay(
       stripWorkflowSessionHintForDisplay(
-        stripAgentMemoryContextForDisplay(
+        stripAgentMemoryContextsForDisplay(
           stripWorkflowContextForDisplay(
             stripCronTriggerTextForDisplay(stripGatewayUserMetadata(text)),
           ),

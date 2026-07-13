@@ -96,7 +96,7 @@ class MemoryCaptureService {
         return;
       }
       // 门控 C：工具调用过少（≤3）的回合不值得触发昂贵的 summarize。阈值 >3 才沉淀。
-      if (snapshot.tools.length <= 3) {
+      if (snapshot.tools.length <= 4) {
         const reason = 'too_few_tools';
         await getKyselyDatabase().updateTable('memory_capture_jobs').set({ status: 'skipped', skip_reason: reason, completed_at: now(), updated_at: now() }).where('id', '=', id).execute();
         trace('info', 'job.skipped', { jobId: id, kind: 'execution_experience', reason, toolCount: snapshot.tools.length, messageCount: snapshot.messageCount });
