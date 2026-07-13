@@ -29,7 +29,19 @@ export async function resolveStoClaudeApiKey(accountId?: string): Promise<string
     const cached = await getApiKey(accountId);
     if (cached?.trim()) return cached.trim();
   }
-  return getUserSk();
+
+  const { user } = await getAuthState();
+  const strategy = await resolveStrategy(user);
+  if (!strategy || !user) {
+    return null;
+  }
+
+  const plainSk = await getUserSk();
+  if (!plainSk?.trim()) {
+    return null;
+  }
+
+  return strategy.formatInferenceApiKey(user, plainSk);
 }
 
 export async function applyStoClaudeInferenceEnv(
