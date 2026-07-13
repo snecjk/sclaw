@@ -183,6 +183,7 @@ const electronAPI = {
         'sclaw-browser:capturePage',
         'sclaw-browser:executeScript',
         'sclaw-browser:getNetworkLog',
+        'sclaw-browser:ensureBridge',
       ];
 
       if (validChannels.includes(channel)) {
