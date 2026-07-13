@@ -13,6 +13,7 @@ import { getApiKey } from '../utils/secure-storage';
 import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
 import { toLegacyChatMessagePayload, type NormalizedEngineEvent } from '../gateway/normalized-engine-event';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
+import { resolveSessionToolCwd } from '../services/session-catalog-service';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, upsertEngineSessionRegistryEntry, type EngineSessionRegistryEntry } from './session-registry';
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EngineSessionSummary } from './types';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
@@ -926,11 +927,11 @@ export async function consumeClaudeQuery(
 
 async function ensureClaudeRegistryEntry(sessionKey: string) {
   const existing = await getEngineSessionRegistryEntry(sessionKey);
-  if (existing?.cwd) return existing;
-
   const agentId = extractAgentId(sessionKey);
-  const cwd = await getAgentWorkspacePath(agentId);
+  const cwd = await resolveSessionToolCwd(sessionKey, agentId);
   if (!cwd) return existing;
+  if (existing?.cwd === cwd) return existing;
+
   const launchSelection = await resolveClaudeLaunchSelection(agentId, existing);
 
   const nextEntry = {
@@ -939,7 +940,7 @@ async function ensureClaudeRegistryEntry(sessionKey: string) {
     cwd,
     agentId,
     engineType: 'claude' as const,
-    updatedAt: existing?.updatedAt ?? Date.now(),
+    updatedAt: Date.now(),
     title: existing?.title,
     model: launchSelection.model,
     accountId: launchSelection.accountId,

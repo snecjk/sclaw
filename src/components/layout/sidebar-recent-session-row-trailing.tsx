@@ -1,11 +1,10 @@
 /**
- * SidebarRecentSessionRowTrailing — 最近会话行尾：状态位 + hover「...」菜单（重命名 / 分组 / 删除）。
- *
- * 使用位置：SidebarRecentSessionRow
+ * SidebarRecentSessionRowTrailing — 最近会话行尾：状态位 + hover「...」菜单（重命名 / 移至项目 / 删除）。
  */
 import {
   ChevronRight,
-  Folder,
+  FolderOpen,
+  FolderPlus,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -30,27 +29,19 @@ import {
   sidebarRecentMenuItemClass,
   sidebarTextIconClass,
 } from '@/lib/surfaces';
-import type { SidebarRecentGroup } from '@/stores/sidebar-recent-groups';
+import type { WorkspaceDto } from '@/lib/session-catalog-api';
 
 export interface SidebarRecentSessionRowTrailingProps {
-  /** OpenClaw session key */
   sessionKey: string;
-  /** 当前会话行是否选中 */
   isActive?: boolean;
-  /** 全部分组（子菜单列表） */
-  groups: SidebarRecentGroup[];
-  /** 当前会话所属 groupId；null = 未分组 */
-  currentGroupId: string | null;
-  /** 点击重命名 */
+  projects: WorkspaceDto[];
+  currentProjectId: string | null;
+  isInProject: boolean;
   onRename: () => void;
-  /** 点击删除 */
   onDelete: () => void;
-  /** 子菜单：新建分组 */
-  onCreateGroup: () => void;
-  /** 子菜单：移入已有分组 */
-  onAssignGroup: (groupId: string) => void;
-  /** 子菜单：不分组（仅已分组时展示） */
-  onUngroup: () => void;
+  onMoveToProject: (projectId: string) => void;
+  onRemoveFromProject: () => void;
+  onCreateProject: () => void;
   className?: string;
 }
 
@@ -59,17 +50,18 @@ const SIDEBAR_RECENT_ROW_TRAILING_W_CLASS = 'w-12';
 export function SidebarRecentSessionRowTrailing({
   sessionKey,
   isActive = false,
-  groups,
-  currentGroupId,
+  projects,
+  currentProjectId,
+  isInProject,
   onRename,
   onDelete,
-  onCreateGroup,
-  onAssignGroup,
-  onUngroup,
+  onMoveToProject,
+  onRemoveFromProject,
+  onCreateProject,
   className,
 }: SidebarRecentSessionRowTrailingProps) {
   const { t } = useTranslation('common');
-  const assignableGroups = groups.filter((group) => group.id !== currentGroupId);
+  const assignableProjects = projects.filter((project) => project.id !== currentProjectId);
 
   return (
     <div
@@ -125,53 +117,52 @@ export function SidebarRecentSessionRowTrailing({
             </DropdownMenuItem>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className={sidebarRecentMenuItemClass}>
-                <Folder className="h-4 w-4 shrink-0" aria-hidden />
-                <span className="flex-1 truncate">{t('sidebar.group')}</span>
+                <FolderOpen className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="flex-1 truncate">{t('sidebar.moveToProject')}</span>
                 <ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className={sidebarRecentMenuContentClass}>
-                {currentGroupId !== null ? (
-                  <DropdownMenuItem
-                    className={cn(sidebarRecentMenuItemClass, 'justify-start')}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onUngroup();
-                    }}
-                  >
-                    {t('sidebar.ungroup')}
-                  </DropdownMenuItem>
-                ) : null}
                 <DropdownMenuItem
                   className={cn(sidebarRecentMenuItemClass, 'justify-start')}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onCreateGroup();
+                    onCreateProject();
                   }}
                 >
-                  {t('sidebar.newGroup')}
+                  <FolderPlus className="h-4 w-4 shrink-0" aria-hidden />
+                  {t('sidebar.newProject')}
                 </DropdownMenuItem>
-                {assignableGroups.length > 0 ? (
-                  <>
-                    <DropdownMenuSeparator className={sidebarRecentMenuDividerClass} />
-                    {assignableGroups.map((group) => (
-                      <DropdownMenuItem
-                        key={group.id}
-                        className={cn(sidebarRecentMenuItemClass, 'justify-start')}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAssignGroup(group.id);
-                        }}
-                      >
-                        <span
-                          className="min-w-0 max-w-[8em] truncate text-left"
-                          title={group.name}
-                        >
-                          {group.name}
-                        </span>
-                      </DropdownMenuItem>
-                    ))}
-                  </>
+                {isInProject || assignableProjects.length > 0 ? (
+                  <DropdownMenuSeparator className={sidebarRecentMenuDividerClass} />
                 ) : null}
+                {isInProject ? (
+                  <DropdownMenuItem
+                    className={cn(sidebarRecentMenuItemClass, 'justify-start')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveFromProject();
+                    }}
+                  >
+                    {t('sidebar.removeFromProject')}
+                  </DropdownMenuItem>
+                ) : null}
+                {assignableProjects.map((project) => (
+                  <DropdownMenuItem
+                    key={project.id}
+                    className={cn(sidebarRecentMenuItemClass, 'justify-start')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMoveToProject(project.id);
+                    }}
+                  >
+                    <span
+                      className="min-w-0 max-w-[10em] truncate text-left"
+                      title={project.name}
+                    >
+                      {project.name}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuItem

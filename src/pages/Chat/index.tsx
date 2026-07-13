@@ -673,6 +673,7 @@ export function Chat() {
 
       {/* Pending Message Queue */}
       <PendingQueuePanel
+        sessionKey={currentSessionKey}
         queue={queue}
         onRemove={queueRemove}
         onMoveUp={queueMoveUp}

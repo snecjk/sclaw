@@ -535,6 +535,9 @@ export function createSessionLifecycleActions(
       }
 
       rememberOptimisticDeletedSessionKey(key);
+      void import('@/stores/session-catalog').then(({ useSessionCatalogStore }) => {
+        void useSessionCatalogStore.getState().softDeleteSession(key);
+      });
       const additionalSuppressKeys = (options?.additionalSuppressKeys ?? [])
         .map((suppressKey) => suppressKey.trim())
         .filter((suppressKey) => suppressKey && suppressKey !== key);
@@ -689,6 +692,9 @@ export function createSessionLifecycleActions(
       // 新建即视为已读，写入已读水位；后续该会话前台完成的迟到事件不会误标未读。
       touchSessionReadAt(newKey);
       void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
+      void import('@/stores/session-catalog').then(({ useSessionCatalogStore }) => {
+        void useSessionCatalogStore.getState().bindSession(newKey);
+      });
     },
 
   };

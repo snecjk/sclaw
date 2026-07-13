@@ -25,6 +25,7 @@ import {
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { buildOpenClawControlUiUrl } from '../utils/openclaw-control-ui';
 import { logger } from '../utils/logger';
+import { registerDialogHandlers } from './ipc/dialog-handlers';
 import { safeWebContentsSend } from './safe-web-contents-send';
 import {
   saveChannelConfig,
@@ -124,9 +125,6 @@ export function registerIpcHandlers(
 
   // Shell handlers
   registerShellHandlers();
-
-  // Dialog handlers
-  registerDialogHandlers();
 
   // Session handlers
   registerSessionHandlers();
@@ -2348,27 +2346,8 @@ function registerClawHubHandlers(clawHubService: ClawHubService): void {
 }
 
 /**
- * Dialog-related IPC handlers
+ * Dialog-related IPC handlers — see ipc/dialog-handlers.ts
  */
-function registerDialogHandlers(): void {
-  // Show open dialog
-  ipcMain.handle('dialog:open', async (_, options: Electron.OpenDialogOptions) => {
-    const result = await dialog.showOpenDialog(options);
-    return result;
-  });
-
-  // Show save dialog
-  ipcMain.handle('dialog:save', async (_, options: Electron.SaveDialogOptions) => {
-    const result = await dialog.showSaveDialog(options);
-    return result;
-  });
-
-  // Show message box
-  ipcMain.handle('dialog:message', async (_, options: Electron.MessageBoxOptions) => {
-    const result = await dialog.showMessageBox(options);
-    return result;
-  });
-}
 
 /**
  * App-related IPC handlers

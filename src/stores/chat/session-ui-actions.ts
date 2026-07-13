@@ -18,6 +18,9 @@ export function createSessionUiActions(
           session.key === key ? { ...session, label: trimmed } : session
         )),
       }));
+      void import('@/stores/session-catalog').then(({ useSessionCatalogStore }) => {
+        void useSessionCatalogStore.getState().patchSessionCatalog({ sessionKey: key, title: trimmed });
+      });
     },
     markScheduledSessionActivating: (sessionKey) => {
       const key = sessionKey.trim();

@@ -39,6 +39,7 @@ const electronAPI = {
         'agent-memory:summarize-execution-experience',
         'agent-memory:capture',
         'execution-memory:bind-injected-memories',
+        'session-catalog:invoke',
         'preview:httpFetch',
         // Workflow
         'workflow:startTracking',
