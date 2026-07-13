@@ -370,8 +370,19 @@ export function ChatModelSelector({
 
   useEffect(() => {
     if (modelSaving) return;
-    if (currentSessionKey === DEFAULT_SESSION_KEY && currentEngineType !== 'claude') {
-      const hint = pendingNewSessionModel?.trim() || workspaceDefaultModelId || '';
+    if (currentSessionKey === DEFAULT_SESSION_KEY) {
+      if (currentEngineType !== 'claude') {
+        const hint = pendingNewSessionModel?.trim() || workspaceDefaultModelId || '';
+        setSelectedModelId(resolveChatSelectedModelId(modelOptions, hint) || hint || '');
+        return;
+      }
+      const toolbarHint = resolveClaudeToolbarModelId({
+        currentSessionKey,
+        sessionModel: currentSession?.model,
+        agentModelDisplay: currentAgent?.modelDisplay,
+        workspaceDefaultModelId,
+      });
+      const hint = pendingNewSessionModel?.trim() || toolbarHint;
       setSelectedModelId(resolveChatSelectedModelId(modelOptions, hint) || hint || '');
       return;
     }

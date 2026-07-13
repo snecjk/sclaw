@@ -7,7 +7,12 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
 import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-to-chat';
-import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
+import {
+  isConcreteModelId,
+  normalizeModelIdForChat,
+  resolveProviderRawModelId,
+} from '@/lib/chat-model-options';
+import { useProviderStore } from '@/stores/providers';
 import { hostApiFetch } from '@/lib/host-api';
 import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
 import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
@@ -1817,7 +1822,13 @@ export const useChatStore = create<ChatState>()(
           (agent) => agent.id === get().currentAgentId,
         );
         if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
-          chosenModel = normalizeModelIdForChat(carryAgent.modelDisplay);
+          const { accounts, defaultAccountId } = useProviderStore.getState();
+          const resolved = resolveProviderRawModelId(
+            accounts,
+            carryAgent.modelDisplay,
+            carryAgent.modelAccountId ?? defaultAccountId,
+          );
+          chosenModel = resolved?.modelId ?? normalizeModelIdForChat(carryAgent.modelDisplay);
         }
       }
     }
@@ -2362,6 +2373,12 @@ export const useChatStore = create<ChatState>()(
     const { text, attachments, targetAgentId, dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
+
+    // Placeholder home session cannot carry a model override — create a real session first
+    // so toolbar/agent model choice is persisted before chat.send hits the gateway default.
+    if (get().currentSessionKey === DEFAULT_SESSION_KEY) {
+      await get().newSession();
+    }
 
     // Inject hidden workflow context / session hint for AI guidance
     const { appendWorkflowContext, stripWorkflowContextForDisplay } = await import('@/lib/workflow-context');

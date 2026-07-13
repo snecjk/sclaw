@@ -19,7 +19,6 @@ export function useHomeChatEntrySend() {
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
   const agents = useAgentsStore((s) => s.agents);
-  const newSession = useChatStore((s) => s.newSession);
 
   const handleHubQueue = useCallback(
     (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, _dingTalkMentions?: DingTalkMention[], workflowId?: string | null) => {
@@ -53,17 +52,13 @@ export function useHomeChatEntrySend() {
         return;
       }
 
-      if (currentSessionKey === DEFAULT_SESSION_KEY) {
-        await newSession();
-      }
-
       const { dispatchChatSend } = await import('@/hooks/dispatch-chat-send');
       await dispatchChatSend({ text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId, workflowSource, workflowName });
       if (useChatStore.getState().error) {
         toast.error(t('assistant.sendFailed'));
       }
     },
-    [agents, isGatewayRunning, newSession, t],
+    [agents, isGatewayRunning, t],
   );
 
   return {

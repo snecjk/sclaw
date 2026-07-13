@@ -118,7 +118,10 @@ export async function applyWorkspaceDefaultToNewSession(
   const userChosenModel = existingSession?.model?.trim();
   if (userChosenModel) {
     try {
-      const resolved = resolveProviderRawModelId(accounts, userChosenModel, fallbackAccountId);
+      const preferredAccountId = engineType === 'claude'
+        ? (agent?.modelAccountId?.trim() || fallbackAccountId)
+        : fallbackAccountId;
+      const resolved = resolveProviderRawModelId(accounts, userChosenModel, preferredAccountId);
       if (!resolved) return;
       const persisted = await persistSessionModelToGateway({
         sessionKey: trimmedKey,
@@ -131,7 +134,7 @@ export async function applyWorkspaceDefaultToNewSession(
         useChatStore.setState((state) => ({
           sessions: state.sessions.map((session) => (
             session.key === trimmedKey
-              ? { ...session, model: resolved.modelId }
+              ? { ...session, model: persisted }
               : session
           )),
         }));
@@ -143,8 +146,30 @@ export async function applyWorkspaceDefaultToNewSession(
     return;
   }
 
-  // Claude agent-scoped model from home toolbar — skip workspace default.
   if (agent?.engineType === 'claude' && isConcreteModelId(agent.modelDisplay)) {
+    const accountId = agent.modelAccountId?.trim() || fallbackAccountId;
+    const resolved = resolveProviderRawModelId(accounts, agent.modelDisplay, accountId);
+    if (!resolved) return;
+    try {
+      const persisted = await persistSessionModelToGateway({
+        sessionKey: trimmedKey,
+        model: resolved.modelId,
+        accountId: resolved.accountId,
+        agentId,
+        engineType,
+      });
+      if (persisted) {
+        useChatStore.setState((state) => ({
+          sessions: state.sessions.map((session) => (
+            session.key === trimmedKey
+              ? { ...session, model: persisted }
+              : session
+          )),
+        }));
+      }
+    } catch (err) {
+      console.warn('[applyWorkspaceDefaultToNewSession] failed to persist Claude agent model:', err);
+    }
     return;
   }
 
